@@ -1682,3 +1682,16 @@ Use this append-only log for decisions that constrain future implementation. Cha
   all three are intact; the finding worth carrying forward is that when a
   system refuses the same operation in three independent places, the refusal
   is the design speaking.
+- Amendment (2026-08-23): the first hosted apply of `20260823000600` failed on
+  its own postflight - `projects_guarded_deletion is missing` - and the
+  migration rolled back cleanly, applying nothing. The finding was real:
+  `20260815000900` is one of the migrations hosted has never recorded, so the
+  friendly trigger is absent there. What is *not* absent is the protection.
+  That trigger's own comment says "nothing can pass the RESTRICT behind this
+  trigger anyway", and the `activity_events -> projects` foreign key with
+  `ON DELETE RESTRICT` is present on hosted. So the postflight now asserts the
+  constraint that actually enforces permanence on every database, and merely
+  reports the trigger's absence as a notice; the scope's rolled-back proof
+  accepts SQLSTATE `23503` as well as the trigger's sentence. The lesson is to
+  assert the enforcing object rather than the explaining one - the explanation
+  is a courtesy, the constraint is the guarantee.
