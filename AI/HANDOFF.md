@@ -2,7 +2,29 @@
 
 Last updated: 2026-08-23
 
-## Newest (2026-08-23 ~00:30Z): the protected chain is applied on production
+## Newest (2026-08-23 ~00:50Z): Step 8/9 record-only accepted; the real-run path is measured and owner-gated
+
+The owner confirmed Step 8 passes and Step 9 shows the truthful record-only
+view (screenshots, 2026-08-23 ~00:27Z), then set the next goal: Step 9 must
+actually run the bot. Probe 32608500364 measured the whole execution path:
+the only bot is `Claude - Daniel` (anthropic/claude-opus-5, ready, connected
+subscription) which records-only by design; no Codex bot or OpenAI account
+exists; every project's GitHub binding is healthy; the sole manual run ever
+(2026-08-13, run f4594556) failed in the CLI-stdin era
+(`Codex Exec exited with code 1: Reading prompt from stdin`) - the current
+adapter is SDK-based (`thread.runStreamed`), and `claim_phase1c_run` claims
+only `queued` runs, so that failure cannot repeat or resurrect. The
+subscription-authenticated GitHub Actions Codex worker last ran green on
+2026-08-21 21:54Z (auth valid, idle) and is currently disabled by repo
+variable `SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED`. Only RED commands await
+approval; GREEN/YELLOW queue tasks and runs immediately, and the Step 9 UI
+already renders the manual execution path. Remaining enablement is entirely
+owner-side: connect the ChatGPT/Codex account, create/assign/configure a
+`openai`/`gpt-5.3-codex` bot, re-enable the worker variable, and issue the
+command with that bot. Autonomy stays OFF; manual owner-issued execution is
+by design not gated by the kill switch.
+
+## Earlier (2026-08-23 ~00:30Z): the protected chain is applied on production
 
 Chain run 32607123713 committed the six-file transaction: the rehearsal
 passed with a clean lint for the first time, all six ledger rows
