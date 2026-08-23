@@ -2,6 +2,7 @@
 
 import { Bot } from "lucide-react";
 import Link from "next/link";
+import { useState } from "react";
 
 import { TenantListShell, formatDateTime, riskTone, useTenantList } from "@/components/tenant-list";
 import { StatusBadge } from "@/components/ui";
@@ -102,6 +103,34 @@ export function CommandsConsole({ refreshToken }: { refreshToken?: number }) {
     (body) => (body.commands as Command[]) ?? [],
     "Saved requests could not be loaded.",
   );
+  const [launchBusy, setLaunchBusy] = useState<string | null>(null);
+  const [launchError, setLaunchError] = useState<string>("");
+
+  // The explicit doorway for a recorded Claude command that has no analysis
+  // run yet — a command saved before the launch feature, or whose submit
+  // raced a deploy, gains its run here instead of waiting for a lucky replay.
+  const runAnalysis = async (command: Command) => {
+    if (!command.project) return;
+    setLaunchBusy(command.id);
+    setLaunchError("");
+    try {
+      const response = await fetch(`/api/commands/${encodeURIComponent(command.id)}/analysis`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ projectId: command.project.id }),
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => null) as { error?: { message?: string } } | null;
+        setLaunchError(body?.error?.message ?? "The analysis could not be launched.");
+        return;
+      }
+      reload();
+    } catch {
+      setLaunchError("The analysis could not be launched.");
+    } finally {
+      setLaunchBusy(null);
+    }
+  };
 
   return (
     <TenantListShell
@@ -162,7 +191,20 @@ export function CommandsConsole({ refreshToken }: { refreshToken?: number }) {
                 <StatusBadge tone={statusTone(command.status)} dot={false}>
                   {command.status.replace(/_/g, " ")}
                 </StatusBadge>
+                {command.executionMode === "record_only" && !command.analysisGraph && command.project ? (
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    disabled={launchBusy === command.id}
+                    onClick={() => void runAnalysis(command)}
+                  >
+                    {launchBusy === command.id ? "Launching…" : "Run analysis"}
+                  </button>
+                ) : null}
               </div>
+              {launchError && launchBusy === null ? (
+                <p className="w-full text-sm text-danger" role="alert">{launchError}</p>
+              ) : null}
             </li>
           ))}
         </ul>
