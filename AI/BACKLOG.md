@@ -81,14 +81,21 @@ Last triaged: 2026-08-22
 - [x] Owner-confirmed acceptance (screenshots 2026-08-23 ~00:27Z): Step 8
   "Issue a Command" Done — 1 command recorded only; Step 9 "Watch It Ship"
   shows the truthful record-only view with the command record modal.
-- [ ] Step 9 real run with the Claude bot (owner goal, ADR-128): deploy the
-  analysis-launch slice, apply 20260823000100 via
-  `scope=command-analysis-graphs`, have the owner issue a command with the
-  Claude bot, watch the launched analysis graph get claimed and completed by
-  the graph worker (manual dispatch works today; repository_dispatch wakes
-  it for new commands), and verify Step 9 reports the run with its
-  artifacts. The existing recorded command predates the link and stays a
-  plain record.
+- [x] Step 9 real run with the Claude bot (owner goal, ADR-128/129):
+  command `0e9a4765` ("Fix high-priority bugs") is linked to analysis graph
+  `e3097ed8`, and graph run `6d6c0a07` reached **COMPLETED with 7
+  artifacts** (2026-08-23 13:42:37Z to 13:48:30Z, worker run 32643138657).
+  The link was committed through `scope=analysis-launch-commit` (run
+  32643074805) after the browser tap twice left no trace and the
+  rolled-back doorcheck (run 32614371816) placed the fault above the
+  database. Confirmed by probe run 32646908822.
+- [x] The application's own launch path is working again: command
+  `d8777258` gained graph `a9fc2de2` at 13:44:25Z with no workflow
+  involvement; its run `cc39a49f` finished PARTIAL with 5 artifacts, which
+  is reported as PARTIAL. Still unexplained is why the two earlier taps
+  failed silently — if it recurs, `scope=analysis-launch-doorcheck`
+  re-proves the database without writing, and the endpoint now returns
+  request-shape refusals with their real status.
 - [ ] Codex write-path enablement (owner-gated, unchanged): connect the
   ChatGPT/Codex account in Bot Manager, create an `openai`/`gpt-5.3-codex`
   bot, assign + configure it, set repo variable
@@ -720,3 +727,19 @@ These are recorded for deliberate owner review and are not evidence that Phase 1
 - [ ] Decide whether to enable protection/required checks and require verified signatures on `main`; the branch is currently unprotected and the published release commit is unsigned. Any settings change is a protected owner-approved action.
 - [ ] Decide the `theagoras.com` aliases with the routing question now answered by evidence: both `*.vercel.app` hosts are behind Vercel SSO Deployment Protection, so `www.theagoras.com` is the **only** public path to the application. Removing the aliases would take the public site offline. See `AI/PRODUCTION_OBSERVATION_EVIDENCE.md`.
 - [ ] Decide whether production keeps Vercel Deployment Protection. While it is on, no external monitor — this one or any third party — can observe the deployment URLs recorded as production.
+
+## Delete a selection of pipelines (2026-08-23, owner goal, ADR-130)
+
+- [x] `20260823000200` adds `delete_selected_pipelines`, the scoped sibling
+  of `clear_all_pipelines`: same caller check, same mandatory reason, live
+  work never deleted, run history never taken unless explicitly included,
+  plus organization scoping (a foreign id is counted, never acted on) and a
+  200-row cap. Eleven behaviour cases against real PostgreSQL.
+- [x] `POST /api/commands/delete` carries no authority of its own and
+  reports the database's own refusal sentence; five boundary cases.
+- [x] The Pipelines page gains a checkbox per row, a select-all with an
+  indeterminate partial state, and a Delete selected (N) button that
+  confirms, requires the reason, and names what was kept.
+- [ ] Apply on hosted through the one-shot
+  `scope=delete-selected-pipelines` (sha-pinned), then confirm the control
+  works on production against a row the owner is willing to lose.

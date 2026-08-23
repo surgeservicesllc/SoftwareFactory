@@ -78,6 +78,9 @@ on:
           analysis tap asked for, through the same database doorway with the
           hash-pinned fixture plan, refusing if the command already has its
           graph; the graph lands PLANNED and only the graph worker runs it;
+          "delete-selected-pipelines" applies only 20260823000200, which lets
+          the Pipelines page delete exactly the rows somebody ticked under the
+          same refusals as the whole-list clear;
           "probe" changes nothing at all and just reports which objects already
           exist, because the ledger has proven to understate the live schema.
         required: false
@@ -104,6 +107,7 @@ on:
           - record-only-postflight
           - analysis-launch-doorcheck
           - analysis-launch-commit
+          - delete-selected-pipelines
           - probe
 permissions:
   checks: read
@@ -5080,6 +5084,64 @@ jobs:
               from public.command_analysis_graphs link
              order by link.created_at desc
              limit 3;"
+
+      - name: Delete selected pipelines (scope=delete-selected-pipelines)
+        # Exactly one file — 20260823000200 — which adds the scoped sibling of
+        # clear_all_pipelines: same caller check, same mandatory reason, same
+        # refusal to delete live work or to take run history by surprise, over
+        # the rows somebody actually ticked. It adds no table and no enum
+        # label (the existing command.pipelines_cleared event carries both
+        # scopes, distinguished by its metadata) and replaces no function, so
+        # the file's own pre- and postflight blocks are the whole safety net.
+        if: ${{ inputs.scope == 'delete-selected-pipelines' }}
+        run: |
+          if [ -z "$SUPABASE_DB_PASSWORD" ]; then
+            echo "::error::This scope requires SUPABASE_DB_PASSWORD for live verification."
+            exit 1
+          fi
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+
+          FILE=supabase/migrations/20260823000200_delete_selected_pipelines.sql
+          EXPECTED_SHA256=45e3cda26bb7da8f3d5d8353ec7a981af067482b4ea490a8f6298b76fee354dc
+          ACTUAL_SHA256=$(sha256sum "$FILE" | cut -d' ' -f1)
+          if [ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]; then
+            echo "::error::Migration hash mismatch; refusing production DDL."
+            exit 1
+          fi
+          ALREADY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc \
+            "select count(*) from supabase_migrations.schema_migrations where version = '20260823000200';")
+          if [ "$ALREADY" != "0" ]; then
+            echo "::error::20260823000200 is already recorded; this scope is one-shot."
+            exit 1
+          fi
+
+          echo "Applying ${FILE}"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -1 -q -f "$FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied 20260823000200
+          else
+            npx supabase migration repair --status applied 20260823000200 --db-url "$DB_URL"
+          fi
+          psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
+
+          VERIFIED=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+            set search_path = pg_catalog;
+            select to_regprocedure('public.delete_selected_pipelines(uuid,uuid[],text,boolean)') is not null
+               and (select prosecdef from pg_proc
+                      where oid = to_regprocedure('public.delete_selected_pipelines(uuid,uuid[],text,boolean)'))
+               and not has_function_privilege('anon', to_regprocedure('public.delete_selected_pipelines(uuid,uuid[],text,boolean)'), 'EXECUTE')
+               and not has_function_privilege('service_role', to_regprocedure('public.delete_selected_pipelines(uuid,uuid[],text,boolean)'), 'EXECUTE')
+               and has_function_privilege('authenticated', to_regprocedure('public.delete_selected_pipelines(uuid,uuid[],text,boolean)'), 'EXECUTE');")
+          if [ "$VERIFIED" != "t" ]; then
+            echo "::error::The scoped delete did not read back as SECURITY DEFINER, member-only."
+            exit 1
+          fi
+          echo "Applied and verified: the Pipelines page can delete a selection under the clear's own rules."
 
       - name: Apply the Backlog and Pipelines clear controls (scope=clear-controls)
         # Exactly two files — 20260822000700 and 20260822000800 — and no others.

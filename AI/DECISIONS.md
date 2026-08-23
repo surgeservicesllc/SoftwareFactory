@@ -1463,3 +1463,75 @@ Use this append-only log for decisions that constrain future implementation. Cha
   verifications - all durable, all visible in Step 9. Hosted apply goes
   through the new one-shot `scope=command-analysis-graphs` with the file
   sha pinned.
+
+## ADR-129 - The Run analysis tap is proven end to end, and the doorway gets a rehearsal that writes nothing
+
+- Date: 2026-08-23
+- Status: Accepted
+- Context: the owner tapped Run analysis twice and the hosted database kept
+  no trace either time - `command_analysis_graphs` read 0 link rows after
+  both (probe runs 32613345163 and 32642517130). Nothing in the repository
+  could see why: the behavior suite exercises
+  `launch_command_analysis_graph` on real PostgreSQL through PGlite, which
+  proves the function and says nothing about the hosted stack in front of
+  it, and this session has no Vercel runtime logs.
+- Decision: add two dispatch-only scopes to `apply-hosted-migrations.yml`.
+  `analysis-launch-doorcheck` rehearses the newest record-only command's
+  launch as its own organization owner inside `BEGIN ... ROLLBACK`, so the
+  database's verbatim answer reaches the run log while the database keeps
+  none of it, then re-sends `NOTIFY pgrst, 'reload schema'`.
+  `analysis-launch-commit` commits that same launch once, with the plan the
+  button would send held as a checked-in fixture
+  (`supabase/fixtures/production_readiness.launch-plan.json`, emitted by
+  `scripts/emit-analysis-plan.mts`, pinned by sha in the workflow and
+  deep-equality-pinned against a fresh compile in
+  `tests/unit/analysis-launch.test.ts`).
+- Rationale: a rolled-back rehearsal is the only way to ask production the
+  exact question the button asks without writing anything, and a pinned
+  fixture keeps the committed launch identical to the code path it stands
+  in for rather than a hand-copied approximation that could drift.
+- Consequence: the doorcheck (run 32614371816) returned a graph id, placing
+  the fault above the database. The commit (run 32643074805) linked command
+  `0e9a4765` to graph `e3097ed8`; the graph worker claimed it and run
+  `6d6c0a07` reached **COMPLETED with 7 artifacts** (13:42:37Z to
+  13:48:30Z) - Step 9's first real analysis run. A second command,
+  `d8777258`, then gained graph `a9fc2de2` at 13:44:25Z **through the
+  application itself**, which is the edge path working again; its run
+  `cc39a49f` finished PARTIAL with 5 artifacts, reported as PARTIAL rather
+  than dressed up. The endpoint now surfaces request-shape refusals with
+  their real status instead of a generic 500, so a future failed tap leaves
+  a usable clue.
+
+## ADR-130 - Deleting a selection of pipelines borrows the whole-list clear's rules rather than writing softer ones
+
+- Date: 2026-08-23
+- Status: Accepted
+- Context: the Pipelines page could clear everything or nothing. The owner
+  asked for the middle: tick one or more rows and delete exactly those. The
+  tempting shortcut is a route that deletes by id, since the caller has
+  already named the rows - which is precisely how a surface acquires a
+  second, weaker deletion path beside its audited one.
+- Decision: `20260823000200` adds `delete_selected_pipelines(uuid, uuid[],
+  text, boolean)` as the scoped sibling of `clear_all_pipelines`, keeping
+  every refusal that function makes - owner or admin only, a reason of ten
+  characters or more, live work never deleted, run history never taken
+  unless explicitly included - and adding two the whole-list clear never
+  needed: ids are scoped to the caller's organization (a foreign id is
+  *counted* as not found, never echoed and never acted on) and a selection
+  is capped at 200. It reuses the `command.pipelines_cleared` activity
+  label with `scope: 'selection'` in its metadata, so no enum label is
+  added and the file stays one transaction.
+- Rationale: naming rows explicitly is a smaller blast radius for the same
+  decision, not a licence to reach past the rules that decision already
+  has. One vocabulary in the audit log keeps both scopes legible to
+  whoever reads it later.
+- Consequence: `POST /api/commands/delete` carries no authority of its own
+  and reports the database's own sentence on refusal. The Pipelines page
+  gains a checkbox per row, a select-all that shows an indeterminate state
+  for a partial selection, and a Delete selected (N) button that confirms
+  before firing, requires the reason the database requires, and names what
+  was kept - still running, with run history, no longer here - rather than
+  claiming a clean sweep. Selection is offered on Active as well as All
+  Pipelines: picking one row out of a live list is ordinary, and the
+  function's own refusal keeps live work safe. Hosted apply goes through
+  the one-shot `scope=delete-selected-pipelines` with the file sha pinned.
