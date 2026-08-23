@@ -1,5 +1,63 @@
 # SoftwareFactory — shared working status
 
+## GRAPH — THE BACKFILL IS APPLIED IN PRODUCTION, AND THE STAGE VOCABULARY IS SETTLED (2026-08-23, latest)
+
+**Applied.** `scope=graph-stage-backfill` ran against production —
+[run 32660207022](https://github.com/surgeservicesllc/SoftwareFactory/actions/runs/32660207022),
+step 33, success — and `20260823000700` is now recorded on **both** sides of
+the ledger. The step's last statement is a hard gate: it exits non-zero if any
+node whose capability the application defines still has no stage, so its
+success is the verification, not a claim beside it. Every graph in this
+workspace, including the first real Step 9 run, now carries a lifecycle stage
+and the graph-runs **Stage** column reads for the whole history.
+
+One honesty note: I did not capture the before/after distribution the step
+prints — the log tail is dominated by the 130-line ledger listing that follows
+it. The counts are in the run log if anyone wants them; what is proven here is
+the gate, not a number I could quote.
+
+**The vocabulary question is decided (ADR-136), and it was blocking per-stage
+pages.** The goal document names ten stages; the database holds eight. They are
+not two designs — the ten are a presentation of the eight:
+
+```
+REQUIREMENT -> GOAL + PRD          REVIEW  -> REVIEW
+DISCOVER    -> (none)              TEST    -> TEST
+EVALUATE    -> (none)              DEPLOY  -> DEPLOYMENT
+DECIDE      -> (none)              MONITOR -> MONITORING
+ARCHITECT   -> ARCHITECTURE
+BUILD       -> IMPLEMENTATION
+```
+
+The enum does **not** grow. DISCOVER, EVALUATE and DECIDE have nothing that
+produces them: no template declares such a capability and `NODE_CAPABILITIES`
+has no member that resolves to one. Three enum values nothing can populate is a
+stage filter that is permanently empty — scaffolding, in the same commit that
+would claim to satisfy the goal. Discovery does exist engine-side
+(`lib/graph/discovery.ts`, canary-proven); when a **stored** graph can add
+rounds mid-run — the limitation recorded 2026-08-19 — a DISCOVERY stage will
+have something real to hold, and the migration is additive so waiting costs
+nothing.
+
+**Next bot, in the Graph lane:**
+
+1. **Per-stage pages are now unblocked, for the eight.** Build against
+   `SDLC_STAGES`, presenting REQUIREMENT as GOAL+PRD if the goal document's
+   wording is wanted. Do not build ten — three would read live and always be
+   empty. Note `/solutions/ai-factory` is the *setup journey* (connect a
+   repository, assign bots, issue a command), not the lifecycle; naming it the
+   lifecycle surface would be the same untruth in the navigation.
+2. **Nothing yet reads the stage except one table column.** The graph-runs
+   panel shows it per node; no surface groups or summarises a run by stage.
+   That is the cheapest next thing that consumes the data rather than adding
+   more of it.
+3. Still open, unchanged: why the two silent Run analysis taps left no row. The
+   alert now reports status and code, so one more tap separates origin (403)
+   from wrong active organization (404) from a database refusal (409).
+4. Still open, not Graph: 19 migration versions remain unrecorded on hosted
+   (`20260821000400` among them, its table demonstrably present). Each wants
+   the probe-first discipline the vault repair used.
+
 ## GRAPH — THE BACKFILL FOR EVERY GRAPH THAT PREDATES THE STAGE RULE (2026-08-23, latest)
 
 Follows the round below, which made new graphs carry a stage. Existing rows
