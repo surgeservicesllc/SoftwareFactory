@@ -1852,3 +1852,47 @@ Use this append-only log for decisions that constrain future implementation. Cha
   forward edge running backwards through the stage order, HUMAN gates at
   exactly ARCHITECTURE and DEPLOYMENT, AUTOMATIC at PRD/DECISION/REVIEW/TEST,
   and the recorded MONITOR→goal feedback edge.
+
+## ADR-139 - Anchors are observations by instruments that cannot be persuaded, and the launch button wakes a worker
+
+- Date: 2026-08-23
+- Status: Accepted
+- Context: the owner launched `full_lifecycle` from the Workflows page and
+  the graph sat PLANNED. Two independent gaps: `POST /api/graphs` recorded
+  the graph but woke nothing (only the command routes dispatched the
+  worker, and the schedule is off by default), and `claim_planned_graph`
+  correctly refused to hand a graph containing ANCHOR nodes to a worker
+  that declared only DETERMINISTIC and MODEL. Both halves were truthful in
+  isolation and together produced a button that said "run this" and meant
+  "file this".
+- Decision, wake half: the launch route resolves the project's GitHub
+  binding and dispatches the graph worker best-effort after
+  `create_graph_from_plan`. The wake sits in its own try so it can never
+  fail a launch that already succeeded, and the response carries
+  `workerWoken` plus a note naming which world the caller is in. A launch
+  with no verified binding is still a created graph - claimable by
+  schedule or manual dispatch - and says so.
+- Decision, anchor half: the worker declares ANCHOR, executed by
+  `lib/worker/anchor-node-executor.ts` as observations, never actions. The
+  TEST anchor reads the CI check-run verdict GitHub recorded for the
+  worker's own checked-out commit (a read-scoped workflow token; skipped
+  and in-progress runs are not verdicts either way; green succeeds with
+  the observation as evidence, red fails naming the checks). The MONITOR
+  anchor probes the production URL and records status and latency -
+  unreachable is itself the observation. The DEPLOY anchor is refused by
+  policy, on the record: Phase 1 keeps deployment owner-approved, and the
+  refusal text says the policy is holding rather than reporting a fault.
+  None of these are retryable, because re-asking an instrument the same
+  question milliseconds later is not a new observation.
+- Why observation rather than execution: re-running a thirty-minute test
+  suite inside an eight-minute node envelope would either lie about
+  coverage or blow the envelope - and the budget estimator applies the
+  slowest node to every level of every graph, so one slow anchor inflates
+  the whole catalogue's budgets. CI already ran the suite for this exact
+  commit; the anchor's job is to fetch that verdict and preserve it as
+  evidence, which is what "record the results rather than describing
+  them" has meant since the executor kinds were defined.
+- The claim-matching rule survives unchanged: the executor-matching test
+  now uses an explicitly narrow worker, because the rule it pins - a
+  worker never receives a graph it cannot finish - protects the queue
+  from any future executor kind, not from ANCHOR specifically.

@@ -944,9 +944,12 @@ describe("the graph executor boundary", { timeout: 180_000 }, () => {
     expect(sourceRuns.rows.every((row) => ["PARTIAL", "FAILED", "CANCELLED", "COMPLETED"].includes(row.state))).toBe(true);
   });
   it("leaves a graph alone when it needs an executor this worker does not provide", async () => {
-    // Two shipped templates contain ANCHOR nodes — run the tests, attempt the
-    // reproduction. The analysis worker has no workspace and cannot do that.
-    // Before executor matching it claimed such a graph anyway, failed the
+    // The claim's matching contract: a worker that does not declare an
+    // executor never receives a graph containing one. The shipped worker now
+    // declares ANCHOR (observation anchors need no workspace), so the narrow
+    // worker here is explicit — the rule it proves is what protected the
+    // queue before that, and what protects it from any future executor kind:
+    // before matching, a worker claimed such a graph anyway, failed the
     // anchor, blocked everything below it, and spent one of the graph's three
     // chances to say something it already knew before claiming.
     const anchorNodes = JSON.stringify([
@@ -963,10 +966,10 @@ describe("the graph executor boundary", { timeout: 180_000 }, () => {
     // it. The drain also proves the anchor graph is never among them.
     const claimedIds: string[] = [];
     for (let i = 0; i < 20; i += 1) {
-      const parsed = parseClaimedGraph(await claim());
+      const parsed = parseClaimedGraph(await claim("no-anchor-worker", ["MODEL", "DETERMINISTIC"]));
       if (!parsed.ok) break;
       claimedIds.push(parsed.graph.graph_id);
-      await pgliteStore(db, "graph-worker-test").completeRun(parsed.graph.graph_run_id, "PARTIAL", false);
+      await pgliteStore(db, "no-anchor-worker").completeRun(parsed.graph.graph_run_id, "PARTIAL", false);
     }
     expect(claimedIds).not.toContain(anchorGraphId);
 
@@ -984,7 +987,7 @@ describe("the graph executor boundary", { timeout: 180_000 }, () => {
     );
     expect(waiting.rows.map((row) => row.id)).toEqual([anchorGraphId]);
 
-    expect(await claim()).toBeNull();
+    expect(await claim("no-anchor-worker", ["MODEL", "DETERMINISTIC"])).toBeNull();
 
     // No run was created, so the graph did not spend a chance and nothing is
     // recorded as a failure that never executed.

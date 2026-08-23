@@ -8,11 +8,12 @@ import { budgetForTemplate, findTemplate } from "@/lib/graph/templates";
 /**
  * The one analysis template each command type launches.
  *
- * Every value here compiles to MODEL and DETERMINISTIC nodes only, which is
- * what the subscription graph worker declares it can execute
- * (`WORKER_SUPPORTED_EXECUTORS`). A template with an ANCHOR node would be
- * created and then never claimed — planned forever — so lifecycle templates
- * such as `agentic_sdlc` are deliberately not in this table.
+ * Every value here compiles only to executors the subscription graph worker
+ * declares (`WORKER_SUPPORTED_EXECUTORS`), so a launched graph is always
+ * claimable. Lifecycle templates such as `agentic_sdlc` and `full_lifecycle`
+ * are deliberately not in this table for a different reason: a record-only
+ * command entitles its author to analysis of the request, not to a build
+ * lifecycle — those launch from the Workflows page under its own authority.
  */
 export const ANALYSIS_TEMPLATE_BY_COMMAND_TYPE: Readonly<Record<string, string>> = {
   audit: "production_readiness",
