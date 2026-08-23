@@ -105,6 +105,8 @@ export function CommandsConsole({ refreshToken }: { refreshToken?: number }) {
   );
   const [launchBusy, setLaunchBusy] = useState<string | null>(null);
   const [launchError, setLaunchError] = useState<string>("");
+  /** Which row the refusal belongs to, so it is shown under that one only. */
+  const [launchFailed, setLaunchFailed] = useState<string | null>(null);
 
   // The explicit doorway for a recorded Claude command that has no analysis
   // run yet — a command saved before the launch feature, or whose submit
@@ -112,6 +114,7 @@ export function CommandsConsole({ refreshToken }: { refreshToken?: number }) {
   const runAnalysis = async (command: Command) => {
     if (!command.project) return;
     setLaunchBusy(command.id);
+    setLaunchFailed(null);
     setLaunchError("");
     try {
       const response = await fetch(`/api/commands/${encodeURIComponent(command.id)}/analysis`, {
@@ -120,13 +123,30 @@ export function CommandsConsole({ refreshToken }: { refreshToken?: number }) {
         body: JSON.stringify({ projectId: command.project.id }),
       });
       if (!response.ok) {
-        const body = await response.json().catch(() => null) as { error?: { message?: string } } | null;
-        setLaunchError(body?.error?.message ?? "The analysis could not be launched.");
+        /*
+         * The refusal has to be reportable, not just visible.
+         *
+         * Two taps in production left no database row and no diagnosis,
+         * because what reached the screen was a bare sentence with no status
+         * and no code — nothing a person could read back. The message now
+         * carries both, so the next tap that fails says which layer refused
+         * it without needing runtime logs.
+         */
+        const body = await response.json().catch(() => null) as
+          | { error?: { code?: string; message?: string } }
+          | null;
+        const detail = body?.error?.message ?? "The analysis could not be launched.";
+        const code = body?.error?.code;
+        setLaunchFailed(command.id);
+        setLaunchError(`${detail} (${response.status}${code ? ` ${code}` : ""})`);
         return;
       }
       reload();
     } catch {
-      setLaunchError("The analysis could not be launched.");
+      // A throw here never reached the server at all — say so, rather than
+      // reporting the same sentence a refusal produces.
+      setLaunchFailed(command.id);
+      setLaunchError("The analysis request did not reach the server. Check the connection and try again.");
     } finally {
       setLaunchBusy(null);
     }
@@ -202,7 +222,10 @@ export function CommandsConsole({ refreshToken }: { refreshToken?: number }) {
                   </button>
                 ) : null}
               </div>
-              {launchError && launchBusy === null ? (
+              {/* The row that failed, not every row: this rendered under all
+                  of them, so a refusal on one request looked like a refusal
+                  on the whole list. */}
+              {launchError && launchFailed === command.id ? (
                 <p className="w-full text-sm text-danger" role="alert">{launchError}</p>
               ) : null}
             </li>

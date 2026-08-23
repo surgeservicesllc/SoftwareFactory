@@ -4,6 +4,7 @@ import { launchCommandAnalysisGraph } from "@/lib/orchestration/analysis-launch"
 import { dispatchGraphWorker } from "@/lib/orchestration/dispatch";
 import {
   ApiRequestError,
+  databaseErrorResponse,
   jsonNoStore,
   readBoundedJson,
   requestErrorResponse,
@@ -26,12 +27,21 @@ export const runtime = "nodejs";
  * launch takes, and honest about whether the worker was woken.
  */
 
+/*
+ * The body names the project, and nothing else.
+ *
+ * It used to carry `commandType`, defaulted to `other`. The command list this
+ * button renders from never exposed the type, so the client could not send it
+ * and every manual launch defaulted — a `fix_bug` command got the
+ * `production_readiness` template instead of `bug_sweep`, silently, because
+ * `other` maps to a real template rather than refusing. The submit and replay
+ * paths were unaffected: both pass the type they just recorded.
+ *
+ * The type is read from the command row below instead. That is the source of
+ * truth, and it also stops the browser choosing which analysis template runs.
+ */
 const bodySchema = z.object({
   projectId: z.string().uuid(),
-  commandType: z.enum([
-    "fix_bug", "build_feature", "audit", "test",
-    "mobile", "security", "performance", "other",
-  ]).default("other"),
 }).strict();
 
 type TargetRow = {
@@ -63,11 +73,38 @@ export async function POST(
     }
 
     const { activeOrganization, client } = await requireActiveOrganization();
+
+    /*
+     * The command's own type, read under the caller's RLS.
+     *
+     * A command the caller cannot see returns no row, which is the same
+     * refusal the launch itself would give — stated here rather than sending a
+     * guessed type into the doorway.
+     */
+    const { data: commandRow, error: commandError } = await client
+      .from("commands")
+      .select("command_type")
+      .eq("id", commandId)
+      .eq("organization_id", activeOrganization.id)
+      .maybeSingle();
+    if (commandError) return databaseErrorResponse(commandError);
+    if (!commandRow) {
+      return jsonNoStore(
+        {
+          error: {
+            code: "command_not_found",
+            message: "That request is not in this workspace.",
+          },
+        },
+        { status: 404 },
+      );
+    }
+
     const outcome = await launchCommandAnalysisGraph(client, {
       organizationId: activeOrganization.id,
       projectId: parsed.data.projectId,
       commandId,
-      commandType: parsed.data.commandType,
+      commandType: String(commandRow.command_type ?? "other"),
     });
     if (!outcome.launched) {
       // The database's refusal is the answer — a manual Codex command, a
@@ -82,15 +119,24 @@ export async function POST(
     // GitHub binding. A wake that cannot happen leaves the graph planned for
     // the scheduled or manual dispatch — reported, never hidden.
     let workerWoken = false;
-    const target = await client
-      .rpc("resolve_phase1c_command_target", {
-        p_organization_id: activeOrganization.id,
-        p_project_id: parsed.data.projectId,
-      })
-      .single();
-    const targetRow = target.error ? null : (target.data as TargetRow | null);
-    if (targetRow?.repository_full_name) {
-      try {
+    try {
+      /*
+       * The whole wake is inside the try, including the binding lookup.
+       *
+       * Only the dispatch was. A throw from the lookup — not an `error` on the
+       * result, a throw — escaped to the 500 handler *after* the graph had
+       * already been created, so the caller was told the launch failed while
+       * the database held a launched graph. Best effort has to mean the
+       * launch's answer never depends on it.
+       */
+      const target = await client
+        .rpc("resolve_phase1c_command_target", {
+          p_organization_id: activeOrganization.id,
+          p_project_id: parsed.data.projectId,
+        })
+        .single();
+      const targetRow = target.error ? null : (target.data as TargetRow | null);
+      if (targetRow?.repository_full_name) {
         await dispatchGraphWorker(
           {
             appId: targetRow.app_id,
@@ -101,9 +147,9 @@ export async function POST(
           outcome.graphId,
         );
         workerWoken = true;
-      } catch {
-        workerWoken = false;
       }
+    } catch {
+      workerWoken = false;
     }
 
     return jsonNoStore(

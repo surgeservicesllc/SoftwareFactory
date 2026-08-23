@@ -1,5 +1,75 @@
 # SoftwareFactory — shared working status
 
+## GRAPH — THE SILENT TAP: TWO DEFECTS FOUND IN THAT PATH, BOTH FIXED (2026-08-23, latest)
+
+Step 9 is resolved above — a real run COMPLETED with 7 artifacts, and the
+application's own launch path is working again. What that section leaves open
+is the one thing this round went after: **why the two earlier taps failed
+silently is still unexplained**, and its stated next step was "the next
+failure should leave a usable clue... wants the verbatim alert text".
+
+Reading the tap path end to end found two real defects in it. Neither is
+proven to be the no-trace cause — I am not claiming the mystery is solved —
+but both were live on the exact path the owner pressed, and both are fixed.
+
+**1. The manual button could never send the command's type, so every launch
+ran the wrong template.** `POST /api/commands/{id}/analysis` took
+`commandType` from the request body, defaulted to `other`. The command list
+the button renders from (`list_factory_commands`) never projected the type, so
+the client had nothing to send and always defaulted. Because `other` maps to a
+real template (`production_readiness`) rather than refusing, a `fix_bug`
+command silently got a production-readiness graph instead of `bug_sweep` — no
+error, wrong analysis. Note the resolved run above *is* command `0e9a4765`
+("Fix high-priority bugs"), launched through the workflow's hash-pinned
+`production_readiness` plan; through the button it would have taken the same
+wrong template by accident rather than by choice. The submit and replay
+auto-launch paths were unaffected — they pass the type they just recorded.
+**Fixed:** the route reads `commands.command_type` under the caller's RLS and
+uses that; the body carries `projectId` only, so the browser cannot choose
+which template runs. A command the caller cannot see returns 404
+`command_not_found` instead of a guessed type entering the doorway.
+
+**2. The "best effort" worker wake was not best effort.** Only
+`dispatchGraphWorker` sat inside the try; the `resolve_phase1c_command_target`
+lookup before it did not. A *throw* there (not an `error` result — that was
+handled) escaped to the 500 handler **after** the graph had been created, so
+the caller was told the launch failed while the database held a launched
+graph. **Fixed:** the whole wake, lookup included, is inside the try.
+
+Worth stating for the diagnosis: defect 2 produces the *opposite* symptom to
+the reported one (a row exists, the caller sees failure), and defect 1
+launches the wrong template rather than none — so neither explains 0 link
+rows. The silent-tap cause is still open.
+
+**What this round adds for that:** the refusal now reaches the person. The
+alert carries the HTTP status and error code
+(`"<message> (409 analysis_launch_refused)"`), a network throw says it never
+reached the server rather than borrowing the refusal's sentence, and the alert
+renders under the row that failed instead of under every row — it was rendered
+for each `<li>`, so one refusal looked like the whole list refusing.
+
+**Next bot:** ask the owner to tap Run analysis once more and read back the
+alert. The status and code now separate the candidates without Vercel logs —
+403 = origin (`assertSameOriginRequest` compares the `Origin` header with
+`new URL(request.url).origin`, a known proxy-mismatch shape); 404
+`command_not_found` = the active organization is not the command's; 409
+`analysis_launch_refused` = the database doorway refused, reason quoted
+verbatim. `scope=analysis-launch-doorcheck` still re-proves the database
+without writing.
+
+Also still open, unrelated and blocking the hosted lane:
+`20260822000900_repair_hosted_plpgsql_catalog_and_lint.sql` fails on real
+PostgreSQL (`relation "_sf_20260822000900_foundation_state" does not exist`),
+which will stop the next `apply-hosted-migrations` run. And `Supabase Preview`
+is red on recent main commits (blocks nothing; nobody has looked).
+
+Verified this round: typecheck, lint, 4287 tests / 2 skipped, production
+build. New coverage in `tests/unit/analysis-launch-route.test.ts` (3 tests):
+the template follows the command's recorded type, a body naming its own
+`commandType` is refused 400, and an unreadable command is 404 before any
+launch — the success case asserts the response stays under 400 while the
+worker wake throws.
+
 ## STEP 9 IS DONE — THE BOT RAN FOR REAL (2026-08-23, resolved; read the section below for how)
 
 Command `0e9a4765` ("Fix high-priority bugs") → analysis graph `e3097ed8` →
