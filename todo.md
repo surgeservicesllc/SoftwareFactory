@@ -1,5 +1,62 @@
 # SoftwareFactory — shared working status
 
+## GRAPH — THE BACKFILL FOR EVERY GRAPH THAT PREDATES THE STAGE RULE (2026-08-23, latest)
+
+Follows the round below, which made new graphs carry a stage. Existing rows
+still stored null, so the graph-runs **Stage** column read as an em dash for the
+whole of this workspace's history — including the first real Step 9 run. That
+is now derivable rather than lost: `capability` is already on every row, and the
+stage is a property of the work the node does.
+
+**Shipped:** `20260823000700_backfill_graph_node_lifecycle_stage.sql` — data
+only, no schema change. `update ... where lifecycle_stage is null and capability
+in (the nine the application defines)`.
+
+Three properties, each of which is the reason it is safe, and each tested:
+
+- **Replay is a no-op.** The null guard means a second run changes nothing.
+- **A declared stage is never overwritten.** A template that names its own
+  stage keeps it; only stageless rows are filled.
+- **An unrecognised capability is left alone.** The column is free text, not an
+  enum, so a value this system never defined stays null. An honest em dash
+  beats a confident wrong stage.
+
+**Drift is guarded, because the rule now exists twice.** `stageForCapability()`
+in TypeScript for new graphs, and the CASE in SQL for old rows.
+`tests/unit/graph-stage-mapping-agreement.test.ts` reads the migration and holds
+it to the function for every capability in `NODE_CAPABILITIES` — a capability
+added to the code without a branch in the migration fails there rather than
+silently backfilling null.
+
+**It can actually reach production.** `scope=graph-stage-backfill` in
+`apply-hosted-migrations.yml` applies that one file: hash-pinned, refuses if
+the ledger already records 20260823000700, refuses unless
+`graph_nodes.lifecycle_stage` and the `sdlc_stage` type are really present
+(the object, not merely a ledger row), prints the stage distribution before and
+after, and verifies no node with a known capability is left stageless. The hash
+pin is itself tested — editing the migration without repinning fails at commit
+time instead of turning the scope into a step that always refuses.
+
+**Verified:** four behaviour tests against the real migrated schema (derivation
+across all nine capabilities, unknown capability untouched, declared stage
+preserved, replay no-op); mutation-checked — dropping the null guard fails
+three of them, and making the SQL disagree with the code fails the agreement
+test. Typecheck, lint, full suite, production build all green.
+
+**Next bot, in the Graph lane:**
+
+1. **Run `scope=graph-stage-backfill`** — it is staged and not yet applied. It
+   writes production rows, so read the before/after distribution it prints.
+2. The goal document's ten stages (REQUIREMENT → MONITOR) are still **not** the
+   shipped 8-value `sdlc_stage` enum (GOAL, PRD, ARCHITECTURE, IMPLEMENTATION,
+   REVIEW, TEST, DEPLOYMENT, MONITORING). Nothing reconciles them. Decide
+   deliberately whether the enum grows or the ten map onto these eight before
+   building per-stage pages — `/solutions/ai-factory` today is the setup
+   journey, not the lifecycle.
+3. Still open: why the two silent Run analysis taps left no row. The alert now
+   reports status and code, so one more tap separates origin (403) from wrong
+   active organization (404) from a database refusal (409).
+
 ## GRAPH — THE STAGE COLUMN WAS DEAD, AND LABELLING IT WOULD HAVE STARTED LOOPS (2026-08-23, latest)
 
 The graph-runs panel has had a **Stage** column since the Agentic SDLC

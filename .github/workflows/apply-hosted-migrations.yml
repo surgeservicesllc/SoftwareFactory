@@ -34,6 +34,10 @@ on:
           records them in history;
           "project-controls" applies the 20260815 range plus the two run-review
           files, which is what the project detail page and the Runs page need;
+          "graph-stage-backfill" applies only 20260823000700, which derives
+          lifecycle_stage from capability for graph nodes that stored none —
+          data only, no schema change, and it never overwrites a stage a
+          template declared;
           "executable-model-repair" applies only 20260822000600, which moves
           bots already provisioned with a model the Codex worker cannot claim
           onto the one it can, so Issue a Command stops refusing every
@@ -123,6 +127,7 @@ on:
           - command-analysis-graphs
           - record-only-postflight
           - analysis-launch-doorcheck
+          - graph-stage-backfill
           - analysis-launch-commit
           - delete-selected-pipelines
           - stop-and-delete-pipelines
@@ -5597,6 +5602,98 @@ jobs:
             exit 1
           fi
           echo "Applied and verified: Clear archives, the list hides archived projects, and nothing can delete one."
+
+      - name: Backfill graph node lifecycle stages (scope=graph-stage-backfill)
+        # Exactly one file — 20260823000700 — and it changes data, not schema.
+        #
+        # Every graph created before the templates supplied a stage stored null
+        # on every node, so the graph-runs Stage column read as an em dash for
+        # the whole of this workspace's history. The stage is derivable from
+        # `capability`, which those rows already carry.
+        #
+        # Replay-safe by construction: the update is restricted to
+        # `lifecycle_stage is null`, so a second run changes nothing and a stage
+        # a template declared explicitly is never overwritten. A capability
+        # outside the nine the application defines is left null rather than
+        # guessed. No run, artifact, autonomy, worker or approval state is
+        # touched.
+        if: ${{ inputs.scope == 'graph-stage-backfill' }}
+        run: |
+          if [ -z "$SUPABASE_DB_PASSWORD" ]; then
+            echo "::error::This scope requires SUPABASE_DB_PASSWORD for live verification."
+            exit 1
+          fi
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+
+          BACKFILL_FILE=supabase/migrations/20260823000700_backfill_graph_node_lifecycle_stage.sql
+          if [ "$(sha256sum "$BACKFILL_FILE" | cut -d' ' -f1)" != "bb1e86f01bbceb56f007a625c0ae1d52919e9a4368f1640eaacc3fc31056cd25" ]; then
+            echo "::error::Migration hash mismatch; refusing to write production rows."
+            exit 1
+          fi
+
+          LEDGER_ROW=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
+            "select count(*) from supabase_migrations.schema_migrations where version = '20260823000700';")
+          if [ "$LEDGER_ROW" != "0" ]; then
+            echo "::error::Ledger already records 20260823000700 (got $LEDGER_ROW; want 0)."
+            exit 1
+          fi
+
+          # The column this writes has to exist, which means 20260821000200's
+          # object — not merely its ledger row — must be present.
+          READY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
+            select (
+              exists (select 1 from information_schema.columns
+                       where table_schema = 'public' and table_name = 'graph_nodes'
+                         and column_name = 'lifecycle_stage')
+              and exists (select 1 from pg_type t join pg_namespace n on n.oid = t.typnamespace
+                       where n.nspname = 'public' and t.typname = 'sdlc_stage')
+            );")
+          if [ "$READY" != "t" ]; then
+            echo "::error::graph_nodes.lifecycle_stage or the sdlc_stage type is missing."
+            exit 1
+          fi
+
+          echo "Before, read from the database rather than assumed:"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
+            select coalesce(lifecycle_stage::text, '(none)') as stage, count(*)
+              from public.graph_nodes group by 1 order by 1;"
+
+          repair() {
+            if [ "$MODE" = "token" ]; then
+              npx supabase migration repair --status applied "$1"
+            else
+              npx supabase migration repair --status applied "$1" --db-url "$DB_URL"
+            fi
+          }
+          echo "Applying ${BACKFILL_FILE}"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$BACKFILL_FILE"
+          repair 20260823000700
+
+          echo ""
+          echo "After:"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
+            select coalesce(lifecycle_stage::text, '(none)') as stage, count(*)
+              from public.graph_nodes group by 1 order by 1;"
+
+          # The verdict is about the rows this scope is responsible for: a node
+          # whose capability the application defines must no longer be stageless.
+          VERIFIED=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
+            select count(*) = 0 from public.graph_nodes
+             where lifecycle_stage is null
+               and capability in (
+                 'qa', 'implementation', 'architecture', 'planning',
+                 'extraction', 'review', 'security_review', 'synthesis', 'reporting'
+               );")
+          if [ "$VERIFIED" != "t" ]; then
+            echo "::error::A node with a known capability still has no lifecycle stage."
+            exit 1
+          fi
+          echo "Every node with a known capability now carries its stage."
 
       - name: Apply the Backlog and Pipelines clear controls (scope=clear-controls)
         # Exactly two files — 20260822000700 and 20260822000800 — and no others.

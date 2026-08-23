@@ -68,7 +68,7 @@ describe("safe activity list RPC", () => {
       .filter((file) => file.endsWith(".sql"))
       .sort();
     expect(migrationFiles.at(-1)).toBe(
-      "20260823000600_clear_autonomy_projects.sql",
+      "20260823000700_backfill_graph_node_lifecycle_stage.sql",
     );
     for (const migrationFile of migrationFiles) {
       await db.exec(await readFile(resolve(migrationsDirectory, migrationFile), "utf8"));
