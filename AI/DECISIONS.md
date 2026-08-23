@@ -1904,3 +1904,52 @@ Use this append-only log for decisions that constrain future implementation. Cha
   `workerWoken` truthfully. The stale "no executor is connected" wording
   on the Workflows page and launch control was retired at the same time,
   and the owner's step-by-step guide lives at docs/FULL_LIFECYCLE_GUIDE.md.
+## ADR-140 - A node's detail is a read of columns already stored, and a field nothing writes is not projected
+
+- Date: 2026-08-23
+- Status: Accepted
+- Context: round 7 recorded "clicking a node still reveals nothing" and rounds
+  8, 9 and 10 each left it standing. The goal document asks a node for its job,
+  inputs, dependencies, attempts, artifacts, timing and output.
+  `list_graph_runs` projected node_key, executor, capability, state, provider,
+  model, latency_ms and error_message — none of which answer any of those. The
+  panel could report that a node FAILED and nothing about what it had been
+  asked to do, how long it took, what it was waiting on, or what it produced.
+- Finding: nothing was missing but the read. `node_runs` has stored
+  `queued_at`, `started_at`, `completed_at` and `blocked_reason` since
+  20260814000100 and `record_node_state_as_worker` writes all four;
+  `graph_nodes` has stored `job` and `max_attempts`; `graph_artifacts` has
+  carried `node_run_id`; `graph_edges` has always known which node feeds which.
+  The migration adds no table, no column, no backfill, and touches no writer.
+- Decision, shape: the new fields go *inside* the `nodes` jsonb rather than
+  into new return columns, so `create or replace` suffices where 20260821000200
+  had to drop and recreate. New keys in a jsonb payload are additive for every
+  existing reader, so a browser running the previous bundle keeps working. The
+  route needed no change at all: it already passes `row.nodes` through verbatim.
+- Decision, dependencies: projected per node as `depends_on`, not as a
+  run-level edge list. It is why the signature could stay fixed, and it is the
+  better shape for the question — a reader looking at one node wants to know
+  what that node waited for, and answering from the node's own row means the
+  browser never joins two arrays and cannot get that join wrong.
+- Decision, the omission: `node_runs.attempt` is deliberately NOT projected.
+  The column exists and is never written — `claim_planned_graph` inserts one
+  row per node at its default of 0, `record_node_state_as_worker` updates
+  state, provider, model and timing but never `attempt`, and the runner counts
+  attempts in memory. Projecting it would put a permanent 0 on every node under
+  a heading that reads like measured fact, which is worse than the field being
+  absent. `max_attempts` — the configured ceiling — is real and is shown, so a
+  reader learns what the node is allowed without being told a retry count
+  nobody records. An integration test asserts both halves: that the key is
+  absent from the projection, and that every stored `attempt` is still 0. If a
+  writer is ever added, project it and delete that test.
+- Decision, timing: the three timestamps are projected raw and durations are
+  derived by the caller. A duration computed in SQL would have to pick a clock
+  for a node that never finished, and any pick would be a guess presented as a
+  measurement. `lib/graph/node-detail.ts` returns null in the three cases where
+  a duration is not knowable — never started, not yet finished, clocks out of
+  order — and the panel omits the row rather than rendering an em dash.
+- Also: wall time is not `latency_ms`, and neither is labelled as the other.
+  `latency_ms` is the executor's own call time and is legitimately shorter than
+  the time the node occupied; the table keeps showing the former under
+  "Latency" and the detail shows the latter under "Ran for". Presenting either
+  as the other would misattribute the gap between them.

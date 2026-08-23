@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { BlockedState, Card, SectionTitle, StatusBadge } from "@/components/ui";
+import { describeNode } from "@/lib/graph/node-detail";
 import { summariseRunStages } from "@/lib/graph/stage-summary";
 
 /**
@@ -39,6 +40,14 @@ type GraphRunNode = {
   gate_state?: string | null;
   gate_anchor_count?: number | null;
   gate_reason?: string | null;
+  job?: string | null;
+  max_attempts?: number | null;
+  queued_at?: string | null;
+  node_started_at?: string | null;
+  node_completed_at?: string | null;
+  blocked_reason?: string | null;
+  depends_on?: string[] | null;
+  artifact_counts?: Record<string, number> | null;
 };
 
 type GraphVerification = {
@@ -265,10 +274,101 @@ function GateDecision({
   );
 }
 
+/**
+ * One node, opened up.
+ *
+ * The table answers "what happened"; this answers "to what, after what, for how
+ * long, and with what to show for it" — the questions the goal document asks of
+ * a node and that no surface could answer until the projection carried them.
+ *
+ * Every field is omitted when absent rather than rendered as an em dash. A
+ * detail panel of eight dashes teaches the reader that opening a node is not
+ * worth doing; showing only what is known keeps it worth doing.
+ */
+function NodeDetail({ node }: { node: GraphRunNode }) {
+  const detail = describeNode(node);
+  const artifactKinds = Object.entries(detail.artifactCounts);
+
+  return (
+    <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
+      {detail.job ? (
+        <div className="sm:col-span-2">
+          <dt className="text-faint">Job</dt>
+          <dd className="text-foreground">{detail.job}</dd>
+        </div>
+      ) : null}
+      {detail.dependsOn.length > 0 ? (
+        <div>
+          <dt className="text-faint">Waited for</dt>
+          <dd className="text-muted">{detail.dependsOn.join(", ")}</dd>
+        </div>
+      ) : null}
+      {detail.elapsed ? (
+        <div>
+          <dt className="text-faint">Ran for</dt>
+          {/*
+            * Wall time from the node's own clocks, which is not `latency_ms` —
+            * that is the executor's call time and is legitimately shorter. The
+            * table shows the latter; this shows the former; neither is labelled
+            * as the other.
+            */}
+          <dd className="tabular text-muted">{detail.elapsed}</dd>
+        </div>
+      ) : null}
+      {detail.queued ? (
+        <div>
+          <dt className="text-faint">Queued for</dt>
+          <dd className="tabular text-muted">{detail.queued}</dd>
+        </div>
+      ) : null}
+      {typeof detail.maxAttempts === "number" ? (
+        <div>
+          <dt className="text-faint">Attempts allowed</dt>
+          {/*
+            * The ceiling, not a count. Nothing writes `node_runs.attempt`, so a
+            * "3 of 3" here would be an invention — see 20260823001000.
+            */}
+          <dd className="tabular text-muted">{detail.maxAttempts}</dd>
+        </div>
+      ) : null}
+      {detail.capability ? (
+        <div>
+          <dt className="text-faint">Capability</dt>
+          <dd className="text-muted">{detail.capability}</dd>
+        </div>
+      ) : null}
+      <div>
+        <dt className="text-faint">Produced</dt>
+        <dd className="text-muted">
+          {artifactKinds.length === 0
+            ? "No artifacts"
+            : artifactKinds.map(([kind, total]) => `${total} ${kind.toLowerCase()}`).join(", ")}
+        </dd>
+      </div>
+      {detail.stoppedReason ? (
+        <div className="sm:col-span-2">
+          <dt className="text-faint">Stopped because</dt>
+          <dd className="text-[var(--danger)]">{detail.stoppedReason}</dd>
+        </div>
+      ) : null}
+    </dl>
+  );
+}
+
 export function GraphRunsPanel() {
   const [state, setState] = useState<State>("loading");
   const [runs, setRuns] = useState<GraphRunView[]>([]);
   const [message, setMessage] = useState("");
+  // Keyed by run *and* node: the same node key exists in every run of a graph,
+  // so keying by node alone would open the same row in all of them at once.
+  const [openNodes, setOpenNodes] = useState<ReadonlySet<string>>(() => new Set());
+  const toggleNode = useCallback((key: string) => {
+    setOpenNodes((current) => {
+      const next = new Set(current);
+      if (!next.delete(key)) next.add(key);
+      return next;
+    });
+  }, []);
 
   const load = useCallback(async () => {
     try {
@@ -399,10 +499,20 @@ export function GraphRunsPanel() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-[var(--border)]">
-                        {(run.nodes ?? []).map((node) => (
-                          <tr key={node.node_key}>
+                        {(run.nodes ?? []).flatMap((node) => {
+                          const nodeKey = `${run.graphRunId}:${node.node_key}`;
+                          const open = openNodes.has(nodeKey);
+                          return [
+                          <tr key={nodeKey}>
                             <td className="py-1.5 pr-3 font-medium text-foreground">
-                              {node.node_key}
+                              <button
+                                type="button"
+                                className="text-left underline decoration-dotted underline-offset-2 hover:text-[var(--accent)]"
+                                aria-expanded={open}
+                                onClick={() => toggleNode(nodeKey)}
+                              >
+                                {node.node_key}
+                              </button>
                               <GateDecision node={node} onDecided={() => void load()} />
                             </td>
                             <td className="py-1.5 pr-3 text-muted">{node.lifecycle_stage ?? "—"}</td>
@@ -424,8 +534,18 @@ export function GraphRunsPanel() {
                             <td className="py-1.5 text-muted">
                               {node.error_message ? <span className="text-[var(--danger)]">{node.error_message}</span> : "—"}
                             </td>
-                          </tr>
-                        ))}
+                          </tr>,
+                          ...(open
+                            ? [
+                              <tr key={`${nodeKey}:detail`}>
+                                <td colSpan={7} className="py-2 pr-3">
+                                  <NodeDetail node={node} />
+                                </td>
+                              </tr>,
+                            ]
+                            : []),
+                          ];
+                        })}
                       </tbody>
                     </table>
                   </div>
