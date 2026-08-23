@@ -1,5 +1,82 @@
 # SoftwareFactory — shared working status
 
+## SIGN-IN NOW LANDS ON /decision, AND THE HEADER NAMES TWO PRODUCTS (2026-08-23, latest)
+
+Shipped and live: `main` `56641c13` (#365), ADR-135.
+
+**What changed.** Every sign-in lands on `/decision` — two product cards (AI
+Software Factory / AI Job Seeker), Getting started, and a Quick overview +
+Recent activity rail. The global header now reads **Software Factory** and
+**Job Seeker**; Administration is no longer an entry there.
+
+**The bit worth knowing before you touch the auth paths.** The default
+post-sign-in destination lives in exactly one place: the sign-in *route*
+(`app/api/auth/sign-in/route.ts`) and the callback. The sign-in *page* used to
+substitute `/solutions` when no `next` was supplied — which reached the route
+as an explicit request and silently beat the route's own default. If you ever
+change where sign-in lands and nothing happens, that is the shape of the bug:
+look for a caller substituting a default before the decision point.
+
+**The one-time gate** (`lib/auth/decision-gate.ts`) records the **decision**,
+not the permission. Absent means "has not chosen since signing in" and the
+chooser renders; `chosen` means they picked a product and `/decision` sends
+them to the console. Signing in clears it (so the chooser returns on every login),
+signing out clears it (so a shared browser inherits nothing).
+
+**It shipped with that backwards and the page was dead on arrival.** The first
+version wrote a cookie meaning "may see the chooser", set only by a fresh
+sign-in — so every session that already existed, the owner's included, had no
+cookie and was redirected straight to `/solutions`. A gate whose closed state
+is also its uninitialised state denies every case it has never seen, and the
+first such case is always the users who are already signed in. If you add a
+gate, make absence mean the permissive case or initialise it explicitly.
+
+Choosing is a Server Action form submit, **not** a link — a link gets
+prefetched, and the prefetch would record a choice the person never made. Do
+not "simplify" those forms into links.
+
+**Testing note.** `/decision` is hard-gated, so like `/job-seeker` it is
+exempted from `tests/e2e/responsive.spec.ts` (navigating to it destroys the
+sweep's own execution context). Its layout is measured through the harness
+cases `decision-products` and `decision-overview` instead. If you add UI to
+that page, put the presentational part in a component and add a harness case,
+or the coverage contract will (correctly) fail you.
+
+**Open for the owner.** The page's wording is mine, built from the described
+structure rather than pixel-matched. The console *sidebar* still says
+`AI Factory` — that is a different destination (`/solutions/ai-factory`, the
+guided journey) from the header entry that was renamed.
+
+## AUTONOMY CLEAR IS HOSTED — AND IT ARCHIVES, IT DOES NOT DELETE (2026-08-23)
+
+`20260823000600` is applied and verified (run `32657726992`). ADR-134.
+
+The owner asked for a Clear that empties "What the loop may do". That list is
+one row per project, so the obvious build was deleting projects. **Three
+independent guards refused**, and the third settles it by name:
+`refuse_project_deletion` (`20260815000900`) states a project's append-only
+activity trail makes it undeletable from its first recorded moment, that this
+is deliberate, that there is no escape hatch, and that "the supported end of a
+project's life is archive_project". So Clear archives, and
+`list_autonomy_status` excludes archived projects — same visible outcome,
+nothing destroyed, unarchive from the Projects page.
+
+**The failed first apply is the lesson.** It died on my own postflight:
+`projects_guarded_deletion is missing`. That was true — hosted has never
+recorded `20260815000900` — and the migration rolled back cleanly, applying
+nothing. But the trigger is the *explanation*; the `activity_events -> projects`
+`ON DELETE RESTRICT` is the *enforcement*, and it is present everywhere. The
+postflight now asserts the constraint and only notices the trigger's absence.
+**Assert the enforcing object, not the explaining one.**
+
+**Ledger status, measured 2026-08-23:** 18 versions are unrecorded on hosted —
+`20260815000200/000300/000400/000500/000600/000800/000900/001100/001200/
+001300/001400/001500/001600`, `20260816000100/000200/000300/001600`, and
+`20260821000400`. `Supabase Preview` stays red because the replay runs in
+version order and dies on the earliest unrecorded file whose objects already
+exist. Each wants the measure-then-finish discipline the vault got: probe
+first, finish only what is missing, record the ledger row only once every
+declared object is present. Applying them blind is how this began.
 ## GRAPH — THE BACKFILL IS APPLIED IN PRODUCTION, AND THE STAGE VOCABULARY IS SETTLED (2026-08-23, round 4 — PICK UP HERE)
 
 **Applied.** `scope=graph-stage-backfill` ran against production —
