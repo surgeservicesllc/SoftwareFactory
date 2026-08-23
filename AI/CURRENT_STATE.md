@@ -62,9 +62,11 @@ database. ADR-116 removes the repository's magic RED release phrase,
 predeclared-SHA, expiry, and repeat-approval ceremony; it does not remove
 any technical gate or any product/runtime RED approval boundary. Workers,
 autonomy, and automatic actions remain OFF and the global kill switch
-remains ON. Outstanding evidence: a green `scope=record-only-postflight`
-readback (ADR-127) and the signed-in production Step 8 -> Step 9
-acceptance; until those land, make no fully-verified claim.
+remains ON. `scope=record-only-postflight` run 32607902289 read every
+post-commit verification back green on the applied database (ADR-127).
+Outstanding evidence: only the signed-in production Step 8 -> Step 9
+acceptance; until that lands, make no fully-verified claim about the
+user-facing journey.
 
 The containment gate walked to its last clause on 2026-08-22 evening
 (ADR-122). The owner engaged the global kill switch and turned Autonomous

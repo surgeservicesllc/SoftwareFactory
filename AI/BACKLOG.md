@@ -74,9 +74,10 @@ Last triaged: 2026-08-22
   RECORD_ONLY_READY check refused on a pinned contract md5 that matches no
   database; the pin is corrected and `scope=record-only-postflight` re-runs
   the three unreached post-commit verifications (ADR-127).
-- [ ] Dispatch `scope=record-only-postflight` and read back green
-  RECORD_ONLY_READY / RECORD_ONLY_BOUNDARY / FOUNDATION_READY, health, and
-  the PostgREST reload on the applied chain.
+- [x] Dispatch `scope=record-only-postflight`: run 32607902289 read back
+  green RECORD_ONLY_READY / RECORD_ONLY_BOUNDARY / FOUNDATION_READY, healthy
+  database, reachable site, and requested the PostgREST reload — "Record-only
+  chain postflights verified on the applied production database."
 - [ ] Reverify autonomy/actions OFF, kill switch ON, disconnected workers and
   executors, and zero runs for all `record_only` commands before and after apply.
 - [ ] Complete signed-in production Claude or alternate-model Step 8 -> truthful
