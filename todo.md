@@ -1,5 +1,77 @@
 # SoftwareFactory — shared working status
 
+## GRAPH — THE STAGE COLUMN WAS DEAD, AND LABELLING IT WOULD HAVE STARTED LOOPS (2026-08-23, latest)
+
+The graph-runs panel has had a **Stage** column since the Agentic SDLC
+migration (`20260821000200`, `sdlc_stage` enum, `graph_nodes.lifecycle_stage`).
+It rendered `—` for every node of every run the owner actually produces.
+
+Measured, not guessed: of 16 templates, **only `agentic_sdlc` declared any
+lifecycle stages**. Every analysis template the Step 9 button launches —
+`production_readiness`, `bug_sweep`, `security_audit` and the rest — declared
+none, so the resolved Step 9 run (command `0e9a4765`, 7 artifacts) has no stage
+on a single node.
+
+**The trap, found before shipping it.** The obvious fix — declare stages on the
+audit templates — would have caused a regression. `isLifecycle` was *inferred*
+in `buildLaunchPlan` as "any node declares a `lifecycleStage`", and
+`lib/sdlc/orchestrator.ts` uses `isLifecycle` to decide whether a graph
+ITERATEs instead of HALTing when acceptance is unmet. Labelling an audit node
+would therefore have turned every read-only analysis into a graph that re-runs
+itself, spending subscription turns on repeat passes nobody asked for. That
+conflation *was* the defect: you could not say which stage a node sits in
+without also changing how the graph runs.
+
+**What shipped:**
+
+- `GraphTemplate.isLifecycle` is declared, not inferred. `agentic_sdlc` sets
+  it; nothing else does. A stage is now a label and nothing more.
+- `stageForCapability()` is the single rule: qa → TEST, implementation →
+  IMPLEMENTATION, architecture → ARCHITECTURE, planning → PRD, and the
+  read-only capabilities (review, security_review, extraction, synthesis,
+  reporting) → REVIEW. An audit examines something that already exists and
+  says what it found, which is REVIEW.
+- `templateStageFor()` resolves a declared stage first and falls back to the
+  capability. One rule at the read boundary rather than 100+ hand-typed labels
+  that drift the first time a template gains a node — all 16 templates, every
+  node, now have a stage.
+- `supabase/fixtures/production_readiness.launch-plan.json` regenerated: the
+  diff is exactly 7 lines, `lifecycle_stage: null → "REVIEW"`. **Note for
+  whoever runs `scope=analysis-launch-commit`:** that scope now sends nodes
+  carrying a stage. The column exists on hosted (`20260821000200` is recorded),
+  so this is a fill, not a schema change.
+
+**Mutation-checked, and the first attempt did not hold.** A test asserting
+"only `agentic_sdlc` iterates" passes under *both* the inferred and the
+declared rule, because no shipped template declares a stage override — the two
+expressions agree on today's data. The guard that actually holds the
+decoupling builds the case that separates them: an audit-shaped template with
+one explicitly staged node and no lifecycle claim, asserted to compile with
+`isLifecycle === false`. Reverting to inference fails it. Dropping the
+capability fallback fails the coverage guards.
+
+**Next bot, in the Graph lane:**
+
+1. The Stage column is now populated for *new* graphs only. Graphs already in
+   the database — including the resolved Step 9 run — still have
+   `lifecycle_stage = null` on their nodes. A backfill would need to map stored
+   `graph_nodes.capability` through the same rule; it is a one-statement
+   update per template shape, but it writes production rows, so measure with
+   `scope=probe` first.
+2. The 10-stage lifecycle in the attached goal document (REQUIREMENT →
+   MONITOR) is **not** the same vocabulary as the shipped `sdlc_stage` enum
+   (GOAL, PRD, ARCHITECTURE, IMPLEMENTATION, REVIEW, TEST, DEPLOYMENT,
+   MONITORING — 8 values). Nothing reconciles them. Decide deliberately
+   whether the enum grows or the goal's ten map onto these eight before
+   building any per-stage pages; `/solutions/ai-factory` today is the setup
+   journey, not the lifecycle.
+3. Still open from the round before: why the two silent Run analysis taps left
+   no row. The alert now reports status and error code, so one more tap is
+   enough to separate origin (403) from wrong active organization (404) from a
+   database refusal (409).
+
+Verified: typecheck, lint, production build, full suite green.
+
 ## THE VAULT MIGRATION IS FINISHED, AND THE DELETE HAD A THIRD BLOCKER (2026-08-23, latest)
 
 **`20260814002500_provider_credential_vault` is complete and recorded** (apply

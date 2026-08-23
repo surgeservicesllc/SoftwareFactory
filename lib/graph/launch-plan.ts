@@ -104,7 +104,16 @@ export function buildLaunchPlan(
 
   const graph = result.graph;
   const nodeKeys = new Set(graph.nodes.map((node) => node.nodeKey));
-  const isLifecycle = template.nodes.some((node) => node.lifecycleStage !== undefined);
+  /*
+   * Declared, not inferred.
+   *
+   * This read "any node declares a lifecycleStage", which made labelling a
+   * node's stage indistinguishable from asking the orchestrator to iterate the
+   * graph. Audit templates could not say which stage their nodes sit in — the
+   * Stage column was empty for every real run — without also becoming
+   * lifecycles that re-run themselves on unmet acceptance.
+   */
+  const isLifecycle = template.isLifecycle === true;
 
   /*
    * A feedback edge is checked against the lifecycle before it is recorded.
