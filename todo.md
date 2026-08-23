@@ -1,5 +1,139 @@
 # SoftwareFactory — shared working status
 
+## GRAPH: THE TEN-STAGE LIFECYCLE — WHAT SHIPPED, AND EXACTLY WHERE TO RESUME (2026-08-23)
+
+Branch `claude/ui-simplification-cbyx5t`, three commits on top of a clean merge
+of `main`. The goal: turn the existing factory into a graph-engineered platform
+running **REQUIREMENT → DISCOVER → EVALUATE → DECIDE → ARCHITECT → BUILD →
+REVIEW → TEST → DEPLOY → MONITOR**, driven by one plain-English request.
+
+**Read this first, before planning anything:** the graph engine was already
+built. Compiler, scheduler, runner, fan-out, fan-in, contracts, budgets, locks,
+verification, anchors, gates, feedback edges, iteration bounds and a background
+worker (`scripts/graph-worker.mts`) all existed on `main`. What was missing was
+the *lifecycle vocabulary* and the *surface*. Do not rebuild the engine.
+
+### Shipped and green
+
+1. **`eca6ccc` — the stage model is ten, not eight.**
+   `lib/sdlc/lifecycle.ts` rewritten: ten stages with number, title, slug,
+   plain-English purpose, produced artifact, capability, gate and anchor rule.
+   Migration `20260823000200_ten_stage_lifecycle.sql` rebuilds the
+   `public.sdlc_stage` enum (rename could not carry it — PRD had to *merge*
+   into REQUIREMENT) and widens `list_graph_runs` with per-node
+   `depends_on`/`attempts`/`anchor_count`/`artifact_count`/timings plus a
+   top-level `edges` column, collapsing to one row per node instead of one per
+   attempt. `lib/graph/templates.ts` `agentic_sdlc` is now 19 nodes / 24 forward
+   edges / 6 feedback edges across all ten stages, budget 240 min (the worker
+   workflow timeout moved to 300 to stay above it — pinned by
+   `tests/unit/graph-budget-fit.test.ts`). `lib/sdlc/artifacts.ts` gives each
+   stage a typed, versioned zod package, and the one node per stage that
+   produces it carries `producesStagePackage: true`.
+
+   **Three real bugs came out of this**, all the same shape — a rule written per
+   node when the thing it describes belongs to a stage — and all three made
+   acceptance *unreachable*, which is the worst way for `acceptanceReport` to be
+   wrong because "not met" is also what an in-progress run looks like:
+   DISCOVER's reducer observes nothing and failed a per-node evidence rule;
+   REVIEW gates `review` and let `security_review` fail a gate check it never
+   carried; MONITOR requires evidence and has no gate, so anchors read off the
+   gate were structurally zero. `lib/sdlc/orchestrator.ts` had **no test** — it
+   has 22 now (`tests/unit/sdlc-orchestrator.test.ts`), three of them these.
+
+2. **`a9dd3d9` — navigation and ten stage pages.**
+   `components/app-shell.tsx` regrouped to five: Overview, Projects, AI Factory
+   (the ten stages, derived from `SDLC_LIFECYCLE` so they cannot drift),
+   Operations, System. Nothing was stranded — `tests/unit/app-shell.test.tsx`
+   asserts that by href. Job Seeker leaves the console column only (the global
+   header carries it). One route serves all ten stages:
+   `app/(portal)/solutions/factory/[stage]/page.tsx` +
+   `components/stage-console.tsx`, over the pure, tested derivation in
+   `lib/sdlc/stage-view.ts`. New `/solutions/artifacts`. `GateDecision`
+   extracted to `components/graph/gate-decision.tsx` and shared.
+
+3. **`4fd6922` — one sentence starts a run.**
+   `components/factory-intake.tsx` on `/solutions/ai-factory`; `POST /api/graphs`
+   now accepts `goal` and stores it verbatim in `graphs.goal`.
+   `tests/integration/graph-launch-plan.test.ts` proves it reaches PostgreSQL.
+
+### In flight, uncommitted at handoff — pick up HERE
+
+`lib/graph/backoff.ts` and `supabase/migrations/20260823000300_structured_stage_handoffs.sql`
+exist and are **not yet wired to anything**. Both are written, commented and
+(for the backoff) tested; neither has a caller.
+
+1. **Wire the backoff.** `lib/worker/graph-run.ts`, inside the `executeNode`
+   wrapper (~line 335): before `await executeNode(node, attempt, …)`, when
+   `attempt > 1`, `await sleep(retryDelayMs(attempt, policy, random))`. Add
+   `sleep`/`backoff`/`random` as a fifth optional options argument to
+   `runClaimedGraph` so tests inject a no-op clock. Do **not** put the delay in
+   `lib/graph/runner.ts`: that module is deliberately free of I/O, and blocking
+   inside the scheduling round would make independent work wait. Also record a
+   `RUNNING` transition with the attempt number so a retry is visible in
+   `graph_events` — today only attempt 1 is recorded.
+2. **Wire the handoffs.** `record_graph_handoff_as_worker` is defined and
+   granted to `service_role` only. Add it to `GraphRunStore` (optional, like
+   `openGate`/`recordVerification`, so an older store still satisfies the
+   contract) and to `SupabaseGraphStore` in `lib/worker/graph-store.ts`. In the
+   worker, when a completed node has `producesStagePackage`, validate its output
+   with `validateStageArtifact(stage, output)` from `lib/sdlc/artifacts.ts` and
+   write one handoff per downstream node — `contract_valid` decided *then*, at
+   the handoff, because recomputing it later checks today's schema against
+   yesterday's payload.
+3. **Call the orchestrator from the worker.** `lib/sdlc/orchestrator.ts`
+   `decideNextAction` is still called by nothing. At the end of
+   `runClaimedGraph`, build `OrchestratorState` from `result.states` + the
+   claim's gates + `anchorsFor`, and use the decision to choose the final run
+   state and whether to call `advance_graph_iteration`. Note
+   `OrchestratorNode.anchorCount` is now a top-level field — pass it, do not
+   rely on `gate.anchorCount`.
+4. **Conditional branches are still a genuine Gap** (`AI/AGENTIC_SDLC_GAP_MATRIX.md`
+   row 6). `graph_edges` carries a reason, never a condition, and nothing
+   evaluates one at run time. This needs a schema column plus compiler and
+   scheduler work; it is the largest remaining item and was not started.
+
+### Hosted apply — two scopes, in this order
+
+`.github/workflows/apply-hosted-migrations.yml`:
+
+1. `scope=lifecycle` (20260821000100 + 20260821000200) — **still unhosted**.
+2. `scope=ten-stage-lifecycle` (20260823000200) — new, and it must run *after*
+   the above. It is the only scope in that workflow that DROPS a type in
+   production; the file guards itself and returns early if the enum already
+   holds `REQUIREMENT`.
+
+**The order is load-bearing and now tested.** `20260821000200` drops and
+recreates `list_graph_runs` with its own narrower return type, so replaying
+`scope=lifecycle` silently reverts the widened projection and every consumer of
+`depends_on` reads undefined. `tests/integration/hosted-scope-replay.behavior.test.ts`
+records this as a property, not a hope. `scope=probe` gained three rows for the
+widening and its `sdlc_stage` marker moved from `MONITORING` to `TEST` — a label
+that exists in both vocabularies, so the lifecycle rows keep answering the
+question they are actually about.
+
+`20260823000300` (handoffs) will need a scope of its own once it is wired.
+
+### What this repository still will not claim
+
+**No node has executed against a provider.** Outbound execution is off and no
+credential is configured. Launching plans a graph; it does not run one. The
+intake says so in the route's own words, and
+`tests/unit/factory-intake.test.tsx` asserts that wording stays — do not
+"improve" it into "your run has started".
+
+### Gate status at handoff
+
+Lint clean, typecheck clean on every file touched. Targeted suites green:
+`sdlc-lifecycle` (17), `sdlc-orchestrator` (22), `sdlc-artifacts` (14),
+`sdlc-stage-view` (21), `stage-console` (17), `artifacts-console` (8),
+`factory-intake` (10), `graph-backoff` (7), `app-shell` (27),
+`agentic-sdlc-lifecycle` (13), `hosted-scope-replay` (9),
+`graph-launch-plan` (9). **A full-suite run and a production build had not
+finished at handoff** — run both before claiming the branch is green, and
+expect the migration-name pins in `tests/integration/*` to need moving again
+the moment another migration lands.
+
+
 ## STEP 9 RUN ANALYSIS: DATABASE PROVEN HEALTHY, BROWSER TAP LEAVES NO TRACE — PICK UP HERE (2026-08-23)
 
 The goal in flight: the AI Factory's Step 9 runs the owner's recorded Claude
