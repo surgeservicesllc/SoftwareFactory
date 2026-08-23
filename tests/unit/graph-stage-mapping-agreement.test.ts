@@ -36,7 +36,7 @@ const migration = readFileSync(
 const extension = readFileSync(
   resolve(
     import.meta.dirname,
-    "../../supabase/migrations/20260823001000_node_detail_in_graph_runs.sql",
+    "../../supabase/migrations/20260823000900_discovery_capability_stage_map.sql",
   ),
   "utf8",
 );
