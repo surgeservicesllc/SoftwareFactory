@@ -795,10 +795,12 @@ These are recorded for deliberate owner review and are not evidence that Phase 1
   whose objects already exist is always the one that fails — an earlier note
   guessed `20260821000400` would be next on the strength of its table
   existing, which was right about the class and wrong about the order.
-  The ledger listing in run 32652305439 shows 20 unrecorded versions.
-  Remaining unrecorded: 20260814002600, 20260815000200/000300/000400/
-  000500/000600/000800/000900/001100/001200/001300/001400/001500/001600,
-  20260816000100/000200/000300/001600, 20260821000400. Each wants the same
+  The ledger listing in apply run 32657726992 (2026-08-23) shows **18**
+  unrecorded versions: 20260815000200/000300/000400/000500/000600/000800/
+  000900/001100/001200/001300/001400/001500/001600,
+  20260816000100/000200/000300/001600, and 20260821000400. An earlier count of
+  20 included 20260814002500 and 20260814002600, both of which are now
+  recorded. Each wants the same
   measure-then-finish discipline the vault got — a probe inventory first,
   finish only what is missing, record the ledger row only once every declared
   object is present. Applying them blind is how this class of problem began.
@@ -856,6 +858,11 @@ These are recorded for deliberate owner review and are not evidence that Phase 1
   overview's failure behaviour, and the renamed header; by the entry-point
   contract; and in a real browser at every width through the harness case
   `decision-overview` and the signed-in header assertion.
+- [x] **Fixed same day: the page was unreachable for everyone already signed
+  in.** The gate defaulted to closed, so a session that predated the feature
+  had no marker and `/decision` redirected to `/solutions`. The marker now
+  records the decision rather than the permission: absent renders the chooser,
+  `chosen` redirects, signing in and signing out both clear it.
 - [ ] The owner should confirm the page matches their image. It was built from
   the described structure — two product cards (BUILD / GROW), Getting started,
   Quick overview and Recent activity — and the wording is mine, not theirs.

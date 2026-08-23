@@ -1747,6 +1747,21 @@ Use this append-only log for decisions that constrain future implementation. Cha
   return to it until the cookie expires. Closing it on any other navigation
   would need middleware on every route, which is a much larger mechanism than
   a chooser screen warrants.
+- Amendment (2026-08-23): the gate shipped with its default inverted and the
+  page was unreachable. The marker meant "this person may see the chooser" and
+  was written only by a fresh sign-in, so every session that already existed -
+  the owner's included - carried nothing and was redirected to `/solutions`.
+  A default of *closed* makes the absence of information mean denied, and
+  absence is the ordinary case here: a session predating the feature, a
+  cleared cookie jar and a brand-new login are indistinguishable, and all
+  three should see the page. The marker now records the **decision** instead:
+  absent means "has not chosen since signing in" and the chooser renders,
+  `chosen` means the person picked a product and `/decision` sends them to the
+  console. Signing in clears it, which is what "land all users on it" requires
+  per login; signing out clears it too, so a shared browser inherits nothing.
+  The general rule this is an instance of: a gate whose closed state is also
+  its uninitialised state will deny every case it has never seen, and the
+  first such case is always the existing users.
 
 ## ADR-136 - The lifecycle vocabulary is the eight stages the database holds, and the goal's ten map onto them
 
