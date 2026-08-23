@@ -49,9 +49,12 @@ never contained" already renders a scout run correctly.
 
 **Still open in this lane:**
 
-1. Hosted apply of `scope=discovery-stages` (if this round's session did not
-   dispatch it, dispatch after merge and verify the eleven-label readback).
-   Until applied, launching the scout on hosted fails at the stage cast.
+1. ~~Hosted apply of `scope=discovery-stages`~~ **Done** (run 32665300909):
+   migrations, postflights and ledger rows all succeeded on hosted; the run
+   shows red only because the scope's readback compared `name[]` to `text[]`
+   after the fact. Fixed, and the readback SQL is now executed verbatim in
+   the discovery-stages replay test. Do not re-dispatch — the one-shot guard
+   now correctly refuses.
 2. Live source lookups for discovery are an **owner-gated tool-surface
    change** (the node executor is Read/Glob/Grep by design; WebSearch would
    make ecosystem candidates verifiable). Until then the scout's ecosystem

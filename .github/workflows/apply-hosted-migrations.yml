@@ -5779,7 +5779,7 @@ jobs:
           # the three new stages accepted by an actual cast.
           VERIFIED=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
             select (
-              (select array_agg(enumlabel order by enumsortorder)
+              (select array_agg(enumlabel::text order by enumsortorder)
                  from pg_enum where enumtypid = 'public.sdlc_stage'::regtype)
               = array['GOAL','PRD','DISCOVERY','EVALUATION','DECISION','ARCHITECTURE',
                       'IMPLEMENTATION','REVIEW','TEST','DEPLOYMENT','MONITORING']

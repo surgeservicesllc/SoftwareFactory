@@ -10,10 +10,12 @@ outputs are the typed packages in `lib/graph/stage-packages.ts`; the
 `open_source_scout` template (seven nodes, three parallel scans, tolerant
 fan-in, AUTOMATIC decision gate) launches nodes in all three stages.
 `SDLC_STAGES` is eleven. Migrations `20260823000800`/`20260823000900` are
-**local and replay-green in PGlite**; the hosted apply goes through the new
-one-shot `scope=discovery-stages` (two psql invocations, because an enum
-value cannot be used in the transaction that added it). Until that scope
-runs, a hosted scout launch fails at the stage cast.
+**applied and recorded on hosted** (run 32665300909, two psql invocations
+because an enum value cannot be used in the transaction that added it). Both
+in-file postflights passed against production; the run shows failure only
+because the scope's after-the-fact readback compared `name[]` to `text[]` —
+fixed, and now executed verbatim in the replay test. A hosted scout launch
+can store nodes in all three stages.
 
 The honesty boundary is in the schema, not the prompt: a discovery candidate
 must say how it is known (REPOSITORY / DEPENDENCY / MODEL_KNOWLEDGE), a
