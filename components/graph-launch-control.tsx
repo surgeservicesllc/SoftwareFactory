@@ -13,13 +13,15 @@ import { Card, EmptyState, SectionTitle, StatusBadge } from "@/components/ui";
  * Until this existed, `create_graph_from_plan` had no caller anywhere in the
  * application and no graph could reach the database at all.
  *
- * ## It records a plan; it does not start work
+ * ## It records a plan and wakes the worker; the server's sentence is the truth
  *
- * The wording throughout is deliberate. `POST /api/graphs` creates the graph,
- * its nodes and its edges, and stops. No node is dispatched, because no executor
- * is wired to the graph runner — so a button labelled "Run" would be a lie, and
- * a resulting state of "started" would read as work in progress to anyone who
- * did not know better. It says **Recorded**, and it says why nothing is running.
+ * `POST /api/graphs` creates the graph, its nodes and its edges, then wakes the
+ * graph executor worker best-effort through the project's GitHub binding. The
+ * wake can fail without failing the launch, so this control never states on its
+ * own authority that anything is running: the badge says **Recorded** — which is
+ * always true — and the server's `note` sentence says whether the worker was
+ * woken or the graph waits for the scheduled or manual dispatch. Run evidence
+ * itself lives on the Pipelines page's runs panel, not here.
  */
 
 type Project = { readonly id: string; readonly name: string };
@@ -109,8 +111,8 @@ export function GraphLaunchControl({
   return (
     <Card>
       <SectionTitle
-        title="Record this graph"
-        description="Writes the compiled plan — its nodes, its edges and its budget — against a project. Nothing is dispatched: no executor is connected to the graph runner yet."
+        title="Launch this graph"
+        description="Writes the compiled plan — its nodes, its edges and its budget — against a project, then wakes the executor worker to claim it. The result below states whether the wake happened; the run itself appears on the Pipelines page."
       />
 
       {projects === null ? (
@@ -156,7 +158,7 @@ export function GraphLaunchControl({
             className="inline-flex items-center gap-2 rounded-lg border border-[var(--accent-border)] bg-[var(--accent-surface)] px-3 py-2 text-sm text-[var(--accent-text)] transition disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Rocket className="h-4 w-4" aria-hidden />
-            {busy ? "Recording…" : `Record ${templateName}`}
+            {busy ? "Launching…" : `Launch ${templateName}`}
           </button>
         </div>
       )}

@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { buildCustomTemplate, parseStoredDefinition } from "@/lib/graph/custom-templates";
+import { dispatchGraphWorker } from "@/lib/orchestration/dispatch";
 import { buildLaunchPlan } from "@/lib/graph/launch-plan";
 import { budgetForTemplate, findTemplate, type GraphTemplate } from "@/lib/graph/templates";
 import {
@@ -141,6 +142,49 @@ export async function POST(request: Request) {
     });
     if (error) return databaseErrorResponse(error);
 
+    /*
+     * Best effort: wake the graph worker through the project's own verified
+     * GitHub binding — the same wake the command routes fire. This route used
+     * to record the graph and stop, which was honest but left the Launch
+     * button planning work nothing would run: the scheduled drain is off by
+     * default, so the owner's first full_lifecycle launch sat PLANNED until a
+     * manual dispatch. The whole wake sits inside the try, binding lookup
+     * included, so the launch's answer never depends on it — a wake that
+     * cannot happen leaves the graph planned for the scheduled or manual
+     * dispatch, reported rather than hidden.
+     */
+    let workerWoken = false;
+    try {
+      const target = await context.client
+        .rpc("resolve_phase1c_command_target", {
+          p_organization_id: context.activeOrganization.id,
+          p_project_id: parsed.data.projectId,
+        })
+        .single();
+      const targetRow = target.error
+        ? null
+        : (target.data as {
+            app_id: number;
+            external_installation_id: number;
+            external_repository_id: number;
+            repository_full_name: string;
+          } | null);
+      if (targetRow?.repository_full_name) {
+        await dispatchGraphWorker(
+          {
+            appId: targetRow.app_id,
+            externalInstallationId: targetRow.external_installation_id,
+            externalRepositoryId: targetRow.external_repository_id,
+            repositoryFullName: targetRow.repository_full_name,
+          },
+          String(data),
+        );
+        workerWoken = true;
+      }
+    } catch {
+      workerWoken = false;
+    }
+
     return jsonNoStore({
       graphId: data,
       template: { key: template.key, name: template.name, version: template.version },
@@ -152,9 +196,12 @@ export async function POST(request: Request) {
       // Said plainly, because a created graph looks like a started one to anyone
       // who does not know the difference.
       state: "PLANNED",
-      note: "The graph is recorded. No node has been dispatched yet: the graph "
-        + "executor worker claims recorded graphs when it runs, and until a "
-        + "dispatch with the subscription credential picks this one up it stays planned.",
+      workerWoken,
+      note: workerWoken
+        ? "The graph is recorded and the executor worker has been woken to claim it."
+        : "The graph is recorded. The worker could not be woken through the project's "
+          + "GitHub binding, so it stays planned until the scheduled or manual dispatch "
+          + "picks it up.",
     });
   } catch (error) {
     return operationsFailure(error, "graph_launch_failed", "The graph could not be created.");

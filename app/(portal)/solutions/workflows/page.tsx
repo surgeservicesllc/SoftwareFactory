@@ -40,9 +40,10 @@ export default function WorkflowsPage() {
       />
 
       <Notice tone="warning" icon={Workflow}>
-        Every graph below is compiled, not run. The topology, node contracts, lock waves and removed
-        dependencies are exact — they are produced by the same code that would schedule the work. No
-        provider credential is configured, so nothing has executed and no run evidence exists.
+        Every preview below is compiled, not run — the topology, node contracts, lock waves and
+        removed dependencies are produced by the same code that schedules the work. Launching
+        records the graph and wakes the executor worker to claim it; the run itself, its stages and
+        its approval gates appear on the Pipelines page.
       </Notice>
 
       <WorkflowsConsole templates={templates} />

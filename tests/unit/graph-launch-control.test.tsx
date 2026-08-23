@@ -7,10 +7,11 @@ import { GraphLaunchControl } from "@/components/graph-launch-control";
 /**
  * The control's job is to be truthful about what it did.
  *
- * The interesting assertions here are about wording, not wiring. A graph is
- * recorded and nothing is dispatched, so a surface that implied a run had
- * started would be the exact overclaim this phase keeps producing — and it would
- * be believed, because a spinner and a green badge are persuasive.
+ * The interesting assertions here are about wording, not wiring. A launch
+ * records the graph and wakes the worker best-effort; whether the wake happened
+ * is the server's sentence to say, so the control must render that sentence
+ * verbatim and never claim on its own authority that work is running — a
+ * spinner and a green badge are persuasive, which is exactly the danger.
  */
 
 function jsonResponse(body: unknown, status = 200) {
@@ -29,7 +30,7 @@ const recorded = {
   edgeCount: 7,
   maxParallelism: 3,
   requiresOwnerApproval: false,
-  note: "The graph is recorded. No node has been dispatched: no executor is connected to the graph runner, so nothing will run until one is.",
+  note: "The graph is recorded and the executor worker has been woken to claim it.",
 };
 
 afterEach(() => {
@@ -37,7 +38,7 @@ afterEach(() => {
 });
 
 describe("the graph launch control", () => {
-  it("records a graph and says plainly that nothing is running", async () => {
+  it("records a graph and renders the server's own sentence about the wake", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.includes("/api/projects")) return jsonResponse({ projects });
@@ -50,7 +51,7 @@ describe("the graph launch control", () => {
 
     const select = await screen.findByLabelText("Project");
     await userEvent.selectOptions(select, projects[0].id);
-    await userEvent.click(screen.getByRole("button", { name: /record feature build/i }));
+    await userEvent.click(screen.getByRole("button", { name: /launch feature build/i }));
 
     await waitFor(() => expect(screen.getByText("Recorded")).toBeInTheDocument());
 
@@ -58,11 +59,12 @@ describe("the graph launch control", () => {
     expect(screen.getByText(/DIAMOND/)).toBeInTheDocument();
     expect(screen.getByText(/6 nodes/)).toBeInTheDocument();
 
-    // The load-bearing sentence. Its absence is what would make this surface a
-    // lie, so it is asserted rather than assumed to survive a refactor.
-    expect(screen.getByText(/No node has been dispatched/)).toBeInTheDocument();
+    // The load-bearing sentence is the server's, verbatim. A paraphrase here
+    // is how the control would drift from what actually happened.
+    expect(screen.getByText(/executor worker has been woken/)).toBeInTheDocument();
 
-    // Nothing anywhere claims the graph is running.
+    // The control itself still never claims the graph is running — the wake is
+    // an invitation to claim, not a run in progress.
     expect(screen.queryByText(/\brunning\b/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/\bstarted\b/i)).not.toBeInTheDocument();
   });
@@ -88,7 +90,7 @@ describe("the graph launch control", () => {
 
     render(<GraphLaunchControl templateKey="feature_build" templateName="Feature build" />);
     await userEvent.selectOptions(await screen.findByLabelText("Project"), projects[0].id);
-    await userEvent.click(screen.getByRole("button", { name: /record feature build/i }));
+    await userEvent.click(screen.getByRole("button", { name: /launch feature build/i }));
 
     // The write boundary went to the trouble of explaining itself; discarding
     // that for "something went wrong" wastes the only useful part.
@@ -113,6 +115,6 @@ describe("the graph launch control", () => {
     render(<GraphLaunchControl templateKey="feature_build" templateName="Feature build" />);
     await screen.findByLabelText("Project");
 
-    expect(screen.getByRole("button", { name: /record feature build/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /launch feature build/i })).toBeDisabled();
   });
 });

@@ -23,6 +23,9 @@ on:
 
 permissions:
   contents: read
+  # The TEST anchor reads CI check-run verdicts for the checked-out commit;
+  # observation only, nothing on GitHub is written.
+  checks: read
 
 concurrency:
   group: graph-worker
@@ -79,6 +82,12 @@ jobs:
           # The subscription credential; no ANTHROPIC_API_KEY is supplied, so
           # this cannot quietly become a billed run.
           SOFTWAREFACTORY_CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.SOFTWAREFACTORY_CLAUDE_CODE_OAUTH_TOKEN }}
+          # Anchor instruments. The TEST anchor observes CI check runs for
+          # GITHUB_SHA with the workflow's own read-scoped token; the MONITOR
+          # anchor probes the deployed product the apply workflow already
+          # verifies against.
+          SOFTWAREFACTORY_CHECKS_TOKEN: ${{ github.token }}
+          SOFTWAREFACTORY_PRODUCTION_URL: ${{ vars.SOFTWAREFACTORY_PRODUCTION_URL || 'https://www.theagoras.com' }}
           # The server-only marker protects Next.js client bundles; in a Node
           # worker it would simply throw. The shim maps that one specifier to
           # the empty module the package ships for server environments.
