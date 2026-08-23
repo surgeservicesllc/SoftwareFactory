@@ -96,6 +96,29 @@ describe("the DISCOVERY/EVALUATION/DECISION stage growth", () => {
     expect(growth).not.toMatch(/'(DISCOVERY|EVALUATION|DECISION)'::public\.sdlc_stage/);
   });
 
+  it("answers the apply scope's own readback with t, so the verifier cannot fail the verified", async () => {
+    /*
+     * The first hosted apply of this pair proved why this exists: both
+     * migrations applied, both postflights passed, both ledger rows were
+     * recorded — and then the workflow's readback query died on
+     * `name[] = text[]`, failing the run after everything real had
+     * succeeded (run 32665300909). The workflow's exact query is executed
+     * here against the replayed database, so a verifier that cannot parse
+     * or that disagrees with the migrations fails at commit time instead
+     * of after a production apply.
+     */
+    const workflow = await readFile(
+      resolve(import.meta.dirname, "../../.github/workflows/apply-hosted-migrations.yml"),
+      "utf8",
+    );
+    const scope = workflow.slice(workflow.indexOf("scope == 'discovery-stages'"));
+    const match = scope.match(/VERIFIED=\$\(psql "\$DB_URL" -v ON_ERROR_STOP=1 -Atqc "\n([\s\S]*?);"\)/);
+    expect(match, "the discovery-stages readback query was not found in the workflow").not.toBeNull();
+
+    const verdict = await db.query<{ verified: boolean }>(`${match![1]} as verified`);
+    expect(verdict.rows[0].verified).toBe(true);
+  });
+
   it("leaves no node with a known capability stage-less after the map extension", async () => {
     const orphaned = await db.query<{ count: number }>(`
       select count(*)::int as count from public.graph_nodes

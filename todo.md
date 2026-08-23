@@ -1,6 +1,62 @@
 # SoftwareFactory — shared working status
 
-## GRAPH — DISCOVER/EVALUATE/DECIDE ARE REAL CAPABILITIES WITH TYPED PACKAGES (2026-08-23, round 6 — PICK UP HERE)
+## GRAPH — ROUND 6'S OPEN ITEM 1 IS ALREADY CLOSED, AND ADR-136 IS SUPERSEDED (2026-08-23, round 7 — PICK UP HERE)
+
+A verification round, not a build round. Three bots are on this repository and
+round 6 landed in the Graph lane while this session was mid-round, so this
+re-scanned rather than assumed.
+
+**Round 6's open item 1 is done.** It said "Hosted apply of
+`scope=discovery-stages` — if this round's session did not dispatch it,
+dispatch after merge... Until applied, launching the scout on hosted fails at
+the stage cast." Dispatched it to be sure
+([run 32665767520](https://github.com/surgeservicesllc/SoftwareFactory/actions/runs/32665767520)):
+the scope refused in zero seconds with **"Ledger already records one of these
+versions (growth=1 map=1; want 0/0)"**. Both `20260823000800` and
+`20260823000900` are recorded — round 6 *had* applied them. Nothing was
+written; the guard did its job. **Treat that item as closed**, and note the
+failed run in the history is the refusal, not a failure to apply.
+
+**ADR-136 is now marked superseded in part by ADR-137**, and the round 4
+section below carries an inline correction. It said "the enum does not grow" —
+true when written, false the same day. Its *rule* still stands and is the
+better half: a stage is added when something produces it, never to make a
+picture match. Round 6 met that precondition and then grew the enum, which is
+the ADR working as intended rather than being overruled.
+
+**Round 5's work survives round 6 untouched.** `summariseRunStages` reads
+`SDLC_STAGES`, so the eleven-stage vocabulary was absorbed with no change —
+all 20 Graph tests (summariser, panel, template lifecycle, SQL/TS agreement)
+pass against round 6's main. Round 6 also updated the two tests of mine that
+its capability additions touched, correctly.
+
+**Lane split, so three bots do not collide.** This session has stayed in
+`lib/graph/*`, `components/graph-runs-panel.tsx` and the Graph migrations. The
+other two have been on sign-in/chooser, navigation, and the unrecorded-migration
+backlog. Round 6 is also Graph — **coordinate before taking anything below.**
+
+**Next, highest value first:**
+
+1. **Per-stage pages are now unblocked for all ten**, which they were not
+   before round 6: nine of the goal document's ten map one to one and
+   REQUIREMENT covers GOAL+PRD. `summariseRunStages` is the grouping those
+   pages want — a stage page is that filtered to one stage plus the nodes
+   behind it. `/solutions/ai-factory` is still the *setup journey*, not the
+   lifecycle; do not rename it into one.
+2. **Clicking a node still reveals nothing.** The goal document asks for owner,
+   inputs, dependencies, attempts, logs, artifacts, timing and output.
+   `list_graph_runs` projects state/provider/model/latency/error; inputs,
+   dependencies and per-node artifacts are not projected. A read path to widen
+   — and it needs a migration, so check the tail pins (round 6 moved 21 files;
+   another mover will conflict).
+3. **Round 6's own item 3** — graph-to-graph chaining, scout→agentic_sdlc, the
+   one-request experience. The handoff contract exists; the chaining does not.
+   That looks like round 6's intended next; ask before taking it.
+4. Owner-gated, unchanged: the silent Run analysis taps (one more tap separates
+   403 / 404 / 409), and live source lookups for discovery (a tool-surface
+   change).
+
+## GRAPH — DISCOVER/EVALUATE/DECIDE ARE REAL CAPABILITIES WITH TYPED PACKAGES (2026-08-23, round 6)
 
 Primary-bot round, from the owner's Step 2–5 boards + the GraphEngineering
 master prompt. ADR-136 said the three dormant stages needed "a capability that
@@ -49,9 +105,12 @@ never contained" already renders a scout run correctly.
 
 **Still open in this lane:**
 
-1. Hosted apply of `scope=discovery-stages` (if this round's session did not
-   dispatch it, dispatch after merge and verify the eleven-label readback).
-   Until applied, launching the scout on hosted fails at the stage cast.
+1. ~~Hosted apply of `scope=discovery-stages`~~ **Done** (run 32665300909):
+   migrations, postflights and ledger rows all succeeded on hosted; the run
+   shows red only because the scope's readback compared `name[]` to `text[]`
+   after the fact. Fixed, and the readback SQL is now executed verbatim in
+   the discovery-stages replay test. Do not re-dispatch — the one-shot guard
+   now correctly refuses.
 2. Live source lookups for discovery are an **owner-gated tool-surface
    change** (the node executor is Read/Glob/Grep by design; WebSearch would
    make ecosystem candidates verifiable). Until then the scout's ecosystem
@@ -226,7 +285,9 @@ ARCHITECT   -> ARCHITECTURE
 BUILD       -> IMPLEMENTATION
 ```
 
-The enum does **not** grow. DISCOVER, EVALUATE and DECIDE have nothing that
+The enum does **not** grow — *superseded the same day by ADR-137, which built the
+capabilities this paragraph named as the precondition and then grew the enum to
+eleven. The rule stands; the verdict does not.* DISCOVER, EVALUATE and DECIDE have nothing that
 produces them: no template declares such a capability and `NODE_CAPABILITIES`
 has no member that resolves to one. Three enum values nothing can populate is a
 stage filter that is permanently empty — scaffolding, in the same commit that
