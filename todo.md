@@ -18,15 +18,27 @@ original, and the apply scope reads it back and re-checks all nine of the
 original's objects **before** recording `20260814002500` — the ledger can
 never claim "applied" about a database still short a function.
 
-That removes **one** cause of the red `Supabase Preview`, and the honest
-expectation is that the check stays red. The preview branch replays every
+That removes **one** cause of the red `Supabase Preview`, and it verifiably
+moved the replay forward: before the repair the preview died on
+20260814002500 (`relation "provider_credentials" already exists`, 42P07);
+after it, the same check on 379a0193 dies on **20260815000200** instead
+(`column "maximum_concurrent_runs" of relation "organizations" already
+exists`, 42701). Same partial-apply class, next file along, different error
+code — a duplicate COLUMN from an `alter table add column` rather than a
+duplicate table.
+
+The check is still red, and expected to stay red until the rest are
+finished. The preview branch replays every
 migration the ledger does not record, and the ledger listing in run
 32652305439 shows **20 unrecorded versions**, of which 20260814002500 was
-only the first to fail. The next one is already known:
-**`20260821000400_command_factory_routing` is unrecorded, and its table
-demonstrably exists** — this session deleted rows from
-`factory_command_routes` on production. Its replay will hit
-`create table public.factory_command_routes` and raise the same 42P07.
+only the first to fail. The replay runs in version order, so the EARLIEST unrecorded file whose
+objects already exist is the one that fails. That is currently
+**20260815000200**. (An earlier note here guessed
+`20260821000400_command_factory_routing` would be next because its table
+demonstrably exists — this session deleted rows from
+`factory_command_routes` on production — but that file is far later in the
+queue and will only be reached once everything before it is finished. The
+guess was right about the class and wrong about the order.)
 
 So do not read the vault repair as "the check is fixed". The remaining
 unrecorded versions, from the same listing, are:

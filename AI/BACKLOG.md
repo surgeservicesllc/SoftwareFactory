@@ -785,13 +785,18 @@ These are recorded for deliberate owner review and are not evidence that Phase 1
   answering every correct bot sign-in code with `connect_session_invalid`,
   and its unrecorded ledger row was what made Supabase's preview branch
   replay the file into a 42P07 on every commit.
-- [ ] `Supabase Preview` will **stay red**, and the vault repair should not
-  be read as fixing it. The ledger listing in run 32652305439 shows 20
-  unrecorded versions; 20260814002500 was only the first to fail the replay.
-  The next is already identified: `20260821000400_command_factory_routing`
-  is unrecorded and its table demonstrably exists (this session deleted rows
-  from `factory_command_routes` on production), so its replay raises the same
-  42P07. Remaining unrecorded: 20260814002600, 20260815000200/000300/000400/
+- [ ] `Supabase Preview` **stays red**, and the vault repair should not be
+  read as fixing it — though it verifiably advanced the replay. Before: the
+  preview died on 20260814002500 (42P07, duplicate table). After (checked on
+  379a0193): it dies on **20260815000200** with
+  `column "maximum_concurrent_runs" of relation "organizations" already
+  exists` (42701, duplicate column). Same partial-apply class, next file
+  along. The replay runs in version order, so the earliest unrecorded file
+  whose objects already exist is always the one that fails — an earlier note
+  guessed `20260821000400` would be next on the strength of its table
+  existing, which was right about the class and wrong about the order.
+  The ledger listing in run 32652305439 shows 20 unrecorded versions.
+  Remaining unrecorded: 20260814002600, 20260815000200/000300/000400/
   000500/000600/000800/000900/001100/001200/001300/001400/001500/001600,
   20260816000100/000200/000300/001600, 20260821000400. Each wants the same
   measure-then-finish discipline the vault got — a probe inventory first,
