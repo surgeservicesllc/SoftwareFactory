@@ -52,8 +52,12 @@ describe("the analysis template map", () => {
    * fixture to launch_command_analysis_graph when the browser doorway cannot
    * be observed. The fixture must therefore be byte-for-byte what the code
    * would send today; regenerate with
-   * `npx tsx scripts/emit-analysis-plan.mts other supabase/fixtures/production_readiness.launch-plan.json`
-   * whenever the template or compiler changes.
+   * `npx tsx --conditions react-server scripts/emit-analysis-plan.mts other \
+   *  supabase/fixtures/production_readiness.launch-plan.json`
+   * whenever the template or compiler changes. The `--conditions` flag is not
+   * optional: the script reaches `lib/orchestration/analysis-launch.ts`, which
+   * imports `server-only`, and that package throws on import unless resolved
+   * under the `react-server` condition.
    */
   it("keeps the checked-in production_readiness launch fixture identical to a fresh compile", () => {
     const fixture = JSON.parse(readFileSync(

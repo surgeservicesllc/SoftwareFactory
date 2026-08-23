@@ -171,6 +171,7 @@
     "max_concurrent_nodes": 8,
     "max_duration_ms": 5400000,
     "max_retries": 10,
-    "max_discovery_rounds": 5
+    "max_discovery_rounds": 5,
+    "is_lifecycle": false
   }
 }
