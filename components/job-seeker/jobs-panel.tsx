@@ -6,23 +6,35 @@ import { EVALUATION_METHOD_LABEL } from "@/lib/job-seeker/evaluate";
 import { Card, EmptyState, NotConnectedBadge, SectionTitle, StatusBadge } from "@/components/ui";
 
 /**
- * Job discovery: record postings and see their match against your recorded
- * facts. Two real ways in: manual recording, and importing from a public
- * board (Greenhouse or Lever) by its identifier — both flow through the
- * same evaluate-and-score chain. A credentialed adapter with no
- * integration (LinkedIn) still renders Not Connected with its exact needs
- * named, never a working-looking control.
+ * Job discovery: find postings and see their match against your recorded
+ * facts. Three real ways in — searching a public aggregator by keyword,
+ * importing a company's public board by its identifier, and recording a
+ * posting by hand — and all three flow through the same evaluate-and-score
+ * chain, so what they produce is one kind of record. A credentialed adapter
+ * with no integration (LinkedIn) still renders Not Connected with its exact
+ * needs named, never a working-looking control.
  */
 
 type SourceView = {
   key: string;
   name: string;
   summary: string;
-  mode: "public" | "credentialed";
+  mode: "public" | "credentialed" | "search";
   identifierLabel: string | null;
   identifierHint: string | null;
   configured: boolean;
   requiredConfiguration: string[];
+};
+
+type SearchResult = {
+  keywords?: string;
+  totalAvailable?: number;
+  considered?: number;
+  recorded?: number;
+  duplicates?: number;
+  skippedSensitive?: number;
+  qualified?: number;
+  error?: { message?: string };
 };
 
 type ImportResult = {
@@ -74,6 +86,113 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <span className="mb-1 block font-medium text-[var(--text)]">{label}</span>
       {children}
     </label>
+  );
+}
+
+/**
+ * Keyword search across a public aggregator.
+ *
+ * The location fields are deliberately two — a city and an ISO country code —
+ * rather than one free-text box. The provider filters on each separately, so
+ * one box would mean guessing which the person meant, and a wrong guess
+ * returns real postings from the wrong place: an answer that looks right and
+ * is not. Two labelled fields cost one extra input and remove the guess.
+ */
+function JobSearchForm({
+  source,
+  searching,
+  disabled,
+  onSearch,
+}: {
+  source: SourceView;
+  searching: boolean;
+  disabled: boolean;
+  onSearch: (query: {
+    keywords: string;
+    city: string | null;
+    country: string | null;
+    workMode: string | null;
+    postedWithinDays: number | null;
+  }) => Promise<void>;
+}) {
+  const [keywords, setKeywords] = useState("");
+  const [city, setCity] = useState("");
+  const [country, setCountry] = useState("");
+  const [workMode, setWorkMode] = useState("");
+  const [postedWithin, setPostedWithin] = useState("");
+  const ready = keywords.trim().length > 0;
+
+  function submit() {
+    const days = Number.parseInt(postedWithin, 10);
+    return onSearch({
+      keywords: keywords.trim(),
+      city: city.trim() || null,
+      country: country.trim() || null,
+      workMode: workMode || null,
+      postedWithinDays: Number.isFinite(days) && days > 0 ? days : null,
+    });
+  }
+
+  return (
+    <form
+      className="mt-3"
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (ready && !disabled) void submit();
+      }}
+    >
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <Field label={`What are you looking for? (${source.name})`}>
+          <input
+            className={FIELD_CLASS}
+            value={keywords}
+            placeholder="e.g. senior platform engineer"
+            onChange={(event) => setKeywords(event.target.value)}
+          />
+        </Field>
+        <Field label="City (optional)">
+          <input
+            className={FIELD_CLASS}
+            value={city}
+            placeholder="e.g. Austin"
+            onChange={(event) => setCity(event.target.value)}
+          />
+        </Field>
+        <Field label="Country code (optional)">
+          <input
+            className={FIELD_CLASS}
+            value={country}
+            maxLength={2}
+            placeholder="e.g. US"
+            onChange={(event) => setCountry(event.target.value)}
+          />
+        </Field>
+        <Field label="Work model (optional)">
+          <select
+            className={FIELD_CLASS}
+            value={workMode}
+            onChange={(event) => setWorkMode(event.target.value)}
+          >
+            <option value="">Any</option>
+            <option value="remote">Remote</option>
+            <option value="hybrid">Hybrid</option>
+            <option value="onsite">On site</option>
+          </select>
+        </Field>
+        <Field label="Posted within (days, optional)">
+          <input
+            className={FIELD_CLASS}
+            value={postedWithin}
+            inputMode="numeric"
+            placeholder="e.g. 14"
+            onChange={(event) => setPostedWithin(event.target.value.replaceAll(/[^0-9]/g, ""))}
+          />
+        </Field>
+      </div>
+      <button type="submit" className="btn btn-primary mt-3" disabled={disabled || !ready}>
+        {searching ? "Searching…" : "Search and score"}
+      </button>
+    </form>
   );
 }
 
@@ -132,6 +251,7 @@ export function JobSeekerJobsPanel() {
   const [workModel, setWorkModel] = useState("");
   const [description, setDescription] = useState("");
   const [sources, setSources] = useState<SourceView[]>([]);
+  const [searchSources, setSearchSources] = useState<SourceView[]>([]);
 
   const load = useCallback(async () => {
     try {
@@ -146,8 +266,12 @@ export function JobSeekerJobsPanel() {
       const body = (await jobsResponse.json()) as { jobs?: JobView[] };
       setJobs(body.jobs ?? []);
       if (sourcesResponse.ok) {
-        const sourcesBody = (await sourcesResponse.json()) as { sources?: typeof sources };
+        const sourcesBody = (await sourcesResponse.json()) as {
+          sources?: SourceView[];
+          searchSources?: SourceView[];
+        };
         setSources(sourcesBody.sources ?? []);
+        setSearchSources(sourcesBody.searchSources ?? []);
       }
     } catch {
       setProblem("Recorded jobs could not be listed.");
@@ -160,6 +284,60 @@ export function JobSeekerJobsPanel() {
   }, [load]);
 
   const [importBusy, setImportBusy] = useState("");
+  const [searchBusy, setSearchBusy] = useState("");
+
+  async function searchFrom(
+    sourceKey: string,
+    query: {
+      keywords: string;
+      city: string | null;
+      country: string | null;
+      workMode: string | null;
+      postedWithinDays: number | null;
+    },
+  ) {
+    setSearchBusy(sourceKey);
+    setProblem("");
+    setNotice("");
+    try {
+      const response = await fetch("/api/job-seeker/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ source: sourceKey, ...query }),
+      });
+      const body = (await response.json()) as SearchResult;
+      if (!response.ok) {
+        setProblem(body.error?.message ?? "The job search could not be completed.");
+        return;
+      }
+      const considered = body.considered ?? 0;
+      if (considered === 0) {
+        // No matches is a real answer, and a different one from a provider
+        // outage — which arrives above as an error, not as an empty result.
+        setNotice(`No postings matched "${body.keywords ?? query.keywords}". Try broader terms or a wider area.`);
+        return;
+      }
+      const extras: string[] = [];
+      if (body.qualified) extras.push(`${body.qualified} above your qualification threshold`);
+      if (body.duplicates) extras.push(`${body.duplicates} already on your board`);
+      if (body.skippedSensitive) {
+        extras.push(`${body.skippedSensitive} skipped by the credential scanner`);
+      }
+      const beyondCap = (body.totalAvailable ?? 0) - considered;
+      if (beyondCap > 0) {
+        extras.push(`${body.totalAvailable} match in total; this search read the first ${considered}`);
+      }
+      setNotice(
+        `Recorded and scored ${body.recorded ?? 0} of ${considered} postings`
+        + `${extras.length ? ` — ${extras.join("; ")}` : ""}.`,
+      );
+      await load();
+    } catch {
+      setProblem("The job search could not be completed.");
+    } finally {
+      setSearchBusy("");
+    }
+  }
 
   async function importFrom(sourceKey: string, identifier: string) {
     setImportBusy(sourceKey);
@@ -257,10 +435,27 @@ export function JobSeekerJobsPanel() {
         </div>
         <p className="mt-2 text-xs text-[var(--text-faint)]">{EVALUATION_METHOD_LABEL}</p>
         <p className="mt-1 text-xs text-[var(--text-faint)]">
-          Record a posting yourself, or import from a company&apos;s public Greenhouse or Lever
-          board by its identifier. A source that needs credentials activates only when its
-          named configuration actually exists — never before.
+          Search a public aggregator by keyword, import from a company&apos;s public Greenhouse
+          or Lever board by its identifier, or record a posting yourself. Everything found is
+          scored the same way. A source that needs credentials activates only when its named
+          configuration actually exists — never before.
         </p>
+
+        {searchSources.map((adapter) => (
+          <div key={adapter.key} className="mt-4 rounded-md border border-[var(--border)] p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm font-medium text-[var(--text)]">{adapter.name}</p>
+              <StatusBadge tone="safe">Public API</StatusBadge>
+            </div>
+            <p className="mt-1 text-xs text-[var(--text-muted)]">{adapter.summary}</p>
+            <JobSearchForm
+              source={adapter}
+              searching={searchBusy === adapter.key}
+              disabled={searchBusy !== "" || importBusy !== "" || busy}
+              onSearch={(query) => searchFrom(adapter.key, query)}
+            />
+          </div>
+        ))}
 
         {sources.length > 0 ? (
           <div className="mt-3 grid items-start gap-2 sm:grid-cols-3">

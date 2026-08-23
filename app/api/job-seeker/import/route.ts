@@ -1,6 +1,10 @@
 import { z } from "zod";
 
-import { ImportSourceError, listImportAdapters } from "@/lib/job-seeker/import-adapters";
+import {
+  IMPORT_ERROR_STATUS,
+  ImportSourceError,
+  listImportAdapters,
+} from "@/lib/job-seeker/import-adapters";
 import { insertScoredJob, loadEvaluationInputs } from "@/lib/job-seeker/record";
 import {
   ApiRequestError,
@@ -32,13 +36,6 @@ const importSchema = z
     identifier: z.string().trim().min(1).max(64),
   })
   .strict();
-
-const IMPORT_ERROR_STATUS = {
-  identifier_invalid: 422,
-  source_not_found: 404,
-  provider_error: 502,
-  provider_unreachable: 502,
-} as const;
 
 export async function POST(request: Request) {
   try {

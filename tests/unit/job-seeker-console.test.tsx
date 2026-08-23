@@ -65,7 +65,13 @@ function stubFetch(overrides: Record<string, unknown> = {}) {
       return jsonResponse({ outreach: overrides.outreach ?? [] });
     }
     if (url === "/api/job-seeker/import-sources") {
-      return jsonResponse({ sources: [] });
+      return jsonResponse({
+        sources: overrides.sources ?? [],
+        searchSources: overrides.searchSources ?? [],
+      });
+    }
+    if (url === "/api/job-seeker/search") {
+      return jsonResponse(overrides.search ?? {});
     }
     if (url === "/api/job-seeker/analytics") {
       return jsonResponse({
@@ -170,15 +176,110 @@ describe("JobSeekerConsole", () => {
     expect(screen.getByText(/Default 80/)).toBeInTheDocument();
   });
 
-  it("shows discovery with the honest method label and both real ways in", async () => {
+  it("shows discovery with the honest method label and all three real ways in", async () => {
     searchParams.mockReturnValue(new URLSearchParams("section=discovery"));
     stubFetch();
     render(<JobSeekerConsole />);
 
     expect(await screen.findByText("No jobs recorded yet")).toBeInTheDocument();
     expect(screen.getByText(/Rule-based match computed from your recorded profile/)).toBeInTheDocument();
-    expect(screen.getByText(/Record a posting yourself, or import from a company/)).toBeInTheDocument();
-    expect(screen.getByText(/activates only when its\s+named configuration actually exists/)).toBeInTheDocument();
+    // Keyword search joined board import and manual recording, and the copy
+    // has to name all three or a real way in is invisible on the page.
+    expect(
+      screen.getByText(/Search a public aggregator by keyword, import from a company/),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/or record a posting yourself/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/activates only when its named\s+configuration actually exists/),
+    ).toBeInTheDocument();
+  });
+
+  it("renders a search adapter as a query form, never as an identifier box", async () => {
+    searchParams.mockReturnValue(new URLSearchParams("section=discovery"));
+    stubFetch({
+      searchSources: [{
+        key: "freehire",
+        name: "freehire job search",
+        summary: "Searches live postings aggregated from many applicant-tracking systems.",
+        mode: "search",
+        identifierLabel: null,
+        identifierHint: null,
+        configured: true,
+        requiredConfiguration: [],
+      }],
+    });
+    render(<JobSeekerConsole />);
+
+    expect(await screen.findByText("freehire job search")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /search and score/i })).toBeInTheDocument();
+    // A search asks what you are looking for and where. A board asks which
+    // company. Rendering the wrong control for the mode is the failure this
+    // guards: an identifier box here would send a company name as keywords.
+    expect(screen.getByLabelText(/what are you looking for/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/city \(optional\)/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/country code \(optional\)/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /import postings/i })).not.toBeInTheDocument();
+  });
+
+  it("says no postings matched without claiming the search failed", async () => {
+    searchParams.mockReturnValue(new URLSearchParams("section=discovery"));
+    stubFetch({
+      searchSources: [{
+        key: "freehire",
+        name: "freehire job search",
+        summary: "Searches live postings.",
+        mode: "search",
+        identifierLabel: null,
+        identifierHint: null,
+        configured: true,
+        requiredConfiguration: [],
+      }],
+      // A search that ran and matched nothing. An outage arrives as an HTTP
+      // error instead, so these two can never be confused on the page.
+      search: { keywords: "underwater basket weaving", considered: 0, recorded: 0, totalAvailable: 0 },
+    });
+    render(<JobSeekerConsole />);
+
+    fireEvent.change(await screen.findByLabelText(/what are you looking for/i), {
+      target: { value: "underwater basket weaving" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /search and score/i }));
+
+    expect(await screen.findByText(/No postings matched/i)).toBeInTheDocument();
+    expect(screen.queryByText(/could not be completed/i)).not.toBeInTheDocument();
+  });
+
+  it("reports what a search recorded, and what it did not read", async () => {
+    searchParams.mockReturnValue(new URLSearchParams("section=discovery"));
+    stubFetch({
+      searchSources: [{
+        key: "freehire",
+        name: "freehire job search",
+        summary: "Searches live postings.",
+        mode: "search",
+        identifierLabel: null,
+        identifierHint: null,
+        configured: true,
+        requiredConfiguration: [],
+      }],
+      search: {
+        keywords: "platform engineer",
+        considered: 20, recorded: 18, duplicates: 2, qualified: 5,
+        skippedSensitive: 0, totalAvailable: 73242,
+      },
+    });
+    render(<JobSeekerConsole />);
+
+    fireEvent.change(await screen.findByLabelText(/what are you looking for/i), {
+      target: { value: "platform engineer" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /search and score/i }));
+
+    // A capped read must never present itself as the whole market.
+    expect(await screen.findByText(/Recorded and scored 18 of 20 postings/)).toBeInTheDocument();
+    expect(screen.getByText(/73242 match in total; this search read the first 20/)).toBeInTheDocument();
+    expect(screen.getByText(/5 above your qualification threshold/)).toBeInTheDocument();
+    expect(screen.getByText(/2 already on your board/)).toBeInTheDocument();
   });
 
   it("shows the applications pipeline with the gate stated", async () => {
