@@ -113,7 +113,7 @@ describe("the workflow's surgical scopes", () => {
       "20260821000100_agentic_sdlc_activity_types.sql",
       "20260821000200_agentic_sdlc_lifecycle.sql",
     ]);
-    expect(widening).toEqual(["20260823000200_ten_stage_lifecycle.sql"]);
+    expect(widening).toEqual(["20260823000700_ten_stage_lifecycle.sql"]);
     expect([...broker, ...lifecycle, ...widening].filter((file) => !known.has(file))).toEqual([]);
   });
 

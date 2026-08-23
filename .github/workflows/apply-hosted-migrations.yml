@@ -52,7 +52,7 @@ on:
           recording every valid non-Codex factory model without dispatch;
           "lifecycle" applies only the two Agentic SDLC files
           (20260821000100 and 20260821000200) and records them in history;
-          "ten-stage-lifecycle" applies only 20260823000200, which rebuilds the
+          "ten-stage-lifecycle" applies only 20260823000700, which rebuilds the
           sdlc_stage type as the ten stages the product presents and widens
           list_graph_runs to carry each node's dependencies, attempts and
           anchored evidence;
@@ -82,6 +82,26 @@ on:
           analysis tap asked for, through the same database doorway with the
           hash-pinned fixture plan, refusing if the command already has its
           graph; the graph lands PLANNED and only the graph worker runs it;
+          "delete-selected-pipelines" applies only 20260823000200, which lets
+          the Pipelines page delete exactly the rows somebody ticked under the
+          same refusals as the whole-list clear;
+          "stop-and-delete-pipelines" applies only 20260823000300, which makes
+          that selection stop live work before removing it and detach an
+          analysis graph rather than being refused by its foreign key;
+          "clear-autonomy-projects" applies only 20260823000600, which adds the
+          Autonomy page's Clear control as an archive sweep and excludes
+          archived projects from the autonomy list; it deletes nothing and
+          leaves the project deletion guard in place;
+          "finish-credential-vault" applies only 20260823000500, which creates
+          the one function 20260814002500 died before creating - the reason a
+          correct bot sign-in code reads invalid - and then records
+          20260814002500 in the ledger so the preview branch stops replaying it
+          into a 42P07;
+          "release-routing-evidence" applies only 20260823000400, which lets
+          the audited pipeline delete release a command's immutable routing
+          evidence - without it a routed command could never be deleted by
+          anyone, because the guard refuses every delete and the foreign key
+          restricts;
           "probe" changes nothing at all and just reports which objects already
           exist, because the ledger has proven to understate the live schema.
         required: false
@@ -109,6 +129,11 @@ on:
           - record-only-postflight
           - analysis-launch-doorcheck
           - analysis-launch-commit
+          - delete-selected-pipelines
+          - stop-and-delete-pipelines
+          - release-routing-evidence
+          - finish-credential-vault
+          - clear-autonomy-projects
           - probe
 permissions:
   checks: read
@@ -855,7 +880,7 @@ jobs:
             order by 1, 2;"
           echo ""
           echo "The Agentic SDLC lifecycle (20260821000100, 20260821000200 and the"
-          echo "ten-stage widening 20260823000200), asked about directly. These files are"
+          echo "ten-stage widening 20260823000700), asked about directly. These files are"
           echo "newer than the measured ledger table in AI/HOSTED_APPLY_RUNBOOK.md, so they"
           echo "are deliberately kept out of the query above: that one reports a"
           echo "measurement, and appending an unmeasured version to it would turn evidence"
@@ -1414,6 +1439,66 @@ jobs:
               join public.commands command on command.id = task.command_id
              where command.parameters ->> 'executionMode' = 'record_only';"
           echo "Expected: record_only_agent_runs 0 (the record-only boundary produced no run)."
+
+          echo ""
+          echo "20260814002500 provider credential vault: the exact object"
+          echo "inventory. The ledger does not record this file, yet its table"
+          echo "exists - which is why the Supabase Preview branch replays it and"
+          echo "dies with 42P07. Finishing it needs to know precisely which"
+          echo "pieces landed, because NOT VISIBLE is not absent."
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
+            select object_name, object_kind, present from (
+              values
+                ('provider_credentials', 'table', to_regclass('public.provider_credentials') is not null),
+                ('provider_connect_sessions', 'table', to_regclass('public.provider_connect_sessions') is not null),
+                ('provider_connect_sessions_expiry_idx', 'index', to_regclass('public.provider_connect_sessions_expiry_idx') is not null),
+                ('list_provider_credentials', 'function', to_regprocedure('public.list_provider_credentials(uuid)') is not null),
+                ('open_provider_connect_session', 'function', to_regprocedure('public.open_provider_connect_session(uuid,text,text,integer)') is not null),
+                ('resolve_provider_connect_session', 'function', to_regprocedure('public.resolve_provider_connect_session(text)') is not null),
+                ('claim_provider_connect_session', 'function', to_regprocedure('public.claim_provider_connect_session(text,text)') is not null),
+                ('read_provider_credential', 'function', to_regprocedure('public.read_provider_credential(uuid,text)') is not null),
+                ('forget_provider_credential', 'function', to_regprocedure('public.forget_provider_credential(uuid,text)') is not null)
+            ) as inventory(object_name, object_kind, present)
+            order by object_kind, object_name;"
+
+          echo ""
+          echo "And the columns those two tables actually carry, because a table"
+          echo "that exists is not the same as a table that is complete."
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
+            select table_name, column_name, data_type, is_nullable
+              from information_schema.columns
+             where table_schema = 'public'
+               and table_name in ('provider_credentials', 'provider_connect_sessions')
+             order by table_name, ordinal_position;" || true
+
+          echo ""
+          echo "RLS posture and client grants on those tables - the part a"
+          echo "migration that died before its grants would have skipped."
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
+            select relation.relname,
+                   relation.relrowsecurity as rls,
+                   relation.relforcerowsecurity as force_rls,
+                   (select count(*) from pg_policy policy where policy.polrelid = relation.oid) as policies,
+                   has_table_privilege('authenticated', relation.oid, 'SELECT') as authenticated_select,
+                   has_table_privilege('service_role', relation.oid, 'SELECT') as service_role_select
+              from pg_class relation
+              join pg_namespace space on space.oid = relation.relnamespace
+             where space.nspname = 'public'
+               and relation.relname in ('provider_credentials', 'provider_connect_sessions')
+             order by relation.relname;" || true
+
+          echo ""
+          echo "The Pipelines page's selection delete, as the database actually"
+          echo "declares it: which output columns it returns tells you whether a"
+          echo "selected pipeline is stopped before removal (stopped_count) or"
+          echo "merely skipped (kept_running). Tolerant of either era."
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
+            select coalesce(
+              (select array_to_string(proargnames, ', ')
+                 from pg_proc
+                where oid = to_regprocedure('public.delete_selected_pipelines(uuid,uuid[],text,boolean)')),
+              'delete_selected_pipelines absent (pre-20260823000200 database)'
+            ) as selection_delete_arguments;" || true
 
           echo ""
           echo "Analysis graphs and their command links - the record-only execution"
@@ -4398,7 +4483,7 @@ jobs:
                 and routine.proname = 'claim_planned_graph';"
 
       - name: Widen the lifecycle to ten stages (scope=ten-stage-lifecycle)
-        # Exactly one file — 20260823000200 — and no others. It requires
+        # Exactly one file — 20260823000700 — and no others. It requires
         # scope=lifecycle to have run first, because it rebuilds the type that
         # file created and alters the two columns that hold it.
         #
@@ -4435,13 +4520,13 @@ jobs:
              group by label.enumlabel, label.enumsortorder
              order by label.enumsortorder;" \
             || echo "sdlc_stage does not exist yet — run scope=lifecycle first."
-          FILE=supabase/migrations/20260823000200_ten_stage_lifecycle.sql
+          FILE=supabase/migrations/20260823000700_ten_stage_lifecycle.sql
           echo "Applying ${FILE}"
           psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
           if [ "$MODE" = "token" ]; then
-            npx supabase migration repair --status applied 20260823000200
+            npx supabase migration repair --status applied 20260823000700
           else
-            npx supabase migration repair --status applied 20260823000200 --db-url "$DB_URL"
+            npx supabase migration repair --status applied 20260823000700 --db-url "$DB_URL"
           fi
           # The return type changed, so a browser holding the old shape must not
           # keep resolving against it.
@@ -5181,6 +5266,438 @@ jobs:
               from public.command_analysis_graphs link
              order by link.created_at desc
              limit 3;"
+
+      - name: Delete selected pipelines (scope=delete-selected-pipelines)
+        # Exactly one file — 20260823000200 — which adds the scoped sibling of
+        # clear_all_pipelines: same caller check, same mandatory reason, same
+        # refusal to delete live work or to take run history by surprise, over
+        # the rows somebody actually ticked. It adds no table and no enum
+        # label (the existing command.pipelines_cleared event carries both
+        # scopes, distinguished by its metadata) and replaces no function, so
+        # the file's own pre- and postflight blocks are the whole safety net.
+        if: ${{ inputs.scope == 'delete-selected-pipelines' }}
+        run: |
+          if [ -z "$SUPABASE_DB_PASSWORD" ]; then
+            echo "::error::This scope requires SUPABASE_DB_PASSWORD for live verification."
+            exit 1
+          fi
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+
+          FILE=supabase/migrations/20260823000200_delete_selected_pipelines.sql
+          EXPECTED_SHA256=45e3cda26bb7da8f3d5d8353ec7a981af067482b4ea490a8f6298b76fee354dc
+          ACTUAL_SHA256=$(sha256sum "$FILE" | cut -d' ' -f1)
+          if [ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]; then
+            echo "::error::Migration hash mismatch; refusing production DDL."
+            exit 1
+          fi
+          ALREADY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc \
+            "select count(*) from supabase_migrations.schema_migrations where version = '20260823000200';")
+          if [ "$ALREADY" != "0" ]; then
+            echo "::error::20260823000200 is already recorded; this scope is one-shot."
+            exit 1
+          fi
+
+          echo "Applying ${FILE}"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -1 -q -f "$FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied 20260823000200
+          else
+            npx supabase migration repair --status applied 20260823000200 --db-url "$DB_URL"
+          fi
+          psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
+
+          VERIFIED=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+            set search_path = pg_catalog;
+            select to_regprocedure('public.delete_selected_pipelines(uuid,uuid[],text,boolean)') is not null
+               and (select prosecdef from pg_proc
+                      where oid = to_regprocedure('public.delete_selected_pipelines(uuid,uuid[],text,boolean)'))
+               and not has_function_privilege('anon', to_regprocedure('public.delete_selected_pipelines(uuid,uuid[],text,boolean)'), 'EXECUTE')
+               and not has_function_privilege('service_role', to_regprocedure('public.delete_selected_pipelines(uuid,uuid[],text,boolean)'), 'EXECUTE')
+               and has_function_privilege('authenticated', to_regprocedure('public.delete_selected_pipelines(uuid,uuid[],text,boolean)'), 'EXECUTE');")
+          if [ "$VERIFIED" != "t" ]; then
+            echo "::error::The scoped delete did not read back as SECURITY DEFINER, member-only."
+            exit 1
+          fi
+          echo "Applied and verified: the Pipelines page can delete a selection under the clear's own rules."
+
+      - name: Stop live work before deleting a selection (scope=stop-and-delete-pipelines)
+        # Exactly one file — 20260823000300 — which drops and recreates
+        # delete_selected_pipelines so a selected pipeline is cancelled before
+        # it is removed, and so an analysis graph link is detached rather than
+        # blocking the delete through its restrict foreign key. The return
+        # shape changes, which is why the old body is dropped rather than
+        # replaced; the file's preflight refuses unless 20260823000200 is
+        # already there, so the two can only be applied in order.
+        if: ${{ inputs.scope == 'stop-and-delete-pipelines' }}
+        run: |
+          if [ -z "$SUPABASE_DB_PASSWORD" ]; then
+            echo "::error::This scope requires SUPABASE_DB_PASSWORD for live verification."
+            exit 1
+          fi
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+
+          FILE=supabase/migrations/20260823000300_stop_and_delete_selected_pipelines.sql
+          EXPECTED_SHA256=4f7ff03f361082f5355eb515742ae4f98ebf41931382616a5e9d748a2aa823c3
+          ACTUAL_SHA256=$(sha256sum "$FILE" | cut -d' ' -f1)
+          if [ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]; then
+            echo "::error::Migration hash mismatch; refusing production DDL."
+            exit 1
+          fi
+          ALREADY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc \
+            "select count(*) from supabase_migrations.schema_migrations where version = '20260823000300';")
+          if [ "$ALREADY" != "0" ]; then
+            echo "::error::20260823000300 is already recorded; this scope is one-shot."
+            exit 1
+          fi
+
+          echo "Applying ${FILE}"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -1 -q -f "$FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied 20260823000300
+          else
+            npx supabase migration repair --status applied 20260823000300 --db-url "$DB_URL"
+          fi
+          psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
+
+          # The new shape is the evidence: six output columns, stopped_count
+          # among them, is what tells the console a selection stops its rows.
+          VERIFIED=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+            set search_path = pg_catalog;
+            select to_regprocedure('public.delete_selected_pipelines(uuid,uuid[],text,boolean)') is not null
+               and (select prosecdef from pg_proc
+                      where oid = to_regprocedure('public.delete_selected_pipelines(uuid,uuid[],text,boolean)'))
+               and (select count(*) = 6 from unnest(
+                      (select proallargtypes from pg_proc
+                        where oid = to_regprocedure('public.delete_selected_pipelines(uuid,uuid[],text,boolean)'))
+                    ) with ordinality as arg(oid, ord)
+                    where ord > 4)
+               -- Array containment, not \`= any(subquery)\`: that form compares
+               -- against each ROW of the subquery, so a single text[] row made
+               -- PostgreSQL coerce the scalar to an array and fail with
+               -- 'malformed array literal' after the DDL had already landed.
+               and (select proargnames from pg_proc
+                     where oid = to_regprocedure('public.delete_selected_pipelines(uuid,uuid[],text,boolean)'))
+                   @> array['stopped_count']::text[]
+               and not has_function_privilege('anon', to_regprocedure('public.delete_selected_pipelines(uuid,uuid[],text,boolean)'), 'EXECUTE')
+               and not has_function_privilege('service_role', to_regprocedure('public.delete_selected_pipelines(uuid,uuid[],text,boolean)'), 'EXECUTE')
+               and has_function_privilege('authenticated', to_regprocedure('public.delete_selected_pipelines(uuid,uuid[],text,boolean)'), 'EXECUTE');")
+          if [ "$VERIFIED" != "t" ]; then
+            echo "::error::The stop-and-delete function did not read back with the intended shape and posture."
+            exit 1
+          fi
+          echo "Applied and verified: selecting a pipeline now stops it, then deletes it."
+
+      - name: Release routing evidence on an audited delete (scope=release-routing-evidence)
+        # Exactly one file - 20260823000400 - which relaxes the routing guard
+        # for one named path and rebuilds delete_selected_pipelines to use it.
+        # Without it a routed command is undeletable by ANY caller: the guard
+        # raises on every delete of a route row, and the route's foreign key
+        # to commands is ON DELETE RESTRICT. The relaxation is narrow - an
+        # UPDATE is still refused unconditionally, and the table still carries
+        # no grants for anon, authenticated or service_role, which the file's
+        # own postflight re-checks.
+        if: ${{ inputs.scope == 'release-routing-evidence' }}
+        run: |
+          if [ -z "$SUPABASE_DB_PASSWORD" ]; then
+            echo "::error::This scope requires SUPABASE_DB_PASSWORD for live verification."
+            exit 1
+          fi
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+
+          FILE=supabase/migrations/20260823000400_pipeline_delete_releases_routing_evidence.sql
+          EXPECTED_SHA256=e35c93087dd7b111a411b621f92a13ecf2741a199ebbe8f3b71da342752b2a56
+          ACTUAL_SHA256=$(sha256sum "$FILE" | cut -d' ' -f1)
+          if [ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]; then
+            echo "::error::Migration hash mismatch; refusing production DDL."
+            exit 1
+          fi
+          ALREADY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc \
+            "select count(*) from supabase_migrations.schema_migrations where version = '20260823000400';")
+          if [ "$ALREADY" != "0" ]; then
+            echo "::error::20260823000400 is already recorded; this scope is one-shot."
+            exit 1
+          fi
+
+          echo "Applying ${FILE}"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -1 -q -f "$FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied 20260823000400
+          else
+            npx supabase migration repair --status applied 20260823000400 --db-url "$DB_URL"
+          fi
+          psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
+
+          # Proof by behaviour, in a transaction that is rolled back: an
+          # UPDATE must still be refused, and a DELETE must still be refused
+          # without the announced permission. Nothing is kept either way.
+          echo "Rolled-back proof that the guard still refuses what it always refused."
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q <<'GUARD_SQL'
+          begin;
+          do $guardcheck$
+          declare
+            v_update_refused boolean := false;
+            v_delete_refused boolean := false;
+          begin
+            if to_regclass('public.factory_command_routes') is null then
+              raise notice 'GUARD: routing table absent on this database; nothing to prove';
+              return;
+            end if;
+            begin
+              update public.factory_command_routes set pipeline_template_key = pipeline_template_key;
+            exception when others then
+              v_update_refused := (SQLERRM like '%routing evidence is immutable%');
+            end;
+            begin
+              delete from public.factory_command_routes where false;
+              -- A no-op delete touches no row, so the row trigger never fires;
+              -- force one row through instead when any row exists.
+              delete from public.factory_command_routes
+               where ctid = (select ctid from public.factory_command_routes limit 1);
+            exception when others then
+              v_delete_refused := (SQLERRM like '%routing evidence is immutable%');
+            end;
+            raise notice 'GUARD: update refused=% delete refused=%', v_update_refused, v_delete_refused;
+            if exists (select 1 from public.factory_command_routes)
+              and not (v_update_refused and v_delete_refused) then
+              raise exception using errcode = '55000',
+                message = 'the routing guard no longer refuses ordinary mutation';
+            end if;
+          end
+          $guardcheck$;
+          rollback;
+          GUARD_SQL
+
+          VERIFIED=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+            set search_path = pg_catalog;
+            select to_regprocedure('public.delete_selected_pipelines(uuid,uuid[],text,boolean)') is not null
+               and (select prosecdef from pg_proc
+                      where oid = to_regprocedure('public.delete_selected_pipelines(uuid,uuid[],text,boolean)'))
+               and not has_function_privilege('anon', to_regprocedure('public.delete_selected_pipelines(uuid,uuid[],text,boolean)'), 'EXECUTE')
+               and not has_function_privilege('service_role', to_regprocedure('public.delete_selected_pipelines(uuid,uuid[],text,boolean)'), 'EXECUTE')
+               and has_function_privilege('authenticated', to_regprocedure('public.delete_selected_pipelines(uuid,uuid[],text,boolean)'), 'EXECUTE')
+               and (to_regclass('public.factory_command_routes') is null
+                 or not (has_table_privilege('anon', 'public.factory_command_routes', 'DELETE')
+                      or has_table_privilege('authenticated', 'public.factory_command_routes', 'DELETE')
+                      or has_table_privilege('service_role', 'public.factory_command_routes', 'DELETE')));")
+          if [ "$VERIFIED" != "t" ]; then
+            echo "::error::The routing release did not read back with the intended posture."
+            exit 1
+          fi
+          echo "Applied and verified: a routed pipeline can be deleted through the audited path, and no other path gained anything."
+
+      - name: Finish the provider credential vault (scope=finish-credential-vault)
+        # Two actions, both narrow. First 20260823000500, which creates the one
+        # function probe run 32652393423 measured as missing from an otherwise
+        # complete 20260814002500. Then the ledger row for 20260814002500
+        # itself, because once that file's effects are all present the ledger
+        # was simply wrong - and its absence is what makes Supabase's preview
+        # branch replay the file into a 42P07 on every commit.
+        #
+        # The order matters: the function is created and read back BEFORE the
+        # ledger claims the migration is applied, so the ledger can never say
+        # "applied" about a database that is still short a function.
+        if: ${{ inputs.scope == 'finish-credential-vault' }}
+        run: |
+          if [ -z "$SUPABASE_DB_PASSWORD" ]; then
+            echo "::error::This scope requires SUPABASE_DB_PASSWORD for live verification."
+            exit 1
+          fi
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+
+          FILE=supabase/migrations/20260823000500_finish_provider_credential_vault.sql
+          EXPECTED_SHA256=912ec2b0e0a652a0f35886d2d8cb3810a6cd02859e1e8bd256d6772a97a61a20
+          ACTUAL_SHA256=$(sha256sum "$FILE" | cut -d' ' -f1)
+          if [ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]; then
+            echo "::error::Migration hash mismatch; refusing production DDL."
+            exit 1
+          fi
+          ALREADY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc \
+            "select count(*) from supabase_migrations.schema_migrations where version = '20260823000500';")
+          if [ "$ALREADY" != "0" ]; then
+            echo "::error::20260823000500 is already recorded; this scope is one-shot."
+            exit 1
+          fi
+
+          echo "Before: which of 20260814002500's objects this database holds."
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
+            select to_regclass('public.provider_credentials') is not null as credentials_table,
+                   to_regclass('public.provider_connect_sessions') is not null as sessions_table,
+                   to_regprocedure('public.resolve_provider_connect_session(text)') is not null as resolve_function,
+                   (select count(*) from supabase_migrations.schema_migrations
+                     where version = '20260814002500') as ledger_rows;"
+
+          echo "Applying ${FILE}"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -1 -q -f "$FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied 20260823000500
+          else
+            npx supabase migration repair --status applied 20260823000500 --db-url "$DB_URL"
+          fi
+
+          # Read the function back BEFORE the ledger is touched.
+          RESOLVED=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+            set search_path = pg_catalog;
+            select to_regprocedure('public.resolve_provider_connect_session(text)') is not null
+               and (select prosecdef from pg_proc
+                      where oid = to_regprocedure('public.resolve_provider_connect_session(text)'))
+               and has_function_privilege('service_role', to_regprocedure('public.resolve_provider_connect_session(text)'), 'EXECUTE')
+               and not has_function_privilege('anon', to_regprocedure('public.resolve_provider_connect_session(text)'), 'EXECUTE')
+               and not has_function_privilege('authenticated', to_regprocedure('public.resolve_provider_connect_session(text)'), 'EXECUTE');")
+          if [ "$RESOLVED" != "t" ]; then
+            echo "::error::The vault function did not read back with the intended posture; the ledger is left untouched."
+            exit 1
+          fi
+
+          # Every object 20260814002500 declares must be present before the
+          # ledger is allowed to say it was applied.
+          COMPLETE=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+            set search_path = pg_catalog;
+            select to_regclass('public.provider_credentials') is not null
+               and to_regclass('public.provider_connect_sessions') is not null
+               and to_regclass('public.provider_connect_sessions_expiry_idx') is not null
+               and to_regprocedure('public.list_provider_credentials(uuid)') is not null
+               and to_regprocedure('public.open_provider_connect_session(uuid,text,text,integer)') is not null
+               and to_regprocedure('public.resolve_provider_connect_session(text)') is not null
+               and to_regprocedure('public.claim_provider_connect_session(text,text)') is not null
+               and to_regprocedure('public.read_provider_credential(uuid,text)') is not null
+               and to_regprocedure('public.forget_provider_credential(uuid,text)') is not null;")
+          if [ "$COMPLETE" != "t" ]; then
+            echo "::error::20260814002500 is still incomplete; refusing to record it as applied."
+            exit 1
+          fi
+
+          echo "Recording 20260814002500 - every object it declares is now present."
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied 20260814002500
+          else
+            npx supabase migration repair --status applied 20260814002500 --db-url "$DB_URL"
+          fi
+          psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
+
+          LEDGER=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc \
+            "select count(*) from supabase_migrations.schema_migrations where version = '20260814002500';")
+          if [ "$LEDGER" != "1" ]; then
+            echo "::error::The ledger does not record 20260814002500 after the repair."
+            exit 1
+          fi
+          echo "Applied and verified: a correct sign-in code can resolve again, and the preview branch has nothing left to replay for this file."
+
+      - name: Add the Autonomy Clear control (scope=clear-autonomy-projects)
+        # Exactly one file — 20260823000600 — which adds clear_autonomy_projects
+        # and narrows list_autonomy_status to the projects the loop can still
+        # act on. It deletes nothing: the clear archives, through
+        # archive_project, because refuse_project_deletion states by name that
+        # a project's append-only trail makes it permanent and that archiving
+        # is the supported end of its life. The file's own postflight re-checks
+        # that a project still cannot be deleted, by asserting the
+        # activity_events RESTRICT that actually enforces it on every database
+        # rather than the friendlier trigger, which this one has not applied.
+        if: ${{ inputs.scope == 'clear-autonomy-projects' }}
+        run: |
+          if [ -z "$SUPABASE_DB_PASSWORD" ]; then
+            echo "::error::This scope requires SUPABASE_DB_PASSWORD for live verification."
+            exit 1
+          fi
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+
+          FILE=supabase/migrations/20260823000600_clear_autonomy_projects.sql
+          EXPECTED_SHA256=47556e48f997e3f4485a194bc18dc29406ee83f2bbd3548ba5af9f83c80c00b3
+          ACTUAL_SHA256=$(sha256sum "$FILE" | cut -d' ' -f1)
+          if [ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]; then
+            echo "::error::Migration hash mismatch; refusing production DDL."
+            exit 1
+          fi
+          ALREADY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc \
+            "select count(*) from supabase_migrations.schema_migrations where version = '20260823000600';")
+          if [ "$ALREADY" != "0" ]; then
+            echo "::error::20260823000600 is already recorded; this scope is one-shot."
+            exit 1
+          fi
+
+          echo "Applying ${FILE}"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -1 -q -f "$FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied 20260823000600
+          else
+            npx supabase migration repair --status applied 20260823000600 --db-url "$DB_URL"
+          fi
+          psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
+
+          echo "Rolled-back proof that a project still cannot be deleted."
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q <<'GUARD_SQL'
+          begin;
+          do $guardcheck$
+          declare
+            v_project uuid;
+            v_refused boolean := false;
+          begin
+            select id into v_project from public.projects limit 1;
+            if v_project is null then
+              raise notice 'GUARD: no project to test against';
+              return;
+            end if;
+            begin
+              delete from public.projects where id = v_project;
+            exception when others then
+              -- Either message is a pass. 20260815000900's trigger explains the
+              -- refusal; without it the activity_events RESTRICT refuses just
+              -- as absolutely, only less legibly.
+              v_refused := (SQLERRM like '%projects cannot be deleted%')
+                        or (SQLSTATE = '23503');
+            end;
+            if not v_refused then
+              raise exception using errcode = '55000',
+                message = 'a project could be deleted; the protection is gone';
+            end if;
+            raise notice 'GUARD: project deletion still refused';
+          end
+          $guardcheck$;
+          rollback;
+          GUARD_SQL
+
+          VERIFIED=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+            set search_path = pg_catalog;
+            select to_regprocedure('public.clear_autonomy_projects(uuid,text)') is not null
+               and not has_function_privilege('anon', to_regprocedure('public.clear_autonomy_projects(uuid,text)'), 'EXECUTE')
+               and not has_function_privilege('service_role', to_regprocedure('public.clear_autonomy_projects(uuid,text)'), 'EXECUTE')
+               and has_function_privilege('authenticated', to_regprocedure('public.clear_autonomy_projects(uuid,text)'), 'EXECUTE')
+               and exists (select 1
+                             from pg_constraint c
+                             join pg_class referencing on referencing.oid = c.conrelid
+                             join pg_class referenced on referenced.oid = c.confrelid
+                            where c.contype = 'f' and c.confdeltype = 'r'
+                              and referencing.relname = 'activity_events'
+                              and referenced.relname = 'projects');")
+          if [ "$VERIFIED" != "t" ]; then
+            echo "::error::The autonomy clear did not read back with the intended posture."
+            exit 1
+          fi
+          echo "Applied and verified: Clear archives, the list hides archived projects, and nothing can delete one."
 
       - name: Apply the Backlog and Pipelines clear controls (scope=clear-controls)
         # Exactly two files — 20260822000700 and 20260822000800 — and no others.

@@ -1,4 +1,5 @@
 import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { PipelinesConsole, pipelineStage, type PipelineTemplateSummary } from "@/components/pipelines-console";
@@ -227,5 +228,115 @@ describe("PipelinesConsole", () => {
     vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({}, 401)));
     render(<PipelinesConsole templates={templates} />);
     expect(await screen.findByText("Sign in to see your pipelines")).toBeInTheDocument();
+  });
+
+  it("deletes only the pipelines ticked, and reports what the database kept", async () => {
+    searchParams.mockReturnValue(new URLSearchParams("view=all"));
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/commands/delete") {
+        return jsonResponse({
+          deleted: {
+            deletedCount: 2,
+            stoppedCount: 1,
+            keptWithRuns: 0,
+            keptWithEvidence: 0,
+            notFound: 0,
+            unlinkedAnalyses: 1,
+          },
+        });
+      }
+      void init;
+      return jsonResponse({ commands: [
+        command("c1", "succeeded", { completedAt: "2026-08-17T11:00:00.000Z" }),
+        command("c2", "running"),
+      ] });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<PipelinesConsole templates={templates} />);
+    await screen.findByText("Goal c1");
+
+    // Nothing ticked: the control is present but inert, so an accidental
+    // press cannot delete a list nobody chose.
+    const deleteButton = screen.getByRole("button", { name: "Delete selected" });
+    expect(deleteButton).toBeDisabled();
+
+    await userEvent.click(screen.getByRole("checkbox", { name: "Select pipeline: Goal c1" }));
+    await userEvent.click(screen.getByRole("checkbox", { name: "Select pipeline: Goal c2" }));
+    await userEvent.click(screen.getByRole("button", { name: "Delete selected (2)" }));
+
+    // The first press asks; a reason under ten characters keeps it asking.
+    const confirm = screen.getByRole("button", { name: /yes, delete these pipelines/i });
+    expect(confirm).toBeDisabled();
+    await userEvent.type(screen.getByLabelText(/reason/i), "tidying the pipelines list");
+    expect(confirm).toBeEnabled();
+    await userEvent.click(confirm);
+
+    const call = fetchMock.mock.calls.find(([url]) => String(url) === "/api/commands/delete");
+    expect(call).toBeDefined();
+    expect(JSON.parse(String((call?.[1] as RequestInit).body))).toEqual({
+      commandIds: ["c1", "c2"],
+      reason: "tidying the pipelines list",
+      includeCommandsWithRuns: false,
+    });
+    // Selecting a running pipeline stops it rather than skipping it, and the
+    // analysis findings outlive the request that asked for them — both are
+    // said out loud rather than left for the reader to discover.
+    expect(await screen.findByText(
+      "2 pipelines deleted. Stopped 1 that was still running. 1 analysis run kept under Graph runs.",
+    )).toBeInTheDocument();
+  });
+
+  it("never tells a record-only pipeline it is waiting for a worker", async () => {
+    searchParams.mockReturnValue(new URLSearchParams("view=all"));
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ commands: [
+      // What the owner actually saw on 2026-08-23: a record-only command
+      // queued for hours, told it was waiting for a worker that by design
+      // never comes. The Bots page stopped saying this in ADR-128; this page
+      // kept saying it because it dropped executionMode.
+      command("c1", "queued", { executionMode: "record_only", analysisGraph: null }),
+      command("c2", "queued", {
+        executionMode: "record_only",
+        analysisGraph: {
+          graphId: "g2",
+          runState: "COMPLETED",
+          startedAt: "2026-08-23T13:42:37.000Z",
+          completedAt: "2026-08-23T13:48:30.000Z",
+          artifactCount: 7,
+          requiresOwnerApproval: false,
+        },
+      }),
+    ] })));
+
+    render(<PipelinesConsole templates={templates} />);
+    await screen.findByText("Goal c1");
+
+    expect(screen.queryByText(/waiting for a worker/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/no repository-writing worker is dispatched by design/i)).toBeInTheDocument();
+    expect(screen.getByText(/finished its analysis — 7 artifacts recorded/i)).toBeInTheDocument();
+    // Its evidence is a graph run, so the link goes to Graph runs, not Runs.
+    expect(screen.getByRole("link", { name: "Watch it on Graph runs" })).toHaveAttribute(
+      "href",
+      "/solutions/pipelines?view=graphs",
+    );
+  });
+
+  it("ticks and unticks every visible row from the header checkbox", async () => {
+    searchParams.mockReturnValue(new URLSearchParams("view=all"));
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ commands: [
+      command("c1", "succeeded", { completedAt: "2026-08-17T11:00:00.000Z" }),
+      command("c2", "failed", { completedAt: "2026-08-17T11:30:00.000Z" }),
+    ] })));
+
+    render(<PipelinesConsole templates={templates} />);
+    await screen.findByText("Goal c1");
+
+    await userEvent.click(screen.getByRole("checkbox", { name: "Select all 2" }));
+    expect(screen.getByRole("button", { name: "Delete selected (2)" })).toBeEnabled();
+    expect(screen.getByText("2 of 2 selected")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("checkbox", { name: "2 of 2 selected" }));
+    expect(screen.getByRole("button", { name: "Delete selected" })).toBeDisabled();
   });
 });

@@ -1463,3 +1463,235 @@ Use this append-only log for decisions that constrain future implementation. Cha
   verifications - all durable, all visible in Step 9. Hosted apply goes
   through the new one-shot `scope=command-analysis-graphs` with the file
   sha pinned.
+
+## ADR-129 - The Run analysis tap is proven end to end, and the doorway gets a rehearsal that writes nothing
+
+- Date: 2026-08-23
+- Status: Accepted
+- Context: the owner tapped Run analysis twice and the hosted database kept
+  no trace either time - `command_analysis_graphs` read 0 link rows after
+  both (probe runs 32613345163 and 32642517130). Nothing in the repository
+  could see why: the behavior suite exercises
+  `launch_command_analysis_graph` on real PostgreSQL through PGlite, which
+  proves the function and says nothing about the hosted stack in front of
+  it, and this session has no Vercel runtime logs.
+- Decision: add two dispatch-only scopes to `apply-hosted-migrations.yml`.
+  `analysis-launch-doorcheck` rehearses the newest record-only command's
+  launch as its own organization owner inside `BEGIN ... ROLLBACK`, so the
+  database's verbatim answer reaches the run log while the database keeps
+  none of it, then re-sends `NOTIFY pgrst, 'reload schema'`.
+  `analysis-launch-commit` commits that same launch once, with the plan the
+  button would send held as a checked-in fixture
+  (`supabase/fixtures/production_readiness.launch-plan.json`, emitted by
+  `scripts/emit-analysis-plan.mts`, pinned by sha in the workflow and
+  deep-equality-pinned against a fresh compile in
+  `tests/unit/analysis-launch.test.ts`).
+- Rationale: a rolled-back rehearsal is the only way to ask production the
+  exact question the button asks without writing anything, and a pinned
+  fixture keeps the committed launch identical to the code path it stands
+  in for rather than a hand-copied approximation that could drift.
+- Consequence: the doorcheck (run 32614371816) returned a graph id, placing
+  the fault above the database. The commit (run 32643074805) linked command
+  `0e9a4765` to graph `e3097ed8`; the graph worker claimed it and run
+  `6d6c0a07` reached **COMPLETED with 7 artifacts** (13:42:37Z to
+  13:48:30Z) - Step 9's first real analysis run. A second command,
+  `d8777258`, then gained graph `a9fc2de2` at 13:44:25Z **through the
+  application itself**, which is the edge path working again; its run
+  `cc39a49f` finished PARTIAL with 5 artifacts, reported as PARTIAL rather
+  than dressed up. The endpoint now surfaces request-shape refusals with
+  their real status instead of a generic 500, so a future failed tap leaves
+  a usable clue.
+
+## ADR-130 - Deleting a selection of pipelines borrows the whole-list clear's rules rather than writing softer ones
+
+- Date: 2026-08-23
+- Status: Accepted
+- Context: the Pipelines page could clear everything or nothing. The owner
+  asked for the middle: tick one or more rows and delete exactly those. The
+  tempting shortcut is a route that deletes by id, since the caller has
+  already named the rows - which is precisely how a surface acquires a
+  second, weaker deletion path beside its audited one.
+- Decision: `20260823000200` adds `delete_selected_pipelines(uuid, uuid[],
+  text, boolean)` as the scoped sibling of `clear_all_pipelines`, keeping
+  every refusal that function makes - owner or admin only, a reason of ten
+  characters or more, live work never deleted, run history never taken
+  unless explicitly included - and adding two the whole-list clear never
+  needed: ids are scoped to the caller's organization (a foreign id is
+  *counted* as not found, never echoed and never acted on) and a selection
+  is capped at 200. It reuses the `command.pipelines_cleared` activity
+  label with `scope: 'selection'` in its metadata, so no enum label is
+  added and the file stays one transaction.
+- Rationale: naming rows explicitly is a smaller blast radius for the same
+  decision, not a licence to reach past the rules that decision already
+  has. One vocabulary in the audit log keeps both scopes legible to
+  whoever reads it later.
+- Consequence: `POST /api/commands/delete` carries no authority of its own
+  and reports the database's own sentence on refusal. The Pipelines page
+  gains a checkbox per row, a select-all that shows an indeterminate state
+  for a partial selection, and a Delete selected (N) button that confirms
+  before firing, requires the reason the database requires, and names what
+  was kept - still running, with run history, no longer here - rather than
+  claiming a clean sweep. Selection is offered on Active as well as All
+  Pipelines: picking one row out of a live list is ordinary, and the
+  function's own refusal keeps live work safe. Hosted apply goes through
+  the one-shot `scope=delete-selected-pipelines` with the file sha pinned.
+
+## ADR-131 - Selecting a pipeline stops it, because the rule protecting live work was protecting rows that could never finish
+
+- Date: 2026-08-23
+- Status: Accepted
+- Context: ADR-130 gave the selection delete the whole-list clear's rule that
+  queued and running commands are never touched. The owner immediately hit
+  it: two record-only pipelines that had sat `queued` for one and fourteen
+  hours - waiting for a Codex worker that, by design, will never claim a
+  record-only command - answered "0 pipelines deleted. Kept: 2 still
+  running." The rule was written to protect work in flight. Applied to an
+  explicit selection it protected rows nobody could ever finish, and gave
+  the owner no way at all to remove them.
+- Decision: `20260823000300` drops and recreates
+  `delete_selected_pipelines` so a selection means stop, then delete. A
+  selected command in `queued` or `running` has its agent runs, its
+  non-terminal tasks and itself moved to `cancelled` before removal, and the
+  stop happens even in the cases where the row is then kept. Three things
+  the change deliberately does not do: it does not race a worker (the agent
+  runs are locked `FOR UPDATE` first, and `claim_phase1c_run` selects `FOR
+  UPDATE ... SKIP LOCKED`, so a claim in flight skips a run this
+  transaction is cancelling); it does not delete run history without the
+  explicit flag; and it never deletes a command the improvement ledger
+  cites, with or without the flag. The return gains `stopped_count`,
+  `kept_with_evidence` and `unlinked_analyses` and loses `kept_running`,
+  which is why the old body is dropped rather than replaced - one name, one
+  selection-delete path.
+- Rationale: cancelling is safe against this schema's own guards, and that
+  is checked rather than assumed: the two RED-block triggers rewrite a
+  status only on a move *into* queued/running/succeeded, and the Phase 1C
+  planners fire on INSERT, so a move to `cancelled` passes through both
+  untouched.
+- Consequence: a second defect surfaced while writing this and would
+  otherwise have bitten on the first real press -
+  `command_analysis_graphs.command_id` is `on delete restrict`, so both of
+  the owner's rows (each carrying an analysis graph since ADR-129) would
+  have failed on a foreign key rather than deleting. The link row is now
+  removed first and **the graph, its run and its artifacts survive**: the
+  bot's findings outlive the request that asked for them, stay readable
+  under Graph runs, and the result line says so rather than letting
+  "deleted" imply the analysis went too. `factory_command_routes` is
+  handled the same way. Both are addressed through `to_regclass`-guarded
+  dynamic SQL, because a database may hold either, both or neither.
+
+## ADR-132 - Routing evidence was made immutable in a way that made commands immortal
+
+- Date: 2026-08-23
+- Status: Accepted
+- Context: the owner selected two pipelines, pressed delete, and got
+  `factory command routing evidence is immutable`.
+  `factory_command_routes` (20260821000400) carries a BEFORE UPDATE OR DELETE
+  trigger that raises unconditionally, and its foreign key to `commands` is
+  ON DELETE RESTRICT. Those two rules together do not make routing evidence
+  immutable - they make the COMMAND immortal. No surface, function, or role
+  could ever delete a routed command, which is not a rule anybody wrote down.
+- Decision: `20260823000400` keeps the guarantee and drops the accident. An
+  UPDATE is still refused unconditionally, with the same message and errcode.
+  A DELETE is still refused, except inside the audited pipeline delete, which
+  announces itself with a transaction-local setting that only that SECURITY
+  DEFINER function sets and withdraws immediately after the statement.
+- Rationale: `factory_command_routes` has no grants at all - `revoke all ...
+  from public, anon, authenticated, service_role` - so no client role can
+  reach the table with or without the setting. The trigger's real job is
+  discipline between definer functions, and this names the one function
+  allowed to release a route: the one deleting that route's own command,
+  under owner-or-admin, with a recorded reason, in the same transaction. The
+  file's postflight and the apply scope both re-assert that no client role
+  holds DELETE on the table, and the scope proves by behaviour, in a
+  rolled-back transaction against the real hosted rows, that ordinary UPDATE
+  and DELETE are still refused (`update refused=t delete refused=t`,
+  run 32652305439).
+- Consequence: a routed pipeline can be deleted through the audited path and
+  no other path gained anything. The released-route count goes to the audit
+  event rather than the return shape, so the console keeps the columns it
+  reads. This was the third distinct blocker between the owner and a working
+  delete - after the live-work rule (ADR-131) and the analysis link's own
+  restrict foreign key - and each was invisible until the one before it was
+  removed.
+
+## ADR-133 - A migration that died one function short is finished from measurement, not from the file
+
+- Date: 2026-08-23
+- Status: Accepted
+- Context: owner-directed. `20260814002500_provider_credential_vault` was
+  applied to hosted but never recorded in the ledger, and it stopped partway.
+  Two costs followed: `POST /api/bots/connect/claim` calls
+  `resolve_provider_connect_session` first, so every CORRECT sign-in code was
+  answered `connect_session_invalid` and each retry minted another code that
+  failed identically; and Supabase's preview branch, which replays every
+  migration the ledger does not record, replayed the file into the table that
+  already existed and died with 42P07 on every commit to main.
+- Decision: measure first. `scope=probe` gained an exact object inventory for
+  that file - both tables with their real column lists, the index, all six
+  functions, the RLS flags and the client grants. Probe run 32652393423
+  answered precisely: everything present and correctly postured except one
+  function. `20260823000500` creates that one function, byte-for-byte as the
+  original declares it, and its preflight refuses if the database is missing
+  more than the probe found.
+- Rationale: the runbook is explicit that NOT VISIBLE is not absent and that
+  re-running the file raises 42P07. Re-applying the whole file was never an
+  option, and guessing which half to apply would have been the same mistake
+  in a new costume. The measurement made the repair a one-function change.
+- Consequence: the apply scope creates the function, reads it back, re-checks
+  that all nine of the original's objects are present, and only THEN records
+  20260814002500 in the ledger - so the ledger can never claim "applied"
+  about a database still short a function. Run 32653491713 did all of that:
+  both rows recorded, posture verified. A correct sign-in code resolves
+  again, and the preview branch has nothing left to replay for this file.
+
+## ADR-134 - The Autonomy page's Clear archives, because three guards say projects are permanent
+
+- Date: 2026-08-23
+- Status: Accepted
+- Context: the owner asked for a Clear control that empties the Autonomy
+  page's "What the loop may do" section. That list is `from public.projects`
+  with the resolved autonomy envelope per row, so emptying it appeared to
+  mean deleting projects. The owner was told exactly what that destroys and
+  chose it; then, when the append-only audit trail turned out to block it,
+  was told that too and chose to preserve every event and release only its
+  project pointer.
+- Decision: neither, because a third guard settles it.
+  `refuse_project_deletion` (20260815000900) states that a project's
+  append-only activity trail makes it undeletable "from its first recorded
+  moment, forever", that this is deliberate, that there is **no escape
+  hatch**, and that "the supported end of a project's life is
+  archive_project". Releasing the audit pointer would have destroyed the very
+  property that guard exists to guarantee. So `20260823000600` adds
+  `clear_autonomy_projects`, which archives every project through
+  `archive_project`, and narrows `list_autonomy_status` to exclude archived
+  projects.
+- Rationale: archiving reaches the identical visible outcome - the section is
+  empty - while deleting nothing. `archive_project` is already owner-only,
+  already requires a reason, already writes an immutable event per
+  transition, and deliberately keeps every run, task, command and activity
+  row. And the list change is a truthfulness gain rather than a concession:
+  the claim path filters on `project.status = 'active'`, so an archived
+  project is precisely one the loop may do nothing with, and listing it under
+  "what the loop may do" was already misleading.
+- Consequence: Clear sits beside Refresh in the section it clears, confirms
+  before firing, requires the ten-character reason the database requires, and
+  reports what it archived alongside the sentence "Nothing was deleted".
+  Projects remain on the Projects page and can be unarchived. The apply scope
+  proves, in a rolled-back transaction against the real hosted rows, that a
+  project still cannot be deleted. Three guards were met on the way here and
+  all three are intact; the finding worth carrying forward is that when a
+  system refuses the same operation in three independent places, the refusal
+  is the design speaking.
+- Amendment (2026-08-23): the first hosted apply of `20260823000600` failed on
+  its own postflight - `projects_guarded_deletion is missing` - and the
+  migration rolled back cleanly, applying nothing. The finding was real:
+  `20260815000900` is one of the migrations hosted has never recorded, so the
+  friendly trigger is absent there. What is *not* absent is the protection.
+  That trigger's own comment says "nothing can pass the RESTRICT behind this
+  trigger anyway", and the `activity_events -> projects` foreign key with
+  `ON DELETE RESTRICT` is present on hosted. So the postflight now asserts the
+  constraint that actually enforces permanence on every database, and merely
+  reports the trigger's absence as a notice; the scope's rolled-back proof
+  accepts SQLSTATE `23503` as well as the trigger's sentence. The lesson is to
+  assert the enforcing object rather than the explaining one - the explanation
+  is a courtesy, the constraint is the guarantee.

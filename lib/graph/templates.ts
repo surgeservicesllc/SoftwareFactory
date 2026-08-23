@@ -68,6 +68,17 @@ export type GraphTemplate = {
   readonly version: number;
   readonly risk: RiskLevel;
   readonly discovery?: boolean;
+  /**
+   * Whether this graph is a lifecycle the orchestrator may iterate.
+   *
+   * This used to be inferred — "any node declares a `lifecycleStage`" — which
+   * silently welded two unrelated things together: what stage a node belongs
+   * to, and whether the whole graph re-runs itself when acceptance is unmet.
+   * A read-only audit could not say which stage its nodes sit in without
+   * becoming an iterating lifecycle that spends subscription turns on repeat
+   * passes. Declared explicitly, a stage is a label and nothing more.
+   */
+  readonly isLifecycle?: boolean;
   readonly nodes: readonly TemplateNode[];
   readonly proposedEdges: readonly ProposedEdge[];
   /**
@@ -205,7 +216,19 @@ export function templateStageFor(
   nodeKey: string,
 ): { stage: SdlcStage | null; gate: GateKind | null } {
   const node = template.nodes.find((candidate) => candidate.nodeId === nodeKey);
-  return { stage: node?.lifecycleStage ?? null, gate: node?.gate ?? null };
+  if (!node) return { stage: null, gate: null };
+  /*
+   * A declared stage wins; otherwise the capability decides.
+   *
+   * Every node has a stage this way, from one rule, instead of 100+ hand-typed
+   * labels that drift the first time a template gains a node. Before this only
+   * `agentic_sdlc` declared any, so the graph-runs Stage column was empty for
+   * every audit — which is every run the analysis button produces.
+   */
+  return {
+    stage: node.lifecycleStage ?? stageForCapability(node.capability),
+    gate: node.gate ?? null,
+  };
 }
 
 const file = (id: string): ResourceRef => ({ kind: "file", id });
@@ -219,6 +242,39 @@ const file = (id: string): ResourceRef => ({ kind: "file", id });
  */
 /** Exported so custom (database-stored) templates build through the exact
  * same shape as the built-ins — one builder, no divergence. */
+/**
+ * The lifecycle stage a capability belongs to.
+ *
+ * One rule, so a node's stage is a property of the work it does rather than a
+ * per-template opinion. Read-only inspection, synthesis and reporting are all
+ * REVIEW: an audit examines something that already exists and says what it
+ * found. QA work is TEST. The build-shaped capabilities keep their own stages
+ * so a lifecycle template and an audit describe the same work the same way.
+ *
+ * Three of these answers were renamed when the lifecycle widened to ten stages
+ * — IMPLEMENTATION became BUILD, ARCHITECTURE became ARCHITECT, and PRD merged
+ * into REQUIREMENT. The rule is unchanged; only the vocabulary moved. Leaving
+ * the old names here would have been a silent production failure rather than a
+ * type error: every value this returns is written into `graph_nodes.
+ * lifecycle_stage`, and PostgreSQL answers a dropped label with `invalid input
+ * value for enum sdlc_stage`, at plan time, on a graph someone just launched.
+ */
+export function stageForCapability(capability: NodeCapability): SdlcStage {
+  switch (capability) {
+    case "qa":
+      return "TEST";
+    case "implementation":
+      return "BUILD";
+    case "architecture":
+      return "ARCHITECT";
+    case "planning":
+      return "REQUIREMENT";
+    default:
+      // review, security_review, extraction, synthesis, reporting.
+      return "REVIEW";
+  }
+}
+
 export function auditTemplate(input: {
   key: string;
   name: string;
@@ -279,6 +335,8 @@ export function auditTemplate(input: {
 export const GRAPH_TEMPLATES: readonly GraphTemplate[] = Object.freeze([
   {
     key: "agentic_sdlc",
+    // The one template the orchestrator may iterate; see `isLifecycle`.
+    isLifecycle: true,
     name: "Agentic SDLC",
     category: "BUILD",
     summary:

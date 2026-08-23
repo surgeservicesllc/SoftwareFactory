@@ -18,7 +18,7 @@ the *lifecycle vocabulary* and the *surface*. Do not rebuild the engine.
 1. **`eca6ccc` — the stage model is ten, not eight.**
    `lib/sdlc/lifecycle.ts` rewritten: ten stages with number, title, slug,
    plain-English purpose, produced artifact, capability, gate and anchor rule.
-   Migration `20260823000200_ten_stage_lifecycle.sql` rebuilds the
+   Migration `20260823000700_ten_stage_lifecycle.sql` rebuilds the
    `public.sdlc_stage` enum (rename could not carry it — PRD had to *merge*
    into REQUIREMENT) and widens `list_graph_runs` with per-node
    `depends_on`/`attempts`/`anchor_count`/`artifact_count`/timings plus a
@@ -58,7 +58,7 @@ the *lifecycle vocabulary* and the *surface*. Do not rebuild the engine.
 
 ### Wired since, and what is left
 
-`lib/graph/backoff.ts` and `20260823000300_structured_stage_handoffs.sql` are
+`lib/graph/backoff.ts` and `20260823000800_structured_stage_handoffs.sql` are
 now called by something.
 
 **Retry backoff** sits in `lib/worker/graph-run.ts`'s `executeNode` wrapper,
@@ -100,18 +100,62 @@ belongs in a reviewed change rather than beside this one.
    row 6). `graph_edges` carries a reason, never a condition, and nothing
    evaluates one at run time. This needs a schema column plus compiler and
    scheduler work; it is the largest remaining item and was not started.
-2. **`20260823000300` needs a hosted scope of its own** in
+2. **`20260823000800` needs a hosted scope of its own** in
    `.github/workflows/apply-hosted-migrations.yml`, after the two below.
 3. **Node confidence** (row 13) — `node_runs.confidence` exists and the worker
    still reports none.
 4. **No project view links to a run** (row 24).
+
+### The merge with main, and the version collision it exposed
+
+`main` moved 17 commits while this branch worked, and the PR went
+`mergeable_state=dirty`. **A conflicted PR gets no `pull_request` workflow runs
+at all** — no run object, no error — which is why CI went silent on `fb7bdf9`
+and looked like a dropped webhook. The repository already knew this; the section
+further down this file cost an hour and three wrong diagnoses to write. Check
+mergeability first.
+
+**The collision that mattered:** `main` shipped its own
+`20260823000200_delete_selected_pipelines.sql` and
+`20260823000300_stop_and_delete_selected_pipelines.sql` — the exact two versions
+this branch used. The Supabase ledger keys on the 14-digit prefix, so two files
+at one version silently orphan DDL. Mine moved to the tail, since main's are
+merged and closer to hosted:
+
+- `20260823000700_ten_stage_lifecycle.sql`
+- `20260823000800_structured_stage_handoffs.sql`
+
+Neither of main's new migrations touches `sdlc_stage` or `list_graph_runs`, so
+running after them is safe. Renumbering by blanket substitution damaged three
+lines of *main's* own scopes before it was caught — a version string is not a
+unique token in that workflow, and the same mistake shape had already bitten
+this branch once on a test pin.
+
+**Main answered a question this branch was also answering.** `a7cb05e` made
+`GraphTemplate.isLifecycle` declared rather than inferred — labelling an audit
+node used to turn every read-only analysis into a self-iterating graph — and
+added `stageForCapability()` so all 16 templates stage every node. That work is
+kept intact. Its rule returned `IMPLEMENTATION`, `ARCHITECTURE` and `PRD`, which
+this branch's enum no longer has; the rule is unchanged and its three answers
+moved to `BUILD`, `ARCHITECT` and `REQUIREMENT`. Leaving them would have been a
+silent production failure rather than a type error — every value it returns is
+written to `graph_nodes.lifecycle_stage`, and PostgreSQL answers a dropped label
+with `invalid input value for enum sdlc_stage` at plan time, on a graph someone
+just launched.
+
+That session's open question — *"decide deliberately whether the enum grows or
+the goal's ten map onto these eight"* — is answered here: **the enum grows.**
+`GOAL` and `PRD` merge into `REQUIREMENT`, `ARCHITECTURE`/`IMPLEMENTATION`/
+`DEPLOYMENT`/`MONITORING` are renamed, and `DISCOVER`/`EVALUATE`/`DECIDE` are
+new. Their backfill note still stands: graphs already in the database have
+`lifecycle_stage = null` and would need mapping through `stageForCapability`.
 
 ### Hosted apply — two scopes, in this order
 
 `.github/workflows/apply-hosted-migrations.yml`:
 
 1. `scope=lifecycle` (20260821000100 + 20260821000200) — **still unhosted**.
-2. `scope=ten-stage-lifecycle` (20260823000200) — new, and it must run *after*
+2. `scope=ten-stage-lifecycle` (20260823000700) — new, and it must run *after*
    the above. It is the only scope in that workflow that DROPS a type in
    production; the file guards itself and returns early if the enum already
    holds `REQUIREMENT`.
@@ -125,7 +169,7 @@ widening and its `sdlc_stage` marker moved from `MONITORING` to `TEST` — a lab
 that exists in both vocabularies, so the lifecycle rows keep answering the
 question they are actually about.
 
-`20260823000300` (handoffs) is wired now and needs a scope of its own. It is
+`20260823000800` (handoffs) is wired now and needs a scope of its own. It is
 additive — two guarded indexes and one `create or replace function` with its
 grants restated — so it carries none of the type-drop risk the scope above has.
 
@@ -176,7 +220,7 @@ completed run for a while; let a run finish before pushing again.
 
 ### Wired since, and what is left
 
-`lib/graph/backoff.ts` and `20260823000300_structured_stage_handoffs.sql` are
+`lib/graph/backoff.ts` and `20260823000800_structured_stage_handoffs.sql` are
 now called by something.
 
 **Retry backoff** sits in `lib/worker/graph-run.ts`'s `executeNode` wrapper,
@@ -218,7 +262,7 @@ belongs in a reviewed change rather than beside this one.
    row 6). `graph_edges` carries a reason, never a condition, and nothing
    evaluates one at run time. This needs a schema column plus compiler and
    scheduler work; it is the largest remaining item and was not started.
-2. **`20260823000300` needs a hosted scope of its own** in
+2. **`20260823000800` needs a hosted scope of its own** in
    `.github/workflows/apply-hosted-migrations.yml`, after the two below.
 3. **Node confidence** (row 13) — `node_runs.confidence` exists and the worker
    still reports none.
@@ -229,7 +273,7 @@ belongs in a reviewed change rather than beside this one.
 `.github/workflows/apply-hosted-migrations.yml`:
 
 1. `scope=lifecycle` (20260821000100 + 20260821000200) — **still unhosted**.
-2. `scope=ten-stage-lifecycle` (20260823000200) — new, and it must run *after*
+2. `scope=ten-stage-lifecycle` (20260823000700) — new, and it must run *after*
    the above. It is the only scope in that workflow that DROPS a type in
    production; the file guards itself and returns early if the enum already
    holds `REQUIREMENT`.
@@ -243,7 +287,7 @@ widening and its `sdlc_stage` marker moved from `MONITORING` to `TEST` — a lab
 that exists in both vocabularies, so the lifecycle rows keep answering the
 question they are actually about.
 
-`20260823000300` (handoffs) is wired now and needs a scope of its own. It is
+`20260823000800` (handoffs) is wired now and needs a scope of its own. It is
 additive — two guarded indexes and one `create or replace function` with its
 grants restated — so it carries none of the type-drop risk the scope above has.
 
@@ -279,7 +323,265 @@ moment another migration lands.
 
 
 ## STEP 9 RUN ANALYSIS: DATABASE PROVEN HEALTHY, BROWSER TAP LEAVES NO TRACE — PICK UP HERE (2026-08-23)
+## GRAPH — THE STAGE COLUMN WAS DEAD, AND LABELLING IT WOULD HAVE STARTED LOOPS (2026-08-23, latest)
 
+The graph-runs panel has had a **Stage** column since the Agentic SDLC
+migration (`20260821000200`, `sdlc_stage` enum, `graph_nodes.lifecycle_stage`).
+It rendered `—` for every node of every run the owner actually produces.
+
+Measured, not guessed: of 16 templates, **only `agentic_sdlc` declared any
+lifecycle stages**. Every analysis template the Step 9 button launches —
+`production_readiness`, `bug_sweep`, `security_audit` and the rest — declared
+none, so the resolved Step 9 run (command `0e9a4765`, 7 artifacts) has no stage
+on a single node.
+
+**The trap, found before shipping it.** The obvious fix — declare stages on the
+audit templates — would have caused a regression. `isLifecycle` was *inferred*
+in `buildLaunchPlan` as "any node declares a `lifecycleStage`", and
+`lib/sdlc/orchestrator.ts` uses `isLifecycle` to decide whether a graph
+ITERATEs instead of HALTing when acceptance is unmet. Labelling an audit node
+would therefore have turned every read-only analysis into a graph that re-runs
+itself, spending subscription turns on repeat passes nobody asked for. That
+conflation *was* the defect: you could not say which stage a node sits in
+without also changing how the graph runs.
+
+**What shipped:**
+
+- `GraphTemplate.isLifecycle` is declared, not inferred. `agentic_sdlc` sets
+  it; nothing else does. A stage is now a label and nothing more.
+- `stageForCapability()` is the single rule: qa → TEST, implementation →
+  IMPLEMENTATION, architecture → ARCHITECTURE, planning → PRD, and the
+  read-only capabilities (review, security_review, extraction, synthesis,
+  reporting) → REVIEW. An audit examines something that already exists and
+  says what it found, which is REVIEW.
+- `templateStageFor()` resolves a declared stage first and falls back to the
+  capability. One rule at the read boundary rather than 100+ hand-typed labels
+  that drift the first time a template gains a node — all 16 templates, every
+  node, now have a stage.
+- `supabase/fixtures/production_readiness.launch-plan.json` regenerated: the
+  diff is exactly 7 lines, `lifecycle_stage: null → "REVIEW"`. **Note for
+  whoever runs `scope=analysis-launch-commit`:** that scope now sends nodes
+  carrying a stage. The column exists on hosted (`20260821000200` is recorded),
+  so this is a fill, not a schema change.
+
+**Mutation-checked, and the first attempt did not hold.** A test asserting
+"only `agentic_sdlc` iterates" passes under *both* the inferred and the
+declared rule, because no shipped template declares a stage override — the two
+expressions agree on today's data. The guard that actually holds the
+decoupling builds the case that separates them: an audit-shaped template with
+one explicitly staged node and no lifecycle claim, asserted to compile with
+`isLifecycle === false`. Reverting to inference fails it. Dropping the
+capability fallback fails the coverage guards.
+
+**Next bot, in the Graph lane:**
+
+1. The Stage column is now populated for *new* graphs only. Graphs already in
+   the database — including the resolved Step 9 run — still have
+   `lifecycle_stage = null` on their nodes. A backfill would need to map stored
+   `graph_nodes.capability` through the same rule; it is a one-statement
+   update per template shape, but it writes production rows, so measure with
+   `scope=probe` first.
+2. The 10-stage lifecycle in the attached goal document (REQUIREMENT →
+   MONITOR) is **not** the same vocabulary as the shipped `sdlc_stage` enum
+   (GOAL, PRD, ARCHITECTURE, IMPLEMENTATION, REVIEW, TEST, DEPLOYMENT,
+   MONITORING — 8 values). Nothing reconciles them. Decide deliberately
+   whether the enum grows or the goal's ten map onto these eight before
+   building any per-stage pages; `/solutions/ai-factory` today is the setup
+   journey, not the lifecycle.
+3. Still open from the round before: why the two silent Run analysis taps left
+   no row. The alert now reports status and error code, so one more tap is
+   enough to separate origin (403) from wrong active organization (404) from a
+   database refusal (409).
+
+Verified: typecheck, lint, production build, full suite green.
+
+## THE VAULT MIGRATION IS FINISHED, AND THE DELETE HAD A THIRD BLOCKER (2026-08-23, latest)
+
+**`20260814002500_provider_credential_vault` is complete and recorded** (apply
+run 32653491713). The section below headed "FOUR MIGRATIONS ARE OUTSTANDING"
+is now one out of date on this file — read it for method, not for status.
+
+It was measured before it was touched. `scope=probe` gained an exact object
+inventory, and run 32652393423 answered: both tables present with every
+column, the index present, RLS and FORCE RLS on with no client grants, and
+five of six functions created. Exactly one was missing —
+`resolve_provider_connect_session`. That single gap was the live cost this
+file has described since 2026-08-20: `POST /api/bots/connect/claim` calls it
+first, so every **correct** sign-in code was answered
+`connect_session_invalid`. `20260823000500` creates it byte-for-byte from the
+original, and the apply scope reads it back and re-checks all nine of the
+original's objects **before** recording `20260814002500` — the ledger can
+never claim "applied" about a database still short a function.
+
+That removes **one** cause of the red `Supabase Preview`, and it verifiably
+moved the replay forward: before the repair the preview died on
+20260814002500 (`relation "provider_credentials" already exists`, 42P07);
+after it, the same check on 379a0193 dies on **20260815000200** instead
+(`column "maximum_concurrent_runs" of relation "organizations" already
+exists`, 42701). Same partial-apply class, next file along, different error
+code — a duplicate COLUMN from an `alter table add column` rather than a
+duplicate table.
+
+The check is still red, and expected to stay red until the rest are
+finished. The preview branch replays every
+migration the ledger does not record, and the ledger listing in run
+32652305439 shows **20 unrecorded versions**, of which 20260814002500 was
+only the first to fail. The replay runs in version order, so the EARLIEST unrecorded file whose
+objects already exist is the one that fails. That is currently
+**20260815000200**. (An earlier note here guessed
+`20260821000400_command_factory_routing` would be next because its table
+demonstrably exists — this session deleted rows from
+`factory_command_routes` on production — but that file is far later in the
+queue and will only be reached once everything before it is finished. The
+guess was right about the class and wrong about the order.)
+
+So do not read the vault repair as "the check is fixed". The remaining
+unrecorded versions, from the same listing, are:
+
+```
+20260814002600  20260815000200  20260815000300  20260815000400
+20260815000500  20260815000600  20260815000800  20260815000900
+20260815001100  20260815001200  20260815001300  20260815001400
+20260815001500  20260815001600  20260816000100  20260816000200
+20260816000300  20260816001600  20260821000400
+```
+
+Each wants the same discipline the vault got: measure its objects with a
+probe inventory first, finish only what is missing, and record the ledger row
+only after every object it declares is present. Applying them blind is how
+this class of problem was created.
+
+**The Pipelines delete needed three separate fixes**, each invisible until the
+one before it was removed:
+
+1. Live work was skipped, not stopped (ADR-131) — two record-only rows queued
+   for hours could never be claimed, so "protect live work" was protecting
+   rows nobody could finish.
+2. `command_analysis_graphs.command_id` is `on delete restrict`, so a command
+   with an analysis graph failed on a foreign key. The link is released; the
+   graph, its run and its artifacts survive.
+3. `factory command routing evidence is immutable` (ADR-132) — a trigger that
+   refuses every delete plus a restrict foreign key did not make routing
+   evidence immutable, it made the **command immortal**. The audited delete
+   now announces itself with a transaction-local setting the guard honours;
+   an UPDATE is still refused, and the table still has no grants for any
+   client role. Proven against the real hosted rows, rolled back:
+   `update refused=t delete refused=t` (run 32652305439).
+
+
+## GRAPH — THE SILENT TAP: TWO DEFECTS FOUND IN THAT PATH, BOTH FIXED (2026-08-23, latest)
+
+Step 9 is resolved above — a real run COMPLETED with 7 artifacts, and the
+application's own launch path is working again. What that section leaves open
+is the one thing this round went after: **why the two earlier taps failed
+silently is still unexplained**, and its stated next step was "the next
+failure should leave a usable clue... wants the verbatim alert text".
+
+Reading the tap path end to end found two real defects in it. Neither is
+proven to be the no-trace cause — I am not claiming the mystery is solved —
+but both were live on the exact path the owner pressed, and both are fixed.
+
+**1. The manual button could never send the command's type, so every launch
+ran the wrong template.** `POST /api/commands/{id}/analysis` took
+`commandType` from the request body, defaulted to `other`. The command list
+the button renders from (`list_factory_commands`) never projected the type, so
+the client had nothing to send and always defaulted. Because `other` maps to a
+real template (`production_readiness`) rather than refusing, a `fix_bug`
+command silently got a production-readiness graph instead of `bug_sweep` — no
+error, wrong analysis. Note the resolved run above *is* command `0e9a4765`
+("Fix high-priority bugs"), launched through the workflow's hash-pinned
+`production_readiness` plan; through the button it would have taken the same
+wrong template by accident rather than by choice. The submit and replay
+auto-launch paths were unaffected — they pass the type they just recorded.
+**Fixed:** the route reads `commands.command_type` under the caller's RLS and
+uses that; the body carries `projectId` only, so the browser cannot choose
+which template runs. A command the caller cannot see returns 404
+`command_not_found` instead of a guessed type entering the doorway.
+
+**2. The "best effort" worker wake was not best effort.** Only
+`dispatchGraphWorker` sat inside the try; the `resolve_phase1c_command_target`
+lookup before it did not. A *throw* there (not an `error` result — that was
+handled) escaped to the 500 handler **after** the graph had been created, so
+the caller was told the launch failed while the database held a launched
+graph. **Fixed:** the whole wake, lookup included, is inside the try.
+
+Worth stating for the diagnosis: defect 2 produces the *opposite* symptom to
+the reported one (a row exists, the caller sees failure), and defect 1
+launches the wrong template rather than none — so neither explains 0 link
+rows. The silent-tap cause is still open.
+
+**What this round adds for that:** the refusal now reaches the person. The
+alert carries the HTTP status and error code
+(`"<message> (409 analysis_launch_refused)"`), a network throw says it never
+reached the server rather than borrowing the refusal's sentence, and the alert
+renders under the row that failed instead of under every row — it was rendered
+for each `<li>`, so one refusal looked like the whole list refusing.
+
+**Next bot:** ask the owner to tap Run analysis once more and read back the
+alert. The status and code now separate the candidates without Vercel logs —
+403 = origin (`assertSameOriginRequest` compares the `Origin` header with
+`new URL(request.url).origin`, a known proxy-mismatch shape); 404
+`command_not_found` = the active organization is not the command's; 409
+`analysis_launch_refused` = the database doorway refused, reason quoted
+verbatim. `scope=analysis-launch-doorcheck` still re-proves the database
+without writing.
+
+Also still open, unrelated and blocking the hosted lane:
+`20260822000900_repair_hosted_plpgsql_catalog_and_lint.sql` fails on real
+PostgreSQL (`relation "_sf_20260822000900_foundation_state" does not exist`),
+which will stop the next `apply-hosted-migrations` run. And `Supabase Preview`
+is red on recent main commits (blocks nothing; nobody has looked).
+
+Verified this round: typecheck, lint, 4287 tests / 2 skipped, production
+build. New coverage in `tests/unit/analysis-launch-route.test.ts` (3 tests):
+the template follows the command's recorded type, a body naming its own
+`commandType` is refused 400, and an unreadable command is 404 before any
+launch — the success case asserts the response stays under 400 while the
+worker wake throws.
+
+## STEP 9 IS DONE — THE BOT RAN FOR REAL (2026-08-23, resolved; read the section below for how)
+
+Command `0e9a4765` ("Fix high-priority bugs") → analysis graph `e3097ed8` →
+graph run `6d6c0a07`: **COMPLETED with 7 artifacts**, 13:42:37Z to 13:48:30Z
+(worker run 32643138657, confirmed by probe run 32646908822). That is the
+Claude bot executing an owner-issued command as a read-only analysis on the
+subscription credential, with durable artifacts — Step 9's first real run.
+
+The application's own launch path is working again too: command `d8777258`
+gained graph `a9fc2de2` at 13:44:25Z with no workflow involvement (its run
+`cc39a49f` finished PARTIAL with 5 artifacts, and is reported as PARTIAL).
+
+Two loose ends for whoever picks this up:
+
+- **Why the two earlier taps failed silently is still unexplained.** If it
+  recurs: `scope=analysis-launch-doorcheck` re-proves the database without
+  writing anything, and the endpoint now returns request-shape refusals
+  (origin, body size) with their real status instead of a generic 500, so
+  the next failure should leave a usable clue. Diagnosing further wants
+  Vercel runtime logs or the verbatim alert text from under the request card.
+- **`Supabase Preview` has been red on every recent main commit**, including
+  ones this session did not touch. It is not one of the four required
+  checks, so it blocks nothing — and it is **not a mystery**: it is the
+  partially-applied `20260814002500_provider_credential_vault` described in
+  the section below, showing up in a second place. The check is Supabase's
+  own GitHub App branching production and replaying every migration the
+  hosted ledger does not record. `20260814002500` is not recorded (the
+  ledger's remote column is blank) but its table *does* exist on hosted
+  (probe run 32646908822: `20260814002500 | table | provider_credentials |
+  t`), so the replay hits that file's unguarded `create table` and dies
+  with `ERROR: relation "provider_credentials" already exists (SQLSTATE
+  42P07)`. Exactly the failure mode the runbook warns about — "NOT VISIBLE
+  is not absent". Fixing it means finishing that migration on hosted, which
+  is an owner-approved action nobody has taken; the red check is the
+  symptom, not a separate bug.
+
+Also shipped 2026-08-23: **multi-select delete on the Pipelines page**
+(ADR-130). `20260823000700` is applied on hosted (run 32647755059);
+`delete_selected_pipelines` keeps every refusal `clear_all_pipelines` makes
+and adds organization scoping plus a 200-row cap. Not yet exercised against
+a real production row — the backlog item says so.
+
+## HOW THE STEP 9 DIAGNOSIS WENT (2026-08-23, kept for the method)
 The goal in flight: the AI Factory's Step 9 runs the owner's recorded Claude
 command as a real read-only analysis (graph → subscription graph worker →
 artifacts), and Runs + Step 9 show it. The full lane shipped through PR #344
@@ -300,8 +602,8 @@ invisible without runtime logs — the endpoint exists (unauthenticated POST
 returns our own 401/403 shapes), the composer POST works from the same phone,
 and the tap's error alert text has not been reported back.
 
-**What is staged to finish the owner's request** (workflow
-`apply-hosted-migrations.yml`):
+**What finished it** — the three steps below ran in order and are repeatable
+for any future stranded command (workflow `apply-hosted-migrations.yml`):
 
 1. `scope=analysis-launch-commit` — commits the one launch the taps asked
    for, through the same DB doorway, as the command's own organization owner,
@@ -309,20 +611,21 @@ and the tap's error alert text has not been reported back.
    (`supabase/fixtures/production_readiness.launch-plan.json`, regenerated by
    `scripts/emit-analysis-plan.mts`, drift-pinned by
    `tests/unit/analysis-launch.test.ts`). Refuses if the link already exists.
+   Ran as 32643074805 → graph `e3097ed8`.
 2. Then dispatch `graph-worker.yml` (plain workflow_dispatch — manual mode is
    unconditional) so the PLANNED graph is claimed and executed on the
-   subscription credential. A real drain takes minutes; watch the run log for
-   claim/nodes/artifacts.
+   subscription credential. A real drain takes minutes. Ran as 32643138657,
+   ~10 minutes, success.
 3. Then `scope=probe` shows the truth: link row for the command, graph with 7
    nodes, `graph_runs` reaching COMPLETED with artifacts. The Runs page and
    Step 9 read the same `list_command_analysis_graphs` and light up on their
-   own once the run exists.
+   own once the run exists. Ran as 32646908822 → COMPLETED, 7 artifacts.
 
-**Still to diagnose (next bot, if the button matters before the next
-submit):** why the authenticated browser POST dies. Wants either Vercel
-runtime logs or the verbatim red alert text under the request card after a
-tap. `scope=analysis-launch-doorcheck` re-proves DB health any time without
-writing. Note the endpoint hardening in
+**Still unexplained:** why those two authenticated browser POSTs died
+silently, given that a third one three minutes later worked. Diagnosing it
+wants either Vercel runtime logs or the verbatim red alert text under the
+request card after a failing tap. `scope=analysis-launch-doorcheck`
+re-proves DB health any time without writing. Note the endpoint hardening in
 `app/api/commands/[commandId]/analysis/route.ts` now returns request-shape
 refusals (origin/body) with their real status instead of a generic 500 —
 future taps leave a better clue. New commands are unaffected in the common

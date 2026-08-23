@@ -112,7 +112,7 @@ async function creationsByName(keyword: "table" | "type"): Promise<Map<string, s
 const FORWARD_REBUILT_TYPES: ReadonlyMap<string, string> = new Map([
   ["sdlc_stage", [
     "20260821000200_agentic_sdlc_lifecycle.sql",
-    "20260823000200_ten_stage_lifecycle.sql",
+    "20260823000700_ten_stage_lifecycle.sql",
   ].join("|")],
 ]);
 

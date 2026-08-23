@@ -81,14 +81,21 @@ Last triaged: 2026-08-22
 - [x] Owner-confirmed acceptance (screenshots 2026-08-23 ~00:27Z): Step 8
   "Issue a Command" Done — 1 command recorded only; Step 9 "Watch It Ship"
   shows the truthful record-only view with the command record modal.
-- [ ] Step 9 real run with the Claude bot (owner goal, ADR-128): deploy the
-  analysis-launch slice, apply 20260823000100 via
-  `scope=command-analysis-graphs`, have the owner issue a command with the
-  Claude bot, watch the launched analysis graph get claimed and completed by
-  the graph worker (manual dispatch works today; repository_dispatch wakes
-  it for new commands), and verify Step 9 reports the run with its
-  artifacts. The existing recorded command predates the link and stays a
-  plain record.
+- [x] Step 9 real run with the Claude bot (owner goal, ADR-128/129):
+  command `0e9a4765` ("Fix high-priority bugs") is linked to analysis graph
+  `e3097ed8`, and graph run `6d6c0a07` reached **COMPLETED with 7
+  artifacts** (2026-08-23 13:42:37Z to 13:48:30Z, worker run 32643138657).
+  The link was committed through `scope=analysis-launch-commit` (run
+  32643074805) after the browser tap twice left no trace and the
+  rolled-back doorcheck (run 32614371816) placed the fault above the
+  database. Confirmed by probe run 32646908822.
+- [x] The application's own launch path is working again: command
+  `d8777258` gained graph `a9fc2de2` at 13:44:25Z with no workflow
+  involvement; its run `cc39a49f` finished PARTIAL with 5 artifacts, which
+  is reported as PARTIAL. Still unexplained is why the two earlier taps
+  failed silently — if it recurs, `scope=analysis-launch-doorcheck`
+  re-proves the database without writing, and the endpoint now returns
+  request-shape refusals with their real status.
 - [ ] Codex write-path enablement (owner-gated, unchanged): connect the
   ChatGPT/Codex account in Bot Manager, create an `openai`/`gpt-5.3-codex`
   bot, assign + configure it, set repo variable
@@ -720,3 +727,105 @@ These are recorded for deliberate owner review and are not evidence that Phase 1
 - [ ] Decide whether to enable protection/required checks and require verified signatures on `main`; the branch is currently unprotected and the published release commit is unsigned. Any settings change is a protected owner-approved action.
 - [ ] Decide the `theagoras.com` aliases with the routing question now answered by evidence: both `*.vercel.app` hosts are behind Vercel SSO Deployment Protection, so `www.theagoras.com` is the **only** public path to the application. Removing the aliases would take the public site offline. See `AI/PRODUCTION_OBSERVATION_EVIDENCE.md`.
 - [ ] Decide whether production keeps Vercel Deployment Protection. While it is on, no external monitor — this one or any third party — can observe the deployment URLs recorded as production.
+
+## Delete a selection of pipelines (2026-08-23, owner goal, ADR-130)
+
+- [x] `20260823000200` adds `delete_selected_pipelines`, the scoped sibling
+  of `clear_all_pipelines`: same caller check, same mandatory reason, live
+  work never deleted, run history never taken unless explicitly included,
+  plus organization scoping (a foreign id is counted, never acted on) and a
+  200-row cap. Eleven behaviour cases against real PostgreSQL.
+- [x] `POST /api/commands/delete` carries no authority of its own and
+  reports the database's own refusal sentence; five boundary cases.
+- [x] The Pipelines page gains a checkbox per row, a select-all with an
+  indeterminate partial state, and a Delete selected (N) button that
+  confirms, requires the reason, and names what was kept.
+- [x] Applied on hosted through the one-shot
+  `scope=delete-selected-pipelines` (sha-pinned, run 32647755059), whose
+  read-back proved SECURITY DEFINER and owner+authenticated-only execute.
+- [x] Proven live on production without destroying anything: signed in as
+  the fake journey account, a selection of one id that does not exist
+  answered `{deletedCount: 0, keptRunning: 0, keptWithRuns: 0, notFound: 1}`
+  — a response only the hosted function can produce, so session, route,
+  PostgREST and function are all on the path. Unauthenticated posts get
+  `authentication_required` (401), cross-origin gets
+  `invalid_request_origin` (403), and an empty selection or short reason
+  gets `invalid_delete_request` (400).
+- [x] Selecting a pipeline now **stops** it (owner instruction, ADR-131):
+  the first press hit "0 pipelines deleted. Kept: 2 still running." on two
+  record-only rows that had been `queued` for one and fourteen hours and
+  could never be claimed. `20260823000300` cancels a selected command's
+  runs, tasks and itself before removal, and detaches its analysis graph
+  rather than being refused by that link's restrict foreign key — the graph,
+  its run and its artifacts survive. Applied on hosted; the function's
+  argument list reads back with `stopped_count` and without `kept_running`
+  (probe run 32649207253), and the live endpoint answers in the new shape.
+- [x] The `stop-and-delete-pipelines` scope's first run (32649087847)
+  **applied and recorded the migration, then failed on its own readback**:
+  `'stopped_count' = any(subquery)` is the subquery form, so PostgreSQL
+  coerced the scalar to an array and raised `malformed array literal`.
+  Fixed to array containment, and `scope=probe` now reports the function's
+  argument names so applied state is confirmable without re-running a
+  one-shot scope.
+- [ ] Still unexercised: an actual deletion of a real production row, and
+  the kept-with-runs / kept-with-evidence branches against live data. Those
+  need rows the owner is willing to lose.
+
+## Two blockers behind the delete, and one migration finished (2026-08-23, ADR-132/133)
+
+- [x] `factory command routing evidence is immutable` was the third blocker
+  between the owner and a working delete. `20260823000400` lets the audited
+  delete release a route while an UPDATE stays refused and no client role
+  gains anything; proven by behaviour against the real hosted rows in a
+  rolled-back transaction (`update refused=t delete refused=t`, apply run
+  32652305439).
+- [x] `20260814002500_provider_credential_vault` is finished and recorded
+  (apply run 32653491713). Probe run 32652393423 measured it first: only
+  `resolve_provider_connect_session` was missing. That single gap was
+  answering every correct bot sign-in code with `connect_session_invalid`,
+  and its unrecorded ledger row was what made Supabase's preview branch
+  replay the file into a 42P07 on every commit.
+- [ ] `Supabase Preview` **stays red**, and the vault repair should not be
+  read as fixing it — though it verifiably advanced the replay. Before: the
+  preview died on 20260814002500 (42P07, duplicate table). After (checked on
+  379a0193): it dies on **20260815000200** with
+  `column "maximum_concurrent_runs" of relation "organizations" already
+  exists` (42701, duplicate column). Same partial-apply class, next file
+  along. The replay runs in version order, so the earliest unrecorded file
+  whose objects already exist is always the one that fails — an earlier note
+  guessed `20260821000400` would be next on the strength of its table
+  existing, which was right about the class and wrong about the order.
+  The ledger listing in run 32652305439 shows 20 unrecorded versions.
+  Remaining unrecorded: 20260814002600, 20260815000200/000300/000400/
+  000500/000600/000800/000900/001100/001200/001300/001400/001500/001600,
+  20260816000100/000200/000300/001600, 20260821000400. Each wants the same
+  measure-then-finish discipline the vault got — a probe inventory first,
+  finish only what is missing, record the ledger row only once every declared
+  object is present. Applying them blind is how this class of problem began.
+- [ ] The bot sign-in claim path has not been exercised end to end since the
+  function landed. The database half is verified; the flow itself wants a
+  real connect attempt.
+
+## Autonomy Clear control (2026-08-23, owner goal, ADR-134)
+
+- [x] `20260823000600` adds `clear_autonomy_projects` (owner-or-admin, reason
+  required, archives through `archive_project` so nothing is deleted) and
+  narrows `list_autonomy_status` to exclude archived projects, which is what
+  empties the section.
+- [x] `POST /api/autonomy/clear` carries no authority of its own; the Clear
+  control sits beside Refresh, confirms first, and says "Nothing was deleted".
+- [x] Seven behaviour cases against real PostgreSQL, including two that assert
+  the guards this design did not touch still refuse: project deletion and any
+  activity-event mutation.
+- [x] The first hosted apply (run 32656024602) **failed and rolled back
+  cleanly**, applying nothing. Its own postflight refused because
+  `projects_guarded_deletion` is absent on hosted — `20260815000900` is one of
+  the unrecorded migrations listed above. The protection is not absent: the
+  `activity_events -> projects` `ON DELETE RESTRICT` is there, and that
+  trigger's own comment says nothing passes it. The postflight now asserts
+  that constraint and only *notices* the trigger's absence, and the scope's
+  rolled-back proof accepts SQLSTATE `23503` as well as the trigger's
+  sentence.
+- [ ] Apply on hosted through `scope=clear-autonomy-projects` and confirm the
+  section empties for the owner. Pressing Clear against the owner's own
+  projects is theirs to do, not mine.

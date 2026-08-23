@@ -19,6 +19,7 @@ import { PipelineTemplatesManager } from "@/components/pipeline-templates-manage
 import { BlockedState, Card, SectionTitle, StatusBadge } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import { ClearSurfaceButton } from "@/components/clear-surface-button";
+import { SelectionDeleteButton } from "@/components/selection-delete-button";
 
 /**
  * Pipelines: the lifecycle view over the records that already govern work.
@@ -39,6 +40,23 @@ type CommandView = {
   submittedAt: string;
   completedAt: string | null;
   project: { id: string; name: string } | null;
+  /*
+   * Both of these come from `/api/commands` and were simply not read here,
+   * which is why this page told the owner a record-only pipeline was
+   * "waiting for a worker to pick it up" — for fourteen hours, about a
+   * command no repository-writing worker will ever claim. The Bots page
+   * stopped saying that in ADR-128; this page kept saying it because it
+   * dropped the two fields that make the difference.
+   */
+  executionMode?: "manual" | "record_only" | "unknown";
+  analysisGraph?: {
+    graphId: string;
+    runState: string | null;
+    startedAt: string | null;
+    completedAt: string | null;
+    artifactCount: number;
+    requiresOwnerApproval: boolean;
+  } | null;
 };
 
 export type PipelineTemplateSummary = {
@@ -120,6 +138,7 @@ export function PipelinesConsole({ templates }: { templates: readonly PipelineTe
   const [state, setState] = useState<State>("loading");
   const [commands, setCommands] = useState<CommandView[]>([]);
   const [message, setMessage] = useState("");
+  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
 
   const load = useCallback(async () => {
     try {
@@ -134,12 +153,29 @@ export function PipelinesConsole({ templates }: { templates: readonly PipelineTe
       }
       const body = (await response.json()) as { commands?: CommandView[]; error?: { message?: string } };
       if (!response.ok) throw new Error(body.error?.message ?? "Pipelines could not be loaded.");
-      setCommands(body.commands ?? []);
+      const loaded = body.commands ?? [];
+      setCommands(loaded);
+      // A tick on a row that has since gone — deleted here or finished
+      // elsewhere — must not linger in the selection and be sent again.
+      const present = new Set(loaded.map((command) => command.id));
+      setSelected((previous) => {
+        const kept = [...previous].filter((id) => present.has(id));
+        return kept.length === previous.size ? previous : new Set(kept);
+      });
       setState("ready");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Pipelines could not be loaded.");
       setState("error");
     }
+  }, []);
+
+  const toggleOne = useCallback((id: string) => {
+    setSelected((previous) => {
+      const next = new Set(previous);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   }, []);
 
   useEffect(() => {
@@ -165,6 +201,12 @@ export function PipelinesConsole({ templates }: { templates: readonly PipelineTe
 
   const active = commands.filter((command) => ACTIVE_STATUSES.has(command.status));
   const needsOwner = active.filter((command) => pipelineStage(command.status).needsOwner);
+  const isList = view !== "templates" && view !== "graphs";
+  const visible = view === "active" ? active : commands;
+  // Only rows on screen can be acted on, so the count beside the button and
+  // the ids the button sends are the same set the ticks describe.
+  const selectedVisible = visible.filter((command) => selected.has(command.id));
+  const allVisibleSelected = visible.length > 0 && selectedVisible.length === visible.length;
 
   return (
     <div className="space-y-4">
@@ -192,21 +234,59 @@ export function PipelinesConsole({ templates }: { templates: readonly PipelineTe
       </nav>
 
       {/*
-        * Owner instruction, 2026-08-22: only on All Pipelines. Active is the
-        * live lane — a clear button beside work in flight invites exactly the
-        * press the function then refuses — and Templates and Graph runs are
-        * different rows entirely.
+        * Two controls, two scopes. Delete selected acts on the rows ticked
+        * below and is offered on both lists, because picking one pipeline out
+        * of a live list is a normal thing to want. Clear all pipelines stays
+        * on All Pipelines only (owner instruction, 2026-08-22): beside work in
+        * flight, a whole-list clear invites exactly the press the function
+        * then refuses.
         */}
-      {view === "all" ? (
-        <div className="flex justify-end">
-          <ClearSurfaceButton
-            endpoint="/api/commands/clear"
-            label="Clear all pipelines"
-            noun="pipeline"
-            includeFlagName="includeCommandsWithRuns"
-            includeFlagLabel="Also clear pipelines that already have run history. Deleting these removes their work items and those runs too."
-            onCleared={load}
-          />
+      {isList && visible.length > 0 ? (
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <label className="flex items-center gap-2 text-sm text-muted">
+            <input
+              type="checkbox"
+              checked={allVisibleSelected}
+              // Some but not all: the box says "partly", not "none".
+              ref={(node) => {
+                if (node) node.indeterminate = selectedVisible.length > 0 && !allVisibleSelected;
+              }}
+              onChange={() => {
+                setSelected((previous) => {
+                  const next = new Set(previous);
+                  if (allVisibleSelected) for (const command of visible) next.delete(command.id);
+                  else for (const command of visible) next.add(command.id);
+                  return next;
+                });
+              }}
+            />
+            <span>
+              {selectedVisible.length > 0
+                ? `${selectedVisible.length} of ${visible.length} selected`
+                : `Select all ${visible.length}`}
+            </span>
+          </label>
+          <div className="flex flex-wrap items-start justify-end gap-3">
+            <SelectionDeleteButton
+              endpoint="/api/commands/delete"
+              selectedIds={selectedVisible.map((command) => command.id)}
+              noun="pipeline"
+              idFieldName="commandIds"
+              includeFlagName="includeCommandsWithRuns"
+              includeFlagLabel="Also delete selected pipelines that already have run history. Deleting these removes their work items and those runs too."
+              onDeleted={load}
+            />
+            {view === "all" ? (
+              <ClearSurfaceButton
+                endpoint="/api/commands/clear"
+                label="Clear all pipelines"
+                noun="pipeline"
+                includeFlagName="includeCommandsWithRuns"
+                includeFlagLabel="Also clear pipelines that already have run history. Deleting these removes their work items and those runs too."
+                onCleared={load}
+              />
+            ) : null}
+          </div>
         </div>
       ) : null}
 
@@ -243,7 +323,9 @@ export function PipelinesConsole({ templates }: { templates: readonly PipelineTe
         <GraphRunsPanel />
       ) : (
         <PipelineList
-          commands={view === "active" ? active : commands}
+          commands={visible}
+          selected={selected}
+          onToggle={toggleOne}
           emptyTitle={view === "active" ? "Nothing is running" : "No pipeline runs yet"}
           emptyDescription={
             view === "active"
@@ -258,10 +340,14 @@ export function PipelinesConsole({ templates }: { templates: readonly PipelineTe
 
 function PipelineList({
   commands,
+  selected,
+  onToggle,
   emptyTitle,
   emptyDescription,
 }: {
   commands: CommandView[];
+  selected: ReadonlySet<string>;
+  onToggle: (id: string) => void;
   emptyTitle: string;
   emptyDescription: string;
 }) {
@@ -282,7 +368,17 @@ function PipelineList({
       <ul className="divide-y divide-[var(--border)]">
         {commands.map((command) => {
           const stage = pipelineStage(command.status);
-          const progress = commandProgress(command.status);
+          const progress = commandProgress(
+            command.status,
+            command.executionMode,
+            command.analysisGraph ?? null,
+          );
+          // An analysis run's evidence is on the graph, which this page's own
+          // Graph runs view renders; only a repository-writing run lands on
+          // Runs. The link goes where the evidence actually is.
+          const evidenceHref = command.executionMode === "record_only" && command.analysisGraph
+            ? "/solutions/pipelines?view=graphs"
+            : "/solutions/runs";
           const StageIcon = stage.tone === "safe"
             ? CheckCircle2
             : stage.tone === "danger"
@@ -293,6 +389,15 @@ function PipelineList({
           return (
             <li key={command.id} className="flex flex-col gap-2 p-4">
               <div className="flex flex-wrap items-center gap-2">
+                <input
+                  type="checkbox"
+                  className="shrink-0"
+                  checked={selected.has(command.id)}
+                  onChange={() => onToggle(command.id)}
+                  // The prompt is the row's name; a screen reader should hear
+                  // which pipeline the tick belongs to, not "checkbox".
+                  aria-label={`Select pipeline: ${command.prompt}`}
+                />
                 <StageIcon
                   className={cn(
                     "size-4 shrink-0",
@@ -325,7 +430,9 @@ function PipelineList({
                 {progress.trackable ? (
                   <>
                     {" "}
-                    <Link href="/solutions/runs" className="font-medium text-accent">Watch it on Runs</Link>
+                    <Link href={evidenceHref} className="font-medium text-accent">
+                      {evidenceHref === "/solutions/runs" ? "Watch it on Runs" : "Watch it on Graph runs"}
+                    </Link>
                   </>
                 ) : null}
               </p>

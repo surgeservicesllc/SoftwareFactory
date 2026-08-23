@@ -16,10 +16,16 @@ import { cn } from "@/lib/cn";
  * wordmark beside the glyph, so the second line and its accent are gone rather
  * than restyled.
  *
- * The wordmark is `aria-hidden` inside a labelled link, and the label says the
- * same words it does: a visible name and an accessible name that disagree is
- * the defect WCAG 2.5.3 is about, and it would be an easy one to introduce
- * here by changing only what is drawn.
+ * The wordmark reads "FACTORY", not "AI Factory" (owner reference,
+ * 2026-08-23). The glyph beside it already carries "AI", so spelling it again
+ * in the words made the lockup read "AI AI FACTORY" once the two are taken
+ * together, which is what the reference removes.
+ *
+ * The wordmark is `aria-hidden` inside a labelled link, and the label names the
+ * whole lockup — glyph and word — rather than only the half that is text: a
+ * visible name and an accessible name that disagree is the defect WCAG 2.5.3
+ * is about, and "AI Factory home" still contains the visible "FACTORY", so the
+ * link keeps announcing the product rather than a bare noun.
  */
 
 export function BrandMark({
@@ -98,7 +104,7 @@ export function BrandMark({
           tone === "chrome" ? "text-white" : "text-foreground",
         )}
       >
-        AI Factory
+        Factory
       </span>
       )}
     </Link>
