@@ -88,6 +88,11 @@ on:
           "stop-and-delete-pipelines" applies only 20260823000300, which makes
           that selection stop live work before removing it and detach an
           analysis graph rather than being refused by its foreign key;
+          "discovery-stages" applies exactly 20260823000800 and 20260823000900
+          as separate psql invocations, growing sdlc_stage by DISCOVERY,
+          EVALUATION and DECISION between PRD and ARCHITECTURE and extending
+          the capability-to-stage map to the three capabilities that produce
+          them; additive, replay-safe, and it touches zero existing rows;
           "clear-autonomy-projects" applies only 20260823000600, which adds the
           Autonomy page's Clear control as an archive sweep and excludes
           archived projects from the autonomy list; it deletes nothing and
@@ -128,6 +133,7 @@ on:
           - record-only-postflight
           - analysis-launch-doorcheck
           - graph-stage-backfill
+          - discovery-stages
           - analysis-launch-commit
           - delete-selected-pipelines
           - stop-and-delete-pipelines
@@ -5694,6 +5700,98 @@ jobs:
             exit 1
           fi
           echo "Every node with a known capability now carries its stage."
+
+      - name: Grow the lifecycle by DISCOVERY, EVALUATION and DECISION (scope=discovery-stages)
+        # Exactly two files — 20260823000800 and 20260823000900 — run as
+        # separate psql invocations because PostgreSQL refuses to use an enum
+        # value in the transaction that added it (the same physics as the
+        # clear-controls scope). The first adds the three values between PRD
+        # and ARCHITECTURE; the second extends the capability→stage map to the
+        # three capabilities that produce them — zero rows qualify today, so
+        # this is vocabulary and derivation, not a data change.
+        #
+        # ADR-136 conditioned this growth on "a capability that produces
+        # them"; the discovery/evaluation/decision capabilities and the
+        # open_source_scout template are that capability, and the launch path
+        # casts a template's declared stage straight into this enum — so a
+        # scout launch on hosted fails without this scope.
+        if: ${{ inputs.scope == 'discovery-stages' }}
+        run: |
+          if [ -z "$SUPABASE_DB_PASSWORD" ]; then
+            echo "::error::This scope requires SUPABASE_DB_PASSWORD for live verification."
+            exit 1
+          fi
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+
+          GROWTH_FILE=supabase/migrations/20260823000800_discovery_evaluation_decision_stages.sql
+          MAP_FILE=supabase/migrations/20260823000900_discovery_capability_stage_map.sql
+          if [ "$(sha256sum "$GROWTH_FILE" | cut -d' ' -f1)" != "f4bd0df5046fd9f0d8d2695a163f2d8b91ad39ab9c1869647fee3e575b91962c" ] \
+            || [ "$(sha256sum "$MAP_FILE" | cut -d' ' -f1)" != "62468eef2c39847b4e76a08dde4b09af58c9ac3b88429c46aa6dc1f7a86a55a1" ]; then
+            echo "::error::Migration hash mismatch; refusing production DDL."
+            exit 1
+          fi
+
+          GROWTH_ROW=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
+            "select count(*) from supabase_migrations.schema_migrations where version = '20260823000800';")
+          MAP_ROW=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
+            "select count(*) from supabase_migrations.schema_migrations where version = '20260823000900';")
+          if [ "$GROWTH_ROW" != "0" ] || [ "$MAP_ROW" != "0" ]; then
+            echo "::error::Ledger already records one of these versions (growth=$GROWTH_ROW map=$MAP_ROW; want 0/0)."
+            exit 1
+          fi
+
+          # The type this grows must exist — 20260821000200's object, not
+          # merely its ledger row.
+          READY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
+            select exists (select 1 from pg_type t join pg_namespace n on n.oid = t.typnamespace
+                            where n.nspname = 'public' and t.typname = 'sdlc_stage');")
+          if [ "$READY" != "t" ]; then
+            echo "::error::The sdlc_stage type is missing; the lifecycle schema is not applied."
+            exit 1
+          fi
+
+          echo "Before, read from the database rather than assumed:"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
+            select enumlabel from pg_enum
+             where enumtypid = 'public.sdlc_stage'::regtype
+             order by enumsortorder;"
+
+          repair() {
+            if [ "$MODE" = "token" ]; then
+              npx supabase migration repair --status applied "$1"
+            else
+              npx supabase migration repair --status applied "$1" --db-url "$DB_URL"
+            fi
+          }
+          echo "Applying ${GROWTH_FILE}"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -1 -q -f "$GROWTH_FILE"
+          repair 20260823000800
+          echo "Applying ${MAP_FILE}"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -1 -q -f "$MAP_FILE"
+          repair 20260823000900
+
+          # The verdict: eleven labels in lifecycle order, and every one of
+          # the three new stages accepted by an actual cast.
+          VERIFIED=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
+            select (
+              (select array_agg(enumlabel order by enumsortorder)
+                 from pg_enum where enumtypid = 'public.sdlc_stage'::regtype)
+              = array['GOAL','PRD','DISCOVERY','EVALUATION','DECISION','ARCHITECTURE',
+                      'IMPLEMENTATION','REVIEW','TEST','DEPLOYMENT','MONITORING']
+              and 'DISCOVERY'::public.sdlc_stage is not null
+              and 'EVALUATION'::public.sdlc_stage is not null
+              and 'DECISION'::public.sdlc_stage is not null
+            );")
+          if [ "$VERIFIED" != "t" ]; then
+            echo "::error::sdlc_stage did not read back as the eleven stages in lifecycle order."
+            exit 1
+          fi
+          echo "Applied and verified: the lifecycle reads GOAL through MONITORING with DISCOVERY, EVALUATION and DECISION between PRD and ARCHITECTURE."
 
       - name: Apply the Backlog and Pipelines clear controls (scope=clear-controls)
         # Exactly two files — 20260822000700 and 20260822000800 — and no others.

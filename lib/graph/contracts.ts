@@ -48,6 +48,14 @@ export const NODE_CAPABILITIES = [
   "qa",
   "synthesis",
   "reporting",
+  // The look-before-you-build trio (2026-08-23). Discovery finds what already
+  // exists; evaluation scores the survivors on one rubric; decision weighs
+  // USE/CONNECT/ADAPT/FORK/BUILD and picks. Their outputs are the typed
+  // stage packages in lib/graph/stage-packages.ts, and their existence is
+  // what let the DISCOVERY/EVALUATION/DECISION stages grow (ADR-136).
+  "discovery",
+  "evaluation",
+  "decision",
 ] as const;
 export type NodeCapability = (typeof NODE_CAPABILITIES)[number];
 
@@ -78,6 +86,12 @@ export const CAPABILITY_MODEL_TIER: Readonly<Record<NodeCapability, ModelTier>> 
     qa: "STANDARD",
     synthesis: "STRONG",
     reporting: "STANDARD",
+    // Discovery is breadth — read, list, label — and does not need the
+    // strongest model. Evaluation and decision are judgment, and a wrong
+    // judgment here misdirects every stage after it.
+    discovery: "STANDARD",
+    evaluation: "STRONG",
+    decision: "STRONG",
   });
 
 export type NodeContract = {

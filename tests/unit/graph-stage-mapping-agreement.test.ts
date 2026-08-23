@@ -25,8 +25,25 @@ const migration = readFileSync(
   "utf8",
 );
 
+/*
+ * The mapping now lives in two files, because the first is applied and
+ * recorded on hosted and must never change under its ledger row. 000700
+ * carries the original nine capabilities; 000900 carries the three the
+ * DISCOVERY/EVALUATION/DECISION growth added. The invariant is over the
+ * union: every capability the application defines has exactly one SQL branch
+ * somewhere in the replayable chain.
+ */
+const extension = readFileSync(
+  resolve(
+    import.meta.dirname,
+    "../../supabase/migrations/20260823000900_discovery_capability_stage_map.sql",
+  ),
+  "utf8",
+);
+const mappingSql = `${migration}\n${extension}`;
+
 function stageInMigration(capability: string): string | null {
-  const match = migration.match(
+  const match = mappingSql.match(
     new RegExp(`when '${capability}' then '([A-Z_]+)'::public\\.sdlc_stage`),
   );
   return match?.[1] ?? null;
@@ -44,6 +61,7 @@ describe("the backfill agrees with the application", () => {
     // Idempotence is the whole reason this is safe to re-run, and an
     // explicitly declared stage must never be overwritten by a derived one.
     expect(migration).toContain("where lifecycle_stage is null");
+    expect(extension).toContain("where lifecycle_stage is null");
   });
 
   it("leaves a capability it does not recognise alone", () => {
@@ -52,10 +70,12 @@ describe("the backfill agrees with the application", () => {
      * value the application never defined. An em dash is honest about that; a
      * guessed stage is not.
      */
-    const guarded = migration.match(/and capability in \(([\s\S]*?)\)/);
-    expect(guarded, "the update must be restricted to known capabilities").not.toBeNull();
+    const guards = [...mappingSql.matchAll(/and capability in \(([\s\S]*?)\)/g)]
+      .map((match) => match[1])
+      .join("\n");
+    expect(guards, "the updates must be restricted to known capabilities").not.toBe("");
     for (const capability of NODE_CAPABILITIES) {
-      expect(guarded![1], capability).toContain(`'${capability}'`);
+      expect(guards, capability).toContain(`'${capability}'`);
     }
   });
 });
