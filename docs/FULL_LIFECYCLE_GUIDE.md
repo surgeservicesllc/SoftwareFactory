@@ -74,13 +74,20 @@ What you will see stage by stage:
 | REQUIREMENT | goal, requirements | Model, through the subscription transport |
 | DISCOVER | three parallel scans + consolidate | Model (repository, dependency and knowledge scans) |
 | EVALUATE | evaluate | Model, against the fixed weighted rubric |
-| DECIDE | decide | Model; **automatic gate** checks the decision package |
+| DECIDE | decide | Model; the decision package is contract-enforced |
 | ARCHITECT | architecture | Model — then **stops for you** (human gate) |
 | BUILD | implement | Model |
-| REVIEW | review | Model, fresh-eyes; automatic gate |
-| TEST | test | **Anchor**: reads the CI verdict recorded for the worker's own commit |
+| REVIEW | review | Model, fresh-eyes; records verifications on what it read |
+| TEST | test | **Anchor + automatic gate**: reads the CI verdict for the worker's own commit, and the gate approves itself on that evidence |
 | DEPLOY | deploy | **Anchor + human gate** — see Step 6 |
 | MONITOR | monitor | **Anchor**: probes the production URL and records the reading |
+
+Gates appear only where they can be decided: the two **human** gates
+(ARCHITECT, DEPLOY) wait for you, and the one **automatic** gate (TEST) sits
+on the anchor, because an automatic gate advances on recorded evidence and
+only an anchor produces any. The worker approves it itself once the anchor's
+observation is on record — no click, and no possibility of approving without
+evidence.
 
 Timing expectations: each model node runs inside an eight-minute envelope;
 the whole graph declares a 220-minute worst-case budget. A typical run is far

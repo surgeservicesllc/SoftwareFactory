@@ -161,10 +161,30 @@ fixed two more, and settled the mystery:**
    cannot tunnel through the egress proxy (curl can); API-level walks are
    the pattern that works here.
 
-**Open in this lane:** the owner presses Launch on Full Lifecycle (the click
-now wakes the worker; approvals at the two gates wake it again), and the run
-drains to the ARCHITECTURE gate. docs/FULL_LIFECYCLE_GUIDE.md is the manual.
-Still open from round 6: owner-gated WebSearch for candidates.
+**The owner-directed test-data walk then ran the first live lifecycle and
+caught the deadlock (ADR-140):** graph 91959362 claimed and ran (goal
+succeeded through the real subscription transport — first ever), then halted
+forever at the PRD AUTOMATIC gate: zero anchors ⇒ unapprovable by rule, and
+nothing anywhere decided automatic gates anyway. The five old PARTIAL
+agentic_sdlc graphs died the same death. Fixes: automatic gates only on
+ANCHOR nodes (templates lose the PRD/DECISION/REVIEW walls; TEST keeps its
+gate), `decide_automatic_gate_as_worker` (20260824000100, scope
+automatic-gate-decider) lets the worker approve an ANCHORED automatic gate
+after the run closes (human gates refused unconditionally; zero anchors
+refused exactly as for a person), the drain re-claims and continues in the
+same dispatch, run records stop calling gate-halts failures, and the claim
+schema's stage enum caught up to the eleven. Also found by the walk: the
+owner's "can't reach the Launch card" was the card buried under five panels
+next to a "No graph has ever run" card that was false for weeks (#381 fixed
+both, plus the seeded Demo Data workspace for repeatable E2E).
+
+**Open in this lane:** after the decider lands on hosted, launch a fresh
+Demo Data full_lifecycle and drive it: model stages → ARCHITECTURE human
+gate (approve as the fake user) → implement/review → TEST anchor +
+self-approving gate → DEPLOY human gate → policy refusal recorded →
+PARTIAL, the honest Phase-1 terminal. Graph 91959362 stays stuck at its
+now-unreachable PRD wall — retire it by rejection or leave it as the
+specimen. Still open from round 6: owner-gated WebSearch for candidates.
 
 
 ## GRAPH — ONE REQUEST THROUGH ALL TEN PHASES: full_lifecycle (2026-08-23, round 9)

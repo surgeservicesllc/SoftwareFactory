@@ -7,6 +7,7 @@ import type { ProposedEdge } from "@/lib/graph/dependencies";
 import { runGraph, type NodeExecutionResult, type RunResult } from "@/lib/graph/runner";
 import { DEFAULT_RETRY_POLICY, type ResourceRef } from "@/lib/graph/types";
 import type { VerificationLens, VerificationVerdict } from "@/lib/graph/verification";
+import { SDLC_STAGES } from "@/lib/sdlc/lifecycle";
 import { deriveVerdict, verificationLensFor } from "@/lib/worker/verification-from-node";
 
 /**
@@ -45,7 +46,7 @@ const claimedNodeSchema = z.object({
    */
   node_id: z.string().uuid().nullish(),
   lifecycle_stage: z
-    .enum(["GOAL", "PRD", "ARCHITECTURE", "IMPLEMENTATION", "REVIEW", "TEST", "DEPLOYMENT", "MONITORING"])
+    .enum(SDLC_STAGES)
     .nullish()
     .catch(null),
   gate_kind: z.enum(["AUTOMATIC", "HUMAN"]).nullish().catch(null),
@@ -507,13 +508,23 @@ export async function runClaimedGraph(
           ? "BUDGET_STOPPED"
           : "PARTIAL";
 
+  // The fan-in notice counts a gate-held node among its failures, because to
+  // the engine it is one. To a reader it is not: a decision is owed, nothing
+  // went wrong. The record says so rather than leaving the correction to
+  // whoever happens to know the distinction.
+  const incompleteness = result.incompleteness !== null && awaitingGate.length > 0
+    ? `${result.incompleteness} ${awaitingGate.length} of the nodes counted above `
+      + `did not fail: they halted at an open lifecycle gate (${awaitingGate.join(", ")}) `
+      + "and continue once the gate is decided."
+    : result.incompleteness;
+
   await store.completeRun(
     claim.graph_run_id,
     finalState,
-    result.incompleteness !== null,
+    incompleteness !== null,
     capacityVoided
-      ? `The provider withheld capacity (session or rate limit) for every attempt; the run is void. ${result.incompleteness ?? ""}`.trim()
-      : result.incompleteness,
+      ? `The provider withheld capacity (session or rate limit) for every attempt; the run is void. ${incompleteness ?? ""}`.trim()
+      : incompleteness,
     { tokensUsed: result.spend.tokensUsed, costMicros: result.spend.costMicros },
   );
 
@@ -522,7 +533,7 @@ export async function runClaimedGraph(
     finalState,
     nodesSucceeded: succeeded,
     nodesFailed: failed,
-    incompleteness: result.incompleteness,
+    incompleteness,
     capacityWithheld: capacityVoided,
     awaitingGate,
   };

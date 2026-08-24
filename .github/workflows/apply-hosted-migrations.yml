@@ -93,6 +93,11 @@ on:
           EVALUATION and DECISION between PRD and ARCHITECTURE and extending
           the capability-to-stage map to the three capabilities that produce
           them; additive, replay-safe, and it touches zero existing rows;
+          "automatic-gate-decider" applies only 20260824000100, the worker-side
+          decider for anchored AUTOMATIC gates — the missing piece that let
+          every lifecycle deadlock at its first automatic gate; it adds one
+          security-definer function executable by service_role alone and
+          changes no table, row, or human-gate rule;
           "clear-autonomy-projects" applies only 20260823000600, which adds the
           Autonomy page's Clear control as an archive sweep and excludes
           archived projects from the autonomy list; it deletes nothing and
@@ -134,6 +139,7 @@ on:
           - analysis-launch-doorcheck
           - graph-stage-backfill
           - discovery-stages
+          - automatic-gate-decider
           - analysis-launch-commit
           - delete-selected-pipelines
           - stop-and-delete-pipelines
@@ -5792,6 +5798,66 @@ jobs:
             exit 1
           fi
           echo "Applied and verified: the lifecycle reads GOAL through MONITORING with DISCOVERY, EVALUATION and DECISION between PRD and ARCHITECTURE."
+
+      - name: Give anchored automatic gates their decider (scope=automatic-gate-decider)
+        # Exactly one file — 20260824000100 — one security-definer function.
+        # The first live lifecycle (graph 91959362) deadlocked at an automatic
+        # gate because nothing in the system could ever decide one; this is
+        # the missing decider, refusing everything the anchored-evidence rule
+        # refuses (human gates, zero anchors, gates a person already decided).
+        if: ${{ inputs.scope == 'automatic-gate-decider' }}
+        run: |
+          if [ -z "$SUPABASE_DB_PASSWORD" ]; then
+            echo "::error::This scope requires SUPABASE_DB_PASSWORD for live verification."
+            exit 1
+          fi
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+
+          DECIDER_FILE=supabase/migrations/20260824000100_anchored_automatic_gates_decide_themselves.sql
+          if [ "$(sha256sum "$DECIDER_FILE" | cut -d' ' -f1)" != "34c5bcbc668a18ff09a49c0ee63941ea23b5603654e98706fa17a775b219ae3c" ]; then
+            echo "::error::Migration hash mismatch; refusing production DDL."
+            exit 1
+          fi
+
+          ROW=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
+            "select count(*) from supabase_migrations.schema_migrations where version = '20260824000100';")
+          if [ "$ROW" != "0" ]; then
+            echo "::error::Ledger already records 20260824000100 (want 0)."
+            exit 1
+          fi
+
+          # The gate machinery this decider belongs to must exist first.
+          READY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
+            select exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+                            where n.nspname = 'public' and p.proname = 'open_node_gate_as_worker');")
+          if [ "$READY" != "t" ]; then
+            echo "::error::open_node_gate_as_worker is missing; the lifecycle gate schema is not applied."
+            exit 1
+          fi
+
+          echo "Applying ${DECIDER_FILE} (its in-file postflight verifies the grant boundary)"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -1 -q -f "$DECIDER_FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied 20260824000100
+          else
+            npx supabase migration repair --status applied 20260824000100 --db-url "$DB_URL"
+          fi
+
+          VERIFIED=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
+            select exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+                            where n.nspname = 'public'
+                              and p.proname = 'decide_automatic_gate_as_worker'
+                              and pg_get_function_identity_arguments(p.oid) = 'p_worker_id text, p_node_id uuid');")
+          if [ "$VERIFIED" != "t" ]; then
+            echo "::error::decide_automatic_gate_as_worker did not read back."
+            exit 1
+          fi
+          echo "Applied and verified: anchored automatic gates now have their decider; the human-gate rule is untouched."
 
       - name: Apply the Backlog and Pipelines clear controls (scope=clear-controls)
         # Exactly two files — 20260822000700 and 20260822000800 — and no others.

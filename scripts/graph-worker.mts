@@ -145,8 +145,27 @@ async function main() {
     process.stdout.write(
       `Graph run ${parsed.graph.graph_run_id} finished ${summary.finalState}: `
       + `${summary.nodesSucceeded} succeeded, ${summary.nodesFailed} failed`
+      + `${summary.awaitingGate.length > 0 ? `, ${summary.awaitingGate.length} halted at a lifecycle gate (${summary.awaitingGate.join(", ")})` : ""}`
       + `${summary.incompleteness ? ` — ${summary.incompleteness}` : ""}\n`,
     );
+
+    /*
+     * Anchored automatic gates decide themselves — after the run has closed,
+     * so the decision is newer than the close and the claim's reopen rule
+     * sees it. The database refuses everything the anchored-evidence rule
+     * refuses (human gates, zero anchors, gates a person already decided),
+     * so every halted gate is offered and the refusals are reported, not
+     * hidden. An approval makes the graph claimable again, and this same
+     * drain loop picks it straight back up.
+     */
+    for (const nodeKey of summary.awaitingGate) {
+      const claimedNode = parsed.graph.nodes.find((entry) => entry.node_key === nodeKey);
+      if (!claimedNode?.node_id || claimedNode.gate_kind !== "AUTOMATIC") continue;
+      const decision = await store.decideAutomaticGate(claimedNode.node_id);
+      process.stdout.write(
+        `Automatic gate at ${nodeKey}: ${decision.approved ? "approved — the graph is claimable again" : decision.detail}\n`,
+      );
+    }
 
     if (summary.capacityWithheld) {
       // The credential is out of capacity; every further claim would burn a
