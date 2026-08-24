@@ -1,6 +1,24 @@
 # Handoff
 
-Last updated: 2026-08-23
+Last updated: 2026-08-24
+
+## Newest (2026-08-24 ~01:50Z): the first live lifecycle found the gate deadlock; fixed, applied, re-running (ADR-140)
+
+The owner said the end-to-end "is not working" and directed a test-data
+walk with fixes in place. Delivered so far: the Launch card was buried
+and is now first on the Workflows page (#381); the fake journey
+workspace has a seeded Demo Data binding chain (e2e-test-data.yml,
+owner-approved) so the whole path is drivable with test data; the first
+live full_lifecycle run (graph 91959362) claimed, executed its goal node
+through the real subscription transport, and deadlocked at the PRD
+automatic gate — an undecidable wall, the same one that froze the five
+old agentic_sdlc graphs. #382 fixed it (automatic gates only on anchors;
+decide_automatic_gate_as_worker; truthful gate-halt reporting) and the
+migration is applied on hosted. A fresh test-data graph (10fe2b0d) is
+draining now; expected path: model stages → ARCHITECTURE human gate
+(approve as the fake user) → implement/review → TEST anchor with the
+self-approving gate → DEPLOY policy refusal → PARTIAL, the honest
+Phase-1 terminal.
 
 ## Newest (2026-08-23 ~23:00Z): the launch button wakes a worker that can run anchors (ADR-139)
 

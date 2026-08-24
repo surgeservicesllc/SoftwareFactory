@@ -64,6 +64,25 @@ fixture omitted `startedAt`, `completedAt` and `verifications`, and the
 briefing correctly reported itself incomplete. The fixture now matches the
 route's projection.
 
+## 2026-08-24: the lifecycle deadlock is found and fixed by the first live run (ADR-140)
+
+The owner-directed end-to-end test with test data (seeded Demo Data
+workspace for the fake journey account; scope note in #381) launched the
+first live full_lifecycle graph (91959362). It claimed and executed its
+goal node through the real subscription transport — then deadlocked at
+the PRD AUTOMATIC gate: zero anchors made it unapprovable by rule, and
+nothing anywhere decided automatic gates at all. Fixes shipped in #382
+and applied to hosted (run 32680840656, migration 20260824000100, scope
+automatic-gate-decider): automatic gates may only sit on ANCHOR nodes
+(both lifecycle templates keep two HUMAN gates + one AUTOMATIC on the
+TEST anchor), `decide_automatic_gate_as_worker` approves anchored
+automatic gates after the run closes (human gates refused
+unconditionally, zero anchors refused as for a person), the drain
+re-claims and continues in the same dispatch, run records stop calling
+gate-halts failures, and the claim schema's stage enum derives from
+SDLC_STAGES. Graph 91959362 remains halted at its now-removed wall as
+the specimen; fresh launches use the fixed design.
+
 ## 2026-08-23: the Workflows launch wakes a worker that can run anchors
 
 The owner's first live `full_lifecycle` launch sat PLANNED and exposed two

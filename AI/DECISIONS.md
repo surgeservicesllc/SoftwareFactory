@@ -1993,3 +1993,13 @@ Use this append-only log for decisions that constrain future implementation. Cha
 - The worker's claim schema also caught up: its lifecycle_stage enum was
   the old eight stages and silently nulled the three newest; it now
   derives from SDLC_STAGES.
+- Amendment (2026-08-24, same walk): the re-run after the decider landed
+  proved eight stages flowing and then found the next strand - the
+  architecture node hit the subscription's session limit and the PARTIAL
+  close locked the graph out of the queue forever, though its failure was
+  fuel rather than work. A lifecycle whose every terminal failure was
+  capacity now closes CANCELLED regardless of how far it got: an analysis
+  run's partial findings are an answer, a lifecycle's intermediate
+  packages are not - its product is the shipped change. The record of
+  what ran survives; the graph stays claimable for a dispatch after the
+  limit resets. Pinned by the worker-execution behavior suite.

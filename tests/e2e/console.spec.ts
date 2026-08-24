@@ -7,6 +7,10 @@ import { expect, test } from "@playwright/test";
 const consoleNavigation = [
   "Overview",
   "AI Factory",
+  // Top-level by owner fix (2026-08-24): this page had been reachable only
+  // as a Pipelines subpage aliased "Templates" and was reported as not
+  // existing. One page, one name.
+  "Workflows",
   "Projects",
   "All Projects",
   "My Projects",
@@ -14,7 +18,6 @@ const consoleNavigation = [
   "Pipelines",
   "Active",
   "All Pipelines",
-  "Templates",
   "Backlog",
   "Bots",
   "Connect Bot",

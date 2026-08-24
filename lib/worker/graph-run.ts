@@ -76,6 +76,9 @@ const claimedGraphSchema = z.object({
   // Null when the project has no repository linked; absent in a projection
   // from before the column existed. Both mean "nothing to contradict".
   project_repository: z.string().nullish(),
+  // Lifecycles judge a capacity-voided run differently (see capacityVoided);
+  // tolerant of projections from before the column existed.
+  is_lifecycle: z.boolean().nullish().catch(null),
   budget: z.object({
     max_nodes: z.number().int().positive().catch(50),
     max_concurrent_nodes: z.number().int().positive().catch(8),
@@ -492,9 +495,19 @@ export async function runClaimedGraph(
   // A run in which nothing succeeded and every terminal failure was a
   // provider capacity refusal never truly executed: it closes CANCELLED so
   // the graph keeps its chances for a worker the provider will actually
-  // fuel. If anything succeeded, the run is a real (partial) answer and is
-  // judged as one.
-  const capacityVoided = succeeded === 0
+  // fuel. If anything succeeded, an ANALYSIS run is a real (partial) answer
+  // and is judged as one — the findings it delivered have value on their own.
+  //
+  // A LIFECYCLE is different, and the first live run proved it (graph
+  // 10fe2b0d): eight stages succeeded, then the architecture node hit the
+  // subscription's session limit, and the PARTIAL close stranded the graph
+  // forever — a partial run counts as an answer, so nothing may ever claim
+  // it again. But a lifecycle's product is the shipped change, not its
+  // intermediate packages; a run stopped by fuel answers nothing. So a
+  // lifecycle whose every terminal failure was capacity closes CANCELLED
+  // regardless of how far it got: the record of what ran survives, and the
+  // graph stays claimable for a dispatch after the limit resets.
+  const capacityVoided = (succeeded === 0 || claim.is_lifecycle === true)
     && finalFailures > 0
     && capacityFinalFailures === finalFailures;
 

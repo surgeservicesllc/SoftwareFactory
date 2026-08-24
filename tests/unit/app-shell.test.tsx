@@ -27,6 +27,10 @@ describe("AppShell navigation", () => {
     expect(links).toEqual([
       "Overview",
       "AI Factory",
+      // Top-level by owner fix (2026-08-24): the page everything calls
+      // Workflows had been reachable only as a Pipelines subpage aliased
+      // "Templates", and was reported as not existing.
+      "Workflows",
       "Projects",
       "Pipelines",
       "Bots",
@@ -97,8 +101,9 @@ describe("AppShell navigation", () => {
     fireEvent.click(toggle);
     expect(within(navigation).getByRole("link", { name: "All Projects" })).toBeInTheDocument();
     // Opening one group leaves the others closed: expanding is a choice about
-    // that group, not a mode the whole menu enters.
-    expect(within(navigation).queryByRole("link", { name: "Templates" })).not.toBeInTheDocument();
+    // that group, not a mode the whole menu enters. (Backlog is a Pipelines
+    // subpage; Workflows is deliberately top-level and always visible.)
+    expect(within(navigation).queryByRole("link", { name: "Backlog" })).not.toBeInTheDocument();
 
     fireEvent.click(within(navigation).getByRole("button", { name: "Collapse Projects subpages" }));
     expect(within(navigation).queryByRole("link", { name: "All Projects" })).not.toBeInTheDocument();
