@@ -2003,3 +2003,37 @@ Use this append-only log for decisions that constrain future implementation. Cha
   packages are not - its product is the shipped change. The record of
   what ran survives; the graph stays claimable for a dispatch after the
   limit resets. Pinned by the worker-execution behavior suite.
+
+## ADR-141 - A lifecycle resumes from its own recorded results
+
+- Date: 2026-08-24
+- Status: Accepted
+- Context: the worker re-executes a claimed graph from the beginning -
+  the right shape for an analysis graph, whose value is fresh findings.
+  Three consecutive live provider windows showed what that costs a
+  lifecycle: each window was spent re-proving stages the graph had
+  already completed and capped before reaching new ground (run 2469db25
+  carried eight nodes and died at architecture; run 6a8d5121, one window
+  later, carried seven and died at decide - a window BEHIND where the
+  previous one ended). Under a shared subscription window the lifecycle
+  could never converge.
+- Decision: `read_prior_node_results_as_worker` (20260824000200, hosted
+  scope lifecycle-resume) returns the most recently completed recorded
+  result per node from a graph's own earlier non-answering runs
+  (CANCELLED, PARTIAL, FAILED) - scoped in SQL to lifecycle graphs, read
+  only, service_role execute only. `runClaimedGraph` substitutes those
+  results instead of re-executing the nodes: zero tokens, zero latency,
+  the artifact recorded again under the new run for lineage, the reuse
+  named in the run summary and drain log so nothing reads fresher than
+  it is. Verifications are not re-recorded for reused reviewers - the
+  original rows stand.
+- Bounds: analysis graphs are excluded by the join, not by worker
+  etiquette; a COMPLETED run's graph never re-claims at all, so nothing
+  can cannibalize a delivered answer; gate semantics are unchanged - a
+  reused gated node still waits at OPEN and passes through APPROVED.
+- Proof: the worker-execution behavior suite runs a lifecycle across a
+  simulated session-limit window boundary (window one records one
+  result and voids; window two reuses it - the executor is provably not
+  called for it - and completes, with the artifact carried into the new
+  run), and the analysis twin records a result that the read then
+  refuses to offer.

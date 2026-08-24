@@ -315,6 +315,10 @@ describe("SECURITY DEFINER functions", () => {
       // Status only, never the sealed code: a worker mid-drive can notice a
       // cancel and stop instead of blind-waiting out the relay window.
       "read_ai_auth_session_status",
+      // The lifecycle resume read (20260824000200): the most recently
+      // completed recorded result per node from a lifecycle graph's own
+      // earlier non-answering runs. Read-only; scoped to lifecycles in SQL.
+      "read_prior_node_results_as_worker",
       "read_provider_credential",
       "reconcile_github_repository_grants",
       // The usage sweep's one write: append a provider-usage observation for

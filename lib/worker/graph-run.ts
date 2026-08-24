@@ -267,6 +267,13 @@ export type GraphRunStore = {
     detail?: string | null,
     usage?: { readonly tokensUsed?: number; readonly costMicros?: number },
   ) => Promise<void>;
+  /**
+   * The most recently completed recorded result per node from this graph's
+   * own earlier runs — the read that lets a lifecycle resume instead of
+   * re-proving finished stages until the provider window caps (optional for
+   * the same reason as `openGate`). The database scopes it to lifecycles.
+   */
+  readonly readPriorNodeResults?: (graphId: string) => Promise<ReadonlyMap<string, unknown>>;
 };
 
 export type GraphRunSummary = {
@@ -287,6 +294,12 @@ export type GraphRunSummary = {
    * a decision is owed, not because anything went wrong.
    */
   readonly awaitingGate: readonly string[];
+  /**
+   * Node keys whose results were reused from this graph's earlier runs
+   * rather than re-executed — real recorded work, restated with provenance
+   * in the drain log so nothing reads as fresher than it is.
+   */
+  readonly reusedNodes: readonly string[];
 };
 
 /**
@@ -333,6 +346,21 @@ export async function runClaimedGraph(
   let capacityFinalFailures = 0;
   const awaitingGate: string[] = [];
 
+  /*
+   * The resume that lets a lifecycle converge. A re-claimed graph re-runs
+   * from the beginning, and three consecutive live windows showed what that
+   * costs: each provider window was spent re-proving finished stages and
+   * capped before reaching new ground. Nodes this graph already completed in
+   * an earlier run reuse their recorded artifacts instead of re-executing —
+   * real recorded work from this same graph, reported as reused, costing no
+   * tokens. The database scopes the read to lifecycles, so an analysis
+   * graph's findings stay fresh.
+   */
+  const reusable: ReadonlyMap<string, unknown> = store.readPriorNodeResults
+    ? await store.readPriorNodeResults(claim.graph_id)
+    : new Map();
+  const reusedNodes = new Set<string>();
+
   const result = await runGraph(compiled, budgetFromClaim(claim), {
     executeNode: async (node, attempt) => {
       const nodeRunId = nodeRunIds.get(node.nodeKey);
@@ -348,7 +376,11 @@ export async function runClaimedGraph(
           missing.push(dependency);
         }
       }
-      const outcome = await executeNode(node, attempt, { outputs, missing });
+      const reused = attempt === 1 && reusable.has(node.nodeKey);
+      if (reused) reusedNodes.add(node.nodeKey);
+      const outcome: NodeExecutionResult = reused
+        ? { status: "SUCCEEDED", output: reusable.get(node.nodeKey), latencyMs: 0, tokensUsed: 0 }
+        : await executeNode(node, attempt, { outputs, missing });
       if (outcome.status === "SUCCEEDED") {
         completedOutputs.set(node.nodeKey, outcome.output);
       }
@@ -427,7 +459,10 @@ export async function runClaimedGraph(
           // It is derived from the answer already given, never a second call:
           // asking again would pay twice for one opinion.
           const lens = verificationLensFor(node);
-          if (lens && store.recordVerification) {
+          // A reused reviewing node already recorded its verifications in the
+          // run that produced the result; re-recording would duplicate rows
+          // and date the same judgement twice.
+          if (lens && store.recordVerification && !reusedNodes.has(node.nodeKey)) {
             const derived = deriveVerdict(outcome.output);
             if (derived) {
               for (const dependency of incoming.get(node.nodeKey) ?? []) {
@@ -549,6 +584,7 @@ export async function runClaimedGraph(
     incompleteness,
     capacityWithheld: capacityVoided,
     awaitingGate,
+    reusedNodes: [...reusedNodes],
   };
 }
 

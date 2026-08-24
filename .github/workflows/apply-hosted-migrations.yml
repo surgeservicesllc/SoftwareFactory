@@ -98,6 +98,11 @@ on:
           every lifecycle deadlock at its first automatic gate; it adds one
           security-definer function executable by service_role alone and
           changes no table, row, or human-gate rule;
+          "lifecycle-resume" applies only 20260824000200, the read-only
+          worker function that lets a re-claimed lifecycle reuse the results
+          it already recorded instead of re-proving finished stages until the
+          provider window caps; one definer function, service_role execute
+          only, no table or row changes;
           "clear-autonomy-projects" applies only 20260823000600, which adds the
           Autonomy page's Clear control as an archive sweep and excludes
           archived projects from the autonomy list; it deletes nothing and
@@ -140,6 +145,7 @@ on:
           - graph-stage-backfill
           - discovery-stages
           - automatic-gate-decider
+          - lifecycle-resume
           - analysis-launch-commit
           - delete-selected-pipelines
           - stop-and-delete-pipelines
@@ -5858,6 +5864,64 @@ jobs:
             exit 1
           fi
           echo "Applied and verified: anchored automatic gates now have their decider; the human-gate rule is untouched."
+
+      - name: Let lifecycles resume from recorded results (scope=lifecycle-resume)
+        # Exactly one file — 20260824000200 — one read-only definer function.
+        # Three consecutive live windows spent their whole provider budget
+        # re-proving finished stages; this is the read the worker's resume
+        # uses to reuse a lifecycle's own recorded results instead.
+        if: ${{ inputs.scope == 'lifecycle-resume' }}
+        run: |
+          if [ -z "$SUPABASE_DB_PASSWORD" ]; then
+            echo "::error::This scope requires SUPABASE_DB_PASSWORD for live verification."
+            exit 1
+          fi
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+
+          RESUME_FILE=supabase/migrations/20260824000200_lifecycles_resume_from_recorded_results.sql
+          if [ "$(sha256sum "$RESUME_FILE" | cut -d' ' -f1)" != "d54b9682c8bd9ce2859bc609b4c622b05f36feff9c7e377098df746c815c73fa" ]; then
+            echo "::error::Migration hash mismatch; refusing production DDL."
+            exit 1
+          fi
+
+          ROW=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
+            "select count(*) from supabase_migrations.schema_migrations where version = '20260824000200';")
+          if [ "$ROW" != "0" ]; then
+            echo "::error::Ledger already records 20260824000200 (want 0)."
+            exit 1
+          fi
+
+          READY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
+            select exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+                            where n.nspname = 'public' and p.proname = 'decide_automatic_gate_as_worker');")
+          if [ "$READY" != "t" ]; then
+            echo "::error::decide_automatic_gate_as_worker is missing; apply scope=automatic-gate-decider first."
+            exit 1
+          fi
+
+          echo "Applying ${RESUME_FILE} (its in-file postflight verifies the grant boundary)"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -1 -q -f "$RESUME_FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied 20260824000200
+          else
+            npx supabase migration repair --status applied 20260824000200 --db-url "$DB_URL"
+          fi
+
+          VERIFIED=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
+            select exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+                            where n.nspname = 'public'
+                              and p.proname = 'read_prior_node_results_as_worker'
+                              and pg_get_function_identity_arguments(p.oid) = 'p_worker_id text, p_graph_id uuid');")
+          if [ "$VERIFIED" != "t" ]; then
+            echo "::error::read_prior_node_results_as_worker did not read back."
+            exit 1
+          fi
+          echo "Applied and verified: lifecycles can resume from their own recorded results."
 
       - name: Apply the Backlog and Pipelines clear controls (scope=clear-controls)
         # Exactly two files — 20260822000700 and 20260822000800 — and no others.

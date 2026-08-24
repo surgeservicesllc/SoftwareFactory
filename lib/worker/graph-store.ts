@@ -96,6 +96,31 @@ export class SupabaseGraphStore implements GraphRunStore {
   }
 
   /**
+   * The most recently completed recorded result per node from this graph's
+   * earlier runs. The database scopes the read to lifecycle graphs and to
+   * runs that never delivered an answer (CANCELLED, PARTIAL, FAILED), so an
+   * analysis graph's findings stay fresh and a COMPLETED run is never
+   * cannibalized.
+   */
+  async readPriorNodeResults(graphId: string): Promise<ReadonlyMap<string, unknown>> {
+    const { data, error } = await this.client.rpc("read_prior_node_results_as_worker", {
+      p_worker_id: this.workerId,
+      p_graph_id: graphId,
+    });
+    if (error) {
+      // A missing function (hosted not yet applied) or a transient read must
+      // not fail the run: no reuse simply means the fresh-execution path.
+      return new Map();
+    }
+    const rows = (data ?? []) as Array<{ node_key?: string; payload?: unknown }>;
+    return new Map(
+      rows
+        .filter((row): row is { node_key: string; payload: unknown } => typeof row.node_key === "string")
+        .map((row) => [row.node_key, row.payload]),
+    );
+  }
+
+  /**
    * Approve an anchored AUTOMATIC gate after its run has closed.
    *
    * The database refuses everything the rule refuses — human gates, zero

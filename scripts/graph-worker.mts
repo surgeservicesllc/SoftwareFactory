@@ -145,6 +145,7 @@ async function main() {
     process.stdout.write(
       `Graph run ${parsed.graph.graph_run_id} finished ${summary.finalState}: `
       + `${summary.nodesSucceeded} succeeded, ${summary.nodesFailed} failed`
+      + `${summary.reusedNodes.length > 0 ? `, ${summary.reusedNodes.length} reused from this graph's earlier runs (${summary.reusedNodes.join(", ")})` : ""}`
       + `${summary.awaitingGate.length > 0 ? `, ${summary.awaitingGate.length} halted at a lifecycle gate (${summary.awaitingGate.join(", ")})` : ""}`
       + `${summary.incompleteness ? ` — ${summary.incompleteness}` : ""}\n`,
     );
