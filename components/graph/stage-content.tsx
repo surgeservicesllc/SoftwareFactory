@@ -60,6 +60,9 @@ export function stageStanding(slice: StageSummary | undefined):
   if (slice.active > 0) return { label: "in flight", tone: "info" };
   if (slice.completed === slice.total) return { label: "complete", tone: "safe" };
   if (slice.skipped === slice.total) return { label: "skipped", tone: "warning" };
+  // Nothing settled and nothing running: the stage is queued work, and
+  // "pending" says so where "mixed" implied a half-finished muddle.
+  if (slice.completed === 0 && slice.skipped === 0) return { label: "pending", tone: "neutral" };
   return { label: "mixed", tone: "neutral" };
 }
 

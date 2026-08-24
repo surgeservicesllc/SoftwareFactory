@@ -100,7 +100,7 @@ describe("a factory step page", () => {
     expect(screen.getByRole("region", { name: "GOAL in this run" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "PRD in this run" })).toBeInTheDocument();
     // The ten-step strip links every step.
-    const strip = screen.getByRole("navigation", { name: /ten factory steps/i });
+    const strip = screen.getByRole("list", { name: /ten factory steps/i });
     expect(within(strip).getAllByRole("link")).toHaveLength(10);
     expect(within(strip).getByRole("link", { name: /1\. Requirement/ }))
       .toHaveAttribute("aria-current", "page");
