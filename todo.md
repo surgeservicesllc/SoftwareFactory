@@ -129,11 +129,42 @@ it) found and fixed three more truth gaps in the same lane:**
    outcome). `graph-gate-decision-route.test.ts` covers woken/unwakeable/
    rejection.
 
-**Open in this lane:** the owner's live full_lifecycle drain is the remaining
-evidence for "all ten phases working" — dispatch `graph-worker.yml` after this
-merges, watch the MODEL stages run to the ARCHITECTURE HUMAN gate (the gate
-appearing IS the design), then the owner decides. Round 9's stage pages will
-show the run. Still open from round 6: owner-gated WebSearch for candidates.
+**The live end-to-end walk (owner: "test end to end all steps") found and
+fixed two more, and settled the mystery:**
+
+1. **The owner's original launch never created a graph.** Worker run
+   32674703858's new queue diagnosis (#378) listed all 8 hosted graphs:
+   newest from 13:44Z — hours before full_lifecycle existed. The click
+   landed on a pre-deploy build (or its then-"Recorded, nothing will run
+   it" card read as launched). Nothing is stuck; there is simply no graph.
+   The owner pressing Launch on the current build is the one remaining
+   live step — everything downstream is now proven.
+2. **"Nothing ran" now explains itself** (#378): when a drain claims zero
+   graphs the worker prints one line per graph naming the excluding claim
+   filter, mirroring claim_planned_graph exactly (ids/states only, never
+   goal text). Proven live on its first run.
+3. **The TEST anchor read every check; main carries a permanently red
+   Supabase Preview** — every lifecycle would have failed TEST on an
+   unrelated integration check. #379: the anchor honors
+   SOFTWAREFACTORY_REQUIRED_CHECKS (same names, same pipe format as the
+   Phase 1C worker; latest attempt wins; missing/running required check =
+   "no verdict yet"). graph-worker.yml carries the third copy of the
+   contract; required-checks-wiring.test.ts guards it both directions.
+4. **Live production verification as the fake journey account**
+   (jordan.seeker.prod1@example.org, the owner-approved throwaway):
+   sign-in → `next: "/decision"`; /decision serves "Open the Software
+   Factory"; /solutions/workflows serves the new record-and-wake Notice,
+   "Launch this graph", and full_lifecycle — the deployed build is
+   current. The fake workspace has no GitHub connection, so it cannot
+   create a project (by design: a project IS a bound repository) — the
+   final Launch click is genuinely owner-territory. Chromium-in-container
+   cannot tunnel through the egress proxy (curl can); API-level walks are
+   the pattern that works here.
+
+**Open in this lane:** the owner presses Launch on Full Lifecycle (the click
+now wakes the worker; approvals at the two gates wake it again), and the run
+drains to the ARCHITECTURE gate. docs/FULL_LIFECYCLE_GUIDE.md is the manual.
+Still open from round 6: owner-gated WebSearch for candidates.
 
 
 ## GRAPH — ONE REQUEST THROUGH ALL TEN PHASES: full_lifecycle (2026-08-23, round 9)

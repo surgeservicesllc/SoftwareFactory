@@ -18,11 +18,19 @@ and the two instrument env vars. Next live step after merge: dispatch
 ARCHITECTURE HUMAN gate, and hand the decision to the owner — the gate
 appearing is the design succeeding. The owner then asked for a
 step-by-step guide plus an end-to-end test of it: `docs/
-FULL_LIFECYCLE_GUIDE.md` is the guide, and walking it surfaced three more
-gaps, all fixed — stale "no executor is connected" wording on the
-Workflows page and launch control, and gate approvals stranding the run
-(the decide route now wakes the worker best-effort on approvals, with
-`workerWoken` reported truthfully).
+FULL_LIFECYCLE_GUIDE.md` is the guide, and walking it surfaced five more
+gaps, all fixed and merged — stale "no executor is connected" wording on
+the Workflows page and launch control; gate approvals stranding the run
+(the decide route now wakes the worker on approvals, `workerWoken`
+reported truthfully); "nothing ran" now printing a per-graph queue
+diagnosis (#378); and the TEST anchor honoring
+SOFTWAREFACTORY_REQUIRED_CHECKS so main's permanently red Supabase
+Preview cannot veto verified commits (#379). The diagnosis settled the
+owner's stuck launch: it never created a graph (pre-deploy click) — the
+one remaining live step is the owner pressing Launch on the current
+build, which now wakes the worker itself. Production verified current
+via the fake journey account: sign-in lands on /decision, the Workflows
+page serves the new launch card and full_lifecycle.
 
 ## Earlier (2026-08-23 ~01:15Z): a record-only Claude command now launches one real analysis run (ADR-128)
 

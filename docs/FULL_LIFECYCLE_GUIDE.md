@@ -30,7 +30,7 @@ Sign in at the product. On your first visit you land on the **/decision**
 chooser; pick **Software Factory**. After that, the global navigation takes
 you straight to /solutions.
 
-## Step 2 — Open Workflows and find “Full lifecycle”
+## Step 2 — Open Workflows and find “Full Lifecycle”
 
 Navigation → **Workflows** (/solutions/workflows). Every template on this page
 is shown as a compiled preview: the topology, the node contracts, the lock
@@ -38,7 +38,7 @@ waves, and which dependencies the compiler removed. The preview is produced by
 the same code that schedules the work, so what you see is what will run —
 but nothing on this page has run yet.
 
-Select **Full lifecycle**. The preview shows its fourteen nodes: goal →
+Select **Full Lifecycle**. The preview shows its fourteen nodes: goal →
 requirements → three parallel discovery scans → consolidate → evaluate →
 decide → architecture → implement → review → test → deploy → monitor, with
 feedback edges (monitor back to goal, test and review back to implement).
@@ -46,7 +46,7 @@ feedback edges (monitor back to goal, test and review back to implement).
 ## Step 3 — Launch it against a project
 
 In the **Launch this graph** card, choose your project and press
-**Launch Full lifecycle**. What happens, in order:
+**Launch Full Lifecycle**. What happens, in order:
 
 1. The compiled plan — nodes, edges, budget — is written to the database as a
    **PLANNED** graph through `create_graph_from_plan`, under your identity.
@@ -107,9 +107,12 @@ not the run being stuck.
 
 - The **test** node does not ask a model whether the tests pass. It reads the
   CI check-run verdict GitHub recorded for the exact commit the worker is
-  running, and stores that observation — sha, conclusions, links — as
-  evidence. Green CI succeeds the node; red CI fails it (and the feedback
-  edge sends the work back to implement).
+  running — specifically the repository's own **required checks**
+  (`SOFTWAREFACTORY_REQUIRED_CHECKS`), so an unrelated red integration check
+  cannot veto a commit the repository itself considers verified — and stores
+  that observation, sha, conclusions and links, as evidence. Green succeeds
+  the node; red fails it (and the feedback edge sends the work back to
+  implement).
 - The **deploy** node sits behind the second human gate. In Phase 1 this
   repository keeps deployment owner-approved and wires the worker **no
   deployment instrument** — so even an approved deploy node records a policy
@@ -127,6 +130,8 @@ not the run being stuck.
 |---|---|---|
 | Launch note says the worker could not be woken | The project has no verified GitHub binding, or the dispatch failed | Assign/verify the repository on the Projects page; or run the worker manually (below) |
 | Graph stays PLANNED | No worker has claimed it — the scheduled drain is off by default | GitHub → Actions → **Graph executor worker** → Run workflow |
+| A worker ran but reported "nothing ran" | The claim's filters excluded every graph | Read the run's log: the **queue diagnosis** names each graph and the exact filter excluding it |
+| You pressed Launch but no graph appears anywhere | The click may have landed on a build deployed before the launch wiring | Reload the Workflows page and launch again; the result card now reports the graph id and whether the worker was woken |
 | A node failed with “Not Connected” | That anchor's instrument (CI token, commit, or production URL) is absent in the worker's environment | Check the workflow's env block; the node's error names the missing instrument |
 | The runs panel shows an open gate and nothing moving | A human gate is waiting for you | Approve or reject it — that is the run asking |
 | A RED-classified plan never gets claimed | RED plans require explicit owner approval before any worker may claim them | This is `requires_owner_approval` holding; approve the plan or leave it |
