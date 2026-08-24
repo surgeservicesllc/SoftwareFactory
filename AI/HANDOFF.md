@@ -2,7 +2,21 @@
 
 Last updated: 2026-08-24
 
-## Newest (2026-08-24 ~19:20Z): the lifecycle stage cards are actionable
+## Newest (2026-08-24 ~20:20Z): the owner's step page, per run and per stage (ADR-142)
+
+The owner sent design boards for a per-run "1. REQUIREMENT"-style page and
+directed building it. Delivered as
+`/solutions/lifecycle/run/[graphRunId]/[stage]`: request verbatim, linked
+ten-step strip from the run's own nodes, recorded artifact payloads rendered
+as the breakdown (typed packages structurally, everything else verbatim
+JSON), verifications, the shared gate decision, real clocks only. New
+migration 20260824001000 (`list_graph_run_artifacts`, authenticated-only) +
+`GET /api/graphs/runs/[graphRunId]/artifacts`; hosted scope
+`run-artifacts-read` added and MUST BE RUN on hosted before the live page
+can show payloads (the page renders and is honest about the artifact read
+failing until then). Stage detail run rows link into the new page.
+
+## Earlier (2026-08-24 ~19:20Z): the lifecycle stage cards are actionable
 
 The owner's latest /goal: the eleven cards on /solutions/lifecycle were
 static; make each actionable and complete the ten-step Graph Engineering

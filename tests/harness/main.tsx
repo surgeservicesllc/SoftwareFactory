@@ -1,4 +1,5 @@
 import { LifecycleConsole } from "@/components/graph/lifecycle-console";
+import { RunStageConsole } from "@/components/graph/run-stage-console";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
@@ -69,6 +70,7 @@ import {
   COMMANDS,
   CONNECTIONS,
   CUSTOM_PIPELINE_TEMPLATES,
+  GRAPH_RUN_ARTIFACTS,
   GRAPH_RUNS_STAGED,
   JOB_SEEKER_CONTACTS,
   JOB_SEEKER_DOCUMENTS,
@@ -179,6 +181,11 @@ function serveFixtures() {
     }
     if (url.includes("/api/pipeline-templates")) {
       return json({ templates: CUSTOM_PIPELINE_TEMPLATES, canManage: true });
+    }
+    // Before the runs branch: the artifacts URL contains "/api/graphs/runs"
+    // too, and the longer match must win.
+    if (/\/api\/graphs\/runs\/[^/]+\/artifacts/.test(url)) {
+      return json({ artifacts: GRAPH_RUN_ARTIFACTS });
     }
     if (url.includes("/api/graphs/runs")) return json({ runs: GRAPH_RUNS_STAGED });
     if (url.includes("/api/runs?limit=100")) return json({ runs: FACTORY_BRIEFING_RUNS });
@@ -397,6 +404,12 @@ const CASES: Record<string, () => React.ReactElement> = {
    */
   lifecycle: () => <InShell><LifecycleConsole /></InShell>,
   "lifecycle-stage": () => <InShell><LifecycleConsole stage="IMPLEMENTATION" /></InShell>,
+  /*
+   * One run's stage page, on the run whose ARCHITECTURE node holds an open
+   * gate: the strip, the recorded payload, and the decision controls are the
+   * widest things the page renders.
+   */
+  "run-stage": () => <InShell><RunStageConsole graphRunId="run-1" stage="ARCHITECTURE" /></InShell>,
   files: () => <InShell><GitHubFileManager /></InShell>,
   operations: () => <InShell><OperationsConsole authenticated /></InShell>,
   resources: () => <InShell><ResourceManagerConsole authenticated /></InShell>,

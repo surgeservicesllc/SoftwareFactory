@@ -244,7 +244,7 @@ function StageIndex({
  * No second request, and nothing to fall out of step with the figures it sits
  * under.
  */
-function StageNodes({
+export function StageNodes({
   nodes,
   onDecided,
 }: {
@@ -384,7 +384,12 @@ function StageDetail({
               <li key={run.graphRunId} className="py-3">
                 <div className="flex flex-wrap items-center gap-2">
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm text-foreground">{run.goal ?? run.graphRunId}</p>
+                  <Link
+                    href={`/solutions/lifecycle/run/${run.graphRunId}/${stage.toLowerCase()}`}
+                    className="block truncate text-sm text-foreground hover:text-accent"
+                  >
+                    {run.goal ?? run.graphRunId}
+                  </Link>
                   <p className="text-xs text-faint">
                     {slice.completed} of {slice.total} node{slice.total === 1 ? "" : "s"} completed
                     {slice.failed > 0 ? ` · ${slice.failed} failed` : ""}

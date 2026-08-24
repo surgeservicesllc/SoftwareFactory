@@ -2,6 +2,29 @@
 
 Last reviewed: 2026-08-24
 
+## 2026-08-24: one run, one stage — the owner's step page
+
+`/solutions/lifecycle/run/[graphRunId]/[stage]` renders the owner's design
+boards as stored facts: the request is the run's goal verbatim, the ten-step
+strip is `summariseRunStages` over the run's own nodes (each chip a link into
+the same run), the breakdown is the recorded artifact payloads themselves —
+structured when a typed stage package parses (decision, evaluation,
+discovery), verbatim JSON when none does — and the decision control is the
+shared `GateDecision`. The boards' invented figures (confidence percentages,
+estimated completion) are deliberately absent: nothing computes them, so
+nothing shows them. `/run/[graphRunId]` redirects to the first stage; a
+non-stage slug or non-UUID id is a 404; a run outside the newest hundred says
+so instead of pretending to be empty.
+
+The read behind it is new: migration `20260824001000_list_graph_run_artifacts`
+(function `list_graph_run_artifacts(p_organization_id, p_graph_run_id)`,
+authenticated execute only, membership-checked, run scoped to the caller's
+organization) served by `GET /api/graphs/runs/[graphRunId]/artifacts` —
+payloads verbatim, because `list_graph_runs` correctly carries only counts.
+Hosted apply scope: `run-artifacts-read` (sha-pinned). Migration total is 161.
+Tests: `tests/unit/run-stage-console.test.tsx`,
+`tests/unit/graph-run-artifacts-route.test.ts`.
+
 ## 2026-08-24: the lifecycle pages act, not just report
 
 The stage index at `/solutions/lifecycle` was eleven accurate, static cards.

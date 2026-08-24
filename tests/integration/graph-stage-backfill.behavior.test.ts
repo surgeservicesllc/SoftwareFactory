@@ -9,7 +9,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const migrationsDirectory = resolve(repositoryRoot, "supabase/migrations");
-const latestMigration = "20260824000200_lifecycles_resume_from_recorded_results.sql";
+const latestMigration = "20260824001000_list_graph_run_artifacts.sql";
 /*
  * Two different files on purpose. `latestMigration` pins the replay chain's
  * tail; `backfillMigration` is the one this suite re-runs against seeded
