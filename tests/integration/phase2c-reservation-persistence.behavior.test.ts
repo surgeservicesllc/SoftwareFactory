@@ -116,7 +116,7 @@ describe("Phase 2C reservation persistence", () => {
     `);
 
     const migrationFiles = (await readdir(migrationsDirectory)).filter((file) => file.endsWith(".sql")).sort();
-    expect(migrationFiles.at(-1)).toBe("20260824000100_anchored_automatic_gates_decide_themselves.sql");
+    expect(migrationFiles.at(-1)).toBe("20260824000200_lifecycles_resume_from_recorded_results.sql");
     for (const file of migrationFiles) {
       await db.exec(await readFile(resolve(migrationsDirectory, file), "utf8"));
     }

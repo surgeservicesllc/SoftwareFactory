@@ -910,3 +910,18 @@ These are recorded for deliberate owner review and are not evidence that Phase 1
   stage coverage, forward-only stage order, gate placement, feedback loop.
 - [ ] Live drain of a full_lifecycle launch (owner-initiated) — the graph
   halts at the ARCHITECTURE human gate by design; deciding it is the owner's.
+
+## Resumable lifecycle runs (found 2026-08-24, owner-visible cost)
+
+Gates are keyed to graph nodes so approvals outlive runs — correct — but a
+reclaim re-executes every node from the beginning: claim_planned_graph
+queues all nodes PENDING and the runner has no memory of a prior run's
+COMPLETED outputs. A full_lifecycle pass therefore costs roughly three
+times its model-node count in subscription sessions (run to the
+ARCHITECTURE gate, re-run everything to the TEST gate, re-run everything
+to the deploy refusal). With the day's session windows this stretches one
+lifecycle across multiple windows. The fix is an engine design change —
+reuse the same graph iteration's COMPLETED node outputs (artifacts already
+persist) instead of re-executing them — and needs an ADR and owner
+direction before building: replaying stale outputs across a decision that
+requested rework is the failure mode to design against.

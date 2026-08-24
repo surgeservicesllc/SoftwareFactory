@@ -83,6 +83,15 @@ function pgliteStore(db: PGlite, workerId: string): GraphRunStore {
       );
       await reset(db);
     },
+    async readPriorNodeResults(graphId) {
+      await asServiceRole(db);
+      const result = await db.query<{ node_key: string; payload: unknown }>(
+        "select node_key, payload from public.read_prior_node_results_as_worker($1, $2::uuid)",
+        [workerId, graphId],
+      );
+      await reset(db);
+      return new Map(result.rows.map((row) => [row.node_key, row.payload]));
+    },
     async recordVerification(subjectNodeRunId, lens, verdict, evidence, verifierProvider) {
       await asServiceRole(db);
       await db.query(
@@ -581,6 +590,116 @@ describe("the graph executor boundary", { timeout: 180_000 }, () => {
     if (!second.ok) return;
     expect(second.graph.graph_id).toBe(graphId);
     await store.completeRun(second.graph.graph_run_id, "PARTIAL", true);
+    expect(await claim()).toBeNull();
+  });
+
+  it("resumes a lifecycle from its own recorded results instead of re-proving them", async () => {
+    /*
+     * Three consecutive live windows spent their whole provider budget
+     * re-executing stages the graph had already completed, and capped before
+     * reaching new ground (runs 2469db25, 6a8d5121). A re-claimed lifecycle
+     * now reuses the results it recorded in its earlier non-answering runs:
+     * the reused node is not re-executed, costs nothing, and is named in the
+     * summary so nothing reads as fresher than it is. Analysis graphs are
+     * deliberately excluded by the database read — their value is fresh
+     * findings — which the lifecycle-only join enforces below.
+     */
+    const graphId = await createDiamondGraph("Resume across a session limit", false);
+    await reset(db);
+    await db.query(`update public.graphs set is_lifecycle = true where id = $1`, [graphId]);
+    const store = pgliteStore(db, "graph-worker-test");
+
+    // First window: the first node completes and records its artifact; the
+    // rest are refused the way a session limit refuses.
+    const first = parseClaimedGraph(await claim());
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    const compiledFirst = compileClaimedGraph(first.graph);
+    expect(compiledFirst.ok).toBe(true);
+    if (!compiledFirst.ok) return;
+    let firstWindowCalls = 0;
+    const firstSummary = await runClaimedGraph(first.graph, compiledFirst.graph, store, async (node): Promise<NodeExecutionResult> => {
+      firstWindowCalls += 1;
+      if (firstWindowCalls === 1) {
+        return { status: "SUCCEEDED", output: { stage: "one", verdict: "recorded", from: node.nodeKey }, tokensUsed: 25 };
+      }
+      return {
+        status: "FAILED",
+        error: "Claude Code returned an error result: You've hit your session limit",
+        retryable: false,
+        capacityWithheld: true,
+      };
+    });
+    expect(firstSummary.finalState).toBe("CANCELLED");
+    expect(firstSummary.nodesSucceeded).toBe(1);
+    expect(firstSummary.reusedNodes).toEqual([]);
+
+    // Next window: the completed node's result is reused — its executor is
+    // never called again — and the rest run fresh to a full completion.
+    const second = parseClaimedGraph(await claim());
+    expect(second.ok).toBe(true);
+    if (!second.ok) return;
+    const compiledSecond = compileClaimedGraph(second.graph);
+    expect(compiledSecond.ok).toBe(true);
+    if (!compiledSecond.ok) return;
+    const executedInSecondWindow: string[] = [];
+    const secondSummary = await runClaimedGraph(second.graph, compiledSecond.graph, store, async (node): Promise<NodeExecutionResult> => {
+      executedInSecondWindow.push(node.nodeKey);
+      return { status: "SUCCEEDED", output: { stage: "two", from: node.nodeKey }, tokensUsed: 25 };
+    });
+
+    expect(secondSummary.finalState).toBe("COMPLETED");
+    expect(secondSummary.reusedNodes).toHaveLength(1);
+    const [reusedKey] = secondSummary.reusedNodes;
+    expect(executedInSecondWindow).not.toContain(reusedKey);
+    expect(executedInSecondWindow).toHaveLength(compiledSecond.graph.nodes.length - 1);
+
+    // The reused node's stored artifact in the NEW run carries the original
+    // result — recorded work restated, not fabricated.
+    await reset(db);
+    const carried = await db.query<{ payload: { stage?: string; verdict?: string } }>(
+      `select a.payload from public.graph_artifacts a
+         join public.node_runs nr on nr.id = a.node_run_id
+         join public.graph_nodes n on n.id = nr.node_id
+        where a.graph_run_id = $1 and n.node_key = $2`,
+      [second.graph.graph_run_id, reusedKey],
+    );
+    expect(carried.rows[0].payload).toMatchObject({ stage: "one", verdict: "recorded" });
+
+    // A COMPLETED run ends the story: the graph leaves the queue for good.
+    expect(await claim()).toBeNull();
+  });
+
+  it("offers no prior results for a non-lifecycle graph, whatever it recorded", async () => {
+    // The analysis twin of the case above: same shape, is_lifecycle stays
+    // false, so the database read returns nothing and every node re-executes.
+    const graphId = await createDiamondGraph("Fresh findings every run", false);
+    const store = pgliteStore(db, "graph-worker-test");
+
+    const first = parseClaimedGraph(await claim());
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    expect(first.graph.graph_id).toBe(graphId);
+    const compiled = compileClaimedGraph(first.graph);
+    expect(compiled.ok).toBe(true);
+    if (!compiled.ok) return;
+    let calls = 0;
+    await runClaimedGraph(first.graph, compiled.graph, store, async (node): Promise<NodeExecutionResult> => {
+      calls += 1;
+      if (calls === 1) return { status: "SUCCEEDED", output: { from: node.nodeKey }, tokensUsed: 5 };
+      return {
+        status: "FAILED",
+        error: "You've hit your session limit",
+        retryable: false,
+        capacityWithheld: true,
+      };
+    });
+
+    const results = await store.readPriorNodeResults!(graphId);
+    expect(results.size).toBe(0);
+
+    // For a non-lifecycle, a run with any success is a PARTIAL answer — the
+    // graph leaves the queue, which also leaves this test's queue empty.
     expect(await claim()).toBeNull();
   });
 
