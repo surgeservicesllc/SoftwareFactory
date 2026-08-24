@@ -2,7 +2,28 @@
 
 Last updated: 2026-08-24
 
-## Newest (2026-08-24 ~01:50Z): the first live lifecycle found the gate deadlock; fixed, applied, re-running (ADR-140)
+## Newest (2026-08-24 ~19:20Z): the lifecycle stage cards are actionable
+
+The owner's latest /goal: the eleven cards on /solutions/lifecycle were
+static; make each actionable and complete the ten-step Graph Engineering
+process through that page. Delivered: the stage index now carries the
+Workflows page's `GraphLaunchControl` (full_lifecycle) at the top, and any
+stage holding an open gate offers Approve/Reject on its own card — the
+shared `components/graph/gate-decision.tsx`, extracted from the runs panel
+so both surfaces post to the same route with the same wording. Stage pages
+offer the decision on the node row. The open-gate scan is newest-run-first
+and deliberately still finds an older PARTIAL run's open gate — that is the
+resume case ADR-141 built.
+
+Live thread to finish: lifecycle graph d7241cf4 resumes at the ~21:20Z
+subscription window (trigger armed) — architecture executes (8 nodes reuse
+recorded results), the ARCHITECTURE human gate is decided from the new
+lifecycle card as the fake user, then implement/review, the TEST anchor's
+self-approving gate, and the DEPLOY policy refusal terminal. The Demo Data
+project 51af87ae was re-activated after the clear-control test archived it
+(unarchive via /api/portfolio/controls, verified status "active").
+
+## Earlier (2026-08-24 ~01:50Z): the first live lifecycle found the gate deadlock; fixed, applied, re-running (ADR-140)
 
 The owner said the end-to-end "is not working" and directed a test-data
 walk with fixes in place. Delivered so far: the Launch card was buried

@@ -65,7 +65,12 @@ Navigation → **Pipelines** (/solutions/pipelines). The graph runs panel shows
 the run the worker created when it claimed your graph: every node, its state
 (PENDING → RUNNING → SUCCEEDED/FAILED), its lifecycle stage, and its recorded
 artifacts. The **Lifecycle** pages (/solutions/lifecycle and one page per
-stage) show the same run rolled up by stage across the portfolio.
+stage) show the same run rolled up by stage across the portfolio — and they
+are actionable, not just a report: the index carries its own **Launch Full
+Lifecycle** card, and when a stage holds an open gate, that stage's card (and
+the node's row on the stage page) offers the same **Approve / Reject** control
+as the runs panel. You can run the entire process from /solutions/lifecycle
+without visiting another page.
 
 What you will see stage by stage:
 
@@ -97,8 +102,9 @@ chat reply.
 ## Step 5 — Decide the ARCHITECTURE gate
 
 When the architecture node finishes, its row in the runs panel grows an
-**Approve / Reject** control marked *Human gate*. Read the architecture
-package the node recorded, then decide:
+**Approve / Reject** control marked *Human gate* — and the ARCHITECT card on
+/solutions/lifecycle shows the same control under *Awaiting a decision*. Read
+the architecture package the node recorded, then decide:
 
 - **Approve** — the decision is recorded and the executor worker is woken to
   continue the run. If the wake cannot happen, the run continues on the next
