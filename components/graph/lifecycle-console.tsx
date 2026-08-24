@@ -6,6 +6,7 @@ import { AlertTriangle, Loader2, ShieldCheck, UserCheck } from "lucide-react";
 
 import { Card, PageHeader, StatusBadge } from "@/components/ui";
 import { SDLC_LIFECYCLE, stageDefinition, type SdlcStage } from "@/lib/sdlc/lifecycle";
+import { describeNode, type DetailedNode } from "@/lib/graph/node-detail";
 import { buildStagePortfolio, type SummarisableRun } from "@/lib/sdlc/portfolio";
 import { summariseRunStages } from "@/lib/graph/stage-summary";
 
@@ -180,6 +181,61 @@ function StageIndex({ portfolio }: { portfolio: ReturnType<typeof buildStagePort
   );
 }
 
+/**
+ * The nodes this run has in this stage.
+ *
+ * The figures above say a stage has four nodes and one failed. This says which
+ * four and which one, which is the difference between a dashboard and something
+ * a person can act on. Every value is derived by `describeNode` — the same call
+ * the graph-runs panel uses — so a node cannot read one way here and another
+ * there.
+ *
+ * Rendered from the run's own `nodes` array, already fetched for the counts.
+ * No second request, and nothing to fall out of step with the figures it sits
+ * under.
+ */
+function StageNodes({ nodes }: { nodes: readonly DetailedNode[] }) {
+  if (nodes.length === 0) return null;
+  return (
+    <ul className="mt-2 space-y-2">
+      {nodes.map((node) => {
+        const detail = describeNode(node);
+        return (
+          <li key={detail.nodeKey} className="rounded border border-[var(--border)] p-2.5">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-medium text-foreground">{detail.nodeKey}</span>
+              <StatusBadge tone={nodeTone(detail.state)} dot={false}>{detail.state}</StatusBadge>
+              {detail.elapsed ? (
+                <span className="tabular text-xs text-faint">{detail.elapsed}</span>
+              ) : null}
+              {detail.artifactTotal > 0 ? (
+                <span className="text-xs text-faint">
+                  {detail.artifactTotal} artifact{detail.artifactTotal === 1 ? "" : "s"}
+                </span>
+              ) : null}
+            </div>
+            {detail.job ? <p className="mt-1 text-xs text-muted">{detail.job}</p> : null}
+            {detail.dependsOn.length > 0 ? (
+              <p className="mt-1 text-xs text-faint">Waited for {detail.dependsOn.join(", ")}</p>
+            ) : null}
+            {detail.stoppedReason ? (
+              <p className="mt-1 text-xs text-[var(--danger)]">{detail.stoppedReason}</p>
+            ) : null}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+/** A node's execution state as a badge tone. */
+function nodeTone(state: string): "safe" | "danger" | "info" | "neutral" {
+  if (state === "COMPLETED") return "safe";
+  if (state === "FAILED" || state === "CANCELLED") return "danger";
+  if (state === "RUNNING" || state === "VERIFYING") return "info";
+  return "neutral";
+}
+
 function StageDetail({
   stage,
   runs,
@@ -204,7 +260,11 @@ function StageDetail({
   const appearances = runs.flatMap((run) => {
     const slice = summariseRunStages(run.nodes ?? []).stages
       .find((candidate) => candidate.stage === stage);
-    return slice ? [{ run, slice }] : [];
+    if (!slice) return [];
+    // The same nodes the slice counted, kept so the list below cannot disagree
+    // with the figures above it.
+    const stageNodes = (run.nodes ?? []).filter((node) => node.lifecycle_stage === stage);
+    return [{ run, slice, stageNodes }];
   });
 
   return (
@@ -255,8 +315,9 @@ function StageDetail({
           </Card>
         ) : (
           <ul className="mt-2 divide-y divide-[var(--border)]">
-            {appearances.map(({ run, slice }) => (
-              <li key={run.graphRunId} className="flex flex-wrap items-center gap-2 py-3">
+            {appearances.map(({ run, slice, stageNodes }) => (
+              <li key={run.graphRunId} className="py-3">
+                <div className="flex flex-wrap items-center gap-2">
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm text-foreground">{run.goal ?? run.graphRunId}</p>
                   <p className="text-xs text-faint">
@@ -278,6 +339,8 @@ function StageDetail({
                     : slice.active > 0 ? "in flight"
                       : slice.completed === slice.total ? "complete" : "mixed"}
                 </StatusBadge>
+                </div>
+                <StageNodes nodes={stageNodes} />
               </li>
             ))}
           </ul>

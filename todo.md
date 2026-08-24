@@ -1,6 +1,55 @@
 # SoftwareFactory — shared working status
 
-## GRAPH — THE NODE EXPLAINS ITSELF (2026-08-23, round 11 — PICK UP HERE)
+## GRAPH — THE STAGE PAGES SHOW THEIR NODES (2026-08-24, round 12 — PICK UP HERE)
+
+**Round 11's item 1 is done.** `/solutions/lifecycle/[stage]` listed runs with
+counts — "2 of 3 nodes completed" — and never said *which* nodes. Now each run
+on a stage page lists its nodes in that stage: key, state, wall time, artifact
+count, the job it was given, what it waited for, and why it stopped.
+
+**No new fetch and no second shape.** The list is rendered from the same
+`run.nodes` array the counts are computed from, filtered by
+`lifecycle_stage === stage`, and every value comes from `describeNode` — the
+same call the graph-runs panel uses. So a node cannot read one way on the panel
+and another on the stage page, and the list cannot disagree with the count
+printed beside it. A test pins exactly that: three nodes, one in another stage,
+count says two and the list shows those two.
+
+`SummarisableRun.nodes` widened from the three fields the rollup reads to
+`DetailedNode`. The rollup still reads only state/stage/error; the wider type
+just lets a caller already holding these runs read the rest.
+
+**The harness fixture was enriched in the same commit, deliberately.** Round 11
+shipped a fixture that had drifted from the route's projection and broke an
+unrelated browser case. The `lifecycle-stage` harness case renders
+IMPLEMENTATION, so `GRAPH_RUNS_STAGED` now carries the job lines, dependency
+lists, clocks and artifact counts the detail renders — including the longest
+strings it can produce. A width sweep against a fixture missing those measures
+a layout no user will ever see.
+
+**Next, highest value first:**
+
+1. **Artifact payloads are still unreachable.** Both the panel and the stage
+   pages report counts by kind, deliberately — a payload can be large. A reader
+   who wants the synthesis itself still has nowhere to go. That needs a
+   per-artifact read path (`graph_artifacts.payload`), and it is the last
+   unbuilt item from the goal document's node list.
+2. **`node_runs.attempt` still has no writer** (round 11). Two tests pin its
+   absence from the projection. If the runner is ever changed to persist its
+   in-memory attempt counter, project it and delete those tests.
+3. **The live `full_lifecycle` drain** — rounds 9/10 and #379-#384 built the
+   launch wake, ANCHOR execution, self-deciding automatic gates and the test-data
+   seed. That is the other bots' lane; coordinate before taking it.
+4. Still open from round 6: owner-gated WebSearch for live-verifiable
+   ecosystem candidates.
+
+**Lane note.** #379-#384 (six merges) landed while this round was in flight and
+touched the worker, launch, gates and the guided walk — none touched
+`lib/graph/node-detail.ts`, `lib/sdlc/portfolio.ts` or the lifecycle console.
+The read path and the execution path have stayed cleanly separable for two
+rounds now; keep it that way.
+
+## GRAPH — THE NODE EXPLAINS ITSELF (2026-08-23, round 11)
 
 **Round 7's item 2 is done**, after rounds 8 and 9 each left it standing:
 "clicking a node still reveals nothing." The goal document asks a node for its
