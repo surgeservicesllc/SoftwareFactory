@@ -84,7 +84,15 @@ The same round wired the gate-decision route to wake the worker on
 approvals (a recorded approval used to strand the run until a manual
 dispatch), retired the "no executor is connected" wording the Workflows
 page and launch control still carried, and added the owner's step-by-step
-`docs/FULL_LIFECYCLE_GUIDE.md`.
+`docs/FULL_LIFECYCLE_GUIDE.md`. The end-to-end walk then added: a
+queue diagnosis whenever a drain claims nothing (one line per graph
+naming the excluding claim filter — proven live on run 32674703858,
+which also showed the owner's original launch never created a graph),
+and required-checks mode for the TEST anchor
+(`SOFTWAREFACTORY_REQUIRED_CHECKS`, guarded by the wiring suite), so
+main's long-red Supabase Preview check cannot fail every lifecycle's
+TEST stage. Production serves the current build (verified signed-in via
+the fake journey account).
 
 ## 2026-08-23: one request can traverse all ten phases in one graph
 
