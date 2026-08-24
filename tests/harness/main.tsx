@@ -1,3 +1,5 @@
+import { FactoryStepConsole } from "@/components/graph/factory-step-console";
+import { factoryStep } from "@/lib/sdlc/factory-steps";
 import { LifecycleConsole } from "@/components/graph/lifecycle-console";
 import { RunStageConsole } from "@/components/graph/run-stage-console";
 import { StrictMode } from "react";
@@ -410,6 +412,12 @@ const CASES: Record<string, () => React.ReactElement> = {
    * widest things the page renders.
    */
   "run-stage": () => <InShell><RunStageConsole graphRunId="run-1" stage="ARCHITECTURE" /></InShell>,
+  /*
+   * One factory step over the staged runs. Architect is the densest: the
+   * ten-step strip, the run's gated node with its decision controls, and a
+   * recorded payload.
+   */
+  "factory-step": () => <InShell><FactoryStepConsole step={factoryStep("architect")!} /></InShell>,
   files: () => <InShell><GitHubFileManager /></InShell>,
   operations: () => <InShell><OperationsConsole authenticated /></InShell>,
   resources: () => <InShell><ResourceManagerConsole authenticated /></InShell>,

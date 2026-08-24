@@ -26,7 +26,10 @@ describe("AppShell navigation", () => {
     // linked to nothing.
     expect(links).toEqual([
       "Overview",
-      "AI Factory",
+      // The owner's 2026-08-24 design: the guided setup journey first, then
+      // the running factory's ten steps as their own numbered group.
+      "01. Factory Setup",
+      "02. AI Factory",
       // Top-level by owner fix (2026-08-24): the page everything calls
       // Workflows had been reachable only as a Pipelines subpage aliased
       // "Templates", and was reported as not existing.

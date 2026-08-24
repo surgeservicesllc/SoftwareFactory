@@ -2,7 +2,19 @@
 
 Last updated: 2026-08-24
 
-## Newest (2026-08-24 ~22:00Z): the 21:20 window proved and closed the next gap (ADR-143)
+## Newest (2026-08-24 ~22:50Z): the owner's navigation — ten factory step pages
+
+The owner's next /goal: match the navigation image (01. Factory Setup +
+02. AI Factory with ten numbered steps) and build each step page
+production-ready. Delivered: nav restructured (only rename + new group —
+everything else already matched), the AI Factory page retitled, ten step
+pages at /solutions/factory/[step] over the newest lifecycle run with
+gates decidable in place, factory-steps mapping (total/exclusive, tested),
+shared stage-content readers extracted. Fixtures updated: consoleNavigation,
+app-shell nav test, ai-factory title pins, responsive sweep, harness
+"factory-step" case, component-layout list.
+
+## Earlier (2026-08-24 ~22:00Z): the 21:20 window proved and closed the next gap (ADR-143)
 
 The window's live walk advanced the test lifecycle and found the fourth
 structural defect in the engine. Run 6152cee2 executed architecture for

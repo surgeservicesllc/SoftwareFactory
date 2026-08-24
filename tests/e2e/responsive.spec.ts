@@ -57,6 +57,9 @@ const ROUTES = [
   // One run's stage page. Signed out this measures the honest error state;
   // the populated layout is measured through the harness case "run-stage".
   "/solutions/lifecycle/run/00000000-0000-4000-8000-00000000dead/architecture",
+  // One factory step: the ten pages share one console, and the harness case
+  // "factory-step" measures the populated layout.
+  "/solutions/factory/requirement",
   "/solutions/admin",
   "/auth/onboarding",
   "/offline",

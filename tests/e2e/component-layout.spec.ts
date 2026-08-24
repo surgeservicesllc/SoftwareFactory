@@ -203,6 +203,7 @@ const CASES = [
   "lifecycle",
   "lifecycle-stage",
   "run-stage",
+  "factory-step",
   "job-seeker-overview",
   "job-seeker-documents",
   "job-seeker-contacts",

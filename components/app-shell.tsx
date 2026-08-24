@@ -8,12 +8,16 @@ import {
   CircleGauge,
   ClipboardList,
   Cpu,
+  DraftingCompass,
+  Eye,
   FileText,
+  FlaskConical,
   FolderKanban,
   FolderOpen,
   Gauge,
   Fingerprint,
   GitBranch,
+  Hammer,
   HeartPulse,
   KeyRound,
   type LucideIcon,
@@ -21,9 +25,13 @@ import {
   PanelLeft,
   PlugZap,
   Plus,
+  Rocket,
+  Scale,
   ScrollText,
+  Search,
   Settings,
   ShieldCheck,
+  Split,
   Workflow,
   X,
 } from "lucide-react";
@@ -73,9 +81,32 @@ type NavigationEntry = NavigationItem & { subpages?: readonly NavigationItem[] }
 
 const navigationEntries: readonly NavigationEntry[] = [
   { label: "Overview", href: "/solutions", icon: CircleGauge },
-  // The guided end-to-end journey over the live flows (owner order,
-  // 2026-08-17): sits directly under Overview.
-  { label: "AI Factory", href: "/solutions/ai-factory", icon: Workflow },
+  // The guided end-to-end journey over the live flows: renamed to the
+  // owner's 2026-08-24 design — setup first, then the running factory.
+  { label: "01. Factory Setup", href: "/solutions/ai-factory", icon: Workflow },
+  /*
+   * The running factory: the owner's ten-step process, one page per step,
+   * each over the newest full-lifecycle run. The group's own href lands on
+   * step one; the ten subpages are the ten steps in the owner's vocabulary
+   * (lib/sdlc/factory-steps.ts maps them onto the eleven lifecycle stages).
+   */
+  {
+    label: "02. AI Factory",
+    href: "/solutions/factory/requirement",
+    icon: Cpu,
+    subpages: [
+      { label: "1. Requirement", href: "/solutions/factory/requirement", icon: ClipboardList },
+      { label: "2. Discover", href: "/solutions/factory/discover", icon: Search },
+      { label: "3. Evaluate", href: "/solutions/factory/evaluate", icon: Scale },
+      { label: "4. Decide", href: "/solutions/factory/decide", icon: Split },
+      { label: "5. Architect", href: "/solutions/factory/architect", icon: DraftingCompass },
+      { label: "6. Build", href: "/solutions/factory/build", icon: Hammer },
+      { label: "7. Review", href: "/solutions/factory/review", icon: Eye },
+      { label: "8. Test", href: "/solutions/factory/test", icon: FlaskConical },
+      { label: "9. Deploy", href: "/solutions/factory/deploy", icon: Rocket },
+      { label: "10. Monitor", href: "/solutions/factory/monitor", icon: Activity },
+    ],
+  },
   // Where a lifecycle is launched from. This page spent a week reachable
   // only as a Pipelines subpage named "Templates" — a second name for a page
   // everything else (its own title, the guide, the Pipelines console's link)
