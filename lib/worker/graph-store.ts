@@ -95,6 +95,30 @@ export class SupabaseGraphStore implements GraphRunStore {
     if (error) throw new Error(`Opening a lifecycle gate failed: ${error.message ?? "unknown error"}`);
   }
 
+  /**
+   * Approve an anchored AUTOMATIC gate after its run has closed.
+   *
+   * The database refuses everything the rule refuses — human gates, zero
+   * anchors, gates a person already decided — so this call is safe to make
+   * for every gate the run halted at; the refusal text is the answer when it
+   * refuses. Called after `completeRun` deliberately: the claim's reopen rule
+   * requires the decision to be newer than the run's close.
+   */
+  async decideAutomaticGate(nodeId: string): Promise<{ approved: boolean; detail: string }> {
+    const { data, error } = await this.client.rpc("decide_automatic_gate_as_worker", {
+      p_worker_id: this.workerId,
+      p_node_id: nodeId,
+    });
+    if (error) return { approved: false, detail: error.message ?? "the decision was refused" };
+    const state = (data as { state?: string } | null)?.state;
+    return {
+      approved: state === "APPROVED",
+      detail: state === "APPROVED"
+        ? "approved on anchored evidence"
+        : `gate is ${state ?? "in an unknown state"}`,
+    };
+  }
+
   async recordArtifact(
     graphRunId: string,
     kind: "RAW" | "REDUCED" | "SYNTHESIS" | "ANCHOR",

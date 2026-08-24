@@ -137,13 +137,16 @@ describe("the full lifecycle graph", () => {
     }
   });
 
-  it("keeps the two human gates where the policies put them, and nowhere else", async () => {
+  it("keeps the two human gates where the policies put them, and automatic gates only where anchors exist", async () => {
     // Autonomous by default, owner-gated where a wrong step is expensive or
-    // externally visible: ARCHITECTURE and DEPLOYMENT. Everything else
-    // advances on automatic gates or its dependencies alone.
+    // externally visible: ARCHITECTURE and DEPLOYMENT. The only automatic
+    // gate sits on the TEST anchor, because an automatic gate advances on
+    // anchored evidence and only an anchor node produces any — the first
+    // live run (graph 91959362) proved that an automatic gate on a MODEL
+    // node is a wall, not a gate: nothing can ever decide it.
     await db.exec("reset role");
-    const gates = await db.query<{ node_key: string; gate_kind: string | null; stage: string }>(
-      `select node_key, gate_kind::text, lifecycle_stage::text as stage
+    const gates = await db.query<{ node_key: string; gate_kind: string | null; stage: string; executor: string }>(
+      `select node_key, gate_kind::text, lifecycle_stage::text as stage, executor::text as executor
          from public.graph_nodes where graph_id = $1 and gate_kind is not null
         order by node_key`,
       [graphId],
@@ -151,9 +154,11 @@ describe("the full lifecycle graph", () => {
     const human = gates.rows.filter((row) => row.gate_kind === "HUMAN");
     expect(human.map((row) => row.stage).sort()).toEqual(["ARCHITECTURE", "DEPLOYMENT"]);
     const automatic = gates.rows.filter((row) => row.gate_kind === "AUTOMATIC");
-    expect(new Set(automatic.map((row) => row.stage))).toEqual(
-      new Set(["PRD", "DECISION", "REVIEW", "TEST"]),
-    );
+    expect(new Set(automatic.map((row) => row.stage))).toEqual(new Set(["TEST"]));
+    // The structural rule itself: every automatic gate sits on an anchor.
+    for (const gate of automatic) {
+      expect(gate.executor, `${gate.node_key} carries an automatic gate`).toBe("ANCHOR");
+    }
   });
 
   it("records the feedback loop the board draws from MONITOR back to the goal", async () => {

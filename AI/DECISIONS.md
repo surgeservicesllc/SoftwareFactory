@@ -1953,3 +1953,43 @@ Use this append-only log for decisions that constrain future implementation. Cha
   the time the node occupied; the table keeps showing the former under
   "Latency" and the detail shows the latter under "Ran for". Presenting either
   as the other would misattribute the gap between them.
+
+## ADR-140 - A gate nothing can decide is a wall: automatic gates live on anchors and decide themselves
+
+- Date: 2026-08-24
+- Status: Accepted
+- Context: the owner-directed end-to-end test with test data produced the
+  first live full_lifecycle run (graph 91959362, run 6ac300ae) and it
+  deadlocked at the PRD gate. Three facts composed into the deadlock:
+  `decide_node_gate` correctly refuses to approve an AUTOMATIC gate with
+  zero anchors; `anchorsFor` correctly counts only ANCHOR-executor output
+  as evidence (a model's confidence about its own work is not an
+  observation); and no code path anywhere decided an automatic gate at
+  all. The templates had placed automatic gates on MODEL nodes - PRD,
+  DECISION and REVIEW - whose gates therefore could never be approved by
+  anyone, human or machine. The five PARTIAL agentic_sdlc graphs in the
+  hosted queue all halted exactly there.
+- Decision, template half: an automatic gate may only sit on an ANCHOR
+  node. full_lifecycle and agentic_sdlc keep their two HUMAN gates
+  (ARCHITECTURE, DEPLOYMENT) and exactly one AUTOMATIC gate each - on the
+  TEST anchor. PRD, DECISION and REVIEW lose their gates: their quality
+  control is real but different in kind - contract-enforced typed
+  packages and fresh-eyes verifications - and pretending a wall is a gate
+  helped nobody. The full-lifecycle behavior suite now pins the
+  structural rule itself: every automatic gate sits on an anchor.
+- Decision, decider half: `decide_automatic_gate_as_worker`
+  (20260824000100) is the missing decider. It refuses a human gate
+  unconditionally - a worker approving one would be an automated system
+  approving its own guardrail - refuses zero anchors exactly as
+  `decide_node_gate` does for a person, and returns an already-decided
+  gate as the person left it. The worker offers it every automatic gate
+  the run halted at, after `completeRun`, because the claim's reopen rule
+  requires the decision to be newer than the run's close; the same drain
+  loop then re-claims the graph and continues.
+- Reporting: a gate-held node is FAILED to the engine (the only way to
+  stop its dependents) but not to a reader. The run's stored
+  incompleteness now appends which counted nodes actually halted at open
+  gates, and the drain line lists them separately from failures.
+- The worker's claim schema also caught up: its lifecycle_stage enum was
+  the old eight stages and silently nulled the three newest; it now
+  derives from SDLC_STAGES.

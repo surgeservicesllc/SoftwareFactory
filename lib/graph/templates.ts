@@ -359,7 +359,6 @@ export const GRAPH_TEMPLATES: readonly GraphTemplate[] = Object.freeze([
         executor: "MODEL",
         dependsOn: ["goal"],
         lifecycleStage: "PRD",
-        gate: "AUTOMATIC",
       },
       {
         nodeId: "scan_internal",
@@ -403,7 +402,6 @@ export const GRAPH_TEMPLATES: readonly GraphTemplate[] = Object.freeze([
         capability: "decision",
         executor: "MODEL",
         dependsOn: ["evaluate"],
-        gate: "AUTOMATIC",
       },
       {
         nodeId: "architecture",
@@ -430,7 +428,6 @@ export const GRAPH_TEMPLATES: readonly GraphTemplate[] = Object.freeze([
         executor: "MODEL",
         dependsOn: ["implement"],
         lifecycleStage: "REVIEW",
-        gate: "AUTOMATIC",
       },
       {
         nodeId: "test",
@@ -518,7 +515,6 @@ export const GRAPH_TEMPLATES: readonly GraphTemplate[] = Object.freeze([
         executor: "MODEL",
         dependsOn: ["goal"],
         lifecycleStage: "PRD",
-        gate: "AUTOMATIC",
       },
       {
         nodeId: "architecture",
@@ -571,7 +567,6 @@ export const GRAPH_TEMPLATES: readonly GraphTemplate[] = Object.freeze([
         executor: "MODEL",
         dependsOn: ["integrate"],
         lifecycleStage: "REVIEW",
-        gate: "AUTOMATIC",
       },
       {
         nodeId: "security_review",

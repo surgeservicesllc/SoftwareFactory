@@ -271,10 +271,13 @@ describe("the Agentic SDLC on the graph worker", () => {
     const claimed = await claim(db);
     expect(claimed, "a closed PARTIAL run with no decided gate is not claimable again").toBeNull();
 
-    // Only a decision reopens it, so one is made here to observe the projection.
+    // Only a decision reopens it, so one is made here to observe the
+    // projection. The deploy node carries a HUMAN gate the owner may decide,
+    // and no later case in this serial suite needs it pristine — unlike
+    // architecture (asserted unopened below) and test (opened fresh later).
     await db.exec("reset role");
     const goalNode = await db.query<{ id: string }>(
-      `select id from public.graph_nodes where graph_id = $1 and node_key = 'prd'`,
+      `select id from public.graph_nodes where graph_id = $1 and node_key = 'deploy'`,
       [graphId],
     );
     const priorRunId = await latestRunId(db, graphId);

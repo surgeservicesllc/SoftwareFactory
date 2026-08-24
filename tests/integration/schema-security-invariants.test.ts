@@ -277,6 +277,10 @@ describe("SECURITY DEFINER functions", () => {
       "complete_github_change_request",
       "complete_graph_run_as_worker",
       "complete_phase1c_run",
+      // The anchored-automatic-gate decider (20260824000100): approves only
+      // AUTOMATIC gates holding anchors, after the run closes; refuses human
+      // gates unconditionally. ADR-140.
+      "decide_automatic_gate_as_worker",
       "disconnect_github_connection",
       "expire_ai_auth_sessions",
       "fail_ai_auth_session",
