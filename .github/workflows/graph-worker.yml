@@ -50,6 +50,12 @@ jobs:
     env:
       CI: true
       NEXT_TELEMETRY_DISABLED: 1
+      # The TEST anchor's definition of "CI passed": the same required-check
+      # names the Phase 1C worker waits for, pinned to ci.yml's job names by
+      # tests/integration/required-checks-wiring.test.ts. Without this the
+      # anchor would read every check, and an unrelated red integration check
+      # would veto commits the repository itself considers verified.
+      SOFTWAREFACTORY_REQUIRED_CHECKS: Lint, typecheck, test, and build|Browser and accessibility tests 1/3|Browser and accessibility tests 2/3|Browser and accessibility tests 3/3
 
     steps:
       - name: Check out the reviewed worker release

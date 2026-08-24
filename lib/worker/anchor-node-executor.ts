@@ -37,11 +37,29 @@ export type AnchorExecutorOptions = Readonly<{
   gitHubToken: string | null;
   /** The deployed product to probe; absent means Not Connected. */
   productionUrl: string | null;
+  /**
+   * The checks that ARE the verdict, when this repository has named them.
+   *
+   * `SOFTWAREFACTORY_REQUIRED_CHECKS` is the repository's own definition of
+   * "CI passed" — the same names branch protection requires and the Phase 1C
+   * worker waits for. Reading every check instead would let an unrelated
+   * integration check (a preview environment that has been red for weeks on
+   * every commit) veto a commit the repository itself considers verified.
+   * Empty or absent means no such definition exists here, and every completed
+   * non-skipped check counts.
+   */
+  requiredCheckNames?: readonly string[] | null;
   /** Injected for tests. */
   fetchImpl?: typeof fetch;
 }>;
 
-type CheckRun = { name: string; status: string; conclusion: string | null; html_url: string };
+type CheckRun = {
+  id?: number;
+  name: string;
+  status: string;
+  conclusion: string | null;
+  html_url: string;
+};
 
 const OBSERVATION_TIMEOUT_MS = 30_000;
 
@@ -78,16 +96,44 @@ export function buildAnchorNodeExecutor(options: AnchorExecutorOptions) {
       );
     }
     const body = (await response.json()) as { check_runs?: CheckRun[] };
-    const checkRuns = (body.check_runs ?? []).filter(
-      // Skipped checks (a migration workflow that did not apply) are not
-      // verdicts about this commit's correctness either way.
-      (run) => run.status === "completed" && run.conclusion !== "skipped",
-    );
-    if (checkRuns.length === 0) {
-      return failed(
-        `Anchor node ${node.nodeKey}: no completed CI check runs exist for `
-        + `${options.headSha.slice(0, 8)}; there is no verdict to record yet.`,
+    const allRuns = body.check_runs ?? [];
+    const required = (options.requiredCheckNames ?? []).filter((name) => name.length > 0);
+
+    let checkRuns: CheckRun[];
+    if (required.length > 0) {
+      // The verdict is the required checks, each read at its latest attempt —
+      // a re-run leaves the earlier check run in the listing, and the earlier
+      // answer is not the answer any more.
+      const latestByName = new Map<string, CheckRun>();
+      for (const run of allRuns) {
+        if (!required.includes(run.name)) continue;
+        const known = latestByName.get(run.name);
+        if (!known || (run.id ?? 0) >= (known.id ?? 0)) latestByName.set(run.name, run);
+      }
+      const unreported = required.filter((name) => {
+        const run = latestByName.get(name);
+        return !run || run.status !== "completed";
+      });
+      if (unreported.length > 0) {
+        return failed(
+          `Anchor node ${node.nodeKey}: required check(s) not yet reported for `
+          + `${options.headSha.slice(0, 8)}: ${unreported.join(", ")}. `
+          + "There is no verdict to record yet.",
+        );
+      }
+      checkRuns = required.map((name) => latestByName.get(name)!);
+    } else {
+      checkRuns = allRuns.filter(
+        // Skipped checks (a migration workflow that did not apply) are not
+        // verdicts about this commit's correctness either way.
+        (run) => run.status === "completed" && run.conclusion !== "skipped",
       );
+      if (checkRuns.length === 0) {
+        return failed(
+          `Anchor node ${node.nodeKey}: no completed CI check runs exist for `
+          + `${options.headSha.slice(0, 8)}; there is no verdict to record yet.`,
+        );
+      }
     }
     const failing = checkRuns.filter((run) => run.conclusion !== "success");
     const evidence = {

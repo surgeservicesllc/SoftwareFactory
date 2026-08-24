@@ -128,6 +128,66 @@ describe("the TEST anchor (qa): the CI verdict for this commit", () => {
     expect(result.error).toContain("no verdict was invented");
   });
 
+  it("reads only the required checks when the repository has named its verdict", async () => {
+    // Supabase Preview has been red for weeks on every commit. The repository
+    // itself does not require it, so it must not veto a commit the four
+    // required checks verified.
+    const fetchImpl = vi.fn().mockResolvedValue(checkRunsResponse([
+      { id: 1, name: "Lint, typecheck, test, and build", status: "completed", conclusion: "success", html_url: "https://ci/1" },
+      { id: 2, name: "Browser and accessibility tests 1/1", status: "completed", conclusion: "success", html_url: "https://ci/2" },
+      { id: 3, name: "Supabase Preview", status: "completed", conclusion: "failure", html_url: "https://ci/3" },
+    ]));
+    const execute = buildAnchorNodeExecutor({
+      ...connected,
+      requiredCheckNames: ["Lint, typecheck, test, and build", "Browser and accessibility tests 1/1"],
+      fetchImpl,
+    });
+
+    const result = await execute(anchorNode("qa"));
+
+    expect(result.status).toBe("SUCCEEDED");
+    if (result.status !== "SUCCEEDED") return;
+    expect(result.output).toMatchObject({ total: 2, failing: [] });
+  });
+
+  it("fails on a red required check, and reads a re-run at its latest attempt", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(checkRunsResponse([
+      { id: 4, name: "Lint, typecheck, test, and build", status: "completed", conclusion: "failure", html_url: "https://ci/4" },
+      // The re-run: same name, higher id, and it is the one that counts.
+      { id: 9, name: "Lint, typecheck, test, and build", status: "completed", conclusion: "failure", html_url: "https://ci/9" },
+    ]));
+    const execute = buildAnchorNodeExecutor({
+      ...connected,
+      requiredCheckNames: ["Lint, typecheck, test, and build"],
+      fetchImpl,
+    });
+
+    const result = await execute(anchorNode("qa"));
+
+    expect(result.status).toBe("FAILED");
+    if (result.status !== "FAILED") return;
+    expect(result.error).toContain("Lint, typecheck, test, and build");
+    expect(result.error).toContain("https://ci/9");
+  });
+
+  it("records no verdict while a required check is missing or still running", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(checkRunsResponse([
+      { id: 5, name: "Lint, typecheck, test, and build", status: "in_progress", conclusion: null, html_url: "https://ci/5" },
+    ]));
+    const execute = buildAnchorNodeExecutor({
+      ...connected,
+      requiredCheckNames: ["Lint, typecheck, test, and build", "Browser and accessibility tests 1/1"],
+      fetchImpl,
+    });
+
+    const result = await execute(anchorNode("qa"));
+
+    expect(result.status).toBe("FAILED");
+    if (result.status !== "FAILED") return;
+    expect(result.error).toContain("not yet reported");
+    expect(result.error).toContain("no verdict to record yet");
+  });
+
   it("is Not Connected without a GitHub token, and never calls out", async () => {
     const fetchImpl = vi.fn();
     const execute = buildAnchorNodeExecutor({ ...connected, gitHubToken: null, fetchImpl });

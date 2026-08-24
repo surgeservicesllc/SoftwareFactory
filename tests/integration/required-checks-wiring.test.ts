@@ -29,10 +29,12 @@ const repositoryRoot = resolve(import.meta.dirname, "../..");
 
 let ci = "";
 let worker = "";
+let graphWorker = "";
 
 beforeAll(async () => {
   ci = await readFile(resolve(repositoryRoot, ".github/workflows/ci.yml"), "utf8");
   worker = await readFile(resolve(repositoryRoot, ".github/workflows/codex-worker.yml"), "utf8");
+  graphWorker = await readFile(resolve(repositoryRoot, ".github/workflows/graph-worker.yml"), "utf8");
 });
 
 /**
@@ -103,6 +105,19 @@ describe("required check wiring", () => {
     const awaited = requiredChecks(worker);
 
     expect([...awaited].sort()).toEqual([...produced].sort());
+  });
+
+  it("keeps the graph worker's TEST-anchor verdict on the same names", () => {
+    // The TEST anchor reads these names as "the verdict" for its commit. A
+    // renamed CI job would make the anchor wait forever on a check that never
+    // reports; a missing entry would let a required check fail unnoticed. The
+    // graph worker's job env is intentionally the third copy of this contract,
+    // guarded here exactly like the first two.
+    const produced = ciJobNames(ci);
+    const anchored = requiredChecks(graphWorker);
+
+    expect(anchored.length).toBeGreaterThan(0);
+    expect([...anchored].sort()).toEqual([...produced].sort());
   });
 
   it("preloads exactly the validation image the validator demands", async () => {
