@@ -92,6 +92,14 @@ function pgliteStore(db: PGlite, workerId: string): GraphRunStore {
       await reset(db);
       return new Map(result.rows.map((row) => [row.node_key, row.payload]));
     },
+    async openGate(nodeId, graphRunId, anchorCount) {
+      await asServiceRole(db);
+      await db.query(
+        "select public.open_node_gate_as_worker($1, $2::uuid, $3::uuid, $4)",
+        [workerId, nodeId, graphRunId, anchorCount],
+      );
+      await reset(db);
+    },
     async recordVerification(subjectNodeRunId, lens, verdict, evidence, verifierProvider) {
       await asServiceRole(db);
       await db.query(
@@ -667,6 +675,78 @@ describe("the graph executor boundary", { timeout: 180_000 }, () => {
     expect(carried.rows[0].payload).toMatchObject({ stage: "one", verdict: "recorded" });
 
     // A COMPLETED run ends the story: the graph leaves the queue for good.
+    expect(await claim()).toBeNull();
+  });
+
+  it("reuses gate-halted work after the gate is approved, instead of paying for it twice", async () => {
+    /*
+     * Found live within hours of the resume shipping. Run 6152cee2 executed
+     * its architecture node for real and halted at the ARCHITECTURE human
+     * gate; the gate was approved; and the next claim re-executed the node
+     * from scratch, spending the rest of the provider window on work the
+     * database already held (run e3c4b582). A gate-halted node is recorded
+     * VERIFYING — work done, decision pending — and the resume read offered
+     * only COMPLETED runs. This pins the repaired contract: the recorded
+     * result is reused, the executor is never called for it again, and the
+     * approved gate passes the reused result through to COMPLETED.
+     */
+    const gatedNodes = JSON.stringify([
+      { node_key: "inspect_a", job: "Design the change", executor: "MODEL", capability: "architecture", max_attempts: 1, lifecycle_stage: "ARCHITECTURE", gate_kind: "HUMAN" },
+      { node_key: "inspect_b", job: "Inspect area B", executor: "MODEL", capability: "extraction", max_attempts: 1, lifecycle_stage: "DISCOVERY" },
+      { node_key: "inspect_c", job: "Inspect area C", executor: "MODEL", capability: "extraction", max_attempts: 1, lifecycle_stage: "DISCOVERY" },
+      { node_key: "synthesize", job: "Build on the approved design", executor: "MODEL", capability: "implementation", max_attempts: 1, lifecycle_stage: "IMPLEMENTATION" },
+    ]);
+    const graphId = await createDiamondGraph("Approved work is never re-paid", false, gatedNodes);
+    await reset(db);
+    await db.query(`update public.graphs set is_lifecycle = true where id = $1`, [graphId]);
+    const store = pgliteStore(db, "graph-worker-test");
+
+    // Window one: every node the engine offers succeeds, and the gated node
+    // halts at its gate with its work recorded.
+    const first = parseClaimedGraph(await claim());
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    const compiledFirst = compileClaimedGraph(first.graph);
+    expect(compiledFirst.ok).toBe(true);
+    if (!compiledFirst.ok) return;
+    const firstSummary = await runClaimedGraph(first.graph, compiledFirst.graph, store, async (node): Promise<NodeExecutionResult> => (
+      { status: "SUCCEEDED", output: { designed: node.nodeKey }, tokensUsed: 25 }
+    ));
+    expect(firstSummary.awaitingGate).toContain("inspect_a");
+    expect(firstSummary.finalState).toBe("PARTIAL");
+
+    // The gate stands OPEN on the node; a person approves it.
+    await reset(db);
+    const gateRow = await db.query<{ id: string; state: string }>(
+      `select gate.id, gate.state::text from public.graph_gates gate
+         join public.graph_nodes node on node.id = gate.node_id
+        where node.graph_id = $1 and node.node_key = 'inspect_a'`,
+      [graphId],
+    );
+    expect(gateRow.rows[0]?.state).toBe("OPEN");
+    await asOwner(db);
+    await db.query("select public.decide_node_gate($1::uuid, true, 'Design approved.')", [gateRow.rows[0].id]);
+    await reset(db);
+
+    // Window two: the gate-halted node's recorded result is reused — its
+    // executor is never called — and the approved gate passes it through, so
+    // only the one genuinely new node costs anything.
+    const second = parseClaimedGraph(await claim());
+    expect(second.ok, "an approved gate must reopen the halted lifecycle").toBe(true);
+    if (!second.ok) return;
+    const compiledSecond = compileClaimedGraph(second.graph);
+    expect(compiledSecond.ok).toBe(true);
+    if (!compiledSecond.ok) return;
+    const executedInSecondWindow: string[] = [];
+    const secondSummary = await runClaimedGraph(second.graph, compiledSecond.graph, store, async (node): Promise<NodeExecutionResult> => {
+      executedInSecondWindow.push(node.nodeKey);
+      return { status: "SUCCEEDED", output: { built: node.nodeKey }, tokensUsed: 25 };
+    });
+
+    expect(secondSummary.finalState).toBe("COMPLETED");
+    expect(secondSummary.reusedNodes).toContain("inspect_a");
+    expect(executedInSecondWindow).not.toContain("inspect_a");
+    expect(executedInSecondWindow).toEqual(["synthesize"]);
     expect(await claim()).toBeNull();
   });
 

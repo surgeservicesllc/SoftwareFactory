@@ -2,7 +2,24 @@
 
 Last updated: 2026-08-24
 
-## Newest (2026-08-24 ~20:20Z): the owner's step page, per run and per stage (ADR-142)
+## Newest (2026-08-24 ~22:00Z): the 21:20 window proved and closed the next gap (ADR-143)
+
+The window's live walk advanced the test lifecycle and found the fourth
+structural defect in the engine. Run 6152cee2 executed architecture for
+real and halted at the ARCHITECTURE human gate; the gate was approved as
+the fake user (gate cc334aaa, APPROVED, truthful "nothing runs until
+dispatch" note); and the re-dispatched claim re-executed architecture
+from scratch — a gate-halted node is VERIFYING, and the resume read only
+offered COMPLETED — burning the remaining window (run e3c4b582,
+session limit "resets 2:20am (UTC)"). Fix: 20260824001100 widens the
+resume read to (COMPLETED, VERIFYING); gates still govern advancement
+(OPEN halts at zero cost, REJECTED fails, APPROVED passes through).
+Behavior-tested end to end in pglite. Hosted scope resume-gate-halted
+must be RUN, then the finish fires at the 02:20Z window: dispatch →
+architecture + the eight stages all reuse → implement/review execute →
+TEST anchor self-gate → DEPLOY policy refusal terminal.
+
+## Earlier (2026-08-24 ~20:20Z): the owner's step page, per run and per stage (ADR-142)
 
 The owner sent design boards for a per-run "1. REQUIREMENT"-style page and
 directed building it. Delivered as
