@@ -1,6 +1,25 @@
 # Current state
 
-Last reviewed: 2026-08-23
+Last reviewed: 2026-08-24
+
+## 2026-08-24: the lifecycle pages act, not just report
+
+The stage index at `/solutions/lifecycle` was eleven accurate, static cards.
+It now carries the work's two actions where the reader already is: a **Launch
+Full Lifecycle** card (the same `GraphLaunchControl` the Workflows console
+uses, `templateKey="full_lifecycle"`), and an **Approve / Reject** control on
+any stage card whose stage holds an open gate — scanning runs newest-first,
+so an older PARTIAL run halted at its gate (the resume case) still surfaces
+its decision. The stage pages offer the same control on the node row itself.
+
+One implementation, deliberately: `GateDecision` moved from a private
+component in `graph-runs-panel.tsx` to `components/graph/gate-decision.tsx`
+and both surfaces import it, so the wording, the route
+(`POST /api/graph-gates/{gateId}/decide`) and the refusal-passthrough cannot
+drift apart. `DetailedNode` (`lib/graph/node-detail.ts`) gained the optional
+`gate_*` projection fields the runs endpoint already returned. A decision on
+the lifecycle page re-reads the runs, so the card never keeps describing a
+gate that no longer holds. Tests: `tests/unit/lifecycle-console-actions.test.tsx`.
 
 ## 2026-08-23: a node explains itself, from columns already stored
 

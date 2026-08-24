@@ -31,6 +31,15 @@ export type DetailedNode = {
   readonly depends_on?: readonly string[] | null;
   readonly artifact_counts?: Readonly<Record<string, number>> | null;
   readonly latency_ms?: number | null;
+  /*
+   * The gate the node waits at, when it has one. Projected by the same runs
+   * endpoint as everything above; carried here so the lifecycle pages can
+   * offer the decision without re-declaring the row's shape.
+   */
+  readonly gate_id?: string | null;
+  readonly gate_kind?: string | null;
+  readonly gate_state?: string | null;
+  readonly gate_anchor_count?: number | null;
 };
 
 function parsed(value: string | null | undefined): number | null {

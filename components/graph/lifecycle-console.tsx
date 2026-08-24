@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { AlertTriangle, Loader2, ShieldCheck, UserCheck } from "lucide-react";
 
+import { GateDecision } from "@/components/graph/gate-decision";
+import { GraphLaunchControl } from "@/components/graph-launch-control";
 import { Card, PageHeader, StatusBadge } from "@/components/ui";
 import { SDLC_LIFECYCLE, stageDefinition, type SdlcStage } from "@/lib/sdlc/lifecycle";
 import { describeNode, type DetailedNode } from "@/lib/graph/node-detail";
@@ -78,24 +80,55 @@ export function LifecycleConsole({ stage }: { stage?: SdlcStage } = {}) {
 
   const portfolio = buildStagePortfolio(state.runs);
   return stage
-    ? <StageDetail stage={stage} runs={state.runs} portfolio={portfolio} />
-    : <StageIndex portfolio={portfolio} />;
+    ? <StageDetail stage={stage} runs={state.runs} portfolio={portfolio} onReload={load} />
+    : <StageIndex portfolio={portfolio} runs={state.runs} onReload={load} />;
 }
 
-function StageIndex({ portfolio }: { portfolio: ReturnType<typeof buildStagePortfolio> }) {
+/**
+ * The open gate this stage is waiting on, from the newest run that has one.
+ *
+ * Runs arrive newest-first from the endpoint — the same ordering the
+ * portfolio's latest-error pick relies on — so the first match is the gate a
+ * person can act on now. Older open gates on retired runs are reachable
+ * through the stage page's run list; offering every one of them on the index
+ * card would present decisions whose runs already moved on.
+ */
+function openGateIn(stage: SdlcStage, runs: readonly SummarisableRun[]) {
+  for (const run of runs) {
+    const node = (run.nodes ?? []).find(
+      (candidate) => candidate.lifecycle_stage === stage
+        && candidate.gate_state === "OPEN"
+        && typeof candidate.gate_id === "string",
+    );
+    if (node) return { run, node };
+  }
+  return null;
+}
+
+function StageIndex({
+  portfolio,
+  runs,
+  onReload,
+}: {
+  portfolio: ReturnType<typeof buildStagePortfolio>;
+  runs: readonly SummarisableRun[];
+  onReload: () => void;
+}) {
   return (
     <div className="space-y-6">
       <PageHeader
         title="Lifecycle"
-        description="Every stage a graph moves through, across every run in this workspace."
+        description="Every stage a graph moves through, across every run in this workspace. Launch the full lifecycle here, and decide its gates on the stage they hold."
       />
+
+      <GraphLaunchControl templateKey="full_lifecycle" templateName="Full Lifecycle" />
 
       {portfolio.runsConsidered === 0 ? (
         <Card className="p-6">
           <h2 className="text-base font-semibold text-foreground">No run has been recorded yet</h2>
           <p className="mt-2 max-w-2xl text-sm text-muted">
-            These figures come from recorded graph runs. Plan one from a pipeline template and its
-            stages will appear here as the work moves.
+            These figures come from recorded graph runs. Launch the full lifecycle above — or plan a
+            graph from any pipeline template — and its stages will appear here as the work moves.
           </p>
           <Link href="/solutions/pipelines?view=templates" className="btn btn-secondary btn-sm mt-3">
             Open Pipelines
@@ -119,6 +152,7 @@ function StageIndex({ portfolio }: { portfolio: ReturnType<typeof buildStagePort
           <ul className="grid grid-cols-1 gap-3 lg:grid-cols-2">
             {portfolio.entries.map((entry, index) => {
               const definition = stageDefinition(entry.stage);
+              const held = openGateIn(entry.stage, runs);
               return (
                 <li key={entry.stage}>
                   <Card className="p-4">
@@ -170,6 +204,22 @@ function StageIndex({ portfolio }: { portfolio: ReturnType<typeof buildStagePort
                         <span className="min-w-0 break-words">{entry.latestError}</span>
                       </p>
                     ) : null}
+                    {held ? (
+                      /*
+                       * The decision, on the card that holds it. Before this,
+                       * an open gate was a fact the index reported and the
+                       * runs panel acted on — two pages for one question.
+                       */
+                      <div className="mt-3 rounded-lg border border-[var(--border)] p-2.5 text-xs">
+                        <p className="text-muted">
+                          Awaiting a decision
+                          {held.run.goal
+                            ? <> on <span className="min-w-0 break-words text-foreground">{held.run.goal}</span></>
+                            : null}
+                        </p>
+                        <GateDecision node={held.node} onDecided={onReload} />
+                      </div>
+                    ) : null}
                   </Card>
                 </li>
               );
@@ -194,7 +244,13 @@ function StageIndex({ portfolio }: { portfolio: ReturnType<typeof buildStagePort
  * No second request, and nothing to fall out of step with the figures it sits
  * under.
  */
-function StageNodes({ nodes }: { nodes: readonly DetailedNode[] }) {
+function StageNodes({
+  nodes,
+  onDecided,
+}: {
+  nodes: readonly DetailedNode[];
+  onDecided: () => void;
+}) {
   if (nodes.length === 0) return null;
   return (
     <ul className="mt-2 space-y-2">
@@ -205,6 +261,10 @@ function StageNodes({ nodes }: { nodes: readonly DetailedNode[] }) {
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs font-medium text-foreground">{detail.nodeKey}</span>
               <StatusBadge tone={nodeTone(detail.state)} dot={false}>{detail.state}</StatusBadge>
+              {node.gate_state === "OPEN" ? (
+                // VERIFYING is a state; this is what it means for a person.
+                <span className="text-xs text-muted">awaiting a decision</span>
+              ) : null}
               {detail.elapsed ? (
                 <span className="tabular text-xs text-faint">{detail.elapsed}</span>
               ) : null}
@@ -221,6 +281,9 @@ function StageNodes({ nodes }: { nodes: readonly DetailedNode[] }) {
             {detail.stoppedReason ? (
               <p className="mt-1 text-xs text-[var(--danger)]">{detail.stoppedReason}</p>
             ) : null}
+            <div className="text-xs">
+              <GateDecision node={node} onDecided={onDecided} />
+            </div>
           </li>
         );
       })}
@@ -240,10 +303,12 @@ function StageDetail({
   stage,
   runs,
   portfolio,
+  onReload,
 }: {
   stage: SdlcStage;
   runs: readonly SummarisableRun[];
   portfolio: ReturnType<typeof buildStagePortfolio>;
+  onReload: () => void;
 }) {
   const definition = stageDefinition(stage);
   const entry = portfolio.entries.find((candidate) => candidate.stage === stage)!;
@@ -340,7 +405,7 @@ function StageDetail({
                       : slice.completed === slice.total ? "complete" : "mixed"}
                 </StatusBadge>
                 </div>
-                <StageNodes nodes={stageNodes} />
+                <StageNodes nodes={stageNodes} onDecided={onReload} />
               </li>
             ))}
           </ul>
