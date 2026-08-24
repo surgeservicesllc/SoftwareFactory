@@ -203,6 +203,65 @@ describe("the per-run stage page", () => {
     expect(screen.getByText("decide completed")).toBeInTheDocument();
   });
 
+  it("reads a recorded model-node report as a report, not as raw JSON", async () => {
+    stubFetch({
+      runs: runPayload([node()]),
+      artifacts: [artifact({
+        payload: {
+          blocked: false,
+          summary: "I weighed the shortlist against the constraints.",
+          findings: [{ title: "CANDIDATE alpha — matchScore 92", detail: "Evidence: package.json line 12." }],
+          confidence: "high",
+          blocked_reason: null,
+          recommendations: ["Carry the labels forward unchanged."],
+        },
+      })],
+    });
+    render(<RunStageConsole graphRunId={RUN_ID} stage="DECISION" />);
+
+    expect(await screen.findByText("I weighed the shortlist against the constraints.")).toBeInTheDocument();
+    expect(screen.getByText("CANDIDATE alpha — matchScore 92")).toBeInTheDocument();
+    expect(screen.getByText("confidence: high")).toBeInTheDocument();
+    expect(screen.getByText("Carry the labels forward unchanged.")).toBeInTheDocument();
+    // The finding's evidence is behind its own disclosure, not dumped inline.
+    expect(screen.getByText("Evidence: package.json line 12.")).toBeInTheDocument();
+  });
+
+  it("sums the scouts honestly on the Discover step, and only there", async () => {
+    const scout = (key: string, count: number, confidence: string) => artifact({
+      artifactId: `a0000000-0000-4000-8000-00000000000${count}`,
+      nodeKey: key,
+      payload: {
+        blocked: false,
+        summary: `${key} report.`,
+        findings: Array.from({ length: count }, (_, index) => ({ title: `${key} finding ${index + 1}`, detail: "" })),
+        confidence,
+        recommendations: [],
+      },
+    });
+    const scanNodes = ["scan_internal", "scan_dependencies", "recall_ecosystem", "consolidate"].map(
+      (key) => node({ node_key: key, lifecycle_stage: "DISCOVERY", capability: "discovery" }),
+    );
+    stubFetch({
+      runs: runPayload(scanNodes),
+      artifacts: [
+        scout("scan_internal", 3, "high"),
+        scout("scan_dependencies", 2, "high"),
+        scout("recall_ecosystem", 4, "medium"),
+        scout("consolidate", 5, "medium"),
+      ],
+    });
+    render(<RunStageConsole graphRunId={RUN_ID} stage="DISCOVERY" />);
+
+    expect(await screen.findByText("What the scouts searched")).toBeInTheDocument();
+    expect(screen.getByText("This repository")).toBeInTheDocument();
+    expect(screen.getByText("Ecosystem recall (model knowledge)")).toBeInTheDocument();
+    // The dedup sentence is arithmetic over recorded findings, nothing more.
+    expect(
+      screen.getByText(/The 3 scans recorded 9 findings; the consolidated shortlist carries 5\./),
+    ).toBeInTheDocument();
+  });
+
   it("says plainly when the run is not among the readable runs", async () => {
     stubFetch({ runs: { runs: [] } });
     render(<RunStageConsole graphRunId={RUN_ID} stage="DECISION" />);

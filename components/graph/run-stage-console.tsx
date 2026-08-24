@@ -7,6 +7,7 @@ import { ArrowLeft, ArrowRight, Loader2, ShieldCheck, UserCheck } from "lucide-r
 import { StageNodes } from "@/components/graph/lifecycle-console";
 import { Card, PageHeader, StatusBadge } from "@/components/ui";
 import { type DetailedNode } from "@/lib/graph/node-detail";
+import { parseNodeReport, type NodeReport } from "@/lib/graph/node-report";
 import {
   decisionPackageSchema,
   discoveryPackageSchema,
@@ -333,6 +334,8 @@ function StageView({
         </dl>
       </Card>
 
+      {stage === "DISCOVERY" ? <DiscoverySources artifacts={stageArtifacts} /> : null}
+
       {/* What the stage recorded — the boards' artifacts and breakdown,
           rendered from the stored payloads themselves. */}
       <section aria-label={`What ${stage} recorded`}>
@@ -507,7 +510,128 @@ function ArtifactBody({ payload }: { payload: unknown }) {
     );
   }
 
+  const report = parseNodeReport(payload);
+  if (report) return <NodeReportBody report={report} payload={payload} />;
+
   return <RawPayload payload={payload} label="Recorded payload" open />;
+}
+
+/**
+ * The general model-node report, read as a report.
+ *
+ * Summary in the node's own words, the stated confidence, findings as
+ * title/detail rows a reader can open one at a time, and the node's
+ * recommendations to the next stage. Nothing is scored or ranked here that
+ * the payload does not carry.
+ */
+function NodeReportBody({ report, payload }: { report: NodeReport; payload: unknown }) {
+  return (
+    <div className="mt-3 space-y-2 text-sm">
+      <div className="flex flex-wrap items-center gap-2">
+        {report.blocked ? (
+          <StatusBadge tone="danger" dot={false}>blocked</StatusBadge>
+        ) : null}
+        {report.confidence ? (
+          <span className="text-xs text-faint">confidence: {report.confidence}</span>
+        ) : null}
+        <span className="text-xs text-faint">
+          {report.findings.length} finding{report.findings.length === 1 ? "" : "s"}
+        </span>
+      </div>
+      <p className="text-muted">{report.summary}</p>
+      {report.blocked && report.blocked_reason ? (
+        <p className="text-[var(--danger)]">{report.blocked_reason}</p>
+      ) : null}
+      {report.findings.length > 0 ? (
+        <ul className="space-y-1.5">
+          {report.findings.map((finding, position) => (
+            <li key={position} className="rounded border border-[var(--border)] p-2.5">
+              {finding.detail ? (
+                <details>
+                  <summary className="cursor-pointer font-medium text-foreground hover:text-accent">
+                    {finding.title}
+                  </summary>
+                  <p className="mt-1.5 whitespace-pre-wrap break-words text-muted">{finding.detail}</p>
+                </details>
+              ) : (
+                <p className="font-medium text-foreground">{finding.title}</p>
+              )}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {report.recommendations.length > 0 ? (
+        <div>
+          <h4 className="label">Recommendations to the next stage</h4>
+          <ul className="mt-1 list-disc space-y-1 pl-5 text-muted">
+            {report.recommendations.map((recommendation, position) => (
+              <li key={position}>{recommendation}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      <RawPayload payload={payload} label="Full recorded report" />
+    </div>
+  );
+}
+
+/**
+ * The Discover step's own summary, from the scouts' recorded reports.
+ *
+ * The owner's board shows a source strip and a dedup figure. The honest
+ * versions of both are here: one tile per scout node with the findings it
+ * actually recorded and the confidence it actually stated, and — when the
+ * consolidating fan-in has run — the arithmetic between what the scans
+ * returned and what the merged shortlist kept. No stars, no relevance bars,
+ * no search timings: nothing records those, so nothing shows them.
+ */
+const DISCOVERY_SOURCE_LABELS: Readonly<Record<string, string>> = {
+  scan_internal: "This repository",
+  scan_dependencies: "Dependency manifests",
+  recall_ecosystem: "Ecosystem recall (model knowledge)",
+  consolidate: "Consolidated shortlist",
+};
+
+function DiscoverySources({ artifacts }: { artifacts: readonly ArtifactView[] }) {
+  const reports = artifacts.flatMap((artifact) => {
+    if (!artifact.nodeKey) return [];
+    const report = parseNodeReport(artifact.payload);
+    return report ? [{ nodeKey: artifact.nodeKey, report }] : [];
+  });
+  if (reports.length === 0) return null;
+
+  const scans = reports.filter((entry) => entry.nodeKey !== "consolidate");
+  const consolidated = reports.find((entry) => entry.nodeKey === "consolidate");
+  const scanFindings = scans.reduce((sum, entry) => sum + entry.report.findings.length, 0);
+
+  return (
+    <Card className="p-5">
+      <h2 className="label">What the scouts searched</h2>
+      <ul className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        {reports.map(({ nodeKey, report }) => (
+          <li key={nodeKey} className="rounded-lg border border-[var(--border)] p-3">
+            <p className="text-xs text-faint">{DISCOVERY_SOURCE_LABELS[nodeKey] ?? nodeKey}</p>
+            <p className="mt-1 text-lg font-semibold text-foreground">
+              {report.findings.length}
+              <span className="ml-1 text-xs font-normal text-muted">
+                finding{report.findings.length === 1 ? "" : "s"}
+              </span>
+            </p>
+            {report.confidence ? (
+              <p className="text-xs text-faint">confidence: {report.confidence}</p>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+      {consolidated && scans.length > 0 ? (
+        <p className="mt-3 text-sm text-muted">
+          The {scans.length} scan{scans.length === 1 ? "" : "s"} recorded {scanFindings} finding
+          {scanFindings === 1 ? "" : "s"}; the consolidated shortlist carries{" "}
+          {consolidated.report.findings.length}.
+        </p>
+      ) : null}
+    </Card>
+  );
 }
 
 function RawPayload({

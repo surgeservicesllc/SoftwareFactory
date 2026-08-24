@@ -2,6 +2,21 @@
 
 Last reviewed: 2026-08-24
 
+## 2026-08-24: the step pages read reports, and Discover sums its scouts
+
+The owner's STEP 2 board landed on the per-run stage page as recorded facts.
+`lib/graph/node-report.ts` is the read-side parser for the general model-node
+report every full_lifecycle MODEL node records ({blocked, summary,
+findings[{title, detail}], confidence, recommendations}); `ArtifactBody` now
+renders that shape as a report — summary, confidence, findings as disclosure
+rows, recommendations — instead of raw JSON, on every stage page at once. On
+DISCOVERY the page adds `DiscoverySources`: one tile per scout node with its
+recorded findings count and stated confidence, and the dedup sentence as
+arithmetic over recorded findings (scans total vs consolidated shortlist).
+The board's stars, relevance bars and search timings are absent on purpose:
+nothing records them. Parser order: typed packages first, then the report,
+then verbatim JSON.
+
 ## 2026-08-24: one run, one stage — the owner's step page
 
 `/solutions/lifecycle/run/[graphRunId]/[stage]` renders the owner's design
