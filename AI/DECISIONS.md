@@ -2063,3 +2063,29 @@ Use this append-only log for decisions that constrain future implementation. Cha
   carry bodies; the page reads the newest hundred runs and says so when
   an id is older; gate decisions go through the shared GateDecision and
   the existing decide route, unchanged.
+
+## ADR-143 - The resume read includes gate-halted work: an approved gate never re-pays
+
+- Date: 2026-08-24
+- Status: Accepted
+- Context: Within hours of ADR-141 shipping, the live test lifecycle
+  proved its gap. Run 6152cee2 executed the architecture node for real
+  and halted at the ARCHITECTURE human gate (node recorded VERIFYING,
+  artifact written first); the gate was approved; and the next claim
+  re-executed the node from scratch, spending the rest of the 21:20
+  provider window on work the database already held (run e3c4b582,
+  CANCELLED on the session limit). The resume read offered only
+  COMPLETED node runs, and a gate-halted node is never COMPLETED.
+- Decision: 20260824001100 (hosted scope resume-gate-halted) widens
+  `read_prior_node_results_as_worker` to node runs in
+  (COMPLETED, VERIFYING). VERIFYING is precisely "work done and
+  recorded; decision pending" - the artifact is written before the
+  state transition, so the reuse is of real recorded work. No worker
+  change: reuse substitution and the gate check compose - a reused
+  result still halts at an OPEN gate (now at zero cost), still fails on
+  REJECTED, and passes through on APPROVED.
+- Bounds: unchanged otherwise - lifecycle graphs only, non-answering
+  runs only, artifact required, service_role execute only. The behavior
+  suite pins it: a gated lifecycle halts, the gate is approved, and the
+  second window calls the executor for exactly the one genuinely new
+  node.

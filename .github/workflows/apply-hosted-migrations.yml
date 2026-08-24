@@ -108,6 +108,11 @@ on:
           run's recorded artifact payloads, membership-checked and scoped to
           the caller's organization, authenticated execute only, no table or
           row changes;
+          "resume-gate-halted" applies only 20260824001100, which widens the
+          resume read to include gate-halted (VERIFYING) node runs — without
+          it an approved gate re-executes work the database already holds and
+          re-pays the provider window for it; replaces one definer function
+          in place, same grants, no table or row changes;
           "clear-autonomy-projects" applies only 20260823000600, which adds the
           Autonomy page's Clear control as an archive sweep and excludes
           archived projects from the autonomy list; it deletes nothing and
@@ -152,6 +157,7 @@ on:
           - automatic-gate-decider
           - lifecycle-resume
           - run-artifacts-read
+          - resume-gate-halted
           - analysis-launch-commit
           - delete-selected-pipelines
           - stop-and-delete-pipelines
@@ -5987,6 +5993,65 @@ jobs:
             exit 1
           fi
           echo "Applied and verified: a run's members can read its recorded artifacts."
+
+      - name: Resume reuses gate-halted work (scope=resume-gate-halted)
+        # Exactly one file — 20260824001100 — replacing the resume read in
+        # place. Live run e3c4b582 re-executed approved architecture work and
+        # spent the window on it; the widened read offers VERIFYING node runs
+        # so an approved gate passes recorded work through at zero cost.
+        if: ${{ inputs.scope == 'resume-gate-halted' }}
+        run: |
+          if [ -z "$SUPABASE_DB_PASSWORD" ]; then
+            echo "::error::This scope requires SUPABASE_DB_PASSWORD for live verification."
+            exit 1
+          fi
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+
+          HALTED_FILE=supabase/migrations/20260824001100_resume_reuses_gate_halted_work.sql
+          if [ "$(sha256sum "$HALTED_FILE" | cut -d' ' -f1)" != "1a8ccd9af6ebd5f6111f5379430919c4c88699930944a301644d1148933ace06" ]; then
+            echo "::error::Migration hash mismatch; refusing production DDL."
+            exit 1
+          fi
+
+          ROW=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
+            "select count(*) from supabase_migrations.schema_migrations where version = '20260824001100';")
+          if [ "$ROW" != "0" ]; then
+            echo "::error::Ledger already records 20260824001100 (want 0)."
+            exit 1
+          fi
+
+          READY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
+            select exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+                            where n.nspname = 'public' and p.proname = 'read_prior_node_results_as_worker');")
+          if [ "$READY" != "t" ]; then
+            echo "::error::read_prior_node_results_as_worker is missing; apply scope=lifecycle-resume first."
+            exit 1
+          fi
+
+          echo "Applying ${HALTED_FILE} (its in-file postflight verifies the widened filter and the grant boundary)"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -1 -q -f "$HALTED_FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied 20260824001100
+          else
+            npx supabase migration repair --status applied 20260824001100 --db-url "$DB_URL"
+          fi
+
+          VERIFIED=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
+            select pg_get_functiondef(p.oid) like '%VERIFYING%'
+              from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+             where n.nspname = 'public'
+               and p.proname = 'read_prior_node_results_as_worker'
+               and pg_get_function_identity_arguments(p.oid) = 'p_worker_id text, p_graph_id uuid';")
+          if [ "$VERIFIED" != "t" ]; then
+            echo "::error::The widened resume read did not read back."
+            exit 1
+          fi
+          echo "Applied and verified: an approved gate passes recorded work through at zero cost."
 
       - name: Apply the Backlog and Pipelines clear controls (scope=clear-controls)
         # Exactly two files — 20260822000700 and 20260822000800 — and no others.
