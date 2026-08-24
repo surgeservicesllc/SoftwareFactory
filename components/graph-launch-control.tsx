@@ -44,6 +44,9 @@ export function GraphLaunchControl({
   readonly templateName: string;
 }) {
   const [projects, setProjects] = useState<readonly Project[] | null>(null);
+  // The server's own sentence when the project read fails. Discarding it left
+  // "Projects could not be read" undiagnosable from the page itself.
+  const [projectsError, setProjectsError] = useState<string | null>(null);
   const [projectId, setProjectId] = useState("");
   const [busy, setBusy] = useState(false);
   // Tagged with the template they describe, so switching template hides them
@@ -61,13 +64,30 @@ export function GraphLaunchControl({
     void (async () => {
       try {
         const response = await fetch("/api/projects", { cache: "no-store" });
-        if (!response.ok) throw new Error("projects_unavailable");
-        const body = (await response.json()) as { projects?: Project[] };
-        if (!cancelled) setProjects(body.projects ?? []);
-      } catch {
+        const body = (await response.json().catch(() => ({}))) as {
+          projects?: Project[];
+          error?: { message?: string };
+        };
+        if (!response.ok) {
+          throw new Error(
+            body.error?.message ?? `The project list answered HTTP ${response.status}.`,
+          );
+        }
+        if (!cancelled) {
+          setProjects(body.projects ?? []);
+          setProjectsError(null);
+        }
+      } catch (readError) {
         // An empty list and an unreadable one are different states, and a
         // selector that silently shows nothing conflates them.
-        if (!cancelled) setProjects(null);
+        if (!cancelled) {
+          setProjects(null);
+          setProjectsError(
+            readError instanceof Error && readError.message
+              ? readError.message
+              : "The project list could not be reached.",
+          );
+        }
       }
     })();
     return () => {
@@ -119,7 +139,11 @@ export function GraphLaunchControl({
         <div className="mt-4">
           <EmptyState
             title="Projects could not be read"
-            description="The project list is unavailable, so a graph cannot be attached to one. This is a failed read, not an empty account."
+            description={
+              "The project list is unavailable, so a graph cannot be attached to one. "
+              + "This is a failed read, not an empty account. "
+              + `The server said: ${projectsError ?? "nothing — the request never completed."}`
+            }
           />
         </div>
       ) : projects.length === 0 ? (

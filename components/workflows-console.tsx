@@ -233,6 +233,13 @@ export function WorkflowsConsole({ templates }: { templates: readonly TemplateSu
         <p className="mt-4 text-sm text-muted">{active.summary}</p>
       </Card>
 
+      {/* First after choosing a template, not buried under the preview: the
+          owner-reported failure mode of this page was "can't reach the Launch
+          card" — it sat below the metrics, the rationale, the whole graph map
+          and two more panels. The compiled evidence follows for anyone who
+          reads before launching. */}
+      {preview ? <GraphLaunchControl templateKey={active.key} templateName={active.name} /> : null}
+
       {!preview ? (
         <Card>
           <SectionTitle
@@ -367,23 +374,18 @@ export function WorkflowsConsole({ templates }: { templates: readonly TemplateSu
             </div>
           </Card>
 
-          {/* After the compiled plan, deliberately: recording a graph is a
-              consequence of reading what it would do, not an invitation ahead
-              of it. */}
-          <GraphLaunchControl templateKey={active.key} templateName={active.name} />
-
           <Card>
-            <SectionTitle title="Runs, verification, artifacts and anchors" />
-            <div className="mt-4">
-              <EmptyState
-                title="No graph has ever run"
-                description="These panels show recorded evidence, and there is none: no provider credential is configured, so no node has executed, nothing has been verified, and no artifact or anchor exists. This is an absence of runs, not a record of successful ones."
-              />
-            </div>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <StatusBadge tone="warning">Execution Not Connected</StatusBadge>
-              <StatusBadge tone="neutral">0 recorded runs</StatusBadge>
-            </div>
+            <SectionTitle
+              title="Runs, verification, artifacts and anchors"
+              description="This page shows what a graph would do. What one actually did — every claim, node transition, artifact, verification and gate — is recorded evidence, and it lives with the runs."
+            />
+            <p className="mt-3 text-sm text-muted">
+              Watch launched graphs on the{" "}
+              <a href="/solutions/pipelines" className="text-[var(--accent-text)] underline">
+                Pipelines page
+              </a>
+              , where each run reports its nodes and stages exactly as the database holds them.
+            </p>
           </Card>
         </>
       )}

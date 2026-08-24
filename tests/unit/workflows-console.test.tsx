@@ -34,15 +34,27 @@ describe("the workflows console", () => {
     expect(screen.getByText("Parallel width").closest("article")).toHaveTextContent("5");
   });
 
-  it("says plainly that nothing has run", () => {
+  it("offers the launch before the preview, and points run evidence at the runs panel", () => {
     render(<WorkflowsConsole templates={[summarize("rls_audit")]} />);
 
-    expect(screen.getByText("No graph has ever run")).toBeInTheDocument();
-    // The distinction the whole console rests on.
+    // The owner-reported failure mode of this page was "can't reach the
+    // Launch card": it rendered below the metrics, the rationale, the graph
+    // map and two more panels. Choosing a template must offer the launch
+    // immediately.
+    const launch = screen.getByText("Launch this graph");
+    const map = screen.getByText("The graph");
     expect(
-      screen.getByText(/absence of runs, not a record of successful ones/i),
-    ).toBeInTheDocument();
-    expect(screen.getByText("Execution Not Connected")).toBeInTheDocument();
+      launch.compareDocumentPosition(map) & Node.DOCUMENT_POSITION_FOLLOWING,
+      "the launch card must precede the graph map",
+    ).toBeTruthy();
+
+    // No fabricated run history in either direction: evidence lives with the
+    // runs, and the console says where.
+    expect(screen.getByRole("link", { name: /pipelines page/i })).toHaveAttribute(
+      "href",
+      "/solutions/pipelines",
+    );
+    expect(screen.queryByText("No graph has ever run")).not.toBeInTheDocument();
   });
 
   it("never shows a cost estimate", () => {
