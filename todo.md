@@ -178,13 +178,40 @@ owner's "can't reach the Launch card" was the card buried under five panels
 next to a "No graph has ever run" card that was false for weeks (#381 fixed
 both, plus the seeded Demo Data workspace for repeatable E2E).
 
-**Open in this lane:** after the decider lands on hosted, launch a fresh
-Demo Data full_lifecycle and drive it: model stages → ARCHITECTURE human
-gate (approve as the fake user) → implement/review → TEST anchor +
-self-approving gate → DEPLOY human gate → policy refusal recorded →
-PARTIAL, the honest Phase-1 terminal. Graph 91959362 stays stuck at its
-now-unreachable PRD wall — retire it by rejection or leave it as the
-specimen. Still open from round 6: owner-gated WebSearch for candidates.
+**The owner's /goal 10-step walk (2026-08-24 ~02:40-03:00Z), executed as
+the fake account against production — every step's verdict:**
+- Steps 1-2 (Connect Repository, Create Project): the seeded Demo Data
+  chain reads through the real APIs; project PATCH (name/description)
+  persists. ✓
+- Step 3 (Configure Pipeline): select → persists → deselect (query-param
+  DELETE) → reselect. ✓ Custom template CRUD proven end to end: create
+  (compiles, 4 nodes) → PATCH (v2, 5 nodes) → selectable → LAUNCHABLE
+  (graph f3cad066 PLANNED from the custom template) → deselect → delete. ✓
+- Step 4 (Select Agents): catalogue seeded; select two, deselect one,
+  persistence verified. ✓
+- Step 5 (Connect Bots): bot creation works and reads truthfully
+  not_connected/"Needs credential" without a real provider credential —
+  which cannot and must not be fabricated. ✓ (Demo bot 065595be + role
+  13e162f8 left in the fake workspace, both labeled Demo Data.)
+- Steps 6-7 (Assign/Configure): assignment of an unconnected bot is
+  correctly refused ("bot_not_connected"); role creation works; the
+  truthful-refusal chain is the verified behavior. ✓ (full happy path
+  needs a real credential — owner-verified in earlier rounds.)
+- Step 8 (Issue a Command): 409 "No bots are assigned to this project"
+  with structured refusals — routing verification working. ✓
+- Step 9 (Watch It Ship): /api/graphs/runs reports both lifecycle runs
+  truthfully (8/14 and 1/14 node progress). ✓
+- Full API sweep: 20+ endpoints answer 200 with Supabase-backed truthful
+  states; autonomy controls read kill-switch-ON/all-OFF for the fake org.
+  The autonomy-controls POST was not exercised (permission classifier —
+  owner-territory; its editability was owner-verified in task #20).
+
+**Open in this lane:** at 05:55Z (session-window reset) the armed trigger
+drains the queue: custom-template graph f3cad066 first (a live custom
+E2E), then a fresh full_lifecycle → ARCHITECTURE human gate (approve as
+the fake user) → TEST anchor + self-approving gate → DEPLOY policy
+refusal → final verdict. Graphs 91959362/10fe2b0d stay as pre-fix
+specimens. Still open from round 6: owner-gated WebSearch for candidates.
 
 
 ## GRAPH — ONE REQUEST THROUGH ALL TEN PHASES: full_lifecycle (2026-08-23, round 9)
