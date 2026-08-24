@@ -103,6 +103,11 @@ on:
           it already recorded instead of re-proving finished stages until the
           provider window caps; one definer function, service_role execute
           only, no table or row changes;
+          "run-artifacts-read" applies only 20260824001000, the member-facing
+          read behind the per-run stage page: one definer function returning a
+          run's recorded artifact payloads, membership-checked and scoped to
+          the caller's organization, authenticated execute only, no table or
+          row changes;
           "clear-autonomy-projects" applies only 20260823000600, which adds the
           Autonomy page's Clear control as an archive sweep and excludes
           archived projects from the autonomy list; it deletes nothing and
@@ -146,6 +151,7 @@ on:
           - discovery-stages
           - automatic-gate-decider
           - lifecycle-resume
+          - run-artifacts-read
           - analysis-launch-commit
           - delete-selected-pipelines
           - stop-and-delete-pipelines
@@ -5922,6 +5928,65 @@ jobs:
             exit 1
           fi
           echo "Applied and verified: lifecycles can resume from their own recorded results."
+
+      - name: Serve a run's recorded artifacts to its members (scope=run-artifacts-read)
+        # Exactly one file — 20260824001000 — one read-only definer function,
+        # authenticated execute only. The per-run stage page renders the
+        # recorded stage packages; this is the read that serves them, with the
+        # same membership rule as list_graph_runs.
+        if: ${{ inputs.scope == 'run-artifacts-read' }}
+        run: |
+          if [ -z "$SUPABASE_DB_PASSWORD" ]; then
+            echo "::error::This scope requires SUPABASE_DB_PASSWORD for live verification."
+            exit 1
+          fi
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+
+          ARTIFACTS_FILE=supabase/migrations/20260824001000_list_graph_run_artifacts.sql
+          if [ "$(sha256sum "$ARTIFACTS_FILE" | cut -d' ' -f1)" != "21754b39db18292401a1b0828a4a8f2c036a135775dd3c136992f50f63ca18d7" ]; then
+            echo "::error::Migration hash mismatch; refusing production DDL."
+            exit 1
+          fi
+
+          ROW=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
+            "select count(*) from supabase_migrations.schema_migrations where version = '20260824001000';")
+          if [ "$ROW" != "0" ]; then
+            echo "::error::Ledger already records 20260824001000 (want 0)."
+            exit 1
+          fi
+
+          READY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
+            select (to_regclass('public.graph_artifacts') is not null)
+               and exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+                            where n.nspname = 'public' and p.proname = 'is_organization_member');")
+          if [ "$READY" != "t" ]; then
+            echo "::error::graph_artifacts or is_organization_member is missing; the graph foundation must be applied first."
+            exit 1
+          fi
+
+          echo "Applying ${ARTIFACTS_FILE} (its in-file postflight verifies the grant boundary)"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -1 -q -f "$ARTIFACTS_FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied 20260824001000
+          else
+            npx supabase migration repair --status applied 20260824001000 --db-url "$DB_URL"
+          fi
+
+          VERIFIED=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
+            select exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+                            where n.nspname = 'public'
+                              and p.proname = 'list_graph_run_artifacts'
+                              and pg_get_function_identity_arguments(p.oid) = 'p_organization_id uuid, p_graph_run_id uuid');")
+          if [ "$VERIFIED" != "t" ]; then
+            echo "::error::list_graph_run_artifacts did not read back."
+            exit 1
+          fi
+          echo "Applied and verified: a run's members can read its recorded artifacts."
 
       - name: Apply the Backlog and Pipelines clear controls (scope=clear-controls)
         # Exactly two files — 20260822000700 and 20260822000800 — and no others.

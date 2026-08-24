@@ -2037,3 +2037,29 @@ Use this append-only log for decisions that constrain future implementation. Cha
   called for it - and completes, with the artifact carried into the new
   run), and the analysis twin records a result that the read then
   refuses to offer.
+
+## ADR-142 - The per-run stage page renders recorded packages, and its read is authenticated-only
+
+- Date: 2026-08-24
+- Status: Accepted
+- Context: The owner's design boards ask for a per-run step page - the
+  request at the top, the ten-step strip, what the stage produced, the
+  decision where the stage holds one. The runs projection deliberately
+  carries artifact counts, not payloads, so the recorded stage packages
+  (the page's whole substance) had no member-facing read.
+- Decision: `list_graph_run_artifacts` (20260824001000, hosted scope
+  run-artifacts-read) returns one run's artifact rows with payloads
+  verbatim - membership-checked, the run joined to the caller's
+  organization, authenticated execute only (service_role revoked; the
+  worker has its own writers). `GET /api/graphs/runs/[graphRunId]/
+  artifacts` serves it unchanged. The page
+  (`/solutions/lifecycle/run/[graphRunId]/[stage]`) renders a payload
+  structurally only when a typed stage package parses it
+  (decision/evaluation/discovery), and otherwise shows the exact JSON:
+  verbatim beats paraphrase, and figures the boards imagined but nothing
+  computes (confidence, estimated completion) are absent rather than
+  invented.
+- Bounds: `list_graph_runs` keeps counts only - a listing should not
+  carry bodies; the page reads the newest hundred runs and says so when
+  an id is older; gate decisions go through the shared GateDecision and
+  the existing decide route, unchanged.
