@@ -532,6 +532,58 @@ describe("the graph executor boundary", { timeout: 180_000 }, () => {
     expect(await claim()).toBeNull();
   });
 
+  it("voids a lifecycle run stopped by capacity even when earlier stages succeeded", async () => {
+    /*
+     * The first live lifecycle (graph 10fe2b0d) proved the gap: eight stages
+     * succeeded, the architecture node hit the subscription's session limit,
+     * and the PARTIAL close stranded the graph forever — a partial run counts
+     * as an answer, so nothing could ever claim it again. A lifecycle's
+     * product is the shipped change, not its intermediate packages, so a run
+     * stopped by fuel answers nothing: it closes CANCELLED and the graph
+     * keeps its chances for a dispatch after the limit resets.
+     */
+    const graphId = await createDiamondGraph("Ship the change across a session limit", false);
+    await reset(db);
+    await db.query(`update public.graphs set is_lifecycle = true where id = $1`, [graphId]);
+    const store = pgliteStore(db, "graph-worker-test");
+
+    const first = parseClaimedGraph(await claim());
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    expect(first.graph.graph_id).toBe(graphId);
+    const compiled = compileClaimedGraph(first.graph);
+    expect(compiled.ok).toBe(true);
+    if (!compiled.ok) return;
+
+    // The first node succeeds; everything after is refused the way a session
+    // limit refuses.
+    let executed = 0;
+    const summary = await runClaimedGraph(first.graph, compiled.graph, store, async (): Promise<NodeExecutionResult> => {
+      executed += 1;
+      if (executed === 1) {
+        return { status: "SUCCEEDED", output: { note: "stage one is real" }, tokensUsed: 10 };
+      }
+      return {
+        status: "FAILED",
+        error: "Claude Code returned an error result: You've hit your session limit",
+        retryable: false,
+        capacityWithheld: true,
+      };
+    });
+
+    expect(summary.nodesSucceeded).toBeGreaterThan(0);
+    expect(summary.finalState).toBe("CANCELLED");
+    expect(summary.capacityWithheld).toBe(true);
+
+    // The record of what ran survives; the graph does not leave the queue.
+    const second = parseClaimedGraph(await claim());
+    expect(second.ok, "a capacity-voided lifecycle must stay claimable").toBe(true);
+    if (!second.ok) return;
+    expect(second.graph.graph_id).toBe(graphId);
+    await store.completeRun(second.graph.graph_run_id, "PARTIAL", true);
+    expect(await claim()).toBeNull();
+  });
+
   it("stops re-claiming at the total-run ceiling even when every run was CANCELLED", async () => {
     const graphId = await createDiamondGraph("A very long capacity outage");
     const store = pgliteStore(db, "graph-worker-test");
