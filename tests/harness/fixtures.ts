@@ -1156,3 +1156,44 @@ export const JOB_SEEKER_PREFERENCES = {
   qualificationThreshold: 80,
   updatedAt: "2026-08-20T00:00:00.000Z",
 };
+
+/*
+ * Skill gaps, shaped to stress the layout rather than to look tidy: long
+ * term names, three-digit counts, and an examples column carrying two full
+ * "Role — Company" strings, which is the widest cell the table can hold.
+ */
+export const JOB_SEEKER_SKILLS = {
+  skills: {
+    analysed: 24,
+    skipped: 3,
+    coverage: 45,
+    gaps: [
+      {
+        term: "Kubernetes", postings: 17, recorded: false, averageScore: 84,
+        examples: ["Staff Platform Engineer — Northwind Systems", "Principal SRE — Contoso Cloud"],
+      },
+      {
+        term: "Terraform", postings: 12, recorded: false, averageScore: null,
+        examples: ["Infrastructure Engineer — Fabrikam Logistics"],
+      },
+      {
+        term: "OpenTelemetry", postings: 4, recorded: false, averageScore: 61,
+        examples: ["Observability Engineer — Tailspin Analytics"],
+      },
+    ],
+    strengths: [
+      {
+        term: "TypeScript", postings: 21, recorded: true, averageScore: 79,
+        examples: ["Staff Platform Engineer — Northwind Systems"],
+      },
+      {
+        term: "Postgres", postings: 15, recorded: true, averageScore: 72,
+        examples: ["Backend Engineer — Fabrikam Logistics", "Data Platform Lead — Contoso Cloud"],
+      },
+    ],
+  },
+  profileRecorded: 9,
+  method:
+    "Counted from the postings on your own board, not from a market survey. A term is listed "
+    + "because at least two of your recorded postings name it, and the count says how many.",
+};

@@ -53,6 +53,7 @@ describe("the Job Seeker navigation", () => {
       "Contacts & Outreach",
       "Interview Tracker",
       "Notes & Documents",
+      "Skills & Improve",
       "Analytics",
       "Settings",
     ]);

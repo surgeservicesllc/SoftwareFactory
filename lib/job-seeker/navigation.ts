@@ -9,6 +9,7 @@ import {
   NotebookPen,
   Search,
   Settings,
+  TrendingUp,
   Users,
 } from "lucide-react";
 
@@ -59,6 +60,10 @@ export const JOB_SEEKER_NAVIGATION: readonly JobSeekerNavEntry[] = [
   { label: "Contacts & Outreach", href: "/job-seeker/contacts", icon: Users },
   { label: "Interview Tracker", href: "/job-seeker/interviews", icon: CalendarCheck },
   { label: "Notes & Documents", href: "/job-seeker/documents", icon: NotebookPen },
+  // Skills sits beside Analytics because it answers the other half of the
+  // same question: analytics says how the search is going, skills says what
+  // to change about it.
+  { label: "Skills & Improve", href: "/job-seeker/skills", icon: TrendingUp },
   { label: "Analytics", href: "/job-seeker/analytics", icon: BarChart3 },
   { label: "Settings", href: "/job-seeker/settings", icon: Settings },
 ] as const;

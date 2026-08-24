@@ -90,6 +90,28 @@ describe("postingTerms, against a real posting", () => {
     expect(terms.length).toBeLessThan(20);
   });
 
+  it("matches a vocabulary term as a whole word, not as a substring", () => {
+    // Without word boundaries the vocabulary is worse than no vocabulary:
+    // "REST" matches "restaurant", "Java" matches "JavaScript", and every
+    // one of those rows is a requirement the posting never stated.
+    const found = postingTerms(
+      "We run a restaurant analytics team. JavaScript throughout. Nodemon in dev.",
+    );
+    expect(found).toContain("JavaScript");
+    expect(found).not.toContain("REST");
+    expect(found).not.toContain("Java");
+    expect(found).not.toContain("Node");
+  });
+
+  it("finds an ordinary capitalised technology name", () => {
+    // The terms people actually want to see are neither acronyms nor tokens
+    // carrying a digit, which is what the curated vocabulary is for.
+    const found = postingTerms("Kubernetes, Terraform and Postgres in production.");
+    expect(found).toContain("Kubernetes");
+    expect(found).toContain("Terraform");
+    expect(found).toContain("Postgres");
+  });
+
   it("returns nothing for a posting with no description rather than guessing", () => {
     expect(postingTerms(null)).toEqual([]);
     expect(postingTerms("")).toEqual([]);

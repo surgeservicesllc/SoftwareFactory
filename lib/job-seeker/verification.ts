@@ -111,6 +111,64 @@ const NON_SKILL_ACRONYMS = new Set([
   "II", "III", "IV", "VI", "VII", "VIII", "IX", "XI", "XII", "XV", "XX",
 ]);
 
+/**
+ * Technology names a posting may state that neither pattern above catches.
+ *
+ * "Kubernetes", "Postgres" and "React" are ordinary capitalised words, and
+ * the extractor deliberately ignores capitalisation because half a real
+ * posting's bullets open with "Strong", "Experience" and "Ability". A curated
+ * vocabulary resolves that without reintroducing the noise: a term is
+ * reported only if it is on this list AND in the posting, so the list bounds
+ * what can be found rather than what can be wrong.
+ *
+ * The cost is coverage — a technology not listed here is missed — which is
+ * the same "indicative, not exhaustive" limit the method label already
+ * states. Extend it; do not replace it with a looser pattern.
+ */
+const KNOWN_TECHNOLOGIES: readonly string[] = [
+  // Languages
+  "JavaScript", "TypeScript", "Python", "Java", "Kotlin", "Swift", "Ruby",
+  "PHP", "Scala", "Elixir", "Erlang", "Haskell", "Clojure", "Perl", "Dart",
+  "Objective-C", "Solidity", "Fortran", "Cobol", "Groovy", "Julia",
+  // Runtimes and frameworks
+  "Node", "Deno", "Bun", "React", "Angular", "Vue", "Svelte", "Next.js",
+  "Nuxt", "Remix", "Django", "Flask", "FastAPI", "Rails", "Laravel",
+  "Spring", "Express", "NestJS", "Astro", "Ember", "Backbone", "jQuery",
+  "Flutter", "Xamarin", "Electron", "Tailwind", "Bootstrap",
+  // Data
+  "Postgres", "PostgreSQL", "MySQL", "MariaDB", "SQLite", "MongoDB",
+  "Cassandra", "DynamoDB", "Redis", "Memcached", "Elasticsearch", "OpenSearch",
+  "Snowflake", "Databricks", "BigQuery", "Redshift", "Clickhouse", "DuckDB",
+  "Kafka", "RabbitMQ", "Airflow", "Dagster", "dbt", "Spark", "Hadoop", "Flink",
+  "Supabase", "Firebase", "Prisma", "Neo4j", "InfluxDB", "Pinecone",
+  // Infrastructure
+  "Kubernetes", "Docker", "Terraform", "Pulumi", "Ansible", "Helm", "Nomad",
+  "Consul", "Vault", "Jenkins", "CircleCI", "Argo", "Prometheus", "Grafana",
+  "Datadog", "Splunk", "Sentry", "PagerDuty", "OpenTelemetry", "Nginx",
+  "Kong", "Istio", "Cloudflare", "Vercel", "Netlify", "Heroku", "Fastly",
+  // Platforms and tooling
+  "Linux", "Windows", "macOS", "Git", "GitHub", "GitLab", "Bitbucket",
+  "Jira", "Confluence", "Figma", "Salesforce", "HubSpot", "Workday",
+  "Stripe", "Twilio", "Segment", "Looker", "Tableau", "PowerBI",
+  "Shopify", "Zendesk", "Okta", "Auth0", "Keycloak",
+  // Practice names a posting states as a requirement
+  "GraphQL", "REST", "gRPC", "WebSocket", "OAuth", "OIDC", "SAML", "JWT",
+  "Microservices", "Serverless", "Kubernetes-native", "Observability",
+  "Terraforming", "Kubernetes/Docker", "Machine Learning", "Deep Learning",
+  "PyTorch", "TensorFlow", "Keras", "scikit-learn", "Pandas", "NumPy",
+  "LangChain", "OpenAI", "Anthropic", "Kubeflow", "MLflow", "SageMaker",
+];
+
+/**
+ * A term is present only as a whole word. Without the boundaries, "Go"
+ * matches "Google" and "R" matches every word with an R in it — which is why
+ * neither single-letter language name is in the vocabulary at all.
+ */
+function statesTerm(haystack: string, term: string): boolean {
+  const escaped = term.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(?:^|[^A-Za-z0-9])${escaped}(?:$|[^A-Za-z0-9])`, "i").test(haystack);
+}
+
 export function postingTerms(description: string | null): string[] {
   if (!description) return [];
   /*
@@ -138,6 +196,10 @@ export function postingTerms(description: string | null): string[] {
     if (NON_SKILL_ACRONYMS.has(term)) continue;
     if (compounds.some((compound) => compound.split("/").includes(term))) continue;
     found.set(term.toLowerCase(), term);
+  }
+  for (const term of KNOWN_TECHNOLOGIES) {
+    if (found.has(term.toLowerCase())) continue;
+    if (statesTerm(scoped, term)) found.set(term.toLowerCase(), term);
   }
   return [...found.values()].sort((a, b) => a.localeCompare(b));
 }

@@ -1,6 +1,89 @@
 # SoftwareFactory — shared working status
 
-## GRAPH — THE STAGES HAVE PAGES, AND THE BROWSER SUITE OUTGREW ITS CEILING (2026-08-23, round 8 — PICK UP HERE)
+## JOB SEEKER — THE ai-job-search PORT (2026-08-23, rounds 1-2 — PICK UP HERE for Job Seeker)
+
+The owner directed that `MadsLorentzen/ai-job-search` (MIT) be built into
+`/job-seeker` end to end. **It is a capability donor, not a dependency** — it
+is a Claude Code framework (skills, slash commands, Bun CLIs, LaTeX) that runs
+on one person's machine against local files, and this is a hosted multi-tenant
+app with Supabase as the system of record. Nothing is vendored. ADR-138/139/140
+and `THIRD_PARTY_NOTICES.md` record what was adapted and under what licence.
+**Read those three ADRs before touching this lane.**
+
+A read-only clone of the donor is at `/home/user/madslorentzen/ai-job-search`
+(re-clone with `add_repo` + `git clone --depth 1` if the container was
+recycled). The pieces still worth mining are `.claude/commands/{rank,interview,
+outcome,expand}.md` and `.claude/skills/{job-application-assistant,upskill}`.
+
+### Done
+
+1. **DISCOVER — keyword search.** `lib/job-seeker/portals/freehire.ts` reads
+   freehire.me's public keyless aggregator; `listSearchAdapters` is the second
+   registry beside `listImportAdapters`; `/api/job-seeker/search` records
+   through the SAME evaluate → job → match → application chain the board
+   import uses. Verified live against the endpoint on 2026-08-23.
+2. **VERIFY — deterministic.** `lib/job-seeker/verification.ts`: keyword
+   coverage, parseability, factual grounding. Computed on read, stored
+   nowhere (ADR-140).
+3. **VERIFY — independent reviewer.** `lib/job-seeker/document-review.ts` plus
+   `job_seeker_document_reviews` (migration 20260823001000). A revision writes
+   a new document version; the reviewed one is append-only and untouched.
+
+### Four traps this lane hit, all of which will catch the next bot
+
+**1. A new migration re-pins about twenty integration tests.** `latestMigration`
+/ `newestMigration` / `migrationFiles.at(-1)` appear in ~20 files and all must
+move together. `AI/HOSTED_APPLY_RUNBOOK.md`'s "the repository total is N
+migration files" and the RLS table counts in
+`phase1e-operations.behavior.test.ts` and `hosted-service-role-table-grants.test.ts`
+move too. **Do not blanket-sed the old filename**: `graph-stage-mapping-agreement.test.ts`
+names `20260823000900` because that is the migration it reads the CONTENT of,
+not a tail pin, and a sed broke it exactly that way here.
+
+**2. PostgreSQL does not short-circuit AND inside a CHECK.**
+`jsonb_typeof(x) = 'array' and jsonb_array_length(x) <= 40` raises "cannot get
+array length of a non-array" before the type test can reject it. The row is
+still refused — by an error naming no constraint, which tells an operator
+nothing. Write `case jsonb_typeof(x) when 'array' then ... else false end`.
+
+**3. Test a text extractor against real prose, never a tidy fixture.** The
+keyword extractor's only real risk is noise, and a hand-made posting with a
+"Requirements:" list passes any extractor. `tests/fixtures/job-seeker/live-posting.ts`
+is a real posting captured from the live search; it is what surfaced that
+"Time spent…", "A track record…", "SOC 2 Type II" and a YC batch code all
+extract as plausible requirements and none of them is one.
+
+**4. The posting is not a source for the candidate's claims.** That live
+posting states "300% net revenue retention". A resume bullet claiming the
+candidate grew revenue 300% audited as GROUNDED until `auditGrounding` grew
+`postingIsSource`, which is true for a cover letter and false for a resume.
+A test caught it; the design was wrong, not the test.
+
+### Next, highest value first
+
+1. **IMPROVE / `/upskill` — the skill-gap heatmap.** `verifyKeywords` already
+   emits `missing_gap` per application. Aggregating those across the board is
+   the heatmap, and every cell traces to a real posting — no fabrication risk,
+   no new provider call. This is the largest win still unclaimed.
+2. **RANK — the donor's vetoes.** `evaluateJob` scores; it has no location
+   veto, no language gate, no deadline urgency, and no verdict bands
+   (`/rank` Step 3). A `FAIL` veto excludes from the shortlist regardless of
+   score, which the current qualification threshold cannot express. Needs a
+   `deadline` column on `job_seeker_jobs` — a migration, so check the tail
+   pins first (trap 1).
+3. **INTERVIEW — the prep pack.** `/interview` builds likely questions and
+   verified STAR answers from the posting and the profile. The profile has no
+   STAR stories yet; that is the blocking gap and it is a profile-schema
+   change, not an interview feature.
+4. **PROFILE — writing style and behavioral profile.** The donor's `02` and
+   `03` skill files feed the reviewer's tone critique. Without them the
+   reviewer has no register to check a draft against.
+5. **Hosted apply for 20260823001000.** Written, covered by
+   `job-seeker-document-reviews.behavior.test.ts`, NOT applied. A scoped
+   apply job in `apply-hosted-migrations.yml` is owner-directed work; probe
+   first, never blind-apply — the ledger understates the database.
+
+## GRAPH — THE STAGES HAVE PAGES, AND THE BROWSER SUITE OUTGREW ITS CEILING (2026-08-23, round 8 — PICK UP HERE for Graph)
 
 **Round 7's item 1 is done.** `/solutions/lifecycle` is the stage index and
 `/solutions/lifecycle/[stage]` is one page per stage, both driven by

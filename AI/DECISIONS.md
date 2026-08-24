@@ -1914,3 +1914,37 @@ Use this append-only log for decisions that constrain future implementation. Cha
   is its only real risk — prose capitalisation, roman numerals in a
   certification, and a YC batch code all extract as plausible requirements and
   none of them is one.
+
+## ADR-141 - Skill gaps are counted from your own board, and say so
+
+- Date: 2026-08-23
+- Status: Accepted
+- Context: The donor's `/upskill` reasons over a CSV of applications and their
+  fit ratings. The equivalent here has better input — the postings are already
+  recorded rows with stored match scores — and a worse failure mode: a web page
+  of terms and counts reads as market research whether or not it is.
+- Decision: every claim carries its sample. `analysed` is how many postings had
+  text to read, `skipped` names the ones that did not, a term needs at least two
+  postings before it becomes a row, and each row names the roles it came from.
+  Coverage is null with nothing to measure rather than 0 or 100.
+- Ranking is by demand weighted by fit, not raw frequency. Frequency alone ranks
+  the terms in whatever someone saved most of, which is usually what they were
+  least selective about; multiplying by the mean match score of the postings
+  carrying a term moves a gap in someone's strongest matches above a commoner
+  one in roles they scored 10 against.
+- The two halves are found differently and the asymmetry is deliberate. A
+  STRENGTH is exact — the profile states the term and the posting text either
+  contains it or does not. A GAP goes through the heuristic extractor. Running
+  both through the extractor would make a recorded skill it does not know about
+  vanish from a person's own strengths.
+- `postingTerms` gained a curated technology vocabulary because acronyms and
+  digit-carrying tokens miss the terms people actually want to see —
+  "Kubernetes", "Postgres" and "React" are ordinary capitalised words, and
+  capitalisation cannot be trusted when half a real posting's bullets open with
+  "Strong" and "Experience". A list bounds what can be FOUND rather than what
+  can be WRONG. Matching is whole-word: without boundaries "REST" matches
+  "restaurant" and "Java" matches "JavaScript", and a vocabulary that does that
+  is worse than none.
+- Consequences: the gaps column is indicative and the method label says so.
+  Extending the vocabulary is the way to improve coverage; loosening the
+  pattern is not.

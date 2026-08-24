@@ -51,6 +51,7 @@ import { buildPortfolio } from "@/lib/portfolio/aggregate";
 
 import { JobSeekerContactsPanel } from "@/components/job-seeker/contacts-panel";
 import { JobSeekerDocumentsPanel } from "@/components/job-seeker/documents-panel";
+import { JobSeekerSkillsPanel } from "@/components/job-seeker/skills-panel";
 import { JobSeekerInterviewsPanel } from "@/components/job-seeker/interviews-panel";
 import { JobSeekerOverview } from "@/components/job-seeker/overview";
 
@@ -76,6 +77,7 @@ import {
   JOB_SEEKER_OUTREACH,
   JOB_SEEKER_PREFERENCES,
   JOB_SEEKER_PROFILE,
+  JOB_SEEKER_SKILLS,
   FACTORY_BRIEFING_AGENTS,
   FACTORY_BRIEFING_CONNECTIONS,
   FACTORY_BRIEFING_RUNS,
@@ -186,6 +188,7 @@ function serveFixtures() {
     if (url.includes("/api/job-seeker/documents")) return json({ documents: JOB_SEEKER_DOCUMENTS });
     if (url.includes("/api/job-seeker/contacts")) return json({ contacts: JOB_SEEKER_CONTACTS });
     if (url.includes("/api/job-seeker/outreach")) return json({ outreach: JOB_SEEKER_OUTREACH });
+    if (url.includes("/api/job-seeker/skills")) return json(JOB_SEEKER_SKILLS);
     if (url.includes("/api/runs")) return json({ runs: RUNS });
     if (url.includes("/api/reports")) return json({ reports: REPORTS });
     if (url.includes("/api/project-agents")) {
@@ -390,6 +393,13 @@ const CASES: Record<string, () => React.ReactElement> = {
     </InShell>
   ),
   "job-seeker-contacts": () => <InShell><JobSeekerContactsPanel /></InShell>,
+  /*
+   * Skills carries two wide tables — term, count, average match, and the
+   * roles a row came from — so it is the Job Seeker surface most likely to
+   * push the page sideways on a phone. Its tables scroll inside their own
+   * container; this is what proves the page around them does not.
+   */
+  "job-seeker-skills": () => <InShell><JobSeekerSkillsPanel /></InShell>,
   "job-seeker-interviews": () => <InShell><JobSeekerInterviewsPanel /></InShell>,
   /*
    * The lifecycle across runs, and one stage of it. Both render tables and an

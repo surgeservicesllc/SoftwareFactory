@@ -205,6 +205,7 @@ const CASES = [
   "job-seeker-overview",
   "job-seeker-documents",
   "job-seeker-contacts",
+  "job-seeker-skills",
   "job-seeker-interviews",
   "agentos",
   "autonomy",
