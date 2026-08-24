@@ -641,6 +641,7 @@ export const GRAPH_RUNS_STAGED = [
     goal: "Add per-account usage evidence to the Bot Manager",
     topology: "DIAMOND",
     riskLevel: "GREEN",
+    isLifecycle: true,
     state: "RUNNING",
     startedAt: "2026-08-23T18:04:11.000Z",
     completedAt: null,

@@ -617,7 +617,7 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
    */
   const framed = (children: React.ReactNode) => (
     <div className="space-y-6">
-      <PageHeader title="AI Factory" description={PAGE_DESCRIPTION} />
+      <PageHeader title="01. Factory Setup" description={PAGE_DESCRIPTION} />
       {children}
     </div>
   );
@@ -1187,7 +1187,7 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
   return (
     <div className="space-y-6">
       <PageHeader
-        title="AI Factory"
+        title="01. Factory Setup"
         description={PAGE_DESCRIPTION}
         action={
           <div className="flex flex-wrap items-center gap-2">

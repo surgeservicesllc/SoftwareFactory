@@ -6,7 +6,20 @@ import { expect, test } from "@playwright/test";
 // real page — this list is the reachability contract for the whole console.
 const consoleNavigation = [
   "Overview",
-  "AI Factory",
+  // The owner's 2026-08-24 design: setup first, then the running factory's
+  // ten steps as their own numbered group.
+  "01. Factory Setup",
+  "02. AI Factory",
+  "1. Requirement",
+  "2. Discover",
+  "3. Evaluate",
+  "4. Decide",
+  "5. Architect",
+  "6. Build",
+  "7. Review",
+  "8. Test",
+  "9. Deploy",
+  "10. Monitor",
   // Top-level by owner fix (2026-08-24): this page had been reachable only
   // as a Pipelines subpage aliased "Templates" and was reported as not
   // existing. One page, one name.

@@ -47,7 +47,7 @@ test.describe("the AI Factory page without a readable tenant", () => {
 
   test("keeps the page's own heading whatever it can render", async ({ page }) => {
     await page.goto("/solutions/ai-factory");
-    await expect(page.getByRole("heading", { level: 1, name: "AI Factory" })).toBeVisible({
+    await expect(page.getByRole("heading", { level: 1, name: "01. Factory Setup" })).toBeVisible({
       timeout: 20_000,
     });
   });

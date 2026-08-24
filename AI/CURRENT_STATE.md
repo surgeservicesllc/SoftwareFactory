@@ -2,6 +2,25 @@
 
 Last reviewed: 2026-08-24
 
+## 2026-08-24: the console navigation is the owner's factory, ten steps and all
+
+The left navigation now matches the owner's design: **01. Factory Setup**
+(the renamed /solutions/ai-factory setup journey) and **02. AI Factory** — a
+group of ten numbered step pages at `/solutions/factory/[step]`
+(requirement, discover, evaluate, decide, architect, build, review, test,
+deploy, monitor). `lib/sdlc/factory-steps.ts` maps the ten-step vocabulary
+onto the eleven lifecycle stages, total and exclusive (REQUIREMENT owns GOAL
+and PRD), with a test that breaks when either vocabulary grows unmapped.
+
+Each step page (`FactoryStepConsole`) walks the **newest full-lifecycle
+run**: the ten-step strip with per-step standings, the request verbatim,
+per-stage sections with nodes and the shared GateDecision, recorded
+artifacts through the shared readers in
+`components/graph/stage-content.tsx` (extracted from the run-stage console
+so two surfaces cannot read one payload two ways), the Discover scout
+summary, activity clocks, and prev/next steps. No lifecycle run yet →
+the page offers the launch control rather than an empty imitation.
+
 ## 2026-08-24: the step pages read reports, and Discover sums its scouts
 
 The owner's STEP 2 board landed on the per-run stage page as recorded facts.

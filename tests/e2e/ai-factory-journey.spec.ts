@@ -432,7 +432,7 @@ test.describe("AI Factory live journey", () => {
     await page.goto("/solutions/ai-factory");
 
     // The page's own heading, in whatever state it renders.
-    await expect(page.getByRole("heading", { level: 1, name: "AI Factory" }))
+    await expect(page.getByRole("heading", { level: 1, name: "01. Factory Setup" }))
       .toBeVisible({ timeout: 45_000 });
 
     // Not the signed-out gate, and not the panel for a snapshot it could not
