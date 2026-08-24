@@ -76,6 +76,12 @@ const navigationEntries: readonly NavigationEntry[] = [
   // The guided end-to-end journey over the live flows (owner order,
   // 2026-08-17): sits directly under Overview.
   { label: "AI Factory", href: "/solutions/ai-factory", icon: Workflow },
+  // Where a lifecycle is launched from. This page spent a week reachable
+  // only as a Pipelines subpage named "Templates" — a second name for a page
+  // everything else (its own title, the guide, the Pipelines console's link)
+  // calls Workflows — and the owner reported it as "there is no Workflow
+  // page". One page, one name, top level (owner fix, 2026-08-24).
+  { label: "Workflows", href: "/solutions/workflows", icon: Workflow },
   {
     label: "Projects",
     href: "/solutions/projects",
@@ -94,12 +100,13 @@ const navigationEntries: readonly NavigationEntry[] = [
     href: "/solutions/pipelines",
     icon: Workflow,
     subpages: [
-      // Active and All are live lifecycle views over saved commands; the
-      // workflows page carries each template's full compiled preview. The
+      // Active and All are live lifecycle views over saved commands. The
       // design's Schedules subpage has no scheduler model yet and stays out.
+      // Workflows is deliberately NOT repeated here: it had lived only here,
+      // under the alias "Templates", and one page under two names is how the
+      // owner came to report that the Workflows page did not exist.
       { label: "Active", href: "/solutions/pipelines", icon: HeartPulse },
       { label: "All Pipelines", href: "/solutions/pipelines?view=all", icon: Workflow },
-      { label: "Templates", href: "/solutions/workflows", icon: Workflow },
       { label: "Backlog", href: "/solutions/backlog", icon: ClipboardList },
     ],
   },
