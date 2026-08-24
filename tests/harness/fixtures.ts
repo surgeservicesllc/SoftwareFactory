@@ -634,7 +634,11 @@ export const GRAPH_RUNS_STAGED = [
       { node_key: "arch", executor: "claude", capability: "architecture", state: "VERIFYING",
         provider: "anthropic", model: "claude-opus-5", latency_ms: 15200,
         error_message: null, lifecycle_stage: "ARCHITECTURE",
-        gate_kind: "HUMAN", gate_id: "gate-1", gate_state: "OPEN", gate_anchor_count: 0 },
+        gate_kind: "HUMAN", gate_id: "gate-1", gate_state: "OPEN", gate_anchor_count: 0,
+        job: "Design the usage-evidence read path and name the components it touches.",
+        max_attempts: 2, depends_on: ["prd"], queued_at: "2026-08-23T18:04:11.000Z",
+        node_started_at: "2026-08-23T18:05:02.000Z", node_completed_at: null,
+        artifact_counts: {} },
     ],
   },
   {
@@ -651,12 +655,23 @@ export const GRAPH_RUNS_STAGED = [
       { node_key: "goal", executor: "codex", capability: "planning", state: "SUCCEEDED",
         provider: "openai", model: "gpt-5.3-codex", latency_ms: 3100,
         error_message: null, lifecycle_stage: "GOAL" },
+      // The long job line and the multi-key dependency list are the widest
+      // strings the node detail can render; the width sweep needs them present
+      // or it measures a layout no user sees.
       { node_key: "impl", executor: "codex", capability: "implementation", state: "SUCCEEDED",
         provider: "openai", model: "gpt-5.3-codex", latency_ms: 42800,
-        error_message: null, lifecycle_stage: "IMPLEMENTATION" },
+        error_message: null, lifecycle_stage: "IMPLEMENTATION",
+        job: "Replace the polling smoke check with a deterministic readiness probe, and delete the sleep.",
+        max_attempts: 3, depends_on: ["goal"], queued_at: "2026-08-23T16:41:02.000Z",
+        node_started_at: "2026-08-23T16:41:40.000Z", node_completed_at: "2026-08-23T16:48:52.000Z",
+        artifact_counts: { SYNTHESIS: 2, RAW: 1 } },
       { node_key: "test", executor: "codex", capability: "qa", state: "FAILED",
         provider: "openai", model: "gpt-5.3-codex", latency_ms: 18400,
-        error_message: "smoke test timed out after 120s", lifecycle_stage: "TEST" },
+        error_message: "smoke test timed out after 120s", lifecycle_stage: "TEST",
+        job: "Run the suite and record the verdict as evidence.",
+        max_attempts: 1, depends_on: ["impl"], queued_at: "2026-08-23T16:41:02.000Z",
+        node_started_at: "2026-08-23T16:48:55.000Z", node_completed_at: "2026-08-23T16:52:24.000Z",
+        artifact_counts: { ANCHOR: 1 } },
     ],
   },
   {

@@ -1,5 +1,6 @@
-import { SDLC_LIFECYCLE, type SdlcStage } from "@/lib/sdlc/lifecycle";
+import type { DetailedNode } from "@/lib/graph/node-detail";
 import { summariseRunStages } from "@/lib/graph/stage-summary";
+import { SDLC_LIFECYCLE, type SdlcStage } from "@/lib/sdlc/lifecycle";
 
 /**
  * Every lifecycle stage across every run, rather than within one.
@@ -25,7 +26,14 @@ export type SummarisableRun = Readonly<{
   graphRunId: string;
   goal?: string | null;
   state?: string | null;
-  nodes?: readonly { state: string; lifecycle_stage?: string | null; error_message?: string | null }[] | null;
+  /*
+   * `DetailedNode` rather than the three fields the rollup itself reads.
+   * The portfolio still uses only state, stage and error; widening the type
+   * lets a caller that already holds these runs — the stage page listing the
+   * nodes behind a figure — read the rest without a second fetch or a second
+   * shape for the same row.
+   */
+  nodes?: readonly DetailedNode[] | null;
 }>;
 
 export type StagePortfolioEntry = Readonly<{
