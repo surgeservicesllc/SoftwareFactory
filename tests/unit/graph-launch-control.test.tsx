@@ -98,8 +98,13 @@ describe("the graph launch control", () => {
     expect(alert).toHaveTextContent("two nodes write the same resource");
   });
 
-  it("distinguishes a failed project read from an account with no projects", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ error: "boom" }, 500)));
+  it("distinguishes a failed project read from an account with no projects, and shows the server's reason", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        jsonResponse({ error: { message: "row-level security refused the read" } }, 500),
+      ),
+    );
 
     render(<GraphLaunchControl templateKey="feature_build" templateName="Feature build" />);
 
@@ -107,6 +112,8 @@ describe("the graph launch control", () => {
     // empty account, and send the reader to create a project they already have.
     expect(await screen.findByText("Projects could not be read")).toBeInTheDocument();
     expect(screen.queryByText("No projects yet")).not.toBeInTheDocument();
+    // The server's own sentence, so the failure is diagnosable from the page.
+    expect(screen.getByText(/row-level security refused the read/)).toBeInTheDocument();
   });
 
   it("cannot record without choosing a project", async () => {
