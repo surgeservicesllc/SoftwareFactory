@@ -1,0 +1,172 @@
+name: Seed E2E lifecycle test data (Demo Data)
+
+# Owner-directed (2026-08-24): "Go through the end to end with test data and
+# confirm it is working on each step." The fake journey account
+# (jordan.seeker.prod1@example.org — RFC-reserved domain, undeliverable) has a
+# workspace with no GitHub binding, so it cannot create a project and cannot
+# launch a graph. This seeds exactly the chain the launch path resolves —
+# connection → installation → repository → project → primary link — into that
+# one fake workspace, every row labeled "(Demo Data)".
+#
+# What this deliberately does NOT do: the external GitHub identities are
+# sentinel values (999000111xxx), so nothing here can mint an installation
+# token, reach the real installation, or dispatch anything on its behalf —
+# the launch wake will fail closed and say so, which is itself a state under
+# test. It touches no real organization: the target organization must be
+# created_by the fake account or the script aborts. Reversal is one dashboard
+# action (delete the fake user) — the cascade removes all of this — or
+# deleting the seeded rows by their "(Demo Data)" names.
+#
+# Idempotent: re-running finds the rows and reports them instead of
+# duplicating them. Output is ids and counts only — never a credential.
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type "confirm-e2e-test-data" to proceed'
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: e2e-test-data
+  cancel-in-progress: false
+
+jobs:
+  seed:
+    name: Seed the fake workspace's binding chain
+    if: ${{ inputs.confirm == 'confirm-e2e-test-data' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      PROJECT_REF: qpuofpmagrmyamahqwxw
+    steps:
+      - name: Seed connection, installation, repository, project and link
+        # Same pooler path the migration apply uses; the URL-encoded password
+        # and URL are masked because this repository is public.
+        run: |
+          if [ -z "$SUPABASE_DB_PASSWORD" ]; then
+            echo "::error::SUPABASE_DB_PASSWORD is not set."
+            exit 1
+          fi
+          ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+          echo "::add-mask::$ENC"
+          FOUND=""
+          for HOST in aws-0-us-west-2.pooler.supabase.com aws-1-us-west-2.pooler.supabase.com; do
+            URL="postgresql://postgres.${PROJECT_REF}:${ENC}@${HOST}:5432/postgres"
+            echo "::add-mask::$URL"
+            if psql "$URL" -q -c "select 1" >/dev/null 2>&1; then
+              DB_URL="$URL"
+              FOUND="yes"
+              echo "Reached the database through ${HOST}."
+              break
+            fi
+          done
+          if [ -z "$FOUND" ]; then
+            echo "::error::Could not reach the database through the pooler."
+            exit 1
+          fi
+
+          psql "$DB_URL" -v ON_ERROR_STOP=1 <<'SQL'
+          do $$
+          declare
+            v_user uuid;
+            v_org uuid;
+            v_conn uuid;
+            v_inst uuid;
+            v_repo uuid;
+            v_proj uuid;
+          begin
+            select id into v_user from auth.users
+             where email = 'jordan.seeker.prod1@example.org';
+            if v_user is null then
+              raise exception 'The fake journey account does not exist; nothing to seed.';
+            end if;
+
+            -- The one workspace this may touch: an organization the fake
+            -- account itself created. Anything else aborts before writing.
+            select id into v_org from public.organizations
+             where created_by = v_user
+             order by created_at
+             limit 1;
+            if v_org is null then
+              raise exception 'The fake account owns no organization; nothing to seed.';
+            end if;
+
+            -- Row-level security may be forced on these tables; the writes are
+            -- made as the fake account, which owns the workspace.
+            perform set_config('request.jwt.claim.sub', v_user::text, true);
+
+            select id into v_conn from public.connections
+             where organization_id = v_org and name = 'E2E GitHub (Demo Data)';
+            if v_conn is null then
+              insert into public.connections
+                (organization_id, name, provider, status, external_account_label,
+                 secret_reference, created_by)
+              values
+                (v_org, 'E2E GitHub (Demo Data)', 'github', 'connected',
+                 'e2e-demo-data', 'env://SOFTWAREFACTORY_E2E_DEMO_DATA', v_user)
+              returning id into v_conn;
+            end if;
+
+            select id into v_inst from public.github_installations
+             where connection_id = v_conn;
+            if v_inst is null then
+              insert into public.github_installations
+                (organization_id, connection_id, external_installation_id, app_id,
+                 app_slug, account_id, account_login, account_type, target_type,
+                 repository_selection, status, installed_at, created_by)
+              values
+                (v_org, v_conn, 999000111222, 999000111, 'e2e-demo-data',
+                 999000112, 'surgeservicesllc', 'Organization', 'Organization',
+                 'selected', 'active', now(), v_user)
+              returning id into v_inst;
+            end if;
+
+            select id into v_repo from public.github_repositories
+             where installation_id = v_inst
+               and full_name = 'surgeservicesllc/SoftwareFactory';
+            if v_repo is null then
+              insert into public.github_repositories
+                (organization_id, installation_id, external_repository_id,
+                 owner_login, name, full_name, default_branch, html_url,
+                 private, visibility, selected, github_updated_at)
+              values
+                (v_org, v_inst, 999000113, 'surgeservicesllc', 'SoftwareFactory',
+                 'surgeservicesllc/SoftwareFactory', 'main',
+                 'https://github.com/surgeservicesllc/SoftwareFactory',
+                 true, 'private', true, now())
+              returning id into v_repo;
+            end if;
+
+            select id into v_proj from public.projects
+             where organization_id = v_org
+               and name = 'E2E Lifecycle Test (Demo Data)';
+            if v_proj is null then
+              insert into public.projects
+                (organization_id, name, description, status, github_repository,
+                 default_branch, created_by)
+              values
+                (v_org, 'E2E Lifecycle Test (Demo Data)',
+                 'Seeded test data for the owner-directed end-to-end lifecycle walk.',
+                 'active', 'surgeservicesllc/SoftwareFactory', 'main', v_user)
+              returning id into v_proj;
+            end if;
+
+            if not exists (
+              select 1 from public.project_connections
+               where project_id = v_proj and connection_id = v_conn
+            ) then
+              insert into public.project_connections
+                (organization_id, project_id, connection_id, is_primary,
+                 github_repository_id, created_by)
+              values (v_org, v_proj, v_conn, true, v_repo, v_user);
+            end if;
+
+            raise notice 'seeded organization=% project=% connection=% installation=% repository=%',
+              v_org, v_proj, v_conn, v_inst, v_repo;
+          end $$;
+          SQL
