@@ -54,6 +54,9 @@ const ROUTES = [
   // contract matches a dynamic route by its static prefix.
   "/solutions/lifecycle",
   "/solutions/lifecycle/implementation",
+  // One run's stage page. Signed out this measures the honest error state;
+  // the populated layout is measured through the harness case "run-stage".
+  "/solutions/lifecycle/run/00000000-0000-4000-8000-00000000dead/architecture",
   "/solutions/admin",
   "/auth/onboarding",
   "/offline",

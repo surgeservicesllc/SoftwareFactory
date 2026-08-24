@@ -202,6 +202,7 @@ const CASES = [
   "pipeline-templates-selected",
   "lifecycle",
   "lifecycle-stage",
+  "run-stage",
   "job-seeker-overview",
   "job-seeker-documents",
   "job-seeker-contacts",

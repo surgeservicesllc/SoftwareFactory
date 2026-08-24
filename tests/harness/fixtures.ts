@@ -601,6 +601,27 @@ export const JOB_SEEKER_OUTREACH = [
 ];
 
 /**
+ * Artifacts for GRAPH_RUNS_STAGED's first run, as the artifacts endpoint
+ * projects them. One payload the ARCHITECTURE stage's node recorded — a
+ * freeform package, so the run-stage harness case measures the verbatim
+ * JSON path, the widest layout the page can produce.
+ */
+export const GRAPH_RUN_ARTIFACTS = [
+  {
+    artifactId: "artifact-1",
+    nodeRunId: "node-run-arch",
+    nodeKey: "arch",
+    kind: "REDUCED",
+    payload: {
+      summary: "Read path through the usage-evidence tables, joined per account.",
+      components: ["bot-manager-workspace", "usage-evidence-panel"],
+      openQuestions: ["Whether the per-account probe interval needs a cap."],
+    },
+    createdAt: "2026-08-23T18:20:00.000Z",
+  },
+];
+
+/**
  * Graph runs with staged nodes, in the states the lifecycle distinguishes:
  * complete, failed with a message, and one waiting on a person. A fixture
  * where every run looked the same would measure one card repeated.
