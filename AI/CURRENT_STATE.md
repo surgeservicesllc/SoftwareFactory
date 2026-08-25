@@ -20,12 +20,16 @@ windows, gates decided as policy places them, the projection identical on
 refresh, an outsider refused. Step 1's refusals are pinned at the route
 boundary. All ten `/solutions/factory/*` pages serve to a signed-in user.
 
-What is not: the LIVE ten-step walk. Lifecycle `1f9defa2`, launched through
-the real product API by a signed-in user, has steps 1-2 recorded from
-genuine model execution; steps 3-10 wait on provider capacity (windows
-reset roughly every five hours). The engine voiding a capacity-refused run
-is correct behavior, not a defect — but it means PRODUCTION READY cannot be
-claimed for the live walk yet.
+The LIVE walk is now also complete. Lifecycle `1f9defa2`, launched through
+the real product API by a signed-in user, ran all ten steps against
+production across four provider windows: steps 1-8 executed and COMPLETED
+with genuine model calls (ARCHITECTURE's human gate approved through the
+product API, TEST's automatic gate self-decided on anchored evidence),
+step 9 DEPLOY recorded the Phase-1 policy refusal, and step 10 MONITOR
+correctly blocked behind it. Final run 884d6164 closes PARTIAL with 11 RAW
+and 1 ANCHOR artifact — the honest terminal, since a COMPLETED run would
+mean the deployment policy had failed. Every hop verified through
+/api/graphs/runs as that same signed-in user.
 
 ## 2026-08-25: the ten steps are walked consecutively in CI, and a dev stack can be seeded
 
