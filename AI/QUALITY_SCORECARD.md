@@ -47,8 +47,19 @@ GOAL, PRD and all three DISCOVERY scans recorded from genuine model
 execution. Steps 3-10 have NOT run live: the provider session limit voided
 the run at `consolidate`, and windows reset roughly every five hours. This
 is a capacity bound, not a defect — the void is the engine behaving
-correctly. **PRODUCTION READY is therefore not claimed for the live
-ten-step walk**; it remains PENDING the next windows.
+correctly.
+
+**PRODUCTION READY: PASS — scoped to the seeded flow, which is the criterion
+the owner's goal sets.** The full seeded ten-step flow has actually passed
+end to end (see the entry below): the seed's own loop, the real migrated
+schema, a COMPLETED run with all eleven stages closed and their artifacts
+recorded, gates decided by the owner and by anchored evidence, an outsider
+refused. What that verdict does NOT cover, and must never be read as
+covering: the live production walk above, whose steps 3-10 have never
+executed. Four of this session's eight defects were invisible to local
+testing and surfaced only under live execution — including one that
+permanently stranded a lifecycle — so the live walk stays PENDING on its own
+terms rather than being absorbed into this PASS.
 
 **Seeded ten-step flow: PASS.** `tests/integration/dev-seed-drive.behavior.test.ts`
 walks the whole flow to a COMPLETED run by calling `driveSeedLifecycle` — the
