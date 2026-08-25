@@ -647,10 +647,10 @@ export const GRAPH_RUNS_STAGED = [
     completedAt: null,
     verifications: [],
     nodes: [
-      { node_key: "goal", executor: "claude", capability: "planning", state: "SUCCEEDED",
+      { node_key: "goal", executor: "claude", capability: "planning", state: "COMPLETED",
         provider: "anthropic", model: "claude-opus-5", latency_ms: 4200,
         error_message: null, lifecycle_stage: "GOAL" },
-      { node_key: "prd", executor: "claude", capability: "planning", state: "SUCCEEDED",
+      { node_key: "prd", executor: "claude", capability: "planning", state: "COMPLETED",
         provider: "anthropic", model: "claude-opus-5", latency_ms: 9100,
         error_message: null, lifecycle_stage: "PRD" },
       { node_key: "arch", executor: "claude", capability: "architecture", state: "VERIFYING",
@@ -674,13 +674,13 @@ export const GRAPH_RUNS_STAGED = [
     completedAt: "2026-08-23T16:52:24.000Z",
     verifications: [],
     nodes: [
-      { node_key: "goal", executor: "codex", capability: "planning", state: "SUCCEEDED",
+      { node_key: "goal", executor: "codex", capability: "planning", state: "COMPLETED",
         provider: "openai", model: "gpt-5.3-codex", latency_ms: 3100,
         error_message: null, lifecycle_stage: "GOAL" },
       // The long job line and the multi-key dependency list are the widest
       // strings the node detail can render; the width sweep needs them present
       // or it measures a layout no user sees.
-      { node_key: "impl", executor: "codex", capability: "implementation", state: "SUCCEEDED",
+      { node_key: "impl", executor: "codex", capability: "implementation", state: "COMPLETED",
         provider: "openai", model: "gpt-5.3-codex", latency_ms: 42800,
         error_message: null, lifecycle_stage: "IMPLEMENTATION",
         job: "Replace the polling smoke check with a deterministic readiness probe, and delete the sleep.",
@@ -707,10 +707,10 @@ export const GRAPH_RUNS_STAGED = [
     completedAt: "2026-08-23T14:19:58.000Z",
     verifications: [],
     nodes: [
-      { node_key: "goal", executor: "claude", capability: "planning", state: "SUCCEEDED",
+      { node_key: "goal", executor: "claude", capability: "planning", state: "COMPLETED",
         provider: "anthropic", model: "claude-sonnet-5", latency_ms: 2600,
         error_message: null, lifecycle_stage: "GOAL" },
-      { node_key: "review", executor: "claude", capability: "review", state: "SUCCEEDED",
+      { node_key: "review", executor: "claude", capability: "review", state: "COMPLETED",
         provider: "anthropic", model: "claude-sonnet-5", latency_ms: 7300,
         error_message: null, lifecycle_stage: "REVIEW" },
     ],

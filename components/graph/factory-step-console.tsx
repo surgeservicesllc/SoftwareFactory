@@ -367,7 +367,9 @@ function StepView({
       </Card>
 
       {/* The boards' tile row: only figures something records. */}
-      <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+      {/* Two-up only once a half-width tile can hold its widest chip beside
+          the icon circle; below that the row stacks. */}
+      <dl className="grid grid-cols-1 gap-3 min-[380px]:grid-cols-2 sm:grid-cols-3 xl:grid-cols-6">
         <StatTile icon={Activity} label="Stage Status">
           <StatusBadge tone={standing.tone} dot={false}>{standingWord(standing)}</StatusBadge>
         </StatTile>
@@ -388,7 +390,7 @@ function StepView({
           </span>
         </StatTile>
         <StatTile icon={UserCheck} label="Gate">
-          <span className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+          <span className="flex flex-wrap items-center gap-1.5 text-sm font-semibold text-foreground">
             {gates.length === 0 ? "None" : gates.map((gate) =>
               gate === "HUMAN" ? "Human" : "Automatic").join(", ")}
             {openGateNode ? (
@@ -637,15 +639,15 @@ function StatTile({
 }) {
   return (
     <Card className="p-4">
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <dt className="text-xs text-faint">{label}</dt>
-          <dd className="mt-1.5 flex min-h-7 items-center">{children}</dd>
-          {sub ? <p className="mt-0.5 text-[11px] text-faint">{sub}</p> : null}
-        </div>
-        <span className="grid size-8 shrink-0 place-items-center rounded-lg border border-[var(--border)] bg-[var(--surface-raised)]">
+      <div className="flex items-start gap-3">
+        <span className="grid size-9 shrink-0 place-items-center rounded-full border border-[var(--accent-border)] bg-[var(--accent-surface)]">
           <Icon className="size-4 text-[var(--accent-text)]" aria-hidden="true" />
         </span>
+        <div className="min-w-0">
+          <dt className="text-xs text-faint">{label}</dt>
+          <dd className="mt-1 flex min-h-7 items-center">{children}</dd>
+          {sub ? <p className="mt-0.5 text-[11px] text-faint">{sub}</p> : null}
+        </div>
       </div>
     </Card>
   );
