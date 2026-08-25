@@ -34,6 +34,16 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // The layout harness's build output — a bundle, not source.
     "tests/harness/dist/**",
+    /*
+     * Vendored upstream source, kept byte-for-byte.
+     *
+     * `vendor/ai-job-search` is a verbatim copy of the MIT-licensed
+     * MadsLorentzen/ai-job-search, carried so the port beside it can be
+     * audited against its origin. Linting it would report on somebody else's
+     * house style, and fixing what it reported would make the copy no longer
+     * a copy.
+     */
+    "vendor/**",
   ]),
 ]);
 
