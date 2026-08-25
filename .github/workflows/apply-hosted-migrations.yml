@@ -118,6 +118,16 @@ on:
           a capacity-voided (CANCELLED) run no longer consumes an approval —
           the sequence that stranded live lifecycle d7241cf4; replaces one
           definer function in place, same grants, no table or row changes;
+          "ledger-repair-node-detail" writes NO DDL. 20260823001000 never ran on
+          hosted, but its effect is present: 20260825000200 replaced
+          list_graph_runs with the current body, node detail included. Leaving
+          the row unrecorded is actively dangerous — 20260823001000 sorts
+          BEFORE 20260825000200, so scope=all would re-apply the older file and
+          overwrite list_graph_runs with the pre-cost version, silently
+          removing tokens_used, cost_micros, budget_action and
+          discovery_rounds from production. This records the row after proving
+          the live function already returns both that migration's node detail
+          and the four spend columns. If it does not, it refuses;
           "ledger-repair-command-routing" writes NO DDL. 20260821000400 was
           applied by hand in the SQL editor, which changes the schema without
           writing the ledger row, so the hosted audit reports it APPLIED while
@@ -186,6 +196,7 @@ on:
           - clear-autonomy-projects
           - run-cost-and-budget
           - ledger-repair-command-routing
+          - ledger-repair-node-detail
           - probe
 permissions:
   checks: read
@@ -6133,6 +6144,74 @@ jobs:
             exit 1
           fi
           echo "Applied and verified: a voided run no longer consumes a gate approval."
+
+      - name: Record the node-detail read a later migration superseded (scope=ledger-repair-node-detail)
+        # No DDL. 20260823001000 never ran here, and must never run now:
+        # 20260825000200 replaced list_graph_runs with the current body -- node
+        # detail AND the four spend columns -- and 20260823001000 sorts first.
+        # scope=all would therefore re-apply the older file over the newer
+        # function and take tokens_used, cost_micros, budget_action and
+        # discovery_rounds off production without a word.
+        #
+        # So the row is recorded rather than the file applied, and the proof
+        # required is that the live function already answers for both: the node
+        # detail this migration introduced, and the spend columns that came
+        # after it. Either missing means the schema is not what this claim says
+        # it is, and the scope refuses.
+        if: ${{ inputs.scope == 'ledger-repair-node-detail' }}
+        run: |
+          if [ -z "$SUPABASE_DB_PASSWORD" ]; then
+            echo "::error::This scope requires SUPABASE_DB_PASSWORD for live verification."
+            exit 1
+          fi
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+
+          ROW=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
+            "select count(*) from supabase_migrations.schema_migrations where version = '20260823001000';")
+          if [ "$ROW" != "0" ]; then
+            echo "Ledger already records 20260823001000; nothing to repair."
+            exit 0
+          fi
+
+          # The node detail 20260823001000 introduced, read from the live body.
+          DETAIL=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
+            select (pg_get_functiondef(p.oid) like '%''job'', n.job%')
+               and (pg_get_functiondef(p.oid) like '%''depends_on''%')
+               and (pg_get_functiondef(p.oid) like '%''gate_state'', gate.state%')
+              from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+             where n.nspname = 'public' and p.proname = 'list_graph_runs';")
+          # The spend columns that came after it. Recording the older row while
+          # the newer function is absent would be recording the wrong world.
+          SPEND=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
+            select (pg_get_function_result(p.oid) like '%tokens_used bigint%')
+               and (pg_get_function_result(p.oid) like '%cost_micros bigint%')
+              from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+             where n.nspname = 'public' and p.proname = 'list_graph_runs';")
+          if [ "$DETAIL" != "t" ] || [ "$SPEND" != "t" ]; then
+            echo "::error::list_graph_runs does not answer for both (node detail=${DETAIL}, spend=${SPEND})."
+            echo "::error::Refusing to record 20260823001000 against a schema that does not carry its effect."
+            exit 1
+          fi
+
+          echo "Live function carries the node detail and the spend columns. Recording the row only; no DDL."
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied 20260823001000
+          else
+            npx supabase migration repair --status applied 20260823001000 --db-url "$DB_URL"
+          fi
+
+          AFTER=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
+            "select count(*) from supabase_migrations.schema_migrations where version = '20260823001000';")
+          if [ "$AFTER" != "1" ]; then
+            echo "::error::The ledger still does not record 20260823001000."
+            exit 1
+          fi
+          echo "Recorded: scope=all can no longer overwrite the cost read with the older one."
 
       - name: Record the routing migration the editor applied (scope=ledger-repair-command-routing)
         # No DDL. 20260821000400's objects are live -- the hosted audit sees
