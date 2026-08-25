@@ -923,7 +923,15 @@ export const GRAPH_TEMPLATES: readonly GraphTemplate[] = Object.freeze([
         capability: "decision",
         executor: "MODEL",
         dependsOn: ["evaluate"],
-        gate: "AUTOMATIC",
+        /*
+         * HUMAN, not AUTOMATIC. This node is the scout's whole product — a
+         * judgement about which path to take — and a judgement carries no
+         * anchored evidence. An AUTOMATIC gate here could never be decided by
+         * anyone (both deciders refuse a zero-anchor automatic gate), so every
+         * scout run halted here forever. The gate the author wanted is kept;
+         * only its kind changes to one a person can actually answer.
+         */
+        gate: "HUMAN",
       },
     ],
     proposedEdges: [
