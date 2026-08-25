@@ -3,6 +3,7 @@ import {
   BarChart3,
   Briefcase,
   CalendarCheck,
+  Compass,
   FileText,
   LayoutDashboard,
   Mail,
@@ -47,12 +48,22 @@ export const JOB_SEEKER_NAVIGATION: readonly JobSeekerNavEntry[] = [
     subpages: [
       { label: "Career Profile", href: "/job-seeker/profile", icon: Users },
       { label: "Job Preferences", href: "/job-seeker/preferences", icon: Settings },
-      { label: "Job Discovery", href: "/job-seeker/discovery", icon: Search },
+      { label: "Search", href: "/job-seeker/search", icon: Search },
+      { label: "Job Discovery", href: "/job-seeker/discovery", icon: Compass },
       { label: "Applications", href: "/job-seeker/applications", icon: FileText },
       { label: "Follow-Up", href: "/job-seeker/follow-up", icon: CalendarCheck },
     ],
   },
-  { label: "Job Search", href: "/job-seeker/discovery", icon: Search },
+  /*
+   * Search and Job Discovery are two different acts and both are kept.
+   * Search queries live job boards by text and place and returns postings
+   * nothing has recorded yet; Discovery reads one named company's board and
+   * imports it. Collapsing them would put "which employer?" in front of a
+   * person who wants "who is hiring for this?", which is the question they
+   * came with.
+   */
+  { label: "Search", href: "/job-seeker/search", icon: Search },
+  { label: "Job Discovery", href: "/job-seeker/discovery", icon: Compass },
   { label: "Applications", href: "/job-seeker/applications", icon: FileText },
   { label: "Resume Library", href: "/job-seeker/resumes", icon: FileText },
   { label: "Cover Letters", href: "/job-seeker/cover-letters", icon: Mail },
