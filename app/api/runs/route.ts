@@ -137,6 +137,10 @@ type AnalysisLinkRow = {
 type GraphRunRow = {
   graph_run_id: string;
   graph_id: string;
+  // Optional: a database that predates 20260825000200 returns no such column.
+  tokens_used?: string | number | null;
+  cost_micros?: string | number | null;
+  budget_action?: string | null;
   goal: string | null;
   project_id: string | null;
   state: string | null;
@@ -176,6 +180,13 @@ function graphRunStatus(state: string | null) {
   }
 }
 
+/** A bigint the driver may hand back as a string, left null when it is null. */
+function bigintOrNull(value: string | number | null | undefined): number | null {
+  if (value === null || value === undefined) return null;
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 /**
  * A graph run rendered in the run list's own vocabulary -- each mapping a true
  * statement about the run, and the `analysis:` id prefix telling the console
@@ -210,6 +221,14 @@ function graphRun(row: GraphRunRow, commandId: string | null) {
       graphRunId: row.graph_run_id,
       commandId,
       artifactCount,
+      /*
+       * What the run spent. Null-preserving: a run whose nodes reported no
+       * usage recorded nothing, and an older database returns no column at
+       * all. Neither is a spend of zero.
+       */
+      costMicros: bigintOrNull(row.cost_micros),
+      tokensUsed: bigintOrNull(row.tokens_used),
+      budgetAction: row.budget_action ?? null,
     },
   };
 }

@@ -645,6 +645,13 @@ export const GRAPH_RUNS_STAGED = [
     state: "RUNNING",
     startedAt: "2026-08-23T18:04:11.000Z",
     completedAt: null,
+    // What the run has spent so far, as the route now projects it. The width
+    // sweep needs the longest honest strings these produce, so this carries a
+    // four-figure cost and a six-figure token count rather than tidy ones.
+    tokensUsed: 1_284_507,
+    costMicros: 4_207_311_000,
+    budgetAction: "PREFER_CHEAPER_MODEL",
+    discoveryRounds: 3,
     verifications: [],
     nodes: [
       { node_key: "goal", executor: "claude", capability: "planning", state: "COMPLETED",

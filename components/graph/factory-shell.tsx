@@ -22,6 +22,8 @@ import type { ReactNode } from "react";
 
 import { cn } from "@/lib/cn";
 import { FACTORY_STEPS, type FactoryStep } from "@/lib/sdlc/factory-steps";
+import { shortRunId } from "@/lib/graph/run-label";
+import { budgetActionIsNotable, budgetActionLabel, formatCost } from "@/lib/graph/run-spend";
 
 /**
  * The AI Factory workspace shell, as the owner's boards draw it.
@@ -95,6 +97,9 @@ export function FactoryShell({
     readonly state: string;
     readonly startedAt?: string | null;
     readonly stepsComplete: number;
+    /** What the run spent, when the worker recorded it. */
+    readonly costMicros?: number | null;
+    readonly budgetAction?: string | null;
   } | null;
   viewer?: FactoryViewer;
   breadcrumb: ReactNode;
@@ -184,11 +189,20 @@ export function FactoryShell({
             <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-3">
               <p className="label">Current run</p>
               <p className="mt-1 truncate font-mono text-xs text-foreground" title={run.graphRunId}>
-                {run.graphRunId.slice(0, 8)}
+                {shortRunId(run.graphRunId)}
               </p>
               <p className="mt-0.5 text-xs text-muted">
                 {run.state} · {run.stepsComplete} of 10 steps complete
               </p>
+              {/* Cost, only once something recorded one. */}
+              {formatCost(run.costMicros) ? (
+                <p className="mt-0.5 text-xs text-muted">
+                  {formatCost(run.costMicros)}
+                  {budgetActionIsNotable(run.budgetAction)
+                    ? ` · ${budgetActionLabel(run.budgetAction)}`
+                    : ""}
+                </p>
+              ) : null}
               <div
                 role="img"
                 aria-label={`${run.stepsComplete} of 10 steps complete`}
