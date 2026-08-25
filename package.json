@@ -20,6 +20,7 @@
     "worker:once": "tsx scripts/worker.mts --once",
     "check": "npm run lint && npm run typecheck && npm run test && npm run build",
     "agentos": "tsx scripts/agentos.mts",
+    "seed:dev": "tsx scripts/seed-dev-lifecycle.mts",
     "harness:build": "vite build --config tests/harness/vite.config.ts",
     "harness:serve": "vite preview --config tests/harness/vite.config.ts --port 4321 --strictPort"
   },
