@@ -140,3 +140,91 @@ describe("POST /api/graphs", () => {
     expect(dispatchGraphWorker).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * Step 1's refusals.
+ *
+ * The ten-step flow begins here, so every way this call can be wrong is a way
+ * the whole lifecycle can start from a lie: a graph planted against a project
+ * the caller may not touch, a template that does not exist, a body that named
+ * neither. Each refusal must reach the caller as a refusal — never a recorded
+ * graph, never a woken worker.
+ */
+describe("POST /api/graphs refuses before it records", () => {
+  it("refuses a body that does not name a project and a template", async () => {
+    const response = await POST(request({ templateKey: "full_lifecycle" }));
+
+    expect(response.status).toBe(400);
+    expect((await response.json() as { error: { code: string } }).error.code).toBe("invalid_request");
+    expect(rpc).not.toHaveBeenCalled();
+    expect(dispatchGraphWorker).not.toHaveBeenCalled();
+  });
+
+  it("refuses a project identifier that is not a uuid", async () => {
+    const response = await POST(request({ projectId: "not-a-uuid", templateKey: "full_lifecycle" }));
+
+    expect(response.status).toBe(400);
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it("names the template a caller asked for and could not have", async () => {
+    // A typo or a stale client. The message says which key failed, because
+    // "not found" alone leaves the caller guessing which half was wrong.
+    rpc.mockImplementation(() => Promise.resolve({ data: null, error: null }));
+    requireActiveOrganization.mockResolvedValue({
+      activeOrganization: { id: organizationId, role: "owner" },
+      client: {
+        rpc,
+        from: () => ({
+          select: () => ({
+            eq: () => ({
+              eq: () => ({
+                eq: () => ({ maybeSingle: async () => ({ data: null, error: null }) }),
+              }),
+            }),
+          }),
+        }),
+      },
+    });
+
+    const response = await POST(request({ projectId, templateKey: "no_such_template" }));
+
+    expect(response.status).toBe(400);
+    const body = await response.json() as { error: { message: string } };
+    expect(body.error.message).toContain("no_such_template");
+    expect(dispatchGraphWorker).not.toHaveBeenCalled();
+  });
+
+  it("refuses a member who may not launch, before any graph exists", async () => {
+    requireActiveOrganization.mockResolvedValue({
+      activeOrganization: { id: organizationId, role: "member" },
+      client: { rpc },
+    });
+
+    const response = await POST(request({ projectId, templateKey: "full_lifecycle" }));
+
+    expect(response.status).toBe(403);
+    expect((await response.json() as { error: { code: string } }).error.code).toBe("manager_required");
+    expect(rpc).not.toHaveBeenCalled();
+    expect(dispatchGraphWorker).not.toHaveBeenCalled();
+  });
+
+  it("refuses a request that did not come from this origin", async () => {
+    const response = await POST(
+      new Request("https://factory.example/api/graphs", {
+        body: JSON.stringify({ projectId, templateKey: "full_lifecycle" }),
+        headers: new Headers({
+          "Content-Type": "application/json",
+          Origin: "https://elsewhere.example",
+        }),
+        method: "POST",
+      }),
+    );
+
+    expect(response.status).toBe(403);
+    expect((await response.json() as { error: { code: string } }).error.code)
+      .toBe("invalid_request_origin");
+    expect(rpc).not.toHaveBeenCalled();
+    expect(dispatchGraphWorker).not.toHaveBeenCalled();
+  });
+});
