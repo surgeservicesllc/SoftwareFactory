@@ -14,7 +14,7 @@ standalone Bun CLIs, ~4,271 source LOC excluding tests:
 
 | Skill | Board | Src LOC | Retrieval |
 | --- | --- | --- | --- |
-| `jobdanmark-search` | jobdanmark.dk | 903 | HTML + JSON-LD |
+| `jobdanmark-search` | jobdanmark.dk | 903 | JSON search (POST) |
 | `jobindex-search` | jobindex.dk | 815 | HTML (`var Stash` blob) |
 | `freehire-search` | freehire.me | 696 | Public REST API |
 | `jobnet-search` | jobnet.dk | 652 | JSON BFF |
@@ -39,16 +39,17 @@ Search.
   extractor and the tree walk for `searchResponse`.
 - `freehire.ts` ← `freehire-search` envelope handling, `toResult`,
   `formatSalary`.
+- `jobdanmark.ts` ← `jobdanmark-search` POST search, `toContractDate`,
+  `extractCity` (with its four-digit-street-number edge case).
 - `types.ts`, `registry.ts` — new; no source counterpart.
 
-**SKIPPED**
+**SKIPPED** — two boards, both refusals with reasons, plus the non-Search parts
 
 | What | Why |
 | --- | --- |
 | `@bunli/core` / `@bunli/utils` CLI layer | Argument parsing for a terminal. A Next.js route is the caller. |
 | `linkedin-search` | LinkedIn's terms prohibit automated collection — a separate permission from the MIT licence. This repo had already decided it: `import-adapters.ts` carries a LinkedIn adapter with no fetch at all. |
 | `jobbank-search` | The source's own helper says Jobbank is Cloudflare-blocked and advises skipping it. A permanently failing board teaches people to ignore the failure notice. |
-| `jobdanmark-search` | Unported, not rejected. Largest adapter; no obstacle in principle. |
 | Python tooling, LaTeX templates, fonts | Not Search. |
 
 **MERGED** — Search does not own a recording path. Saving calls the existing
@@ -96,14 +97,14 @@ endpoints.
 
 ## 7. Functionality added
 
-Authenticated `Search` at `/job-seeker/search`: query three live boards by text
+Authenticated `Search` at `/job-seeker/search`: query four live boards by text
 and place, see each board's results with the board's own total, and save any
 result into the job list with honest board attribution. Failures are reported
 per board beside the results that arrived.
 
 ## 8. Tests
 
-61 new tests across 6 files, all passing; full suite **4,608 tests / 400 files**
+70 new tests across 7 files, all passing; full suite **4,617 tests / 401 files**
 green, with lint, typecheck and a production build.
 
 **Unit** — parser normalization, malformed-payload handling (throwing rather
@@ -142,5 +143,5 @@ None to run Search. Two limits worth stating plainly:
   not happened. Running `JOB_SEEKER_E2E=1 npx playwright test
   tests/e2e/job-seeker-journey.spec.ts --project=desktop-chromium` against a
   local stack is what would settle it.
-- **Coverage is Denmark-heavy.** Jobnet and Jobindex are Danish; only Freehire
-  is international. That is what the source repository was.
+- **Coverage is Denmark-heavy.** Jobnet, Jobindex and Jobdanmark are Danish;
+  only Freehire is international. That is what the source repository was.

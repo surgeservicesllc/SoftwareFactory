@@ -5,14 +5,14 @@ Last reviewed: 2026-08-25
 ## 2026-08-25: Search, ported from ai-job-search into Job Seeker
 
 Branch `claude/ui-simplification-cbyx5t`, **not merged**. `/job-seeker/search`
-queries three live job boards — Jobnet, Jobindex, Freehire — and saves results
-into the existing job list. Full detail in `AI/SEARCH_MIGRATION_REPORT.md`.
+queries four live job boards — Jobnet, Jobindex, Jobdanmark, Freehire — and
+saves results into the existing job list. Full detail in `AI/SEARCH_MIGRATION_REPORT.md`.
 
 Adapted from [MadsLorentzen/ai-job-search](https://github.com/MadsLorentzen/ai-job-search)
 (**MIT**, © 2026 Mads Lorentzen) at `e2c311a5`. Attribution in
-`THIRD_PARTY_NOTICES.md`. Three of the source's six boards are ported; the
-other three are deliberately not, and `lib/job-seeker/board-search/registry.ts`
-records why for each.
+`THIRD_PARTY_NOTICES.md`. Four of the source's six boards are ported; the
+other two are refusals with reasons, recorded in
+`lib/job-seeker/board-search/registry.ts`.
 
 **No migration, no new dependency, no new environment variable.** Saved
 postings go into `job_seeker_jobs` under its existing RLS, ownership checks and
@@ -35,7 +35,7 @@ accepts `javascript:`, and that value is rendered as an `href` on the jobs
 panel. The column's `^https?://` CHECK did refuse it, so nothing unsafe was
 stored, but the refusal arrived as a database error rather than a clear answer.
 
-Local gates: lint, typecheck, **4,601 tests / 399 files**, production build —
+Local gates: lint, typecheck, **4,617 tests / 401 files**, production build —
 all green.
 
 ## 2026-08-25: the ten-step factory, and the four defects driving it exposed

@@ -1,4 +1,5 @@
 import { freehireAdapter } from "@/lib/job-seeker/board-search/freehire";
+import { jobdanmarkAdapter } from "@/lib/job-seeker/board-search/jobdanmark";
 import { jobindexAdapter } from "@/lib/job-seeker/board-search/jobindex";
 import { jobnetAdapter } from "@/lib/job-seeker/board-search/jobnet";
 import type { BoardSearchAdapter } from "@/lib/job-seeker/board-search/types";
@@ -42,17 +43,11 @@ import type { BoardSearchAdapter } from "@/lib/job-seeker/board-search/types";
  * failure notice — which is the notice that has to work when a board that
  * usually answers stops. If Jobbank's protection changes, it can be added.
  *
- * ## Jobdanmark is not ported yet
- *
- * No obstacle in principle — it is the largest of the source adapters (903
- * lines across search, detail, autocomplete, categories and locations) and
- * parses JSON-LD out of HTML. It is left out because it is unported, not
- * because it was judged unusable, and this comment is here so the next person
- * does not have to re-derive that distinction.
  */
 export const BOARD_SEARCH_ADAPTERS: readonly BoardSearchAdapter[] = Object.freeze([
   jobnetAdapter,
   jobindexAdapter,
+  jobdanmarkAdapter,
   freehireAdapter,
 ]);
 

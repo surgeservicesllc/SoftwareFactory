@@ -11,7 +11,7 @@ at commit `e2c311a5b40512daf79a04b22c96d7e049afc745`.
 
 **What was taken.** The per-board request construction, retry policy shape, and
 response parsing from `.agents/skills/<board>-search/cli/src` — specifically
-`jobnet-search` and `jobindex-search`. The most substantial single piece is
+`jobnet-search`, `jobindex-search`, `jobdanmark-search` and `freehire-search`. The most substantial single piece is
 Jobindex's `var Stash = {...}` extraction, including the finding that Jobindex
 serves its results client-side and its `/jobsoegning.json` endpoint returns
 204, which is recorded in `lib/job-seeker/board-search/jobindex.ts` where the
