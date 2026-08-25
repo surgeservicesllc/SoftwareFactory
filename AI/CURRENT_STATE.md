@@ -2,6 +2,42 @@
 
 Last reviewed: 2026-08-25
 
+## 2026-08-25: Search, ported from ai-job-search into Job Seeker
+
+Branch `claude/ui-simplification-cbyx5t`, **not merged**. `/job-seeker/search`
+queries three live job boards — Jobnet, Jobindex, Freehire — and saves results
+into the existing job list. Full detail in `AI/SEARCH_MIGRATION_REPORT.md`.
+
+Adapted from [MadsLorentzen/ai-job-search](https://github.com/MadsLorentzen/ai-job-search)
+(**MIT**, © 2026 Mads Lorentzen) at `e2c311a5`. Attribution in
+`THIRD_PARTY_NOTICES.md`. Three of the source's six boards are ported; the
+other three are deliberately not, and `lib/job-seeker/board-search/registry.ts`
+records why for each.
+
+**No migration, no new dependency, no new environment variable.** Saved
+postings go into `job_seeker_jobs` under its existing RLS, ownership checks and
+dedupe index — `source` already accepted a board key. Saving calls the existing
+`insertScoredJob`, so a saved posting is scored and enters the pipeline exactly
+as a manually recorded one does.
+
+**LinkedIn is not ported.** Its terms prohibit automated collection — a
+different permission from the MIT licence on the code — and this repository had
+already decided the question: `import-adapters.ts` carries a LinkedIn adapter
+with no fetch at all.
+
+**Two honest limits.** No test exercises a live board; every parser is proven
+against fixtures, because a suite that calls jobindex.dk fails when someone
+else ships a marketing change. And coverage is Denmark-heavy — only Freehire is
+international — because that is what the source repository was.
+
+Also hardens the pre-existing `POST /api/job-seeker/jobs`: zod's `.url()`
+accepts `javascript:`, and that value is rendered as an `href` on the jobs
+panel. The column's `^https?://` CHECK did refuse it, so nothing unsafe was
+stored, but the refusal arrived as a database error rather than a clear answer.
+
+Local gates: lint, typecheck, **4,601 tests / 399 files**, production build —
+all green.
+
 ## 2026-08-25: the ten-step factory, and the four defects driving it exposed
 
 Driving the owner's ten-step flow against live production found four graph
