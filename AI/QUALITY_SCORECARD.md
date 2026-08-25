@@ -50,12 +50,31 @@ is a capacity bound, not a defect — the void is the engine behaving
 correctly. **PRODUCTION READY is therefore not claimed for the live
 ten-step walk**; it remains PENDING the next windows.
 
-**Development seed: LOCAL/UNEXERCISED.** `scripts/seed-dev-lifecycle.mts`
-plants the whole flow through the product's own RPCs, is idempotent, labels
-every payload `dev_seed`, refuses the production project with no override,
-and refuses to claim graphs it did not plant. Its refusal guards are
-exercised; the full drive has never run against a live stack, because this
-container cannot start Docker.
+**Development seed: SETUP PASS, full drive PENDING — and it was broken.**
+`scripts/seed-dev-lifecycle.mts` was first recorded here as unexercised,
+because this container cannot start Docker. That was too generous: its setup
+path was checkable against real PostgreSQL all along, and
+`tests/integration/dev-seed-setup.behavior.test.ts` found **two defects that
+would have failed the first time anyone ran it**.
+
+It created its project with a direct service-role insert, but only
+`postgres` may insert a project — migration 20260812001700 revoked that from
+`authenticated`, and `service_role` never held it, because a project is born
+from the audited `connect_github_project` path. And it read its world with
+the service-role client, which holds SELECT on none of `projects`, `graphs`
+or `graph_gates`: those are granted to `authenticated`, so RLS decides who
+sees what. Both were fixed by respecting the boundary rather than widening
+any grant — the seed now finds a project instead of inventing one, and reads
+as the signed-in owner — and both failures are kept as assertions.
+
+Now **PASS** at 5 cases against the real migrated schema: onboarding
+idempotency, no role may invent a project, the discovery read refused the
+service role and working as the owner, all eleven phases staged through
+`create_graph_from_plan`, and the planted graph actually claimable. The full
+end-to-end drive against a live Supabase stack remains **PENDING** the same
+Docker limitation, and the script is idempotent, labels every payload
+`dev_seed`, refuses the production project with no override, and refuses to
+claim graphs it did not plant.
 
 
 **Addendum, 2026-08-22 ~21:30Z — containment gate honesty and the audit
