@@ -15,6 +15,7 @@ import {
   UserCheck,
 } from "lucide-react";
 
+import { shortRunId } from "@/lib/graph/run-label";
 import { FactoryShell, type FactoryViewer, type StepMark } from "@/components/graph/factory-shell";
 import { GraphLaunchControl } from "@/components/graph-launch-control";
 import { StageNodes } from "@/components/graph/lifecycle-console";
@@ -73,7 +74,7 @@ function FactoryBreadcrumb({ step, runId }: { step: FactoryStep; runId?: string 
                 href={`/solutions/lifecycle/run/${runId}/${step.stages[0].toLowerCase()}`}
                 className="font-mono hover:text-foreground"
               >
-                {runId.slice(0, 8)}
+                {shortRunId(runId)}
               </Link>
             </li>
           </>
