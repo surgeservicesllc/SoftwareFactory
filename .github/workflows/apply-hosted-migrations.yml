@@ -118,6 +118,14 @@ on:
           a capacity-voided (CANCELLED) run no longer consumes an approval —
           the sequence that stranded live lifecycle d7241cf4; replaces one
           definer function in place, same grants, no table or row changes;
+          "ledger-repair-command-routing" writes NO DDL. 20260821000400 was
+          applied by hand in the SQL editor, which changes the schema without
+          writing the ledger row, so the hosted audit reports it APPLIED while
+          the ledger reports it missing — and scope=all would try to re-run it
+          and abort on 42P07. This records the row that is already true, after
+          proving from pg_class and pg_proc that the table and all three
+          functions really are there. If they are not, it refuses: recording a
+          migration that never ran would skip it forever;
           "run-cost-and-budget" applies only 20260825000200, which returns the
           four columns the graph worker has written since 20260819000100 and
           no read has ever returned — tokens_used, cost_micros, budget_action
@@ -177,6 +185,7 @@ on:
           - finish-credential-vault
           - clear-autonomy-projects
           - run-cost-and-budget
+          - ledger-repair-command-routing
           - probe
 permissions:
   checks: read
@@ -6124,6 +6133,70 @@ jobs:
             exit 1
           fi
           echo "Applied and verified: a voided run no longer consumes a gate approval."
+
+      - name: Record the routing migration the editor applied (scope=ledger-repair-command-routing)
+        # No DDL. 20260821000400's objects are live -- the hosted audit sees
+        # factory_command_routes with its grants -- but the ledger has no row,
+        # because applying SQL in the editor does not write one. That gap is
+        # not cosmetic: scope=all re-runs anything the ledger omits, and this
+        # one would abort on `42P07: relation already exists`.
+        #
+        # The guard is deliberately the opposite way round from an apply
+        # scope. An apply refuses when the objects are already there; this
+        # refuses when they are NOT, because a ledger row is a claim that the
+        # migration ran, and recording that falsely would make every future
+        # apply skip it -- silently, and permanently.
+        if: ${{ inputs.scope == 'ledger-repair-command-routing' }}
+        run: |
+          if [ -z "$SUPABASE_DB_PASSWORD" ]; then
+            echo "::error::This scope requires SUPABASE_DB_PASSWORD for live verification."
+            exit 1
+          fi
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+
+          ROW=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
+            "select count(*) from supabase_migrations.schema_migrations where version = '20260821000400';")
+          if [ "$ROW" != "0" ]; then
+            echo "Ledger already records 20260821000400; nothing to repair."
+            exit 0
+          fi
+
+          # Proof of presence, read from the catalog rather than from a report.
+          TABLE=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
+            select count(*) from pg_class c join pg_namespace n on n.oid = c.relnamespace
+             where n.nspname = 'public' and c.relname = 'factory_command_routes' and c.relkind = 'r';")
+          FUNCTIONS=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
+            select count(distinct p.proname) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+             where n.nspname = 'public'
+               and p.proname in ('submit_factory_command',
+                                 'list_factory_command_routing_candidates',
+                                 'resolve_factory_command_replay');")
+          if [ "$TABLE" != "1" ] || [ "$FUNCTIONS" != "3" ]; then
+            echo "::error::20260821000400 is NOT applied (table=${TABLE} of 1, functions=${FUNCTIONS} of 3)."
+            echo "::error::Refusing to record a migration that did not run — that would skip it forever."
+            echo "::error::Apply it instead, then repair the ledger."
+            exit 1
+          fi
+
+          echo "Objects verified present. Recording the ledger row only; no DDL is executed."
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied 20260821000400
+          else
+            npx supabase migration repair --status applied 20260821000400 --db-url "$DB_URL"
+          fi
+
+          AFTER=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
+            "select count(*) from supabase_migrations.schema_migrations where version = '20260821000400';")
+          if [ "$AFTER" != "1" ]; then
+            echo "::error::The ledger still does not record 20260821000400."
+            exit 1
+          fi
+          echo "Recorded: the ledger now agrees with the schema, and scope=all no longer re-runs it."
 
       - name: Report what a run cost (scope=run-cost-and-budget)
         # Exactly one file — 20260825000200 — replacing list_graph_runs in
