@@ -2,9 +2,8 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 import { DEFAULT_GRAPH_BUDGET } from "@/lib/graph/budgets";
 import { buildLaunchPlan } from "@/lib/graph/launch-plan";
-import type { NodeExecutionResult } from "@/lib/graph/runner";
 import { budgetForTemplate, findTemplate } from "@/lib/graph/templates";
-import { compileClaimedGraph, parseClaimedGraph, runClaimedGraph } from "@/lib/worker/graph-run";
+import { driveSeedLifecycle, type SeedGate } from "@/scripts/seed-drive.mjs";
 import { SupabaseGraphStore } from "@/lib/worker/graph-store";
 
 /**
@@ -242,78 +241,41 @@ async function main() {
   }
 
   // 6. Drive the run the way the production worker does: claim, execute,
-  //    halt at gates. Every output says what it is.
+  //    halt at gates. The loop itself lives in `seed-drive.mts` so a test can
+  //    walk the same code against a real database instead of trusting it.
   const store = SupabaseGraphStore.create({ url, serviceRoleKey, workerId: WORKER_ID });
-  const seedExecutor = async (node: { nodeKey: string; executor: string }): Promise<NodeExecutionResult> => {
-    if (node.executor === "ANCHOR") {
-      return {
-        status: "SUCCEEDED",
-        output: { dev_seed: true, kind: "seed_observation", subject: node.nodeKey, verdict: "green" },
-        tokensUsed: 0,
-      };
-    }
-    return {
-      status: "SUCCEEDED",
-      output: { dev_seed: true, stage_product: node.nodeKey, note: "Development seed output — not real work." },
-      tokensUsed: 0,
-    };
-  };
+  const outcome = await driveSeedLifecycle({
+    store,
+    graphId,
+    drain,
+    log: (line) => console.log(line),
+    listOpenGates: async (id) => {
+      const openGates = await owner
+        .from("graph_gates")
+        .select("id, kind, state, node_id, stage")
+        .eq("graph_id", id)
+        .eq("state", "OPEN");
+      if (openGates.error) throw new Error(`Reading the gates failed: ${openGates.error.message}`);
+      return (openGates.data ?? []) as SeedGate[];
+    },
+    approveHumanGate: async (gate) => {
+      const decided = await owner.rpc("decide_node_gate", {
+        p_gate_id: gate.id,
+        p_approved: true,
+        p_reason: "Approved by the dev seed owner.",
+      });
+      if (decided.error) throw new Error(`Approving the ${gate.stage} gate failed: ${decided.error.message}`);
+    },
+    decideAutomaticGate: async (gate) => {
+      const decided = await admin.rpc("decide_automatic_gate_as_worker", {
+        p_worker_id: WORKER_ID,
+        p_node_id: gate.node_id,
+      });
+      if (decided.error) throw new Error(`Deciding the ${gate.stage} automatic gate failed: ${decided.error.message}`);
+    },
+  });
 
-  for (let window = 1; window <= 8; window += 1) {
-    const claimed = parseClaimedGraph(await store.claimPlannedGraph());
-    if (claimed === null) {
-      console.log("Nothing left to claim.");
-      break;
-    }
-    if (!claimed.ok) throw new Error(`The claim did not parse: ${claimed.detail}`);
-    if (claimed.graph.graph_id !== graphId) {
-      throw new Error("The claim returned a graph the seed did not plant; refusing to continue.");
-    }
-    const compiled = compileClaimedGraph(claimed.graph);
-    if (!compiled.ok) throw new Error(`The claimed graph did not compile: ${compiled.detail}`);
-
-    const summary = await runClaimedGraph(claimed.graph, compiled.graph, store, seedExecutor);
-    console.log(
-      `Window ${window}: ${summary.nodesSucceeded} node(s) completed, `
-      + `${summary.reusedNodes.length} reused, run closed ${summary.finalState}.`,
-    );
-    if (summary.finalState === "COMPLETED") break;
-
-    const openGates = await owner
-      .from("graph_gates")
-      .select("id, kind, state, node_id, stage")
-      .eq("graph_id", graphId)
-      .eq("state", "OPEN");
-    if (openGates.error) throw new Error(`Reading the gates failed: ${openGates.error.message}`);
-    const gates = openGates.data ?? [];
-    if (gates.length === 0) continue;
-
-    if (!drain) {
-      console.log(
-        `Halted at ${gates.map((gate) => `${gate.stage} (${gate.kind})`).join(", ")}. `
-        + "The factory pages now show this decision. Re-run with --drain to approve the gates and complete all ten steps.",
-      );
-      return;
-    }
-    for (const gate of gates) {
-      if (gate.kind === "HUMAN") {
-        const decided = await owner.rpc("decide_node_gate", {
-          p_gate_id: gate.id,
-          p_approved: true,
-          p_reason: "Approved by the dev seed owner.",
-        });
-        if (decided.error) throw new Error(`Approving the ${gate.stage} gate failed: ${decided.error.message}`);
-        console.log(`Approved the ${gate.stage} human gate as the seed owner.`);
-      } else {
-        const decided = await admin.rpc("decide_automatic_gate_as_worker", {
-          p_worker_id: WORKER_ID,
-          p_node_id: gate.node_id,
-        });
-        if (decided.error) throw new Error(`Deciding the ${gate.stage} automatic gate failed: ${decided.error.message}`);
-        console.log(`The ${gate.stage} automatic gate decided itself on its anchored evidence.`);
-      }
-    }
-  }
+  if (outcome.haltedForDecision) return;
 
   console.log(
     "Seed complete. Sign in as the seed owner and open /solutions/factory/requirement to walk the ten steps.",
