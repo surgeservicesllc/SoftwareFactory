@@ -2089,3 +2089,30 @@ Use this append-only log for decisions that constrain future implementation. Cha
   suite pins it: a gated lifecycle halts, the gate is approved, and the
   second window calls the executor for exactly the one genuinely new
   node.
+
+## ADR-144 - The gate-approval watermark counts answers, not runs
+
+- Date: 2026-08-25
+- Status: accepted (migration 20260825000100, hosted apply scope
+  gate-approval-voided)
+- Context: live lifecycle d7241cf4 stranded on a three-step sequence:
+  its run halted at the approved-later ARCHITECTURE human gate
+  (PARTIAL), the owner approved the gate, and the next claim's run was
+  voided by a provider session limit (CANCELLED, per the void rule).
+  claim_planned_graph's reopen clause compared gate.decided_at against
+  max(completed_at) over ALL runs - the void's close was newer, so the
+  approval read as stale and nothing could ever claim the graph again.
+  The queue diagnosis reported it honestly ("no fresh gate approval"),
+  which is how the strand was found.
+- Decision: the freshness watermark considers only runs that answered -
+  states outside FAILED and CANCELLED. A voided or failed run answers
+  nothing (that is already why those states leave a graph claimable
+  elsewhere in the same function), so it cannot consume an approval.
+  lib/worker/queue-diagnosis.ts mirrors the same filter so the drain's
+  explanation cannot drift from the claim's truth.
+- Bounds: an approval is still consumed by the next ANSWER - a later
+  PARTIAL halt (the next gate) or COMPLETED close supersedes it, and
+  the 3-failure / 10-run ceilings still retire runaway graphs. Pinned
+  by the worker-execution case "keeps a gate approval fresh across a
+  capacity-voided run" (halt, approve, void, then a third window that
+  must claim and complete) and a queue-diagnosis unit case.

@@ -50,10 +50,13 @@ function excludingReason(graph: QueueGraphRow, supported: ReadonlySet<string>): 
       return `already answered: has run(s) in state ${states}`;
     }
     // The lifecycle exception: a halted run reopens when a gate approval is
-    // newer than the last run's completion — the question was answered.
+    // newer than the last ANSWERING run's completion — the question was
+    // answered. FAILED and CANCELLED runs answered nothing, so they do not
+    // stale an approval (mirrors claim_planned_graph, 20260825000100).
     const running = liveRuns.some((run) => run.state === "RUNNING");
     if (running) return "a run is in flight (RUNNING)";
     const lastCompleted = graph.graph_runs
+      .filter((run) => !LIVE_RUN_STATES.has(run.state))
       .map((run) => run.completed_at)
       .filter((value): value is string => value !== null)
       .sort()

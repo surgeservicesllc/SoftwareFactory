@@ -92,6 +92,23 @@ describe("the empty-queue diagnosis", () => {
     expect(reasonOf(explainEmptyQueue([reopened], SUPPORTED))).toContain("contradicts");
   });
 
+  it("keeps an approval fresh across a run that answered nothing", () => {
+    // Live graph d7241cf4: halt (PARTIAL) → approval → capacity-voided run
+    // (CANCELLED, closed after the approval). The void answers nothing, so
+    // the approval still reopens the lifecycle.
+    const voided = graph({
+      is_lifecycle: true,
+      graph_runs: [
+        { state: "PARTIAL", completed_at: "2026-08-23T21:00:00Z" },
+        { state: "CANCELLED", completed_at: "2026-08-23T22:00:00Z" },
+      ],
+      graph_gates: [
+        { state: "APPROVED", opened_at: "2026-08-23T20:59:00Z", decided_at: "2026-08-23T21:30:00Z" },
+      ],
+    });
+    expect(reasonOf(explainEmptyQueue([voided], SUPPORTED))).toContain("contradicts");
+  });
+
   it("calls out the contradiction for a graph nothing excludes", () => {
     expect(reasonOf(explainEmptyQueue([graph({})], SUPPORTED))).toContain("contradicts");
   });

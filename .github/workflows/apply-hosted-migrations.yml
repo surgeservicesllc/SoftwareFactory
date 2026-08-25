@@ -113,6 +113,11 @@ on:
           it an approved gate re-executes work the database already holds and
           re-pays the provider window for it; replaces one definer function
           in place, same grants, no table or row changes;
+          "gate-approval-voided" applies only 20260825000100, which scopes
+          the claim's gate-approval freshness watermark to answering runs so
+          a capacity-voided (CANCELLED) run no longer consumes an approval —
+          the sequence that stranded live lifecycle d7241cf4; replaces one
+          definer function in place, same grants, no table or row changes;
           "clear-autonomy-projects" applies only 20260823000600, which adds the
           Autonomy page's Clear control as an archive sweep and excludes
           archived projects from the autonomy list; it deletes nothing and
@@ -158,6 +163,7 @@ on:
           - lifecycle-resume
           - run-artifacts-read
           - resume-gate-halted
+          - gate-approval-voided
           - analysis-launch-commit
           - delete-selected-pipelines
           - stop-and-delete-pipelines
@@ -6052,6 +6058,65 @@ jobs:
             exit 1
           fi
           echo "Applied and verified: an approved gate passes recorded work through at zero cost."
+
+      - name: A gate approval survives voided runs (scope=gate-approval-voided)
+        # Exactly one file — 20260825000100 — replacing claim_planned_graph in
+        # place. Live graph d7241cf4 halted at its approved ARCHITECTURE gate:
+        # the approval was compared against a capacity-voided run's close and
+        # read as stale, stranding the lifecycle. The watermark now considers
+        # only runs that answered (PARTIAL/COMPLETED).
+        if: ${{ inputs.scope == 'gate-approval-voided' }}
+        run: |
+          if [ -z "$SUPABASE_DB_PASSWORD" ]; then
+            echo "::error::This scope requires SUPABASE_DB_PASSWORD for live verification."
+            exit 1
+          fi
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+
+          VOID_FILE=supabase/migrations/20260825000100_gate_approval_survives_voided_runs.sql
+          if [ "$(sha256sum "$VOID_FILE" | cut -d' ' -f1)" != "ff38feb9debcd64e30809639b084305200c440632a8bf05b7b0ee9c0903f324e" ]; then
+            echo "::error::Migration hash mismatch; refusing production DDL."
+            exit 1
+          fi
+
+          ROW=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
+            "select count(*) from supabase_migrations.schema_migrations where version = '20260825000100';")
+          if [ "$ROW" != "0" ]; then
+            echo "::error::Ledger already records 20260825000100 (want 0)."
+            exit 1
+          fi
+
+          READY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
+            select exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+                            where n.nspname = 'public' and p.proname = 'claim_planned_graph');")
+          if [ "$READY" != "t" ]; then
+            echo "::error::claim_planned_graph is missing; apply the lifecycle scopes first."
+            exit 1
+          fi
+
+          echo "Applying ${VOID_FILE} (its in-file postflight verifies the answer-scoped watermark)"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -1 -q -f "$VOID_FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied 20260825000100
+          else
+            npx supabase migration repair --status applied 20260825000100 --db-url "$DB_URL"
+          fi
+
+          VERIFIED=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
+            select pg_get_functiondef(p.oid) like '%not in (''FAILED'', ''CANCELLED'')%'
+              from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+             where n.nspname = 'public'
+               and p.proname = 'claim_planned_graph';")
+          if [ "$VERIFIED" != "t" ]; then
+            echo "::error::The answer-scoped watermark did not read back."
+            exit 1
+          fi
+          echo "Applied and verified: a voided run no longer consumes a gate approval."
 
       - name: Apply the Backlog and Pipelines clear controls (scope=clear-controls)
         # Exactly two files — 20260822000700 and 20260822000800 — and no others.
