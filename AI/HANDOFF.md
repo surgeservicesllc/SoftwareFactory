@@ -16,6 +16,14 @@ Steps 7-10 remain: review hit the session limit (resets 17:20Z) and run
 4a426a14 voided CANCELLED, which is correct. Trigger
 trig_01WayphjizZz23QDwAqPVhaM (17:21Z) carries the finish.
 
+Budget the finish accordingly: only ONE of the four remaining nodes costs
+provider capacity. `review` is the last MODEL node in the template; `test`,
+`deploy` and `monitor` are all ANCHOR executors, which make no provider call
+at all — test reads CI's verdict, deploy records the Phase-1 policy refusal,
+monitor probes the live surface. So the walk is one model call from its
+terminal, not four, and a single short window finishes it. The drain stopping
+on review is what defers the three anchors behind it, not their own cost.
+
 Separately, and NOT this user's walk: graph 0dafc3b9 belongs to another
 organization. The same drain carried it the whole distance, and its run
 050b35e5 recorded DEPLOY failing on the Phase-1 policy refusal —
