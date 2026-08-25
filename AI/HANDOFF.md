@@ -2,7 +2,31 @@
 
 Last updated: 2026-08-25
 
-## Newest (2026-08-25 ~08:30Z): fresh lifecycle 1f9defa2, launched by the product, walking the ten steps
+## Newest (2026-08-25 ~12:55Z): the live walk reaches step 6, and ADR-145 is proven live
+
+The 12:20 window carried lifecycle 1f9defa2 (the fake user's, launched
+through POST /api/graphs) from two stages to SEVEN, all from genuine model
+execution: GOAL, PRD, the three DISCOVERY scans + consolidate, EVALUATION,
+DECISION, ARCHITECTURE — whose HUMAN gate was approved through the product's
+own /api/graph-gates/{id}/decide as the signed-in user — and IMPLEMENTATION,
+which ran fresh and succeeded under ADR-145's 48-turn budget. That is the
+turn-budget fix proven live: the same node exhausted 24 turns twice before.
+
+Steps 7-10 remain: review hit the session limit (resets 17:20Z) and run
+4a426a14 voided CANCELLED, which is correct. Trigger
+trig_01WayphjizZz23QDwAqPVhaM (17:21Z) carries the finish.
+
+Separately, and NOT this user's walk: graph 0dafc3b9 belongs to another
+organization. The same drain carried it the whole distance, and its run
+050b35e5 recorded DEPLOY failing on the Phase-1 policy refusal —
+"deployment execution is owner-approved in Phase 1 and no deployment
+instrument is wired. This refusal is the policy holding, not a fault." —
+with MONITOR blocked behind it, after its TEST anchor gate self-decided.
+That is the designed step 9/10 terminal observed live, but it is visible
+only in the worker log: this user is not a member of that organization and
+cannot verify it through the product. Report it as such, never as ours.
+
+## Earlier (2026-08-25 ~08:30Z): fresh lifecycle 1f9defa2, launched by the product, walking the ten steps
 
 d7241cf4 is PARTIAL-retired (implement's two 24-turn exhaustions were
 genuine failures; the re-plant machinery is per-graph data migrations,
