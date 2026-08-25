@@ -10,9 +10,9 @@ import { SupabaseGraphStore } from "@/lib/worker/graph-store";
 /**
  * Development seed for the ten-step AI Factory flow.
  *
- * Plants a complete, clearly-labelled development world — a seed owner, a
- * seed organization, a seed project, and one `full_lifecycle` graph — through
- * the same RPCs production uses (`onboard_authenticated_organization`,
+ * Plants a clearly-labelled development world — a seed owner, a seed
+ * organization, and one `full_lifecycle` graph — through the same RPCs
+ * production uses (`onboard_authenticated_organization`,
  * `create_graph_from_plan`, the `*_as_worker` boundary), then drives the
  * run's first window so the factory pages at /solutions/factory/* show live
  * stages, recorded artifacts, and the open ARCHITECTURE human gate waiting
@@ -24,19 +24,24 @@ import { SupabaseGraphStore } from "@/lib/worker/graph-store";
  *
  *   - It REFUSES the production project. There is no override flag. Seed data
  *     never belongs in the system of record.
- *   - Every generated payload carries `dev_seed: true`, and every name says
- *     "Dev Seed". Nothing it writes could be mistaken for real work.
+ *   - It does NOT create the project. Only `postgres` may insert one, because
+ *     a project is born from the audited `connect_github_project` path; the
+ *     seed uses a project that already exists and says so when there is none.
+ *   - Every generated payload carries `dev_seed: true`. Nothing it writes
+ *     could be mistaken for real work.
  *   - It is idempotent: a second run finds the world it planted and reports
  *     it instead of duplicating it.
  *   - It touches only its own graph. If the target database holds any other
  *     claimable graph, it stops before claiming rather than grabbing work
  *     that is not its own.
  *
- * Usage (against a local `supabase start` stack or a dev project):
+ * Usage (against a local `supabase start` stack or a dev project), after
+ * connecting a repository as the seed owner through the product:
  *
  *   NEXT_PUBLIC_SUPABASE_URL=... \
  *   SUPABASE_SERVICE_ROLE_KEY=... \
  *   SEED_OWNER_PASSWORD=... \
+ *   [SEED_PROJECT_ID=...] \
  *   npx tsx scripts/seed-dev-lifecycle.mts [--drain]
  */
 
@@ -44,7 +49,6 @@ const PRODUCTION_PROJECT_REF = "qpuofpmagrmyamahqwxw";
 const SEED_OWNER_EMAIL = "seed-owner@dev-seed.local";
 const SEED_ORGANIZATION_NAME = "Dev Seed Factory";
 const SEED_ORGANIZATION_SLUG = "dev-seed-factory";
-const SEED_PROJECT_NAME = "Dev Seed Project";
 const SEED_GOAL_PREFIX = "Dev seed:";
 const WORKER_ID = "dev-seed-lifecycle";
 
@@ -98,7 +102,7 @@ async function main() {
 
   // 1. The seed owner — a real authenticated user, so every write below runs
   //    under the exact RLS the product runs under.
-  const ownerId = await ensureSeedOwner(admin, password);
+  await ensureSeedOwner(admin, password);
 
   const owner = createClient(url, serviceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false },
@@ -127,42 +131,62 @@ async function main() {
     + `(${organization.organization_id}).`,
   );
 
-  // 3. The seed project. Production projects are born from a GitHub
-  //    connection; a dev stack has none, and pretending otherwise is exactly
-  //    what this repository forbids — so the project is planted directly,
-  //    with no repository claim, and the consoles honestly show it
-  //    unconnected.
-  const existingProject = await admin
+  /*
+   * 3. The project the lifecycle runs against — found, never invented.
+   *
+   * A project is deliberately not insertable by anyone but `postgres`:
+   * migration 20260812001700 revoked write on `public.projects` from
+   * `authenticated`, and `service_role` never held it, because a project is
+   * born from the audited `connect_github_project` path and nothing else.
+   * An earlier draft of this script inserted the row directly with the
+   * service-role client and would have died at runtime with "permission
+   * denied for table projects" — the boundary working exactly as designed.
+   *
+   * So the seed uses a project that already exists: named by
+   * SEED_PROJECT_ID, or the organization's own active project when it holds
+   * exactly one. If there is none, the seed says what to do rather than
+   * routing around the boundary.
+   */
+  const namedProjectId = process.env.SEED_PROJECT_ID?.trim();
+  const candidates = await owner
     .from("projects")
-    .select("id")
+    .select("id, name, status")
     .eq("organization_id", organization.organization_id)
-    .eq("name", SEED_PROJECT_NAME)
-    .maybeSingle();
-  if (existingProject.error) throw new Error(`Reading the seed project failed: ${existingProject.error.message}`);
-  let projectId = existingProject.data?.id as string | undefined;
-  if (!projectId) {
-    const inserted = await admin
-      .from("projects")
-      .insert({
-        organization_id: organization.organization_id,
-        name: SEED_PROJECT_NAME,
-        status: "active",
-        default_branch: "main",
-        created_by: ownerId,
-      })
-      .select("id")
-      .single();
-    if (inserted.error) throw new Error(`Creating the seed project failed: ${inserted.error.message}`);
-    projectId = inserted.data.id as string;
-    console.log(`Created project "${SEED_PROJECT_NAME}" (${projectId}).`);
+    .eq("status", "active");
+  if (candidates.error) throw new Error(`Reading the organization's projects failed: ${candidates.error.message}`);
+  const active = (candidates.data ?? []) as Array<{ id: string; name: string }>;
+
+  let projectId: string;
+  if (namedProjectId) {
+    const named = active.find((project) => project.id === namedProjectId);
+    if (!named) {
+      console.error(
+        `SEED_PROJECT_ID ${namedProjectId} is not an active project of "${SEED_ORGANIZATION_NAME}". `
+        + `Active projects: ${active.map((p) => `${p.name} (${p.id})`).join(", ") || "none"}.`,
+      );
+      process.exit(1);
+    }
+    projectId = named.id;
+    console.log(`Using project "${named.name}" (${projectId}).`);
+  } else if (active.length === 1) {
+    projectId = active[0].id;
+    console.log(`Using the organization's only active project "${active[0].name}" (${projectId}).`);
   } else {
-    console.log(`Found project "${SEED_PROJECT_NAME}" (${projectId}).`);
+    console.error(
+      active.length === 0
+        ? `Organization "${SEED_ORGANIZATION_NAME}" has no active project, and this seed will not create one: `
+          + "a project is born from the audited GitHub connection path, which the schema reserves. "
+          + "Connect a repository as the seed owner through the product first, then re-run."
+        : `Organization "${SEED_ORGANIZATION_NAME}" has ${active.length} active projects. `
+          + `Name one with SEED_PROJECT_ID: ${active.map((p) => `${p.name} (${p.id})`).join(", ")}.`,
+    );
+    process.exit(1);
   }
 
   // 4. One lifecycle graph, planned through the same template + RPC the
   //    factory pages' launch control uses. Idempotent: an existing seed
   //    lifecycle in this organization is reported, not duplicated.
-  const existingGraph = await admin
+  const existingGraph = await owner
     .from("graphs")
     .select("id, goal, graph_runs(state)")
     .eq("organization_id", organization.organization_id)
@@ -203,7 +227,7 @@ async function main() {
   // 5. Only our graph may be claimed. Any other claimable graph means this is
   //    not the empty development stack the seed expects — stop, touch
   //    nothing.
-  const otherGraphs = await admin
+  const otherGraphs = await owner
     .from("graphs")
     .select("id, organization_id")
     .neq("id", graphId);
@@ -255,7 +279,7 @@ async function main() {
     );
     if (summary.finalState === "COMPLETED") break;
 
-    const openGates = await admin
+    const openGates = await owner
       .from("graph_gates")
       .select("id, kind, state, node_id, stage")
       .eq("graph_id", graphId)
