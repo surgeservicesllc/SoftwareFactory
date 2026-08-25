@@ -239,7 +239,7 @@ describe("automatic gates can actually be decided", () => {
 
     expect(built.ok).toBe(false);
     if (built.ok) return;
-    expect(built.errors.join(" ")).toMatch(/decide.*AUTOMATIC gate.*MODEL/s);
+    expect(built.errors.join(" ")).toMatch(/decide[\s\S]*AUTOMATIC gate[\s\S]*MODEL/);
   });
 
   it("still compiles every shipped template", () => {
