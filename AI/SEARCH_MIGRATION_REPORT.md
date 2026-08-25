@@ -103,24 +103,44 @@ per board beside the results that arrived.
 
 ## 8. Tests
 
-54 new tests across 5 files, all passing; full suite **4,601 tests / 399 files**
+61 new tests across 6 files, all passing; full suite **4,608 tests / 400 files**
 green, with lint, typecheck and a production build.
 
-Covered: parser normalization, malformed-payload handling (throwing rather than
-returning empty), the retry deadline, network-failure message hygiene, the
-auth-before-fetch boundary, cross-origin refusal, partial board failure,
-re-validation of client-supplied postings, credential-shaped content, duplicate
-saves, and the signed-out redirect for the new route.
+**Unit** — parser normalization, malformed-payload handling (throwing rather
+than returning empty), the retry deadline under a fake clock, network-failure
+message hygiene.
+
+**Route** — the auth-before-fetch boundary, cross-origin refusal, partial board
+failure, re-validation of client-supplied postings, credential-shaped content,
+duplicate saves reported as a state rather than an error.
+
+**Behaviour, real PostgreSQL** (`job-seeker-search-persistence.behavior`) — the
+full migration chain in PGlite: every registry board key satisfies the `source`
+CHECK, a repeat save is refused by the unique index rather than by the route, a
+saved job is invisible to a colleague in the same tenant, `anon` is refused the
+table outright rather than filtered by RLS, and a saved posting survives a
+later read.
+
+**Browser** — the signed-out redirect for `/job-seeker/search` runs in CI. The
+signed-in workflow (search → save → reload → verify attribution) is written in
+`tests/e2e/job-seeker-journey.spec.ts` behind `JOB_SEEKER_E2E`; it really
+contacts the boards, and has **not been executed** — this environment has no
+Docker daemon, so no local Supabase stack.
 
 ## 9. Remaining external configuration
 
 None to run Search. Two limits worth stating plainly:
 
-- **The live boards are not exercised by any test.** Every test uses fixtures,
+- **No live board has been contacted.** Every test that runs uses fixtures,
   deliberately — a suite that calls jobindex.dk fails when someone else ships a
-  marketing change. So the parsers are proven against recorded shapes, not
-  against today's live HTML. Jobindex in particular reads a page's embedded
-  payload and will break when that page changes; it is built to fail loudly
-  when it does.
+  marketing change. The gated journey does contact them and has not been run
+  here. So the parsers are proven against recorded shapes, not against today's
+  live HTML. Jobindex in particular reads a page's embedded payload and will
+  break when that page changes; it is built to fail loudly when it does.
+- **Therefore this is not SEARCH INTEGRATION: PASS.** That verdict was reserved
+  for a real end-to-end run, and the end-to-end run is the one thing that has
+  not happened. Running `JOB_SEEKER_E2E=1 npx playwright test
+  tests/e2e/job-seeker-journey.spec.ts --project=desktop-chromium` against a
+  local stack is what would settle it.
 - **Coverage is Denmark-heavy.** Jobnet and Jobindex are Danish; only Freehire
   is international. That is what the source repository was.
