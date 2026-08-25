@@ -2,7 +2,32 @@
 
 Last updated: 2026-08-25
 
-## Newest (2026-08-25 ~17:30Z): the live ten-step walk is complete
+## Newest (2026-08-25 ~19:15Z): the retry that never happened (ADR-146)
+
+Inspecting the live queue rather than re-running green tests turned up
+defect #10, and a second defect underneath it. Runs `28b4dedf` (06:02Z)
+and `bfb6e0e7` (06:08Z) — the same graph, six minutes apart — lost six
+nodes between them to `API Error: 529 Overloaded`, and not one of those
+six was ever retried. `isCapacityRefusal` matched session limits and 529
+alike, and the executor spends no attempts on a capacity refusal, so the
+one error whose own text says "try again in a moment" was the only class
+that never got a second attempt; a plain transport failure got three.
+
+Underneath it: `RetryPolicy.backoffMs` was declared, defaulted to 2000ms,
+dropped by the compiler, and read by nothing. Every graph retry the
+engine has ever performed fired into the instant that had just refused
+it — so fixing the classification alone would have bought nothing.
+
+Both are fixed in ADR-146. `isQuotaRefusal` (never retried, waits for a
+named reset) is now separate from `isTransientOverload` (keeps its
+attempts); their union still drives the run's void decision, so an
+overload that exhausts every attempt still leaves a lifecycle CANCELLED
+and claimable. `backoffMs` reaches CompiledNode and the runner waits it,
+once per scheduling round rather than once per node.
+
+Four cases fail without the change; they were run red before green.
+
+## Earlier (2026-08-25 ~17:30Z): the live ten-step walk is complete
 
 The 17:20 window finished it. Run 895b1918 executed REVIEW and halted at
 the TEST anchor's automatic gate; that gate self-decided on its anchored

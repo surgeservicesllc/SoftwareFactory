@@ -58,6 +58,13 @@ export type CompiledNode = {
   readonly risk: RiskLevel;
   readonly timeoutMs: number;
   readonly maxAttempts: number;
+  /**
+   * How long to wait before a retry. Carried onto the compiled node because
+   * the runner is the only thing that can honour it, and until it was carried
+   * the policy's `backoffMs` was declared, defaulted, and read by nothing —
+   * every graph retry fired into the same instant that had just refused it.
+   */
+  readonly backoffMs: number;
   readonly allowProviderFallback: boolean;
   readonly reads: NodeContract["reads"];
   readonly writes: NodeContract["writes"];
@@ -100,8 +107,20 @@ export type CompileInput = {
 export function minimumGraphDurationMs(
   graph: Pick<CompiledGraph, "nodes" | "sequentialDepth">,
 ): number {
+  // The waits between attempts are part of the chain. Leaving them out was
+  // harmless only while the runner ignored them; now that it waits, a ceiling
+  // that excluded the waiting would be a ceiling the run can pass without
+  // anything having gone wrong.
   const slowestAttemptChain = graph.nodes.reduce(
-    (worst, node) => Math.max(worst, node.timeoutMs * node.maxAttempts),
+    (worst, node) => {
+      // A node with no declared backoff waits nothing. Read defensively
+      // because the alternative is NaN, and a NaN ceiling is worse than a
+      // wrong one: every comparison against it is false, so the budget stops
+      // binding at all rather than binding badly.
+      const backoffMs = Number.isFinite(node.backoffMs) ? node.backoffMs : 0;
+      const attempts = Math.max(1, node.maxAttempts);
+      return Math.max(worst, node.timeoutMs * attempts + backoffMs * (attempts - 1));
+    },
     0,
   );
   return Math.max(1, graph.sequentialDepth) * slowestAttemptChain;
@@ -200,6 +219,7 @@ export function compileGraph(input: CompileInput): CompileResult {
         risk: node.risk,
         timeoutMs: node.timeoutMs,
         maxAttempts: node.retry.maxAttempts,
+        backoffMs: node.retry.backoffMs,
         allowProviderFallback: node.retry.allowProviderFallback,
         reads: node.reads,
         writes: node.writes,

@@ -2145,3 +2145,45 @@ Use this append-only log for decisions that constrain future implementation. Cha
   "contains a sensitive-shaped output" (node FAILED with the clean
   message, siblings COMPLETED, run PARTIAL, queue intact) and the
   transport/executor turn-budget pins.
+
+## ADR-146 - An overload keeps its retries; a limit does not; both wait
+
+- Date: 2026-08-25
+- Status: accepted
+- Context: the live queue holds two consecutive runs of the same graph,
+  six minutes apart, that together prove two joined defects. Run
+  28b4dedf (2026-08-24 06:02Z) and run bfb6e0e7 (06:08Z) lost six nodes
+  between them to `API Error: 529 Overloaded` - the provider's own
+  message ends "usually temporary - try again in a moment" - and not one
+  of those six nodes was ever retried. `isCapacityRefusal` matched
+  session limits, rate limits and 529 alike, and the executor spends no
+  attempts on a capacity refusal, so the single most retryable error the
+  provider returns was the only one that never got a second attempt. An
+  ordinary transport failure got three. Underneath that sat a second
+  defect that would have made the first fix worthless:
+  `RetryPolicy.backoffMs` shipped declared and defaulted to 2000ms, the
+  compiler dropped it when building CompiledNode, and the runner
+  re-queued a retrying node straight into the next scheduling tick.
+  Every graph retry the engine has ever performed fired into the same
+  instant that had just refused it.
+- Decision: (1) split the classification. `isQuotaRefusal` covers what
+  will not pass until a named reset - session limits, rate limits, 429 -
+  and is never retried inside the run. `isTransientOverload` covers 529,
+  "Overloaded" and "capacity", and keeps the same attempts a transport
+  failure gets. `isCapacityRefusal` remains their union and remains what
+  the run's void decision reads, so an overload that exhausts every
+  attempt still leaves a lifecycle CANCELLED and claimable rather than
+  recorded as an answer it never gave. (2) `backoffMs` is carried onto
+  CompiledNode and honoured by the runner: one wait per scheduling
+  round, not one per node, because an overloaded provider refuses
+  whatever is in flight and the whole batch returns asking for the same
+  pause. The wait is injectable (`deps.delay`) so a test can prove it
+  happened without spending it.
+- Bounds: `minimumGraphDurationMs` now counts the waits between attempts
+  in its worst case - a ceiling that excluded the waiting would be one a
+  run could pass with nothing wrong. The retry ceilings are unchanged:
+  three attempts in the executor, `maxAttempts` in the runner. Pinned by
+  four cases that fail without the change - the classification split,
+  the retried 529, the per-round wait, and the wait not multiplying by
+  graph width - plus guards that an exhausted overload stops retrying
+  and a clean round waits for nothing.

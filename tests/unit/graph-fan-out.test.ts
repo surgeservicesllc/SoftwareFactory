@@ -27,6 +27,7 @@ function node(
     risk: "GREEN",
     timeoutMs: 60_000,
     maxAttempts: 2,
+    backoffMs: 0,
     allowProviderFallback: true,
     toleratesPartialInputs: false,
     reads: options.reads ?? [],

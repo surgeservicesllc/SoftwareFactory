@@ -26,6 +26,7 @@ function anchorNode(capability: CompiledNode["capability"], nodeKey = "verify"):
     risk: "GREEN",
     timeoutMs: 60_000,
     maxAttempts: 1,
+    backoffMs: 0,
     allowProviderFallback: false,
     reads: [],
     writes: [],

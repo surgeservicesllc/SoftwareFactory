@@ -2,11 +2,11 @@
 
 Last reviewed: 2026-08-25
 
-**Addendum, 2026-08-25 — the ten-step factory: four engine defects found by
-driving it, and what is actually proven (ADR-144, ADR-145):** the owner's
-ten-step production-readiness goal was driven against live production, and
-the drive — not review — found four defects in the graph engine. Each was
-fixed with a regression that fails without it:
+**Addendum, 2026-08-25 — the ten-step factory: five engine defects found by
+driving it, and what is actually proven (ADR-144, ADR-145, ADR-146):** the
+owner's ten-step production-readiness goal was driven against live
+production, and the drive — not review — found five defects in the graph
+engine. Each was fixed with a regression that fails without it:
 
 - **Gate-halted re-pay (ADR-143, `20260824001100`).** A gate-approved node's
   recorded work was re-executed on the next claim, spending a provider window
@@ -27,6 +27,16 @@ fixed with a regression that fails without it:
   throw stopped the drain for every organization's graphs. The engine now
   writes the artifact before the COMPLETED mark and contains the refusal to
   its own node, with a message that never restates the payload.
+
+- **A 529 was never retried, over a backoff never applied (ADR-146).** The
+  capacity classifier could not tell a session limit, which must wait for a
+  named reset, from a 529 overload, which asks to be retried — so the one
+  error class the provider marks temporary was the only one that spent no
+  attempts. Runs `28b4dedf` and `bfb6e0e7` lost six nodes to it. Underneath,
+  `RetryPolicy.backoffMs` was declared, defaulted, dropped by the compiler
+  and read by nothing, so every retry the engine ever performed fired into
+  the instant that had just refused it. Both halves are fixed together;
+  fixing either alone would have changed nothing.
 
 **Ten-step flow, local: PASS.**
 `tests/integration/ten-step-consecutive-flow.behavior.test.ts` drives one
