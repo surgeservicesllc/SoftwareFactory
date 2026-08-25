@@ -1,6 +1,30 @@
 # Backlog
 
-Last triaged: 2026-08-22
+Last triaged: 2026-08-25
+
+## One graph stranded behind an undecidable gate (2026-08-25, needs an owner call)
+
+Graph `91959362` (test lifecycle from an earlier session, run `6ac300ae`,
+PARTIAL since 2026-08-24) sits permanently halted: its `requirements` node is
+VERIFYING behind an AUTOMATIC gate holding zero anchors. Nobody can approve
+that — `decide_automatic_gate_as_worker` and `decide_node_gate` both refuse a
+zero-anchor automatic approval — so the queue reports it waiting for a
+decision no one is able to give.
+
+`f6f4bb7` stops the shape being planted again (the compiler now refuses an
+AUTOMATIC gate off an ANCHOR node), but a compile-time guard cannot heal a row
+already in the database.
+
+- [ ] Decide what to do with it. Three options, none of them urgent — the
+  graph blocks nothing, the claim skips it, and its recorded work is intact:
+  1. **Leave it.** It is honest debris: a dead test lifecycle that says so.
+  2. **Reject the gate.** A rejection is permitted where an approval is not
+     (the zero-anchor check only guards `p_approved`), which closes the graph
+     with a recorded reason. This is a product decision on real data, so it
+     wants the owner's word rather than an agent's.
+  3. **Delete the graph.** A destructive data operation, and out of scope for
+     an agent without explicit direction.
+
 
 ## Clearing the Backlog and All Pipelines pages (2026-08-22, ADR-119)
 
