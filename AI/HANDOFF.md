@@ -2,7 +2,22 @@
 
 Last updated: 2026-08-25
 
-## Newest (2026-08-25 ~03:00Z): defect #5 found and fixed — a void consumed a gate approval
+## Newest (2026-08-25 ~03:35Z): ADR-144 proven live — nine stages reused at zero cost
+
+#398 merged (72f13b2), scope gate-approval-voided hosted-applied and
+read back (run 32805322660). The next dispatch claimed the previously
+stranded d7241cf4: run 04e5f69f reused all nine recorded stages —
+goal, requirements, the three scans, consolidate, evaluate, decide,
+and the approved gate-halted architecture — at zero cost, and executed
+implement, which failed only on the session limit (resets 07:20Z). The
+projection (verified as the fake user via /api/graphs/runs) shows the
+nine stages COMPLETED, architecture passed through its approved gate.
+8 of 10 run slots used: do not dispatch before the reset. A one-shot
+trigger (trig_01MxgLSJ385g85oDpcpEtVr7, 07:21Z) carries the finishing
+plan: implement→review→test, TEST anchor self-gate, deploy refusal
+terminal, fake-user + live-page verification, final ten-step verdict.
+
+## Earlier (2026-08-25 ~03:00Z): defect #5 found and fixed — a void consumed a gate approval
 
 The 02:20 window's live drive surfaced the fifth engine defect. Graph
 67a8fdda (an older org's lifecycle at the queue head) executed 8 real
