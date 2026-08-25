@@ -2116,3 +2116,32 @@ Use this append-only log for decisions that constrain future implementation. Cha
   by the worker-execution case "keeps a gate approval fresh across a
   capacity-voided run" (halt, approve, void, then a third window that
   must claim and complete) and a queue-diagnosis unit case.
+
+## ADR-145 - Turn budgets scale by capability, and the artifact guard fails one node, not the drain
+
+- Date: 2026-08-25
+- Status: accepted
+- Context: the 07:20 window's drive surfaced two defects in one drain
+  (worker run 32821441484). First, the lifecycle's implement node
+  exhausted the flat 24-turn budget twice (graph run f200de80) while its
+  nine upstream stages reused cleanly - implementation surveys a
+  repository before it can describe a build, and the one-size envelope
+  measured for scouts was the failure, not the work. Second, on the next
+  graph (0dafc3b9) a node's real output tripped the
+  graph_artifacts_payload_no_sensitive_data constraint - the guard doing
+  its job - and the raw throw killed the whole drain for every
+  organization's graphs.
+- Decision: (1) the transport ceiling rises to 48 and the node executor
+  grants IMPLEMENTATION_NODE_MAX_TURNS = 48 to implementation-capability
+  nodes; every other capability keeps the measured 24. Both constants
+  stay pinned against the ceiling in tests so a silent clamp cannot
+  recur. (2) The engine records a node's artifact BEFORE its COMPLETED
+  mark, and a guard refusal fails exactly that node with a fixed message
+  that never restates the payload; any other storage error still stops
+  the drain, because a database outage should. State finality is
+  preserved - the node was never COMPLETED when the write was refused.
+- Bounds: the guard itself is untouched; secret-shaped content still
+  never enters the artifact record. Pinned by the worker-execution case
+  "contains a sensitive-shaped output" (node FAILED with the clean
+  message, siblings COMPLETED, run PARTIAL, queue intact) and the
+  transport/executor turn-budget pins.

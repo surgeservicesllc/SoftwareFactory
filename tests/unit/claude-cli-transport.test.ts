@@ -13,7 +13,7 @@ import {
 } from "@/lib/providers/claude-cli-transport";
 import { ProviderError } from "@/lib/providers/errors";
 import type { ProviderRunRequest } from "@/lib/providers/types";
-import { GRAPH_NODE_MAX_TURNS } from "@/lib/worker/claude-node-executor";
+import { GRAPH_NODE_MAX_TURNS, IMPLEMENTATION_NODE_MAX_TURNS } from "@/lib/worker/claude-node-executor";
 
 /**
  * What the transport must guarantee, tested against a captured invocation
@@ -332,13 +332,16 @@ describe("the declared turn budget", () => {
   it("clamps rather than throwing when a caller asks for too many", () => {
     // Throwing would turn a cost preference into an outage, which is a worse
     // failure than quietly getting fewer turns than requested.
-    expect(resolveMaxTurns(500)).toBe(24);
+    expect(resolveMaxTurns(500)).toBe(48);
     // Production runs 32228988434, 32230345648 and 32254860997 all failed
     // inspectors with "Reached maximum number of turns (8)" while the graph
     // executor declared more: the ceiling clamped it away without a word, so
-    // raising the executor alone looked like a fix and was not. If either
-    // number moves without the other, this fails rather than the next drain.
+    // raising the executor alone looked like a fix and was not. Run
+    // 32821441484 then repeated the lesson at 24 with the implement node.
+    // If either number moves without the other, this fails rather than the
+    // next drain.
     expect(resolveMaxTurns(GRAPH_NODE_MAX_TURNS)).toBe(GRAPH_NODE_MAX_TURNS);
+    expect(resolveMaxTurns(IMPLEMENTATION_NODE_MAX_TURNS)).toBe(IMPLEMENTATION_NODE_MAX_TURNS);
   });
 
   it("refuses to go below one, however it is asked", () => {

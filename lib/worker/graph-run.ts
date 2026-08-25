@@ -406,9 +406,17 @@ export async function runClaimedGraph(
           const gateState = claimed?.gate_state ?? null;
 
           if (gateKind !== null && gateState !== "APPROVED") {
-            await store.recordArtifact(
-              claim.graph_run_id, artifactKindForNode(node), outcome.output, nodeRunId,
-            );
+            try {
+              await store.recordArtifact(
+                claim.graph_run_id, artifactKindForNode(node), outcome.output, nodeRunId,
+              );
+            } catch (error) {
+              const refusal = artifactGuardRefusal(error);
+              if (refusal === null) throw error;
+              finalFailures += 1;
+              await store.recordNodeState(nodeRunId, "FAILED", refusal);
+              return { status: "FAILED", error: refusal, retryable: false };
+            }
 
             if (gateState === "REJECTED") {
               finalFailures += 1;
@@ -446,12 +454,26 @@ export async function runClaimedGraph(
             };
           }
 
+          // The artifact is the node's product, so it lands before the
+          // COMPLETED mark: a refused write can still fail the node cleanly,
+          // where flipping an already-terminal COMPLETED back would be
+          // exactly the finality violation the state machine forbids. A crash
+          // between the two writes leaves an artifact on a non-terminal node
+          // run, which the resume read (COMPLETED/VERIFYING only) ignores.
+          try {
+            await store.recordArtifact(claim.graph_run_id, artifactKindForNode(node), outcome.output, nodeRunId);
+          } catch (error) {
+            const refusal = artifactGuardRefusal(error);
+            if (refusal === null) throw error;
+            finalFailures += 1;
+            await store.recordNodeState(nodeRunId, "FAILED", refusal);
+            return { status: "FAILED", error: refusal, retryable: false };
+          }
           await store.recordNodeState(nodeRunId, "COMPLETED", null, {
             provider: outcome.provider,
             model: outcome.model,
             latencyMs: outcome.latencyMs,
           });
-          await store.recordArtifact(claim.graph_run_id, artifactKindForNode(node), outcome.output, nodeRunId);
 
           // A reviewing node has just judged its inputs. Recording that as a
           // verification — of which subject, under which lens, with the
@@ -597,6 +619,22 @@ export async function runClaimedGraph(
  * the anchor rule self-satisfying — which is the exact failure the rule exists
  * to prevent.
  */
+/**
+ * The database's sensitive-data guard refusing a node's output, recognized so
+ * the drain can contain it. Live run 0dafc3b9 (worker 32821441484) produced
+ * an output the `graph_artifacts_payload_no_sensitive_data` constraint
+ * refused — correctly — and the raw throw then killed the whole drain for
+ * every organization's graphs. A refused output fails ITS node, with a
+ * message that never restates the payload; any other storage error still
+ * propagates, because a database outage genuinely should stop a drain.
+ */
+export function artifactGuardRefusal(error: unknown): string | null {
+  const message = error instanceof Error ? error.message : String(error);
+  if (!message.includes("graph_artifacts_payload_no_sensitive_data")) return null;
+  return "The node's output was refused by the sensitive-data guard and was not stored. "
+    + "Secret-shaped content must not enter the artifact record.";
+}
+
 export function anchorsFor(
   node: Pick<CompiledNode, "executor">,
   output: unknown,

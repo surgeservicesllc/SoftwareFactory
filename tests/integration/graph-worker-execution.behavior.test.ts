@@ -750,6 +750,61 @@ describe("the graph executor boundary", { timeout: 180_000 }, () => {
     expect(await claim()).toBeNull();
   });
 
+  it("contains a sensitive-shaped output: the node fails, the drain survives", async () => {
+    /*
+     * The sixth live defect's second half (worker 32821441484, graph
+     * 0dafc3b9): a node's output tripped the artifact table's sensitive-data
+     * constraint — the guard doing its job — and the raw throw killed the
+     * whole drain for every organization's graphs. A refused output fails
+     * exactly its node with a message that never restates the payload;
+     * siblings finish, dependents skip, and the run closes as the partial
+     * answer it is.
+     */
+    const graphId = await createDiamondGraph("Contain the refused output", false);
+    const store = pgliteStore(db, "graph-worker-test");
+
+    const claimed = parseClaimedGraph(await claim());
+    expect(claimed.ok).toBe(true);
+    if (!claimed.ok) return;
+    expect(claimed.graph.graph_id).toBe(graphId);
+    const compiled = compileClaimedGraph(claimed.graph);
+    expect(compiled.ok).toBe(true);
+    if (!compiled.ok) return;
+
+    const summary = await runClaimedGraph(claimed.graph, compiled.graph, store, async (node): Promise<NodeExecutionResult> => {
+      if (node.nodeKey === "inspect_b") {
+        // A finding that quotes a secret-shaped string, as a real scan of a
+        // repository can: the guard must refuse it and nothing else may die.
+        return {
+          status: "SUCCEEDED",
+          output: { note: "found sk-abcdefghijklmnopqrstuvwxyz012345 in the config" },
+          tokensUsed: 5,
+        };
+      }
+      return { status: "SUCCEEDED", output: { from: node.nodeKey }, tokensUsed: 5 };
+    });
+
+    expect(summary.finalState).toBe("PARTIAL");
+    expect(summary.nodesFailed).toBeGreaterThan(0);
+
+    await reset(db);
+    const rows = await db.query<{ node_key: string; state: string; error_message: string | null }>(
+      `select n.node_key, nr.state::text as state, nr.error_message
+         from public.node_runs nr join public.graph_nodes n on n.id = nr.node_id
+        where n.graph_id = $1 order by n.node_key`,
+      [graphId],
+    );
+    const byKey = new Map(rows.rows.map((row) => [row.node_key, row]));
+    expect(byKey.get("inspect_b")?.state).toBe("FAILED");
+    expect(byKey.get("inspect_b")?.error_message).toContain("sensitive-data guard");
+    expect(byKey.get("inspect_b")?.error_message).not.toContain("sk-");
+    expect(byKey.get("inspect_a")?.state).toBe("COMPLETED");
+    expect(byKey.get("inspect_c")?.state).toBe("COMPLETED");
+
+    // A PARTIAL is an answer; the graph leaves the queue for the next case.
+    expect(await claim()).toBeNull();
+  });
+
   it("keeps a gate approval fresh across a capacity-voided run", async () => {
     /*
      * The fifth live defect, found the same night the fourth shipped. Graph

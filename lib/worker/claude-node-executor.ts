@@ -39,6 +39,21 @@ const DEFAULT_MODEL = "claude-opus-5";
  */
 export const GRAPH_NODE_MAX_TURNS = 24;
 
+/**
+ * Implementation is not find-read-answer: the node surveys the repository
+ * before it can describe a build. Drain run 32821441484 (graph run f200de80)
+ * exhausted 24 turns twice on the lifecycle's implement node while its nine
+ * upstream stages reused cleanly — the budget, not the work, was the failure.
+ */
+export const IMPLEMENTATION_NODE_MAX_TURNS = 48;
+
+/** The turn budget a node's kind of work actually needs. */
+export function turnsForNode(node: Pick<CompiledNode, "capability">): number {
+  return node.capability === "implementation"
+    ? IMPLEMENTATION_NODE_MAX_TURNS
+    : GRAPH_NODE_MAX_TURNS;
+}
+
 /** Cheaper models for repetitive extraction; the strongest for synthesis. */
 export function defaultModelForNode(node: CompiledNode): string {
   if (node.modelTier === "ECONOMY") return "claude-haiku-4-5";
@@ -145,9 +160,9 @@ export function buildClaudeNodeExecutor(
           allowedTools: ["Read", "Glob", "Grep"],
           // Turns bound the exploration; the deadline above bounds the wall
           // clock. The transport clamps this to its own ceiling, which is why
-          // GRAPH_NODE_MAX_TURNS is pinned against that ceiling in tests
+          // the capability budgets are pinned against that ceiling in tests
           // rather than merely declared here.
-          maxTurns: options.maxTurns ?? GRAPH_NODE_MAX_TURNS,
+          maxTurns: options.maxTurns ?? turnsForNode(node),
         },
       );
 
