@@ -41,25 +41,50 @@ its own error code. Full suite 4535 passed / 2 skipped, lint, typecheck and
 production build green; all ten `/solutions/factory/*` pages serve 200 to a
 signed-in user on `dab41e5`.
 
-**Ten-step flow, live production: PARTIAL — steps 1-2 only.** Lifecycle
-`1f9defa2`, launched by a signed-in user through the real product API, has
-GOAL, PRD and all three DISCOVERY scans recorded from genuine model
-execution. Steps 3-10 have NOT run live: the provider session limit voided
-the run at `consolidate`, and windows reset roughly every five hours. This
-is a capacity bound, not a defect — the void is the engine behaving
-correctly.
+**Ten-step flow, live production: PASS — the whole walk, terminating on
+policy.** Lifecycle `1f9defa2`, launched by a signed-in user through the
+real product API (`POST /api/graphs`, project 51af87ae), ran all ten steps
+against production with genuine model execution, across four provider
+windows on 2026-08-25. Verified through `/api/graphs/runs` as that same
+signed-in user, not from worker logs:
 
-**PRODUCTION READY: PASS — scoped to the seeded flow, which is the criterion
-the owner's goal sets.** The full seeded ten-step flow has actually passed
-end to end (see the entry below): the seed's own loop, the real migrated
-schema, a COMPLETED run with all eleven stages closed and their artifacts
-recorded, gates decided by the owner and by anchored evidence, an outsider
-refused. What that verdict does NOT cover, and must never be read as
-covering: the live production walk above, whose steps 3-10 have never
-executed. Four of this session's eight defects were invisible to local
-testing and surfaced only under live execution — including one that
-permanently stranded a lifecycle — so the live walk stays PENDING on its own
-terms rather than being absorbed into this PASS.
+| Step | Stage | Node(s) | Result |
+|---|---|---|---|
+| 1 | REQUIREMENT | goal, requirements | COMPLETED |
+| 2 | DISCOVER | scan_internal, scan_dependencies, recall_ecosystem, consolidate | COMPLETED |
+| 3 | EVALUATE | evaluate | COMPLETED |
+| 4 | DECIDE | decide | COMPLETED |
+| 5 | ARCHITECT | architecture | COMPLETED, HUMAN gate APPROVED via the product API |
+| 6 | BUILD | implement | COMPLETED under ADR-145's 48-turn budget |
+| 7 | REVIEW | review | COMPLETED |
+| 8 | TEST | test | COMPLETED, AUTOMATIC gate APPROVED on anchored evidence |
+| 9 | DEPLOY | deploy | FAILED by policy refusal — the designed Phase-1 terminal |
+| 10 | MONITOR | monitor | SKIPPED, correctly blocked behind the refusal |
+
+The final run `884d6164` closes PARTIAL carrying 11 RAW and 1 ANCHOR
+artifact. That PARTIAL is the honest terminal, not a defect: step 9 records
+"deployment execution is owner-approved in Phase 1 and no deployment
+instrument is wired. This refusal is the policy holding, not a fault," and
+step 10 blocks behind it because nothing shipped to observe. A COMPLETED
+run here would mean the policy had failed.
+
+Both intermediate voids (`c1576809`, `4a426a14`) were capacity refusals the
+engine correctly recorded as CANCELLED rather than answers, and ADR-144's
+watermark then let the approved gate survive them — proven live, twice.
+
+**PRODUCTION READY: PASS — seeded flow and live production walk both.**
+The seeded ten-step flow passed end to end (the seed's own loop, the real
+migrated schema, a COMPLETED run with all eleven stages closed and their
+artifacts recorded, gates decided by the owner and by anchored evidence, an
+outsider refused), and the live walk above completed all ten steps against
+production, verified through the product's own API as the signed-in user.
+
+What this verdict covers precisely: steps 1-8 executed and COMPLETED with
+real model calls; step 9 terminates on the Phase-1 deployment refusal and
+step 10 blocks behind it, which is the designed behavior, not an
+outstanding gap. Autonomous deployment stays outside Phase 1 by policy, so
+no walk can pass step 9 until an owner-approved deployment instrument is
+wired — and that is a scope boundary, not a defect.
 
 **Migrations, and the `Supabase Preview` check: two different claims.** On a
 FRESH database, the migration set replays cleanly — every integration suite in

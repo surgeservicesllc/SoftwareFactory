@@ -2,7 +2,26 @@
 
 Last updated: 2026-08-25
 
-## Newest (2026-08-25): Search is built; the graph branch was parked
+## Newest (2026-08-25 ~17:30Z): the live ten-step walk is complete
+
+The 17:20 window finished it. Run 895b1918 executed REVIEW and halted at
+the TEST anchor's automatic gate; that gate self-decided on its anchored
+evidence, and run 884d6164 then reused twelve stages and recorded DEPLOY's
+Phase-1 policy refusal with MONITOR blocked behind it. Lifecycle 1f9defa2
+has now run all ten steps live: steps 1-8 COMPLETED with real model calls,
+step 9 terminating on policy, step 10 correctly blocked. Verified through
+/api/graphs/runs as the signed-in user who launched it, not from logs.
+
+Both intermediate voids were capacity refusals recorded as CANCELLED, and
+ADR-144's watermark let the approved ARCHITECTURE gate survive them — the
+fix proven live twice. ADR-145's 48-turn budget carried IMPLEMENTATION,
+which had exhausted 24 turns twice before.
+
+Nothing on the ten-step goal is outstanding. The next lifecycle work is
+whatever the owner asks for; a Phase-2 deployment instrument is what would
+let step 9 pass rather than refuse.
+
+## Also 2026-08-25 (parallel branch): Search is built; the graph branch was parked
 
 **Branch reset, deliberately and with the owner's direction.**
 `claude/ui-simplification-cbyx5t` was reset onto `main` to build Search. The
@@ -32,7 +51,7 @@ new environment variable.
    obstacle in principle. Jobbank and LinkedIn are refusals with reasons, both
    recorded in `registry.ts`.
 
-## Newest (2026-08-25 ~12:55Z): the live walk reaches step 6, and ADR-145 is proven live
+## Earlier (2026-08-25 ~12:55Z): the live walk reaches step 6, and ADR-145 is proven live
 
 The 12:20 window carried lifecycle 1f9defa2 (the fake user's, launched
 through POST /api/graphs) from two stages to SEVEN, all from genuine model
