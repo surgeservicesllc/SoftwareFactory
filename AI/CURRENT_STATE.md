@@ -2,6 +2,31 @@
 
 Last reviewed: 2026-08-25
 
+## 2026-08-25: the ten-step factory, and the four defects driving it exposed
+
+Driving the owner's ten-step flow against live production found four graph
+engine defects that review had not: gate-halted work re-paid (ADR-143), a
+capacity-voided run consuming a gate approval and stranding a lifecycle
+permanently (ADR-144), a flat 24-turn budget too small for implementation
+nodes, and the artifact sensitive-data guard's refusal killing an entire
+drain for every organization (both ADR-145). All four are fixed, each with
+a regression that fails without the fix; ADR-143 and ADR-144's migrations
+are hosted-applied and readback-verified.
+
+What is proven: the whole flow reaches a COMPLETED run locally against the
+real migrated schema (`ten-step-consecutive-flow.behavior.test.ts`) — every
+stage closed with its artifact, exactly-once execution across gate-halted
+windows, gates decided as policy places them, the projection identical on
+refresh, an outsider refused. Step 1's refusals are pinned at the route
+boundary. All ten `/solutions/factory/*` pages serve to a signed-in user.
+
+What is not: the LIVE ten-step walk. Lifecycle `1f9defa2`, launched through
+the real product API by a signed-in user, has steps 1-2 recorded from
+genuine model execution; steps 3-10 wait on provider capacity (windows
+reset roughly every five hours). The engine voiding a capacity-refused run
+is correct behavior, not a defect — but it means PRODUCTION READY cannot be
+claimed for the live walk yet.
+
 ## 2026-08-25: the ten steps are walked consecutively in CI, and a dev stack can be seeded
 
 `tests/integration/ten-step-consecutive-flow.behavior.test.ts` drives one

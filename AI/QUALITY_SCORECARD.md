@@ -1,6 +1,62 @@
 # Quality scorecard
 
-Last reviewed: 2026-08-22
+Last reviewed: 2026-08-25
+
+**Addendum, 2026-08-25 — the ten-step factory: four engine defects found by
+driving it, and what is actually proven (ADR-144, ADR-145):** the owner's
+ten-step production-readiness goal was driven against live production, and
+the drive — not review — found four defects in the graph engine. Each was
+fixed with a regression that fails without it:
+
+- **Gate-halted re-pay (ADR-143, `20260824001100`).** A gate-approved node's
+  recorded work was re-executed on the next claim, spending a provider window
+  on work the database already held. The resume read now offers VERIFYING
+  runs. Hosted-applied.
+- **A void consumed a gate approval (ADR-144, `20260825000100`).** The claim
+  compared the owner's approval against the last RUN's close rather than the
+  last ANSWERING run's, so a capacity-voided run silently staled the approval
+  and stranded lifecycle `d7241cf4` permanently. The watermark now counts
+  answers only. Hosted-applied, run `32805322660`, readback verified — and
+  proven live: run `04e5f69f` reused all nine recorded stages at zero cost.
+- **A flat turn budget (ADR-145).** The lifecycle's implement node exhausted
+  24 turns twice; implementation surveys a repository before it can describe
+  a build. Ceiling 48, implementation nodes granted it, both pinned against
+  the ceiling so a silent clamp cannot recur.
+- **The artifact guard killed the drain (ADR-145).** A node's real output
+  tripped the sensitive-data constraint — the guard working — and the raw
+  throw stopped the drain for every organization's graphs. The engine now
+  writes the artifact before the COMPLETED mark and contains the refusal to
+  its own node, with a message that never restates the payload.
+
+**Ten-step flow, local: PASS.**
+`tests/integration/ten-step-consecutive-flow.behavior.test.ts` drives one
+`full_lifecycle` request to a COMPLETED run against the real migrated schema
+across gate-halted windows: all eleven stages close with a COMPLETED node and
+an artifact, no node executes twice, both human gates are owner-approved and
+the automatic gate decides on its anchors, `list_graph_runs` reports
+identically on a second read, and a signed-in outsider is refused outright.
+Step 1's refusals are pinned at the route boundary (malformed body, non-uuid
+project, unknown template, non-manager role, cross-origin), each asserting
+its own error code. Full suite 4535 passed / 2 skipped, lint, typecheck and
+production build green; all ten `/solutions/factory/*` pages serve 200 to a
+signed-in user on `dab41e5`.
+
+**Ten-step flow, live production: PARTIAL — steps 1-2 only.** Lifecycle
+`1f9defa2`, launched by a signed-in user through the real product API, has
+GOAL, PRD and all three DISCOVERY scans recorded from genuine model
+execution. Steps 3-10 have NOT run live: the provider session limit voided
+the run at `consolidate`, and windows reset roughly every five hours. This
+is a capacity bound, not a defect — the void is the engine behaving
+correctly. **PRODUCTION READY is therefore not claimed for the live
+ten-step walk**; it remains PENDING the next windows.
+
+**Development seed: LOCAL/UNEXERCISED.** `scripts/seed-dev-lifecycle.mts`
+plants the whole flow through the product's own RPCs, is idempotent, labels
+every payload `dev_seed`, refuses the production project with no override,
+and refuses to claim graphs it did not plant. Its refusal guards are
+exercised; the full drive has never run against a live stack, because this
+container cannot start Docker.
+
 
 **Addendum, 2026-08-22 ~21:30Z — containment gate honesty and the audit
 guard's hosted ACL (ADR-122):** four probe-guided rounds isolated why the
