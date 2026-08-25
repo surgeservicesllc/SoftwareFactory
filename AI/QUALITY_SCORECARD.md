@@ -50,7 +50,21 @@ is a capacity bound, not a defect — the void is the engine behaving
 correctly. **PRODUCTION READY is therefore not claimed for the live
 ten-step walk**; it remains PENDING the next windows.
 
-**Development seed: SETUP PASS, full drive PENDING — and it was broken.**
+**Seeded ten-step flow: PASS.** `tests/integration/dev-seed-drive.behavior.test.ts`
+walks the whole flow to a COMPLETED run by calling `driveSeedLifecycle` — the
+exact loop `npm run seed:dev` runs — against the real migrated schema, with
+only PGlite substituted for supabase-js. All eleven stages close with a
+COMPLETED node and a recorded artifact, the two human gates are approved by
+the owner and the anchored gate decides itself, the walk halts for a person
+without `--drain`, and every artifact carries `dev_seed`. Running the real
+loop found two further defects: the claim was parsed before being checked
+for null (an empty queue threw a malformed-projection error instead of
+reporting an idle answer), and a `--drain` re-run claimed nothing at all,
+because the first run leaves an OPEN gate that makes the graph deliberately
+unclaimable and the loop only decided gates after a claim — so the obvious
+two-step usage did nothing. Both fixed and pinned.
+
+**Development seed setup: PASS — and it was broken.**
 `scripts/seed-dev-lifecycle.mts` was first recorded here as unexercised,
 because this container cannot start Docker. That was too generous: its setup
 path was checkable against real PostgreSQL all along, and
