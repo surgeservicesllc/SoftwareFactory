@@ -12,6 +12,7 @@ import {
 } from "@/components/control-plane-detail";
 import { TenantListShell, formatDateTime, formatDuration, riskTone, useTenantList } from "@/components/tenant-list";
 import { StatusBadge } from "@/components/ui";
+import { shortRunId } from "@/lib/graph/run-label";
 
 type Run = {
   id: string;
@@ -31,7 +32,12 @@ type Run = {
   archivedAt?: string | null;
   /** Present on read-only analysis graph runs, which have no agent-run
    * detail, lease, cancel, or delete — their evidence lives on Pipelines. */
-  analysis?: { graphId: string; commandId: string; artifactCount: number } | null;
+  analysis?: {
+    graphId: string;
+    graphRunId?: string | null;
+    commandId: string | null;
+    artifactCount: number;
+  } | null;
 };
 
 type RunEvent = { id?: string; stage?: string; status?: string; message?: string | null; occurredAt?: string; createdAt?: string };
@@ -109,6 +115,8 @@ function statusTone(status: string) {
   if (["succeeded", "passed", "completed", "success"].includes(status)) return "safe";
   if (["failed", "cancelled", "blocked", "failure"].includes(status)) return "danger";
   if (["running", "in_progress"].includes(status)) return "info";
+  // Terminal, but not clean: the run stopped having done part of the work.
+  if (["partial", "budget_stopped"].includes(status)) return "warning";
   return "neutral";
 }
 
@@ -133,6 +141,15 @@ export function runStatusLabel(status: string) {
       return "Failed — needs a look";
     case "cancelled":
       return "Stopped";
+    /*
+     * Two states only a graph run reaches. Both are finished, so neither may
+     * borrow "A worker is on it" -- which is what they used to render before
+     * the run list read graph runs by their own state.
+     */
+    case "partial":
+      return "Finished, with gaps";
+    case "budget_stopped":
+      return "Stopped on budget";
     default:
       return status.replace(/_/g, " ");
   }
@@ -628,7 +645,21 @@ export function RunsConsole() {
                               ? <>Recorded target: {providerDisplayName(run.provider)}{run.model ? ` / ${run.model}` : " / model chosen at execution"}</>
                               : "No provider/model routing target is recorded for this run."}
                         </p>
-                        <p className="mt-1 truncate font-mono text-xs text-faint">{run.branch ?? run.id}</p>
+                        {/* An analysis run is named here exactly as the AI
+                            Factory names it — same eight characters, same
+                            monospace — so a row in this list and the run's
+                            own page are recognizably one run. The full id
+                            stays available on hover for anyone quoting it. */}
+                        {run.analysis ? (
+                          <p className="mt-1 truncate text-xs text-faint">
+                            Run{" "}
+                            <span className="font-mono text-muted" title={run.analysis.graphRunId ?? run.id}>
+                              {shortRunId(run.analysis.graphRunId ?? run.id)}
+                            </span>
+                          </p>
+                        ) : (
+                          <p className="mt-1 truncate font-mono text-xs text-faint">{run.branch ?? run.id}</p>
+                        )}
                       </div>
                       <div className="flex flex-wrap items-center gap-2 md:shrink-0">
                         {run.risk ? <StatusBadge tone={riskTone(run.risk)}>{run.risk.toUpperCase()}</StatusBadge> : null}
@@ -644,8 +675,15 @@ export function RunsConsole() {
                           /* An analysis run's evidence — nodes, artifacts,
                              verifications — lives on the graph surfaces, and
                              it has no lease to cancel or agent-run row to
-                             archive or delete. One honest action. */
-                          <Link href="/solutions/pipelines" className="btn btn-secondary btn-sm">
+                             archive or delete. One honest action, and it goes
+                             to *this* run's own page where the run id is
+                             known, rather than to the list it came from. */
+                          <Link
+                            href={run.analysis.graphRunId
+                              ? `/solutions/lifecycle/run/${run.analysis.graphRunId}`
+                              : "/solutions/pipelines"}
+                            className="btn btn-secondary btn-sm"
+                          >
                             View analysis
                           </Link>
                         ) : (

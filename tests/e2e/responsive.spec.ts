@@ -170,6 +170,21 @@ test("the job seeker page is hard-gated behind sign-in", async ({ page }) => {
   await expect(page).toHaveURL(/\/auth\/sign-in\?next=%2Fjob-seeker/);
 });
 
+test("search is gated server-side, not merely hidden from the navigation", async ({ page }) => {
+  /*
+   * Search is a new destination and the requirement on it was explicit: only
+   * for signed-in people, and protected on the server rather than by leaving
+   * the link out. Those are different claims — a hidden link is still a
+   * reachable URL — so this asks for the URL directly while signed out.
+   *
+   * It inherits the gate from the job-seeker layout rather than carrying its
+   * own; that is deliberate, and this is the test that proves the inheritance
+   * actually reaches a page added later.
+   */
+  await page.goto("/job-seeker/search");
+  await expect(page).toHaveURL(/\/auth\/sign-in\?next=%2Fjob-seeker/);
+});
+
 test("a console page offers one menu button, not two", async ({ page }) => {
   /*
    * The console renders the global header and its own drawer, so a phone had

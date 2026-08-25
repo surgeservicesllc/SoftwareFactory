@@ -387,4 +387,59 @@ test.describe("job seeker live journey", () => {
     // engine as manual entries.
     await expect(page.getByText(/via greenhouse/).first()).toBeVisible();
   });
+
+  test("searches live job boards, saves a result, and finds it again after a reload", async ({ page }) => {
+    /*
+     * The Search workflow end to end, in the same live-stack spirit as the
+     * Greenhouse import above: the search really contacts the boards.
+     *
+     * That makes this the one test in the repository that can fail because
+     * somebody else's website changed, which is exactly why it is here and
+     * not in the ordinary suite. The parsers are pinned against fixtures in
+     * `tests/unit/board-search-*.test.ts`; this proves the whole path is
+     * connected, and its failure is a real signal that a board moved.
+     *
+     * It asserts a shape rather than a specific posting. Which jobs a board
+     * returns for "engineer" on any given day is not this repository's fact,
+     * and asserting one would be asserting somebody else's content.
+     */
+    test.setTimeout(180_000);
+
+    await page.goto("/job-seeker/search");
+    await expect(page.getByRole("heading", { name: "Search", level: 1 })).toBeVisible();
+
+    // The page names the boards it will contact before contacting any.
+    await expect(page.getByText(/Searching \d+ boards?:/)).toBeVisible({ timeout: 20_000 });
+
+    await page.getByPlaceholder("Job title, skill or keyword").fill("engineer");
+    await page.getByRole("button", { name: /^search$/i }).click();
+
+    /*
+     * Either outcome is a pass, and the distinction matters. A board that
+     * answers with nothing is a legitimate empty result; a board that fails is
+     * reported by name. What must never appear is a result card with no
+     * postings behind it.
+     */
+    const anyOutcome = page
+      .locator("[data-testid='search-result-card'], [role='alert']")
+      .first();
+    await expect(anyOutcome).toBeVisible({ timeout: 90_000 });
+
+    const saveButtons = page.getByRole("button", { name: /^save$/i });
+    const savable = await saveButtons.count();
+    test.skip(savable === 0, "no board returned a posting to save on this run");
+
+    await saveButtons.first().click();
+    await expect(page.getByRole("button", { name: /saved to your jobs/i }).first()).toBeVisible({
+      timeout: 30_000,
+    });
+
+    // Persistence: the saved posting is in the job list, attributed to the
+    // board rather than to manual entry, and survives a full reload.
+    await page.goto("/job-seeker/discovery");
+    await page.reload();
+    await expect(
+      page.getByText(/via (jobnet|jobindex|freehire)/).first(),
+    ).toBeVisible({ timeout: 30_000 });
+  });
 });

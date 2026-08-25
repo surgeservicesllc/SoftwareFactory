@@ -21,6 +21,36 @@ Nothing on the ten-step goal is outstanding. The next lifecycle work is
 whatever the owner asks for; a Phase-2 deployment instrument is what would
 let step 9 pass rather than refuse.
 
+## Also 2026-08-25 (parallel branch): Search is built; the graph branch was parked
+
+**Branch reset, deliberately and with the owner's direction.**
+`claude/ui-simplification-cbyx5t` was reset onto `main` to build Search. The
+ten-stage graph work that was on it — PR #347 — is preserved on
+`claude/graph-ten-stage-backup` at `786d1ef`. It was 39 commits behind a
+fast-moving `main` and largely superseded: `main` had independently shipped its
+own ten-stage lifecycle (#370, #372, #374, #375, #385–#388, #399, #401),
+including marking ADR-136 superseded itself. Anything still wanted from #347
+should be taken from that backup ref, not from the PR.
+
+**Search.** `/job-seeker/search` over Jobnet, Jobindex and Freehire, ported from
+the MIT-licensed `MadsLorentzen/ai-job-search`. See
+`AI/SEARCH_MIGRATION_REPORT.md` for the full disposition, and
+`THIRD_PARTY_NOTICES.md` for attribution. No migration, no new dependency, no
+new environment variable.
+
+**What a next session should know.**
+
+1. **Jobindex is the fragile adapter, by construction.** It reads a page and
+   lifts the payload out of a `var Stash` blob, because Jobindex serves results
+   client-side. When Jobindex changes its markup this breaks — and it is built
+   to throw rather than return an empty list, because "no matches" and "the
+   parser is broken" look identical to a person.
+2. **No test touches a live board.** Fixtures only, deliberately. So a green
+   suite does not prove the boards still answer in the shape the parsers expect.
+3. **Jobdanmark is unported, not rejected** — the largest source adapter, no
+   obstacle in principle. Jobbank and LinkedIn are refusals with reasons, both
+   recorded in `registry.ts`.
+
 ## Earlier (2026-08-25 ~12:55Z): the live walk reaches step 6, and ADR-145 is proven live
 
 The 12:20 window carried lifecycle 1f9defa2 (the fake user's, launched
