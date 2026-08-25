@@ -750,6 +750,82 @@ describe("the graph executor boundary", { timeout: 180_000 }, () => {
     expect(await claim()).toBeNull();
   });
 
+  it("keeps a gate approval fresh across a capacity-voided run", async () => {
+    /*
+     * The fifth live defect, found the same night the fourth shipped. Graph
+     * d7241cf4 halted at its ARCHITECTURE gate (PARTIAL), the owner approved
+     * it, and the next claim's run was voided by a session limit (CANCELLED).
+     * The reopen rule then compared the approval against the last run's
+     * close — the void's — and read it as stale: the lifecycle stranded with
+     * its question answered. An approval is consumed by an ANSWER, not by a
+     * run that answered nothing.
+     */
+    const gatedNodes = JSON.stringify([
+      { node_key: "inspect_a", job: "Design the change", executor: "MODEL", capability: "architecture", max_attempts: 1, lifecycle_stage: "ARCHITECTURE", gate_kind: "HUMAN" },
+      { node_key: "inspect_b", job: "Inspect area B", executor: "MODEL", capability: "extraction", max_attempts: 1, lifecycle_stage: "DISCOVERY" },
+      { node_key: "inspect_c", job: "Inspect area C", executor: "MODEL", capability: "extraction", max_attempts: 1, lifecycle_stage: "DISCOVERY" },
+      { node_key: "synthesize", job: "Build on the approved design", executor: "MODEL", capability: "implementation", max_attempts: 1, lifecycle_stage: "IMPLEMENTATION" },
+    ]);
+    const graphId = await createDiamondGraph("An approval outlives a voided run", false, gatedNodes);
+    await reset(db);
+    await db.query(`update public.graphs set is_lifecycle = true where id = $1`, [graphId]);
+    const store = pgliteStore(db, "graph-worker-test");
+
+    // Window one: work succeeds, the gated node halts. PARTIAL.
+    const first = parseClaimedGraph(await claim());
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    const compiledFirst = compileClaimedGraph(first.graph);
+    expect(compiledFirst.ok).toBe(true);
+    if (!compiledFirst.ok) return;
+    const firstSummary = await runClaimedGraph(first.graph, compiledFirst.graph, store, async (node): Promise<NodeExecutionResult> => (
+      { status: "SUCCEEDED", output: { designed: node.nodeKey }, tokensUsed: 25 }
+    ));
+    expect(firstSummary.finalState).toBe("PARTIAL");
+
+    // The owner approves the gate.
+    await reset(db);
+    const gateRow = await db.query<{ id: string }>(
+      `select gate.id from public.graph_gates gate
+         join public.graph_nodes node on node.id = gate.node_id
+        where node.graph_id = $1 and node.node_key = 'inspect_a'`,
+      [graphId],
+    );
+    await asOwner(db);
+    await db.query("select public.decide_node_gate($1::uuid, true, 'Design approved.')", [gateRow.rows[0].id]);
+    await reset(db);
+
+    // Window two: the provider withholds capacity. The run voids CANCELLED.
+    const second = parseClaimedGraph(await claim());
+    expect(second.ok, "the approval must reopen the halted lifecycle").toBe(true);
+    if (!second.ok) return;
+    const compiledSecond = compileClaimedGraph(second.graph);
+    expect(compiledSecond.ok).toBe(true);
+    if (!compiledSecond.ok) return;
+    const secondSummary = await runClaimedGraph(second.graph, compiledSecond.graph, store, async (): Promise<NodeExecutionResult> => ({
+      status: "FAILED",
+      error: "Claude Code returned an error result: You've hit your session limit",
+      retryable: false,
+      capacityWithheld: true,
+    }));
+    expect(secondSummary.finalState).toBe("CANCELLED");
+
+    // Window three: the void must not have consumed the approval — the graph
+    // is still claimable, and this time it finishes.
+    const third = parseClaimedGraph(await claim());
+    expect(third.ok, "a voided run must not stale the gate approval").toBe(true);
+    if (!third.ok) return;
+    const compiledThird = compileClaimedGraph(third.graph);
+    expect(compiledThird.ok).toBe(true);
+    if (!compiledThird.ok) return;
+    const thirdSummary = await runClaimedGraph(third.graph, compiledThird.graph, store, async (node): Promise<NodeExecutionResult> => (
+      { status: "SUCCEEDED", output: { built: node.nodeKey }, tokensUsed: 25 }
+    ));
+    expect(thirdSummary.finalState).toBe("COMPLETED");
+    expect(thirdSummary.reusedNodes).toContain("inspect_a");
+    expect(await claim()).toBeNull();
+  });
+
   it("offers no prior results for a non-lifecycle graph, whatever it recorded", async () => {
     // The analysis twin of the case above: same shape, is_lifecycle stays
     // false, so the database read returns nothing and every node re-executes.

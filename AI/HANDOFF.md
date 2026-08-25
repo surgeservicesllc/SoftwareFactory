@@ -2,7 +2,23 @@
 
 Last updated: 2026-08-25
 
-## Newest (2026-08-25 ~02:15Z): the ten-step goal — consecutive E2E landed, dev seed added
+## Newest (2026-08-25 ~03:00Z): defect #5 found and fixed — a void consumed a gate approval
+
+The 02:20 window's live drive surfaced the fifth engine defect. Graph
+67a8fdda (an older org's lifecycle at the queue head) executed 8 real
+stages and halted at its ARCHITECTURE gate — correct. But d7241cf4 was
+NOT claimable after it: the queue diagnosis said "no fresh gate
+approval" because the approval (after the 6152cee2 halt) was compared
+against the capacity-voided e3c4b582 run's close. ADR-144: the
+watermark now counts answers only (migration 20260825000100, tail pin
+moved, 163 total; workflow scope gate-approval-voided, sha
+ff38feb9…f324e; queue-diagnosis mirrored; regression in the
+worker-execution suite + a diagnosis unit case). After merge: hosted-
+apply the scope, then dispatch graph-worker.yml — d7241cf4 then reuses
+its nine recorded stages and runs implement→review→test. 67a8fdda's own
+ARCHITECTURE gate awaits its org's owner on the product pages.
+
+## Earlier (2026-08-25 ~02:15Z): the ten-step goal — consecutive E2E landed, dev seed added
 
 The owner's active /goal asks for the ten factory steps fully functional,
 Supabase-backed, seeded, and tested end to end. Mapped: the flow already is
