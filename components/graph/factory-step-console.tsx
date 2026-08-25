@@ -367,7 +367,9 @@ function StepView({
       </Card>
 
       {/* The boards' tile row: only figures something records. */}
-      <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+      {/* Two-up only once a half-width tile can hold its widest chip beside
+          the icon circle; below that the row stacks. */}
+      <dl className="grid grid-cols-1 gap-3 min-[380px]:grid-cols-2 sm:grid-cols-3 xl:grid-cols-6">
         <StatTile icon={Activity} label="Stage Status">
           <StatusBadge tone={standing.tone} dot={false}>{standingWord(standing)}</StatusBadge>
         </StatTile>
@@ -388,7 +390,7 @@ function StepView({
           </span>
         </StatTile>
         <StatTile icon={UserCheck} label="Gate">
-          <span className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+          <span className="flex flex-wrap items-center gap-1.5 text-sm font-semibold text-foreground">
             {gates.length === 0 ? "None" : gates.map((gate) =>
               gate === "HUMAN" ? "Human" : "Automatic").join(", ")}
             {openGateNode ? (
