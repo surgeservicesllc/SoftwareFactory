@@ -105,6 +105,11 @@ export type RunnerDependencies = {
   readonly validateOutput?: (node: CompiledNode, output: unknown) => { valid: boolean; issues: readonly string[] };
   /** Monotonic elapsed milliseconds. Injected so budgets are testable. */
   readonly elapsedMs?: () => number;
+  /**
+   * Waits before a retry is dispatched. Injected so a test can prove the wait
+   * happened without spending it, and defaulted so production waits for real.
+   */
+  readonly delay?: (ms: number) => Promise<void>;
   readonly onEvent?: (event: RunnerEvent) => void;
 };
 
@@ -118,7 +123,8 @@ export type RunnerEvent = {
     | "node_output_rejected"
     | "budget_degraded"
     | "budget_stopped"
-    | "capacity_withheld";
+    | "capacity_withheld"
+    | "retry_backoff";
   readonly nodeKey?: string;
   readonly detail: string;
 };
@@ -167,6 +173,8 @@ export async function runGraph(
   const events: RunnerEvent[] = [];
   const attemptsByNode = new Map<string, number>();
   const elapsed = deps.elapsedMs ?? (() => 0);
+  const delay = deps.delay
+    ?? ((ms: number) => new Promise<void>((resolve) => { setTimeout(resolve, ms); }));
 
   const emit = (event: RunnerEvent) => {
     events.push(event);
@@ -278,6 +286,12 @@ export async function runGraph(
       }),
     );
 
+    // One wait per scheduling round, not one per node. When a provider is
+    // overloaded it refuses whatever is in flight, so the whole batch comes
+    // back asking for the same pause; serving it once is both the shorter
+    // wait and the politer one.
+    let retryPauseMs = 0;
+
     for (const { nodeKey, node, attempt, result } of results) {
       if (result.tokensUsed !== undefined) tokensUsed = (tokensUsed ?? 0) + result.tokensUsed;
       if (result.costMicros !== undefined) costMicros = (costMicros ?? 0) + result.costMicros;
@@ -295,6 +309,7 @@ export async function runGraph(
 
           if (attempt < node.maxAttempts) {
             retriesUsed += 1;
+            if (node.backoffMs > retryPauseMs) retryPauseMs = node.backoffMs;
             state = transition(state, nodeKey, "PENDING");
             emit({ type: "node_retrying", nodeKey, detail: `Output rejected; retrying (${attempt}/${node.maxAttempts}).` });
           } else {
@@ -313,6 +328,7 @@ export async function runGraph(
       const canRetry = result.retryable && attempt < node.maxAttempts;
       if (canRetry) {
         retriesUsed += 1;
+        if (node.backoffMs > retryPauseMs) retryPauseMs = node.backoffMs;
         state = transition(state, nodeKey, "PENDING");
         emit({
           type: "node_retrying",
@@ -330,6 +346,18 @@ export async function runGraph(
           ? `${result.error} — retry budget spent after ${attempt} attempt(s).`
           : `${result.error} — not retryable.`,
       });
+    }
+
+    // The node's retry policy has always declared a backoff; until this line
+    // nothing read it, so every retry fired into the same instant that had
+    // just refused it. Waiting here rather than inside the results loop keeps
+    // the pause to one per round.
+    if (retryPauseMs > 0) {
+      emit({
+        type: "retry_backoff",
+        detail: `Waiting ${retryPauseMs}ms before the retries this round scheduled.`,
+      });
+      await delay(retryPauseMs);
     }
   }
 

@@ -6,7 +6,7 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { DEFAULT_GRAPH_BUDGET } from "@/lib/graph/budgets";
-import { compileGraph, minimumGraphDurationMs } from "@/lib/graph/compiler";
+import { compileGraph, minimumGraphDurationMs, type CompiledNode } from "@/lib/graph/compiler";
 import { buildLaunchPlan } from "@/lib/graph/launch-plan";
 import { budgetForTemplate, GRAPH_TEMPLATES, templateNodeContracts } from "@/lib/graph/templates";
 
@@ -65,9 +65,27 @@ describe("the graph budget", () => {
 
   it("derives the requirement from the critical path, not the node count", () => {
     // Ten parallel nodes cost one node's time; three in a chain cost three.
-    const node = { timeoutMs: 60_000, maxAttempts: 2 };
+    const node = { timeoutMs: 60_000, maxAttempts: 2, backoffMs: 0 };
     expect(minimumGraphDurationMs({ nodes: Array(10).fill(node), sequentialDepth: 1 })).toBe(120_000);
     expect(minimumGraphDurationMs({ nodes: Array(3).fill(node), sequentialDepth: 3 })).toBe(360_000);
+  });
+
+  it("counts the waits between attempts, not just the attempts", () => {
+    // The runner waits `backoffMs` before a retry (ADR-146). A ceiling that
+    // excluded that waiting would be one a healthy run could exceed with
+    // nothing having gone wrong.
+    // Only the three fields the estimator reads; the rest of the node is
+    // irrelevant to a duration ceiling and inventing it would obscure that.
+    const chain = (fields: Pick<CompiledNode, "timeoutMs" | "maxAttempts" | "backoffMs">) =>
+      [fields] as unknown as CompiledNode[];
+
+    const node = { timeoutMs: 60_000, maxAttempts: 2, backoffMs: 2_000 };
+    expect(minimumGraphDurationMs({ nodes: chain(node), sequentialDepth: 1 })).toBe(122_000);
+    expect(minimumGraphDurationMs({ nodes: chain(node), sequentialDepth: 3 })).toBe(366_000);
+
+    // A single attempt waits for nothing: there is no retry to pace.
+    const once = { timeoutMs: 60_000, maxAttempts: 1, backoffMs: 2_000 };
+    expect(minimumGraphDurationMs({ nodes: chain(once), sequentialDepth: 1 })).toBe(60_000);
   });
 });
 

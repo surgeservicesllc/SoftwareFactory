@@ -62,12 +62,37 @@ export function defaultModelForNode(node: CompiledNode): string {
 }
 
 /**
- * A provider refusal that means "not now", not "wrong": session limits, rate
- * limits, overload. Retrying seconds later burns attempts a reset would have
- * honoured, so these are classified rather than treated as node failures.
+ * A refusal that will not pass until a limit resets: session limits, rate
+ * limits, 429. Retrying seconds later burns attempts the reset would have
+ * honoured, so these are never retried inside the run.
+ */
+export function isQuotaRefusal(message: string): boolean {
+  return /session limit|rate limit|too many requests|quota|\b429\b/i.test(message);
+}
+
+/**
+ * A momentary upstream overload: 529, "Overloaded", "capacity". The provider's
+ * own message says to try again in a moment, and this is the only failure class
+ * that says so — so it keeps its attempts rather than being spent on the first.
+ *
+ * Runs 28b4dedf and bfb6e0e7 are why this is separated out. Six nodes across
+ * them died on 529 with exactly one attempt each, because the old single
+ * predicate below classified an overload as a limit and the executor spends no
+ * attempts on a limit. The most retryable error the provider returns was the
+ * only one never retried.
+ */
+export function isTransientOverload(message: string): boolean {
+  return /overloaded|capacity|\b529\b/i.test(message);
+}
+
+/**
+ * A provider refusal that means "not now", not "wrong". Both kinds still mean
+ * the attempt was never fuelled, which is what the run's void decision reads:
+ * a lifecycle whose every terminal failure was capacity answered nothing,
+ * however many attempts it spent finding that out.
  */
 export function isCapacityRefusal(message: string): boolean {
-  return /session limit|rate limit|too many requests|overloaded|capacity|\b429\b|\b529\b/i.test(message);
+  return isQuotaRefusal(message) || isTransientOverload(message);
 }
 
 /** Enough to carry real findings; bounded so one verbose upstream cannot
@@ -197,14 +222,19 @@ export function buildClaudeNodeExecutor(
         ? `The node exceeded its ${Math.round(node.timeoutMs / 1000)}s timeout and was stopped.`
         : rawMessage;
       const capacityWithheld = isCapacityRefusal(message);
+      // A quota refusal names its own reset hour: nothing this run can do will
+      // change the answer, so it is never retried here. An overload is the
+      // opposite — the provider asks to be tried again — and it keeps the same
+      // attempts a transport failure gets. Both still count as capacity
+      // withheld, so an exhausted overload leaves the graph claimable rather
+      // than recorded as an answer it never gave.
+      const quotaExhausted = isQuotaRefusal(message);
       return {
         status: "FAILED",
         error: message,
         // A transport or timeout failure may pass on retry; the runner's
         // policy bounds how often that optimism is allowed to cost a turn.
-        // A capacity refusal will not pass until the limit resets, so it is
-        // never retried within the run.
-        retryable: !capacityWithheld && attempt < 3,
+        retryable: !quotaExhausted && attempt < 3,
         capacityWithheld,
         provider: "anthropic",
         model,

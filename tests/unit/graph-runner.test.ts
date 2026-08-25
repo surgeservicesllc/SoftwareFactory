@@ -106,6 +106,71 @@ describe("node runner", () => {
     expect(result.spend.retriesUsed).toBe(2);
   });
 
+  it("waits the node's declared backoff before a retry is dispatched", async () => {
+    // `RetryPolicy.backoffMs` shipped declared, defaulted to two seconds, and
+    // read by nothing: the compiler dropped it and the runner re-queued the
+    // node into the very next tick. Every graph retry fired into the same
+    // instant that had just refused it, which is the worst moment to ask.
+    const graph = compile([
+      node("flaky", { retry: { maxAttempts: 3, backoffMs: 2_000, allowProviderFallback: true } }),
+    ]);
+
+    const waits: number[] = [];
+    const execute = vi.fn(
+      async (): Promise<NodeExecutionResult> => ({
+        status: "FAILED",
+        error: "API Error: 529 Overloaded",
+        retryable: true,
+      }),
+    );
+
+    const result = await runGraph(graph, DEFAULT_GRAPH_BUDGET, {
+      executeNode: execute,
+      delay: async (ms) => { waits.push(ms); },
+    });
+
+    expect(execute).toHaveBeenCalledTimes(3);
+    expect(waits).toEqual([2_000, 2_000]);
+    expect(result.events.filter((event) => event.type === "retry_backoff")).toHaveLength(2);
+  });
+
+  it("waits once for a whole round of retries, not once per node", async () => {
+    // An overloaded provider refuses everything in flight, so the batch comes
+    // back asking for the same pause. Serving it per node would multiply one
+    // outage into a wait proportional to the graph's width.
+    const graph = compile([
+      node("a", { retry: { maxAttempts: 2, backoffMs: 2_000, allowProviderFallback: true } }),
+      node("b", { retry: { maxAttempts: 2, backoffMs: 2_000, allowProviderFallback: true } }),
+      node("c", { retry: { maxAttempts: 2, backoffMs: 2_000, allowProviderFallback: true } }),
+    ]);
+
+    const waits: number[] = [];
+    await runGraph(graph, DEFAULT_GRAPH_BUDGET, {
+      executeNode: async (): Promise<NodeExecutionResult> => ({
+        status: "FAILED",
+        error: "API Error: 529 Overloaded",
+        retryable: true,
+      }),
+      delay: async (ms) => { waits.push(ms); },
+    });
+
+    expect(waits).toEqual([2_000]);
+  });
+
+  it("does not wait when nothing was retried", async () => {
+    const graph = compile([
+      node("clean", { retry: { maxAttempts: 3, backoffMs: 2_000, allowProviderFallback: true } }),
+    ]);
+
+    const waits: number[] = [];
+    await runGraph(graph, DEFAULT_GRAPH_BUDGET, {
+      executeNode: async () => succeed(),
+      delay: async (ms) => { waits.push(ms); },
+    });
+
+    expect(waits).toEqual([]);
+  });
+
   it("does not retry a failure declared non-retryable", async () => {
     const graph = compile([node("blocked")]);
 

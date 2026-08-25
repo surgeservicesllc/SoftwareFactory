@@ -35,19 +35,30 @@ accepts `javascript:`, and that value is rendered as an `href` on the jobs
 panel. The column's `^https?://` CHECK did refuse it, so nothing unsafe was
 stored, but the refusal arrived as a database error rather than a clear answer.
 
-Local gates: lint, typecheck, **4,617 tests / 401 files**, production build —
+Local gates: lint, typecheck, **4,673 tests / 401 files**, production build —
 all green.
 
-## 2026-08-25: the ten-step factory, and the four defects driving it exposed
+## 2026-08-25: the ten-step factory, and the defects driving it exposed
 
-Driving the owner's ten-step flow against live production found four graph
+Driving the owner's ten-step flow against live production found five graph
 engine defects that review had not: gate-halted work re-paid (ADR-143), a
 capacity-voided run consuming a gate approval and stranding a lifecycle
 permanently (ADR-144), a flat 24-turn budget too small for implementation
-nodes, and the artifact sensitive-data guard's refusal killing an entire
-drain for every organization (both ADR-145). All four are fixed, each with
-a regression that fails without the fix; ADR-143 and ADR-144's migrations
-are hosted-applied and readback-verified.
+nodes, the artifact sensitive-data guard's refusal killing an entire
+drain for every organization (both ADR-145), and a 529 overload retried
+zero times over a backoff the engine declared but never applied
+(ADR-146). All five are fixed, each with a regression that fails without
+the fix; ADR-143 and ADR-144's migrations are hosted-applied and
+readback-verified.
+
+The last of them came from reading the live queue rather than re-running
+tests that already pass: two runs of one graph, six minutes apart, lost
+six nodes to `529 Overloaded` on a single attempt each, because the
+classifier could not tell a limit with a reset hour from an overload that
+asks to be retried. Underneath sat `RetryPolicy.backoffMs` — declared,
+defaulted, dropped at compile time, read by nothing — which meant every
+graph retry the engine had ever performed fired into the same instant
+that had just refused it.
 
 What is proven: the whole flow reaches a COMPLETED run locally against the
 real migrated schema (`ten-step-consecutive-flow.behavior.test.ts`) — every

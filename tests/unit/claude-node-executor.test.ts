@@ -16,6 +16,8 @@ import {
   GRAPH_NODE_MAX_TURNS,
   IMPLEMENTATION_NODE_MAX_TURNS,
   isCapacityRefusal,
+  isQuotaRefusal,
+  isTransientOverload,
 } from "@/lib/worker/claude-node-executor";
 import type { ClaudeAuthResolution } from "@/lib/providers/claude-auth";
 
@@ -66,6 +68,21 @@ describe("isCapacityRefusal", () => {
     expect(isCapacityRefusal("The model returned malformed JSON")).toBe(false);
     expect(isCapacityRefusal("getaddrinfo ENOTFOUND api.anthropic.com")).toBe(false);
     expect(isCapacityRefusal("The area could not be read.")).toBe(false);
+  });
+
+  it("separates a limit that must wait for a reset from an overload that must not", () => {
+    const sessionLimit = "You've hit your session limit · resets 7:30am (UTC)";
+    const overload = "API Error: 529 Overloaded. This is a server-side issue, usually temporary";
+
+    expect(isQuotaRefusal(sessionLimit)).toBe(true);
+    expect(isTransientOverload(sessionLimit)).toBe(false);
+
+    expect(isTransientOverload(overload)).toBe(true);
+    expect(isQuotaRefusal(overload)).toBe(false);
+
+    // The union still answers what it always answered: both are "not now".
+    expect(isCapacityRefusal(sessionLimit)).toBe(true);
+    expect(isCapacityRefusal(overload)).toBe(true);
   });
 });
 
@@ -133,6 +150,40 @@ describe("buildClaudeNodeExecutor", () => {
     if (result.status !== "FAILED") return;
     expect(result.capacityWithheld).toBe(true);
     expect(result.retryable).toBe(false);
+  });
+
+  it("retries a 529 overload, because the provider asked to be tried again", async () => {
+    // Runs 28b4dedf and bfb6e0e7 lost six nodes to 529 with one attempt each.
+    // An overload and a session limit are both "not now", but only one of them
+    // has a reset hour to wait for; spending zero attempts on the other threw
+    // away the retry the provider's own message requested.
+    executeMock.mockRejectedValue(
+      new Error(
+        "Claude Code returned an error result: API Error: 529 Overloaded. This is a "
+        + "server-side issue, usually temporary — try again in a moment.",
+      ),
+    );
+    const executor = buildClaudeNodeExecutor(auth, options);
+
+    const result = await executor(node, 1);
+    expect(result.status).toBe("FAILED");
+    if (result.status !== "FAILED") return;
+    expect(result.retryable).toBe(true);
+    // Still capacity withheld: if every attempt is refused the run answered
+    // nothing, and a lifecycle must stay claimable rather than be recorded
+    // as having failed on the merits.
+    expect(result.capacityWithheld).toBe(true);
+  });
+
+  it("stops retrying an overload once the attempts are spent", async () => {
+    executeMock.mockRejectedValue(new Error("API Error: 529 Overloaded."));
+    const executor = buildClaudeNodeExecutor(auth, options);
+
+    const result = await executor(node, 3);
+    expect(result.status).toBe("FAILED");
+    if (result.status !== "FAILED") return;
+    expect(result.retryable).toBe(false);
+    expect(result.capacityWithheld).toBe(true);
   });
 
   it("keeps ordinary transport failures retryable on early attempts", async () => {
