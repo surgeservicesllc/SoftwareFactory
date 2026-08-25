@@ -124,6 +124,35 @@ export function buildLaunchPlan(
    * labelled feedback that runs forwards would be an ordinary dependency the
    * scheduler never enforces: work that silently never waits.
    */
+  /*
+   * An AUTOMATIC gate must sit where anchored evidence can actually arrive.
+   *
+   * Both deciders refuse an automatic gate holding zero anchors — the worker's
+   * `decide_automatic_gate_as_worker` and a person's `decide_node_gate` alike
+   * — because generated output is not a completed task. `anchorsFor` only ever
+   * counts an ANCHOR node's output, so an AUTOMATIC gate on a MODEL or
+   * DETERMINISTIC node can never be approved by anyone: the run halts there
+   * forever, and the queue reports it as waiting for a decision no one is able
+   * to give. Production graph 91959362 is stranded in exactly that state.
+   *
+   * Refusing it here turns a permanent silent strand into a template that will
+   * not compile, which is the failure a person can see and fix.
+   */
+  const gateErrors: string[] = [];
+  for (const node of graph.nodes) {
+    const gate = templateStageFor(template, node.nodeKey).gate;
+    if (gate === "AUTOMATIC" && node.executor !== "ANCHOR") {
+      gateErrors.push(
+        `Node ${node.nodeKey} carries an AUTOMATIC gate but runs on ${node.executor}, `
+        + "which records no anchored evidence — no worker or person could ever decide it. "
+        + "Use a HUMAN gate, or move the gate onto an ANCHOR node.",
+      );
+    }
+  }
+  if (gateErrors.length > 0) {
+    return { ok: false, errors: gateErrors };
+  }
+
   const feedbackErrors: string[] = [];
   const feedbackEdges: PlanEdgePayload[] = [];
   for (const edge of template.feedbackEdges ?? []) {

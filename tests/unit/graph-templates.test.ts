@@ -2,7 +2,10 @@
 
 import { describe, expect, it } from "vitest";
 
+import { budgetForTemplate } from "@/lib/graph/templates";
 import { compileGraph } from "@/lib/graph/compiler";
+import { DEFAULT_GRAPH_BUDGET } from "@/lib/graph/budgets";
+import { buildLaunchPlan } from "@/lib/graph/launch-plan";
 import { validateNodeOutput } from "@/lib/graph/contracts";
 import {
   cloneTemplate,
@@ -193,5 +196,56 @@ describe("cloning and versioning", () => {
     } as Partial<typeof original>);
 
     expect(revised.key).toBe("bug_sweep");
+  });
+});
+
+/**
+ * A gate nobody can ever decide.
+ *
+ * Both deciders refuse an AUTOMATIC gate holding zero anchors — the worker's
+ * `decide_automatic_gate_as_worker` and a person's `decide_node_gate` alike —
+ * because generated output is not a completed task. `anchorsFor` only counts
+ * an ANCHOR node's output, so an AUTOMATIC gate anywhere else can never be
+ * approved by anyone: the run halts there permanently and the queue reports it
+ * waiting for a decision no one is able to give.
+ *
+ * Found live: production graph 91959362 sits stranded exactly so, its PRD node
+ * VERIFYING behind an AUTOMATIC gate with an anchor count of zero. The shipped
+ * `open_source_scout` template carried the same shape on its terminal decision
+ * node, which meant every run of it was destined to strand.
+ */
+describe("automatic gates can actually be decided", () => {
+  it.each(GRAPH_TEMPLATES.map((template) => [template.key, template] as const))(
+    "%s puts no AUTOMATIC gate where anchors cannot arrive",
+    (_key, template) => {
+      const offenders = template.nodes
+        .filter((node) => node.gate === "AUTOMATIC" && node.executor !== "ANCHOR")
+        .map((node) => `${node.nodeId} (${node.executor})`);
+
+      expect(offenders, "an AUTOMATIC gate off an ANCHOR node can never be approved").toEqual([]);
+    },
+  );
+
+  it("refuses to compile a plan that gates a model node automatically", () => {
+    const scout = findTemplate("open_source_scout")!;
+    const impossible = {
+      ...scout,
+      nodes: scout.nodes.map((node) =>
+        node.nodeId === "decide" ? { ...node, gate: "AUTOMATIC" as const } : node,
+      ),
+    };
+
+    const built = buildLaunchPlan(impossible, budgetForTemplate(impossible, DEFAULT_GRAPH_BUDGET));
+
+    expect(built.ok).toBe(false);
+    if (built.ok) return;
+    expect(built.errors.join(" ")).toMatch(/decide[\s\S]*AUTOMATIC gate[\s\S]*MODEL/);
+  });
+
+  it("still compiles every shipped template", () => {
+    for (const template of GRAPH_TEMPLATES) {
+      const built = buildLaunchPlan(template, budgetForTemplate(template, DEFAULT_GRAPH_BUDGET));
+      expect(built.ok, `${template.key} must compile: ${built.ok ? "" : built.errors.join("; ")}`).toBe(true);
+    }
   });
 });
