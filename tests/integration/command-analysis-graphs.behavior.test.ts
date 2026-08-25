@@ -280,4 +280,43 @@ describe("launch_command_analysis_graph", () => {
     );
     expect(outsiderRead.rows).toEqual([]);
   });
+
+  /**
+   * Why a run can be readable at /solutions/lifecycle/run/... and absent from
+   * /solutions/runs, measured against the real schema rather than argued.
+   *
+   * The link table answers "which graph did this command launch", so a graph
+   * run that no live command points at is not in it -- by design. It is in
+   * `list_graph_runs`, which is why the Runs list reads that instead.
+   */
+  it("does not carry a graph run no live command points at, which list_graph_runs does", async () => {
+    const commandId = await makeCommand("fix_bug", "Fix high-priority bugs");
+    await asUser(ownerId);
+    const graphId = await launch(commandId);
+
+    await db.exec("reset role");
+    const run = await db.query<{ id: string }>(
+      `insert into public.graph_runs (organization_id, graph_id, created_by, state, started_at)
+       values ($1::uuid, $2::uuid, $3::uuid, 'PARTIAL'::public.graph_run_state, now()) returning id`,
+      [organizationId, graphId, ownerId],
+    );
+    const graphRunId = run.rows[0].id;
+
+    // ADR-132: deleting a command unlinks it and keeps the graph, its run and
+    // its artifacts. This is that state.
+    await db.query("delete from public.command_analysis_graphs where graph_id = $1::uuid", [graphId]);
+
+    await asUser(ownerId);
+    const linked = await db.query(
+      "select graph_id from public.list_command_analysis_graphs($1::uuid)",
+      [organizationId],
+    );
+    expect(linked.rows).toEqual([]);
+
+    const runs = await db.query<{ graph_run_id: string; state: string }>(
+      "select graph_run_id, state from public.list_graph_runs($1::uuid)",
+      [organizationId],
+    );
+    expect(runs.rows).toEqual([{ graph_run_id: graphRunId, state: "PARTIAL" }]);
+  });
 });
