@@ -637,15 +637,15 @@ function StatTile({
 }) {
   return (
     <Card className="p-4">
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <dt className="text-xs text-faint">{label}</dt>
-          <dd className="mt-1.5 flex min-h-7 items-center">{children}</dd>
-          {sub ? <p className="mt-0.5 text-[11px] text-faint">{sub}</p> : null}
-        </div>
-        <span className="grid size-8 shrink-0 place-items-center rounded-lg border border-[var(--border)] bg-[var(--surface-raised)]">
+      <div className="flex items-start gap-3">
+        <span className="grid size-9 shrink-0 place-items-center rounded-full border border-[var(--accent-border)] bg-[var(--accent-surface)]">
           <Icon className="size-4 text-[var(--accent-text)]" aria-hidden="true" />
         </span>
+        <div className="min-w-0">
+          <dt className="text-xs text-faint">{label}</dt>
+          <dd className="mt-1 flex min-h-7 items-center">{children}</dd>
+          {sub ? <p className="mt-0.5 text-[11px] text-faint">{sub}</p> : null}
+        </div>
       </div>
     </Card>
   );

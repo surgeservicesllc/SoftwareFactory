@@ -61,8 +61,9 @@ export function stageStanding(slice: StageSummary | undefined):
   if (slice.completed === slice.total) return { label: "complete", tone: "safe" };
   if (slice.skipped === slice.total) return { label: "skipped", tone: "warning" };
   // Nothing settled and nothing running: the stage is queued work, and
-  // "pending" says so where "mixed" implied a half-finished muddle.
-  if (slice.completed === 0 && slice.skipped === 0) return { label: "pending", tone: "neutral" };
+  // "pending" says so where "mixed" implied a half-finished muddle. Amber,
+  // as the boards chip it — waiting is a state a person may need to notice.
+  if (slice.completed === 0 && slice.skipped === 0) return { label: "pending", tone: "warning" };
   return { label: "mixed", tone: "neutral" };
 }
 

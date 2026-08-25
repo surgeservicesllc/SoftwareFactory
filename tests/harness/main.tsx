@@ -415,18 +415,22 @@ const CASES: Record<string, () => React.ReactElement> = {
   /*
    * One factory step over the staged runs. Architect is the densest: the
    * ten-step strip, the run's gated node with its decision controls, and a
-   * recorded payload.
+   * recorded payload. `?step=<slug>` renders any of the other nine so each
+   * page can be screenshot-compared against its own reference board.
    */
-  "factory-step": () => (
-    // Standalone on purpose: the factory pages render their own workspace
-    // shell inside the `.factory-theme` scope, exactly as the route does.
-    <div className="factory-theme min-h-screen">
-      <FactoryStepConsole
-        step={factoryStep("architect")!}
-        viewer={{ email: "owner@example.org", displayName: null }}
-      />
-    </div>
-  ),
+  "factory-step": () => {
+    const slug = new URLSearchParams(window.location.search).get("step") ?? "architect";
+    return (
+      // Standalone on purpose: the factory pages render their own workspace
+      // shell inside the `.factory-theme` scope, exactly as the route does.
+      <div className="factory-theme min-h-screen">
+        <FactoryStepConsole
+          step={factoryStep(slug) ?? factoryStep("architect")!}
+          viewer={{ email: "owner@example.org", displayName: null }}
+        />
+      </div>
+    );
+  },
   files: () => <InShell><GitHubFileManager /></InShell>,
   operations: () => <InShell><OperationsConsole authenticated /></InShell>,
   resources: () => <InShell><ResourceManagerConsole authenticated /></InShell>,

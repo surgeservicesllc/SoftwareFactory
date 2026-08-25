@@ -2,14 +2,16 @@
 
 import {
   Boxes,
+  Check,
+  ChevronRight,
+  CircleGauge,
   Cpu,
   FolderKanban,
   GitBranch,
   Hexagon,
   KeyRound,
+  LayoutDashboard,
   type LucideIcon,
-  Check,
-  CircleGauge,
   PlugZap,
   ScrollText,
   Settings,
@@ -116,6 +118,7 @@ export function FactoryShell({
         <p className="label mt-6 px-3">Overview</p>
         <nav aria-label="Overview" className="mt-1.5 space-y-0.5">
           <SideLink href="/solutions" icon={CircleGauge}>Overview</SideLink>
+          <SideLink href="/solutions/portfolio" icon={LayoutDashboard}>Dashboard</SideLink>
           <SideLink href="/solutions/projects" icon={FolderKanban}>Projects</SideLink>
         </nav>
 
@@ -150,7 +153,9 @@ export function FactoryShell({
                   {mark === "complete" ? <Check className="size-3" aria-hidden="true" /> : entry.number}
                 </span>
                 <span className="truncate">{entry.title}</span>
-                {mark === "active" && !current ? (
+                {current ? (
+                  <ChevronRight aria-hidden="true" className="ml-auto size-3.5 shrink-0" />
+                ) : mark === "active" ? (
                   <span aria-hidden="true" className="ml-auto size-1.5 rounded-full bg-[var(--accent)]" />
                 ) : null}
               </Link>
