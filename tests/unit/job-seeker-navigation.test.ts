@@ -37,6 +37,7 @@ describe("the Job Seeker navigation", () => {
     expect(JOB_SEEKER_NAVIGATION[0]?.subpages?.map((entry) => entry.label)).toEqual([
       "Career Profile",
       "Job Preferences",
+      "Search",
       "Job Discovery",
       "Applications",
       "Follow-Up",
@@ -46,7 +47,13 @@ describe("the Job Seeker navigation", () => {
   it("names every destination in the owner's design", () => {
     expect(JOB_SEEKER_NAVIGATION.map((entry) => entry.label)).toEqual([
       "Overview",
-      "Job Search",
+      /*
+       * "Job Search" became two entries. Search queries live boards by text
+       * and place; Job Discovery imports one named company's board. They were
+       * one label while only the second existed.
+       */
+      "Search",
+      "Job Discovery",
       "Applications",
       "Resume Library",
       "Cover Letters",

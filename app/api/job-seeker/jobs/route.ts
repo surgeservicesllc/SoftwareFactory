@@ -26,7 +26,21 @@ const recordJobSchema = z
   .object({
     title: z.string().trim().min(1).max(300),
     company: z.string().trim().min(1).max(300),
-    url: z.string().trim().url().max(800).nullish(),
+    /*
+     * `.url()` accepts `javascript:` — it is a valid URL — and this value is
+     * rendered as an `href` on the jobs panel. The column's `^https?://`
+     * CHECK does refuse it, so nothing unsafe was ever stored; what was wrong
+     * is that the refusal arrived as a database error instead of as a clear
+     * answer, and the scheme was never checked by the code that treats the
+     * value as a link.
+     */
+    url: z
+      .string()
+      .trim()
+      .url()
+      .max(800)
+      .refine((value) => /^https?:\/\//i.test(value), { message: "A job link must be http or https." })
+      .nullish(),
     externalId: z.string().trim().min(1).max(200).nullish(),
     salaryText: z.string().trim().min(1).max(200).nullish(),
     location: z.string().trim().min(1).max(200).nullish(),
