@@ -6,6 +6,7 @@ const harness = vi.hoisted(() => ({
   requireActiveOrganization: vi.fn(),
   searchJobnet: vi.fn(),
   searchJobindex: vi.fn(),
+  searchFreehire: vi.fn(),
 }));
 
 vi.mock("server-only", () => ({}));
@@ -20,6 +21,11 @@ vi.mock("@/lib/job-seeker/board-search/jobnet", async (importOriginal) => {
 vi.mock("@/lib/job-seeker/board-search/jobindex", async (importOriginal) => {
   const original = await importOriginal<typeof import("@/lib/job-seeker/board-search/jobindex")>();
   return { ...original, jobindexAdapter: { ...original.jobindexAdapter, search: harness.searchJobindex } };
+});
+
+vi.mock("@/lib/job-seeker/board-search/freehire", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@/lib/job-seeker/board-search/freehire")>();
+  return { ...original, freehireAdapter: { ...original.freehireAdapter, search: harness.searchFreehire } };
 });
 
 import { GET, POST } from "@/app/api/job-seeker/search/route";
@@ -62,6 +68,7 @@ beforeEach(() => {
   });
   harness.searchJobnet.mockResolvedValue({ board: "jobnet", hits: [hit("Platform Engineer")], totalAvailable: 812 });
   harness.searchJobindex.mockResolvedValue({ board: "jobindex", hits: [hit("Backend Developer")], totalAvailable: 40 });
+  harness.searchFreehire.mockResolvedValue({ board: "freehire", hits: [hit("Go Engineer")], totalAvailable: 7 });
 });
 
 describe("the search boundary", () => {
@@ -80,6 +87,7 @@ describe("the search boundary", () => {
     expect(response.status).toBeGreaterThanOrEqual(401);
     expect(harness.searchJobnet).not.toHaveBeenCalled();
     expect(harness.searchJobindex).not.toHaveBeenCalled();
+    expect(harness.searchFreehire).not.toHaveBeenCalled();
   });
 
   it("refuses a cross-origin request", async () => {
@@ -125,7 +133,7 @@ describe("searching across boards", () => {
     };
 
     expect(response.status).toBe(200);
-    expect(payload.results).toHaveLength(2);
+    expect(payload.results).toHaveLength(3);
     // Not hits.length: a person who sees 1 of 812 knows this is a sample.
     expect(payload.results.find((r) => r.board === "jobnet")?.totalAvailable).toBe(812);
     expect(payload.failures).toEqual([]);
@@ -143,7 +151,7 @@ describe("searching across boards", () => {
     };
 
     expect(response.status).toBe(200);
-    expect(payload.results.map((r) => r.board)).toEqual(["jobnet"]);
+    expect(payload.results.map((r) => r.board).sort()).toEqual(["freehire", "jobnet"]);
     expect(payload.failures).toHaveLength(1);
     expect(payload.failures[0]).toMatchObject({ board: "jobindex", code: "board_unreachable" });
     expect(payload.failures[0]?.message).toMatch(/rate limiting/);
