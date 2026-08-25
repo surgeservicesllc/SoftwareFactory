@@ -233,7 +233,8 @@ export function JobSearchPanel() {
         />
       ) : (
         results.map((result) => (
-          <Card key={result.board}>
+          <div key={result.board} data-testid="search-result-card">
+          <Card>
             <SectionTitle
               title={result.boardName}
               description={
@@ -297,6 +298,7 @@ export function JobSearchPanel() {
               </ul>
             )}
           </Card>
+          </div>
         ))
       )}
     </div>
