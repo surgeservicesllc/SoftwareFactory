@@ -2,8 +2,20 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { ArrowLeft, ArrowRight, Check, Loader2 } from "lucide-react";
+import {
+  Activity,
+  ArrowLeft,
+  ArrowRight,
+  Check,
+  CircleCheck,
+  Layers,
+  Loader2,
+  ShieldCheck,
+  Timer,
+  UserCheck,
+} from "lucide-react";
 
+import { FactoryShell, type FactoryViewer, type StepMark } from "@/components/graph/factory-shell";
 import { GraphLaunchControl } from "@/components/graph-launch-control";
 import { StageNodes } from "@/components/graph/lifecycle-console";
 import {
@@ -45,7 +57,41 @@ type State =
   | { kind: "none" }
   | { kind: "ready"; run: RunView; artifacts: readonly ArtifactView[] };
 
-export function FactoryStepConsole({ step }: { step: FactoryStep }) {
+/** The breadcrumb the boards put in the topbar, into the run when one exists. */
+function FactoryBreadcrumb({ step, runId }: { step: FactoryStep; runId?: string | null }) {
+  return (
+    <nav aria-label="Breadcrumb" className="text-sm text-muted">
+      <ol className="flex flex-wrap items-center gap-1.5">
+        <li><Link href="/solutions/factory/requirement" className="hover:text-foreground">AI Factory</Link></li>
+        <li aria-hidden="true" className="text-faint">›</li>
+        <li><Link href="/solutions/pipelines" className="hover:text-foreground">Runs</Link></li>
+        {runId ? (
+          <>
+            <li aria-hidden="true" className="text-faint">›</li>
+            <li>
+              <Link
+                href={`/solutions/lifecycle/run/${runId}/${step.stages[0].toLowerCase()}`}
+                className="font-mono hover:text-foreground"
+              >
+                {runId.slice(0, 8)}
+              </Link>
+            </li>
+          </>
+        ) : null}
+        <li aria-hidden="true" className="text-faint">›</li>
+        <li aria-current="page" className="text-foreground">{step.number}. {step.title}</li>
+      </ol>
+    </nav>
+  );
+}
+
+export function FactoryStepConsole({
+  step,
+  viewer,
+}: {
+  step: FactoryStep;
+  viewer?: FactoryViewer;
+}) {
   const [state, setState] = useState<State>({ kind: "loading" });
 
   const load = useCallback(async () => {
@@ -84,43 +130,49 @@ export function FactoryStepConsole({ step }: { step: FactoryStep }) {
     return () => window.clearTimeout(timer);
   }, [load]);
 
-  if (state.kind === "loading") {
+  if (state.kind !== "ready") {
     return (
-      <Card className="grid min-h-64 place-items-center">
-        <Loader2 className="size-6 animate-spin text-accent" aria-label="Loading the factory step" />
-      </Card>
-    );
-  }
-  if (state.kind === "error") {
-    return (
-      <Card className="p-6">
-        <h2 className="text-lg font-semibold text-foreground">The factory could not be read</h2>
-        <p className="mt-2 text-sm text-muted">
-          The graph runs did not answer. Nothing is shown rather than a figure that might be wrong.
-        </p>
-        <button type="button" onClick={() => void load()} className="btn btn-secondary btn-sm mt-4">
-          Try again
-        </button>
-      </Card>
-    );
-  }
-  if (state.kind === "none") {
-    return (
-      <div className="space-y-6">
-        <PageHeader title={`${step.number}. ${step.title}`} description={step.summary} />
-        <Card className="p-6">
-          <h2 className="text-base font-semibold text-foreground">No lifecycle has run yet</h2>
-          <p className="mt-2 max-w-2xl text-sm text-muted">
-            These pages walk the newest full-lifecycle run through the ten steps, and none is
-            recorded yet. Launch one below and every step fills in as the work moves.
-          </p>
-        </Card>
-        <GraphLaunchControl templateKey="full_lifecycle" templateName="Full Lifecycle" />
-      </div>
+      <FactoryShell
+        step={step}
+        marks={[]}
+        run={null}
+        viewer={viewer}
+        breadcrumb={<FactoryBreadcrumb step={step} />}
+      >
+        {state.kind === "loading" ? (
+          <Card className="grid min-h-64 place-items-center">
+            <Loader2 className="size-6 animate-spin text-accent" aria-label="Loading the factory step" />
+          </Card>
+        ) : state.kind === "error" ? (
+          <Card className="p-6">
+            <h2 className="text-lg font-semibold text-foreground">The factory could not be read</h2>
+            <p className="mt-2 text-sm text-muted">
+              The graph runs did not answer. Nothing is shown rather than a figure that might be wrong.
+            </p>
+            <button type="button" onClick={() => void load()} className="btn btn-secondary btn-sm mt-4">
+              Try again
+            </button>
+          </Card>
+        ) : (
+          <div className="space-y-6">
+            <PageHeader title={`${step.number}. ${step.title}`} description={step.summary} />
+            <Card className="p-6">
+              <h2 className="text-base font-semibold text-foreground">No lifecycle has run yet</h2>
+              <p className="mt-2 max-w-2xl text-sm text-muted">
+                These pages walk the newest full-lifecycle run through the ten steps, and none is
+                recorded yet. Launch one below and every step fills in as the work moves.
+              </p>
+            </Card>
+            <GraphLaunchControl templateKey="full_lifecycle" templateName="Full Lifecycle" />
+          </div>
+        )}
+      </FactoryShell>
     );
   }
 
-  return <StepView step={step} run={state.run} artifacts={state.artifacts} onReload={load} />;
+  return (
+    <StepView step={step} run={state.run} artifacts={state.artifacts} onReload={load} viewer={viewer} />
+  );
 }
 
 function StepView({
@@ -128,11 +180,13 @@ function StepView({
   run,
   artifacts,
   onReload,
+  viewer,
 }: {
   step: FactoryStep;
   run: RunView;
   artifacts: readonly ArtifactView[];
   onReload: () => void;
+  viewer?: FactoryViewer;
 }) {
   const nodes = run.nodes ?? [];
   const { stages } = summariseRunStages(nodes);
@@ -171,10 +225,6 @@ function StepView({
     .map((node) => node.node_started_at)
     .filter((value): value is string => typeof value === "string")
     .sort();
-  const activityTimes = stepNodes
-    .flatMap((node) => [node.queued_at, node.node_started_at, node.node_completed_at])
-    .filter((value): value is string => typeof value === "string")
-    .sort();
   const workedBy = [...new Set(stepNodes.flatMap((node) => {
     const provider = (node as { provider?: string | null }).provider;
     return [node.executor, provider].filter((value): value is string => Boolean(value));
@@ -203,28 +253,39 @@ function StepView({
               : value.label === "not in this run" ? "Not planned"
                 : "Mixed";
 
-  return (
-    <div className="space-y-5">
-      {/* Breadcrumb, as the boards read: product › surface › run › step. */}
-      <nav aria-label="Breadcrumb" className="text-sm text-muted">
-        <ol className="flex flex-wrap items-center gap-1.5">
-          <li><Link href="/solutions/factory/requirement" className="hover:text-foreground">AI Factory</Link></li>
-          <li aria-hidden="true" className="text-faint">›</li>
-          <li><Link href="/solutions/pipelines" className="hover:text-foreground">Runs</Link></li>
-          <li aria-hidden="true" className="text-faint">›</li>
-          <li>
-            <Link
-              href={`/solutions/lifecycle/run/${run.graphRunId}/${step.stages[0].toLowerCase()}`}
-              className="hover:text-foreground"
-            >
-              {run.graphRunId.slice(0, 8)}
-            </Link>
-          </li>
-          <li aria-hidden="true" className="text-faint">›</li>
-          <li aria-current="page" className="text-foreground">{step.number}. {step.title}</li>
-        </ol>
-      </nav>
+  /* The sidebar's ten circles and the run card, from the same standings. */
+  const marks: StepMark[] = FACTORY_STEPS.map((entry) => {
+    const entryStanding = stepStanding(entry);
+    return {
+      slug: entry.slug,
+      state: entryStanding.label === "complete" ? "complete"
+        : entryStanding.label === "in flight" || entryStanding.label === "failed" ? "active"
+          : "pending",
+    };
+  });
+  const stepsComplete = marks.filter((mark) => mark.state === "complete").length;
 
+  /* The step's node states, counted for the donut and the tiles. */
+  const inFlightInStep = stepNodes.filter(
+    (node) => node.state === "RUNNING" || node.state === "VERIFYING",
+  ).length;
+  const failedInStep = stepNodes.filter((node) => node.state === "FAILED").length;
+  const settledOtherwise = stepNodes.length - completedInStep - inFlightInStep - failedInStep;
+
+  return (
+    <FactoryShell
+      step={step}
+      marks={marks}
+      run={{
+        graphRunId: run.graphRunId,
+        state: run.state,
+        startedAt: run.startedAt,
+        stepsComplete,
+      }}
+      viewer={viewer}
+      breadcrumb={<FactoryBreadcrumb step={step} runId={run.graphRunId} />}
+    >
+    <div className="space-y-5">
       {/* The title row: big numbered step, its live standing, the actions. */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
@@ -305,41 +366,37 @@ function StepView({
         </ol>
       </Card>
 
-      {/* The segmented status bar: only figures something records. */}
-      <Card className="p-0">
-        <dl className="grid grid-cols-2 divide-[var(--border)] sm:grid-cols-3 lg:grid-cols-6 lg:divide-x">
-          <StatusCell label="Stage Status">
-            <StatusBadge tone={standing.tone} dot={false}>{standingWord(standing)}</StatusBadge>
-          </StatusCell>
-          <StatusCell label="Nodes Completed">
-            <span className="tabular text-sm font-semibold text-foreground">
-              {completedInStep} / {stepNodes.length}
-            </span>
-          </StatusCell>
-          <StatusCell label="Started">
-            <span className="text-sm text-foreground">{clock(startedTimes[0]) ?? "—"}</span>
-          </StatusCell>
-          <StatusCell label="Last Activity">
-            <span className="text-sm text-foreground">
-              {clock(activityTimes[activityTimes.length - 1]) ?? "—"}
-            </span>
-          </StatusCell>
-          <StatusCell label="Worked By">
-            <span className="truncate text-sm text-foreground">
-              {workedBy.length > 0 ? workedBy.join(", ") : "—"}
-            </span>
-          </StatusCell>
-          <StatusCell label="Gate">
-            <span className="flex items-center gap-1 text-sm text-foreground">
-              {gates.length === 0 ? "None" : gates.map((gate) =>
-                gate === "HUMAN" ? "Human" : "Automatic").join(", ")}
-              {openGateNode ? (
-                <StatusBadge tone="warning" dot={false}>open</StatusBadge>
-              ) : null}
-            </span>
-          </StatusCell>
-        </dl>
-      </Card>
+      {/* The boards' tile row: only figures something records. */}
+      <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+        <StatTile icon={Activity} label="Stage Status">
+          <StatusBadge tone={standing.tone} dot={false}>{standingWord(standing)}</StatusBadge>
+        </StatTile>
+        <StatTile icon={CircleCheck} label="Nodes Completed" sub={`of ${stepNodes.length} planned`}>
+          <span className="tabular text-xl font-bold text-foreground">
+            {completedInStep} / {stepNodes.length}
+          </span>
+        </StatTile>
+        <StatTile icon={Layers} label="Artifacts" sub="recorded by this step">
+          <span className="tabular text-xl font-bold text-foreground">{stepArtifacts.length}</span>
+        </StatTile>
+        <StatTile icon={ShieldCheck} label="Verifications" sub="on this step's work">
+          <span className="tabular text-xl font-bold text-foreground">{stepVerifications.length}</span>
+        </StatTile>
+        <StatTile icon={Timer} label="Started">
+          <span className="text-sm font-semibold text-foreground">
+            {clock(startedTimes[0]) ?? "—"}
+          </span>
+        </StatTile>
+        <StatTile icon={UserCheck} label="Gate">
+          <span className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+            {gates.length === 0 ? "None" : gates.map((gate) =>
+              gate === "HUMAN" ? "Human" : "Automatic").join(", ")}
+            {openGateNode ? (
+              <StatusBadge tone="warning" dot={false}>open</StatusBadge>
+            ) : null}
+          </span>
+        </StatTile>
+      </dl>
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="min-w-0 space-y-5">
@@ -425,6 +482,19 @@ function StepView({
         {/* The rail: the boards' insight and action column, from recorded
             content and real destinations alone. */}
         <aside className="min-w-0 space-y-5">
+          {stepNodes.length > 0 ? (
+            <Card className="p-5">
+              <h2 className="label">{step.title} progress</h2>
+              <NodeDonut
+                completed={completedInStep}
+                inFlight={inFlightInStep}
+                failed={failedInStep}
+                remaining={settledOtherwise}
+                total={stepNodes.length}
+              />
+            </Card>
+          ) : null}
+
           {insights.length > 0 ? (
             <Card className="p-5">
               <h2 className="label">{step.title} insights</h2>
@@ -460,6 +530,21 @@ function StepView({
                   </li>
                 ))}
               </ul>
+            </Card>
+          ) : null}
+
+          {workedBy.length > 0 ? (
+            <Card className="p-5">
+              <h2 className="label">Worked by</h2>
+              <ul className="mt-2 space-y-1.5 text-sm">
+                {workedBy.map((worker) => (
+                  <li key={worker} className="flex items-center gap-2 text-muted">
+                    <span aria-hidden="true" className="size-1.5 rounded-full bg-[var(--accent)]" />
+                    {worker}
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-2 text-xs text-faint">Executors and providers this step recorded.</p>
             </Card>
           ) : null}
 
@@ -535,14 +620,103 @@ function StepView({
         </div>
       </Card>
     </div>
+    </FactoryShell>
   );
 }
 
-function StatusCell({ label, children }: { label: string; children: ReactNode }) {
+function StatTile({
+  icon: Icon,
+  label,
+  sub,
+  children,
+}: {
+  icon: typeof Activity;
+  label: string;
+  sub?: string;
+  children: ReactNode;
+}) {
   return (
-    <div className="px-4 py-3">
-      <dt className="text-xs text-faint">{label}</dt>
-      <dd className="mt-1 flex min-h-6 items-center">{children}</dd>
+    <Card className="p-4">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <dt className="text-xs text-faint">{label}</dt>
+          <dd className="mt-1.5 flex min-h-7 items-center">{children}</dd>
+          {sub ? <p className="mt-0.5 text-[11px] text-faint">{sub}</p> : null}
+        </div>
+        <span className="grid size-8 shrink-0 place-items-center rounded-lg border border-[var(--border)] bg-[var(--surface-raised)]">
+          <Icon className="size-4 text-[var(--accent-text)]" aria-hidden="true" />
+        </span>
+      </div>
+    </Card>
+  );
+}
+
+/**
+ * The step's nodes as a donut — real fractions of real states, the legend
+ * carrying the counts so the ring never has to be trusted alone.
+ */
+function NodeDonut({
+  completed,
+  inFlight,
+  failed,
+  remaining,
+  total,
+}: {
+  completed: number;
+  inFlight: number;
+  failed: number;
+  remaining: number;
+  total: number;
+}) {
+  const radius = 34;
+  const circumference = 2 * Math.PI * radius;
+  const segments = [
+    { value: completed, color: "#34d399", label: "Completed" },
+    { value: inFlight, color: "#60a5fa", label: "In flight" },
+    { value: failed, color: "#f87171", label: "Failed" },
+    { value: remaining, color: "#3f3f5a", label: "Pending" },
+  ].filter((segment) => segment.value > 0);
+  let offset = 0;
+
+  return (
+    <div className="mt-3 flex items-center gap-4">
+      <svg viewBox="0 0 84 84" className="size-24 shrink-0" role="img"
+        aria-label={`${completed} of ${total} nodes completed`}>
+        <circle cx="42" cy="42" r={radius} fill="none" stroke="var(--surface-raised)" strokeWidth="9" />
+        {segments.map((segment) => {
+          const length = (segment.value / total) * circumference;
+          const dash = `${length} ${circumference - length}`;
+          const element = (
+            <circle
+              key={segment.label}
+              cx="42" cy="42" r={radius} fill="none"
+              stroke={segment.color} strokeWidth="9"
+              strokeDasharray={dash}
+              strokeDashoffset={-offset}
+              transform="rotate(-90 42 42)"
+            />
+          );
+          offset += length;
+          return element;
+        })}
+        <text x="42" y="46" textAnchor="middle" className="fill-[var(--text)] text-[13px] font-bold">
+          {completed}/{total}
+        </text>
+      </svg>
+      <ul className="space-y-1 text-xs">
+        {[
+          { value: completed, color: "#34d399", label: "Completed" },
+          { value: inFlight, color: "#60a5fa", label: "In flight" },
+          { value: failed, color: "#f87171", label: "Failed" },
+          { value: remaining, color: "#3f3f5a", label: "Pending" },
+        ].map((entry) => (
+          <li key={entry.label} className="flex items-center gap-2 text-muted">
+            <span aria-hidden="true" className="size-2 rounded-full" style={{ background: entry.color }} />
+            {entry.label}
+            <span className="tabular text-foreground">{entry.value}</span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

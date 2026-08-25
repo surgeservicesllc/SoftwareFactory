@@ -417,7 +417,16 @@ const CASES: Record<string, () => React.ReactElement> = {
    * ten-step strip, the run's gated node with its decision controls, and a
    * recorded payload.
    */
-  "factory-step": () => <InShell><FactoryStepConsole step={factoryStep("architect")!} /></InShell>,
+  "factory-step": () => (
+    // Standalone on purpose: the factory pages render their own workspace
+    // shell inside the `.factory-theme` scope, exactly as the route does.
+    <div className="factory-theme min-h-screen">
+      <FactoryStepConsole
+        step={factoryStep("architect")!}
+        viewer={{ email: "owner@example.org", displayName: null }}
+      />
+    </div>
+  ),
   files: () => <InShell><GitHubFileManager /></InShell>,
   operations: () => <InShell><OperationsConsole authenticated /></InShell>,
   resources: () => <InShell><ResourceManagerConsole authenticated /></InShell>,
