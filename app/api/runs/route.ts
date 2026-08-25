@@ -134,29 +134,67 @@ type AnalysisLinkRow = {
   artifact_count: number | null;
 };
 
+type GraphRunRow = {
+  graph_run_id: string;
+  graph_id: string;
+  goal: string | null;
+  project_id: string | null;
+  state: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  artifact_counts: Record<string, number> | null;
+};
+
 /**
- * An analysis run rendered in the run list's own vocabulary — each mapping is
- * a true statement about the graph run: a graph nobody claimed yet is queued
- * work, a completed one succeeded. The `analysis:` id prefix is what tells
- * the console this row has no agent-run detail, cancel, or delete.
+ * A graph run's own state, said in the run list's words without flattening
+ * the ones that have no agent-run equivalent.
+ *
+ * `PARTIAL` and `BUDGET_STOPPED` are terminal: the run stopped, having done
+ * some of the work. Mapping them onto "running" -- which is what this did --
+ * left a finished run claiming a worker was still on it, forever. They keep
+ * their own words instead, which the console already renders for any status
+ * outside the agent-run five.
  */
-function analysisRun(row: AnalysisLinkRow) {
-  const state = row.latest_run_state;
-  const status = state === "COMPLETED"
-    ? "succeeded"
-    : state === "FAILED"
-      ? "failed"
-      : state === null || state === "PLANNED"
-        ? "queued"
-        : "running";
+function graphRunStatus(state: string | null) {
+  switch (state) {
+    case "COMPLETED":
+      return "succeeded";
+    case "FAILED":
+      return "failed";
+    case "CANCELLED":
+      return "cancelled";
+    case "RUNNING":
+      return "running";
+    case "PARTIAL":
+      return "partial";
+    case "BUDGET_STOPPED":
+      return "budget_stopped";
+    // A graph nobody has claimed yet is queued work, and so is a run whose
+    // state could not be read: neither has started, and neither is finished.
+    default:
+      return "queued";
+  }
+}
+
+/**
+ * A graph run rendered in the run list's own vocabulary -- each mapping a true
+ * statement about the run, and the `analysis:` id prefix telling the console
+ * this row has no agent-run detail, cancel, or delete.
+ *
+ * Keyed by the run, not by the graph: running a graph twice is two runs, and a
+ * list called Runs that collapsed them would be hiding one.
+ */
+function graphRun(row: GraphRunRow, commandId: string | null) {
+  const artifactCount = Object.values(row.artifact_counts ?? {})
+    .reduce((sum, count) => sum + count, 0);
   return {
-    id: `analysis:${row.graph_id}`,
-    status,
-    startedAt: row.latest_run_started_at,
-    completedAt: row.latest_run_completed_at,
-    createdAt: row.linked_at,
-    durationMs: row.latest_run_started_at && row.latest_run_completed_at
-      ? Math.max(0, Date.parse(row.latest_run_completed_at) - Date.parse(row.latest_run_started_at))
+    id: `analysis:${row.graph_run_id}`,
+    status: graphRunStatus(row.state),
+    startedAt: row.started_at,
+    completedAt: row.completed_at,
+    createdAt: row.started_at,
+    durationMs: row.started_at && row.completed_at
+      ? Math.max(0, Date.parse(row.completed_at) - Date.parse(row.started_at))
       : null,
     risk: null,
     provider: "anthropic",
@@ -165,12 +203,13 @@ function analysisRun(row: AnalysisLinkRow) {
     reviewStatus: "unreviewed",
     archivedAt: null,
     project: null,
-    task: { id: row.graph_id, title: row.goal },
+    task: { id: row.graph_id, title: row.goal ?? "Analysis" },
     agent: { id: row.graph_id, name: "Claude — analysis" },
     analysis: {
       graphId: row.graph_id,
-      commandId: row.command_id,
-      artifactCount: row.artifact_count ?? 0,
+      graphRunId: row.graph_run_id,
+      commandId,
+      artifactCount,
     },
   };
 }
@@ -186,20 +225,41 @@ export async function GET(request: Request) {
     shape: (rows) => ({
       runs: rows.map((row) => briefing ? briefingRun(row) : fullRun(row)),
     }),
-    // Analysis graph runs are runs — one piece of work a bot carried out,
-    // with durable evidence — so the list that calls itself Runs must show
-    // them. A database that predates the linking migration answers with a
-    // missing-function code, which reads as "no analysis runs" rather than
-    // an error, keeping the provider run list available.
+    /*
+     * Graph runs are runs — one piece of work a bot carried out, with durable
+     * evidence — so the list that calls itself Runs must show them.
+     *
+     * Read from `list_graph_runs`, which is every graph run the organization
+     * has. It used to read `list_command_analysis_graphs`, which is only the
+     * graph runs a *command* launched, and that made two kinds of run
+     * invisible here while they stayed readable on the lifecycle and Graph
+     * runs surfaces: one launched from the factory itself rather than from a
+     * command, and one whose command was later deleted — ADR-132 unlinks the
+     * command and keeps the graph, its run and its artifacts on purpose.
+     *
+     * The link is still read, for the command each run answers where there is
+     * one. Either RPC missing (a database predating its migration) reads as
+     * "no graph runs" rather than an error, keeping the provider run list
+     * available.
+     */
     augment: briefing
       ? undefined
       : async (client, organizationId) => {
-          const linked = await client.rpc("list_command_analysis_graphs", {
-            p_organization_id: organizationId,
-          });
-          if (linked.error || !Array.isArray(linked.data)) return {};
+          const [runs, linked] = await Promise.all([
+            // Explicit, because the function's own default is 20: a list
+            // called Runs must not quietly stop at the twentieth one. 100 is
+            // the ceiling the function enforces anyway.
+            client.rpc("list_graph_runs", { p_organization_id: organizationId, p_limit: 100 }),
+            client.rpc("list_command_analysis_graphs", { p_organization_id: organizationId }),
+          ]);
+          if (runs.error || !Array.isArray(runs.data)) return {};
+          const commandByGraph = new Map<string, string>(
+            (Array.isArray(linked.data) ? linked.data as AnalysisLinkRow[] : [])
+              .map((link) => [link.graph_id, link.command_id]),
+          );
           return {
-            analysisRuns: (linked.data as AnalysisLinkRow[]).map(analysisRun),
+            analysisRuns: (runs.data as GraphRunRow[])
+              .map((row) => graphRun(row, commandByGraph.get(row.graph_id) ?? null)),
           };
         },
   });

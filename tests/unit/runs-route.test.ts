@@ -96,51 +96,137 @@ describe("runs route", () => {
     expect(JSON.stringify(body)).not.toContain("PRIVATE COMMAND PROMPT");
   });
 
-  it("augments the default list with analysis graph runs in the list's own vocabulary", async () => {
-    await GET(new Request("https://factory.example/api/runs?limit=10"));
+  /** Both RPCs the augment reads, with whatever rows a case needs. */
+  function graphRpc({
+    runs = [] as unknown[],
+    links = [] as unknown[],
+    runsError = null as unknown,
+  } = {}) {
+    return vi.fn().mockImplementation(async (name: string) => (
+      name === "list_graph_runs"
+        ? { data: runsError ? null : runs, error: runsError }
+        : { data: links, error: null }
+    ));
+  }
+
+  async function augmentOf(url = "https://factory.example/api/runs?limit=10") {
+    await GET(new Request(url));
     const config = harness.tenantListResponse.mock.calls[0]![0] as {
       augment?: (client: unknown, organizationId: string) => Promise<Record<string, unknown>>;
     };
     expect(config.augment).toBeTypeOf("function");
+    return config.augment!;
+  }
 
-    const rpc = vi.fn().mockResolvedValue({
-      data: [{
-        command_id: "command-1",
-        graph_id: "graph-1",
-        goal: "Fix high-priority bugs",
-        requires_owner_approval: false,
-        linked_at: "2026-08-23T01:30:00.000Z",
-        latest_run_id: null,
-        latest_run_state: null,
-        latest_run_started_at: null,
-        latest_run_completed_at: null,
-        artifact_count: 0,
-      }],
-      error: null,
-    });
-    const augmented = await config.augment!({ rpc }, "organization-1");
-    expect(rpc).toHaveBeenCalledWith("list_command_analysis_graphs", {
+  const lifecycleRun = {
+    graph_run_id: "run-050b35e5",
+    graph_id: "graph-1",
+    goal: "One request through all ten phases",
+    project_id: null,
+    state: "PARTIAL",
+    started_at: "2026-08-25T08:31:01.000Z",
+    completed_at: "2026-08-25T08:41:01.000Z",
+    artifact_counts: { finding: 2 },
+  };
+
+  it("lists a graph run that no command launched", async () => {
+    /*
+     * The defect this covers: the list read `list_command_analysis_graphs`,
+     * so a run reached Runs only through a command link. A run launched from
+     * the factory, or one whose command was deleted -- ADR-132 unlinks the
+     * command and keeps the run -- stayed readable on the lifecycle surface
+     * while Runs showed nothing, which is how run 050b35e5 went missing.
+     */
+    const augment = await augmentOf();
+    const rpc = graphRpc({ runs: [lifecycleRun], links: [] });
+
+    const augmented = await augment({ rpc }, "organization-1") as {
+      analysisRuns: Array<Record<string, unknown>>;
+    };
+
+    // Explicitly past the function's own default of 20.
+    expect(rpc).toHaveBeenCalledWith("list_graph_runs", {
       p_organization_id: "organization-1",
+      p_limit: 100,
     });
-    expect(augmented).toEqual({
-      analysisRuns: [expect.objectContaining({
-        id: "analysis:graph-1",
-        // Unclaimed is queued work — true in this list's vocabulary.
-        status: "queued",
-        createdAt: "2026-08-23T01:30:00.000Z",
-        task: { id: "graph-1", title: "Fix high-priority bugs" },
-        agent: { id: "graph-1", name: "Claude — analysis" },
-        analysis: { graphId: "graph-1", commandId: "command-1", artifactCount: 0 },
-      })],
+    expect(augmented.analysisRuns).toHaveLength(1);
+    expect(augmented.analysisRuns[0]).toMatchObject({
+      id: "analysis:run-050b35e5",
+      task: { id: "graph-1", title: "One request through all ten phases" },
+      analysis: {
+        graphId: "graph-1",
+        graphRunId: "run-050b35e5",
+        commandId: null,
+        artifactCount: 2,
+      },
+    });
+  });
+
+  it("says a partial run finished rather than claiming a worker is still on it", async () => {
+    const augment = await augmentOf();
+    const rpc = graphRpc({ runs: [lifecycleRun] });
+
+    const { analysisRuns } = await augment({ rpc }, "organization-1") as {
+      analysisRuns: Array<{ status: string; durationMs: number | null }>;
+    };
+
+    expect(analysisRuns[0]!.status).toBe("partial");
+    expect(analysisRuns[0]!.durationMs).toBe(600_000);
+  });
+
+  it.each([
+    ["COMPLETED", "succeeded"],
+    ["FAILED", "failed"],
+    ["CANCELLED", "cancelled"],
+    ["RUNNING", "running"],
+    ["PARTIAL", "partial"],
+    ["BUDGET_STOPPED", "budget_stopped"],
+    ["PLANNED", "queued"],
+    [null, "queued"],
+  ])("maps the %s graph state to %s", async (state, expected) => {
+    const augment = await augmentOf();
+    const rpc = graphRpc({ runs: [{ ...lifecycleRun, state }] });
+
+    const { analysisRuns } = await augment({ rpc }, "organization-1") as {
+      analysisRuns: Array<{ status: string }>;
+    };
+
+    expect(analysisRuns[0]!.status).toBe(expected);
+  });
+
+  it("keeps the command a run answers, where a command launched it", async () => {
+    const augment = await augmentOf();
+    const rpc = graphRpc({
+      runs: [lifecycleRun],
+      links: [{ command_id: "command-1", graph_id: "graph-1" }],
     });
 
-    // A database that predates the linking migration reads as "no analysis
-    // runs", never as a failed run list.
-    const missing = vi.fn().mockResolvedValue({
-      data: null,
-      error: { code: "PGRST202", message: "missing" },
+    const { analysisRuns } = await augment({ rpc }, "organization-1") as {
+      analysisRuns: Array<{ analysis: { commandId: string | null } }>;
+    };
+
+    expect(analysisRuns[0]!.analysis.commandId).toBe("command-1");
+  });
+
+  it("shows each run of a graph rather than collapsing them into one", async () => {
+    const augment = await augmentOf();
+    const rpc = graphRpc({
+      runs: [lifecycleRun, { ...lifecycleRun, graph_run_id: "run-second", state: "COMPLETED" }],
     });
-    await expect(config.augment!({ rpc: missing }, "organization-1")).resolves.toEqual({});
+
+    const { analysisRuns } = await augment({ rpc }, "organization-1") as {
+      analysisRuns: Array<{ id: string }>;
+    };
+
+    expect(analysisRuns.map((run) => run.id))
+      .toEqual(["analysis:run-050b35e5", "analysis:run-second"]);
+  });
+
+  it("reads a missing graph-run function as no graph runs, never as a failed list", async () => {
+    const augment = await augmentOf();
+    const rpc = graphRpc({ runsError: { code: "PGRST202", message: "missing" } });
+
+    await expect(augment({ rpc }, "organization-1")).resolves.toEqual({});
   });
 
   it("does not augment the briefing view", async () => {

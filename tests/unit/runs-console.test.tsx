@@ -49,6 +49,14 @@ describe("runStatusLabel", () => {
   it("falls back to the raw word for anything unrecognized, never a guess", () => {
     expect(runStatusLabel("awaiting_approval")).toBe("awaiting approval");
   });
+
+  it("says the two graph-only states finished, because they have", () => {
+    // Both are terminal. Before the run list read graph runs by their own
+    // state they arrived as "running", so a run that had stopped claimed a
+    // worker was still on it.
+    expect(runStatusLabel("partial")).toBe("Finished, with gaps");
+    expect(runStatusLabel("budget_stopped")).toBe("Stopped on budget");
+  });
 });
 
 describe("RunsConsole", () => {
@@ -62,6 +70,52 @@ describe("RunsConsole", () => {
 
     expect(await screen.findByText("Finished")).toBeInTheDocument();
     expect(screen.queryByText("succeeded")).not.toBeInTheDocument();
+  });
+
+  it("lists a graph run no command launched, and opens that run", async () => {
+    /*
+     * Run 050b35e5 was readable at /solutions/lifecycle/run/... and absent
+     * from /solutions/runs, because the list only knew graph runs a command
+     * had launched. It is one row in this list now, and its one action goes
+     * to the run itself rather than to the pipelines page.
+     */
+    const analysisRun = {
+      id: "analysis:run-050b35e5",
+      status: "partial",
+      startedAt: "2026-08-25T08:31:01.000Z",
+      completedAt: "2026-08-25T08:41:01.000Z",
+      createdAt: "2026-08-25T08:31:01.000Z",
+      durationMs: 600_000,
+      risk: null,
+      provider: "anthropic",
+      model: null,
+      branch: null,
+      reviewStatus: "unreviewed",
+      archivedAt: null,
+      project: null,
+      task: { id: "graph-1", title: "One request through all ten phases" },
+      agent: { id: "graph-1", name: "Claude — analysis" },
+      analysis: {
+        graphId: "graph-1",
+        graphRunId: "run-050b35e5",
+        commandId: null,
+        artifactCount: 2,
+      },
+    };
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === "/api/runs") {
+        return jsonResponse({ runs: [], analysisRuns: [analysisRun] });
+      }
+      throw new Error(`Unexpected fetch: ${String(input)}`);
+    }));
+
+    render(<RunsConsole />);
+
+    expect(await screen.findByText("One request through all ten phases")).toBeInTheDocument();
+    expect(screen.getByText("Finished, with gaps")).toBeInTheDocument();
+    expect(screen.queryByText("A worker is on it")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "View analysis" }))
+      .toHaveAttribute("href", "/solutions/lifecycle/run/run-050b35e5");
   });
 
   it("promotes the draft pull request to a primary action on the run detail", async () => {
