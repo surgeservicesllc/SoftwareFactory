@@ -1,0 +1,302 @@
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+
+import { DEFAULT_GRAPH_BUDGET } from "@/lib/graph/budgets";
+import { buildLaunchPlan } from "@/lib/graph/launch-plan";
+import type { NodeExecutionResult } from "@/lib/graph/runner";
+import { budgetForTemplate, findTemplate } from "@/lib/graph/templates";
+import { compileClaimedGraph, parseClaimedGraph, runClaimedGraph } from "@/lib/worker/graph-run";
+import { SupabaseGraphStore } from "@/lib/worker/graph-store";
+
+/**
+ * Development seed for the ten-step AI Factory flow.
+ *
+ * Plants a complete, clearly-labelled development world — a seed owner, a
+ * seed organization, a seed project, and one `full_lifecycle` graph — through
+ * the same RPCs production uses (`onboard_authenticated_organization`,
+ * `create_graph_from_plan`, the `*_as_worker` boundary), then drives the
+ * run's first window so the factory pages at /solutions/factory/* show live
+ * stages, recorded artifacts, and the open ARCHITECTURE human gate waiting
+ * for a decision. With `--drain`, it approves the human gates as the seed
+ * owner, lets the anchored evidence decide the automatic gate, and walks the
+ * run to COMPLETED — all ten steps closed.
+ *
+ * Boundaries this script keeps, deliberately:
+ *
+ *   - It REFUSES the production project. There is no override flag. Seed data
+ *     never belongs in the system of record.
+ *   - Every generated payload carries `dev_seed: true`, and every name says
+ *     "Dev Seed". Nothing it writes could be mistaken for real work.
+ *   - It is idempotent: a second run finds the world it planted and reports
+ *     it instead of duplicating it.
+ *   - It touches only its own graph. If the target database holds any other
+ *     claimable graph, it stops before claiming rather than grabbing work
+ *     that is not its own.
+ *
+ * Usage (against a local `supabase start` stack or a dev project):
+ *
+ *   NEXT_PUBLIC_SUPABASE_URL=... \
+ *   SUPABASE_SERVICE_ROLE_KEY=... \
+ *   SEED_OWNER_PASSWORD=... \
+ *   npx tsx scripts/seed-dev-lifecycle.mts [--drain]
+ */
+
+const PRODUCTION_PROJECT_REF = "qpuofpmagrmyamahqwxw";
+const SEED_OWNER_EMAIL = "seed-owner@dev-seed.local";
+const SEED_ORGANIZATION_NAME = "Dev Seed Factory";
+const SEED_ORGANIZATION_SLUG = "dev-seed-factory";
+const SEED_PROJECT_NAME = "Dev Seed Project";
+const SEED_GOAL_PREFIX = "Dev seed:";
+const WORKER_ID = "dev-seed-lifecycle";
+
+function requiredEnv(name: string): string {
+  const value = process.env[name]?.trim();
+  if (!value) {
+    console.error(`Missing required environment variable ${name}.`);
+    process.exit(1);
+  }
+  return value;
+}
+
+async function ensureSeedOwner(admin: SupabaseClient, password: string): Promise<string> {
+  // The admin listing is paged; the seed owner, if present, is findable by
+  // its fixed email within the first pages of a development stack.
+  for (let page = 1; page <= 10; page += 1) {
+    const { data, error } = await admin.auth.admin.listUsers({ page, perPage: 200 });
+    if (error) throw new Error(`Listing users failed: ${error.message}`);
+    const existing = data.users.find((user) => user.email === SEED_OWNER_EMAIL);
+    if (existing) return existing.id;
+    if (data.users.length < 200) break;
+  }
+  const { data, error } = await admin.auth.admin.createUser({
+    email: SEED_OWNER_EMAIL,
+    password,
+    email_confirm: true,
+    user_metadata: { dev_seed: true, display_name: "Dev Seed Owner" },
+  });
+  if (error || !data.user) throw new Error(`Creating the seed owner failed: ${error?.message ?? "no user returned"}`);
+  console.log(`Created seed owner ${SEED_OWNER_EMAIL}.`);
+  return data.user.id;
+}
+
+async function main() {
+  const url = requiredEnv("NEXT_PUBLIC_SUPABASE_URL");
+  const serviceRoleKey = requiredEnv("SUPABASE_SERVICE_ROLE_KEY");
+  const password = requiredEnv("SEED_OWNER_PASSWORD");
+  const drain = process.argv.includes("--drain");
+
+  if (url.includes(PRODUCTION_PROJECT_REF)) {
+    console.error(
+      "This is the production project. The development seed refuses to run against it, "
+      + "and there is no override. Point NEXT_PUBLIC_SUPABASE_URL at a local or dev stack.",
+    );
+    process.exit(1);
+  }
+
+  const admin = createClient(url, serviceRoleKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+
+  // 1. The seed owner — a real authenticated user, so every write below runs
+  //    under the exact RLS the product runs under.
+  const ownerId = await ensureSeedOwner(admin, password);
+
+  const owner = createClient(url, serviceRoleKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  const signIn = await owner.auth.signInWithPassword({ email: SEED_OWNER_EMAIL, password });
+  if (signIn.error) {
+    console.error(
+      `Signing in as ${SEED_OWNER_EMAIL} failed: ${signIn.error.message}. `
+      + "If the user predates this run, SEED_OWNER_PASSWORD must match the password it was created with.",
+    );
+    process.exit(1);
+  }
+
+  // 2. The seed organization, through the product's own onboarding RPC —
+  //    idempotent by slug, and it makes the caller the owner.
+  const onboarded = await owner
+    .rpc("onboard_authenticated_organization", {
+      p_name: SEED_ORGANIZATION_NAME,
+      p_slug: SEED_ORGANIZATION_SLUG,
+    })
+    .single();
+  if (onboarded.error) throw new Error(`Onboarding the seed organization failed: ${onboarded.error.message}`);
+  const organization = onboarded.data as { organization_id: string; was_created: boolean };
+  console.log(
+    `${organization.was_created ? "Created" : "Found"} organization "${SEED_ORGANIZATION_NAME}" `
+    + `(${organization.organization_id}).`,
+  );
+
+  // 3. The seed project. Production projects are born from a GitHub
+  //    connection; a dev stack has none, and pretending otherwise is exactly
+  //    what this repository forbids — so the project is planted directly,
+  //    with no repository claim, and the consoles honestly show it
+  //    unconnected.
+  const existingProject = await admin
+    .from("projects")
+    .select("id")
+    .eq("organization_id", organization.organization_id)
+    .eq("name", SEED_PROJECT_NAME)
+    .maybeSingle();
+  if (existingProject.error) throw new Error(`Reading the seed project failed: ${existingProject.error.message}`);
+  let projectId = existingProject.data?.id as string | undefined;
+  if (!projectId) {
+    const inserted = await admin
+      .from("projects")
+      .insert({
+        organization_id: organization.organization_id,
+        name: SEED_PROJECT_NAME,
+        status: "active",
+        default_branch: "main",
+        created_by: ownerId,
+      })
+      .select("id")
+      .single();
+    if (inserted.error) throw new Error(`Creating the seed project failed: ${inserted.error.message}`);
+    projectId = inserted.data.id as string;
+    console.log(`Created project "${SEED_PROJECT_NAME}" (${projectId}).`);
+  } else {
+    console.log(`Found project "${SEED_PROJECT_NAME}" (${projectId}).`);
+  }
+
+  // 4. One lifecycle graph, planned through the same template + RPC the
+  //    factory pages' launch control uses. Idempotent: an existing seed
+  //    lifecycle in this organization is reported, not duplicated.
+  const existingGraph = await admin
+    .from("graphs")
+    .select("id, goal, graph_runs(state)")
+    .eq("organization_id", organization.organization_id)
+    .eq("is_lifecycle", true)
+    .like("goal", `${SEED_GOAL_PREFIX}%`)
+    .limit(1)
+    .maybeSingle();
+  if (existingGraph.error) throw new Error(`Reading the seed lifecycle failed: ${existingGraph.error.message}`);
+
+  let graphId = existingGraph.data?.id as string | undefined;
+  if (!graphId) {
+    const template = findTemplate("full_lifecycle");
+    if (!template) throw new Error("The full_lifecycle template is missing.");
+    const built = buildLaunchPlan(template, budgetForTemplate(template, DEFAULT_GRAPH_BUDGET));
+    if (!built.ok) throw new Error(`full_lifecycle did not compile: ${built.errors.join("; ")}`);
+
+    const planted = await owner
+      .rpc("create_graph_from_plan", {
+        p_organization_id: organization.organization_id,
+        p_project_id: projectId,
+        p_goal: `${SEED_GOAL_PREFIX} ${built.plan.goal}`,
+        p_topology: built.plan.topology,
+        p_topology_reasons: built.plan.topologyReasons,
+        p_risk_level: built.plan.riskLevel,
+        p_requires_owner_approval: built.plan.requiresOwnerApproval,
+        p_nodes: built.plan.nodes,
+        p_edges: built.plan.edges,
+        p_budget: built.plan.budget,
+      })
+      .single();
+    if (planted.error) throw new Error(`Planting the seed lifecycle failed: ${planted.error.message}`);
+    graphId = planted.data as unknown as string;
+    console.log(`Planted the seed lifecycle graph (${graphId}).`);
+  } else {
+    console.log(`Found the seed lifecycle graph (${graphId}).`);
+  }
+
+  // 5. Only our graph may be claimed. Any other claimable graph means this is
+  //    not the empty development stack the seed expects — stop, touch
+  //    nothing.
+  const otherGraphs = await admin
+    .from("graphs")
+    .select("id, organization_id")
+    .neq("id", graphId);
+  if (otherGraphs.error) throw new Error(`Inspecting the queue failed: ${otherGraphs.error.message}`);
+  if ((otherGraphs.data ?? []).length > 0) {
+    console.error(
+      `The database holds ${otherGraphs.data!.length} other graph(s). The seed drives only its own `
+      + "lifecycle and will not claim from a shared queue. Run it against a stack that holds no other graphs, "
+      + "or drain those graphs first.",
+    );
+    process.exit(1);
+  }
+
+  // 6. Drive the run the way the production worker does: claim, execute,
+  //    halt at gates. Every output says what it is.
+  const store = SupabaseGraphStore.create({ url, serviceRoleKey, workerId: WORKER_ID });
+  const seedExecutor = async (node: { nodeKey: string; executor: string }): Promise<NodeExecutionResult> => {
+    if (node.executor === "ANCHOR") {
+      return {
+        status: "SUCCEEDED",
+        output: { dev_seed: true, kind: "seed_observation", subject: node.nodeKey, verdict: "green" },
+        tokensUsed: 0,
+      };
+    }
+    return {
+      status: "SUCCEEDED",
+      output: { dev_seed: true, stage_product: node.nodeKey, note: "Development seed output — not real work." },
+      tokensUsed: 0,
+    };
+  };
+
+  for (let window = 1; window <= 8; window += 1) {
+    const claimed = parseClaimedGraph(await store.claimPlannedGraph());
+    if (claimed === null) {
+      console.log("Nothing left to claim.");
+      break;
+    }
+    if (!claimed.ok) throw new Error(`The claim did not parse: ${claimed.detail}`);
+    if (claimed.graph.graph_id !== graphId) {
+      throw new Error("The claim returned a graph the seed did not plant; refusing to continue.");
+    }
+    const compiled = compileClaimedGraph(claimed.graph);
+    if (!compiled.ok) throw new Error(`The claimed graph did not compile: ${compiled.detail}`);
+
+    const summary = await runClaimedGraph(claimed.graph, compiled.graph, store, seedExecutor);
+    console.log(
+      `Window ${window}: ${summary.nodesSucceeded} node(s) completed, `
+      + `${summary.reusedNodes.length} reused, run closed ${summary.finalState}.`,
+    );
+    if (summary.finalState === "COMPLETED") break;
+
+    const openGates = await admin
+      .from("graph_gates")
+      .select("id, kind, state, node_id, stage")
+      .eq("graph_id", graphId)
+      .eq("state", "OPEN");
+    if (openGates.error) throw new Error(`Reading the gates failed: ${openGates.error.message}`);
+    const gates = openGates.data ?? [];
+    if (gates.length === 0) continue;
+
+    if (!drain) {
+      console.log(
+        `Halted at ${gates.map((gate) => `${gate.stage} (${gate.kind})`).join(", ")}. `
+        + "The factory pages now show this decision. Re-run with --drain to approve the gates and complete all ten steps.",
+      );
+      return;
+    }
+    for (const gate of gates) {
+      if (gate.kind === "HUMAN") {
+        const decided = await owner.rpc("decide_node_gate", {
+          p_gate_id: gate.id,
+          p_approved: true,
+          p_reason: "Approved by the dev seed owner.",
+        });
+        if (decided.error) throw new Error(`Approving the ${gate.stage} gate failed: ${decided.error.message}`);
+        console.log(`Approved the ${gate.stage} human gate as the seed owner.`);
+      } else {
+        const decided = await admin.rpc("decide_automatic_gate_as_worker", {
+          p_worker_id: WORKER_ID,
+          p_node_id: gate.node_id,
+        });
+        if (decided.error) throw new Error(`Deciding the ${gate.stage} automatic gate failed: ${decided.error.message}`);
+        console.log(`The ${gate.stage} automatic gate decided itself on its anchored evidence.`);
+      }
+    }
+  }
+
+  console.log(
+    "Seed complete. Sign in as the seed owner and open /solutions/factory/requirement to walk the ten steps.",
+  );
+}
+
+main().catch((error: unknown) => {
+  console.error(error instanceof Error ? error.message : error);
+  process.exit(1);
+});

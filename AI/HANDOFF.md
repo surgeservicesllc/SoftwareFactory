@@ -1,8 +1,26 @@
 # Handoff
 
-Last updated: 2026-08-24
+Last updated: 2026-08-25
 
-## Newest (2026-08-24 ~22:50Z): the owner's navigation — ten factory step pages
+## Newest (2026-08-25 ~02:15Z): the ten-step goal — consecutive E2E landed, dev seed added
+
+The owner's active /goal asks for the ten factory steps fully functional,
+Supabase-backed, seeded, and tested end to end. Mapped: the flow already is
+the full_lifecycle graph (STEP 1's empty state carries the real launch
+control; gates decidable on the step pages). Landed this window:
+`tests/integration/ten-step-consecutive-flow.behavior.test.ts` (one request
+drained to COMPLETED across gate-halted windows — all eleven stages closed
+with artifacts, exactly-once execution, gates + audit, identical refresh
+projection, outsider refused) and `npm run seed:dev`
+(`scripts/seed-dev-lifecycle.mts`, idempotent, dev_seed-labelled,
+production-refusing). Open: the seed has not run against a live dev stack
+(no Docker here — guards exercised, drive path is the tested one); the live
+lifecycle d7241cf4 still needs its implement→monitor hops via the
+graph-worker dispatch on main (the 02:21Z trigger carries the plan). Also
+merged: #396 (factory step board detail + truthful fixture states + 320px
+tile stacking), deploy-verified on production.
+
+## Earlier (2026-08-24 ~22:50Z): the owner's navigation — ten factory step pages
 
 The owner's next /goal: match the navigation image (01. Factory Setup +
 02. AI Factory with ten numbered steps) and build each step page

@@ -1,6 +1,31 @@
 # Current state
 
-Last reviewed: 2026-08-24
+Last reviewed: 2026-08-25
+
+## 2026-08-25: the ten steps are walked consecutively in CI, and a dev stack can be seeded
+
+`tests/integration/ten-step-consecutive-flow.behavior.test.ts` drives one
+`full_lifecycle` request end to end against the migrated schema: worker
+windows split by the ARCHITECTURE human gate, the TEST anchor's automatic
+gate, and the DEPLOYMENT human gate; the owner approves the human gates,
+anchored evidence decides the automatic one, and the run closes COMPLETED.
+It pins the properties the factory pages depend on — every one of the eleven
+stages closes with a COMPLETED node and an artifact, no node executes twice
+across windows (gate-halted and completed work is reused), the gates land
+where policy places them with audit events, `list_graph_runs` reports the
+finished truth identically on a second read, and a signed-in outsider is
+refused outright ("organization membership is required").
+
+`npm run seed:dev` (`scripts/seed-dev-lifecycle.mts`) plants the same flow
+on a development stack through the product's own RPCs: seed owner (auth
+admin), organization (`onboard_authenticated_organization`), project (direct
+insert, deliberately without a fake GitHub connection), one lifecycle graph
+(`create_graph_from_plan`), driven with `SupabaseGraphStore` to the first
+gate halt — or all the way with `--drain`. Idempotent; every payload carries
+`dev_seed: true`; refuses production (ref pinned, no override) and refuses
+to claim graphs it did not plant. Guards are exercised; the full script has
+not yet run against a live dev stack (this container cannot start Docker),
+which is the one open verification.
 
 ## 2026-08-24: the console navigation is the owner's factory, ten steps and all
 

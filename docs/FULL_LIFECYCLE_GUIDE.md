@@ -161,3 +161,16 @@ Every step above is pinned by tests that run on every pull request:
 - Gate decisions from the runs panel: `tests/unit/graph-runs-panel-gates.test.tsx`
 - An approval wakes the worker to continue the graph: `tests/unit/graph-gate-decision-route.test.ts`
 - Budget chain (node envelope → template budget → worker timeout): `tests/unit/graph-budget-fit.test.ts`
+- The whole flow, consecutively: one request drained window by window to a COMPLETED run — every stage closed with its artifact, each node paid for exactly once across the gate-halted windows, both human gates approved by the owner and the automatic gate by its anchors, the projection identical on refresh, and an outsider refused outright: `tests/integration/ten-step-consecutive-flow.behavior.test.ts`
+
+## Seeding a development stack
+
+`npm run seed:dev` (scripts/seed-dev-lifecycle.mts) plants the whole flow on
+a development stack: a seed owner, organization, and project, plus one
+`full_lifecycle` graph driven through its first worker window so every
+factory page shows real recorded stages and the open ARCHITECTURE gate.
+`--drain` approves the gates and completes all ten steps. It needs
+`NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and
+`SEED_OWNER_PASSWORD`; it is idempotent, labels everything it writes
+`dev_seed`, refuses to claim any graph it did not plant, and refuses the
+production project outright — there is no override.
