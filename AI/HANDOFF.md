@@ -2,7 +2,33 @@
 
 Last updated: 2026-08-25
 
-## Newest (2026-08-25 ~19:15Z): the retry that never happened (ADR-146)
+## Newest (2026-08-25 ~20:00Z): the run that never said why (ADR-147)
+
+Defect #11, from the same live queue read. `graph-run.ts` composes a
+run-level explanation on every close — the fan-in assessment, the "this
+run is void" statement, and the correction that gate-halted nodes did
+not fail — and its own comment says the record should carry it "rather
+than leaving the correction to whoever happens to know the distinction".
+
+It was left to whoever happens to know. The message reached
+`completeRun`, whose parameter was named `_detail` because nothing read
+it: the RPC had no parameter and `graph_runs` had no column. Ten
+CANCELLED runs in the live queue state no reason at all.
+
+Migration `20260825000300` adds `closure_note`, the writer stores it, and
+`list_graph_runs` projects it. **Apply the migration before deploying the
+code** — the new parameter is defaulted, so the currently deployed
+seven-argument call still resolves, but the reverse is not true. The
+apply scope is `runs-closure-note` in `apply-hosted-migrations.yml`.
+
+Two collisions were caught during this change and are worth knowing
+about: #416 landed `20260825000200` while this was in flight, so the
+timestamp was taken (renumbered to `000300`) *and* its rebuild of
+`list_graph_runs` would have been reverted had this file been rebuilt
+from the older `20260823001000`. Twenty-one tests pin the newest
+migration filename; they are re-pointed here.
+
+## Earlier (2026-08-25 ~19:15Z): the retry that never happened (ADR-146)
 
 Inspecting the live queue rather than re-running green tests turned up
 defect #10, and a second defect underneath it. Runs `28b4dedf` (06:02Z)

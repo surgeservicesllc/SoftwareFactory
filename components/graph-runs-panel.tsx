@@ -68,6 +68,9 @@ type GraphRunView = {
   topology: string;
   state: string;
   hadPartialInput: boolean;
+  // Optional for the same reason `verifications` is: a response from a
+  // deployment that predates the column must still render the run.
+  closureNote?: string | null;
   startedAt: string | null;
   completedAt: string | null;
   nodes: GraphRunNode[];
@@ -406,6 +409,14 @@ export function GraphRunsPanel() {
                       ? ` · ${artifactTotal} artifact${artifactTotal === 1 ? "" : "s"} (${Object.entries(run.artifactCounts).map(([kind, count]) => `${count} ${kind}`).join(", ")})`
                       : " · No artifacts recorded."}
                   </p>
+                  {run.closureNote ? (
+                    <p
+                      className="rounded-lg border border-line bg-surface-inset p-3 text-xs text-muted"
+                      data-testid="run-closure-note"
+                    >
+                      {run.closureNote}
+                    </p>
+                  ) : null}
                   {verifications.length > 0 ? (
                     <div className="rounded-lg border border-line p-3">
                       <p className="text-xs font-medium text-foreground">Verifications</p>

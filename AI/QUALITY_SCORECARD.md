@@ -2,10 +2,10 @@
 
 Last reviewed: 2026-08-25
 
-**Addendum, 2026-08-25 — the ten-step factory: five engine defects found by
-driving it, and what is actually proven (ADR-144, ADR-145, ADR-146):** the
+**Addendum, 2026-08-25 — the ten-step factory: six engine defects found by
+driving it, and what is actually proven (ADR-144 through ADR-147):** the
 owner's ten-step production-readiness goal was driven against live
-production, and the drive — not review — found five defects in the graph
+production, and the drive — not review — found six defects in the graph
 engine. Each was fixed with a regression that fails without it:
 
 - **Gate-halted re-pay (ADR-143, `20260824001100`).** A gate-approved node's
@@ -37,6 +37,15 @@ engine. Each was fixed with a regression that fails without it:
   and read by nothing, so every retry the engine ever performed fired into
   the instant that had just refused it. Both halves are fixed together;
   fixing either alone would have changed nothing.
+
+- **The run never said why it ended (ADR-147).** The engine composes a
+  run-level explanation on every close — including the correction that
+  gate-halted nodes did not fail — and threw it away: `completeRun`'s
+  parameter was named `_detail` because the RPC had no parameter and
+  `graph_runs` had no column. Ten CANCELLED runs in the live queue state no
+  reason. Migration `20260825000300` adds `closure_note` and carries it
+  through to `list_graph_runs`. **Not yet hosted**; apply before the code
+  ships, not after.
 
 **Ten-step flow, local: PASS.**
 `tests/integration/ten-step-consecutive-flow.behavior.test.ts` drives one

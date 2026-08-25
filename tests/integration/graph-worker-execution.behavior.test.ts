@@ -108,11 +108,14 @@ function pgliteStore(db: PGlite, workerId: string): GraphRunStore {
       );
       await reset(db);
     },
-    async completeRun(graphRunId, state, hadPartialInput, _detail, usage) {
+    async completeRun(graphRunId, state, hadPartialInput, detail, usage) {
       await asServiceRole(db);
       await db.query(
-        "select public.complete_graph_run_as_worker($1, $2::uuid, $3::public.graph_run_state, $4, $5, $6)",
-        [workerId, graphRunId, state, hadPartialInput, usage?.tokensUsed ?? null, usage?.costMicros ?? null],
+        "select public.complete_graph_run_as_worker($1, $2::uuid, $3::public.graph_run_state, $4, $5, $6, null, $7)",
+        [
+          workerId, graphRunId, state, hadPartialInput,
+          usage?.tokensUsed ?? null, usage?.costMicros ?? null, detail ?? null,
+        ],
       );
       await reset(db);
     },
@@ -1396,5 +1399,51 @@ describe("the graph executor boundary", { timeout: 180_000 }, () => {
       db.query("select public.claim_planned_graph($1, $2::text[])", ["graph-worker-test", []]),
     ).rejects.toThrow(/at least one executor/);
     await reset(db);
+  });
+
+  it("keeps the run's own account of why it ended, and reads it back", async () => {
+    // The engine composed this sentence on every close and threw it away:
+    // `completeRun`'s parameter was named `_detail` because the RPC had no
+    // parameter to carry it and `graph_runs` had no column to hold it. Ten
+    // CANCELLED runs in the live queue state no reason at all.
+    //
+    // Keyed by run id rather than by goal: this suite shares one database and
+    // a claim returns whatever is oldest and PLANNED, which is not necessarily
+    // the graph this case just created.
+    await createDiamondGraph("Explain why this run ended");
+    const claimed = parseClaimedGraph(await claim());
+    expect(claimed.ok).toBe(true);
+    if (!claimed.ok) return;
+
+    const note = "The provider withheld capacity (session or rate limit) for "
+      + "every attempt; the run is void. 2 of the nodes counted above did not "
+      + "fail: they halted at an open lifecycle gate (architecture).";
+    await pgliteStore(db, "graph-worker-test")
+      .completeRun(claimed.graph.graph_run_id, "CANCELLED", false, note);
+
+    const read = async (graphRunId: string): Promise<string | null> => {
+      await asOwner(db);
+      const listed = await db.query<{ graph_run_id: string; closure_note: string | null }>(
+        "select graph_run_id, closure_note from public.list_graph_runs($1::uuid, 100)",
+        [organizationId],
+      );
+      await reset(db);
+      const row = listed.rows.find((candidate) => candidate.graph_run_id === graphRunId);
+      expect(row, "the run is missing from the projection").toBeDefined();
+      return row?.closure_note ?? null;
+    };
+
+    expect(await read(claimed.graph.graph_run_id)).toBe(note);
+
+    // A run closed with nothing to explain carries no note, rather than an
+    // empty string that reads as "a reason was recorded and it was blank".
+    await createDiamondGraph("Nothing to explain");
+    const second = parseClaimedGraph(await claim());
+    expect(second.ok).toBe(true);
+    if (!second.ok) return;
+    await pgliteStore(db, "graph-worker-test")
+      .completeRun(second.graph.graph_run_id, "PARTIAL", true, "   ");
+
+    expect(await read(second.graph.graph_run_id)).toBeNull();
   });
 });

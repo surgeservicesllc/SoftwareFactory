@@ -78,7 +78,7 @@ the measured list, not today's total outstanding migration count. Later exact ev
 forward candidates.
 Do not add any of them to the 19-row measurement or
 infer a new overall missing count without another complete ledger probe. As of this release,
-the repository total is 164 migration files. Those two numbers do not stand in a prefix relationship, and the reason
+the repository total is 165 migration files. Those two numbers do not stand in a prefix relationship, and the reason
 matters: the
 hosted ledger is **not a contiguous prefix** of the local files. It has gaps in the middle and
 rows well past them. Any sentence of the form "everything after `X` is outstanding" is therefore
@@ -782,9 +782,35 @@ test passed, because the failure lives in the ledger rather than the schema. It 
 first time during the one operation that is hardest to reverse.
 
 `tests/integration/migration-version-uniqueness.test.ts` now asserts uniqueness, that every
-filename parses, and that filename order matches version order. It has happened twice, both times
-from separate agents picking the same timestamp in parallel, so it is checked rather than
+filename parses, and that filename order matches version order. It has happened three times, every
+time from separate agents picking the same timestamp in parallel, so it is checked rather than
 remembered.
+
+The third was 2026-08-25: `20260825000200_run_cost_and_budget_in_graph_runs` (#416) landed on main
+while `20260825000200_runs_state_their_closure_reason` was in flight on another branch. The second
+renumbered to `20260825000300`. Worth knowing beyond the version itself: both files rebuild
+`list_graph_runs`, and the in-flight one had been written against the older `20260823001000` body,
+so merging it unchanged would have silently reverted the cost columns #416 had just added. When two
+branches touch one `create or replace` function, the later file has to be rebuilt from whatever
+actually reached main, not from whatever it was originally derived from — the version collision is
+the loud half of that problem and the reverted body is the quiet half.
+
+## Pending apply: `runs-closure-note` (20260825000300)
+
+Not yet hosted. `graph_runs` gains `closure_note`; `complete_graph_run_as_worker` gains a defaulted
+`p_closure_note`; `list_graph_runs` projects the column.
+
+**Apply before the code that sends the note reaches production, not after.** The new function's
+extra parameter is defaulted, so the currently deployed worker's seven-argument call still resolves
+against it — but code that sends eight arguments to the old seven-parameter function fails, and it
+fails on every run close. One direction is safe and the other bricks the worker.
+
+```
+scope=runs-closure-note
+```
+
+The step verifies all three halves read back — the column, the writer's parameter, and the
+projection — and refuses if the ledger already records the version or if the file's hash has moved.
 
 ## Not covered here
 

@@ -26,6 +26,7 @@ const graphRunRow = {
   project_id: "project-1",
   state: "completed",
   had_partial_input: false,
+  closure_note: "Nine of eleven nodes reported. 2 halted at an open lifecycle gate.",
   started_at: "2026-08-21T12:00:00.000Z",
   completed_at: "2026-08-21T12:05:00.000Z",
   nodes: [{ id: "node-1", error: "Internal node detail" }],
@@ -76,6 +77,7 @@ describe("graph runs route", () => {
         projectId: "project-1",
         state: "completed",
         hadPartialInput: false,
+        closureNote: "Nine of eleven nodes reported. 2 halted at an open lifecycle gate.",
         startedAt: "2026-08-21T12:00:00.000Z",
         completedAt: "2026-08-21T12:05:00.000Z",
         // The row this case feeds carries no spend, and the projection says so

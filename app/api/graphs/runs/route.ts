@@ -32,6 +32,7 @@ type GraphRunRow = {
   project_id: string;
   state: string;
   had_partial_input: boolean;
+  closure_note: string | null;
   started_at: string | null;
   completed_at: string | null;
   // bigint columns: postgrest hands these back as strings, and a run that
@@ -121,6 +122,10 @@ export async function GET(request: Request) {
         projectId: row.project_id,
         state: row.state,
         hadPartialInput: row.had_partial_input,
+        // Why the run ended as it did, as the engine assessed it. Null on runs
+        // closed before the column existed, and on runs that ended whole with
+        // nothing to explain — an absent note is not an empty one.
+        closureNote: row.closure_note ?? null,
         startedAt: row.started_at,
         completedAt: row.completed_at,
         /*

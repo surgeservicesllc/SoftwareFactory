@@ -40,16 +40,21 @@ all green.
 
 ## 2026-08-25: the ten-step factory, and the defects driving it exposed
 
-Driving the owner's ten-step flow against live production found five graph
+Driving the owner's ten-step flow against live production found six graph
 engine defects that review had not: gate-halted work re-paid (ADR-143), a
 capacity-voided run consuming a gate approval and stranding a lifecycle
 permanently (ADR-144), a flat 24-turn budget too small for implementation
 nodes, the artifact sensitive-data guard's refusal killing an entire
-drain for every organization (both ADR-145), and a 529 overload retried
-zero times over a backoff the engine declared but never applied
-(ADR-146). All five are fixed, each with a regression that fails without
-the fix; ADR-143 and ADR-144's migrations are hosted-applied and
-readback-verified.
+drain for every organization (both ADR-145), a 529 overload retried zero
+times over a backoff the engine declared but never applied (ADR-146),
+and the run's own account of why it ended computed on every close and
+discarded on every close (ADR-147). All six are fixed, each with a
+regression that fails without the fix; ADR-143 and ADR-144's migrations
+are hosted-applied and readback-verified. **ADR-147's migration
+(`20260825000300`) is not yet hosted** — apply it with the
+`runs-closure-note` scope *before* the code that sends the note reaches
+production, since the deployed worker's call still resolves against the
+new function but not the reverse.
 
 The last of them came from reading the live queue rather than re-running
 tests that already pass: two runs of one graph, six minutes apart, lost

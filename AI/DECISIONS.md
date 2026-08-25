@@ -2187,3 +2187,41 @@ Use this append-only log for decisions that constrain future implementation. Cha
   the retried 529, the per-round wait, and the wait not multiplying by
   graph width - plus guards that an exhausted overload stops retrying
   and a clean round waits for nothing.
+
+## ADR-147 - A run states why it ended, in the run's own row
+
+- Date: 2026-08-25
+- Status: accepted
+- Context: `lib/worker/graph-run.ts` composes a run-level explanation
+  before every close - whether the fan-in was whole, that a
+  capacity-voided run is void rather than failed, and the correction
+  that matters most to a reader: "N of the nodes counted above did not
+  fail: they halted at an open lifecycle gate and continue once the gate
+  is decided." Its own comment says the record should carry that "rather
+  than leaving the correction to whoever happens to know the
+  distinction". It was left to whoever happens to know. The message
+  reached `GraphRunStore.completeRun`, whose parameter was named
+  `_detail` because nothing read it: `complete_graph_run_as_worker` had
+  no parameter to carry it and `graph_runs` had no column to hold it.
+  Every run-level explanation this engine has produced was computed and
+  discarded. The live queue shows the cost - ten CANCELLED runs, none of
+  which states a reason.
+- Decision: `graph_runs` gains `closure_note`, written by
+  `complete_graph_run_as_worker` from that same assessment and projected
+  by `list_graph_runs` (migration 20260825000300). This is the argument
+  `node_runs.blocked_reason` has made since 20260814000100, one level
+  up: a run whose reason is invisible sends the reader to the event log
+  to learn something the row already knew. A note that trims to nothing
+  is stored as null, because an empty note reads as "a reason was
+  recorded and it was blank".
+- Bounds: no backfill. Runs closed before the column existed have no
+  note because none was ever stored, and writing a plausible one now
+  would put invented text under a heading that reads like a record. The
+  migration is backward compatible with the code already deployed - the
+  new parameter is defaulted, so the live worker's seven-argument call
+  still resolves - which fixes the release order: apply the migration
+  first, then deploy the code that sends the note. The `list_graph_runs`
+  body is restated from 20260825000200 rather than the older
+  20260823001000, because that file landed on main while this change was
+  in flight and rebuilding from the stale version would have silently
+  reverted its cost columns.

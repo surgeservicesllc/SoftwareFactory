@@ -86,7 +86,7 @@ beforeAll(async () => {
   const migrationFiles = (await readdir(migrationsRoot))
     .filter((name) => /^\d+.*\.sql$/.test(name))
     .sort();
-  expect(migrationFiles.at(-1)).toBe("20260825000200_run_cost_and_budget_in_graph_runs.sql");
+  expect(migrationFiles.at(-1)).toBe("20260825000300_runs_state_their_closure_reason.sql");
   for (const file of migrationFiles) {
     await db.exec(await readFile(resolve(migrationsRoot, file), "utf8"));
   }
