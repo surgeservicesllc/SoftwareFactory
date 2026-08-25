@@ -64,6 +64,20 @@ test.describe("AI Factory live journey", () => {
   const installed = process.env.AI_FACTORY_E2E_INSTALLED === "1";
   const stepOneReady = seeded || installed;
 
+  /**
+   * What a completed sign-in looks like now.
+   *
+   * It used to be a landing on /solutions. Every signed-in person now lands on
+   * the /decision chooser first, which is a product decision, not a fault --
+   * so waiting for /solutions specifically made every case here fail at the
+   * door, and the scheduled lane with them. What each case actually needs is
+   * that the session landed and the form is behind us; each one navigates to
+   * the page it is about immediately afterwards.
+   */
+  async function waitForSignedIn(page: import("@playwright/test").Page, timeout = 60_000) {
+    await page.waitForURL(/\/(solutions|decision)(\/|$)/, { timeout });
+  }
+
   /** The card for one step, found by its title. */
   function stepCard(page: import("@playwright/test").Page, title: string) {
     return page.getByRole("heading", { name: title, exact: true }).locator("xpath=ancestor::li[1]");
@@ -86,7 +100,7 @@ test.describe("AI Factory live journey", () => {
     await page.getByRole("button", { name: /^sign in$/i }).click();
     // Wait for the session to land. Navigating straight on raced the POST and
     // arrived at the journey still signed out.
-    await page.waitForURL(/\/solutions(\/|$)/, { timeout: 45_000 });
+    await waitForSignedIn(page, 45_000);
 
     // ── The journey, with the seeded installation already behind step 1 ───
     await page.goto("/solutions/ai-factory");
@@ -427,7 +441,7 @@ test.describe("AI Factory live journey", () => {
     await page.getByLabel("Email").fill(email);
     await page.getByLabel("Password").fill(password);
     await page.getByRole("button", { name: /^sign in$/i }).click();
-    await page.waitForURL(/\/solutions(\/|$)/, { timeout: 60_000 });
+    await waitForSignedIn(page);
 
     await page.goto("/solutions/ai-factory");
 
@@ -478,7 +492,7 @@ test.describe("AI Factory live journey", () => {
     await page.getByLabel("Email").fill(email);
     await page.getByLabel("Password").fill(password);
     await page.getByRole("button", { name: /^sign in$/i }).click();
-    await page.waitForURL(/\/solutions(\/|$)/, { timeout: 60_000 });
+    await waitForSignedIn(page);
 
     await page.goto("/solutions/ai-factory");
     /*
@@ -542,7 +556,7 @@ test.describe("AI Factory live journey", () => {
     await page.getByLabel("Email").fill(email);
     await page.getByLabel("Password").fill(password);
     await page.getByRole("button", { name: /^sign in$/i }).click();
-    await page.waitForURL(/\/solutions(\/|$)/, { timeout: 60_000 });
+    await waitForSignedIn(page);
 
     await page.goto("/solutions/factory/requirement");
     await expect(page.getByRole("heading", { level: 1, name: /1\. Requirement/i }))
