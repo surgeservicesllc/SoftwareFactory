@@ -12,6 +12,7 @@ import {
 } from "@/components/control-plane-detail";
 import { TenantListShell, formatDateTime, formatDuration, riskTone, useTenantList } from "@/components/tenant-list";
 import { StatusBadge } from "@/components/ui";
+import { shortRunId } from "@/lib/graph/run-label";
 
 type Run = {
   id: string;
@@ -644,7 +645,21 @@ export function RunsConsole() {
                               ? <>Recorded target: {providerDisplayName(run.provider)}{run.model ? ` / ${run.model}` : " / model chosen at execution"}</>
                               : "No provider/model routing target is recorded for this run."}
                         </p>
-                        <p className="mt-1 truncate font-mono text-xs text-faint">{run.branch ?? run.id}</p>
+                        {/* An analysis run is named here exactly as the AI
+                            Factory names it — same eight characters, same
+                            monospace — so a row in this list and the run's
+                            own page are recognizably one run. The full id
+                            stays available on hover for anyone quoting it. */}
+                        {run.analysis ? (
+                          <p className="mt-1 truncate text-xs text-faint">
+                            Run{" "}
+                            <span className="font-mono text-muted" title={run.analysis.graphRunId ?? run.id}>
+                              {shortRunId(run.analysis.graphRunId ?? run.id)}
+                            </span>
+                          </p>
+                        ) : (
+                          <p className="mt-1 truncate font-mono text-xs text-faint">{run.branch ?? run.id}</p>
+                        )}
                       </div>
                       <div className="flex flex-wrap items-center gap-2 md:shrink-0">
                         {run.risk ? <StatusBadge tone={riskTone(run.risk)}>{run.risk.toUpperCase()}</StatusBadge> : null}

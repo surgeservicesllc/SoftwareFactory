@@ -118,6 +118,49 @@ describe("RunsConsole", () => {
       .toHaveAttribute("href", "/solutions/lifecycle/run/run-050b35e5");
   });
 
+  it("names the run the way the AI Factory names it", async () => {
+    // The connection between the two surfaces is the id: the factory's
+    // breadcrumb reads 050b35e5, so this row must too — not
+    // "analysis:050b35e5-9eb6-4527-a10c-6a87b20f70a9".
+    const analysisRun = {
+      id: "analysis:050b35e5-9eb6-4527-a10c-6a87b20f70a9",
+      status: "partial",
+      startedAt: "2026-08-25T08:31:01.000Z",
+      completedAt: "2026-08-25T08:41:01.000Z",
+      createdAt: "2026-08-25T08:31:01.000Z",
+      durationMs: 600_000,
+      risk: null,
+      provider: "anthropic",
+      model: null,
+      branch: null,
+      reviewStatus: "unreviewed",
+      archivedAt: null,
+      project: null,
+      task: { id: "graph-1", title: "One request through all ten phases" },
+      agent: { id: "graph-1", name: "Claude — analysis" },
+      analysis: {
+        graphId: "graph-1",
+        graphRunId: "050b35e5-9eb6-4527-a10c-6a87b20f70a9",
+        commandId: null,
+        artifactCount: 12,
+      },
+    };
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === "/api/runs") {
+        return jsonResponse({ runs: [], analysisRuns: [analysisRun] });
+      }
+      throw new Error(`Unexpected fetch: ${String(input)}`);
+    }));
+
+    render(<RunsConsole />);
+
+    const label = await screen.findByText("050b35e5");
+    expect(label).toBeInTheDocument();
+    // The full id stays reachable for anyone quoting it, without being shouted.
+    expect(label).toHaveAttribute("title", "050b35e5-9eb6-4527-a10c-6a87b20f70a9");
+    expect(screen.queryByText(/^analysis:/)).not.toBeInTheDocument();
+  });
+
   it("promotes the draft pull request to a primary action on the run detail", async () => {
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
