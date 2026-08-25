@@ -61,6 +61,31 @@ testing and surfaced only under live execution — including one that
 permanently stranded a lifecycle — so the live walk stays PENDING on its own
 terms rather than being absorbed into this PASS.
 
+**Migrations, and the `Supabase Preview` check: two different claims.** On a
+FRESH database, the migration set replays cleanly — every integration suite in
+this session applies all 163 files in order to an empty PGlite and passes,
+which is what the ten-step PASS below rests on. What is NOT clean is replay
+onto a database that already holds the objects: `Supabase Preview` has been
+red on `main` continuously (checked across eleven commits back through
+`5e5054b`, all predating this session), dying on `20260815000200` with
+`column "maximum_concurrent_runs" of relation "organizations" already exists`.
+
+That is the known partial-apply class already tracked in `AI/BACKLOG.md`: 18
+historical migrations were applied to production without recording ledger
+rows, so the preview branch replays each one into its own objects. The
+backlog's stated discipline — probe inventory first, finish only what is
+missing, record the row only once every declared object is present — is
+deliberately NOT shortcut here, because "applying them blind is how this class
+of problem began." Making the column adds `if not exists` would paper over a
+ledger gap and could hide a genuine partial apply, so it was left alone.
+
+This session's own migration (`20260825000100`) followed that discipline and
+IS ledger-recorded (apply run 32805322660, `migration repair` confirmed), so
+it does not extend the 18. `Supabase Preview` is also not a required check —
+`main` has no required status checks configured at all; the four-green-checks
+bar used for every merge in this session is stricter than the repository
+enforces.
+
 **Seeded ten-step flow: PASS.** `tests/integration/dev-seed-drive.behavior.test.ts`
 walks the whole flow to a COMPLETED run by calling `driveSeedLifecycle` — the
 exact loop `npm run seed:dev` runs — against the real migrated schema, with
