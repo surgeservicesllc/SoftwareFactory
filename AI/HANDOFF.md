@@ -2,7 +2,23 @@
 
 Last updated: 2026-08-25
 
-## Newest (2026-08-25 ~07:45Z): defects #6 and #7 — turn budget and the guard crash (ADR-145)
+## Newest (2026-08-25 ~08:30Z): fresh lifecycle 1f9defa2, launched by the product, walking the ten steps
+
+d7241cf4 is PARTIAL-retired (implement's two 24-turn exhaustions were
+genuine failures; the re-plant machinery is per-graph data migrations,
+not automatic). The live walk continues on a FRESH lifecycle the fake
+user launched through the real product API (POST /api/graphs,
+templateKey full_lifecycle, project 51af87ae): graph 1f9defa2. Its
+first window (run c1576809) completed GOAL, PRD and all three DISCOVERY
+scans for real, then consolidate hit the session limit (resets 12:20Z)
+and the run voided CANCELLED — the five stages reuse at zero cost next
+window under ADR-144. One-shot trigger trig_01HweQJNJBeJ6d6TZcojkm43
+(12:21Z) carries the continuation: consolidate→architecture halt →
+fake-user gate approval → implement under ADR-145's 48 turns → review →
+TEST anchor self-gate → deploy refusal terminal → final verdict.
+Windows appear to reset every 5 hours (02:20/07:20/12:20).
+
+## Earlier (2026-08-25 ~07:45Z): defects #6 and #7 — turn budget and the guard crash (ADR-145)
 
 The 07:20 window's drain (run 32821441484) surfaced two more defects.
 Implement exhausted the flat 24-turn budget twice (run f200de80; the
