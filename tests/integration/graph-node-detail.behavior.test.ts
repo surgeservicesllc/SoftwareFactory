@@ -11,7 +11,7 @@ import { describeNode, type DetailedNode } from "@/lib/graph/node-detail";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const migrationsDirectory = resolve(repositoryRoot, "supabase/migrations");
-const latestMigration = "20260825000100_gate_approval_survives_voided_runs.sql";
+const latestMigration = "20260825000200_run_cost_and_budget_in_graph_runs.sql";
 
 const ownerId = "00000000-0000-4000-8000-00000000ad01";
 const organizationId = "10000000-0000-4000-8000-00000000ad01";

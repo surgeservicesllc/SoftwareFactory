@@ -296,6 +296,8 @@ function StepView({
         state: run.state,
         startedAt: run.startedAt,
         stepsComplete,
+        costMicros: run.costMicros,
+        budgetAction: run.budgetAction,
       }}
       viewer={viewer}
       breadcrumb={<FactoryBreadcrumb step={step} runId={run.graphRunId} />}

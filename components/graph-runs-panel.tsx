@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from "react";
 import { GateDecision } from "@/components/graph/gate-decision";
 import { BlockedState, Card, SectionTitle, StatusBadge } from "@/components/ui";
 import { describeNode } from "@/lib/graph/node-detail";
+import { budgetActionIsNotable, budgetActionLabel, formatCost, formatTokens } from "@/lib/graph/run-spend";
 import { summariseRunStages } from "@/lib/graph/stage-summary";
 
 /**
@@ -78,6 +79,12 @@ type GraphRunView = {
   isLifecycle?: boolean;
   iteration?: number;
   maxIterations?: number;
+  // What the run spent. Optional for the same reason as verifications, and
+  // nullable because a run whose nodes reported no usage recorded none.
+  tokensUsed?: number | null;
+  costMicros?: number | null;
+  budgetAction?: string | null;
+  discoveryRounds?: number | null;
 };
 
 type State = "loading" | "signed-out" | "setup" | "error" | "ready";
@@ -367,6 +374,31 @@ export function GraphRunsPanel() {
                   </span>
                 </summary>
                 <div className="mt-3 space-y-3">
+                  {/*
+                    What the run spent, when the worker recorded it -- absent
+                    rather than zeroed when it did not, because "$0.00" on an
+                    unmeasured run is a claim nobody measured.
+                  */}
+                  {formatCost(run.costMicros) || formatTokens(run.tokensUsed) || budgetActionLabel(run.budgetAction) ? (
+                    <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+                      {formatCost(run.costMicros) ? (
+                        <span className="font-medium text-foreground">{formatCost(run.costMicros)}</span>
+                      ) : null}
+                      {formatTokens(run.tokensUsed) ? (
+                        <span className="text-muted">{formatTokens(run.tokensUsed)} tokens</span>
+                      ) : null}
+                      {budgetActionLabel(run.budgetAction) ? (
+                        <StatusBadge tone={budgetActionIsNotable(run.budgetAction) ? "warning" : "neutral"} dot={false}>
+                          {budgetActionLabel(run.budgetAction)}
+                        </StatusBadge>
+                      ) : null}
+                      {typeof run.discoveryRounds === "number" && run.discoveryRounds > 0 ? (
+                        <span className="text-faint">
+                          {run.discoveryRounds} discovery round{run.discoveryRounds === 1 ? "" : "s"}
+                        </span>
+                      ) : null}
+                    </p>
+                  ) : null}
                   <p className="text-xs text-faint">
                     Started {timestamp(run.startedAt)} · Finished {timestamp(run.completedAt)}
                     {run.hadPartialInput ? " · Inputs were incomplete — this is a partial view." : ""}

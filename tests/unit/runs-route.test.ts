@@ -120,6 +120,9 @@ describe("runs route", () => {
 
   const lifecycleRun = {
     graph_run_id: "run-050b35e5",
+    tokens_used: "128450",
+    cost_micros: "2407311",
+    budget_action: "PREFER_CHEAPER_MODEL",
     graph_id: "graph-1",
     goal: "One request through all ten phases",
     project_id: null,
@@ -192,6 +195,43 @@ describe("runs route", () => {
     };
 
     expect(analysisRuns[0]!.status).toBe(expected);
+  });
+
+  it("carries what the run spent, parsing the bigints the driver hands back as strings", async () => {
+    const augment = await augmentOf();
+    const rpc = graphRpc({ runs: [lifecycleRun] });
+
+    const { analysisRuns } = await augment({ rpc }, "organization-1") as {
+      analysisRuns: Array<{ analysis: Record<string, unknown> }>;
+    };
+
+    expect(analysisRuns[0]!.analysis).toMatchObject({
+      costMicros: 2_407_311,
+      tokensUsed: 128_450,
+      budgetAction: "PREFER_CHEAPER_MODEL",
+    });
+  });
+
+  it("leaves spend null when the run recorded none, and when the column is absent", async () => {
+    // Two different absences, one honest answer. A zero here would be a
+    // measurement of a run nobody measured.
+    const augment = await augmentOf();
+    const noUsage = { ...lifecycleRun, tokens_used: null, cost_micros: null, budget_action: null };
+    const olderDatabase = { ...lifecycleRun };
+    delete (olderDatabase as Record<string, unknown>).tokens_used;
+    delete (olderDatabase as Record<string, unknown>).cost_micros;
+    delete (olderDatabase as Record<string, unknown>).budget_action;
+
+    const { analysisRuns } = await augment(
+      { rpc: graphRpc({ runs: [noUsage, { ...olderDatabase, graph_run_id: "run-older" }] }) },
+      "organization-1",
+    ) as { analysisRuns: Array<{ analysis: Record<string, unknown> }> };
+
+    for (const run of analysisRuns) {
+      expect(run.analysis.costMicros).toBeNull();
+      expect(run.analysis.tokensUsed).toBeNull();
+      expect(run.analysis.budgetAction).toBeNull();
+    }
   });
 
   it("keeps the command a run answers, where a command launched it", async () => {

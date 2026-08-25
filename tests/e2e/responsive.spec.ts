@@ -185,6 +185,21 @@ test("search is gated server-side, not merely hidden from the navigation", async
   await expect(page).toHaveURL(/\/auth\/sign-in\?next=%2Fjob-seeker/);
 });
 
+test("/Job-Search is gated server-side, and by its own call", async ({ page }) => {
+  /*
+   * The named entry point to the board search. Unlike /job-seeker/search it
+   * inherits no job-seeker layout -- it sits outside that segment -- so the
+   * gate is called by the page itself. This asks for the URL directly while
+   * signed out, which is the only way to tell a real server gate from a link
+   * left out of the navigation.
+   *
+   * The `next` parameter carries this path rather than the section's, so
+   * signing in returns to the page that was asked for.
+   */
+  await page.goto("/Job-Search");
+  await expect(page).toHaveURL(/\/auth\/sign-in\?next=%2FJob-Search/);
+});
+
 test("a console page offers one menu button, not two", async ({ page }) => {
   /*
    * The console renders the global header and its own drawer, so a phone had

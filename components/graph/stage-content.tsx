@@ -41,6 +41,17 @@ export type RunView = {
   isLifecycle?: boolean;
   iteration?: number;
   maxIterations?: number;
+  /*
+   * What the run spent, from the worker's own accumulation.
+   *
+   * Null means nothing was recorded — a run whose nodes reported no usage, or
+   * a database that predates the read. It is not zero, and the renderers keep
+   * that distinction rather than printing a measurement nobody took.
+   */
+  tokensUsed?: number | null;
+  costMicros?: number | null;
+  budgetAction?: string | null;
+  discoveryRounds?: number | null;
 };
 
 export type ArtifactView = {

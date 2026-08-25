@@ -39,6 +39,15 @@ const graphRunRow = {
   max_iterations: 5,
 };
 
+/** The same row, as a database that has recorded spend returns it. */
+const spentRow = {
+  ...graphRunRow,
+  tokens_used: "128450",
+  cost_micros: "2407311",
+  budget_action: "PREFER_CHEAPER_MODEL",
+  discovery_rounds: 3,
+};
+
 function expectNoStore(response: Response) {
   expect(response.headers.get("cache-control")).toBe("private, no-store, max-age=0");
 }
@@ -69,6 +78,12 @@ describe("graph runs route", () => {
         hadPartialInput: false,
         startedAt: "2026-08-21T12:00:00.000Z",
         completedAt: "2026-08-21T12:05:00.000Z",
+        // The row this case feeds carries no spend, and the projection says so
+        // rather than reporting a run that cost nothing.
+        tokensUsed: null,
+        costMicros: null,
+        budgetAction: null,
+        discoveryRounds: null,
         nodes: [{ id: "node-1", error: "Internal node detail" }],
         artifactCounts: { patch: 1 },
         verifications: [
@@ -81,6 +96,22 @@ describe("graph runs route", () => {
       }],
     });
     expectNoStore(response);
+  });
+
+  it("reports what the run spent, parsing the bigints as numbers", async () => {
+    // The worker has written these four since 20260819000100; nothing read
+    // them until 20260825000200. postgrest hands bigints back as strings.
+    harness.rpc.mockResolvedValue({ data: [spentRow], error: null });
+
+    const response = await GET(new Request("https://factory.example/api/graphs/runs"));
+    const body = await response.json() as { runs: Array<Record<string, unknown>> };
+
+    expect(body.runs[0]).toMatchObject({
+      tokensUsed: 128_450,
+      costMicros: 2_407_311,
+      budgetAction: "PREFER_CHEAPER_MODEL",
+      discoveryRounds: 3,
+    });
   });
 
   it("returns only summary fields and verification verdicts for Factory Briefing", async () => {

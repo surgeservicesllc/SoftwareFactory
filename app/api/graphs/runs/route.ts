@@ -34,6 +34,12 @@ type GraphRunRow = {
   had_partial_input: boolean;
   started_at: string | null;
   completed_at: string | null;
+  // bigint columns: postgrest hands these back as strings, and a run that
+  // reported no usage has null rather than 0.
+  tokens_used?: string | number | null;
+  cost_micros?: string | number | null;
+  budget_action?: string | null;
+  discovery_rounds?: number | null;
   nodes: unknown;
   artifact_counts: unknown;
   verifications: unknown;
@@ -41,6 +47,13 @@ type GraphRunRow = {
   iteration: number | null;
   max_iterations: number | null;
 };
+
+/** A bigint the driver may hand back as a string, kept null when it is null. */
+function numberOrNull(value: string | number | null | undefined): number | null {
+  if (value === null || value === undefined) return null;
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
 
 function briefingVerifications(value: unknown): Array<{ verdict: string }> | null {
   if (!Array.isArray(value)) return null;
@@ -110,6 +123,19 @@ export async function GET(request: Request) {
         hadPartialInput: row.had_partial_input,
         startedAt: row.started_at,
         completedAt: row.completed_at,
+        /*
+         * What the run spent, and what the budget did about it.
+         *
+         * Optional on the row and null-preserving here, both deliberately: a
+         * database that predates 20260825000200 returns no such column, and a
+         * run whose nodes never reported usage has null. Neither is zero, and
+         * coalescing either to zero would put a measurement on the page that
+         * nobody took.
+         */
+        tokensUsed: numberOrNull(row.tokens_used),
+        costMicros: numberOrNull(row.cost_micros),
+        budgetAction: row.budget_action ?? null,
+        discoveryRounds: typeof row.discovery_rounds === "number" ? row.discovery_rounds : null,
         nodes: Array.isArray(row.nodes) ? row.nodes : [],
         artifactCounts:
           typeof row.artifact_counts === "object" && row.artifact_counts !== null

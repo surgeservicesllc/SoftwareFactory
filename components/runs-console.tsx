@@ -13,6 +13,7 @@ import {
 import { TenantListShell, formatDateTime, formatDuration, riskTone, useTenantList } from "@/components/tenant-list";
 import { StatusBadge } from "@/components/ui";
 import { shortRunId } from "@/lib/graph/run-label";
+import { budgetActionIsNotable, budgetActionLabel, formatCost, formatTokens } from "@/lib/graph/run-spend";
 
 type Run = {
   id: string;
@@ -37,6 +38,9 @@ type Run = {
     graphRunId?: string | null;
     commandId: string | null;
     artifactCount: number;
+    costMicros?: number | null;
+    tokensUsed?: number | null;
+    budgetAction?: string | null;
   } | null;
 };
 
@@ -640,7 +644,20 @@ export function RunsConsole() {
                         </p>
                         <p className="mt-1 break-words text-xs text-muted">
                           {run.analysis
-                            ? `Read-only analysis on your Claude subscription · ${run.analysis.artifactCount} artifact${run.analysis.artifactCount === 1 ? "" : "s"} recorded · no branch or pull request by design`
+                            ? [
+                                "Read-only analysis on your Claude subscription",
+                                `${run.analysis.artifactCount} artifact${run.analysis.artifactCount === 1 ? "" : "s"} recorded`,
+                                // Spend joins the line only once recorded. A
+                                // run that measured nothing says nothing here.
+                                formatCost(run.analysis.costMicros),
+                                formatTokens(run.analysis.tokensUsed)
+                                  ? `${formatTokens(run.analysis.tokensUsed)} tokens`
+                                  : null,
+                                budgetActionIsNotable(run.analysis.budgetAction)
+                                  ? budgetActionLabel(run.analysis.budgetAction)
+                                  : null,
+                                "no branch or pull request by design",
+                              ].filter(Boolean).join(" · ")
                             : run.provider
                               ? <>Recorded target: {providerDisplayName(run.provider)}{run.model ? ` / ${run.model}` : " / model chosen at execution"}</>
                               : "No provider/model routing target is recorded for this run."}

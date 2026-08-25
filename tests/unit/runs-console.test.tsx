@@ -118,6 +118,65 @@ describe("RunsConsole", () => {
       .toHaveAttribute("href", "/solutions/lifecycle/run/run-050b35e5");
   });
 
+  it("says what a run spent, and says nothing when nothing was recorded", async () => {
+    const base = {
+      id: "analysis:run-1",
+      status: "succeeded",
+      startedAt: "2026-08-25T08:31:01.000Z",
+      completedAt: "2026-08-25T08:41:01.000Z",
+      createdAt: "2026-08-25T08:31:01.000Z",
+      durationMs: 600_000,
+      risk: null,
+      provider: "anthropic",
+      model: null,
+      branch: null,
+      reviewStatus: "unreviewed",
+      archivedAt: null,
+      project: null,
+      task: { id: "graph-1", title: "A measured run" },
+      agent: { id: "graph-1", name: "Claude — analysis" },
+      analysis: {
+        graphId: "graph-1",
+        graphRunId: "run-1",
+        commandId: null,
+        artifactCount: 12,
+        costMicros: 2_407_311,
+        tokensUsed: 128_450,
+        budgetAction: "PREFER_CHEAPER_MODEL",
+      },
+    };
+    const unmeasured = {
+      ...base,
+      id: "analysis:run-2",
+      task: { id: "graph-2", title: "An unmeasured run" },
+      analysis: {
+        graphId: "graph-2",
+        graphRunId: "run-2",
+        commandId: null,
+        artifactCount: 0,
+        costMicros: null,
+        tokensUsed: null,
+        budgetAction: null,
+      },
+    };
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === "/api/runs") {
+        return jsonResponse({ runs: [], analysisRuns: [base, unmeasured] });
+      }
+      throw new Error(`Unexpected fetch: ${String(input)}`);
+    }));
+
+    render(<RunsConsole />);
+
+    expect(await screen.findByText(/\$2\.41/)).toBeInTheDocument();
+    expect(screen.getByText(/128,450 tokens/)).toBeInTheDocument();
+    expect(screen.getByText(/Switched to a cheaper model/)).toBeInTheDocument();
+
+    // The unmeasured run says nothing about cost rather than claiming $0.00.
+    expect(screen.queryByText(/\$0\.00/)).not.toBeInTheDocument();
+    expect(screen.getByText(/An unmeasured run/)).toBeInTheDocument();
+  });
+
   it("names the run the way the AI Factory names it", async () => {
     // The connection between the two surfaces is the id: the factory's
     // breadcrumb reads 050b35e5, so this row must too — not
