@@ -160,10 +160,129 @@ export function ArtifactBody({ payload }: { payload: unknown }) {
     );
   }
 
+  const observation = parseAnchorObservation(payload);
+  if (observation) return <AnchorObservationBody observation={observation} payload={payload} />;
+
   const report = parseNodeReport(payload);
   if (report) return <NodeReportBody report={report} payload={payload} />;
 
   return <RawPayload payload={payload} label="Recorded payload" open />;
+}
+
+/**
+ * The two instrument readings the anchor executor records.
+ *
+ * A TEST anchor stores CI's own verdict for the worker's commit; a MONITOR
+ * anchor stores one HTTP probe of production. Both are observations by
+ * instruments that cannot be persuaded, and the page renders them as
+ * readings — the sha, the counts, the status, the clocks — never as prose
+ * the browser made up.
+ */
+type CiObservation = {
+  kind: "ci";
+  sha: string;
+  repository?: string;
+  total: number;
+  failing: readonly { name: string; conclusion?: string | null; url?: string | null }[];
+  observedAt?: string | null;
+  latencyMs?: number | null;
+};
+type ProbeObservation = {
+  kind: "probe";
+  url: string;
+  status: number;
+  healthy: boolean;
+  observedAt?: string | null;
+  latencyMs?: number | null;
+};
+
+function parseAnchorObservation(payload: unknown): CiObservation | ProbeObservation | null {
+  if (typeof payload !== "object" || payload === null) return null;
+  const value = payload as Record<string, unknown>;
+  if (value.observation === "ci_check_runs"
+    && typeof value.sha === "string"
+    && typeof value.total === "number"
+    && Array.isArray(value.failing)) {
+    return {
+      kind: "ci",
+      sha: value.sha,
+      repository: typeof value.repository === "string" ? value.repository : undefined,
+      total: value.total,
+      failing: value.failing.filter((entry): entry is { name: string } =>
+        typeof entry === "object" && entry !== null && typeof (entry as { name?: unknown }).name === "string"),
+      observedAt: typeof value.observedAt === "string" ? value.observedAt : null,
+      latencyMs: typeof value.latencyMs === "number" ? value.latencyMs : null,
+    };
+  }
+  if (value.observation === "production_http_probe"
+    && typeof value.url === "string"
+    && typeof value.status === "number"
+    && typeof value.healthy === "boolean") {
+    return {
+      kind: "probe",
+      url: value.url,
+      status: value.status,
+      healthy: value.healthy,
+      observedAt: typeof value.observedAt === "string" ? value.observedAt : null,
+      latencyMs: typeof value.latencyMs === "number" ? value.latencyMs : null,
+    };
+  }
+  return null;
+}
+
+function AnchorObservationBody({
+  observation,
+  payload,
+}: {
+  observation: CiObservation | ProbeObservation;
+  payload: unknown;
+}) {
+  if (observation.kind === "ci") {
+    const failing = observation.failing;
+    return (
+      <div className="mt-3 space-y-2 text-sm">
+        <div className="flex flex-wrap items-center gap-2">
+          <StatusBadge tone={failing.length === 0 ? "safe" : "danger"} dot={false}>
+            {failing.length === 0 ? "CI green" : `${failing.length} failing`}
+          </StatusBadge>
+          <span className="text-muted">
+            {observation.total} check run{observation.total === 1 ? "" : "s"} for commit{" "}
+            <code className="font-mono text-foreground">{observation.sha.slice(0, 8)}</code>
+            {observation.repository ? ` in ${observation.repository}` : ""}
+          </span>
+        </div>
+        {failing.length > 0 ? (
+          <ul className="list-disc space-y-1 pl-5 text-muted">
+            {failing.map((run) => (
+              <li key={run.name}>
+                {run.name} — {run.conclusion ?? "no conclusion"}
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        <p className="text-xs text-faint">
+          Read from CI itself{observation.observedAt ? ` at ${clock(observation.observedAt)}` : ""}
+          {typeof observation.latencyMs === "number" ? ` in ${observation.latencyMs}ms` : ""}.
+        </p>
+        <RawPayload payload={payload} label="Full recorded observation" />
+      </div>
+    );
+  }
+  return (
+    <div className="mt-3 space-y-2 text-sm">
+      <div className="flex flex-wrap items-center gap-2">
+        <StatusBadge tone={observation.healthy ? "safe" : "danger"} dot={false}>
+          HTTP {observation.status}
+        </StatusBadge>
+        <span className="min-w-0 break-all text-muted">{observation.url}</span>
+      </div>
+      <p className="text-xs text-faint">
+        One live probe of production{observation.observedAt ? ` at ${clock(observation.observedAt)}` : ""}
+        {typeof observation.latencyMs === "number" ? ` · answered in ${observation.latencyMs}ms` : ""}.
+      </p>
+      <RawPayload payload={payload} label="Full recorded observation" />
+    </div>
+  );
 }
 
 /**

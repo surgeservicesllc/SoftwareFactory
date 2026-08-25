@@ -262,6 +262,53 @@ describe("the per-run stage page", () => {
     ).toBeInTheDocument();
   });
 
+  it("reads a TEST anchor's CI observation as a verdict, not as JSON", async () => {
+    stubFetch({
+      runs: runPayload([node({ node_key: "test", lifecycle_stage: "TEST", capability: "qa", executor: "ANCHOR" })]),
+      artifacts: [artifact({
+        nodeKey: "test",
+        kind: "ANCHOR",
+        payload: {
+          observation: "ci_check_runs",
+          sha: "b1771b1b5a6c82b55f3d68f02b7e5a251380aca8",
+          repository: "owner/repository",
+          total: 4,
+          failing: [],
+          observedAt: "2026-08-24T12:05:00.000Z",
+          latencyMs: 412,
+        },
+      })],
+    });
+    render(<RunStageConsole graphRunId={RUN_ID} stage="TEST" />);
+
+    expect(await screen.findByText("CI green")).toBeInTheDocument();
+    expect(screen.getByText("b1771b1b")).toBeInTheDocument();
+    expect(screen.getByText(/4 check runs for commit/)).toBeInTheDocument();
+  });
+
+  it("reads a MONITOR anchor's probe as a reading with its status", async () => {
+    stubFetch({
+      runs: runPayload([node({ node_key: "monitor", lifecycle_stage: "MONITORING", capability: "synthesis", executor: "ANCHOR" })]),
+      artifacts: [artifact({
+        nodeKey: "monitor",
+        kind: "ANCHOR",
+        payload: {
+          observation: "production_http_probe",
+          url: "https://www.example.org/",
+          status: 200,
+          healthy: true,
+          observedAt: "2026-08-24T12:06:00.000Z",
+          latencyMs: 180,
+        },
+      })],
+    });
+    render(<RunStageConsole graphRunId={RUN_ID} stage="MONITORING" />);
+
+    expect(await screen.findByText("HTTP 200")).toBeInTheDocument();
+    expect(screen.getByText("https://www.example.org/")).toBeInTheDocument();
+    expect(screen.getByText(/One live probe of production/)).toBeInTheDocument();
+  });
+
   it("says plainly when the run is not among the readable runs", async () => {
     stubFetch({ runs: { runs: [] } });
     render(<RunStageConsole graphRunId={RUN_ID} stage="DECISION" />);
