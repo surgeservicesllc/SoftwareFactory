@@ -66,7 +66,11 @@ function FactoryBreadcrumb({ step, runId }: { step: FactoryStep; runId?: string 
       <ol className="flex flex-wrap items-center gap-1.5">
         <li><Link href="/solutions/factory/requirement" className="hover:text-foreground">AI Factory</Link></li>
         <li aria-hidden="true" className="text-faint">›</li>
-        <li><Link href="/solutions/pipelines" className="hover:text-foreground">Runs</Link></li>
+        {/* Runs is /solutions/runs. This crumb pointed at Pipelines, which
+            was defensible only while Runs could not show a lifecycle run at
+            all: a crumb named Runs sent you somewhere else, and the run you
+            came from was on neither page. Runs lists them now. */}
+        <li><Link href="/solutions/runs" className="hover:text-foreground">Runs</Link></li>
         {runId ? (
           <>
             <li aria-hidden="true" className="text-faint">›</li>
