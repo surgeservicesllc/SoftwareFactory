@@ -124,14 +124,19 @@ const DEFAULT_MAX_TURNS = 1;
  * narrowest node fit. Worse, the clamp was silent, so raising the executor's
  * request to 24 changed nothing and looked correct while doing so.
  *
- * Twenty-four is the measured envelope, and it stays a ceiling: a caller
- * asking for more still gets clamped rather than refused, because a provider
- * call failing over a budget request would turn a cost preference into an
- * outage. What must not recur is a caller declaring a budget this ceiling
- * quietly discards — `tests/unit/claude-node-executor.test.ts` pins the graph
- * executor's declared turns against this constant so the two cannot drift.
+ * Twenty-four was the measured envelope for inspectors, and production then
+ * measured past it: drain run 32821441484 (graph run f200de80) exhausted 24
+ * turns twice on the lifecycle's implement node — a node that must survey the
+ * repository before describing a build, not merely find-read-answer. The
+ * ceiling is forty-eight so an implementation-scale budget fits; it stays a
+ * ceiling: a caller asking for more still gets clamped rather than refused,
+ * because a provider call failing over a budget request would turn a cost
+ * preference into an outage. What must not recur is a caller declaring a
+ * budget this ceiling quietly discards — `tests/unit/claude-cli-transport.test.ts`
+ * pins the graph executor's declared turns against this constant so the two
+ * cannot drift.
  */
-const MAX_TURNS_CEILING = 24;
+const MAX_TURNS_CEILING = 48;
 
 export interface ClaudeCliTransportOptions {
   /** Working directory the read-only tools are scoped to. */

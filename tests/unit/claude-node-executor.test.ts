@@ -14,6 +14,7 @@ import {
   buildClaudeNodeExecutor,
   defaultModelForNode,
   GRAPH_NODE_MAX_TURNS,
+  IMPLEMENTATION_NODE_MAX_TURNS,
   isCapacityRefusal,
 } from "@/lib/worker/claude-node-executor";
 import type { ClaudeAuthResolution } from "@/lib/providers/claude-auth";
@@ -94,6 +95,22 @@ describe("buildClaudeNodeExecutor", () => {
     expect(task).toContain("the config drifts");
     expect(task).toContain("Missing inputs: upstream node(s) inspect_b");
     expect(task).toContain("state this incompleteness explicitly");
+  });
+
+  it("grants an implementation node its larger measured turn budget", async () => {
+    // Run 32821441484 exhausted 24 turns twice on the implement node while
+    // every scout fit comfortably: implementation surveys before it answers.
+    executeMock.mockResolvedValue({ text: '{"ok":true}', inputTokens: 10, outputTokens: 5 });
+    const executor = buildClaudeNodeExecutor(auth, options);
+
+    await executor(
+      { ...(node as object), nodeKey: "implement", capability: "implementation" } as CompiledNode,
+      1,
+    );
+
+    expect(executeMock.mock.calls.at(-1)?.[4]).toMatchObject({
+      maxTurns: IMPLEMENTATION_NODE_MAX_TURNS,
+    });
   });
 
   it("sends the bare job when the node has no incoming edges", async () => {

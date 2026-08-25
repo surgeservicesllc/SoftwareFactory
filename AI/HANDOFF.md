@@ -2,7 +2,23 @@
 
 Last updated: 2026-08-25
 
-## Newest (2026-08-25 ~03:35Z): ADR-144 proven live — nine stages reused at zero cost
+## Newest (2026-08-25 ~07:45Z): defects #6 and #7 — turn budget and the guard crash (ADR-145)
+
+The 07:20 window's drain (run 32821441484) surfaced two more defects.
+Implement exhausted the flat 24-turn budget twice (run f200de80; the
+nine upstream stages reused at zero cost — ADR-143/144 both held) and
+d7241cf4 closed PARTIAL-retired. Then graph 0dafc3b9 (un-stranded by
+ADR-144) hit the artifact sensitive-data guard with a real output and
+the raw throw killed the drain; its run sits RUNNING until the 2-hour
+reclaim (~09:37Z). Fixes: transport ceiling 24→48 with
+IMPLEMENTATION_NODE_MAX_TURNS=48 (others keep 24, all pinned against
+the ceiling), and the engine now writes the artifact before COMPLETED
+so a guard refusal fails exactly that node with a payload-free message
+(worker-execution regression + transport/executor pins). After merge,
+the next dispatch re-plants d7241cf4's successor with the measured
+envelope (the re-plant machinery) and implement runs under 48 turns.
+
+## Earlier (2026-08-25 ~03:35Z): ADR-144 proven live — nine stages reused at zero cost
 
 #398 merged (72f13b2), scope gate-approval-voided hosted-applied and
 read back (run 32805322660). The next dispatch claimed the previously
