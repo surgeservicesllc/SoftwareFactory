@@ -16,6 +16,12 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
  */
 
 const migrationsRoot = resolve(import.meta.dirname, "../../supabase/migrations");
+/*
+ * The chain's newest file, pinned as every integration suite here pins it: a
+ * migration added after this was written should make somebody re-read this
+ * case rather than let it pass unexamined.
+ */
+const latestMigration = "20260825000200_run_cost_and_budget_in_graph_runs.sql";
 
 const ownerId = "00000000-0000-4000-8000-00000000c001";
 const organizationId = "10000000-0000-4000-8000-00000000c001";
@@ -83,7 +89,9 @@ beforeAll(async () => {
     create role authenticated nologin;
     create role service_role nologin bypassrls;
   `);
-  for (const file of (await readdir(migrationsRoot)).filter((n) => /^\d+.*\.sql$/.test(n)).sort()) {
+  const migrationFiles = (await readdir(migrationsRoot)).filter((n) => /^\d+.*\.sql$/.test(n)).sort();
+  expect(migrationFiles.at(-1)).toBe(latestMigration);
+  for (const file of migrationFiles) {
     await db.exec(await readFile(resolve(migrationsRoot, file), "utf8"));
   }
   await db.exec(`
