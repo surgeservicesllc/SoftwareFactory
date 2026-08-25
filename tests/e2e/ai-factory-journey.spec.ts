@@ -64,6 +64,20 @@ test.describe("AI Factory live journey", () => {
   const installed = process.env.AI_FACTORY_E2E_INSTALLED === "1";
   const stepOneReady = seeded || installed;
 
+  /**
+   * What a completed sign-in looks like now.
+   *
+   * It used to be a landing on /solutions. Every signed-in person now lands on
+   * the /decision chooser first, which is a product decision, not a fault --
+   * so waiting for /solutions specifically made every case here fail at the
+   * door, and the scheduled lane with them. What each case actually needs is
+   * that the session landed and the form is behind us; each one navigates to
+   * the page it is about immediately afterwards.
+   */
+  async function waitForSignedIn(page: import("@playwright/test").Page, timeout = 60_000) {
+    await page.waitForURL(/\/(solutions|decision)(\/|$)/, { timeout });
+  }
+
   /** The card for one step, found by its title. */
   function stepCard(page: import("@playwright/test").Page, title: string) {
     return page.getByRole("heading", { name: title, exact: true }).locator("xpath=ancestor::li[1]");
@@ -86,7 +100,7 @@ test.describe("AI Factory live journey", () => {
     await page.getByRole("button", { name: /^sign in$/i }).click();
     // Wait for the session to land. Navigating straight on raced the POST and
     // arrived at the journey still signed out.
-    await page.waitForURL(/\/solutions(\/|$)/, { timeout: 45_000 });
+    await waitForSignedIn(page, 45_000);
 
     // ── The journey, with the seeded installation already behind step 1 ───
     await page.goto("/solutions/ai-factory");
@@ -427,7 +441,7 @@ test.describe("AI Factory live journey", () => {
     await page.getByLabel("Email").fill(email);
     await page.getByLabel("Password").fill(password);
     await page.getByRole("button", { name: /^sign in$/i }).click();
-    await page.waitForURL(/\/solutions(\/|$)/, { timeout: 60_000 });
+    await waitForSignedIn(page);
 
     await page.goto("/solutions/ai-factory");
 
@@ -478,7 +492,7 @@ test.describe("AI Factory live journey", () => {
     await page.getByLabel("Email").fill(email);
     await page.getByLabel("Password").fill(password);
     await page.getByRole("button", { name: /^sign in$/i }).click();
-    await page.waitForURL(/\/solutions(\/|$)/, { timeout: 60_000 });
+    await waitForSignedIn(page);
 
     await page.goto("/solutions/ai-factory");
     /*
@@ -523,6 +537,55 @@ test.describe("AI Factory live journey", () => {
 
     // Nothing anywhere on the page may claim a live connection.
     await expect(page.getByText("Demo Data")).toHaveCount(0);
+  });
+
+  test("the factory step page offers New Request, and it opens the launcher", async ({ page }) => {
+    /*
+     * The New Request button, exercised where it actually ships.
+     *
+     * It renders on a step that already has a lifecycle run -- before it
+     * existed, that state had no way to start another request. The button's
+     * job is to disclose the launcher, so that is what this drives: closed,
+     * open, closed. It stops before pressing Launch: recording a graph is
+     * real work in a real workspace, and no test should start one nobody
+     * asked for.
+     */
+    test.setTimeout(180_000);
+
+    await page.goto("/auth/sign-in");
+    await page.getByLabel("Email").fill(email);
+    await page.getByLabel("Password").fill(password);
+    await page.getByRole("button", { name: /^sign in$/i }).click();
+    await waitForSignedIn(page);
+
+    await page.goto("/solutions/factory/requirement");
+    await expect(page.getByRole("heading", { level: 1, name: /1\. Requirement/i }))
+      .toBeVisible({ timeout: 45_000 });
+
+    // The crumb that used to send you to Pipelines.
+    const crumbs = page.getByRole("navigation", { name: "Breadcrumb" });
+    await expect(crumbs.getByRole("link", { name: "Runs" }))
+      .toHaveAttribute("href", "/solutions/runs");
+
+    const button = page.getByRole("button", { name: /new request/i });
+    const launch = page.getByRole("button", { name: /^launch/i });
+
+    // This account has lifecycle runs, so the step renders its ready state and
+    // the button is there. Without one the page offers the launcher outright,
+    // which is a different state and not what this case is about.
+    await expect(button).toBeVisible({ timeout: 45_000 });
+    await expect(button).toHaveAttribute("aria-expanded", "false");
+    await expect(launch).toHaveCount(0);
+
+    await button.click();
+
+    await expect(button).toHaveAttribute("aria-expanded", "true");
+    await expect(launch).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText(/runs the whole ten-step lifecycle once/i)).toBeVisible();
+
+    await button.click();
+    await expect(button).toHaveAttribute("aria-expanded", "false");
+    await expect(launch).toHaveCount(0);
   });
 
   test("the journey's reads are refused to a signed-out visitor", async ({ browser }) => {
