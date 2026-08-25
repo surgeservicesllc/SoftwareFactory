@@ -118,6 +118,12 @@ on:
           a capacity-voided (CANCELLED) run no longer consumes an approval —
           the sequence that stranded live lifecycle d7241cf4; replaces one
           definer function in place, same grants, no table or row changes;
+          "run-cost-and-budget" applies only 20260825000200, which returns the
+          four columns the graph worker has written since 20260819000100 and
+          no read has ever returned — tokens_used, cost_micros, budget_action
+          and discovery_rounds — so a finished run can say what it spent;
+          replaces one definer function in place, same grants, no table or row
+          changes;
           "clear-autonomy-projects" applies only 20260823000600, which adds the
           Autonomy page's Clear control as an archive sweep and excludes
           archived projects from the autonomy list; it deletes nothing and
@@ -170,6 +176,7 @@ on:
           - release-routing-evidence
           - finish-credential-vault
           - clear-autonomy-projects
+          - run-cost-and-budget
           - probe
 permissions:
   checks: read
@@ -6117,6 +6124,72 @@ jobs:
             exit 1
           fi
           echo "Applied and verified: a voided run no longer consumes a gate approval."
+
+      - name: Report what a run cost (scope=run-cost-and-budget)
+        # Exactly one file — 20260825000200 — replacing list_graph_runs in
+        # place. The signature grows by four columns the worker already
+        # writes, so the file drops the function first; nothing else changes,
+        # and no row is touched.
+        if: ${{ inputs.scope == 'run-cost-and-budget' }}
+        run: |
+          if [ -z "$SUPABASE_DB_PASSWORD" ]; then
+            echo "::error::This scope requires SUPABASE_DB_PASSWORD for live verification."
+            exit 1
+          fi
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+
+          SPEND_FILE=supabase/migrations/20260825000200_run_cost_and_budget_in_graph_runs.sql
+          if [ "$(sha256sum "$SPEND_FILE" | cut -d' ' -f1)" != "abc7bb695628942be85b32db1fb06b71f81dad1f831b75c8a1f9c861af4c0fe8" ]; then
+            echo "::error::Migration hash mismatch; refusing production DDL."
+            exit 1
+          fi
+
+          ROW=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
+            "select count(*) from supabase_migrations.schema_migrations where version = '20260825000200';")
+          if [ "$ROW" != "0" ]; then
+            echo "::error::Ledger already records 20260825000200 (want 0)."
+            exit 1
+          fi
+
+          # The columns must already exist: this scope changes a read, and
+          # would otherwise fail mid-apply on a database whose graph_runs
+          # predates them.
+          COLUMNS=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
+            select count(*) from information_schema.columns
+             where table_schema = 'public' and table_name = 'graph_runs'
+               and column_name in ('tokens_used','cost_micros','budget_action','discovery_rounds');")
+          if [ "$COLUMNS" != "4" ]; then
+            echo "::error::graph_runs is missing one of the four spend columns (found ${COLUMNS} of 4)."
+            exit 1
+          fi
+
+          echo "Applying ${SPEND_FILE}"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -1 -q -f "$SPEND_FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied 20260825000200
+          else
+            npx supabase migration repair --status applied 20260825000200 --db-url "$DB_URL"
+          fi
+
+          # Read the answer back from the function's own signature rather than
+          # trusting the apply: all four columns, or the scope failed.
+          VERIFIED=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
+            select (pg_get_function_result(p.oid) like '%tokens_used bigint%')
+               and (pg_get_function_result(p.oid) like '%cost_micros bigint%')
+               and (pg_get_function_result(p.oid) like '%budget_action text%')
+               and (pg_get_function_result(p.oid) like '%discovery_rounds integer%')
+              from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+             where n.nspname = 'public' and p.proname = 'list_graph_runs';")
+          if [ "$VERIFIED" != "t" ]; then
+            echo "::error::list_graph_runs did not read back with the four spend columns."
+            exit 1
+          fi
+          echo "Applied and verified: a run can now say what it spent."
 
       - name: Apply the Backlog and Pipelines clear controls (scope=clear-controls)
         # Exactly two files — 20260822000700 and 20260822000800 — and no others.
