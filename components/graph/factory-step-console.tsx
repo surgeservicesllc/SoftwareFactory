@@ -10,6 +10,7 @@ import {
   CircleCheck,
   Layers,
   Loader2,
+  Plus,
   ShieldCheck,
   Timer,
   UserCheck,
@@ -65,7 +66,11 @@ function FactoryBreadcrumb({ step, runId }: { step: FactoryStep; runId?: string 
       <ol className="flex flex-wrap items-center gap-1.5">
         <li><Link href="/solutions/factory/requirement" className="hover:text-foreground">AI Factory</Link></li>
         <li aria-hidden="true" className="text-faint">›</li>
-        <li><Link href="/solutions/pipelines" className="hover:text-foreground">Runs</Link></li>
+        {/* Runs is /solutions/runs. This crumb pointed at Pipelines, which
+            was defensible only while Runs could not show a lifecycle run at
+            all: a crumb named Runs sent you somewhere else, and the run you
+            came from was on neither page. Runs lists them now. */}
+        <li><Link href="/solutions/runs" className="hover:text-foreground">Runs</Link></li>
         {runId ? (
           <>
             <li aria-hidden="true" className="text-faint">›</li>
@@ -189,6 +194,15 @@ function StepView({
   onReload: () => void;
   viewer?: FactoryViewer;
 }) {
+  /*
+   * Whether the launcher is open.
+   *
+   * The empty state has always offered one; once a run existed these pages
+   * had no way to start another, so the only route to a second request was
+   * to know that Workflows carries the same control.
+   */
+  const [startingNew, setStartingNew] = useState(false);
+
   const nodes = run.nodes ?? [];
   const { stages } = summariseRunStages(nodes);
   const previous = FACTORY_STEPS.find((candidate) => candidate.number === step.number - 1) ?? null;
@@ -299,6 +313,16 @@ function StepView({
           <p className="mt-1.5 max-w-2xl text-sm text-muted">{step.summary}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setStartingNew((open) => !open)}
+            aria-expanded={startingNew}
+            aria-controls="factory-new-request"
+            className="btn btn-secondary btn-sm inline-flex items-center gap-1.5"
+          >
+            <Plus className="size-3.5" aria-hidden="true" />
+            New Request
+          </button>
           <Link href="/solutions/pipelines" className="btn btn-secondary btn-sm">
             View Run Overview
           </Link>
@@ -312,6 +336,24 @@ function StepView({
           ) : null}
         </div>
       </div>
+
+      {/*
+        The launcher, in place, when asked for.
+        This is the same control the no-run state offers, not a second way to
+        start work: one request is one Full Lifecycle graph recorded against a
+        project. The goal is the template's, so this deliberately offers no
+        free-text box it could not honour — and the control's own result
+        states whether the worker was woken or the graph waits for a dispatch.
+      */}
+      {startingNew ? (
+        <div id="factory-new-request" className="space-y-2">
+          <p className="text-sm text-muted">
+            A request runs the whole ten-step lifecycle once against the project you choose. It
+            joins the run list when recorded; this page keeps showing the newest run.
+          </p>
+          <GraphLaunchControl templateKey="full_lifecycle" templateName="Full Lifecycle" />
+        </div>
+      ) : null}
 
       {/* The ten steps as the boards draw them: a circle per step — a check
           once complete, the number otherwise — the name, and the standing
