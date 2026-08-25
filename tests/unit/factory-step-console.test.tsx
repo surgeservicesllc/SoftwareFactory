@@ -106,6 +106,37 @@ describe("a factory step page", () => {
       .toHaveAttribute("aria-current", "page");
   });
 
+  it("offers New Request on a step that already has a run, and launches from it", async () => {
+    /*
+     * The launcher used to appear only when no lifecycle run existed, so once
+     * one did these pages had no way to start another. The button discloses
+     * the same control rather than a second way to start work.
+     */
+    stubFetch({
+      runs: [lifecycleRun("80000000-0000-4000-8000-0000000000f1", [node()], "The run under way.")],
+    });
+    render(<FactoryStepConsole step={factoryStep("requirement")!} />);
+
+    const button = await screen.findByRole("button", { name: /new request/i });
+    expect(button).toHaveAttribute("aria-expanded", "false");
+    // Closed, the launcher is genuinely absent rather than merely hidden.
+    expect(screen.queryByRole("button", { name: /^launch/i })).not.toBeInTheDocument();
+
+    await userEvent.click(button);
+
+    expect(button).toHaveAttribute("aria-expanded", "true");
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /^launch/i })).toBeInTheDocument();
+    });
+    // It says what a request is, rather than implying a prompt it cannot take.
+    expect(screen.getByText(/runs the whole ten-step lifecycle once/i)).toBeInTheDocument();
+
+    // Closing puts it away again.
+    await userEvent.click(button);
+    expect(button).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("button", { name: /^launch/i })).not.toBeInTheDocument();
+  });
+
   it("chooses the newest lifecycle run, not a newer analysis run", async () => {
     stubFetch({
       runs: [
