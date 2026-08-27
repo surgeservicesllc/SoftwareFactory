@@ -157,7 +157,13 @@ export function toJobindexHits(response: SearchResponse, limit: number): BoardSe
     const row = entry as Record<string, unknown>;
 
     const title = text(row.headline) ?? text(row.title);
-    const company = text(row.company) ?? text(row.companyName);
+    const companyRecord = row.company !== null && typeof row.company === "object"
+      ? row.company as Record<string, unknown>
+      : null;
+    const company = text(companyRecord?.name)
+      ?? text(row.companytext)
+      ?? text(row.company)
+      ?? text(row.companyName);
     if (title === null || company === null) continue;
 
     const url = absoluteUrl(row.url) ?? absoluteUrl(row.link);
@@ -195,7 +201,13 @@ export async function searchJobindex(
 ): Promise<BoardSearchResult> {
   const params = new URLSearchParams();
   if (query.text.length > 0) params.set("q", query.text);
-  if (query.location !== null) params.set("supid", query.location);
+  /*
+   * Jobindex exposes no free-text location parameter. `supid` is an internal
+   * area id, not a place name; sending a city there can silently return an
+   * unrelated set. The adapter therefore ignores location and declares that
+   * limitation through `supportsLocation`, which the page renders beside the
+   * result instead of pretending the filter was applied.
+   */
 
   const html = await fetchBoardText(`${BASE_URL}/jobsoegning?${params.toString()}`, {
     board: BOARD,
@@ -215,10 +227,19 @@ export async function searchJobindex(
     );
   }
 
+  const hits = toJobindexHits(response, query.limit);
+  if (response.results.length > 0 && hits.length === 0) {
+    throw new BoardSearchError(
+      "board_response_unreadable",
+      BOARD,
+      "Jobindex returned postings in a shape this search cannot read.",
+    );
+  }
+
   const hitcount = response.hitcount;
   return {
     board: BOARD,
-    hits: toJobindexHits(response, query.limit),
+    hits,
     totalAvailable:
       typeof hitcount === "number" && Number.isFinite(hitcount) && hitcount >= 0 ? hitcount : null,
   };
@@ -229,5 +250,6 @@ export const jobindexAdapter: BoardSearchAdapter = {
   name: "Jobindex",
   summary: "Denmark's largest commercial job board.",
   coverage: "Denmark",
+  supportsLocation: false,
   search: searchJobindex,
 };

@@ -6,6 +6,7 @@ const harness = vi.hoisted(() => ({
   requireActiveOrganization: vi.fn(),
   loadEvaluationInputs: vi.fn(),
   insertScoredJob: vi.fn(),
+  verifySearchResult: vi.fn(),
 }));
 
 vi.mock("server-only", () => ({}));
@@ -17,6 +18,10 @@ vi.mock("@/lib/job-seeker/record", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/job-seeker/record")>()),
   loadEvaluationInputs: harness.loadEvaluationInputs,
   insertScoredJob: harness.insertScoredJob,
+}));
+vi.mock("@/lib/job-seeker/search-result-token", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/job-seeker/search-result-token")>()),
+  verifySearchResult: harness.verifySearchResult,
 }));
 
 import { POST } from "@/app/api/job-seeker/search/save/route";
@@ -34,10 +39,13 @@ const job = {
 };
 
 function saveRequest(body: unknown) {
+  const withToken = body !== null && typeof body === "object" && !Array.isArray(body)
+    ? { resultToken: "sealed-result-token", ...body as Record<string, unknown> }
+    : body;
   return new Request("https://factory.example/api/job-seeker/search/save", {
     method: "POST",
     headers: { "content-type": "application/json", origin: "https://factory.example" },
-    body: JSON.stringify(body),
+    body: JSON.stringify(withToken),
   });
 }
 
@@ -113,6 +121,18 @@ describe("saving a search result", () => {
       saveRequest({ board: "jobnet", job: { ...job, title: "", company: "x".repeat(400) } }),
     );
     expect(response.status).toBe(422);
+    expect(harness.insertScoredJob).not.toHaveBeenCalled();
+  });
+
+  it("refuses a posting whose server-issued search result token does not match", async () => {
+    const { SearchResultTokenError } = await import("@/lib/job-seeker/search-result-token");
+    harness.verifySearchResult.mockImplementationOnce(() => {
+      throw new SearchResultTokenError();
+    });
+    const response = await POST(saveRequest({ board: "jobnet", job }));
+    const payload = (await response.json()) as { error?: { code?: string } };
+    expect(response.status).toBe(422);
+    expect(payload.error?.code).toBe("search_result_invalid");
     expect(harness.insertScoredJob).not.toHaveBeenCalled();
   });
 

@@ -42,7 +42,11 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import { SignOutButton } from "@/components/sign-out-button";
 import { cn } from "@/lib/cn";
 import { globalNavigation } from "@/lib/navigation";
-import { isJobSeekerPath, JOB_SEEKER_NAVIGATION } from "@/lib/job-seeker/navigation";
+import {
+  isJobSearchPath,
+  isJobSeekerPath,
+  JOB_SEEKER_NAVIGATION,
+} from "@/lib/job-seeker/navigation";
 import { JobSeekerSidebarProfile } from "@/components/job-seeker/sidebar-profile";
 
 /**
@@ -254,6 +258,7 @@ const SECTION_ROOTS = new Set(["/solutions", "/job-seeker"]);
 
 function isActiveHref(pathname: string, href: string) {
   if (href.includes("?") || href.includes("#")) return false;
+  if (href === "/job-seeker/search" && isJobSearchPath(pathname)) return true;
   return SECTION_ROOTS.has(href) ? pathname === href : pathname.startsWith(href);
 }
 

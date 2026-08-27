@@ -1,6 +1,28 @@
 # Quality scorecard
 
-Last reviewed: 2026-08-25
+Last reviewed: 2026-08-27
+
+**Addendum, 2026-08-27 — Job Search integration candidate (ADR-147):**
+
+| Evidence tier | Result | What it proves / does not prove |
+| --- | --- | --- |
+| Upstream identity | PASS | All 214 files match exact `MadsLorentzen/ai-job-search` head `79cd383e58f0af7948c7c6462a3a289e9b67421e`; the vendor tree is excluded from build, lint, typecheck, tests and runtime imports. This proves source identity, not runtime behavior. |
+| Product entry and navigation | PASS locally | `/JobSearch` is canonical, the signed-in global entry is **Job Search**, and `/Job-Search` plus `/job-seeker/search` share the same gated content. Unit contracts and the responsive/browser harness register the canonical route, auth return path and active-navigation aliases. The application candidate is not yet deployed. |
+| Live board contracts | PASS as direct probes | Actual adapters returned Jobnet 2/4, Jobindex 2/736, Jobdanmark 0/0 for London and Freehire 2/6752. This proves current request/parse contracts and honest empty handling at probe time; it does not prove a signed-in production browser flow or future third-party stability. |
+| Save provenance | PASS locally | Every result is sealed server-side for organization + user + board + exact normalized fields with a 30-minute lifetime. Missing, expired, cross-user, cross-tenant or altered evidence is refused before persistence. A replacement search removes stale tokens; the UI renders the server's safe refusal and disables futile retry for an expired result. |
+| Supabase transaction and isolation | PASS in migrated PostgreSQL behavior tests | `record_job_seeker_job` atomically records job + match + initial application + immutable `job_seeker.job_recorded` event, derives `auth.uid()`, checks membership, returns a no-write duplicate outcome, rolls back child failure, and uses composite owner FKs. Exact authenticated-only EXECUTE, `SECURITY DEFINER`, `search_path=pg_catalog`, and enabled+forced RLS are asserted. |
+| Hosted database | PASS | Exact-head CI run `33110615299` passed all four required jobs before workflow run `33111692239` applied only `20260827000100_record_job_seeker_job_atomically.sql` (SHA-256 `2f51bf64ba3fd2bc711e6fbf9e660a2cc0dd5ef4b1f85d932ee574e79e9c7d13`) to project `qpuofpmagrmyamahqwxw`. Postflight accepted the one ledger row, exact routine identity/security/search path/ACL, three validated owner constraints, old-key removal, PostgREST reload and forced RLS. |
+| Application production acceptance | **OPEN** | The application candidate is not deployed. Exact application CI/Vercel identity, health and an authenticated production search → sealed save → reload/audit walk are still required. |
+
+Local evidence is full lint and typecheck green, 407 Vitest files / 4,721
+tests passed (3 files / 7 tests skipped), and a production build of 165 pages
+including `/JobSearch`. Focused evidence includes 16 atomic-persistence tests,
+64 migration-contract tests and the related Job Seeker regression suites.
+The rollout was database-first because the application calls the new RPC.
+Direct authenticated table INSERT remains intentionally available while the
+manual jobs POST route still uses it; a later forward contraction must first
+move and test that final writer. The verdict is **HOSTED DATABASE PASS;
+APPLICATION PRODUCTION ACCEPTANCE OPEN**.
 
 **Addendum, 2026-08-25 — the ten-step factory: five engine defects found by
 driving it, and what is actually proven (ADR-144, ADR-145, ADR-146):** the
@@ -388,9 +410,11 @@ independently by signing in to production as the fake account and
 reading the production API back: 42 jobs in its RLS-isolated workspace
 (2 manual + 40 imported live from Greenhouse in production), all 42
 scored, analytics recomputed from the walked rows (1 application, 100%
-measured response rate, 1 interview-stage count, 1 offer). Every
-capability on /job-seeker has now been observed working in production,
-wired to hosted Supabase end to end.
+measured response rate, 1 interview-stage count, 1 offer). Every capability
+on the then-existing `/job-seeker` surface was observed working in production,
+wired to hosted Supabase end to end. That 2026-08-22 run predates the later
+Job Search integration and is not evidence for `/JobSearch`, live multi-board
+search, sealed-result saving, or the atomic recording RPC.
 
 **Release addendum, 2026-08-21 — Factory command routing (ADR-106):**
 implementation is locally complete but not live. Migration

@@ -200,6 +200,16 @@ test("/Job-Search is gated server-side, and by its own call", async ({ page }) =
   await expect(page).toHaveURL(/\/auth\/sign-in\?next=%2FJob-Search/);
 });
 
+test("/JobSearch is gated server-side with its canonical return path", async ({ page }) => {
+  /*
+   * The product header points here, so the canonical spelling needs its own
+   * direct server-gate proof. The legacy hyphenated route above cannot catch a
+   * canonical page that accidentally stops calling the gate.
+   */
+  await page.goto("/JobSearch");
+  await expect(page).toHaveURL(/\/auth\/sign-in\?next=%2FJobSearch/);
+});
+
 test("a console page offers one menu button, not two", async ({ page }) => {
   /*
    * The console renders the global header and its own drawer, so a phone had

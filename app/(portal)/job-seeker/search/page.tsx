@@ -1,7 +1,6 @@
-import { JobSearchPanel } from "@/components/job-seeker/search-panel";
-import { PageHeader } from "@/components/ui";
+import { JobSearchPageContent } from "@/components/job-seeker/job-search-page";
 
-export const metadata = { title: "Search" };
+export const metadata = { title: "Job Search" };
 
 /**
  * Search lives under `/job-seeker`, so the section layout's gate applies: a
@@ -12,13 +11,5 @@ export const metadata = { title: "Search" };
  * layout to begin with.
  */
 export default function JobSearchPage() {
-  return (
-    <>
-      <PageHeader
-        title="Search"
-        description="Search live job boards and save what is worth keeping into your job list."
-      />
-      <JobSearchPanel />
-    </>
-  );
+  return <JobSearchPageContent />;
 }

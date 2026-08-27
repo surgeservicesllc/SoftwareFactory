@@ -68,6 +68,8 @@ describe("the Job Seeker navigation", () => {
   it("claims the Job Seeker subtree and nothing that merely looks like it", () => {
     expect(isJobSeekerPath("/job-seeker")).toBe(true);
     expect(isJobSeekerPath("/job-seeker/resumes")).toBe(true);
+    expect(isJobSeekerPath("/JobSearch")).toBe(true);
+    expect(isJobSeekerPath("/Job-Search")).toBe(true);
     // A future `/job-seekers` route must not silently inherit this navigation.
     expect(isJobSeekerPath("/job-seekers")).toBe(false);
     expect(isJobSeekerPath("/solutions/ai-factory")).toBe(false);

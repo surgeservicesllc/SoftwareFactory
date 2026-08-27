@@ -1,6 +1,67 @@
 # Handoff
 
-Last updated: 2026-08-25
+Last updated: 2026-08-27
+
+## Newest (2026-08-27): canonical Job Search database gate passed; release the application
+
+The active application candidate is in the shared worktree based on exact
+`main` `f023024a90f2d37094276084df62bec135a3282e`; it is not committed or
+deployed at this handoff. The database-first commits are already on `main`,
+exact-head CI run `33110615299` passed all four required jobs, and matching
+staging Vercel Production deployment `6129989143` succeeded. Search originally
+landed through #416 (`5cfd839`). The current work completes it with one
+canonical product entry, current live-board contracts, sealed save provenance
+and transactional persistence. Read `AI/SEARCH_MIGRATION_REPORT.md` before
+release; it is the detailed source, disposition, probe and rollout record.
+
+**Surface and source.** `/JobSearch` is canonical and **Job Search** is the
+signed-in global-navigation label. `/Job-Search` and `/job-seeker/search` are
+compatibility routes over the same content and gate. The entire 214-file
+upstream repository is vendored byte-for-byte at exact head
+`79cd383e58f0af7948c7c6462a3a289e9b67421e`, excluded from runtime/tooling.
+Four safe, keyless board capabilities are adapted: Jobnet, Jobindex,
+Jobdanmark and Freehire. LinkedIn remains excluded on service-terms grounds;
+Jobbank is deferred until its intermittent Cloudflare/WebSearch fallback can
+be made reliable and reviewed, not declared permanently impossible.
+
+**What the direct probes proved.** Non-persistent calls through the actual
+adapters returned Jobnet 2/4, Jobindex 2/736, Jobdanmark 0/0 for London and
+Freehire 2/6752. Jobnet's current BFF path/order, Jobindex's nested company
+shape and lack of free-text location, and Freehire's `cities` parameter are
+now executable request contracts. A Jobdanmark 0/0 is a valid empty live
+answer, not a parser error. These contacts are stronger than fixtures and
+weaker than an authenticated production journey; do not label them production
+acceptance.
+
+**Trust and persistence.** Search responses mint a 30-minute sealed token per
+result, bound to organization, user, board and exact normalized fields. Save
+refuses missing/tampered/expired evidence. `insertScoredJob` preserves its API
+but calls only `record_job_seeker_job`, supplied by local forward migration
+`20260827000100_record_job_seeker_job_atomically.sql`. The authenticated-only,
+exact-path `SECURITY DEFINER` function derives `auth.uid()`, checks membership,
+and records job + match + initial application + immutable
+`job_seeker.job_recorded` activity in one transaction. Composite owner foreign
+keys close the cross-user child-reference gap. Behavior tests prove success,
+dedupe no-op, child-failure rollback, outsider refusal, cross-user refusal,
+ACL/search-path and forced RLS.
+
+**Database gate passed.** Workflow run `33111692239` applied only exact
+`20260827000100_record_job_seeker_job_atomically.sql` (SHA-256
+`2f51bf64ba3fd2bc711e6fbf9e660a2cc0dd5ef4b1f85d932ee574e79e9c7d13`) to
+project `qpuofpmagrmyamahqwxw`. Its postflight accepted the ledger, function
+identity/security/search path/ACL, owner constraints, superseded-key removal,
+PostgREST reload, and forced RLS. Next, freeze and deploy the exact application
+revision, require its exact-head CI and Vercel identity, then run signed-in
+production search → save → reload/readback plus responsive/auth/error/loading/
+empty acceptance. Direct INSERT remains authenticated because the manual jobs
+POST route still depends on it; move that final writer to the RPC before a
+later ACL contraction. Nothing here authorizes a reset, down-migration, worker
+or autonomy action.
+
+Local lint, typecheck, focused persistence/migration contracts and related Job
+Seeker regression suites are green. The hosted migration is accepted; final
+application deployment identity, production health and the signed-in
+acceptance walk remain unproved.
 
 ## Newest (2026-08-25 ~19:15Z): the retry that never happened (ADR-146)
 
@@ -46,7 +107,7 @@ Nothing on the ten-step goal is outstanding. The next lifecycle work is
 whatever the owner asks for; a Phase-2 deployment instrument is what would
 let step 9 pass rather than refuse.
 
-## Also 2026-08-25 (parallel branch): Search is built; the graph branch was parked
+## Earlier 2026-08-25 (parallel branch): the graph branch was parked for Search
 
 **Branch reset, deliberately and with the owner's direction.**
 `claude/ui-simplification-cbyx5t` was reset onto `main` to build Search. The
@@ -57,24 +118,12 @@ own ten-stage lifecycle (#370, #372, #374, #375, #385–#388, #399, #401),
 including marking ADR-136 superseded itself. Anything still wanted from #347
 should be taken from that backup ref, not from the PR.
 
-**Search.** `/job-seeker/search` over Jobnet, Jobindex and Freehire, ported from
-the MIT-licensed `MadsLorentzen/ai-job-search`. See
-`AI/SEARCH_MIGRATION_REPORT.md` for the full disposition, and
-`THIRD_PARTY_NOTICES.md` for attribution. No migration, no new dependency, no
-new environment variable.
-
-**What a next session should know.**
-
-1. **Jobindex is the fragile adapter, by construction.** It reads a page and
-   lifts the payload out of a `var Stash` blob, because Jobindex serves results
-   client-side. When Jobindex changes its markup this breaks — and it is built
-   to throw rather than return an empty list, because "no matches" and "the
-   parser is broken" look identical to a person.
-2. **No test touches a live board.** Fixtures only, deliberately. So a green
-   suite does not prove the boards still answer in the shape the parsers expect.
-3. **Jobdanmark is unported, not rejected** — the largest source adapter, no
-   obstacle in principle. Jobbank and LinkedIn are refusals with reasons, both
-   recorded in `registry.ts`.
+The Search status recorded here at the time (fixture-only, Jobdanmark unported,
+no migration) is superseded by the 2026-08-27 handoff above. Jobdanmark is now
+adapted, all four adapters have direct live probe evidence, and atomic audited
+persistence requires a new local forward migration. Attribution remains in
+`THIRD_PARTY_NOTICES.md`; exact current disposition is in
+`AI/SEARCH_MIGRATION_REPORT.md`.
 
 ## Earlier (2026-08-25 ~12:55Z): the live walk reaches step 6, and ADR-145 is proven live
 

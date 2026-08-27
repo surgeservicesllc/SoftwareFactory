@@ -1,42 +1,85 @@
 # Current state
 
-Last reviewed: 2026-08-25
+Last reviewed: 2026-08-27
 
-## 2026-08-25: Search, ported from ai-job-search into Job Seeker
+## 2026-08-27: Job Search database contract is hosted; application production acceptance is outstanding
 
-Branch `claude/ui-simplification-cbyx5t`, **not merged**. `/job-seeker/search`
-queries four live job boards — Jobnet, Jobindex, Jobdanmark, Freehire — and
-saves results into the existing job list. Full detail in `AI/SEARCH_MIGRATION_REPORT.md`.
+The active application candidate is an uncommitted worktree based on exact
+`main` `f023024a90f2d37094276084df62bec135a3282e`; it is **not deployed**.
+Database-first commits `1168e94958e9f24a927d087571384d63b12f303b` and
+`f023024a90f2d37094276084df62bec135a3282e` are on `main`. Exact-head CI run
+`33110615299` passed the quality job and all three browser/accessibility
+shards, and exact Vercel Production deployment `6129989143` is successful.
+Search first reached `main` in #416 (`5cfd839`); the active candidate completes
+that integration rather than claiming the staging deployment has the new
+application behavior. Full disposition and evidence are in
+`AI/SEARCH_MIGRATION_REPORT.md`.
 
-Adapted from [MadsLorentzen/ai-job-search](https://github.com/MadsLorentzen/ai-job-search)
-(**MIT**, © 2026 Mads Lorentzen) at `e2c311a5`. Attribution in
-`THIRD_PARTY_NOTICES.md`. Four of the source's six boards are ported; the
-other two are refusals with reasons, recorded in
-`lib/job-seeker/board-search/registry.ts`.
+The exact upstream source snapshot is
+[MadsLorentzen/ai-job-search](https://github.com/MadsLorentzen/ai-job-search)
+at `79cd383e58f0af7948c7c6462a3a289e9b67421e` (MIT, © 2026 Mads
+Lorentzen): all 214 files are kept byte-for-byte under
+`vendor/ai-job-search/`, excluded from build/runtime tooling, and classified
+rather than selectively remembered. Four keyless search capabilities are
+adapted into the product — Jobnet, Jobindex, Jobdanmark and Freehire.
+LinkedIn remains excluded because service terms and source-code licensing are
+different permissions. Jobbank is deferred until a reliable, reviewed
+Cloudflare/WebSearch fallback exists; it is not described as permanently
+impossible.
 
-**No migration, no new dependency, no new environment variable.** Saved
-postings go into `job_seeker_jobs` under its existing RLS, ownership checks and
-dedupe index — `source` already accepted a board key. Saving calls the existing
-`insertScoredJob`, so a saved posting is scored and enters the pipeline exactly
-as a manually recorded one does.
+`/JobSearch` is the canonical owner-named page and the signed-in global header
+entry is **Job Search**. `/Job-Search` and `/job-seeker/search` remain working
+compatibility entries over the same component, auth gate, Job Seeker shell and
+API — not three search implementations. The responsive/auth/loading/error/
+empty coverage registers the canonical path. Live request-contract repairs
+match the boards as observed now: Jobnet uses `/FindJob/Search` with
+`PublicationDate`; Jobindex reads nested company names, refuses an unreadable
+non-empty result shape and honestly does not apply a free-text location;
+Freehire sends `cities`; Jobdanmark declares its location support. Direct,
+non-persistent probes returned Jobnet **2/4**, Jobindex **2/736**, Jobdanmark
+**0/0** for London, and Freehire **2/6752**. Those contacts prove today's
+adapters can reach and parse the boards; they are not a signed-in production
+journey.
 
-**LinkedIn is not ported.** Its terms prohibit automated collection — a
-different permission from the MIT licence on the code — and this repository had
-already decided the question: `import-adapters.ts` carries a LinkedIn adapter
-with no fetch at all.
+The repeated-error loop is closed in the application candidate. Starting a
+replacement search immediately removes the prior results and their sealed
+tokens, including when the replacement loses its network response. Save now
+renders the server's actual safe error message; an expired/invalid result tells
+the person to search again and disables the futile retry, while a transient
+failure remains retryable. The save route also authenticates before parsing or
+classifying caller-controlled content.
 
-**Two honest limits.** No test exercises a live board; every parser is proven
-against fixtures, because a suite that calls jobindex.dk fails when someone
-else ships a marketing change. And coverage is Denmark-heavy — only Freehire is
-international — because that is what the source repository was.
+Saving no longer trusts a browser-posted board result. Each returned result
+carries a 30-minute server-sealed token bound to organization, user, board and
+the exact normalized job fields; missing, expired or altered evidence is
+refused. `insertScoredJob` now crosses one database boundary:
+`record_job_seeker_job`, added by the forward migration
+`20260827000100_record_job_seeker_job_atomically.sql`. The authenticated-only
+`SECURITY DEFINER` function has exact `search_path=pg_catalog`, derives the
+owner from `auth.uid()`, verifies organization membership, and commits job +
+match + initial application + immutable `job_seeker.job_recorded` evidence in
+one transaction. A dedupe race returns `duplicate` without children or an
+extra event; child validation failure rolls the job back. Composite owner
+foreign keys prevent a child from naming another person's job, and RLS is
+reasserted enabled and forced.
 
-Also hardens the pre-existing `POST /api/job-seeker/jobs`: zod's `.url()`
-accepts `javascript:`, and that value is rendered as an `href` on the jobs
-panel. The column's `^https?://` CHECK did refuse it, so nothing unsafe was
-stored, but the refusal arrived as a database error rather than a clear answer.
-
-Local gates: lint, typecheck, **4,673 tests / 401 files**, production build —
-all green.
+The database-first gate is complete. Workflow run `33111692239` applied only
+`20260827000100_record_job_seeker_job_atomically.sql` (SHA-256
+`2f51bf64ba3fd2bc711e6fbf9e660a2cc0dd5ef4b1f85d932ee574e79e9c7d13`) to
+exact project `qpuofpmagrmyamahqwxw` and verified the single ledger row,
+function identity/owner/`SECURITY DEFINER`/exact search path/authenticated-only
+ACL, three validated owner constraints, removal of the two superseded foreign
+keys, PostgREST schema reload, and enabled+forced RLS. Direct authenticated
+INSERT grants are not contracted yet because the existing manual
+`POST /api/job-seeker/jobs` path still writes the three tables directly;
+contracting them first would break an application path. Local lint, typecheck,
+focused persistence/migration tests, and the related Job Seeker regression
+suites are green. The full candidate passes 407 Vitest files / 4,721 tests
+(3 files / 7 tests skipped), full lint and typecheck, and a 165-page production
+build that includes `/JobSearch`. The remaining release steps are the exact application push,
+its exact-head CI/Vercel identity, health, and signed-in production search →
+sealed save → reload/audit acceptance. Until those pass this remains an
+**application release candidate, not production-accepted behavior**.
 
 ## 2026-08-25: the ten-step factory, and the defects driving it exposed
 

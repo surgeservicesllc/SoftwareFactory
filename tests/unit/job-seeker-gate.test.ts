@@ -55,7 +55,7 @@ describe("requireJobSeekerViewer", () => {
   });
 
   it("lets a signed-in member through", async () => {
-    await expect(requireJobSeekerViewer("/Job-Search")).resolves.toBeUndefined();
+    await expect(requireJobSeekerViewer("/JobSearch")).resolves.toBeUndefined();
     expect(harness.redirect).not.toHaveBeenCalled();
   });
 
@@ -69,6 +69,12 @@ describe("requireJobSeekerViewer", () => {
 });
 
 describe("every job-seeker entry point runs that gate", () => {
+  it("gates the canonical /JobSearch page with its exact return path", () => {
+    const page = source("app/(portal)/JobSearch/page.tsx");
+    expect(page).toMatch(/requireJobSeekerViewer\("\/JobSearch"\)/);
+    expect(page).toMatch(/await requireJobSeekerViewer/);
+  });
+
   it("gates /Job-Search in the page, because it inherits no job-seeker layout", () => {
     // This page sits outside the `job-seeker` segment, so the section layout
     // does not cover it. It shows a person's own career data, and an entry
@@ -88,6 +94,7 @@ describe("every job-seeker entry point runs that gate", () => {
     // redirect logic again.
     for (const path of [
       "app/(portal)/job-seeker/layout.tsx",
+      "app/(portal)/JobSearch/page.tsx",
       "app/(portal)/Job-Search/page.tsx",
     ]) {
       expect(source(path)).not.toMatch(/listOrganizationMemberships/);
@@ -96,11 +103,14 @@ describe("every job-seeker entry point runs that gate", () => {
   });
 
   it("renders the same search panel on both entry points, not a second one", () => {
-    const search = source("app/(portal)/job-seeker/search/page.tsx");
+    const shared = source("components/job-seeker/job-search-page.tsx");
+    const canonical = source("app/(portal)/JobSearch/page.tsx");
     const named = source("app/(portal)/Job-Search/page.tsx");
-    for (const page of [search, named]) {
-      expect(page).toMatch(/from "@\/components\/job-seeker\/search-panel"/);
-      expect(page).toMatch(/<JobSearchPanel \/>/);
+    expect(shared).toMatch(/from "@\/components\/job-seeker\/search-panel"/);
+    expect(shared).toMatch(/<JobSearchPanel \/>/);
+    for (const page of [canonical, named]) {
+      expect(page).toMatch(/from "@\/components\/job-seeker\/job-search-page"/);
+      expect(page).toMatch(/<JobSearchPageContent \/>/);
     }
   });
 });

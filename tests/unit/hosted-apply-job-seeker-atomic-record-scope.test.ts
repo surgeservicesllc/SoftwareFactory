@@ -49,7 +49,8 @@ describe("hosted atomic job-recording scope", () => {
 
   it("pins and stages exactly the frozen migration", () => {
     const run = step.run ?? "";
-    expect(createHash("sha256").update(readFileSync(resolve(root, path))).digest("hex")).toBe(hash);
+    const migration = readFileSync(resolve(root, path), "utf8").replace(/\r\n?/g, "\n");
+    expect(createHash("sha256").update(migration).digest("hex")).toBe(hash);
     expect(run.match(/supabase\/migrations\/[A-Za-z0-9_.-]+\.sql/g)).toEqual([path]);
     expect(run.match(/(?<=EXPECTED_SHA256=)[a-f0-9]{64}/g)).toEqual([hash]);
     expect(run).toContain('STAGE_DIR=$(mktemp -d)');

@@ -71,7 +71,7 @@ describe("globalNavigation", () => {
 
   it("names the factory the way the product names itself", () => {
     // Owner request, 2026-08-23: the header entry reads "Software Factory".
-    expect(SIGNED_IN_NAV.map((item) => item.label)).toEqual(["Software Factory", "Job Seeker"]);
+    expect(SIGNED_IN_NAV.map((item) => item.label)).toEqual(["Software Factory", "Job Search"]);
   });
 });
 
@@ -133,7 +133,7 @@ describe("SiteHeader", () => {
 
     expect(primaryNav().getAllByRole("link").map((link) => link.textContent)).toEqual([
       "Software Factory",
-      "Job Seeker",
+      "Job Search",
     ]);
   });
 
@@ -152,8 +152,8 @@ describe("SiteHeader", () => {
 
     expect(primaryNav().getByRole("link", { name: "Software Factory" }))
       .toHaveAttribute("href", "/solutions");
-    expect(primaryNav().getByRole("link", { name: "Job Seeker" }))
-      .toHaveAttribute("href", "/job-seeker");
+    expect(primaryNav().getByRole("link", { name: "Job Search" }))
+      .toHaveAttribute("href", "/JobSearch");
   });
 
   it("drops the console's inner pages from the header", () => {
@@ -202,6 +202,20 @@ describe("SiteHeader", () => {
       .filter((link) => link.getAttribute("aria-current") === "page");
 
     expect(current.map((link) => link.textContent)).toEqual(["Software Factory"]);
+  });
+
+  it("keeps Job Search current across its canonical route and existing subtree", () => {
+    for (const pathname of ["/JobSearch", "/Job-Search", "/job-seeker/search", "/job-seeker/resumes"]) {
+      route.pathname = pathname;
+      const { unmount } = render(
+        <SiteHeader viewer={{ signedIn: true, email: "person@example.org" }} />,
+      );
+      const current = primaryNav()
+        .getAllByRole("link")
+        .filter((link) => link.getAttribute("aria-current") === "page");
+      expect(current.map((link) => link.textContent)).toEqual(["Job Search"]);
+      unmount();
+    }
   });
 
   it("marks the current destination and underlines only that one", () => {

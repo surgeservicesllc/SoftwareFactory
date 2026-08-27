@@ -27,6 +27,7 @@ import { BotFabricConsole } from "@/components/bot-fabric-console";
 import { BotManagerHome } from "@/components/bot-manager/home";
 import { BotUsageConsole } from "@/components/bot-usage-console";
 import { JobSeekerConsole } from "@/components/job-seeker/console";
+import { JobSearchPanel } from "@/components/job-seeker/search-panel";
 import { ResumeReviewPanel } from "@/components/job-seeker/resume-review-panel";
 import { GitHubFileManager } from "@/components/github-file-manager";
 import { MyProjectsConsole } from "@/components/my-projects-console";
@@ -80,6 +81,8 @@ import {
   JOB_SEEKER_OUTREACH,
   JOB_SEEKER_PREFERENCES,
   JOB_SEEKER_PROFILE,
+  JOB_SEARCH_BOARDS,
+  JOB_SEARCH_RESULTS,
   FACTORY_BRIEFING_AGENTS,
   FACTORY_BRIEFING_CONNECTIONS,
   FACTORY_BRIEFING_RUNS,
@@ -138,8 +141,11 @@ function serveFixtures() {
     } as unknown as Response);
   };
 
-  window.fetch = ((input: RequestInfo | URL) => {
+  window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
+    const method = (init?.method
+      ?? (typeof Request !== "undefined" && input instanceof Request ? input.method : "GET"))
+      .toUpperCase();
     if (url.includes("/bots") && url.includes("/projects/")) return json(PROJECT_BOTS_ROSTER);
     // Order matters: the more specific bot routes before the fabric snapshot.
     if (url.includes("/api/bots/providers")) return json({ providers: [] });
@@ -161,6 +167,12 @@ function serveFixtures() {
     }
     if (url.includes("/api/job-seeker/profile")) return json({ profile: JOB_SEEKER_PROFILE });
     if (url.includes("/api/job-seeker/preferences")) return json({ preferences: JOB_SEEKER_PREFERENCES });
+    if (url.includes("/api/job-seeker/search/save")) return json({ saved: true });
+    if (url.includes("/api/job-seeker/search")) {
+      return method === "POST"
+        ? json({ results: JOB_SEARCH_RESULTS, failures: [] })
+        : json({ boards: JOB_SEARCH_BOARDS });
+    }
     if (url.includes("/api/ai-accounts/usage")) return json({ usage: [] });
     /*
      * `canManage` matters: the Bot Manager renders read-only without it, so
@@ -276,6 +288,7 @@ const CASES: Record<string, () => React.ReactElement> = {
   autonomy: () => <InShell><AutonomyConsole /></InShell>,
   "bot-usage": () => <InShell><BotUsageConsole /></InShell>,
   "job-seeker": () => <InShell><JobSeekerConsole /></InShell>,
+  "job-search": () => <InShell><JobSearchPanel /></InShell>,
   /*
    * The resume review panel only exists after an upload, so the job-seeker
    * case above never renders it and it had no width coverage at all. Its

@@ -116,5 +116,7 @@ export type BoardSearchAdapter = Readonly<{
   summary: string;
   /** Where this board's postings actually are, stated rather than implied. */
   coverage: string;
+  /** Whether the board can truthfully apply the route's free-text place. */
+  supportsLocation: boolean;
   search: (query: BoardSearchQuery, overrides?: BoardFetchOverrides) => Promise<BoardSearchResult>;
 }>;
