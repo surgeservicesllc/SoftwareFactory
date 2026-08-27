@@ -430,7 +430,7 @@ ADR-115/ADR-118/ADR-120/ADR-121
   `fetchPostings` against the providers' keyless APIs, identifier-driven
   from the page, recorded and scored through the shared chain, journey-
   proven live (40/40 imported rows scored and in the pipeline).
-- [x] Job Search integration candidate (2026-08-27, ADR-147): canonical
+- [x] Job Search integration (2026-08-27, ADR-147): canonical
   `/JobSearch` plus signed-in global **Job Search** navigation, with
   `/Job-Search` and `/job-seeker/search` sharing the same gated content;
   exact 214-file upstream snapshot at
@@ -450,13 +450,16 @@ ADR-115/ADR-118/ADR-120/ADR-121
   and enabled+forced RLS. Migrated-PostgreSQL behavior tests cover safe
   duplicate, rollback, audit evidence, and tenant/user refusals; the signed-in
   hosted path remains part of production acceptance below.
-- [ ] **Production acceptance after the database gate:** deploy the exact
-  application revision only after the migration is accepted, then run a
-  signed-in `/JobSearch` search → sealed save → reload/readback at mobile and
-  desktop widths. Confirm exact deployment identity, all four per-board
-  outcomes, attribution, scoring, initial application and one immutable audit
-  event. Until this passes, direct probes and local PostgreSQL behavior are not
-  a production pass.
+- [x] **Production acceptance after the database gate:** exact application
+  release `aabd82b3a626da94a2478ef26f043a51d059cd15`, CI `33114868741` and
+  Vercel Production deployment `6130751384` are identity-bound. Signed-in
+  production returned all four board outcomes, and a sealed Jobnet result was
+  saved, read back `via jobnet` at score 35/100 and stage FOUND, then matched
+  to exactly one immutable `job_seeker.job_recorded` event
+  (`7637e796-b172-40d6-833f-408407b6f5b2`). Desktop and 390px mobile acceptance
+  passed. Remote journey `33115019633` separately passed the returning-account
+  gate; its live-board sample had no new savable row and skipped that mutation
+  honestly rather than substituting a fake result.
 - [ ] Move the remaining manual `POST /api/job-seeker/jobs` insert chain onto
   the atomic boundary, add its regression, then revoke authenticated direct
   INSERT on jobs/matches/applications in a separate forward contraction. Do

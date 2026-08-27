@@ -2,17 +2,17 @@
 
 Last updated: 2026-08-27
 
-## Newest (2026-08-27): canonical Job Search database gate passed; release the application
+## Newest (2026-08-27): canonical Job Search is production accepted
 
-The active application candidate is in the shared worktree based on exact
-`main` `f023024a90f2d37094276084df62bec135a3282e`; it is not committed or
-deployed at this handoff. The database-first commits are already on `main`,
-exact-head CI run `33110615299` passed all four required jobs, and matching
-staging Vercel Production deployment `6129989143` succeeded. Search originally
-landed through #416 (`5cfd839`). The current work completes it with one
-canonical product entry, current live-board contracts, sealed save provenance
-and transactional persistence. Read `AI/SEARCH_MIGRATION_REPORT.md` before
-release; it is the detailed source, disposition, probe and rollout record.
+The completed integration is on `main`. Application behavior release
+`aabd82b3a626da94a2478ef26f043a51d059cd15` is bound to exact-head CI
+`33114868741` and Vercel Production deployment `6130751384`
+(`https://softwarefactory-14wpknnsx-surgeservices-projects.vercel.app`); the
+stable alias serves `/JobSearch` as `200`. Search originally landed through
+#416 (`5cfd839`). This release completes it with one canonical product entry,
+current live-board contracts, sealed save provenance, transactional
+persistence and signed-in production acceptance. `AI/SEARCH_MIGRATION_REPORT.md`
+is the detailed source, disposition, probe and rollout record.
 
 **Surface and source.** `/JobSearch` is canonical and **Job Search** is the
 signed-in global-navigation label. `/Job-Search` and `/job-seeker/search` are
@@ -24,14 +24,13 @@ Jobdanmark and Freehire. LinkedIn remains excluded on service-terms grounds;
 Jobbank is deferred until its intermittent Cloudflare/WebSearch fallback can
 be made reliable and reviewed, not declared permanently impossible.
 
-**What the direct probes proved.** Non-persistent calls through the actual
+**What the direct probes and production walk proved.** Non-persistent calls through the actual
 adapters returned Jobnet 2/4, Jobindex 2/736, Jobdanmark 0/0 for London and
 Freehire 2/6752. Jobnet's current BFF path/order, Jobindex's nested company
 shape and lack of free-text location, and Freehire's `cities` parameter are
 now executable request contracts. A Jobdanmark 0/0 is a valid empty live
-answer, not a parser error. These contacts are stronger than fixtures and
-weaker than an authenticated production journey; do not label them production
-acceptance.
+answer, not a parser error. Signed-in production returned Jobnet 4/4,
+Jobindex 20 shown of 736, Jobdanmark 0/0 and Freehire 25 shown of 6,752.
 
 **Trust and persistence.** Search responses mint a 30-minute sealed token per
 result, bound to organization, user, board and exact normalized fields. Save
@@ -50,18 +49,28 @@ ACL/search-path and forced RLS.
 `2f51bf64ba3fd2bc711e6fbf9e660a2cc0dd5ef4b1f85d932ee574e79e9c7d13`) to
 project `qpuofpmagrmyamahqwxw`. Its postflight accepted the ledger, function
 identity/security/search path/ACL, owner constraints, superseded-key removal,
-PostgREST reload, and forced RLS. Next, freeze and deploy the exact application
-revision, require its exact-head CI and Vercel identity, then run signed-in
-production search → save → reload/readback plus responsive/auth/error/loading/
-empty acceptance. Direct INSERT remains authenticated because the manual jobs
-POST route still depends on it; move that final writer to the RPC before a
-later ACL contraction. Nothing here authorizes a reset, down-migration, worker
-or autonomy action.
+PostgREST reload, and forced RLS. Direct INSERT remains authenticated because
+the manual jobs POST route still depends on it; move that final writer to the
+RPC before a later ACL contraction. Nothing here authorizes a reset,
+down-migration, worker or autonomy action.
 
-Local lint, typecheck, focused persistence/migration contracts and related Job
-Seeker regression suites are green. The hosted migration is accepted; final
-application deployment identity, production health and the signed-in
-acceptance walk remain unproved.
+**Production acceptance.** Remote journey `33115019633` passed the
+returning-account gate on exact `aabd82b`; its live sample had no unsaved row
+and skipped the mutation honestly. The authenticated browser walk closed that
+sample gap: all four board sections rendered, a sealed Jobnet posting was
+saved, and Supabase-backed Discovery read it back `via jobnet`, score 35/100,
+stage FOUND. Activity rendered one immutable `job_seeker.job_recorded` event,
+entity `7637e796-b172-40d6-833f-408407b6f5b2`, at 16:55 EDT. Desktop and 390px
+mobile acceptance passed with no horizontal overflow.
+
+**Separate AI Factory Step 8 trace.** Postflight run `33114160835` verified
+the current any-model record-only database contract, exact definitions/ACL,
+zero-agent-run boundary and schema reload. Vercel logs showed zero new
+`POST /api/commands` requests after that postflight; the owner's repeated red
+message was retained state in an already-open modal, not a response from the
+current release. Hard refresh/reopen/submission is the correct next probe. Do
+not add or replay a migration until a failing current-deployment POST has a
+request ID and proves catalog drift.
 
 ## Newest (2026-08-25 ~19:15Z): the retry that never happened (ADR-146)
 

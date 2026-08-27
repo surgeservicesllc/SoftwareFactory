@@ -2191,7 +2191,7 @@ Use this append-only log for decisions that constrain future implementation. Cha
 ## ADR-147 - Job Search has one canonical product entry and one audited recording transaction
 
 - Date: 2026-08-27
-- Status: accepted; hosted migration applied and verified; application production acceptance open
+- Status: accepted; hosted migration applied and verified; application production accepted
 - Context: Search arrived in increments: four adapted public-board clients,
   `/job-seeker/search`, then the owner-named `/Job-Search` entry and a complete
   vendored upstream reference. The active goal names `/JobSearch` exactly and
@@ -2234,9 +2234,12 @@ Use this append-only log for decisions that constrain future implementation. Cha
   run `33111692239` applied its exact SHA-256
   `2f51bf64ba3fd2bc711e6fbf9e660a2cc0dd5ef4b1f85d932ee574e79e9c7d13` to
   project `qpuofpmagrmyamahqwxw` and verified ledger, routine identity/ACL,
-  constraints, PostgREST reload and forced RLS. Exact application deployment
-  and signed-in production search/save/reload acceptance remain. Authenticated
-  direct INSERT is not revoked in
+  constraints, PostgREST reload and forced RLS. Application release
+  `aabd82b3a626da94a2478ef26f043a51d059cd15` passed exact-head CI
+  `33114868741`, exact Vercel Production deployment `6130751384`, health and
+  signed-in production search/save/readback. The accepted record was attributed
+  `jobnet`, scored 35/100, initialized at FOUND and matched exactly one immutable
+  event. Authenticated direct INSERT is not revoked in
   this migration because the existing manual jobs POST route still uses it;
   move and test that final writer before a later forward ACL contraction. No
   reset, down-migration, worker, autonomous action or deployment is implied by

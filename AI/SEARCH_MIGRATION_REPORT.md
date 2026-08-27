@@ -7,14 +7,15 @@ at exact head `79cd383e58f0af7948c7c6462a3a289e9b67421e` (2026-08-27).
 Licence: **MIT**, © 2026 Mads Lorentzen. Attribution is preserved in
 `THIRD_PARTY_NOTICES.md` and the upstream `LICENSE` is kept verbatim.
 
-Status: **hosted database pass; application production acceptance open**.
+Status: **hosted database pass; application production acceptance pass**.
 Search first reached `main` through #416 (`5cfd839`). Database-first commits
 `1168e94958e9f24a927d087571384d63b12f303b` and
 `f023024a90f2d37094276084df62bec135a3282e` are on `main`; exact-head CI run
 `33110615299` passed all four required jobs and matching Vercel Production
-deployment `6129989143` succeeded. The active application candidate is an
-uncommitted worktree based on exact `main` `f023024a90f2d37094276084df62bec135a3282e`;
-it has not been deployed.
+deployment `6129989143` succeeded. The completed application behavior is exact
+`main` `aabd82b3a626da94a2478ef26f043a51d059cd15`, with exact-head CI
+`33114868741` and Vercel Production deployment `6130751384`; the stable alias
+serves `/JobSearch` as `200`.
 
 ## 1. Exact source and capability census
 
@@ -108,11 +109,10 @@ repairs:
 | Jobdanmark | 0 | 0 | London query completed with a valid empty response |
 | Freehire | 2 | 6,752 | REST response parsed with current query contract |
 
-These probes replace the stale claim that no live board was contacted. They
-prove reachability and parser/request compatibility at one point in time. They
-do not prove authentication, Supabase persistence, responsive browser behavior
-or the currently deployed production revision, and third-party contracts may
-change later.
+These probes replace the stale claim that no live board was contacted. The
+signed-in production walk then returned Jobnet 4/4, Jobindex 20 shown of 736,
+Jobdanmark 0/0 and Freehire 25 shown of 6,752. That adds authentication and
+deployed-browser evidence; third-party contracts may still change later.
 
 ## 6. Server-issued save provenance
 
@@ -187,10 +187,20 @@ first would make the manual product path fail.
   one ledger row, routine identity/owner/`SECURITY DEFINER`/exact search path/
   authenticated-only ACL, all three validated owner constraints, old-key
   removal, PostgREST reload and enabled+forced RLS accepted.
+- Application behavior release
+  `aabd82b3a626da94a2478ef26f043a51d059cd15`: exact-head CI `33114868741`,
+  Vercel Production deployment `6130751384`, stable-alias `/JobSearch` health,
+  desktop and 390px mobile acceptance.
+- Remote production journey `33115019633` passed the returning-account gate.
+  Its board sample exposed no unsaved row and skipped the mutation honestly.
+- Authenticated production browser acceptance closed that sample gap: a sealed
+  Jobnet result was saved and read back from the Supabase-backed Discovery UI
+  at score 35/100 and initial stage FOUND. Activity rendered one immutable
+  `job_seeker.job_recorded` event for entity
+  `7637e796-b172-40d6-833f-408407b6f5b2`.
 
-These are bounded database and local application evidence, not a substitute
-for the final application's exact-head CI/Vercel identity or signed-in hosted
-acceptance.
+Together these are the exact database, application, deployment and signed-in
+hosted acceptance chain.
 
 ## 9. Dependencies and configuration
 
@@ -213,14 +223,15 @@ and verified on the exact production project. No new configuration is needed.
    path/ACL, forced RLS and PostgREST reload. Migrated-PostgreSQL tests cover
    audit, duplicate, rollback and ownership/tenant refusals; the signed-in
    hosted path is step 5.
-4. After database acceptance, merge/deploy the exact application revision
-   and verify exact CI/Vercel identity and health.
-5. Run a signed-in production `/JobSearch` journey: search, observe per-board
-   success/failure/empty honesty, save a sealed result, reload/read it back,
-   and verify board attribution, score, initial application and exactly one
-   immutable activity event at mobile and desktop widths.
+4. **Complete:** after database acceptance, deploy exact application behavior
+   revision `aabd82b3a626da94a2478ef26f043a51d059cd15`; verify CI
+   `33114868741`, Vercel Production `6130751384`, alias and health.
+5. **Complete:** signed-in production `/JobSearch` rendered every board,
+   accepted a sealed Jobnet result, read it back with attribution/score/stage,
+   and showed exactly one immutable activity event at desktop and mobile
+   widths.
 6. On any mismatch, stop. Contain database defects only with a new forward
    migration; do not reset, replay history or down-migrate.
 
-Until the application steps pass, the accurate verdict is **HOSTED DATABASE:
-PASS; APPLICATION PRODUCTION ACCEPTANCE: OPEN**.
+The accurate verdict is **HOSTED DATABASE: PASS; APPLICATION PRODUCTION
+ACCEPTANCE: PASS**.

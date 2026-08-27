@@ -2,17 +2,17 @@
 
 Last reviewed: 2026-08-27
 
-## 2026-08-27: Job Search database contract is hosted; application production acceptance is outstanding
+## 2026-08-27: canonical Job Search is live and production accepted
 
-The active application candidate is an uncommitted worktree based on exact
-`main` `f023024a90f2d37094276084df62bec135a3282e`; it is **not deployed**.
-Database-first commits `1168e94958e9f24a927d087571384d63b12f303b` and
-`f023024a90f2d37094276084df62bec135a3282e` are on `main`. Exact-head CI run
-`33110615299` passed the quality job and all three browser/accessibility
-shards, and exact Vercel Production deployment `6129989143` is successful.
-Search first reached `main` in #416 (`5cfd839`); the active candidate completes
-that integration rather than claiming the staging deployment has the new
-application behavior. Full disposition and evidence are in
+The complete integration is on `main`. Application behavior release
+`aabd82b3a626da94a2478ef26f043a51d059cd15` is deployed through exact Vercel
+Production deployment `6130751384` at
+`https://softwarefactory-14wpknnsx-surgeservices-projects.vercel.app`, with
+`www.theagoras.com` serving `/JobSearch` as `200`. Its exact-head CI run
+`33114868741` covers the quality job and all three browser/accessibility
+shards. Search first reached `main` in #416 (`5cfd839`); this release completes
+the canonical surface, trust boundary, transactional save and production
+acceptance. Full disposition and evidence are in
 `AI/SEARCH_MIGRATION_REPORT.md`.
 
 The exact upstream source snapshot is
@@ -37,11 +37,12 @@ match the boards as observed now: Jobnet uses `/FindJob/Search` with
 non-empty result shape and honestly does not apply a free-text location;
 Freehire sends `cities`; Jobdanmark declares its location support. Direct,
 non-persistent probes returned Jobnet **2/4**, Jobindex **2/736**, Jobdanmark
-**0/0** for London, and Freehire **2/6752**. Those contacts prove today's
-adapters can reach and parse the boards; they are not a signed-in production
-journey.
+**0/0** for London, and Freehire **2/6752**. Signed-in production then
+returned Jobnet **4/4**, Jobindex **20 shown of 736**, Jobdanmark **0/0** and
+Freehire **25 shown of 6,752**, including the explicit Jobindex location
+limitation and honest Jobdanmark empty state.
 
-The repeated-error loop is closed in the application candidate. Starting a
+The repeated-error loop is closed in the production application. Starting a
 replacement search immediately removes the prior results and their sealed
 tokens, including when the replacement loses its network response. Save now
 renders the server's actual safe error message; an expired/invalid result tells
@@ -74,12 +75,23 @@ INSERT grants are not contracted yet because the existing manual
 `POST /api/job-seeker/jobs` path still writes the three tables directly;
 contracting them first would break an application path. Local lint, typecheck,
 focused persistence/migration tests, and the related Job Seeker regression
-suites are green. The full candidate passes 407 Vitest files / 4,721 tests
+suites are green. The full release passes 407 Vitest files / 4,721 tests
 (3 files / 7 tests skipped), full lint and typecheck, and a 165-page production
-build that includes `/JobSearch`. The remaining release steps are the exact application push,
-its exact-head CI/Vercel identity, health, and signed-in production search →
-sealed save → reload/audit acceptance. Until those pass this remains an
-**application release candidate, not production-accepted behavior**.
+build that includes `/JobSearch`.
+
+Production acceptance is measured, not inferred. Remote journey run
+`33115019633` passed the returning-account overview gate against exact release
+`aabd82b`; its board sample did not expose an unsaved row and therefore skipped
+the mutation rather than fabricating a pass. The authenticated browser walk
+closed that gap on a fresh exact-release page at 16:55 EDT: it searched all
+four boards, saved the Jobnet posting "Sales Development Representative for
+the Swedish Market", and read it back from the Supabase-backed Discovery page
+as `via jobnet`, score **35/100**, initial stage **FOUND**. Activity rendered
+exactly one immutable `job_seeker.job_recorded` event for entity
+`7637e796-b172-40d6-833f-408407b6f5b2`. Desktop and 390px mobile rendering
+showed the canonical heading/input with no horizontal overflow. The verdict is
+**production accepted**; board content and third-party availability remain
+live external facts rather than guarantees.
 
 ## 2026-08-25: the ten-step factory, and the defects driving it exposed
 
