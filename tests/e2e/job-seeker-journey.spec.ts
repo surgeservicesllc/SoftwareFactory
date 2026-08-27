@@ -406,7 +406,7 @@ test.describe("job seeker live journey", () => {
     test.setTimeout(180_000);
 
     await page.goto("/job-seeker/search");
-    await expect(page.getByRole("heading", { name: "Search", level: 1 })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Job Search", level: 1 })).toBeVisible();
 
     // The page names the boards it will contact before contacting any.
     await expect(page.getByText(/Searching \d+ boards?:/)).toBeVisible({ timeout: 20_000 });
