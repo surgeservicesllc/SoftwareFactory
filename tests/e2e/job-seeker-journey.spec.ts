@@ -47,24 +47,56 @@ test.describe("job seeker live journey", () => {
     await page.getByLabel("Password").fill(password);
     await page.getByRole("button", { name: /^sign in$/i }).click();
 
-    // A first visit is redirected to workspace onboarding; a later run of the
-    // same journey already has the workspace and lands straight on the
-    // profile. Race the two destinations by element rather than by URL — the
+    // A first visit is redirected to workspace onboarding. A returning user
+    // lands on the overview, while an older deployment may still land on the
+    // profile. Race those rendered destinations rather than the URL — the
     // redirect passes through /job-seeker on its way to onboarding, so URL
     // matching here is a coin flip.
     const workspaceName = page.getByLabel(/workspace name/i);
     const saveProfile = page.getByRole("button", { name: /save profile/i });
-    await expect(workspaceName.or(saveProfile).first()).toBeVisible({ timeout: 30_000 });
+    const overviewHeading = page.getByRole("heading", {
+      name: "Job Seeker Overview",
+      level: 1,
+    });
+    await expect(
+      workspaceName.or(saveProfile).or(overviewHeading).first(),
+    ).toBeVisible({ timeout: 30_000 });
+
+    const isFreshAccount = await workspaceName.isVisible();
+    if (!isFreshAccount && await overviewHeading.isVisible()) {
+      // Production reuses a synthetic account so its durable rows survive
+      // between runs. Replaying the full mutating onboarding journey would
+      // collide with those deliberately immutable/unique records. The loaded
+      // overview proves the returning-account gate and Supabase reads, then
+      // the independent Search test below continues the production journey.
+      expect(new URL(page.url()).pathname).toBe("/job-seeker");
+      await expect(page.getByRole("region", { name: "Search totals" })).toBeVisible();
+      await expect(
+        page.getByRole("link", { name: "Career Profile", exact: true }).first(),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("link", { name: "Applications", exact: true }).first(),
+      ).toBeVisible();
+      return;
+    }
+
     if (await workspaceName.isVisible()) {
       await workspaceName.fill("Jordan Job Search");
       await page.getByRole("button", { name: /create workspace/i }).click();
-      // Onboarding honors ?next= and returns to the job-seeker console.
+      // Onboarding honors ?next= and returns to the overview. Enter Career
+      // Profile explicitly so a fresh local stack still exercises every field
+      // and every persisted workflow below.
+      await expect(overviewHeading).toBeVisible({ timeout: 30_000 });
+      await page
+        .getByRole("link", { name: "Career Profile", exact: true })
+        .first()
+        .click();
     }
 
     // ── Career Profile: every field ────────────────────────────────────────
     await expect(saveProfile).toBeVisible({ timeout: 30_000 });
     // The pathname itself, not the ?next= query of the onboarding URL.
-    expect(new URL(page.url()).pathname).toBe("/job-seeker");
+    expect(new URL(page.url()).pathname).toMatch(/^\/job-seeker(?:\/profile)?$/);
     await page.getByLabel("Full name").fill("Jordan Seeker");
     await page.getByLabel("Email").fill("jordan.seeker@example.com");
     await page.getByLabel("Phone").fill("+1 555 0100");
