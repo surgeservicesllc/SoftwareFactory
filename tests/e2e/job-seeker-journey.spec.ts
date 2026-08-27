@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Locator } from "@playwright/test";
 
 /**
  * The whole Job Seeker experience, driven in a real browser against a real
@@ -436,10 +436,81 @@ test.describe("job seeker live journey", () => {
     const savable = await saveButtons.count();
     test.skip(savable === 0, "no board returned a posting to save on this run");
 
-    await saveButtons.first().click();
-    await expect(page.getByRole("button", { name: /saved to your jobs/i }).first()).toBeVisible({
+    type RecordedJob = {
+      application: { stage: string } | null;
+      discoveredAt: string;
+      id: string;
+      match: { qualified: boolean; score: number } | null;
+      source: string;
+      title: string;
+      url: string | null;
+    };
+    type ActivityEvent = {
+      entity: { id: string | null; type: string };
+      eventType: string;
+      id: string;
+    };
+    const [jobsBeforeResponse, activityBeforeResponse] = await Promise.all([
+      page.request.get("/api/job-seeker/jobs"),
+      page.request.get("/api/activity?limit=100"),
+    ]);
+    expect(jobsBeforeResponse.ok()).toBeTruthy();
+    expect(activityBeforeResponse.ok()).toBeTruthy();
+    const jobsBefore = await jobsBeforeResponse.json() as { jobs?: RecordedJob[] };
+    const activityBefore = await activityBeforeResponse.json() as { events?: ActivityEvent[] };
+    const existingUrls = new Set(
+      (jobsBefore.jobs ?? []).flatMap((job) => job.url === null ? [] : [job.url]),
+    );
+    const previousEventIds = new Set((activityBefore.events ?? []).map((event) => event.id));
+
+    // A stable board result can be the same on successive production runs.
+    // Select a URL this synthetic account has not saved before so this walk
+    // proves the recorded transaction instead of accepting a duplicate no-op.
+    const resultRows = page.locator("[data-testid='search-result-card'] li");
+    let candidateRow: Locator | null = null;
+    let candidateUrl: string | null = null;
+    for (let index = 0; index < await resultRows.count(); index += 1) {
+      const row = resultRows.nth(index);
+      const link = row.locator("a[href^='http']").first();
+      const url = await link.getAttribute("href");
+      if (url !== null && !existingUrls.has(url)) {
+        candidateRow = row;
+        candidateUrl = url;
+        break;
+      }
+    }
+    expect(candidateRow, "live boards returned no previously-unsaved linked posting").not.toBeNull();
+    expect(candidateUrl).not.toBeNull();
+
+    await candidateRow!.getByRole("button", { name: /^save$/i }).click();
+    await expect(candidateRow!.getByRole("button", { name: /saved to your jobs/i })).toBeVisible({
       timeout: 30_000,
     });
+
+    const [jobsAfterResponse, activityAfterResponse] = await Promise.all([
+      page.request.get("/api/job-seeker/jobs"),
+      page.request.get("/api/activity?limit=100"),
+    ]);
+    expect(jobsAfterResponse.ok()).toBeTruthy();
+    expect(activityAfterResponse.ok()).toBeTruthy();
+    const jobsAfter = await jobsAfterResponse.json() as { jobs?: RecordedJob[] };
+    const activityAfter = await activityAfterResponse.json() as { events?: ActivityEvent[] };
+    const savedJob = (jobsAfter.jobs ?? []).find((job) => job.url === candidateUrl);
+    expect(savedJob).toBeDefined();
+    expect(savedJob!.source).toMatch(/^(jobnet|jobindex|jobdanmark|freehire)$/);
+    expect(savedJob!.match).not.toBeNull();
+    expect(savedJob!.match!.score).toEqual(expect.any(Number));
+    expect(savedJob!.application).not.toBeNull();
+    expect(savedJob!.application!.stage).toBe(
+      savedJob!.match!.qualified ? "QUALIFIED" : "FOUND",
+    );
+    const newRecordingEvents = (activityAfter.events ?? []).filter((event) =>
+      !previousEventIds.has(event.id)
+      && event.eventType === "job_seeker.job_recorded"
+      && event.entity.type === "job_seeker_job"
+      && event.entity.id === savedJob!.id,
+    );
+    expect(newRecordingEvents).toHaveLength(1);
 
     // Persistence: the saved posting is in the job list, attributed to the
     // board rather than to manual entry, and survives a full reload.
