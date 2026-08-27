@@ -405,7 +405,14 @@ test.describe("job seeker live journey", () => {
      */
     test.setTimeout(180_000);
 
-    await page.goto("/job-seeker/search");
+    // Every Playwright test owns a fresh browser context. Exercise the exact
+    // canonical gate and return path instead of depending on the prior test's
+    // cookies or accepting only the compatibility route.
+    await page.goto("/JobSearch");
+    await expect(page).toHaveURL(/\/auth\/sign-in\?next=%2FJobSearch/);
+    await page.getByLabel("Email").fill(email);
+    await page.getByLabel("Password").fill(password);
+    await page.getByRole("button", { name: /^sign in$/i }).click();
     await expect(page.getByRole("heading", { name: "Job Search", level: 1 })).toBeVisible();
 
     // The page names the boards it will contact before contacting any.
