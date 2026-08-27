@@ -3,6 +3,25 @@
 Written 2026-08-14, after verifying the whole chain on a real PostgreSQL 16 cluster.
 Rebased 2026-08-16 on an owner-measured hosted position (see the section directly below).
 
+## Atomic job recording release (2026-08-27)
+
+Migration `20260827000100_record_job_seeker_job_atomically.sql` is a protected,
+one-file hosted change. Its frozen SHA-256 is
+`2f51bf64ba3fd2bc711e6fbf9e660a2cc0dd5ef4b1f85d932ee574e79e9c7d13`.
+It has not been applied merely because it exists in this worktree.
+
+Apply it only by manually dispatching `apply-hosted-migrations.yml` from the
+exact deployed `main` SHA with `scope=job-seeker-atomic-record`. The scope binds
+the repository and Supabase project identities, requires the target ledger row
+and new catalog objects to be absent, verifies the prerequisite job-seeker
+tables/enums/function/foreign keys and forced RLS, stages exactly this one file,
+then commits its DDL and ledger row in one PostgreSQL transaction. It reloads
+PostgREST and reads back the exact function signature, authenticated-only ACL,
+validated owner-consistent constraints, retired legacy foreign keys, ledger,
+and forced-RLS state. Any mismatch stops the run; containment is forward-only.
+The broad `scope=all` path is blocked until this version is recorded exactly
+once under its frozen file hash.
+
 ## Any-model safe Step 8 -> Step 9 release (2026-08-22, ADR-115)
 
 This section is the current release procedure and supersedes older command-model
