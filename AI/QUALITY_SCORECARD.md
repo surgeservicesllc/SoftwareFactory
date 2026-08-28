@@ -2,6 +2,22 @@
 
 Last reviewed: 2026-08-28
 
+**Addendum, 2026-08-28 — hosted selector/URL checkpoint and signed acceptance
+gate (ADR-161):** exact cleanup SHA
+`994da2cec81c0cd83aa1e2d87ad848d2f2ff612a` passed all four CI jobs and exact
+READY Vercel/public-health identity. First-attempt protected runs
+`33165823042`, `33165886343`, `33165944760`, and `33165992529` passed; hosted
+ledger is exactly `1|1|1|1|0|0`, the selector is normalized, and the
+production-URL writer/catalog/ACL is live. The new disposable acceptance path
+is manual, exact-main/actor/first-attempt, serialized with migrations, and
+rechecks exact CI/deployment/health plus full stopped database/GitHub state
+three times. It uses no password and requires a confirmed owner/admin, an unset
+value, one immutable owner-attributed event, no-op replay, and signed-in reload.
+Focused evidence is **6/6 workflow guard tests**, **86/86 URL-focused tests**,
+clean focused ESLint, clean TypeScript, valid YAML, and every shell block passes
+`bash -n`. Verdict: **HOSTED DDL PASS; SIGNED-IN VALUE/AUDIT ACCEPTANCE
+PENDING**. No worker or autonomous action was enabled.
+
 **Addendum, 2026-08-28 — exact Blackstone Auth bootstrap (ADR-160):** the
 temporary workflow is manual-only, permissions-empty, exact-main/project/email,
 first-attempt, and identity-gated to the configured production release actor as

@@ -2698,3 +2698,38 @@ Use this append-only log for decisions that constrain future implementation. Cha
   role. This decision grants neither, connects no provider, enables no worker,
   changes no autonomy/action setting, and does not release the global kill
   switch.
+
+## ADR-161 - Accept the public project URL through a disposable signed-in boundary
+
+- Date: 2026-08-28
+- Status: accepted locally; exact production dispatch pending
+- Context: protected first-attempt runs have installed the selector
+  normalization and owner/admin-only URL writer, leaving the release ledger at
+  `1|1|1|1|0|0`. The migration workflow proves catalog/ACL/runtime shape but
+  intentionally cannot prove that the production application establishes a
+  real user session, selects the intended tenant, persists a value, emits one
+  immutable audit event, and reloads it. Existing remote journey inputs are
+  plaintext and must never carry an owner's password.
+- Decision: publish a temporary manual workflow serialized with production
+  migrations. Read the owner email and project name only from temporary
+  encrypted repository secrets, require that already-confirmed identity to be
+  an exact owner/admin of one non-archived unset project, and use the existing
+  service credential only to mint an ephemeral magic-link token. Consume that
+  token through the production callback, select the exact organization, call
+  the same-origin production URL API, verify one owner-attributed
+  `project.updated` event, replay the identical write with zero new events, and
+  reload the value through the signed-in portfolio API. Check exact
+  main/four-job CI/READY deployment/public health, writer/predicate/constraint/
+  RLS/audit catalog, stopped workflows, every autonomy/action flag, worker
+  heartbeats/runs, and kill switches initially, immediately before mutation,
+  and after reload.
+- Consequence: application acceptance uses the production boundary without
+  exposing, resetting, or storing a password and cannot silently pass on a
+  skipped authorization job, preseeded URL, unconfirmed identity, broadened
+  ACL, moved release, active worker, or duplicate audit event. Delete the two
+  temporary selectors immediately after the accepted run and remove the
+  disposable workflow/test in the next forward commit.
+- Bounds: this changes only the one public URL and its existing immutable
+  audit trail. It grants no membership, connects no provider, enables no
+  worker/autonomy/automatic action, does not release the kill switch, and does
+  not authorize replay, reset, down-migration, or historical ledger repair.

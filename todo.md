@@ -1,5 +1,24 @@
 # SoftwareFactory — shared working status
 
+## FACTORY RELEASE CHECKPOINT (2026-08-28 07:27 EDT — CURRENT)
+
+- Current exact `main` before the disposable acceptance release:
+  `994da2cec81c0cd83aa1e2d87ad848d2f2ff612a`; four CI jobs green in
+  `33164903094`; READY Vercel `dpl_7u7h6GaP2LLNawDtB9wYGAuMTARB`.
+- Protected runs completed: initial probe `33165823042`, selector mutation
+  `33165886343`, fresh probe `33165944760`, URL-schema mutation `33165992529`.
+- Current hosted ledger: `1|1|1|1|0|0`. Never rerun selector or URL-schema.
+- The next commit publishes only a disposable signed-in production-URL
+  acceptance workflow/test plus this checkpoint documentation. After exact
+  green CI/READY deployment, set temporary encrypted owner/project selectors,
+  dispatch once, require exact write/audit/no-op/reload evidence, delete the
+  selectors, and remove the workflow/test in a forward cleanup.
+- After cleanup publication, dispatch a fresh `probe`, then only
+  `target-claims`. Do not apply `postdeploy` until exact-target behavior and a
+  legitimate signed-in Step 8/9 record/reload are accepted.
+- Workers, schedules, auth broker, autonomy, and all automatic actions stay
+  OFF. Global kill switch stays ON. The formal goal remains active.
+
 ## FACTORY 10-STEP PRODUCTION RECOVERY (2026-08-28 06:49 EDT — PICK UP HERE)
 
 ### Goal and current release

@@ -51,13 +51,19 @@ Last triaged: 2026-08-28
   plus a dedicated protected `selector-normalization` scope. Local gates pass:
   lint, typecheck, 5,150 tests / 7 skipped across 442 files, and 171/171-page
   production build.
-- [ ] Publish the selector-normalization containment, pass all four exact-head
-  jobs plus exact READY Vercel/health identity, then run a fresh read-only
-  probe. Do not rerun failed probe `33159805326`.
-- [ ] Apply only `20260828000050`, verify its exact ledger/catalog/ACL/runtime
-  and stopped-safety postflight, then apply only `20260828000100`,
-  `20260828000200`, and `20260828000300` through their ordered forward-only
-  scopes and accept every postflight.
+- [x] Publish exact cleanup release
+  `994da2cec81c0cd83aa1e2d87ad848d2f2ff612a`, pass all four exact-head jobs
+  plus exact READY Vercel/health identity, and complete fresh probe
+  `33165823042`.
+- [x] Apply only `20260828000050` in first-attempt run `33165886343`, pass
+  fresh probe `33165944760`, then apply only `20260828000100` in first-attempt
+  run `33165992529`. Exact ledger is `1|1|1|1|0|0`; never rerun either scope.
+- [ ] Complete the disposable signed-in owner/admin production-URL write,
+  immutable audit, no-op replay, reload, and pre/post containment acceptance;
+  remove its two temporary protected selectors and workflow/test afterward.
+- [ ] Only after URL acceptance, apply `20260828000200`; accept exact target
+  behavior and signed-in Step 8/9 persistence before applying
+  `20260828000300`, then run read-only `verify`.
 - [ ] Complete signed-in production Step 8 record/reload and Step 9 persisted
   observation with a legitimately connected bot. The current organization has
   zero connected accounts, ready linked bots, or assignments. Do not copy a
@@ -89,12 +95,12 @@ Last triaged: 2026-08-28
   API/unit/contract/native-SQL behavior coverage, focused lint and typecheck.
 - [x] Configure Vercel Production with an independent non-secret expected
   Supabase project ref; make `/api/health` fail closed on mismatch.
-- [ ] Publish and apply only
+- [x] Publish and apply only
   `20260828000100_project_production_url_configuration.sql` (LF SHA-256
   `0856ddee447280a1bb4418f25d6a6d4650687e168fffcd5e98e8ce15edd62b27`) through the
-  protected hosted path, then configure the intended project through its
-  signed-in owner/admin UI and verify one immutable audit event. No live value
-  was set by the local implementation.
+  protected hosted path in first-attempt run `33165992529`.
+- [ ] Configure the intended project through the signed-in owner/admin
+  application boundary and verify one immutable audit event plus no-op replay.
 
 ## Exact-target one-shot worker claims (2026-08-28, ADR-155)
 

@@ -2,6 +2,26 @@
 
 Last updated: 2026-08-28
 
+## Newest (2026-08-28): hosted release tail is at URL acceptance
+
+Exact cleanup release `994da2cec81c0cd83aa1e2d87ad848d2f2ff612a` is green in
+CI `33164903094` and READY as Vercel deployment
+`dpl_7u7h6GaP2LLNawDtB9wYGAuMTARB`. Protected runs `33165823042`,
+`33165886343`, `33165944760`, and `33165992529` completed the read-only probe,
+selector normalization, fresh probe, and production-URL schema respectively.
+The exact six-field ledger is `1|1|1|1|0|0`; never rerun either mutation.
+
+Next, publish and run the disposable exact-release URL-acceptance workflow. Its
+owner email and project name exist only as temporary encrypted repository
+secrets. It creates an ephemeral magic-link session without reading/changing a
+password, selects the exact owner/admin organization, requires the current URL
+to be unset, writes the public URL through the production API, verifies one
+owner-attributed immutable audit event, proves no-op replay, reloads, and
+rechecks exact main/CI/deployment/health/catalog and full stopped containment
+before and after. Delete both selectors and remove the workflow/test after the
+accepted run. Then restart at a fresh lifecycle `probe` on the cleanup SHA and
+continue only with `target-claims`.
+
 ## Newest (2026-08-28 ~09:45Z): the site sets up its own Stripe account (ADR-158)
 
 The six-paste configuration path failed in practice: the shape diagnostic

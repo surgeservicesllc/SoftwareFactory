@@ -2,6 +2,33 @@
 
 Last reviewed: 2026-08-28
 
+## 2026-08-28: selector and production-URL schema are hosted; signed acceptance is next
+
+Exact cleanup release `994da2cec81c0cd83aa1e2d87ad848d2f2ff612a` passed all
+four required jobs in CI `33164903094`. GitHub deployment `6139882660`
+resolved to READY Vercel deployment `dpl_7u7h6GaP2LLNawDtB9wYGAuMTARB`, and
+public health joined that exact SHA/ref, deployment URL, Vercel project, and
+Supabase project `qpuofpmagrmyamahqwxw`.
+
+Protected read-only probe `33165823042`, selector-normalization mutation
+`33165886343`, post-selector probe `33165944760`, and configure-URL mutation
+`33165992529` all passed on their first attempts. Hosted ledger state is now
+exactly `1|1|1|1|0|0` for
+`27000200|27000210|28000050|28000100|28000200|28000300`. The stale Phase 1C
+selector is normalized and the owner/admin-only production-URL writer is live;
+neither scope may be rerun.
+
+The next release adds a disposable acceptance workflow. It uses protected
+owner/project selectors and one ephemeral GoTrue magic-link session—never an
+owner password—to call the real production application route. It requires an
+unset target value, writes `https://www.theagoras.com`, proves exactly one
+owner-attributed immutable `project.updated` event, repeats the same write as a
+no-op with no duplicate event, reloads through the signed-in portfolio API,
+and rechecks exact main/CI/Vercel/health/catalog plus fully stopped containment
+immediately before and after. Only after that exact run may `target-claims`
+continue. Workers, schedules, the auth broker, autonomy, and automatic actions
+remain OFF; the global kill switch remains ON.
+
 ## 2026-08-28: exact verified Blackstone Auth bootstrap completed and disposed
 
 The owner requested one email-confirmed Supabase Auth identity for
