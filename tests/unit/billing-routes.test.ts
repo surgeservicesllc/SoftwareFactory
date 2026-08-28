@@ -24,6 +24,9 @@ vi.mock("@/lib/billing/stripe", async (importOriginal) => ({
   createStripeCustomer: harness.createStripeCustomer,
   createCheckoutSession: harness.createCheckoutSession,
   createPortalSession: harness.createPortalSession,
+  // The lookup fallback must never reach the network from a unit test; an
+  // empty catalog makes env vars the only price source here.
+  listPricesByLookupKeys: async () => [],
 }));
 vi.mock("@/lib/billing/webhook", () => ({ handleStripeEvent: harness.handleStripeEvent }));
 vi.mock("@supabase/supabase-js", () => ({ createClient: harness.createClient }));
@@ -36,6 +39,7 @@ const ORG = "33333333-3333-4333-8333-333333333333";
 
 function connectStripeEnv() {
   vi.stubEnv("STRIPE_SECRET_KEY", "sk_test_abcdefgh12345678");
+  vi.stubEnv("STRIPE_WEBHOOK_SECRET", "whsec_abcdefgh12345678");
   vi.stubEnv("STRIPE_PRICE_BASIC_MONTHLY", "price_Basic123M");
   vi.stubEnv("STRIPE_PRICE_PRO_MONTHLY", "price_Pro123M");
 }
@@ -78,8 +82,9 @@ function tenantWith(options: {
   return { rpc };
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   vi.clearAllMocks();
+  (await import("@/lib/billing/plans")).resetPriceLookupCache();
 });
 
 afterEach(() => {

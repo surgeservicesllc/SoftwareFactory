@@ -15,8 +15,21 @@ import { cn } from "@/lib/cn";
  * could not charge.
  */
 
+type ConfigShape = "missing" | "malformed" | "ok";
+
+type BootstrapResult = {
+  prices: Array<{ lookupKey: string; priceId: string; created: boolean }>;
+  webhook: { url: string; created: boolean; signingSecret?: string };
+};
+
 type Summary = {
   connected: boolean;
+  canBootstrap?: boolean;
+  configuration?: {
+    secretKey: ConfigShape;
+    webhookSecret: ConfigShape;
+    prices: Record<string, Record<string, boolean>>;
+  };
   plan: {
     key: string;
     name: string;
@@ -69,6 +82,8 @@ export function BillingConsole() {
   const [message, setMessage] = useState("");
   const [cadence, setCadence] = useState<"monthly" | "yearly">("monthly");
   const [pending, setPending] = useState<string | null>(null);
+  const [bootstrap, setBootstrap] = useState<BootstrapResult | null>(null);
+  const [bootstrapMessage, setBootstrapMessage] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -129,6 +144,28 @@ export function BillingConsole() {
     [],
   );
 
+  const runBootstrap = useCallback(async () => {
+    setPending("bootstrap");
+    setBootstrapMessage("");
+    try {
+      const response = await fetch("/api/billing/bootstrap", {
+        method: "POST",
+        credentials: "include",
+      });
+      const payload = (await response.json().catch(() => null)) as
+        | (BootstrapResult & { error?: { message?: string } })
+        | null;
+      if (!response.ok || !payload || !Array.isArray(payload.prices)) {
+        setBootstrapMessage(payload?.error?.message ?? "The Stripe setup failed.");
+      } else {
+        setBootstrap(payload);
+      }
+    } catch {
+      setBootstrapMessage("The Stripe setup failed.");
+    }
+    setPending(null);
+  }, []);
+
   if (state === "loading") {
     return (
       <Card className="flex items-center gap-3 p-6 text-slate-300">
@@ -182,6 +219,87 @@ export function BillingConsole() {
           <CreditCard className="size-8 text-violet-400" aria-hidden="true" />
         </div>
       </Card>
+
+      {summary.canBootstrap && !connected ? (
+        <Card className="space-y-4 p-6">
+          <SectionTitle
+            title="Finish payment setup"
+            description="Deployment administrator only. The site creates its own Stripe products, prices, and webhook — you paste two values, total."
+          />
+          {summary.configuration ? (
+            <ul className="space-y-1 text-sm text-slate-300">
+              <li>
+                1. Stripe secret key:{" "}
+                {summary.configuration.secretKey === "ok" ? (
+                  <span className="text-emerald-400">configured</span>
+                ) : (
+                  <span className="text-amber-400">
+                    {summary.configuration.secretKey} — add STRIPE_SECRET_KEY in Vercel
+                    (Production checked), then redeploy
+                  </span>
+                )}
+              </li>
+              <li>
+                2. Products, prices, and webhook:{" "}
+                {summary.configuration.secretKey === "ok" ? (
+                  <span>run the setup below</span>
+                ) : (
+                  <span className="text-slate-500">waiting on step 1</span>
+                )}
+              </li>
+              <li>
+                3. Webhook signing secret:{" "}
+                {summary.configuration.webhookSecret === "ok" ? (
+                  <span className="text-emerald-400">configured</span>
+                ) : (
+                  <span className="text-amber-400">
+                    {summary.configuration.webhookSecret} — step 2 hands you the value
+                  </span>
+                )}
+              </li>
+            </ul>
+          ) : null}
+          {bootstrapMessage ? <p className="text-sm text-red-400">{bootstrapMessage}</p> : null}
+          {bootstrap ? (
+            <div className="space-y-2 rounded-xl border border-slate-700 p-4 text-sm">
+              <p className="text-slate-300">
+                Prices ready:{" "}
+                {bootstrap.prices.map((price) => `${price.lookupKey} (${price.created ? "created" : "found"})`).join(", ")}
+              </p>
+              <p className="text-slate-300">
+                Webhook {bootstrap.webhook.created ? "created" : "already existed"}: {bootstrap.webhook.url}
+              </p>
+              {bootstrap.webhook.signingSecret ? (
+                <div className="space-y-1">
+                  <p className="font-semibold text-amber-300">
+                    Shown once — copy this now into Vercel as STRIPE_WEBHOOK_SECRET
+                    (Production checked), then redeploy:
+                  </p>
+                  <code className="block break-all rounded bg-slate-900 p-2 text-emerald-300">
+                    {bootstrap.webhook.signingSecret}
+                  </code>
+                </div>
+              ) : bootstrap.webhook.created === false && summary.configuration?.webhookSecret !== "ok" ? (
+                <p className="text-amber-300">
+                  The webhook already exists in Stripe but this deployment has no
+                  STRIPE_WEBHOOK_SECRET. Open Stripe → Developers → Webhooks → this
+                  endpoint → reveal the signing secret, and paste it into Vercel.
+                </p>
+              ) : null}
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => void runBootstrap()}
+              disabled={pending !== null || summary.configuration?.secretKey !== "ok"}
+              className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-violet-600 px-4 text-sm font-semibold text-white hover:bg-violet-500 disabled:opacity-50"
+            >
+              {pending === "bootstrap" ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
+              Create Stripe products, prices, and webhook
+            </button>
+          )}
+        </Card>
+      ) : null}
 
       <Card className="space-y-4 p-6">
         <SectionTitle title="Usage this month" />

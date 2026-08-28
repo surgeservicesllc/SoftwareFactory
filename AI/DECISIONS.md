@@ -2581,3 +2581,43 @@ Use this append-only log for decisions that constrain future implementation. Cha
 - Bounds: project/deployment IDs and hostnames are non-secret identity values.
   No worker, provider, autonomy, automatic action, merge, deployment, reset,
   or down-migration is enabled or initiated by this decision.
+
+## ADR-158 - The site sets up its own Stripe account contents
+
+- Date: 2026-08-28
+- Status: accepted
+- Context: the billing release (ADR-149) required six values to travel
+  by hand from two dashboards into Vercel. The owner tried; the
+  configuration report (shape diagnostic, shipped mid-saga) proved the
+  production runtime saw none of them across seven hours and four fresh
+  deployments — the failure mode was never the code, it was six manual
+  pastes with an invisible Production checkbox. The owner then asked,
+  verbatim, to "do everything for me", and offered a browser session an
+  isolated cloud container cannot reach; secrets must not transit the
+  agent's transcript in any case.
+- Decision: shrink the human part to the two values that are genuinely
+  secrets, and have the deployment create everything else itself.
+  (1) Prices become addressable by fixed lookup keys
+  (`factory_<plan>_<cadence>`): `resolvePriceId` reads the env var
+  first, then queries Stripe by lookup key with a 60-second per-instance
+  cache, so per-price environment variables are now optional. (2) A
+  super-administrator-only route, `POST /api/billing/bootstrap`,
+  idempotently ensures the Basic/Pro products, the four lookup-keyed
+  recurring prices at the advertised amounts, and the webhook endpoint
+  aimed at the deployment — find-first on lookup key and webhook URL, so
+  running it twice changes nothing. The webhook signing secret Stripe
+  returns only at creation travels once, in the response, to the super
+  administrator's screen; it is never logged or stored. Tenant
+  organization owners are refused: the Stripe account belongs to the
+  platform, and `isSuperAdmin` is the same authority the admin page
+  uses. (3) `billingConnected` now also requires the webhook signing
+  secret — a checkout that charges while the mirror is deaf would take
+  money without granting anything, so "connected" means the whole loop.
+- Bounds: the bootstrap needs `STRIPE_SECRET_KEY` and cannot install it;
+  the two secret pastes into Vercel remain the owner's, by design — the
+  transcript rule ("never place credentials in chat, logs") is why the
+  agent refuses to ferry them even when offered dashboard access. The
+  bootstrap writes only to the platform's own Stripe account, additively
+  and idempotently; it never deletes, and a webhook that exists without
+  a known secret is reported with instructions to reveal it in Stripe
+  rather than recreated behind the working one's back.

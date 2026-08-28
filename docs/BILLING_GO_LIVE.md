@@ -26,7 +26,29 @@ sign-in). Nothing pretends.
 - **Surfaces**: `/pricing` buys (when connected); `/solutions/billing` shows
   the plan, usage meters, upgrade buttons, and the Stripe customer portal.
 
-## Go-live steps
+## Go-live steps — the short path (two pastes)
+
+The site can now set up its own Stripe account contents. The long path below
+still works and still documents what exists; the short path is:
+
+1. **Stripe** → Developers → API keys → copy the **Secret key** (use test
+   mode first: toggle "Test mode" top-right, key starts `sk_test_`).
+2. **Vercel** → the project serving www.theagoras.com → Settings →
+   Environment Variables → add `STRIPE_SECRET_KEY` with that value —
+   **tick Production** — Save → Deployments → Redeploy.
+3. Sign in to the site as the super administrator → **Settings → Billing** →
+   the "Finish payment setup" card → click **Create Stripe products,
+   prices, and webhook**. The site creates Basic/Pro, all four prices (by
+   lookup key — no price env vars needed), and the webhook endpoint, then
+   shows the webhook **signing secret exactly once**.
+4. Paste that value into Vercel as `STRIPE_WEBHOOK_SECRET` (Production
+   ticked) → Redeploy. Done: the pricing page starts selling.
+
+The card is visible only to the deployment's super administrator; a tenant
+organization owner never sees it, because the Stripe account belongs to the
+platform, not to a tenant.
+
+## Go-live steps — the long path (manual dashboard setup)
 
 1. **Apply the migration** (before deploying the code):
    run the `apply-hosted-migrations.yml` workflow with

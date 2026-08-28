@@ -32,6 +32,7 @@ afterEach(() => {
 
 function clearBillingEnv() {
   vi.stubEnv("STRIPE_SECRET_KEY", "");
+  vi.stubEnv("STRIPE_WEBHOOK_SECRET", "");
   for (const name of PRICE_VARS) vi.stubEnv(name, "");
 }
 
@@ -99,9 +100,17 @@ describe("billingConnected", () => {
     expect(billingConnected()).toBe(false);
   });
 
-  it("is true with a well-formed secret key and at least one price", () => {
+  it("stays false without the webhook secret: charging while the mirror is deaf takes money without granting", () => {
     clearBillingEnv();
     vi.stubEnv("STRIPE_SECRET_KEY", "sk_test_abcdefgh12345678");
+    vi.stubEnv("STRIPE_PRICE_BASIC_MONTHLY", "price_abc123");
+    expect(billingConnected()).toBe(false);
+  });
+
+  it("is true with secret key, webhook secret, and at least one price", () => {
+    clearBillingEnv();
+    vi.stubEnv("STRIPE_SECRET_KEY", "sk_test_abcdefgh12345678");
+    vi.stubEnv("STRIPE_WEBHOOK_SECRET", "whsec_abcdefgh12345678");
     vi.stubEnv("STRIPE_PRICE_BASIC_MONTHLY", "price_abc123");
     expect(billingConnected()).toBe(true);
   });
