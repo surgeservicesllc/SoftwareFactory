@@ -1,6 +1,6 @@
 # Current state
 
-Last reviewed: 2026-08-27
+Last reviewed: 2026-08-28
 
 ## 2026-08-27: canonical Job Search is live and production accepted
 ## 2026-08-25: Revenue — Stripe subscription billing behind the existing storefront (ADR-149)
