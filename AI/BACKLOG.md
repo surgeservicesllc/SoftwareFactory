@@ -1,10 +1,10 @@
 # Backlog
 
-Last triaged: 2026-08-25
+Last triaged: 2026-08-27
 
 ## Billing follow-ons (2026-08-25, after go-live)
 
-The subscription engine shipped with ADR-148; these are the deliberate
+The subscription engine shipped with ADR-149; these are the deliberate
 deferrals, in the order they become worth doing once money moves:
 
 - **Seat enforcement** waits for a member-invite surface to exist; the limit
@@ -452,6 +452,44 @@ ADR-115/ADR-118/ADR-120/ADR-121
   `fetchPostings` against the providers' keyless APIs, identifier-driven
   from the page, recorded and scored through the shared chain, journey-
   proven live (40/40 imported rows scored and in the pipeline).
+- [x] Job Search integration (2026-08-27, ADR-147): canonical
+  `/JobSearch` plus signed-in global **Job Search** navigation, with
+  `/Job-Search` and `/job-seeker/search` sharing the same gated content;
+  exact 214-file upstream snapshot at
+  `79cd383e58f0af7948c7c6462a3a289e9b67421e`; four keyless adapters with
+  current request/response contracts; explicit location-capability honesty;
+  per-result organization/user/board/payload-bound save evidence; and one
+  atomic audited persistence RPC. Direct non-persistent probes observed
+  Jobnet 2/4, Jobindex 2/736, Jobdanmark 0/0 for London and Freehire 2/6752.
+- [x] **Database-first release:** exact-head CI run `33110615299` passed all
+  four required jobs, then workflow run `33111692239` applied only
+  `20260827000100_record_job_seeker_job_atomically.sql` (SHA-256
+  `2f51bf64ba3fd2bc711e6fbf9e660a2cc0dd5ef4b1f85d932ee574e79e9c7d13`) to
+  exact Supabase project `qpuofpmagrmyamahqwxw`. Its postflight verified the
+  one ledger row, exact function signature/owner/`SECURITY DEFINER`/
+  `search_path=pg_catalog`/authenticated-only ACL, three validated composite
+  owner constraints, removal of the superseded keys, PostgREST schema reload,
+  and enabled+forced RLS. Migrated-PostgreSQL behavior tests cover safe
+  duplicate, rollback, audit evidence, and tenant/user refusals; the signed-in
+  hosted path remains part of production acceptance below.
+- [x] **Production acceptance after the database gate:** exact application
+  release `aabd82b3a626da94a2478ef26f043a51d059cd15`, CI `33114868741` and
+  Vercel Production deployment `6130751384` are identity-bound. Signed-in
+  production returned all four board outcomes, and a sealed Jobnet result was
+  saved, read back `via jobnet` at score 35/100 and stage FOUND, then matched
+  to exactly one immutable `job_seeker.job_recorded` event
+  (`7637e796-b172-40d6-833f-408407b6f5b2`). Desktop and 390px mobile acceptance
+  passed. Remote journey `33115019633` separately passed the returning-account
+  gate; its live-board sample had no new savable row and skipped that mutation
+  honestly rather than substituting a fake result.
+- [ ] Move the remaining manual `POST /api/job-seeker/jobs` insert chain onto
+  the atomic boundary, add its regression, then revoke authenticated direct
+  INSERT on jobs/matches/applications in a separate forward contraction. Do
+  not revoke while that application path still depends on the grants.
+- [ ] Reconsider Jobbank only with a reliable, reviewed fallback contract for
+  its intermittent Cloudflare block. Upstream suggests WebSearch as a
+  fallback; the current hosted adapter has no such instrument. This is a
+  deferred capability, not a permanent impossibility claim.
 - [ ] Open (needs external credentials/decisions): LinkedIn import
   (SOFTWAREFACTORY_LINKEDIN_CLIENT_ID+SECRET — real OAuth app, reviewed
   integration); model-polished document variants through the

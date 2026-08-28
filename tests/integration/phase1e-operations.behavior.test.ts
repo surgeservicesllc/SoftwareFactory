@@ -198,7 +198,7 @@ describe("Phase 1E production operations behavior", () => {
        where grantee = 'service_role' and table_schema = 'public' order by table_name`,
     );
     // The verified-webhook ingress set: GitHub's four and the Stripe billing
-    // mirror's three (20260825000400, ADR-148); billing audit goes through
+    // mirror's three (20260825000400, ADR-149); billing audit goes through
     // the record_billing_activity definer. The same list
     // schema-security-invariants pins.
     expect(grantRows.map((row) => row.table_name)).toEqual([

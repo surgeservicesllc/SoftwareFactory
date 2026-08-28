@@ -57,14 +57,32 @@ export const PUBLIC_NAV: readonly NavItem[] = [
  * matches the product's own name on the decision page and in the page title,
  * so one thing has one name everywhere.
  *
- * `Job Seeker` points outside `/solutions` on purpose: it is the one
+ * `Job Search` points outside `/solutions` on purpose: it is the one
  * person-scoped surface, gated on its own and private to the person even inside
  * their organization.
  */
 export const SIGNED_IN_NAV: readonly NavItem[] = [
   { label: "Software Factory", href: "/solutions" },
-  { label: "Job Seeker", href: "/job-seeker" },
+  { label: "Job Search", href: "/JobSearch" },
 ];
+
+/**
+ * Whether a pathname belongs to a global product entry.
+ *
+ * Job Search has one canonical URL but an existing product subtree and a
+ * retained hyphenated entry. They are one product, so all of them light the
+ * same global link. The most-specific-link selection in SiteHeader still
+ * decides between genuinely nested entries.
+ */
+export function globalNavigationMatches(pathname: string, href: string): boolean {
+  if (href === "/JobSearch") {
+    return pathname === "/JobSearch"
+      || pathname === "/Job-Search"
+      || pathname === "/job-seeker"
+      || pathname.startsWith("/job-seeker/");
+  }
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
 
 /**
  * The global navigation for a viewer.

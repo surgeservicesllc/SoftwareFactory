@@ -39,6 +39,14 @@ export type JobSeekerNavEntry = JobSeekerNavItem & {
 
 /** Every path the Job Seeker navigation owns, for the shell's swap test. */
 export const JOB_SEEKER_ROOT = "/job-seeker";
+export const JOB_SEARCH_CANONICAL_PATH = "/JobSearch";
+export const JOB_SEARCH_COMPATIBILITY_PATH = "/Job-Search";
+
+export function isJobSearchPath(pathname: string | null | undefined): boolean {
+  return pathname === JOB_SEARCH_CANONICAL_PATH
+    || pathname === JOB_SEARCH_COMPATIBILITY_PATH
+    || pathname === `${JOB_SEEKER_ROOT}/search`;
+}
 
 export const JOB_SEEKER_NAVIGATION: readonly JobSeekerNavEntry[] = [
   {
@@ -84,5 +92,7 @@ export const JOB_SEEKER_ICON: LucideIcon = Briefcase;
  */
 export function isJobSeekerPath(pathname: string | null | undefined): boolean {
   if (!pathname) return false;
-  return pathname === JOB_SEEKER_ROOT || pathname.startsWith(`${JOB_SEEKER_ROOT}/`);
+  return isJobSearchPath(pathname)
+    || pathname === JOB_SEEKER_ROOT
+    || pathname.startsWith(`${JOB_SEEKER_ROOT}/`);
 }

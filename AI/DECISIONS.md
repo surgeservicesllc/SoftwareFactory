@@ -2188,7 +2188,64 @@ Use this append-only log for decisions that constrain future implementation. Cha
   graph width - plus guards that an exhausted overload stops retrying
   and a clean round waits for nothing.
 
-## ADR-147 - A run states why it ended, in the run's own row
+## ADR-147 - Job Search has one canonical product entry and one audited recording transaction
+
+- Date: 2026-08-27
+- Status: accepted; hosted migration applied and verified; application production accepted
+- Context: Search arrived in increments: four adapted public-board clients,
+  `/job-seeker/search`, then the owner-named `/Job-Search` entry and a complete
+  vendored upstream reference. The active goal names `/JobSearch` exactly and
+  asks for a global product entry. Review also found two trust gaps beneath the
+  page. Save accepted a browser-reposted job without evidence that the server
+  had returned it, and `insertScoredJob` committed job, match and application
+  in three independent requests, so a child refusal could strand an orphan
+  that the next attempt called a duplicate. Child foreign keys named only the
+  job id while child RLS checked the independently supplied child owner,
+  leaving no schema proof that parent and child belonged to the same person.
+  The exact upstream source reviewed for the correction is the complete
+  214-file MIT snapshot at
+  `79cd383e58f0af7948c7c6462a3a289e9b67421e`.
+- Decision: `/JobSearch` is canonical and the signed-in global header names it
+  **Job Search**. `/Job-Search` and `/job-seeker/search` remain compatibility
+  entries but render the same content, use the same auth gate, and select the
+  same Job Seeker shell; aliases do not own behavior. The four adapted,
+  keyless boards remain Jobnet, Jobindex, Jobdanmark and Freehire, and each
+  declares whether it can truthfully apply free-text location. LinkedIn stays
+  excluded because service terms are authority separate from an MIT licence.
+  Jobbank is deferred until the upstream's intermittent Cloudflare/WebSearch
+  fallback has a reliable reviewed product contract; the deferral is not a
+  permanent impossibility claim.
+- Decision: every returned posting is accompanied by a short-lived sealed
+  token scoped to organization and user and containing a digest of board plus
+  every normalized job field. Save verifies that evidence before scoring or
+  persistence. Persistence crosses one authenticated-only `SECURITY DEFINER`
+  function, `record_job_seeker_job`, with exact
+  `search_path=pg_catalog`. It derives ownership from `auth.uid()`, verifies
+  organization membership, and writes job, match, initial application and
+  immutable `job_seeker.job_recorded` evidence in one transaction. The dedupe
+  index remains the concurrency authority and returns a no-write `duplicate`
+  outcome. Composite `(job_id, organization_id, user_id)` foreign keys prove
+  child/parent ownership identity. RLS stays enabled and forced.
+- Bounds: direct, non-persistent probes (Jobnet 2/4, Jobindex 2/736,
+  Jobdanmark 0/0 for London, Freehire 2/6752) prove current board contracts,
+  not production acceptance or future third-party stability. The new RPC is
+  supplied by forward migration
+  `20260827000100_record_job_seeker_job_atomically.sql`. Database-first workflow
+  run `33111692239` applied its exact SHA-256
+  `2f51bf64ba3fd2bc711e6fbf9e660a2cc0dd5ef4b1f85d932ee574e79e9c7d13` to
+  project `qpuofpmagrmyamahqwxw` and verified ledger, routine identity/ACL,
+  constraints, PostgREST reload and forced RLS. Application release
+  `aabd82b3a626da94a2478ef26f043a51d059cd15` passed exact-head CI
+  `33114868741`, exact Vercel Production deployment `6130751384`, health and
+  signed-in production search/save/readback. The accepted record was attributed
+  `jobnet`, scored 35/100, initialized at FOUND and matched exactly one immutable
+  event. Authenticated direct INSERT is not revoked in
+  this migration because the existing manual jobs POST route still uses it;
+  move and test that final writer before a later forward ACL contraction. No
+  reset, down-migration, worker, autonomous action or deployment is implied by
+  accepting this source decision.
+
+## ADR-148 - A run states why it ended, in the run's own row
 
 - Date: 2026-08-25
 - Status: accepted
@@ -2226,7 +2283,7 @@ Use this append-only log for decisions that constrain future implementation. Cha
   in flight and rebuilding from the stale version would have silently
   reverted its cost columns.
 
-## ADR-148 - Revenue: Stripe subscriptions behind the storefront that already existed
+## ADR-149 - Revenue: Stripe subscriptions behind the storefront that already existed
 
 - Date: 2026-08-25
 - Status: accepted

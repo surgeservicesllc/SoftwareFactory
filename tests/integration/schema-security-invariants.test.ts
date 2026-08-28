@@ -38,7 +38,7 @@ const migrationsDirectory = resolve(import.meta.dirname, "../../supabase/migrati
  * The only tables `service_role` may hold direct table privileges on: the
  * ingress tables of the two signature-verified webhooks. GitHub's deliveries
  * have held this position since Phase 1; the Stripe billing mirror
- * (20260825000400, ADR-148) is the second and equal case — an external
+ * (20260825000400, ADR-149) is the second and equal case — an external
  * system's verified events, written by a route that has no user session to
  * write as. Its audit trail goes through record_billing_activity, a definer
  * function, so activity_events stays out of this list. Everything else is
@@ -341,7 +341,7 @@ describe("SECURITY DEFINER functions", () => {
       // The Stripe webhook's audit write: one activity event per subscription
       // transition, validated and clamped inside the definer, so
       // activity_events itself keeps zero service_role table privileges
-      // (20260825000400, ADR-148).
+      // (20260825000400, ADR-149).
       "record_billing_activity",
       // Server-only credential evaluation records a verdict only when the
       // exact bot identity/configuration/revision still matches under row lock.

@@ -1,8 +1,30 @@
 # Quality scorecard
 
-Last reviewed: 2026-08-25
+Last reviewed: 2026-08-27
 
-**Addendum, 2026-08-25 — billing (ADR-148):** the revenue engine is tested at
+**Addendum, 2026-08-27 — Job Search production acceptance (ADR-147):**
+
+| Evidence tier | Result | What it proves / does not prove |
+| --- | --- | --- |
+| Upstream identity | PASS | All 214 files match exact `MadsLorentzen/ai-job-search` head `79cd383e58f0af7948c7c6462a3a289e9b67421e`; the vendor tree is excluded from build, lint, typecheck, tests and runtime imports. This proves source identity, not runtime behavior. |
+| Product entry and navigation | PASS in production | `/JobSearch` is canonical, the signed-in global entry is **Job Search**, and `/Job-Search` plus `/job-seeker/search` share the same gated content. Exact release `aabd82b3a626da94a2478ef26f043a51d059cd15` is live; the stable alias returns `200`. Desktop and 390px mobile browser acceptance passed. |
+| Live board contracts | PASS in production | Direct probes returned Jobnet 2/4, Jobindex 2/736, Jobdanmark 0/0 and Freehire 2/6752. Signed-in production returned Jobnet 4/4, Jobindex 20 shown of 736, Jobdanmark 0/0 and Freehire 25 shown of 6,752, with the location limitation and empty state rendered honestly. Future third-party stability remains external. |
+| Save provenance | PASS locally and in production | Every result is sealed server-side for organization + user + board + exact normalized fields with a 30-minute lifetime. Missing, expired, cross-user, cross-tenant or altered evidence is refused before persistence. Production accepted an untouched Jobnet result and read it back with the same attribution. |
+| Supabase transaction and isolation | PASS in PostgreSQL tests and production | `record_job_seeker_job` atomically records job + match + initial application + immutable event, derives `auth.uid()`, checks membership, returns a no-write duplicate outcome, rolls back child failure, and uses composite owner FKs. Production read back the accepted row at score 35/100 and stage FOUND plus exactly one `job_seeker.job_recorded` event. |
+| Hosted database | PASS | Exact-head CI run `33110615299` passed all four required jobs before workflow run `33111692239` applied only `20260827000100_record_job_seeker_job_atomically.sql` (SHA-256 `2f51bf64ba3fd2bc711e6fbf9e660a2cc0dd5ef4b1f85d932ee574e79e9c7d13`) to project `qpuofpmagrmyamahqwxw`. Postflight accepted the one ledger row, exact routine identity/security/search path/ACL, three validated owner constraints, old-key removal, PostgREST reload and forced RLS. |
+| Application production acceptance | **PASS** | Exact-head CI `33114868741`, Vercel Production deployment `6130751384`, alias health, four-board signed-in search, sealed Jobnet save, Supabase readback and immutable activity evidence passed. Remote journey `33115019633` also passed the returning-account gate; its no-unsaved-result mutation was skipped honestly and the manual authenticated walk supplied that missing acceptance evidence. |
+
+Local evidence is full lint and typecheck green, 407 Vitest files / 4,721
+tests passed (3 files / 7 tests skipped), and a production build of 165 pages
+including `/JobSearch`. Focused evidence includes 16 atomic-persistence tests,
+64 migration-contract tests and the related Job Seeker regression suites.
+The rollout was database-first because the application calls the new RPC.
+Direct authenticated table INSERT remains intentionally available while the
+manual jobs POST route still uses it; a later forward contraction must first
+move and test that final writer. The verdict is **HOSTED DATABASE PASS;
+APPLICATION PRODUCTION ACCEPTANCE PASS**.
+
+**Addendum, 2026-08-25 — billing (ADR-149):** the revenue engine is tested at
 every seam it owns — 56 tests in six new files plus quota regressions in the
 launch and projects route suites: catalog invariants against the advertised
 matrix, price env resolution both directions, HMAC signature vectors
@@ -16,7 +38,7 @@ the test-mode purchase in `docs/BILLING_GO_LIVE.md` step 7 — the scorecard
 will say so until a real test-mode webhook has landed on production.
 
 **Addendum, 2026-08-25 — the ten-step factory: six engine defects found by
-driving it, and what is actually proven (ADR-144 through ADR-147):** the
+driving it, and what is actually proven (ADR-144 through ADR-146, plus ADR-148):** the
 owner's ten-step production-readiness goal was driven against live
 production, and the drive — not review — found six defects in the graph
 engine. Each was fixed with a regression that fails without it:
@@ -51,7 +73,7 @@ engine. Each was fixed with a regression that fails without it:
   the instant that had just refused it. Both halves are fixed together;
   fixing either alone would have changed nothing.
 
-- **The run never said why it ended (ADR-147).** The engine composes a
+- **The run never said why it ended (ADR-148).** The engine composes a
   run-level explanation on every close — including the correction that
   gate-halted nodes did not fail — and threw it away: `completeRun`'s
   parameter was named `_detail` because the RPC had no parameter and
@@ -410,9 +432,11 @@ independently by signing in to production as the fake account and
 reading the production API back: 42 jobs in its RLS-isolated workspace
 (2 manual + 40 imported live from Greenhouse in production), all 42
 scored, analytics recomputed from the walked rows (1 application, 100%
-measured response rate, 1 interview-stage count, 1 offer). Every
-capability on /job-seeker has now been observed working in production,
-wired to hosted Supabase end to end.
+measured response rate, 1 interview-stage count, 1 offer). Every capability
+on the then-existing `/job-seeker` surface was observed working in production,
+wired to hosted Supabase end to end. That 2026-08-22 run predates the later
+Job Search integration and is not evidence for `/JobSearch`, live multi-board
+search, sealed-result saving, or the atomic recording RPC.
 
 **Release addendum, 2026-08-21 — Factory command routing (ADR-106):**
 implementation is locally complete but not live. Migration

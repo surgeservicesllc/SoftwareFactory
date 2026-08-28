@@ -135,6 +135,30 @@ on:
           apply this BEFORE deploying the code that sends the note, because
           the new function's extra parameter is defaulted and therefore still
           answers the currently deployed seven-argument call;
+          "ledger-repair-node-detail" writes NO DDL. 20260823001000 never ran on
+          hosted, but its effect is present: 20260825000200 replaced
+          list_graph_runs with the current body, node detail included. Leaving
+          the row unrecorded is actively dangerous — 20260823001000 sorts
+          BEFORE 20260825000200, so scope=all would re-apply the older file and
+          overwrite list_graph_runs with the pre-cost version, silently
+          removing tokens_used, cost_micros, budget_action and
+          discovery_rounds from production. This records the row after proving
+          the live function already returns both that migration's node detail
+          and the four spend columns. If it does not, it refuses;
+          "ledger-repair-command-routing" writes NO DDL. 20260821000400 was
+          applied by hand in the SQL editor, which changes the schema without
+          writing the ledger row, so the hosted audit reports it APPLIED while
+          the ledger reports it missing — and scope=all would try to re-run it
+          and abort on 42P07. This records the row that is already true, after
+          proving from pg_class and pg_proc that the table and all three
+          functions really are there. If they are not, it refuses: recording a
+          migration that never ran would skip it forever;
+          "run-cost-and-budget" applies only 20260825000200, which returns the
+          four columns the graph worker has written since 20260819000100 and
+          no read has ever returned — tokens_used, cost_micros, budget_action
+          and discovery_rounds — so a finished run can say what it spent;
+          replaces one definer function in place, same grants, no table or row
+          changes;
           "clear-autonomy-projects" applies only 20260823000600, which adds the
           Autonomy page's Clear control as an archive sweep and excludes
           archived projects from the autonomy list; it deletes nothing and
@@ -189,6 +213,10 @@ on:
           - release-routing-evidence
           - finish-credential-vault
           - clear-autonomy-projects
+          - run-cost-and-budget
+          - job-seeker-atomic-record
+          - ledger-repair-command-routing
+          - ledger-repair-node-detail
           - probe
 permissions:
   checks: read
@@ -356,7 +384,7 @@ jobs:
         # do not yet trust the ledger -- but this step sits above the scope
         # branch, so a probe could still rewrite history rows. A read-only
         # question must not be able to edit the thing being questioned.
-        if: ${{ inputs.scope != 'probe' && inputs.scope != 'analysis-launch-doorcheck' && inputs.scope != 'bot-legacy-acl-normalization' && inputs.scope != 'bot-account-binding' && inputs.scope != 'bot-account-binding-contract' && inputs.scope != 'factory-any-model-record-only' }}
+        if: ${{ inputs.scope != 'probe' && inputs.scope != 'analysis-launch-doorcheck' && inputs.scope != 'bot-legacy-acl-normalization' && inputs.scope != 'bot-account-binding' && inputs.scope != 'bot-account-binding-contract' && inputs.scope != 'factory-any-model-record-only' && inputs.scope != 'job-seeker-atomic-record' }}
         # Two known history-only repairs, each applied only when the live
         # listing shows the stale row. 20260814002000 was renamed to
         # 20260814000100; remote-only 20260814000200 is the pre-split name
@@ -6264,6 +6292,299 @@ jobs:
           fi
           echo "Applied and verified: a voided run no longer consumes a gate approval."
 
+      - name: Record the node-detail read a later migration superseded (scope=ledger-repair-node-detail)
+        # No DDL. 20260823001000 never ran here, and must never run now:
+        # 20260825000200 replaced list_graph_runs with the current body -- node
+        # detail AND the four spend columns -- and 20260823001000 sorts first.
+        # scope=all would therefore re-apply the older file over the newer
+        # function and take tokens_used, cost_micros, budget_action and
+        # discovery_rounds off production without a word.
+        #
+        # So the row is recorded rather than the file applied, and the proof
+        # required is that the live function already answers for both: the node
+        # detail this migration introduced, and the spend columns that came
+        # after it. Either missing means the schema is not what this claim says
+        # it is, and the scope refuses.
+        if: ${{ inputs.scope == 'ledger-repair-node-detail' }}
+        run: |
+          if [ -z "$SUPABASE_DB_PASSWORD" ]; then
+            echo "::error::This scope requires SUPABASE_DB_PASSWORD for live verification."
+            exit 1
+          fi
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+
+          ROW=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
+            "select count(*) from supabase_migrations.schema_migrations where version = '20260823001000';")
+          if [ "$ROW" != "0" ]; then
+            echo "Ledger already records 20260823001000; nothing to repair."
+            exit 0
+          fi
+
+          # The node detail 20260823001000 introduced, read from the live body.
+          DETAIL=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
+            select (pg_get_functiondef(p.oid) like '%''job'', n.job%')
+               and (pg_get_functiondef(p.oid) like '%''depends_on''%')
+               and (pg_get_functiondef(p.oid) like '%''gate_state'', gate.state%')
+              from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+             where n.nspname = 'public' and p.proname = 'list_graph_runs';")
+          # The spend columns that came after it. Recording the older row while
+          # the newer function is absent would be recording the wrong world.
+          SPEND=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
+            select (pg_get_function_result(p.oid) like '%tokens_used bigint%')
+               and (pg_get_function_result(p.oid) like '%cost_micros bigint%')
+              from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+             where n.nspname = 'public' and p.proname = 'list_graph_runs';")
+          if [ "$DETAIL" != "t" ] || [ "$SPEND" != "t" ]; then
+            echo "::error::list_graph_runs does not answer for both (node detail=${DETAIL}, spend=${SPEND})."
+            echo "::error::Refusing to record 20260823001000 against a schema that does not carry its effect."
+            exit 1
+          fi
+
+          echo "Live function carries the node detail and the spend columns. Recording the row only; no DDL."
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied 20260823001000
+          else
+            npx supabase migration repair --status applied 20260823001000 --db-url "$DB_URL"
+          fi
+
+          AFTER=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
+            "select count(*) from supabase_migrations.schema_migrations where version = '20260823001000';")
+          if [ "$AFTER" != "1" ]; then
+            echo "::error::The ledger still does not record 20260823001000."
+            exit 1
+          fi
+          echo "Recorded: scope=all can no longer overwrite the cost read with the older one."
+
+      - name: Record the routing migration the editor applied (scope=ledger-repair-command-routing)
+        # No DDL. 20260821000400's objects are live -- the hosted audit sees
+        # factory_command_routes with its grants -- but the ledger has no row,
+        # because applying SQL in the editor does not write one. That gap is
+        # not cosmetic: scope=all re-runs anything the ledger omits, and this
+        # one would abort on `42P07: relation already exists`.
+        #
+        # The guard is deliberately the opposite way round from an apply
+        # scope. An apply refuses when the objects are already there; this
+        # refuses when they are NOT, because a ledger row is a claim that the
+        # migration ran, and recording that falsely would make every future
+        # apply skip it -- silently, and permanently.
+        if: ${{ inputs.scope == 'ledger-repair-command-routing' }}
+        run: |
+          if [ -z "$SUPABASE_DB_PASSWORD" ]; then
+            echo "::error::This scope requires SUPABASE_DB_PASSWORD for live verification."
+            exit 1
+          fi
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+
+          ROW=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
+            "select count(*) from supabase_migrations.schema_migrations where version = '20260821000400';")
+          if [ "$ROW" != "0" ]; then
+            echo "Ledger already records 20260821000400; nothing to repair."
+            exit 0
+          fi
+
+          # Proof of presence, read from the catalog rather than from a report.
+          TABLE=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
+            select count(*) from pg_class c join pg_namespace n on n.oid = c.relnamespace
+             where n.nspname = 'public' and c.relname = 'factory_command_routes' and c.relkind = 'r';")
+          FUNCTIONS=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
+            select count(distinct p.proname) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+             where n.nspname = 'public'
+               and p.proname in ('submit_factory_command',
+                                 'list_factory_command_routing_candidates',
+                                 'resolve_factory_command_replay');")
+          if [ "$TABLE" != "1" ] || [ "$FUNCTIONS" != "3" ]; then
+            echo "::error::20260821000400 is NOT applied (table=${TABLE} of 1, functions=${FUNCTIONS} of 3)."
+            echo "::error::Refusing to record a migration that did not run — that would skip it forever."
+            echo "::error::Apply it instead, then repair the ledger."
+            exit 1
+          fi
+
+          echo "Objects verified present. Recording the ledger row only; no DDL is executed."
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied 20260821000400
+          else
+            npx supabase migration repair --status applied 20260821000400 --db-url "$DB_URL"
+          fi
+
+          AFTER=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
+            "select count(*) from supabase_migrations.schema_migrations where version = '20260821000400';")
+          if [ "$AFTER" != "1" ]; then
+            echo "::error::The ledger still does not record 20260821000400."
+            exit 1
+          fi
+          echo "Recorded: the ledger now agrees with the schema, and scope=all no longer re-runs it."
+
+      - name: Apply atomic job recording (scope=job-seeker-atomic-record)
+        # Exactly one staged file and one transaction. The migration and its
+        # ledger row commit together, so a failed constraint/function change
+        # cannot leave hosted history claiming success (or vice versa).
+        if: ${{ inputs.scope == 'job-seeker-atomic-record' }}
+        run: |
+          if [ "$GITHUB_REPOSITORY" != "surgeservicesllc/SoftwareFactory" ] \
+            || [ "$GITHUB_REF" != "refs/heads/main" ] \
+            || [ "$PROJECT_REF" != "qpuofpmagrmyamahqwxw" ] \
+            || [ "$GITHUB_SHA" != "$(git rev-parse HEAD)" ]; then
+            echo "::error::Atomic job recording may run only from the exact SoftwareFactory main checkout against the production project."
+            exit 1
+          fi
+          if [ -z "$SUPABASE_DB_PASSWORD" ]; then
+            echo "::error::This protected scope requires SUPABASE_DB_PASSWORD for exact live catalog verification."
+            exit 1
+          fi
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+
+          FILE=supabase/migrations/20260827000100_record_job_seeker_job_atomically.sql
+          EXPECTED_SHA256=2f51bf64ba3fd2bc711e6fbf9e660a2cc0dd5ef4b1f85d932ee574e79e9c7d13
+          ACTUAL_SHA256=$(sha256sum "$FILE" | cut -d' ' -f1)
+          if [ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]; then
+            echo "::error::Atomic job-recording migration hash mismatch; refusing production DDL."
+            exit 1
+          fi
+
+          TARGET=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc \
+            "select count(*) from supabase_migrations.schema_migrations where version = '20260827000100';")
+          READY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+            set search_path = pg_catalog;
+            select (
+              to_regclass('public.job_seeker_jobs') is not null
+              and to_regclass('public.job_seeker_matches') is not null
+              and to_regclass('public.job_seeker_applications') is not null
+              and to_regclass('public.activity_events') is not null
+              and to_regprocedure('public.is_organization_member(uuid)') is not null
+              and exists (select 1 from pg_type t join pg_namespace n on n.oid=t.typnamespace where n.nspname='public' and t.typname='job_seeker_arrangement')
+              and exists (select 1 from pg_type t join pg_namespace n on n.oid=t.typnamespace join pg_enum e on e.enumtypid=t.oid where n.nspname='public' and t.typname='activity_event_type' and e.enumlabel='job_seeker.job_recorded')
+              and (select count(*) = 2 and bool_and(convalidated)
+                     from pg_constraint
+                    where conname in ('job_seeker_matches_job_id_fkey','job_seeker_applications_job_id_fkey'))
+              and not exists (select 1 from pg_constraint where conname in ('job_seeker_jobs_owner_identity_key','job_seeker_matches_job_owner_fkey','job_seeker_applications_job_owner_fkey'))
+              and to_regprocedure('public.record_job_seeker_job(uuid,text,text,text,text,text,text,text,public.job_seeker_arrangement,text,integer,jsonb,jsonb,jsonb,integer,boolean)') is null
+              and (select count(*) = 3 and bool_and(c.relrowsecurity and c.relforcerowsecurity)
+                     from pg_class c join pg_namespace n on n.oid=c.relnamespace
+                    where n.nspname='public' and c.relname in ('job_seeker_jobs','job_seeker_matches','job_seeker_applications'))
+            );")
+          if [ "$TARGET" != "0" ] || [ "$READY" != "t" ]; then
+            echo "::error::Ledger or prerequisite catalog is not the exact pre-apply state (target=$TARGET catalog=$READY)."
+            exit 1
+          fi
+
+          STAGE_DIR=$(mktemp -d)
+          trap 'rm -rf -- "$STAGE_DIR"' EXIT
+          STAGED_FILE="$STAGE_DIR/20260827000100_record_job_seeker_job_atomically.sql"
+          cp -- "$FILE" "$STAGED_FILE"
+          if [ "$(sha256sum "$STAGED_FILE" | cut -d' ' -f1)" != "$EXPECTED_SHA256" ] \
+            || [ "$(find "$STAGE_DIR" -maxdepth 1 -type f | wc -l | tr -d ' ')" != "1" ]; then
+            echo "::error::Exact-file staging failed; refusing production DDL."
+            exit 1
+          fi
+
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -X --single-transaction -q \
+            -f "$STAGED_FILE" \
+            -c "insert into supabase_migrations.schema_migrations (version) values ('20260827000100');"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q -c "NOTIFY pgrst, 'reload schema';"
+
+          VERIFIED=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+            set search_path = pg_catalog;
+            with routine as (
+              select p.* from pg_proc p
+               where p.oid = to_regprocedure('public.record_job_seeker_job(uuid,text,text,text,text,text,text,text,public.job_seeker_arrangement,text,integer,jsonb,jsonb,jsonb,integer,boolean)')
+            )
+            select
+              (select count(*) = 1 from supabase_migrations.schema_migrations where version='20260827000100')
+              and (select count(*) = 1 and bool_and(prosecdef and proconfig=array['search_path=pg_catalog']::text[] and pg_get_userbyid(proowner)='postgres') from routine)
+              and (select count(*) = 1 and bool_and(proacl is not null and (select count(*) from aclexplode(proacl))=2) from routine)
+              and has_function_privilege('authenticated', 'public.record_job_seeker_job(uuid,text,text,text,text,text,text,text,public.job_seeker_arrangement,text,integer,jsonb,jsonb,jsonb,integer,boolean)', 'EXECUTE')
+              and not has_function_privilege('anon', 'public.record_job_seeker_job(uuid,text,text,text,text,text,text,text,public.job_seeker_arrangement,text,integer,jsonb,jsonb,jsonb,integer,boolean)', 'EXECUTE')
+              and not has_function_privilege('service_role', 'public.record_job_seeker_job(uuid,text,text,text,text,text,text,text,public.job_seeker_arrangement,text,integer,jsonb,jsonb,jsonb,integer,boolean)', 'EXECUTE')
+              and (select count(*) = 3 and bool_and(convalidated) from pg_constraint where conname in ('job_seeker_jobs_owner_identity_key','job_seeker_matches_job_owner_fkey','job_seeker_applications_job_owner_fkey'))
+              and not exists (select 1 from pg_constraint where conname in ('job_seeker_matches_job_id_fkey','job_seeker_applications_job_id_fkey'))
+              and (select count(*) = 3 and bool_and(c.relrowsecurity and c.relforcerowsecurity) from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relname in ('job_seeker_jobs','job_seeker_matches','job_seeker_applications')); ")
+          if [ "$VERIFIED" != "t" ]; then
+            echo "::error::Atomic job-recording ledger/catalog/ACL/RLS postflight failed; contain only with a new forward migration."
+            exit 1
+          fi
+          echo "Applied exactly 20260827000100 and verified its ledger, function, ACL, constraints, and forced-RLS contract."
+
+      - name: Report what a run cost (scope=run-cost-and-budget)
+        # Exactly one file — 20260825000200 — replacing list_graph_runs in
+        # place. The signature grows by four columns the worker already
+        # writes, so the file drops the function first; nothing else changes,
+        # and no row is touched.
+        if: ${{ inputs.scope == 'run-cost-and-budget' }}
+        run: |
+          if [ -z "$SUPABASE_DB_PASSWORD" ]; then
+            echo "::error::This scope requires SUPABASE_DB_PASSWORD for live verification."
+            exit 1
+          fi
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+
+          SPEND_FILE=supabase/migrations/20260825000200_run_cost_and_budget_in_graph_runs.sql
+          if [ "$(sha256sum "$SPEND_FILE" | cut -d' ' -f1)" != "abc7bb695628942be85b32db1fb06b71f81dad1f831b75c8a1f9c861af4c0fe8" ]; then
+            echo "::error::Migration hash mismatch; refusing production DDL."
+            exit 1
+          fi
+
+          ROW=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
+            "select count(*) from supabase_migrations.schema_migrations where version = '20260825000200';")
+          if [ "$ROW" != "0" ]; then
+            echo "::error::Ledger already records 20260825000200 (want 0)."
+            exit 1
+          fi
+
+          # The columns must already exist: this scope changes a read, and
+          # would otherwise fail mid-apply on a database whose graph_runs
+          # predates them.
+          COLUMNS=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
+            select count(*) from information_schema.columns
+             where table_schema = 'public' and table_name = 'graph_runs'
+               and column_name in ('tokens_used','cost_micros','budget_action','discovery_rounds');")
+          if [ "$COLUMNS" != "4" ]; then
+            echo "::error::graph_runs is missing one of the four spend columns (found ${COLUMNS} of 4)."
+            exit 1
+          fi
+
+          echo "Applying ${SPEND_FILE}"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -1 -q -f "$SPEND_FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied 20260825000200
+          else
+            npx supabase migration repair --status applied 20260825000200 --db-url "$DB_URL"
+          fi
+
+          # Read the answer back from the function's own signature rather than
+          # trusting the apply: all four columns, or the scope failed.
+          VERIFIED=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
+            select (pg_get_function_result(p.oid) like '%tokens_used bigint%')
+               and (pg_get_function_result(p.oid) like '%cost_micros bigint%')
+               and (pg_get_function_result(p.oid) like '%budget_action text%')
+               and (pg_get_function_result(p.oid) like '%discovery_rounds integer%')
+              from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+             where n.nspname = 'public' and p.proname = 'list_graph_runs';")
+          if [ "$VERIFIED" != "t" ]; then
+            echo "::error::list_graph_runs did not read back with the four spend columns."
+            exit 1
+          fi
+          echo "Applied and verified: a run can now say what it spent."
+
       - name: Apply the Backlog and Pipelines clear controls (scope=clear-controls)
         # Exactly two files — 20260822000700 and 20260822000800 — and no others.
         #
@@ -6455,8 +6776,9 @@ jobs:
             || [ "$(tr -d '\r' < supabase/migrations/20260822000900_repair_hosted_plpgsql_catalog_and_lint.sql | sha256sum | cut -d' ' -f1)" != "512869badb309e99f9c58c6886ecd1af10e3b29ec636ed700b93b539f2f0f694" ] \
             || [ "$(tr -d '\r' < supabase/migrations/20260822001000_factory_any_model_record_only.sql | sha256sum | cut -d' ' -f1)" != "b09a07b28ec3429e60f373b01d257c7ad16afd0767bc921f6dd645f81a6c1255" ] \
             || [ "$(tr -d '\r' < supabase/migrations/20260822001100_contract_resume_extraction_function_acl.sql | sha256sum | cut -d' ' -f1)" != "dd4bb8ed59d5a46cea66b213fe53b0ad101da18244c161bae543999ae49af789" ] \
-            || [ "$(tr -d '\r' < supabase/migrations/20260822001200_contract_clear_function_acls.sql | sha256sum | cut -d' ' -f1)" != "ed90ededc30117434bacadebfffb47e35d39d26c0abf31725a96bc7f829bf87e" ]; then
-            echo "::error::A protected 00300/00400/00500/00600/00700/00800/00850/00900/01000/01100/01200 file hash drifted; broad push is forbidden."
+            || [ "$(tr -d '\r' < supabase/migrations/20260822001200_contract_clear_function_acls.sql | sha256sum | cut -d' ' -f1)" != "ed90ededc30117434bacadebfffb47e35d39d26c0abf31725a96bc7f829bf87e" ] \
+            || [ "$(tr -d '\r' < supabase/migrations/20260827000100_record_job_seeker_job_atomically.sql | sha256sum | cut -d' ' -f1)" != "2f51bf64ba3fd2bc711e6fbf9e660a2cc0dd5ef4b1f85d932ee574e79e9c7d13" ]; then
+            echo "::error::A protected migration file hash drifted; broad push is forbidden."
             exit 1
           fi
           PROTECTED_NORMALIZER=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
@@ -6485,6 +6807,8 @@ jobs:
             "select count(*) from supabase_migrations.schema_migrations where version = '20260822001100';")
           PROTECTED_CLEAR_FUNCTION_ACL=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
             "select count(*) from supabase_migrations.schema_migrations where version = '20260822001200';")
+          PROTECTED_JOB_ATOMIC_RECORD=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
+            "select count(*) from supabase_migrations.schema_migrations where version = '20260827000100';")
           if [ "$PROTECTED_NORMALIZER" != "1" ]; then
             echo "::error::Protected migration 20260822000150 is not recorded exactly once. Apply it only through scope=bot-legacy-acl-normalization; broad push is forbidden."
             exit 1
@@ -6527,6 +6851,10 @@ jobs:
           fi
           if [ "$PROTECTED_CLEAR_FUNCTION_ACL" != "1" ]; then
             echo "::error::Protected migration 20260822001200 is not recorded exactly once. Apply it only in the atomic factory-any-model-record-only chain; broad push is forbidden."
+            exit 1
+          fi
+          if [ "$PROTECTED_JOB_ATOMIC_RECORD" != "1" ]; then
+            echo "::error::Protected migration 20260827000100 is not recorded exactly once. Apply it only through scope=job-seeker-atomic-record; broad push is forbidden."
             exit 1
           fi
           PROTECTED_RESUME_FUNCTION_ACL_READY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "

@@ -1,8 +1,78 @@
 # Handoff
 
-Last updated: 2026-08-25
+Last updated: 2026-08-27
 
-## Newest (2026-08-25 ~23:00Z): revenue — subscription billing shipped behind a Not Connected gate (ADR-148)
+## Newest (2026-08-27): canonical Job Search is production accepted
+
+The completed integration is on `main`. Application behavior release
+`aabd82b3a626da94a2478ef26f043a51d059cd15` is bound to exact-head CI
+`33114868741` and Vercel Production deployment `6130751384`
+(`https://softwarefactory-14wpknnsx-surgeservices-projects.vercel.app`); the
+stable alias serves `/JobSearch` as `200`. Search originally landed through
+#416 (`5cfd839`). This release completes it with one canonical product entry,
+current live-board contracts, sealed save provenance, transactional
+persistence and signed-in production acceptance. `AI/SEARCH_MIGRATION_REPORT.md`
+is the detailed source, disposition, probe and rollout record.
+
+**Surface and source.** `/JobSearch` is canonical and **Job Search** is the
+signed-in global-navigation label. `/Job-Search` and `/job-seeker/search` are
+compatibility routes over the same content and gate. The entire 214-file
+upstream repository is vendored byte-for-byte at exact head
+`79cd383e58f0af7948c7c6462a3a289e9b67421e`, excluded from runtime/tooling.
+Four safe, keyless board capabilities are adapted: Jobnet, Jobindex,
+Jobdanmark and Freehire. LinkedIn remains excluded on service-terms grounds;
+Jobbank is deferred until its intermittent Cloudflare/WebSearch fallback can
+be made reliable and reviewed, not declared permanently impossible.
+
+**What the direct probes and production walk proved.** Non-persistent calls through the actual
+adapters returned Jobnet 2/4, Jobindex 2/736, Jobdanmark 0/0 for London and
+Freehire 2/6752. Jobnet's current BFF path/order, Jobindex's nested company
+shape and lack of free-text location, and Freehire's `cities` parameter are
+now executable request contracts. A Jobdanmark 0/0 is a valid empty live
+answer, not a parser error. Signed-in production returned Jobnet 4/4,
+Jobindex 20 shown of 736, Jobdanmark 0/0 and Freehire 25 shown of 6,752.
+
+**Trust and persistence.** Search responses mint a 30-minute sealed token per
+result, bound to organization, user, board and exact normalized fields. Save
+refuses missing/tampered/expired evidence. `insertScoredJob` preserves its API
+but calls only `record_job_seeker_job`, supplied by local forward migration
+`20260827000100_record_job_seeker_job_atomically.sql`. The authenticated-only,
+exact-path `SECURITY DEFINER` function derives `auth.uid()`, checks membership,
+and records job + match + initial application + immutable
+`job_seeker.job_recorded` activity in one transaction. Composite owner foreign
+keys close the cross-user child-reference gap. Behavior tests prove success,
+dedupe no-op, child-failure rollback, outsider refusal, cross-user refusal,
+ACL/search-path and forced RLS.
+
+**Database gate passed.** Workflow run `33111692239` applied only exact
+`20260827000100_record_job_seeker_job_atomically.sql` (SHA-256
+`2f51bf64ba3fd2bc711e6fbf9e660a2cc0dd5ef4b1f85d932ee574e79e9c7d13`) to
+project `qpuofpmagrmyamahqwxw`. Its postflight accepted the ledger, function
+identity/security/search path/ACL, owner constraints, superseded-key removal,
+PostgREST reload, and forced RLS. Direct INSERT remains authenticated because
+the manual jobs POST route still depends on it; move that final writer to the
+RPC before a later ACL contraction. Nothing here authorizes a reset,
+down-migration, worker or autonomy action.
+
+**Production acceptance.** Remote journey `33115019633` passed the
+returning-account gate on exact `aabd82b`; its live sample had no unsaved row
+and skipped the mutation honestly. The authenticated browser walk closed that
+sample gap: all four board sections rendered, a sealed Jobnet posting was
+saved, and Supabase-backed Discovery read it back `via jobnet`, score 35/100,
+stage FOUND. Activity rendered one immutable `job_seeker.job_recorded` event,
+entity `7637e796-b172-40d6-833f-408407b6f5b2`, at 16:55 EDT. Desktop and 390px
+mobile acceptance passed with no horizontal overflow.
+
+**Separate AI Factory Step 8 trace.** Postflight run `33114160835` verified
+the current any-model record-only database contract, exact definitions/ACL,
+zero-agent-run boundary and schema reload. Vercel logs showed zero new
+`POST /api/commands` requests after that postflight; the owner's repeated red
+message was retained state in an already-open modal, not a response from the
+current release. Hard refresh/reopen/submission is the correct next probe. Do
+not add or replay a migration until a failing current-deployment POST has a
+request ID and proves catalog drift.
+
+## Newest (2026-08-25 ~23:00Z): revenue — subscription billing shipped behind a Not Connected gate (ADR-149)
 
 The owner directed a revenue avenue. What ships in this release: Stripe
 subscription billing for the plans the pricing page has always advertised.
@@ -16,8 +86,8 @@ project-route suites.
 
 **Release order — two migrations now ride this branch, both apply-first:**
 
-1. `scope=runs-closure-note` (20260825000300, ADR-147)
-2. `scope=billing-foundation` (20260825000400, ADR-148)
+1. `scope=runs-closure-note` (20260825000300, ADR-148)
+2. `scope=billing-foundation` (20260825000400, ADR-149)
 3. then merge/deploy the code.
 
 Neither migration depends on the other; both are additive and safe against
@@ -28,7 +98,7 @@ billing surface renders **Not Connected** and the storefront behaves exactly
 as it did before this change. The webhook is the only subscription writer;
 browsers hold zero Stripe keys and zero write grants on billing tables.
 
-## Earlier (2026-08-25 ~20:00Z): the run that never said why (ADR-147)
+## Earlier (2026-08-25 ~20:00Z): the run that never said why (ADR-148; 147 was taken by Job Search on main)
 
 Defect #11, from the same live queue read. `graph-run.ts` composes a
 run-level explanation on every close — the fan-in assessment, the "this
@@ -98,7 +168,7 @@ Nothing on the ten-step goal is outstanding. The next lifecycle work is
 whatever the owner asks for; a Phase-2 deployment instrument is what would
 let step 9 pass rather than refuse.
 
-## Also 2026-08-25 (parallel branch): Search is built; the graph branch was parked
+## Earlier 2026-08-25 (parallel branch): the graph branch was parked for Search
 
 **Branch reset, deliberately and with the owner's direction.**
 `claude/ui-simplification-cbyx5t` was reset onto `main` to build Search. The
@@ -109,24 +179,12 @@ own ten-stage lifecycle (#370, #372, #374, #375, #385–#388, #399, #401),
 including marking ADR-136 superseded itself. Anything still wanted from #347
 should be taken from that backup ref, not from the PR.
 
-**Search.** `/job-seeker/search` over Jobnet, Jobindex and Freehire, ported from
-the MIT-licensed `MadsLorentzen/ai-job-search`. See
-`AI/SEARCH_MIGRATION_REPORT.md` for the full disposition, and
-`THIRD_PARTY_NOTICES.md` for attribution. No migration, no new dependency, no
-new environment variable.
-
-**What a next session should know.**
-
-1. **Jobindex is the fragile adapter, by construction.** It reads a page and
-   lifts the payload out of a `var Stash` blob, because Jobindex serves results
-   client-side. When Jobindex changes its markup this breaks — and it is built
-   to throw rather than return an empty list, because "no matches" and "the
-   parser is broken" look identical to a person.
-2. **No test touches a live board.** Fixtures only, deliberately. So a green
-   suite does not prove the boards still answer in the shape the parsers expect.
-3. **Jobdanmark is unported, not rejected** — the largest source adapter, no
-   obstacle in principle. Jobbank and LinkedIn are refusals with reasons, both
-   recorded in `registry.ts`.
+The Search status recorded here at the time (fixture-only, Jobdanmark unported,
+no migration) is superseded by the 2026-08-27 handoff above. Jobdanmark is now
+adapted, all four adapters have direct live probe evidence, and atomic audited
+persistence requires a new local forward migration. Attribution remains in
+`THIRD_PARTY_NOTICES.md`; exact current disposition is in
+`AI/SEARCH_MIGRATION_REPORT.md`.
 
 ## Earlier (2026-08-25 ~12:55Z): the live walk reaches step 6, and ADR-145 is proven live
 

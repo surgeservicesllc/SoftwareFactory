@@ -50,7 +50,7 @@ beforeAll(async () => {
   const migrationFiles = (await readdir(migrationsRoot))
     .filter((name) => /^\d+.*\.sql$/.test(name))
     .sort();
-  expect(migrationFiles.at(-1)).toBe("20260825000400_billing_foundation.sql");
+  expect(migrationFiles.at(-1)).toBe("20260827000100_record_job_seeker_job_atomically.sql");
   for (const file of migrationFiles) {
     await db.exec(await readFile(resolve(migrationsRoot, file), "utf8"));
   }
@@ -112,7 +112,7 @@ describe("the DISCOVERY/EVALUATION/DECISION stage growth", () => {
       "utf8",
     );
     const scope = workflow.slice(workflow.indexOf("scope == 'discovery-stages'"));
-    const match = scope.match(/VERIFIED=\$\(psql "\$DB_URL" -v ON_ERROR_STOP=1 -Atqc "\n([\s\S]*?);"\)/);
+    const match = scope.match(/VERIFIED=\$\(psql "\$DB_URL" -v ON_ERROR_STOP=1 -Atqc "\r?\n([\s\S]*?);"\)/);
     expect(match, "the discovery-stages readback query was not found in the workflow").not.toBeNull();
 
     const verdict = await db.query<{ verified: boolean }>(`${match![1]} as verified`);

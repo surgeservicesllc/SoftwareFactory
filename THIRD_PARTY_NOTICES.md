@@ -7,7 +7,10 @@ that work's licence requires.
 
 `lib/job-seeker/board-search/` is adapted from the job-board search skills in
 [MadsLorentzen/ai-job-search](https://github.com/MadsLorentzen/ai-job-search),
-at commit `e2c311a5b40512daf79a04b22c96d7e049afc745`.
+at exact reviewed commit `79cd383e58f0af7948c7c6462a3a289e9b67421e`.
+The complete 214-file source snapshot is preserved byte-for-byte under
+`vendor/ai-job-search/`, including its original `LICENSE`; that directory is
+audit evidence and is excluded from this application's build and runtime.
 
 **What was taken.** The per-board request construction, retry policy shape, and
 response parsing from `.agents/skills/<board>-search/cli/src` — specifically
@@ -17,18 +20,26 @@ serves its results client-side and its `/jobsoegning.json` endpoint returns
 204, which is recorded in `lib/job-seeker/board-search/jobindex.ts` where the
 code that depends on it lives.
 
-**What was not taken.** The `@bunli/core` CLI layer, the Python tooling, the
-LaTeX CV and cover-letter templates, and the `linkedin-search` skill. The last
-is deliberate and is explained in `lib/job-seeker/board-search/registry.ts`:
-LinkedIn's terms prohibit automated collection, and the MIT licence on this
-source governs whether the code may be copied, not whether that service may be
-read this way.
+**What was not taken.** The `@bunli/core` CLI layer, Claude commands and local
+workspace automation, the Python tooling, the LaTeX CV and cover-letter
+templates, `linkedin-search`, and `jobbank-search`. LinkedIn is excluded
+deliberately and is explained in `lib/job-seeker/board-search/registry.ts`:
+its terms prohibit automated collection, and the MIT licence on this source
+governs whether the code may be copied, not whether that service may be read
+this way. Jobbank is deferred rather than declared permanently unavailable:
+upstream documents intermittent Cloudflare blocking and a WebSearch fallback,
+while this hosted product does not yet have a reliable reviewed fallback at
+that boundary.
 
 **What changed.** The retry budget became a wall-clock deadline rather than a
 fixed retry count, because the original's six retries at a 15s attempt timeout can
 exceed a minute — correct for a CLI, wrong inside a request a person is
 watching. Bare `Error` throws became typed `BoardSearchError`s carrying the
-board that failed. The six duplicated fetch helpers became one.
+board that failed. The six duplicated fetch helpers became one. The current
+product contract also states each board's location-filter capability, seals
+each returned posting before the browser may save it, and records a save
+through this repository's audited Supabase boundary; those controls are new
+work, not upstream code.
 
 The licence below applies to the original work and travels with these
 derivatives.

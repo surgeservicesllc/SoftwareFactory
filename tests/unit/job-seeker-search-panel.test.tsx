@@ -15,8 +15,8 @@ import { JobSearchPanel } from "@/components/job-seeker/search-panel";
 
 const BOARDS = {
   boards: [
-    { key: "jobnet", name: "Jobnet", summary: "Danish public job bank.", coverage: "Denmark" },
-    { key: "freehire", name: "Freehire", summary: "Developer jobs.", coverage: "International" },
+    { key: "jobnet", name: "Jobnet", summary: "Danish public job bank.", coverage: "Denmark", supportsLocation: true },
+    { key: "freehire", name: "Freehire", summary: "Developer jobs.", coverage: "International", supportsLocation: true },
   ],
 };
 
@@ -34,6 +34,7 @@ function hit(title: string) {
     },
     publishedOn: "2026-08-20",
     closesOn: null,
+    saveToken: `token-${title}`,
   };
 }
 
@@ -92,7 +93,7 @@ describe("the search panel", () => {
   });
 
   it("reads an empty answer as empty rather than as nothing at all", async () => {
-    respond({ results: [{ board: "jobnet", boardName: "Jobnet", totalAvailable: 0, hits: [] }], failures: [] });
+    respond({ results: [{ board: "jobnet", boardName: "Jobnet", totalAvailable: 0, hits: [], locationApplied: true }], failures: [] });
     const user = userEvent.setup();
     render(<JobSearchPanel />);
     await screen.findByText(/Searching 2 boards:/);
@@ -104,7 +105,7 @@ describe("the search panel", () => {
 
   it("shows the board's own total, so a sample is not read as the whole", async () => {
     respond({
-      results: [{ board: "jobnet", boardName: "Jobnet", totalAvailable: 812, hits: [hit("Platform Engineer")] }],
+      results: [{ board: "jobnet", boardName: "Jobnet", totalAvailable: 812, hits: [hit("Platform Engineer")], locationApplied: true }],
       failures: [],
     });
     const user = userEvent.setup();
@@ -118,7 +119,7 @@ describe("the search panel", () => {
 
   it("says so when a board does not report a total", async () => {
     respond({
-      results: [{ board: "jobnet", boardName: "Jobnet", totalAvailable: null, hits: [hit("Platform Engineer")] }],
+      results: [{ board: "jobnet", boardName: "Jobnet", totalAvailable: null, hits: [hit("Platform Engineer")], locationApplied: true }],
       failures: [],
     });
     const user = userEvent.setup();
@@ -137,7 +138,7 @@ describe("the search panel", () => {
      * searched everywhere when they had searched one board of two.
      */
     respond({
-      results: [{ board: "jobnet", boardName: "Jobnet", totalAvailable: 3, hits: [hit("Platform Engineer")] }],
+      results: [{ board: "jobnet", boardName: "Jobnet", totalAvailable: 3, hits: [hit("Platform Engineer")], locationApplied: true }],
       failures: [
         { board: "freehire", boardName: "Freehire", code: "board_unreachable", message: "Freehire did not answer in time." },
       ],
@@ -169,7 +170,7 @@ describe("the search panel", () => {
 
   it("reports a save and then refuses to save the same posting twice", async () => {
     respond({
-      results: [{ board: "jobnet", boardName: "Jobnet", totalAvailable: 1, hits: [hit("Platform Engineer")] }],
+      results: [{ board: "jobnet", boardName: "Jobnet", totalAvailable: 1, hits: [hit("Platform Engineer")], locationApplied: true }],
       failures: [],
     });
     const user = userEvent.setup();
@@ -197,9 +198,76 @@ describe("the search panel", () => {
     expect(await screen.findByText(/The search could not be run/)).toBeInTheDocument();
   });
 
+  it("removes old results when a replacement search loses its connection", async () => {
+    let searchCount = 0;
+    fetchMock.mockImplementation((_url: string, init?: RequestInit) => {
+      if (init?.method !== "POST") return Promise.resolve(json(BOARDS));
+      searchCount += 1;
+      if (searchCount === 1) {
+        return Promise.resolve(json({
+          results: [{
+            board: "jobnet",
+            boardName: "Jobnet",
+            totalAvailable: 1,
+            hits: [hit("Old Platform Engineer")],
+            locationApplied: true,
+          }],
+          failures: [],
+        }));
+      }
+      return Promise.reject(new Error("network down"));
+    });
+    const user = userEvent.setup();
+    render(<JobSearchPanel />);
+    await screen.findByText(/Searching 2 boards:/);
+
+    await search(user);
+    expect(await screen.findByText("Old Platform Engineer")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /^search$/i }));
+
+    expect(await screen.findByText(/The search could not be run/)).toBeInTheDocument();
+    expect(screen.queryByText("Old Platform Engineer")).not.toBeInTheDocument();
+  });
+
+  it("shows the server's expired-result instruction and prevents a futile retry", async () => {
+    fetchMock.mockImplementation((url: string, init?: RequestInit) => {
+      if (typeof url === "string" && url.includes("/search/save")) {
+        return Promise.resolve(json({
+          error: {
+            code: "search_result_invalid",
+            message: "This search result is no longer valid. Run the search again before saving it.",
+          },
+        }, 422));
+      }
+      if (init?.method === "POST") {
+        return Promise.resolve(json({
+          results: [{
+            board: "jobnet",
+            boardName: "Jobnet",
+            totalAvailable: 1,
+            hits: [hit("Platform Engineer")],
+            locationApplied: true,
+          }],
+          failures: [],
+        }));
+      }
+      return Promise.resolve(json(BOARDS));
+    });
+    const user = userEvent.setup();
+    render(<JobSearchPanel />);
+    await screen.findByText(/Searching 2 boards:/);
+    await search(user);
+    await screen.findByText("Platform Engineer");
+
+    await user.click(screen.getByRole("button", { name: /^save$/i }));
+
+    expect(await screen.findByText(/Run the search again before saving it/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Search again to save/i })).toBeDisabled();
+  });
+
   it("links a posting to the board, opening it without handing over the referrer", async () => {
     respond({
-      results: [{ board: "jobnet", boardName: "Jobnet", totalAvailable: 1, hits: [hit("Platform Engineer")] }],
+      results: [{ board: "jobnet", boardName: "Jobnet", totalAvailable: 1, hits: [hit("Platform Engineer")], locationApplied: true }],
       failures: [],
     });
     const user = userEvent.setup();

@@ -8,7 +8,7 @@ import { useEffect, useState } from "react";
 import { BrandMark } from "@/components/brand-mark";
 import { SignOutButton } from "@/components/sign-out-button";
 import { cn } from "@/lib/cn";
-import { globalNavigation, PUBLIC_NAV } from "@/lib/navigation";
+import { globalNavigation, globalNavigationMatches, PUBLIC_NAV } from "@/lib/navigation";
 
 /**
  * The signed-out navigation, kept as a named export for callers and tests that
@@ -74,7 +74,7 @@ export function SiteHeader({
    * longest matching href wins, which is the entry a person is actually on.
    */
   const activeHref = navItems.reduce<string | null>((best, item) => {
-    const matches = pathname === item.href || pathname.startsWith(`${item.href}/`);
+    const matches = globalNavigationMatches(pathname, item.href);
     if (!matches) return best;
     return best === null || item.href.length > best.length ? item.href : best;
   }, null);

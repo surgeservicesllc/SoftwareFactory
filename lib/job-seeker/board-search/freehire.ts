@@ -141,7 +141,7 @@ export async function searchFreehire(
 ): Promise<BoardSearchResult> {
   const params = new URLSearchParams({ limit: String(Math.min(Math.max(query.limit, 1), 100)) });
   if (query.text.length > 0) params.set("q", query.text);
-  if (query.location !== null) params.set("location", query.location);
+  if (query.location !== null) params.append("cities", query.location);
 
   const envelope = await fetchBoardJson<FreehireEnvelope>(
     `${BASE_URL}${SEARCH_PATH}?${params.toString()}`,
@@ -177,5 +177,6 @@ export const freehireAdapter: BoardSearchAdapter = {
   name: "Freehire",
   summary: "A public developer-job API, with work arrangement and salary where the posting states them.",
   coverage: "International",
+  supportsLocation: true,
   search: searchFreehire,
 };

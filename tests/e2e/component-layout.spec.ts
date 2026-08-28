@@ -213,6 +213,7 @@ const CASES = [
   "bot-usage",
   "billing",
   "job-seeker",
+  "job-search",
   "resume-review",
   "bot-fabric",
   "bot-manager",
@@ -253,6 +254,29 @@ for (const width of WIDTHS) {
       ).toEqual([]);
     });
   }
+}
+
+for (const width of WIDTHS) {
+  test(`job search renders populated board results inside ${width}px`, async ({ page, isMobile }) => {
+    test.skip(Boolean(isMobile), "viewport-driving check runs in the resizable projects");
+    await open(page, "job-search", width);
+
+    await expect(page.getByText(/Searching 4 boards:/)).toBeVisible();
+    await page.getByRole("searchbox", { name: "What to search for" }).fill("platform engineer");
+    await page.getByRole("textbox", { name: "Where" }).fill("Copenhagen");
+    await page.getByRole("button", { name: "Search", exact: true }).click();
+
+    const cards = page.getByTestId("search-result-card");
+    await expect(cards).toHaveCount(4);
+    await expect(page.getByText(/does not expose a free-text place filter/)).toBeVisible();
+    await expect(page.getByRole("button", { name: "Save", exact: true })).toHaveCount(4);
+
+    expect(await overflowing(page), `job-search results @ ${width}px overflowed`).toEqual([]);
+    expect(
+      await unreachable(page, "body"),
+      `job-search results @ ${width}px put a control out of reach`,
+    ).toEqual([]);
+  });
 }
 
 for (const width of [320, 1440]) {
@@ -558,15 +582,15 @@ test("the signed-in header names the two products and nothing else", async ({ pa
   const primary = page.getByRole("navigation", { name: "Primary" });
   await expect(primary).toBeVisible();
 
-  await expect(primary.getByRole("link")).toHaveText(["Software Factory", "Job Seeker"]);
+  await expect(primary.getByRole("link")).toHaveText(["Software Factory", "Job Search"]);
   await expect(primary.getByRole("link", { name: "Admin" })).toHaveCount(0);
   await expect(primary.getByRole("link", { name: "Software Factory" })).toHaveAttribute(
     "href",
     "/solutions",
   );
-  await expect(primary.getByRole("link", { name: "Job Seeker" })).toHaveAttribute(
+  await expect(primary.getByRole("link", { name: "Job Search" })).toHaveAttribute(
     "href",
-    "/job-seeker",
+    "/JobSearch",
   );
 
   // The account side of the same row, which the owner's image also shows.

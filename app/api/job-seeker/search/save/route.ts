@@ -10,6 +10,10 @@ import {
 import { boardSearchKeys } from "@/lib/job-seeker/board-search/registry";
 import { insertScoredJob, loadEvaluationInputs } from "@/lib/job-seeker/record";
 import { findSensitiveData } from "@/lib/server/sensitive-data";
+import {
+  SearchResultTokenError,
+  verifySearchResult,
+} from "@/lib/job-seeker/search-result-token";
 import { supabaseBoundaryErrorResponse } from "@/lib/supabase/http";
 import { assertSameOriginRequest } from "@/lib/supabase/request";
 import { requireActiveOrganization } from "@/lib/supabase/tenant";
@@ -43,6 +47,7 @@ export const runtime = "nodejs";
 const saveSchema = z
   .object({
     board: z.string().trim().min(1).max(64),
+    resultToken: z.string().trim().min(1).max(2_048),
     job: z
       .object({
         externalId: z.string().trim().min(1).max(200).nullish(),
@@ -75,6 +80,9 @@ const saveSchema = z
 export async function POST(request: Request) {
   try {
     assertSameOriginRequest(request);
+    // Authenticate before parsing or classifying caller-controlled content so
+    // a signed-out request receives only the normal auth boundary response.
+    const { client, user, activeOrganization } = await requireActiveOrganization();
 
     const parsed = saveSchema.safeParse(await readBoundedJson(request, 128_000));
     if (!parsed.success) {
@@ -103,7 +111,33 @@ export async function POST(request: Request) {
       );
     }
 
-    const { client, user, activeOrganization } = await requireActiveOrganization();
+    try {
+      verifySearchResult({
+        token: parsed.data.resultToken,
+        organizationId: activeOrganization.id,
+        userId: user.id,
+        board: parsed.data.board,
+        job: {
+          externalId: parsed.data.job.externalId ?? null,
+          url: parsed.data.job.url ?? null,
+          title: parsed.data.job.title,
+          company: parsed.data.job.company,
+          salaryText: parsed.data.job.salaryText ?? null,
+          location: parsed.data.job.location ?? null,
+          workModel: parsed.data.job.workModel ?? null,
+          description: parsed.data.job.description ?? null,
+        },
+      });
+    } catch (error) {
+      if (error instanceof SearchResultTokenError) {
+        throw new ApiRequestError(
+          422,
+          "search_result_invalid",
+          "This search result is no longer valid. Run the search again before saving it.",
+        );
+      }
+      throw error;
+    }
     const inputs = await loadEvaluationInputs(client, activeOrganization.id);
 
     const outcome = await insertScoredJob(client, {
