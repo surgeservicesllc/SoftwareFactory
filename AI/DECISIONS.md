@@ -2655,7 +2655,7 @@ Use this append-only log for decisions that constrain future implementation. Cha
   applied hosted shape converge on the same function without changing its
   signature or authority, replaying `20260815000300`/`20260815000500`, or
   claiming their history was repaired. Local evidence is lint/typecheck
-  green, 5,127 tests passed / 7 skipped across 439 files, and a 170/170-page
+  green, 5,150 tests passed / 7 skipped across 442 files, and a 171/171-page
   production build. The remaining 17-version ledger drift stays explicit and
   requires separate object-by-object catalog proof, forward compensation, and
   only then protected reconciliation.

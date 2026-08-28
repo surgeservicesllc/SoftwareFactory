@@ -1,6 +1,6 @@
 # SoftwareFactory — shared working status
 
-## FACTORY 10-STEP PRODUCTION RECOVERY (2026-08-28 06:24 EDT — PICK UP HERE)
+## FACTORY 10-STEP PRODUCTION RECOVERY (2026-08-28 06:33 EDT — PICK UP HERE)
 
 ### Goal and current release
 
@@ -13,13 +13,16 @@ intentionally stopped.
 - Active worktree:
   `C:\Users\Daniel\OneDrive\Documents\ChatGPT\SoftwareFactory-factory-e2e`
 - Branch: `codex/factory-ten-step-e2e`
+- The Factory release change is committed and rebased directly on the exact
+  `origin/main` shown below. Only the final Auth response-shape hardening and
+  this evidence refresh remain to commit before publication.
 - Current `origin/main`:
   `459be6426a988432f2a8b71595428957674881bb`
 - Last fully validated Factory deployment:
   `79ca52f5b92e7d95292210e05565d35d21b4a435`
 - `origin/main` advanced by one direct-child Stripe commit. Its only overlap
   with this work is `AI/DECISIONS.md` and `AI/HANDOFF.md`; preserve both sets
-  of documentation during rebase. Upstream owns ADR-158, so this work uses
+  of documentation during rebase; that merge is complete. Upstream owns ADR-158, so this work uses
   ADR-159 for selector normalization and ADR-160 for the Auth bootstrap.
 - The original worktree
   `C:\Users\Daniel\OneDrive\Documents\ChatGPT\SoftwareFactory` is dirty and
@@ -73,7 +76,7 @@ owner-only ACL, `search_path=pg_catalog`:
 shape, authenticated SELECT-only, and hosted `service_role` full table ACL.
 Never contract that hosted service-role ACL in this selector-only containment.
 
-### Uncommitted forward containment in progress
+### Committed and rebased forward containment
 
 New file:
 
@@ -164,42 +167,40 @@ and is pinned in both the release workflow and its unit test.
 
 Current post-fix evidence:
 
-- Final hardened focused run: **32/32 passed** across the selector behavior and
+- Final hardened focused run: **33/33 passed** across the selector behavior and
   contract suites, full-chain idempotence, protected release-workflow contract,
   and temporary Auth-workflow contract.
 - Lint passed with exit 0 and no diagnostics.
 - Typecheck passed with exit 0 (`tsc --noEmit` clean).
 - Production build passed with exit 0: Next.js 16.3.0 compiled, TypeScript
-  completed, and 170/170 static pages generated. The build emitted one
+  completed, and 171/171 static pages generated. The build emitted one
   non-fatal existing Turbopack trace warning for the dynamic
   `path.resolve(process.cwd())` use in `lib/worker/env.ts:68`; no file was
   edited by these gates.
-- The earlier clean full suite passed **5,127 / 7 skipped** across 439 files.
-  After the final exact ACL hardening, a fresh full suite reached **5,137
-  passed / 7 skipped** with one stale string-only contract expectation; that
-  expectation and the follow-on ACL alias expectation are corrected and the
-  focused run is green. A final full-suite rerun remains required after rebase.
+- The final post-rebase full suite passed with exit 0: **5,150 passed / 7
+  skipped**, across **439 passed / 3 skipped test files** (442 total), with no
+  failures. The follow-on raw GoTrue response-shape hardening passed its focused
+  workflow suite **5/5**.
 - Workflow scope review completed and confirmed that the new scope remains
   SHA-pinned, single-file, transaction-locked, identity-gated, safety-gated,
   and read-only for `probe`/`verify`.
 
 Run next, in this order:
 
-1. Review the working diff, stage only the intentional files listed above,
-   scan added content for secrets, and commit. Do not stage the EOL-only
-   `apply-hosted-migrations.yml` change.
-2. Rebase onto exact `459be642...`, preserving upstream Stripe documentation
-   plus local ADR-159/ADR-160 and both handoff sections; rerun every final gate.
-3. Push directly to `main`, wait for all four
+1. Commit the final Auth response-shape hardening and evidence refresh, verify
+   the intentional diff and zero added secret patterns, and fetch `main` once
+   more. The EOL-only `apply-hosted-migrations.yml` artifact is semantically
+   clean and must not be staged or edited.
+2. Push directly to `main`, wait for all four
    exact-head CI jobs and exact READY Vercel/health identity.
-4. Dispatch the one-shot Auth bootstrap, verify its bounded result, delete its
+3. Dispatch the one-shot Auth bootstrap, verify its bounded result, delete its
    temporary password secret, and remove the workflow/test in a forward cleanup
    release before continuing. Never expose the credential.
-5. Dispatch a fresh lifecycle release `probe`; never rerun failed run
+4. Dispatch a fresh lifecycle release `probe`; never rerun failed run
    `33159805326`.
-6. If exact, dispatch `selector-normalization` with `confirm=apply`, verify
+5. If exact, dispatch `selector-normalization` with `confirm=apply`, verify
    ledger/catalog/ACL/runtime/safety, then a fresh read-only `probe`.
-7. Continue exact scopes in order: `configure-url`, `target-claims`, and only
+6. Continue exact scopes in order: `configure-url`, `target-claims`, and only
    after signed-in acceptance, `postdeploy`.
 
 ### External blockers and safety invariants — do not fabricate around these

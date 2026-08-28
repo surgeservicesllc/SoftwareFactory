@@ -31,8 +31,8 @@ and stopped-safety state otherwise passed. The isolated forward migration
 `20260828000050_normalize_breaker_aware_phase1c_selector.sql` is pinned at LF
 SHA-256
 `8914034508451d1550ebf3f1bedd8f7b71592f1809306e78c57774c458952896`.
-Current containment evidence is lint and typecheck green, **5,127 tests
-passed / 7 skipped across 439 files**, and a **170/170-page production
+Current containment evidence is lint and typecheck green, **5,150 tests
+passed / 7 skipped across 442 files**, and a **171/171-page production
 build**. Verdict: **SELECTOR CONTAINMENT LOCAL PASS; EXACT-HEAD PUBLICATION,
 PROTECTED APPLY, AND POSTFLIGHT PENDING**.
 
@@ -58,8 +58,8 @@ Production worker/auth-broker variables are explicitly OFF and no execution
 workflow is active. Verdict: **LOCAL PASS; EXACT-HEAD PUBLICATION, ORDERED
 HOSTED MIGRATIONS, AND SIGNED-IN RECORD/RELOAD ACCEPTANCE PENDING**. Workers,
 autonomy, and automatic actions remain OFF; the kill switch remains ON. Final
-local evidence: lint/typecheck green, **434 test files / 5,121 tests passed**
-(3 files / 7 tests skipped), and a **170/170-page production build**.
+local evidence: lint/typecheck green, **439 test files / 5,150 tests passed**
+(3 files / 7 tests skipped), and a **171/171-page production build**.
 
 **Addendum, 2026-08-28 — Step 10 public URL configuration (ADR-156):**
 the project detail page now supplies the missing owner/admin writer for the

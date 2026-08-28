@@ -147,7 +147,7 @@ jobs:
               });
               if (created.ok) {
                 operation = "created";
-                user = created.body;
+                user = created.body?.user ?? created.body;
               } else if (created.status === 400 || created.status === 409 || created.status === 422) {
                 matches = await findExactUsers();
                 if (matches.length !== 1) {
@@ -174,7 +174,7 @@ jobs:
               if (!updated.ok) {
                 fail("Supabase Auth user update failed closed.");
               }
-              user = updated.body;
+              user = updated.body?.user ?? updated.body;
             }
 
             if (!uuidPattern.test(user?.id ?? "")) {
@@ -182,10 +182,11 @@ jobs:
             }
 
             const verified = await adminRequest(`/admin/users/${encodeURIComponent(user.id)}`);
-            const confirmedAt = verified.body?.email_confirmed_at;
+            const verifiedUser = verified.body?.user ?? verified.body;
+            const confirmedAt = verifiedUser?.email_confirmed_at;
             if (!verified.ok
-              || verified.body?.id !== user.id
-              || verified.body?.email !== targetEmail
+              || verifiedUser?.id !== user.id
+              || verifiedUser?.email !== targetEmail
               || typeof confirmedAt !== "string"
               || confirmedAt.length === 0
               || !Number.isFinite(Date.parse(confirmedAt))) {

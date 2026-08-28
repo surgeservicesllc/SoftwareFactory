@@ -116,6 +116,8 @@ describe("the exact Blackstone Supabase Auth bootstrap workflow", () => {
     expect(commands).toContain(
       "adminRequest(`/admin/users/${encodeURIComponent(user.id)}`, \"PUT\"",
     );
+    expect(commands).toContain("created.body?.user ?? created.body");
+    expect(commands).toContain("updated.body?.user ?? updated.body");
     expect(commands).toContain("email: targetEmail");
     expect(commands).toContain("password,");
     expect(commands.match(/email_confirm: true/g)).toHaveLength(2);
@@ -128,9 +130,10 @@ describe("the exact Blackstone Supabase Auth bootstrap workflow", () => {
     expect(commands).toContain(
       "const verified = await adminRequest(`/admin/users/${encodeURIComponent(user.id)}`)",
     );
-    expect(commands).toContain("verified.body?.email !== targetEmail");
-    expect(commands).toContain("verified.body?.id !== user.id");
-    expect(commands).toContain("verified.body?.email_confirmed_at");
+    expect(commands).toContain("const verifiedUser = verified.body?.user ?? verified.body");
+    expect(commands).toContain("verifiedUser?.email !== targetEmail");
+    expect(commands).toContain("verifiedUser?.id !== user.id");
+    expect(commands).toContain("verifiedUser?.email_confirmed_at");
     expect(commands).toContain("Number.isFinite(Date.parse(confirmedAt))");
     expect(commands).toContain(
       "process.stdout.write(`${operation} user_id=${user.id}\\n`)",

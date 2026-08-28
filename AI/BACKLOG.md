@@ -44,7 +44,7 @@ Last triaged: 2026-08-28
   `20260828000050_normalize_breaker_aware_phase1c_selector.sql` (LF SHA-256
   `8914034508451d1550ebf3f1bedd8f7b71592f1809306e78c57774c458952896`)
   plus a dedicated protected `selector-normalization` scope. Local gates pass:
-  lint, typecheck, 5,127 tests / 7 skipped across 439 files, and 170/170-page
+  lint, typecheck, 5,150 tests / 7 skipped across 442 files, and 171/171-page
   production build.
 - [ ] Publish the selector-normalization containment, pass all four exact-head
   jobs plus exact READY Vercel/health identity, then run a fresh read-only

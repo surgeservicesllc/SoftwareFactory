@@ -72,7 +72,7 @@ the full surrounding catalog and ACL shape, replaces only the selector with
 the frozen breaker-aware body, and re-verifies it. The protected release order
 is now `00050`, `00100`, `00200`, then `00300`; this does not replay or mark
 either historical migration. Current local evidence is lint and typecheck
-green, 5,127 tests passed / 7 skipped across 439 files, and a 170/170-page
+green, 5,150 tests passed / 7 skipped across 442 files, and a 171/171-page
 production build.
 
 Signed-in Steps 8-10 are still not accepted for the active organization:
