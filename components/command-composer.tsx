@@ -150,7 +150,11 @@ export function CommandComposer({
 
   function markEdited() {
     pendingIntent.current = null;
-    if (state.kind !== "idle") setState({ kind: "idle" });
+    // A result belongs to the exact project/pipeline/prompt intent that
+    // produced it. Clear it only when that intent changes; background renders
+    // must not erase a current-attempt error before the person can read or
+    // retry it.
+    setState((current) => current.kind === "idle" ? current : { kind: "idle" });
   }
 
   useEffect(() => {
@@ -771,7 +775,11 @@ export function CommandComposer({
           ) : (
             <ArrowUp className="size-4" aria-hidden="true" />
           )}
-          {state.kind === "pending" ? "Queuing…" : "Queue command"}
+          {state.kind === "pending"
+            ? "Queuing…"
+            : state.kind === "error"
+              ? "Retry command"
+              : "Queue command"}
         </button>
       </div>
 

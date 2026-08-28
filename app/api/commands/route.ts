@@ -232,6 +232,14 @@ function isFactoryIdempotencyConflict(error: DatabaseError | null): boolean {
     ].includes(error.message ?? "");
 }
 
+function isFactoryCommandSchemaOutOfDate(error: DatabaseError | null): boolean {
+  return error?.code === "22023"
+    && [
+      "invalid Phase 1C command plan",
+      "Phase 1C execution configuration is not supported",
+    ].includes(error.message ?? "");
+}
+
 export async function POST(request: Request) {
   try {
     assertSameOriginRequest(request);
@@ -761,6 +769,12 @@ export async function POST(request: Request) {
       }
       if (isFactoryIdempotencyConflict(error)) {
         return factoryIdempotencyConflict();
+      }
+      if (isFactoryCommandSchemaOutOfDate(error)) {
+        return unavailableRead(
+          "factory_command_schema_out_of_date",
+          "Factory command routing is temporarily out of sync with this release. Reload after the database release finishes.",
+        );
       }
       return databaseErrorResponse(error);
     }

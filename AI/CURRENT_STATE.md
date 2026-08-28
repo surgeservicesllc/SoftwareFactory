@@ -1368,6 +1368,12 @@ acceptance criteria and none is claimed to have.
 
 ## Release blockers
 
+### Step 8 stale-error containment candidate (2026-08-27)
+
+- The repeated `invalid Phase 1C command plan` screenshot is an Aug 22 client result. Production request logs contain no newer Step 8 POST, while the hosted `20260822001000` contract is present and its exact Aug 23 signed-in request returned `202`.
+- `CommandComposer` now keeps a current-attempt error readable, labels the same-idempotency retry explicitly, and clears that result when its intent changes or the composer remounts. The command route maps the two exact legacy schema-skew refusals to a bounded `503 factory_command_schema_out_of_date` response instead of exposing a database error.
+- This is a local candidate only until exact-head CI and production identity are recorded. A browser reload is required to replace the already-loaded Aug 22 JavaScript and React state.
+
 1. Preserve the prior verified production baseline before this update: commit `0c662a24393f682073e6002c5aff9339292226d8`, CI run `31749352644`, and READY deployment `dpl_FJKMapsyLB4hQPDsaykUo1cVUQp7`.
 2. Preserve the passing frozen local candidate and publish only after exact review, recording a new commit, CI run, and matching Vercel deployment. Keep `130015` local until a fresh exact RED approval authorizes only that complete forward migration on `qpuofpmagrmyamahqwxw`, including all four new no-secret constraints; then stop on any ledger, identity, constraint, secret-shaped-text regression, table/function ACL, signature, RLS/direct-denial, runtime, lint, or health mismatch.
 3. Contain and remeasure the current hosted blockers: five linked lint errors/ten findings, one raw organization with `autonomous_mode = true`, one with `autonomy_kill_switch_active = false`, two projects effective-kill-off, and no connected/fresh worker. Preserve valid historical identity/ACL/audit evidence without presenting it as a clean current baseline.

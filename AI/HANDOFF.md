@@ -1485,3 +1485,9 @@ The non-secret repository Actions variable `SOFTWAREFACTORY_PHASE1C_WORKER_ENABL
 - Do not let a Vercel READY state, workflow file, configured secret name, queued command, or mocked SDK response count as a live worker.
 - Keep the Phase 1B candidate/primary distinctions and remaining tenant/adverse gaps intact.
 - Any new code/schema/provider/deployment change invalidates affected evidence and requires rerunning its gates.
+
+## 2026-08-27 Step 8 stale-error handoff
+
+- The visible `invalid Phase 1C command plan` result came from an Aug 22 modal that remained mounted; production has received no newer Step 8 POST. The hosted any-model record-only database contract is current and a signed-in Aug 23 request succeeded with `202`.
+- The local hotfix clears stale result state when the exact command intent changes or the composer remounts, offers `Retry command` with the existing idempotency key, and translates only the two known schema-skew database refusals into `factory_command_schema_out_of_date`.
+- Do not claim production acceptance from local tests. After release, hard reload the signed-in Factory, reopen Step 8, submit a fresh request, verify a new POST and immutable command/routing evidence, then verify Step 9 reflects that exact command.

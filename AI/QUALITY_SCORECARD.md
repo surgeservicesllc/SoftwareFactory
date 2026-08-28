@@ -900,3 +900,11 @@ unapplied to hosted Supabase.
 - Any browser exposure of raw command/model/provider errors, service credentials, raw audit details, or broad worker tables is a failure.
 - Any default-branch write, non-draft PR, approval, merge, deploy, rollback, workflow/provider administration, or Autonomous Mode widening is a failure.
 - A code/schema/provider/deployment change invalidates affected evidence and requires rerunning it.
+
+## Step 8 stale-error candidate (2026-08-27)
+
+| Check | Evidence | Status |
+| --- | --- | --- |
+| Stale client result lifecycle | Current error retained across ordinary rerenders; project/context change and remount clear it; retry reuses the original idempotency key | Local focused tests pass |
+| Schema-skew response | Exact legacy `22023` command-plan/configuration refusals become bounded actionable `503`; no worker dispatch occurs | Local focused tests pass |
+| Production acceptance | Fresh signed-in Step 8 POST, immutable route evidence, Step 9 correlation, exact-head CI, exact Vercel deployment | Pending release and signed-in verification |

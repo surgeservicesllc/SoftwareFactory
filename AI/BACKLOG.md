@@ -987,3 +987,10 @@ reuse the same graph iteration's COMPLETED node outputs (artifacts already
 persist) instead of re-executing them — and needs an ADR and owner
 direction before building: replaying stale outputs across a decision that
 requested rework is the failure mode to design against.
+
+## Step 8 stale-error containment (2026-08-27)
+
+- [x] Distinguish the old Aug 22 client error from a current hosted database rejection using production request and migration evidence.
+- [x] Clear result state on a changed/remounted command intent and expose a same-idempotency Retry command action.
+- [x] Map the two exact legacy command-plan/schema-skew refusals to a safe actionable `503` response.
+- [ ] Publish the exact candidate, require exact-head CI and READY Vercel identity, reload the signed-in page, submit a new Step 8 request, and record the resulting command/route identity before calling the incident closed.

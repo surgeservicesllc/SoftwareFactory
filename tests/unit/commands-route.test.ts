@@ -1193,6 +1193,26 @@ describe("POST /api/commands", () => {
     expect(rpc).not.toHaveBeenCalledWith("record_phase1c_dispatch_outcome", expect.anything());
   });
 
+  it.each([
+    "invalid Phase 1C command plan",
+    "Phase 1C execution configuration is not supported",
+  ])("fails closed with an actionable release-skew error for %s", async (message) => {
+    const rpc = configuredClient({ submitError: { code: "22023", message } });
+
+    const response = await POST(commandRequest("https://factory.example"));
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({
+      error: {
+        code: "factory_command_schema_out_of_date",
+        message:
+          "Factory command routing is temporarily out of sync with this release. Reload after the database release finishes.",
+      },
+    });
+    expect(dispatchPhase1CWorker).not.toHaveBeenCalled();
+    expect(rpc).not.toHaveBeenCalledWith("record_phase1c_dispatch_outcome", expect.anything());
+  });
+
   it("canonicalizes dependency task references before durable persistence", async () => {
     const rpc = configuredClient({});
 
