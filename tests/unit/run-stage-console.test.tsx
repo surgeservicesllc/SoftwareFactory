@@ -273,6 +273,12 @@ describe("the per-run stage page", () => {
           sha: "b1771b1b5a6c82b55f3d68f02b7e5a251380aca8",
           repository: "owner/repository",
           total: 4,
+          checks: [
+            { name: "CI 1", conclusion: "success", url: "https://github.com/owner/repository/actions/runs/1" },
+            { name: "CI 2", conclusion: "success", url: "https://github.com/owner/repository/actions/runs/2" },
+            { name: "CI 3", conclusion: "success", url: "https://github.com/owner/repository/actions/runs/3" },
+            { name: "CI 4", conclusion: "success", url: "https://github.com/owner/repository/actions/runs/4" },
+          ],
           failing: [],
           observedAt: "2026-08-24T12:05:00.000Z",
           latencyMs: 412,

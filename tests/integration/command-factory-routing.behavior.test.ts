@@ -1569,7 +1569,7 @@ describe("durable command to factory routing", () => {
     );
     expect(workers.rows[0].total).toBe(0);
     await expect(
-      db.query("select * from public.claim_phase1c_run('missing-worker', 'openai', 'gpt-5.3-codex', 120)"),
+      db.query("select * from public.claim_phase1c_run_v2('missing-worker', 'openai', 'gpt-5.3-codex', 120, 2)"),
     ).rejects.toThrow(/worker is not registered and active/i);
     await asOwner();
   });

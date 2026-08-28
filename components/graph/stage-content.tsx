@@ -32,6 +32,8 @@ export type RunVerification = {
 export type RunView = {
   graphRunId: string;
   graphId: string;
+  /** Tenant-scoped project identity returned by the graph-run projection. */
+  projectId?: string;
   goal: string;
   state: string;
   startedAt: string | null;

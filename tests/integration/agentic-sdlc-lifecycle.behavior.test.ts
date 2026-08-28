@@ -34,6 +34,8 @@ const repositoryRoot = resolve(import.meta.dirname, "../..");
 const migrationsRoot = resolve(repositoryRoot, "supabase/migrations");
 const WORKER = "graph-worker-lifecycle";
 const EXECUTORS = ["MODEL", "DETERMINISTIC", "ANCHOR"];
+const CLAIM_REPOSITORY = "factory/lifecycle";
+const CLAIM_REQUIRED_CHECKS = ["CI"];
 
 const ownerId = "00000000-0000-4000-8000-0000000007a1";
 const memberId = "00000000-0000-4000-8000-0000000007a2";
@@ -68,6 +70,26 @@ async function asWorker(db: PGlite) {
   await db.exec("set role service_role");
 }
 
+async function skipUnstartedNodes(db: PGlite, graphRunId: string) {
+  await db.exec("reset role");
+  const nodes = await db.query<{ id: string }>(
+    `select id from public.node_runs
+      where graph_run_id = $1
+        and state in ('PENDING', 'READY', 'BLOCKED', 'RUNNING')`,
+    [graphRunId],
+  );
+  for (const node of nodes.rows) {
+    await asWorker(db);
+    await db.query(
+      `select public.record_node_state_as_worker(
+        $1, $2::uuid, 'SKIPPED'::public.graph_node_state,
+        'lifecycle fixture intentionally did not execute this node'
+      )`,
+      [WORKER, node.id],
+    );
+  }
+}
+
 /**
  * Close the current run the way the worker does when it halts at a gate.
  *
@@ -77,9 +99,10 @@ async function asWorker(db: PGlite) {
  * exactly as the worker would.
  */
 async function closeRunAsPartial(db: PGlite, graphRunId: string) {
+  await skipUnstartedNodes(db, graphRunId);
   await asWorker(db);
   await db.query(
-    `select public.complete_graph_run_as_worker($1, $2, 'PARTIAL', true)`,
+    `select public.complete_graph_run_with_phase1c_bridge_as_worker($1, $2, 'PARTIAL', true)`,
     [WORKER, graphRunId],
   );
 }
@@ -98,6 +121,70 @@ async function latestRunId(db: PGlite, graphId: string): Promise<string> {
     [graphId],
   );
   return result.rows[0].id;
+}
+
+async function prepareGateNode(
+  db: PGlite,
+  graphRunId: string,
+  nodeKey: string,
+  finalState: "VERIFYING" | "COMPLETED" = "VERIFYING",
+): Promise<{ nodeId: string; nodeRunId: string }> {
+  await db.exec("reset role");
+  const result = await db.query<{
+    capability: string;
+    executor: string;
+    node_id: string;
+    node_run_id: string;
+  }>(
+    `select node.id as node_id, node_run.id as node_run_id,
+            node.executor::text as executor, node.capability
+       from public.graph_runs run
+       join public.graph_nodes node on node.graph_id = run.graph_id
+       join public.node_runs node_run
+         on node_run.graph_run_id = run.id
+        and node_run.node_id = node.id
+        and node_run.organization_id = run.organization_id
+      where run.id = $1 and run.state = 'RUNNING' and node.node_key = $2`,
+    [graphRunId, nodeKey],
+  );
+  expect(result.rows, `${nodeKey} must have an exact node run on the live graph run`).toHaveLength(1);
+
+  await asWorker(db);
+  await db.query(
+    `select public.record_node_state_as_worker($1, $2::uuid, 'RUNNING'::public.graph_node_state, $3)`,
+    [WORKER, result.rows[0].node_run_id, `${nodeKey} evidence collection started`],
+  );
+  const artifactKind = result.rows[0].executor === "ANCHOR"
+    ? "ANCHOR"
+    : ["synthesis", "reporting"].includes(result.rows[0].capability)
+      ? "SYNTHESIS"
+      : result.rows[0].executor === "DETERMINISTIC" && result.rows[0].capability === "extraction"
+        ? "REDUCED"
+        : "RAW";
+  await db.query(
+    `select public.record_graph_artifact_as_worker(
+      $1, $2::uuid, $3::public.graph_artifact_kind, $4::jsonb, $5::uuid
+    )`,
+    [
+      WORKER,
+      graphRunId,
+      artifactKind,
+      JSON.stringify(artifactKind === "ANCHOR" ? [] : { fixture: `${nodeKey} evidence` }),
+      result.rows[0].node_run_id,
+    ],
+  );
+  await db.query(
+    `select public.record_node_state_as_worker($1, $2::uuid, $3::public.graph_node_state, $4)`,
+    [
+      WORKER,
+      result.rows[0].node_run_id,
+      finalState,
+      finalState === "COMPLETED"
+        ? `${nodeKey} completed with exact evidence`
+        : `${nodeKey} evidence ready for gate`,
+    ],
+  );
+  return { nodeId: result.rows[0].node_id, nodeRunId: result.rows[0].node_run_id };
 }
 
 /**
@@ -126,6 +213,18 @@ function workerStore(db: PGlite): GraphRunStore {
       );
       await db.exec("reset role");
     },
+    async completeReviewerWithVerifications(verifierNodeRunId, artifactPayload, execution, verifications) {
+      await asWorker(db);
+      await db.query(
+        `select public.complete_reviewer_with_verifications_as_worker(
+          $1, $2::uuid, $3::jsonb, $4, $5, $6, $7::jsonb
+        )`,
+        [WORKER, verifierNodeRunId, JSON.stringify(artifactPayload),
+          execution.provider, execution.model, execution.latencyMs,
+          JSON.stringify(verifications)],
+      );
+      await db.exec("reset role");
+    },
     async openGate(nodeId, graphRunId, anchorCount) {
       await asWorker(db);
       await db.query(`select public.open_node_gate_as_worker($1, $2::uuid, $3::uuid, $4)`,
@@ -135,7 +234,7 @@ function workerStore(db: PGlite): GraphRunStore {
     async completeRun(graphRunId, state, hadPartialInput, detail, usage) {
       await asWorker(db);
       await db.query(
-        `select public.complete_graph_run_as_worker($1, $2::uuid, $3::public.graph_run_state, $4, $5, $6, null, $7)`,
+        `select public.complete_graph_run_with_phase1c_bridge_as_worker($1, $2::uuid, $3::public.graph_run_state, $4, $5, $6, null, $7)`,
         [
           WORKER, graphRunId, state, hadPartialInput,
           usage?.tokensUsed ?? null, usage?.costMicros ?? null, detail ?? null,
@@ -149,8 +248,8 @@ function workerStore(db: PGlite): GraphRunStore {
 async function claim(db: PGlite): Promise<Claim | null> {
   await asWorker(db);
   const result = await db.query<{ c: Claim | null }>(
-    `select public.claim_planned_graph($1, $2) as c`,
-    [WORKER, EXECUTORS],
+    `select public.claim_planned_graph_v2($1, $2, $3, $4::jsonb, 2) as c`,
+    [WORKER, EXECUTORS, CLAIM_REPOSITORY, JSON.stringify(CLAIM_REQUIRED_CHECKS)],
   );
   return result.rows[0].c;
 }
@@ -188,8 +287,46 @@ describe("the Agentic SDLC on the graph worker", () => {
       insert into auth.users (id) values ('${ownerId}'), ('${memberId}');
       insert into public.organizations (id, name, slug, created_by) values
         ('${organizationId}', 'Lifecycle Factory', 'lifecycle-factory', '${ownerId}');
-      insert into public.projects (id, organization_id, name, status, created_by) values
-        ('${projectId}', '${organizationId}', 'Lifecycle Project', 'active', '${ownerId}');
+      insert into public.projects (
+        id, organization_id, name, status, github_repository, created_by
+      ) values (
+        '${projectId}', '${organizationId}', 'Lifecycle Project', 'active',
+        '${CLAIM_REPOSITORY}', '${ownerId}'
+      );
+      insert into public.connections (
+        id, organization_id, name, provider, status, secret_reference, created_by
+      ) values (
+        '30000000-0000-4000-8000-0000000007a1', '${organizationId}',
+        'GitHub', 'github', 'connected', 'env://GITHUB_APP', '${ownerId}'
+      );
+      insert into public.github_installations (
+        id, organization_id, connection_id, external_installation_id, app_id,
+        app_slug, account_id, account_login, account_type, target_type,
+        repository_selection, status, installed_at, created_by
+      ) values (
+        '50000000-0000-4000-8000-0000000007a1', '${organizationId}',
+        '30000000-0000-4000-8000-0000000007a1', 920001, 920002,
+        'lifecycle-app', 920003, 'factory', 'Organization', 'Organization',
+        'selected', 'active', now(), '${ownerId}'
+      );
+      insert into public.github_repositories (
+        id, organization_id, installation_id, external_repository_id,
+        owner_login, name, full_name, default_branch, html_url, private,
+        visibility, selected, github_updated_at
+      ) values (
+        '60000000-0000-4000-8000-0000000007a1', '${organizationId}',
+        '50000000-0000-4000-8000-0000000007a1', 920004,
+        'factory', 'lifecycle', '${CLAIM_REPOSITORY}', 'main',
+        'https://github.com/${CLAIM_REPOSITORY}', true, 'private', true, now()
+      );
+      insert into public.project_connections (
+        organization_id, project_id, connection_id, github_repository_id,
+        is_primary, created_by
+      ) values (
+        '${organizationId}', '${projectId}',
+        '30000000-0000-4000-8000-0000000007a1',
+        '60000000-0000-4000-8000-0000000007a1', true, '${ownerId}'
+      );
     `);
     await db.query(
       `insert into public.organization_members (organization_id, user_id, role)
@@ -267,30 +404,25 @@ describe("the Agentic SDLC on the graph worker", () => {
     // The compiler rejects cycles. A claim carrying the backward edges would
     // produce a graph that never compiles and therefore never runs.
     expect(claimed!.edges).toHaveLength(forward);
-    await closeRunAsPartial(db, claimed!.graph_run_id);
   });
 
   it("tells the worker which nodes are staged and which wait at a gate", async () => {
     const claimed = await claim(db);
-    expect(claimed, "a closed PARTIAL run with no decided gate is not claimable again").toBeNull();
+    expect(claimed, "a live RUNNING graph cannot be claimed by a second worker").toBeNull();
 
-    // Only a decision reopens it, so one is made here to observe the
-    // projection. The deploy node carries a HUMAN gate the owner may decide,
-    // and no later case in this serial suite needs it pristine — unlike
-    // architecture (asserted unopened below) and test (opened fresh later).
-    await db.exec("reset role");
-    const goalNode = await db.query<{ id: string }>(
-      `select id from public.graph_nodes where graph_id = $1 and node_key = 'deploy'`,
-      [graphId],
-    );
+    // The real worker opens a gate while both its graph run and exact node run
+    // are live, then closes the parent run before a decision is made. Recreate
+    // that order here instead of attaching evidence to an already-closed run.
     const priorRunId = await latestRunId(db, graphId);
+    const deploy = await prepareGateNode(db, priorRunId, "deploy");
     await asWorker(db);
     const gate = await db.query<{ id: string }>(
-      `select (public.open_node_gate_as_worker($1, $2, $3, 2)).id as id`,
-      [WORKER, goalNode.rows[0].id, priorRunId],
+      `select (public.open_node_gate_as_worker($1, $2, $3, 0)).id as id`,
+      [WORKER, deploy.nodeId, priorRunId],
     );
+    await closeRunAsPartial(db, priorRunId);
     await asUser(db, ownerId);
-    await db.query(`select public.decide_node_gate($1, true, 'evidence attached')`, [gate.rows[0].id]);
+    await db.query(`select public.decide_node_gate($1, true, 'deployment route reviewed')`, [gate.rows[0].id]);
 
     const reclaimed = await claim(db);
     expect(reclaimed, "an approved gate is what makes a halted lifecycle claimable").not.toBeNull();
@@ -308,6 +440,13 @@ describe("the Agentic SDLC on the graph worker", () => {
     // The node id is what a gate is keyed to; without it the worker cannot
     // open one that outlives this run.
     expect(byKey.get("architecture")?.node_id).toMatch(/^[0-9a-f-]{36}$/);
+
+    // Leave an honestly opened architecture gate for the authorization cases
+    // below: exact RUNNING graph, exact VERIFYING node, then parent close.
+    const architecture = await prepareGateNode(db, reclaimed!.graph_run_id, "architecture");
+    await asWorker(db);
+    await db.query(`select public.open_node_gate_as_worker($1, $2, $3, 0)`,
+      [WORKER, architecture.nodeId, reclaimed!.graph_run_id]);
     await closeRunAsPartial(db, reclaimed!.graph_run_id);
   });
 
@@ -327,22 +466,19 @@ describe("the Agentic SDLC on the graph worker", () => {
 
   it("refuses a human gate to a plain member, and takes it from an owner", async () => {
     await db.exec("reset role");
-    const node = await db.query<{ id: string }>(
-      `select id from public.graph_nodes where graph_id = $1 and node_key = 'architecture'`,
-      [graphId],
-    );
-    const runId = await latestRunId(db, graphId);
-    await asWorker(db);
     const opened = await db.query<{ id: string }>(
-      `select (public.open_node_gate_as_worker($1, $2, $3, 0)).id as id`,
-      [WORKER, node.rows[0].id, runId],
+      `select gate.id
+         from public.graph_gates gate
+         join public.graph_nodes node on node.id = gate.node_id
+        where node.graph_id = $1 and node.node_key = 'architecture'`,
+      [graphId],
     );
     const gateId = opened.rows[0].id;
 
     await asUser(db, memberId);
     await expect(
       db.query(`select public.decide_node_gate($1, true, null)`, [gateId]),
-    ).rejects.toThrow(/owner or admin role is required to decide a human gate/);
+    ).rejects.toThrow(/owner or admin role is required to decide a gate/);
 
     await asUser(db, ownerId);
     const decided = await db.query<{ state: string }>(
@@ -382,40 +518,32 @@ describe("the Agentic SDLC on the graph worker", () => {
   });
 
   it("will not reopen a decided gate on a later claim", async () => {
-    await db.exec("reset role");
-    const node = await db.query<{ id: string }>(
-      `select id from public.graph_nodes where graph_id = $1 and node_key = 'architecture'`,
-      [graphId],
-    );
     const runId = await latestRunId(db, graphId);
+    const node = await prepareGateNode(db, runId, "architecture", "COMPLETED");
     await asWorker(db);
     const reopened = await db.query<{ state: string; reason: string | null }>(
       `select (public.open_node_gate_as_worker($1, $2, $3, 0)).state::text as state,
               (public.open_node_gate_as_worker($1, $2, $3, 0)).reason as reason`,
-      [WORKER, node.rows[0].id, runId],
+      [WORKER, node.nodeId, runId],
     );
     expect(reopened.rows[0].state).toBe("APPROVED");
     expect(reopened.rows[0].reason).toBe("design reviewed");
   });
 
-  it("refuses an automatic approval with no anchored evidence, but records a rejection", async () => {
-    await db.exec("reset role");
-    const node = await db.query<{ id: string }>(
-      `select id from public.graph_nodes where graph_id = $1 and node_key = 'test'`,
-      [graphId],
-    );
+  it("reserves automatic approval for the evidence-bound worker, but records an owner rejection", async () => {
     const runId = await latestRunId(db, graphId);
+    const node = await prepareGateNode(db, runId, "test", "COMPLETED");
     await asWorker(db);
     const opened = await db.query<{ id: string }>(
       `select (public.open_node_gate_as_worker($1, $2, $3, 0)).id as id`,
-      [WORKER, node.rows[0].id, runId],
+      [WORKER, node.nodeId, runId],
     );
     const gateId = opened.rows[0].id;
 
     await asUser(db, ownerId);
     await expect(
       db.query(`select public.decide_node_gate($1, true, null)`, [gateId]),
-    ).rejects.toThrow(/an automatic gate cannot approve without anchored evidence/);
+    ).rejects.toThrow(/automatic gate approval is worker-only and evidence-bound/);
 
     // Refusing to approve on no evidence is not refusing to record a decision.
     const rejected = await db.query<{ state: string }>(
@@ -427,6 +555,8 @@ describe("the Agentic SDLC on the graph worker", () => {
     await expect(
       db.query(`select public.decide_node_gate($1, true, null)`, [gateId]),
     ).rejects.toThrow(/gate_already_decided/);
+
+    await closeRunAsPartial(db, runId);
   });
 
   it("writes an audit event for every gate decision", async () => {
@@ -487,11 +617,20 @@ describe("the Agentic SDLC on the graph worker", () => {
         organizationId, projectId,
         JSON.stringify([
           { node_key: "goal", job: "State it.", executor: "MODEL", capability: "planning",
-            lifecycle_stage: "GOAL" },
+            lifecycle_stage: "GOAL", input_schema: {}, output_schema: {
+              type: "object", properties: { node: { type: "string" } },
+              required: ["node"], additionalProperties: false,
+            } },
           { node_key: "prd", job: "Write it.", executor: "MODEL", capability: "planning",
-            lifecycle_stage: "PRD", gate_kind: "AUTOMATIC" },
+            lifecycle_stage: "PRD", gate_kind: "AUTOMATIC", input_schema: {}, output_schema: {
+              type: "object", properties: { node: { type: "string" } },
+              required: ["node"], additionalProperties: false,
+            } },
           { node_key: "architecture", job: "Design it.", executor: "MODEL", capability: "architecture",
-            lifecycle_stage: "ARCHITECTURE" },
+            lifecycle_stage: "ARCHITECTURE", input_schema: {}, output_schema: {
+              type: "object", properties: { node: { type: "string" } },
+              required: ["node"], additionalProperties: false,
+            } },
         ]),
         JSON.stringify([
           { from_node_key: "goal", to_node_key: "prd", reason: "DATA", detail: "d", is_feedback: false },
@@ -565,13 +704,35 @@ describe("the Agentic SDLC on the graph worker", () => {
   });
 
   it("refuses to store a node output carrying something secret-shaped", async () => {
-    const runId = await latestRunId(db, graphId);
+    await asUser(db, ownerId);
+    await db.query(
+      `select public.create_graph_from_plan(
+        $1, $2, 'artifact boundary fixture', 'SEQUENTIAL'::public.graph_topology,
+        '[]'::jsonb, 'green'::public.risk_level, false,
+        $3::jsonb, '[]'::jsonb, '{}'::jsonb
+      )`,
+      [
+        organizationId,
+        projectId,
+        JSON.stringify([{
+          node_key: "artifact",
+          job: "Record one artifact.",
+          executor: "MODEL",
+          capability: "analysis",
+          input_schema: {},
+          output_schema: {},
+        }]),
+      ],
+    );
+    const artifactRun = await claim(db);
+    expect(artifactRun, "the artifact fixture must have a live parent run").not.toBeNull();
+    const runId = artifactRun!.graph_run_id;
     await asWorker(db);
 
     await expect(
       db.query(`select public.record_graph_artifact_as_worker($1, $2, 'RAW', $3::jsonb)`,
         [WORKER, runId, JSON.stringify({ finding: "ok", api_key: "abc" })]),
-    ).rejects.toThrow(/graph_artifacts_payload_no_sensitive_data/);
+    ).rejects.toThrow(/graph artifact payload is sensitive or oversized/);
 
     // A secret-shaped value under an innocent key is caught too, which a
     // blocklist of key names alone would wave through.
@@ -579,12 +740,13 @@ describe("the Agentic SDLC on the graph worker", () => {
       db.query(`select public.record_graph_artifact_as_worker($1, $2, 'RAW', $3::jsonb)`,
         [WORKER, runId,
          JSON.stringify({ note: "found sk-abcdefghijklmnopqrstuvwxyz012345 in the config" })]),
-    ).rejects.toThrow(/graph_artifacts_payload_no_sensitive_data/);
+    ).rejects.toThrow(/graph artifact payload is sensitive or oversized/);
 
     const ordinary = await db.query<{ id: string }>(
       `select public.record_graph_artifact_as_worker($1, $2, 'RAW', $3::jsonb) as id`,
       [WORKER, runId, JSON.stringify({ criteria: ["the screen saves"] })],
     );
     expect(ordinary.rows[0].id).toMatch(/^[0-9a-f-]{36}$/);
+    await closeRunAsPartial(db, runId);
   });
 });

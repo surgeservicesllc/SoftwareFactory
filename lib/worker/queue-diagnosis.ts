@@ -3,10 +3,10 @@
  *
  * "No planned graph was claimable; nothing ran" is truthful and useless: it
  * cost a whole dispatch to learn nothing about WHICH filter excluded the graph
- * someone is watching. This module reproduces `claim_planned_graph`'s four
- * filters — owner approval, run history, retirement counts, executor support,
- * plus the lifecycle gate-reopen exception — over the same rows, and states
- * each graph's first excluding reason in one line.
+ * someone is watching. The versioned database projection evaluates the exact
+ * active repository binding, required-check policy, and post-ARCH bridge
+ * predicates. This formatter adds owner approval, run history, retirement,
+ * executor support, and lifecycle gate-reopen explanations over those rows.
  *
  * It is a diagnosis, not an authority: the database function still decides
  * every claim. If this listing says a graph looks claimable while the claim
@@ -20,6 +20,9 @@ export type QueueGraphRow = Readonly<{
   requires_owner_approval: boolean;
   is_lifecycle: boolean;
   created_at: string;
+  repository_scope_matches: boolean;
+  required_check_policy_matches: boolean;
+  phase1c_resume_ready: boolean;
   graph_nodes: ReadonlyArray<Readonly<{ executor: string }>>;
   graph_runs: ReadonlyArray<Readonly<{ state: string; completed_at: string | null }>>;
   graph_gates: ReadonlyArray<Readonly<{ state: string; opened_at: string; decided_at: string | null }>>;
@@ -28,6 +31,15 @@ export type QueueGraphRow = Readonly<{
 const LIVE_RUN_STATES = new Set(["FAILED", "CANCELLED"]);
 
 function excludingReason(graph: QueueGraphRow, supported: ReadonlySet<string>): string {
+  if (!graph.repository_scope_matches) {
+    return "does not have this worker's exact active primary repository binding";
+  }
+  if (!graph.required_check_policy_matches) {
+    return "its persisted required-check policy differs from this worker's exact policy";
+  }
+  if (!graph.phase1c_resume_ready) {
+    return "waiting for the latest completed predecessor's exact Phase 1C pull-request bridge evidence";
+  }
   if (graph.requires_owner_approval) {
     return "requires owner approval before any worker may claim it";
   }
@@ -83,13 +95,16 @@ function excludingReason(graph: QueueGraphRow, supported: ReadonlySet<string>): 
 export function explainEmptyQueue(
   graphs: readonly QueueGraphRow[],
   supported: Iterable<string>,
+  targetGraphId: string | null = null,
 ): readonly string[] {
   if (graphs.length === 0) {
-    return ["Queue diagnosis: no graphs exist at all — nothing has ever been launched."];
+    return [targetGraphId
+      ? `Queue diagnosis: target graph ${targetGraphId} was not found in this repository scope.`
+      : "Queue diagnosis: no graph appeared in this repository's newest bounded diagnostic sample."];
   }
   const supportedSet = new Set(supported);
   return [
-    `Queue diagnosis (${graphs.length} graph(s), oldest first):`,
+    `Queue diagnosis (${graphs.length} graph(s), newest first${targetGraphId ? ", exact target" : ""}):`,
     ...graphs.map(
       (graph) =>
         `  graph ${graph.id} (created ${graph.created_at}): ${excludingReason(graph, supportedSet)}`,

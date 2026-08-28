@@ -4,14 +4,38 @@ import { checkGraphLaunch } from "@/lib/billing/entitlements";
 import { buildCustomTemplate, parseStoredDefinition } from "@/lib/graph/custom-templates";
 import { dispatchGraphWorker } from "@/lib/orchestration/dispatch";
 import { buildLaunchPlan } from "@/lib/graph/launch-plan";
+import {
+  parseRepositoryReleasePolicy,
+  RELEASE_POLICY_PATH,
+} from "@/lib/graph/release-policy";
+import {
+  FULL_LIFECYCLE_TEMPLATE_KEY,
+  FULL_LIFECYCLE_TEMPLATE_VERSION,
+  phase1CTargetSchema,
+} from "@/lib/graph/phase1c-gate-bridge";
 import { budgetForTemplate, findTemplate, type GraphTemplate } from "@/lib/graph/templates";
+import { createGitHubInstallationToken, GitHubApiError } from "@/lib/github/client";
+import {
+  getGitHubAppConfigurationForAppId,
+  GitHubConfigurationError,
+} from "@/lib/github/config";
+import { githubRouteErrorResponse } from "@/lib/github/errors";
+import { createSupabaseGitHubWebhookClient } from "@/lib/github/service-role";
+import { getGitHubBranchReference, getGitHubFile } from "@/lib/github/repository";
 import {
   invalidRequest,
   operationsContext,
   operationsFailure,
   requireManager,
 } from "@/lib/operations/route";
-import { databaseErrorResponse, jsonNoStore, readBoundedJson } from "@/lib/server/http";
+import {
+  ApiRequestError,
+  databaseErrorResponse,
+  jsonNoStore,
+  readBoundedJson,
+  requestErrorResponse,
+} from "@/lib/server/http";
+import { containsLikelySecret } from "@/lib/server/sensitive-data";
 import { assertSameOriginRequest } from "@/lib/supabase/request";
 
 export const runtime = "nodejs";
@@ -51,6 +75,11 @@ const launchSchema = z
   .object({
     projectId: z.string().uuid(),
     templateKey: z.string().trim().min(1).max(64),
+    // Optional only for rolling compatibility with the older template-planning
+    // dialog. The Factory launch control always supplies a real user goal;
+    // when this field is present it, rather than the template summary, is the
+    // graph's durable goal and the context every worker node receives.
+    goal: z.string().trim().min(1).max(4_000).optional(),
   })
   .strict();
 
@@ -58,7 +87,9 @@ export async function POST(request: Request) {
   try {
     assertSameOriginRequest(request);
 
-    const parsed = launchSchema.safeParse(await readBoundedJson(request, 4 * 1024));
+    // Four thousand Unicode characters can occupy sixteen thousand UTF-8
+    // bytes. Bound both the semantic field and the transport envelope.
+    const parsed = launchSchema.safeParse(await readBoundedJson(request, 20 * 1024));
     if (!parsed.success) {
       return invalidRequest("Provide a projectId and a templateKey.");
     }
@@ -113,12 +144,26 @@ export async function POST(request: Request) {
         template = buildCustomTemplate(input);
       }
     }
+
     if (!template) {
       // Named rather than generic: a caller sending an unknown key has a typo
       // or a stale client, and "not found" alone distinguishes neither.
       return invalidRequest(
         `No graph template is registered under \`${parsed.data.templateKey}\`.`,
       );
+    }
+
+    // The ten-step release lifecycle begins with the person's actual goal.
+    // Falling back to the template's summary would create a valid-looking
+    // Requirement step that nobody requested. Non-release template callers
+    // retain rolling compatibility.
+    if (template.key === FULL_LIFECYCLE_TEMPLATE_KEY && parsed.data.goal === undefined) {
+      return invalidRequest("Describe the concrete goal for this Full Lifecycle run.");
+    }
+
+    const goal = parsed.data.goal ?? template.summary;
+    if (containsLikelySecret(goal)) {
+      return invalidRequest("The graph goal cannot contain credentials or likely secret values.");
     }
 
     /*
@@ -129,7 +174,10 @@ export async function POST(request: Request) {
      * ceiling for a graph that declared it needs a hundred and fifty — the
      * guard would pass, and production would stop the run as overspending.
      */
-    const built = buildLaunchPlan(template, budgetForTemplate(template));
+    const built = buildLaunchPlan(
+      { ...template, summary: goal },
+      budgetForTemplate(template),
+    );
     if (!built.ok) {
       // The compiler refused. That is a real answer about the template, not a
       // server fault, so it reaches the caller intact.
@@ -147,7 +195,109 @@ export async function POST(request: Request) {
 
     const plan = built.plan;
 
-    const { data, error } = await context.client.rpc("create_graph_from_plan", {
+    const isReleaseLifecycle = template.key === FULL_LIFECYCLE_TEMPLATE_KEY;
+    if (isReleaseLifecycle && template.version !== FULL_LIFECYCLE_TEMPLATE_VERSION) {
+      return jsonNoStore(
+        {
+          error: {
+            code: "full_lifecycle_version_mismatch",
+            message: "Full Lifecycle must launch from the current release-lineage template version.",
+          },
+        },
+        { status: 409 },
+      );
+    }
+
+    let releaseTarget: z.infer<typeof phase1CTargetSchema> | null = null;
+    let releaseBaseSha: string | null = null;
+    let releaseRequiredChecks: readonly string[] | null = null;
+    if (isReleaseLifecycle) {
+      if (context.activeOrganization.role !== "owner") {
+        return jsonNoStore(
+          {
+            error: {
+              code: "owner_required",
+              message: "Only the organization owner can launch a Full Lifecycle release graph.",
+            },
+          },
+          { status: 403 },
+        );
+      }
+      const targetRead = await context.client.rpc("resolve_phase1c_command_target", {
+        p_organization_id: context.activeOrganization.id,
+        p_project_id: parsed.data.projectId,
+      }).single();
+      if (targetRead.error) return databaseErrorResponse(targetRead.error);
+      const target = phase1CTargetSchema.safeParse(targetRead.data);
+      if (!target.success || target.data.project_id !== parsed.data.projectId) {
+        return jsonNoStore(
+          {
+            error: {
+              code: "release_repository_not_connected",
+              message: "Full Lifecycle requires one exact active GitHub repository binding.",
+            },
+          },
+          { status: 409 },
+        );
+      }
+      const coordinates = target.data.repository_full_name.split("/");
+      if (coordinates.length !== 2 || !coordinates[0] || !coordinates[1]) {
+        return jsonNoStore(
+          { error: { code: "release_repository_invalid", message: "The release repository identity is invalid." } },
+          { status: 409 },
+        );
+      }
+      const installationToken = await createGitHubInstallationToken(
+        getGitHubAppConfigurationForAppId(target.data.app_id),
+        target.data.external_installation_id,
+        {
+          permissions: { contents: "read", metadata: "read" },
+          repositoryIds: [target.data.external_repository_id],
+        },
+      );
+      const reference = await getGitHubBranchReference(
+        installationToken.token,
+        coordinates[0],
+        coordinates[1],
+        target.data.base_branch,
+      );
+      const exactSha = reference.object.sha.toLowerCase();
+      if (!/^[0-9a-f]{40}$/.test(exactSha)) {
+        return jsonNoStore(
+          {
+            error: {
+              code: "release_base_identity_invalid",
+              message: "GitHub did not return an exact release base commit identity.",
+            },
+          },
+          { status: 503 },
+        );
+      }
+      const policyFile = await getGitHubFile(
+        installationToken.token,
+        coordinates[0],
+        coordinates[1],
+        exactSha,
+        RELEASE_POLICY_PATH,
+      );
+      const policy = parseRepositoryReleasePolicy(policyFile.content);
+      if (!policy) {
+        return jsonNoStore(
+          {
+            error: {
+              code: "release_policy_invalid",
+              message: `The exact base commit must contain a valid ${RELEASE_POLICY_PATH}.`,
+            },
+          },
+          { status: 409 },
+        );
+      }
+      releaseTarget = target.data;
+      releaseBaseSha = exactSha;
+      releaseRequiredChecks = policy.requiredChecks;
+    }
+
+    const commonPlanArguments = {
       p_organization_id: context.activeOrganization.id,
       p_project_id: parsed.data.projectId,
       p_goal: plan.goal,
@@ -158,7 +308,19 @@ export async function POST(request: Request) {
       p_nodes: plan.nodes,
       p_edges: plan.edges,
       p_budget: plan.budget,
-    });
+    };
+    const { data, error } = isReleaseLifecycle && releaseTarget && releaseBaseSha && releaseRequiredChecks
+      ? await createSupabaseGitHubWebhookClient().rpc("create_graph_from_plan_with_release_identity_as_server", {
+        ...commonPlanArguments,
+        p_requested_by: context.user.id,
+        p_template_key: FULL_LIFECYCLE_TEMPLATE_KEY,
+        p_template_version: FULL_LIFECYCLE_TEMPLATE_VERSION,
+        p_github_repository_id: releaseTarget.repository_id,
+        p_base_branch: releaseTarget.base_branch,
+        p_base_sha: releaseBaseSha,
+        p_required_check_names: releaseRequiredChecks,
+      })
+      : await context.client.rpc("create_graph_from_plan", commonPlanArguments);
     if (error) return databaseErrorResponse(error);
 
     /*
@@ -174,27 +336,24 @@ export async function POST(request: Request) {
      */
     let workerWoken = false;
     try {
-      const target = await context.client
-        .rpc("resolve_phase1c_command_target", {
+      let dispatchBinding = releaseTarget;
+      if (!dispatchBinding) {
+        const fallbackTarget = await context.client.rpc("resolve_phase1c_command_target", {
           p_organization_id: context.activeOrganization.id,
           p_project_id: parsed.data.projectId,
-        })
-        .single();
-      const targetRow = target.error
-        ? null
-        : (target.data as {
-            app_id: number;
-            external_installation_id: number;
-            external_repository_id: number;
-            repository_full_name: string;
-          } | null);
-      if (targetRow?.repository_full_name) {
+        }).single();
+        const resolvedFallback = fallbackTarget.error
+          ? null
+          : phase1CTargetSchema.safeParse(fallbackTarget.data);
+        dispatchBinding = resolvedFallback?.success ? resolvedFallback.data : null;
+      }
+      if (dispatchBinding?.repository_full_name) {
         await dispatchGraphWorker(
           {
-            appId: targetRow.app_id,
-            externalInstallationId: targetRow.external_installation_id,
-            externalRepositoryId: targetRow.external_repository_id,
-            repositoryFullName: targetRow.repository_full_name,
+            appId: dispatchBinding.app_id,
+            externalInstallationId: dispatchBinding.external_installation_id,
+            externalRepositoryId: dispatchBinding.external_repository_id,
+            repositoryFullName: dispatchBinding.repository_full_name,
           },
           String(data),
         );
@@ -212,6 +371,13 @@ export async function POST(request: Request) {
       edgeCount: plan.edges.length,
       maxParallelism: plan.compiled.maxParallelism,
       requiresOwnerApproval: plan.requiresOwnerApproval,
+      releaseIdentity: isReleaseLifecycle && releaseTarget && releaseBaseSha
+        ? {
+          baseBranch: releaseTarget.base_branch,
+          baseSha: releaseBaseSha,
+          repository: releaseTarget.repository_full_name,
+        }
+        : null,
       // Said plainly, because a created graph looks like a started one to anyone
       // who does not know the difference.
       state: "PLANNED",
@@ -223,6 +389,10 @@ export async function POST(request: Request) {
           + "picks it up.",
     });
   } catch (error) {
+    if (error instanceof ApiRequestError) return requestErrorResponse(error);
+    if (error instanceof GitHubApiError || error instanceof GitHubConfigurationError) {
+      return githubRouteErrorResponse(error);
+    }
     return operationsFailure(error, "graph_launch_failed", "The graph could not be created.");
   }
 }

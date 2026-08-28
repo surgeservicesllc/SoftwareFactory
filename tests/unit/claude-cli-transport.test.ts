@@ -90,7 +90,11 @@ const SUBSCRIPTION = resolveClaudeAuth({
 
 async function run(
   messages: ClaudeSdkMessage[],
-  options: { signal?: AbortSignal; auth?: typeof SUBSCRIPTION } = {},
+  options: {
+    signal?: AbortSignal;
+    auth?: typeof SUBSCRIPTION;
+    outputSchema?: Readonly<Record<string, unknown>>;
+  } = {},
 ) {
   const { queryFn, calls } = capturingQuery(messages);
   const execution = await executeClaudeThroughCli(
@@ -98,7 +102,7 @@ async function run(
     PROMPTS,
     options.signal ?? new AbortController().signal,
     options.auth ?? SUBSCRIPTION,
-    { workingDirectory: process.cwd(), queryFn },
+    { workingDirectory: process.cwd(), queryFn, outputSchema: options.outputSchema },
   );
   return { execution, calls };
 }
@@ -159,6 +163,19 @@ describe("the request", () => {
       "blocked",
       "blocked_reason",
     ]);
+  });
+
+  it("uses a graph node's exact contract instead of the generic report schema", async () => {
+    const nodeSchema = {
+      type: "object",
+      properties: { steps: { type: "array", items: { type: "string" } } },
+      required: ["steps"],
+      additionalProperties: false,
+    } as const;
+    const { calls } = await run([successResult()], { outputSchema: nodeSchema });
+    const format = calls[0].options.outputFormat as { type: string; schema: unknown };
+
+    expect(format).toEqual({ type: "json_schema", schema: nodeSchema });
   });
 
   it("allows reading and denies every mutating tool", async () => {

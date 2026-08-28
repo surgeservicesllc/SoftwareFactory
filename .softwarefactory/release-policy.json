@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "requiredChecks": [
+    "Lint, typecheck, test, and build",
+    "Browser and accessibility tests 1/3",
+    "Browser and accessibility tests 2/3",
+    "Browser and accessibility tests 3/3"
+  ]
+}

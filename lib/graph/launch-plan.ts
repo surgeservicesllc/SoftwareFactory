@@ -1,4 +1,5 @@
 import { compileGraph, type CompiledGraph } from "@/lib/graph/compiler";
+import { storeZodSchema } from "@/lib/graph/stored-schema";
 import { templateNodeContracts, templateStageFor, type GraphTemplate } from "@/lib/graph/templates";
 import { isFeedbackTransition, type GateKind, type SdlcStage } from "@/lib/sdlc/lifecycle";
 import type { GraphBudget } from "@/lib/graph/budgets";
@@ -182,6 +183,44 @@ export function buildLaunchPlan(
     return { ok: false, errors: feedbackErrors };
   }
 
+  let nodePayloads: readonly PlanNodePayload[];
+  try {
+    nodePayloads = graph.nodes.map((node) => {
+      if (!node.inputSchema || !node.outputSchema) {
+        throw new Error(`Node ${node.nodeKey} lost its input or output contract during compilation.`);
+      }
+      return {
+        node_key: node.nodeKey,
+        job: node.job,
+        executor: node.executor,
+        capability: node.capability,
+        model_tier: node.modelTier,
+        tolerates_partial_inputs: node.toleratesPartialInputs,
+        // The compiled contract's execution envelope. Omitting these let the
+        // database defaults silently override what the planner decided.
+        timeout_ms: node.timeoutMs,
+        max_attempts: node.maxAttempts,
+        // Zod owns the in-process contract. JSON Schema is its durable form:
+        // Postgres stores it and a later worker rehydrates it before executing.
+        input_schema: storeZodSchema(node.inputSchema),
+        output_schema: storeZodSchema(node.outputSchema),
+        reads: resourcePayload(node.reads),
+        writes: resourcePayload(node.writes),
+        lifecycle_stage: templateStageFor(template, node.nodeKey).stage,
+        gate_kind: templateStageFor(template, node.nodeKey).gate,
+      };
+    });
+  } catch (error) {
+    return {
+      ok: false,
+      errors: [
+        `A node contract could not be serialized for durable execution: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      ],
+    };
+  }
+
   return {
     ok: true,
     plan: {
@@ -196,28 +235,7 @@ export function buildLaunchPlan(
         code: reason.code,
         detail: reason.detail,
       })),
-      nodes: graph.nodes.map((node) => ({
-        node_key: node.nodeKey,
-        job: node.job,
-        executor: node.executor,
-        capability: node.capability,
-        model_tier: node.modelTier,
-        tolerates_partial_inputs: node.toleratesPartialInputs,
-        // The compiled contract's execution envelope. Omitting these let the
-        // database defaults silently override what the planner decided.
-        timeout_ms: node.timeoutMs,
-        max_attempts: node.maxAttempts,
-        // The contracts live in the engine's Zod schemas rather than in the
-        // database. Sending `{}` records that a contract exists without
-        // pretending the database can enforce it — a serialized Zod schema that
-        // nothing validates against would be decoration.
-        input_schema: {},
-        output_schema: {},
-        reads: resourcePayload(node.reads),
-        writes: resourcePayload(node.writes),
-        lifecycle_stage: templateStageFor(template, node.nodeKey).stage,
-        gate_kind: templateStageFor(template, node.nodeKey).gate,
-      })),
+      nodes: nodePayloads,
       edges: [
         ...graph.edges.map((edge) => ({
           from_node_key: edge.from,

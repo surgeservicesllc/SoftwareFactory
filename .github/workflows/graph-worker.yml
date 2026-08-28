@@ -23,9 +23,15 @@ on:
 
 permissions:
   contents: read
-  # The TEST anchor reads CI check-run verdicts for the checked-out commit;
-  # observation only, nothing on GitHub is written.
+  # The TEST anchor may read CI check-run verdicts when explicit produced-
+  # change lineage is supplied; observation only, nothing on GitHub is written.
   checks: read
+  # REVIEW verifies the exact Phase 1C PR head/base/state before accepting its
+  # stored validation evidence.
+  pull-requests: read
+  # DEPLOY observes an existing exact-SHA Production deployment and status.
+  # It never creates, updates, or approves a deployment.
+  deployments: read
 
 concurrency:
   group: graph-worker
@@ -83,17 +89,18 @@ jobs:
         env:
           SOFTWAREFACTORY_GRAPH_WORKER_ENABLED: "true"
           SOFTWAREFACTORY_WORKER_ID: graph-worker-${{ github.run_id }}-${{ github.run_attempt }}
+          # Diagnostic scope only; the database claim remains the authority.
+          SOFTWAREFACTORY_TARGET_GRAPH_ID: ${{ github.event.client_payload.graph_id || '' }}
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.SOFTWAREFACTORY_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SOFTWAREFACTORY_SUPABASE_SERVICE_ROLE_KEY }}
           # The subscription credential; no ANTHROPIC_API_KEY is supplied, so
           # this cannot quietly become a billed run.
           SOFTWAREFACTORY_CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.SOFTWAREFACTORY_CLAUDE_CODE_OAUTH_TOKEN }}
-          # Anchor instruments. The TEST anchor observes CI check runs for
-          # GITHUB_SHA with the workflow's own read-scoped token; the MONITOR
-          # anchor probes the deployed product the apply workflow already
-          # verifies against.
+          # Anchor instrument access only. Produced-change, merge, deployment,
+          # and monitor URL identities come exclusively from the graph-scoped
+          # Phase 1C bridge projection; GITHUB_SHA and workflow variables are
+          # never substituted for that lineage.
           SOFTWAREFACTORY_CHECKS_TOKEN: ${{ github.token }}
-          SOFTWAREFACTORY_PRODUCTION_URL: ${{ vars.SOFTWAREFACTORY_PRODUCTION_URL || 'https://www.theagoras.com' }}
           # The server-only marker protects Next.js client bundles; in a Node
           # worker it would simply throw. The shim maps that one specifier to
           # the empty module the package ships for server environments.

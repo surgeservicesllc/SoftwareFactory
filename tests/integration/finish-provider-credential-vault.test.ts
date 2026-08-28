@@ -52,7 +52,7 @@ beforeAll(async () => {
   const migrationFiles = (await readdir(migrationsRoot))
     .filter((name) => /^\d+.*\.sql$/.test(name))
     .sort();
-  expect(migrationFiles.at(-1)).toBe("20260827000100_record_job_seeker_job_atomically.sql");
+  expect(migrationFiles.at(-1)).toBe("20260827000200_graph_phase1c_release_lineage.sql");
   for (const file of migrationFiles) {
     await db.exec(await readFile(resolve(migrationsRoot, file), "utf8"));
   }

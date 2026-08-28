@@ -25,16 +25,32 @@ export async function generateMetadata({
 
 export default async function FactoryStepPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ step: string }>;
+  searchParams: Promise<{
+    graphId?: string | string[];
+    graphRunId?: string | string[];
+    projectId?: string | string[];
+  }>;
 }) {
   const { step } = await params;
+  const selectionParams = await searchParams;
   const match = factoryStep(step);
   if (!match) notFound();
   const viewer = await readViewer();
+  // Repeated values are ambiguous identities, so they are ignored rather than
+  // choosing the first value supplied by an untrusted URL.
+  const one = (value: string | string[] | undefined) =>
+    typeof value === "string" && value !== "" ? value : undefined;
   return (
     <FactoryStepConsole
       step={match}
+      initialSelection={{
+        graphId: one(selectionParams.graphId),
+        graphRunId: one(selectionParams.graphRunId),
+        projectId: one(selectionParams.projectId),
+      }}
       viewer={viewer.signedIn
         ? { email: viewer.email, displayName: viewer.displayName }
         : undefined}

@@ -1,7 +1,7 @@
 "use client";
 
 import { Rocket } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 
 import { Card, EmptyState, SectionTitle, StatusBadge } from "@/components/ui";
 
@@ -26,6 +26,8 @@ import { Card, EmptyState, SectionTitle, StatusBadge } from "@/components/ui";
 
 type Project = { readonly id: string; readonly name: string };
 
+const MAX_GOAL_LENGTH = 4_000;
+
 type LaunchResult = {
   readonly graphId: string;
   readonly topology: string;
@@ -36,18 +38,29 @@ type LaunchResult = {
   readonly note: string;
 };
 
+export type LaunchedGraph = LaunchResult & {
+  /** The exact project selected for this launch, retained client-side. */
+  readonly projectId: string;
+};
+
 export function GraphLaunchControl({
   templateKey,
   templateName,
+  onLaunched,
 }: {
   readonly templateKey: string;
   readonly templateName: string;
+  /** Called only after the graph has been durably recorded. */
+  readonly onLaunched?: (graph: LaunchedGraph) => void;
 }) {
+  const goalId = useId();
+  const goalHelpId = `${goalId}-help`;
   const [projects, setProjects] = useState<readonly Project[] | null>(null);
   // The server's own sentence when the project read fails. Discarding it left
   // "Projects could not be read" undiagnosable from the page itself.
   const [projectsError, setProjectsError] = useState<string | null>(null);
   const [projectId, setProjectId] = useState("");
+  const [goal, setGoal] = useState("");
   const [busy, setBusy] = useState(false);
   // Tagged with the template they describe, so switching template hides them
   // by derivation rather than by an effect that resets state on every change --
@@ -58,6 +71,7 @@ export function GraphLaunchControl({
 
   const shownResult = result?.key === templateKey ? result.value : null;
   const shownError = error?.key === templateKey ? error.message : null;
+  const normalizedGoal = goal.trim();
 
   useEffect(() => {
     let cancelled = false;
@@ -96,6 +110,7 @@ export function GraphLaunchControl({
   }, []);
 
   async function launch() {
+    let launchedGraph: LaunchedGraph | null = null;
     setBusy(true);
     setError(null);
     setResult(null);
@@ -103,7 +118,7 @@ export function GraphLaunchControl({
       const response = await fetch("/api/graphs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectId, templateKey }),
+        body: JSON.stringify({ projectId, templateKey, goal: normalizedGoal }),
       });
       const body = (await response.json()) as
         | LaunchResult
@@ -120,12 +135,18 @@ export function GraphLaunchControl({
         });
         return;
       }
-      setResult({ key: templateKey, value: body as LaunchResult });
+      const launched = body as LaunchResult;
+      setResult({ key: templateKey, value: launched });
+      launchedGraph = { ...launched, projectId };
     } catch {
       setError({ key: templateKey, message: "The request did not reach the server." });
     } finally {
       setBusy(false);
     }
+    // A local navigation callback must not be inside the request catch: the
+    // graph is already durable, and a consumer exception cannot truthfully
+    // turn that success into "the request did not reach the server."
+    if (launchedGraph) onLaunched?.(launchedGraph);
   }
 
   return (
@@ -154,36 +175,55 @@ export function GraphLaunchControl({
           />
         </div>
       ) : (
-        <div className="mt-4 flex flex-wrap items-end gap-3">
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="text-muted">Project</span>
-            <select
-              value={projectId}
-              onChange={(event) => setProjectId(event.target.value)}
-              // The `.input` token rather than a hand-rolled copy of it. The
-              // copy missed the token's `min-width: 0`, so a project named
-              // longer than a phone is wide sized this control to its widest
-              // option and carried the whole panel off the screen.
-              className="input"
-            >
-              <option value="">Select a project…</option>
-              {projects.map((project) => (
-                <option key={project.id} value={project.id}>
-                  {project.name}
-                </option>
-              ))}
-            </select>
-          </label>
+        <div className="mt-4 grid gap-3">
+          <div className="flex min-w-0 flex-col gap-1 text-sm">
+            <label htmlFor={goalId} className="text-muted">Goal</label>
+            <textarea
+              id={goalId}
+              aria-describedby={goalHelpId}
+              value={goal}
+              onChange={(event) => setGoal(event.target.value)}
+              maxLength={MAX_GOAL_LENGTH}
+              rows={4}
+              className="input min-h-28 resize-y"
+              placeholder={`Describe what ${templateName} should accomplish.`}
+            />
+            <span id={goalHelpId} className="text-xs text-faint">
+              This exact goal is recorded on the graph and supplied to its nodes. {goal.length}/{MAX_GOAL_LENGTH}
+            </span>
+          </div>
 
-          <button
-            type="button"
-            onClick={() => void launch()}
-            disabled={busy || projectId === ""}
-            className="inline-flex items-center gap-2 rounded-lg border border-[var(--accent-border)] bg-[var(--accent-surface)] px-3 py-2 text-sm text-[var(--accent-text)] transition disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <Rocket className="h-4 w-4" aria-hidden />
-            {busy ? "Launching…" : `Launch ${templateName}`}
-          </button>
+          <div className="flex flex-wrap items-end gap-3">
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="text-muted">Project</span>
+              <select
+                value={projectId}
+                onChange={(event) => setProjectId(event.target.value)}
+                // The `.input` token rather than a hand-rolled copy of it. The
+                // copy missed the token's `min-width: 0`, so a project named
+                // longer than a phone is wide sized this control to its widest
+                // option and carried the whole panel off the screen.
+                className="input"
+              >
+                <option value="">Select a project…</option>
+                {projects.map((project) => (
+                  <option key={project.id} value={project.id}>
+                    {project.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <button
+              type="button"
+              onClick={() => void launch()}
+              disabled={busy || projectId === "" || normalizedGoal === ""}
+              className="inline-flex items-center gap-2 rounded-lg border border-[var(--accent-border)] bg-[var(--accent-surface)] px-3 py-2 text-sm text-[var(--accent-text)] transition disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Rocket className="h-4 w-4" aria-hidden />
+              {busy ? "Launching…" : `Launch ${templateName}`}
+            </button>
+          </div>
         </div>
       )}
 

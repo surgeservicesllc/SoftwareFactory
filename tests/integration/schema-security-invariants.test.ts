@@ -86,6 +86,11 @@ const INTENTIONALLY_POLICYLESS: Readonly<Record<string, string>> = Object.freeze
     "Ephemeral one-use capabilities for the nested factory command transaction. "
     + "Every table privilege is denied; only the SECURITY DEFINER factory/public "
     + "command pair may create and consume a row, and successful calls leave none.",
+  graph_release_gate_approval_intents:
+    "Append-only, one-use owner intent evidence for TEST and DEPLOYMENT gates. "
+    + "Browsers request an intent and the server consumes it only through bounded "
+    + "SECURITY DEFINER RPCs; direct reads or writes would bypass the nonce, exact "
+    + "provider evidence, and immutable approval audit.",
   newsletter_subscribers:
     "Public-input table. Inserts happen only through public.subscribe_to_newsletter; "
     + "anon and authenticated hold no SELECT, INSERT, UPDATE, or DELETE privilege.",
@@ -264,22 +269,29 @@ describe("SECURITY DEFINER functions", () => {
     // by the worker's key. Pinned by name: the set should change only when a
     // phase deliberately gives the worker a new capability.
     expect(result.rows.map((row) => row.proname)).toEqual([
+      "abort_graph_run_as_worker",
       "agentos_record_trigger_delivery",
       "append_phase1c_run_event",
+      // Full Lifecycle v2 release gates are evidence-bound. These wrappers
+      // atomically validate and persist the exact merge/deployment evidence
+      // with the gate decision instead of exposing low-level record helpers.
+      "approve_graph_phase1c_deployment_gate_as_worker",
+      "approve_graph_phase1c_test_gate_as_worker",
+      "bind_graph_phase1c_run_by_command_as_worker",
       // The auth-broker worker's eight capabilities: drive a sign-in session
       // through the provider's real login. `read_ai_auth_relay_code` returns
       // a sealed envelope useless without SOFTWAREFACTORY_CREDENTIAL_KEY, and
       // `complete_` accepts only an already-sealed credential — plaintext
       // never crosses this boundary in either direction.
       "claim_ai_auth_session",
-      "claim_phase1c_run",
+      "claim_phase1c_run_v2",
       // The graph executor's four capabilities, mirroring the Phase 1C
       // pattern: claim an unrun graph atomically (run + node_runs + the whole
       // projection in one call), transition nodes under the same
       // terminal-states-are-final rule the member path enforces, append
       // artifacts, and close the run — where incomplete input can never be
       // recorded as COMPLETED. No credential material crosses any of them.
-      "claim_planned_graph",
+      "claim_planned_graph_v2",
       // The provider sign-in path, added with the credential vault. `claim_`
       // and `resolve_` are reachable only by presenting a valid one-time code,
       // and `read_` returns ciphertext that is useless without
@@ -288,12 +300,20 @@ describe("SECURITY DEFINER functions", () => {
       "claim_provider_connect_session",
       "complete_ai_auth_session",
       "complete_github_change_request",
-      "complete_graph_run_as_worker",
-      "complete_phase1c_run",
+      // Release-lineage writes are exposed only through atomic worker
+      // wrappers. The legacy completion functions remain implementation
+      // details, so a terminal run can never strand its graph bridge.
+      "complete_graph_run_with_phase1c_bridge_as_worker",
+      "complete_phase1c_run_with_graph_bridge_as_worker",
+      "complete_reviewer_with_verifications_as_worker",
+      "create_graph_from_plan_with_release_identity_as_server",
       // The anchored-automatic-gate decider (20260824000100): approves only
       // AUTOMATIC gates holding anchors, after the run closes; refuses human
       // gates unconditionally. ADR-140.
       "decide_automatic_gate_as_worker",
+      // Bounded queue diagnosis replaces broad direct table reads and exposes
+      // only graph ids, execution states, timestamps, and executor names.
+      "diagnose_graph_queue_as_worker_v2",
       "disconnect_github_connection",
       "expire_ai_auth_sessions",
       "fail_ai_auth_session",
@@ -331,7 +351,7 @@ describe("SECURITY DEFINER functions", () => {
       // The lifecycle resume read (20260824000200): the most recently
       // completed recorded result per node from a lifecycle graph's own
       // earlier non-answering runs. Read-only; scoped to lifecycles in SQL.
-      "read_prior_node_results_as_worker",
+      "read_prior_node_results_as_worker_v2",
       "read_provider_credential",
       "reconcile_github_repository_grants",
       // The usage sweep's one write: append a provider-usage observation for
@@ -351,10 +371,6 @@ describe("SECURITY DEFINER functions", () => {
       "record_node_state_as_worker",
       "record_phase1c_run_artifact",
       "record_phase1c_validation",
-      // The reviewing half of the executor: a node whose job is judging other
-      // nodes' work writes its verdict, lens, and evidence where a person can
-      // audit it. Same self-verification refusal as the member function.
-      "record_verification_as_worker",
       "recover_github_change_request_with_provider_evidence",
       "register_phase1c_worker",
       // Moves a never-started run's planned base to the observed live head.

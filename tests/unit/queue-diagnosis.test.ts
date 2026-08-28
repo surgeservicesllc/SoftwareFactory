@@ -20,6 +20,9 @@ function graph(overrides: Partial<QueueGraphRow>): QueueGraphRow {
     requires_owner_approval: false,
     is_lifecycle: false,
     created_at: "2026-08-23T20:00:00Z",
+    repository_scope_matches: true,
+    required_check_policy_matches: true,
+    phase1c_resume_ready: true,
     graph_nodes: [{ executor: "MODEL" }],
     graph_runs: [],
     graph_gates: [],
@@ -34,7 +37,18 @@ function reasonOf(lines: readonly string[]): string {
 
 describe("the empty-queue diagnosis", () => {
   it("says plainly when nothing has ever been launched", () => {
-    expect(explainEmptyQueue([], SUPPORTED)[0]).toContain("no graphs exist at all");
+    expect(explainEmptyQueue([], SUPPORTED)[0]).toContain("repository's newest bounded diagnostic sample");
+    expect(explainEmptyQueue([], SUPPORTED, "g-target")[0]).toContain(
+      "target graph g-target was not found in this repository scope",
+    );
+  });
+
+  it.each([
+    [{ repository_scope_matches: false }, "active primary repository"],
+    [{ required_check_policy_matches: false }, "required-check policy differs"],
+    [{ phase1c_resume_ready: false }, "pull-request bridge evidence"],
+  ] as const)("reports the protocol-v2 scope filter %#", (overrides, expected) => {
+    expect(reasonOf(explainEmptyQueue([graph(overrides)], SUPPORTED))).toContain(expected);
   });
 
   it("names owner approval first, because no worker can ever get past it", () => {

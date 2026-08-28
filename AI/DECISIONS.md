@@ -2330,3 +2330,49 @@ Use this append-only log for decisions that constrain future implementation. Cha
   command's implicit graph is a follow-on, recorded in the backlog. The quota
   check is a read-before-write soft limit by design - one concurrent
   overshoot costs at most one row and corrects on the next attempt.
+
+## ADR-150 - The ten-step Factory is one release-identity-bound protocol
+
+- Date: 2026-08-27
+- Status: accepted locally; production publication, hosted cutover, and
+  signed-in owner acceptance pending
+- Context: the existing ten-step presentation could describe progress without
+  proving that Requirements, planning, implementation, review, CI, deployment,
+  and monitoring belonged to the same repository revision and release. Legacy
+  graph claim/read functions also remained callable, so a mixed-version worker
+  could create evidence outside the new protocol.
+- Decision: Factory v2 binds every lifecycle launch to the exact active
+  project, primary repository, base SHA, policy, and protocol version; carries
+  immutable Phase 1C command, draft PR, exact-head checks, merge, deployment,
+  health, and monitor lineage; and renders the exact graph/run requested by the
+  URL. Cutover is forward-only and split into two protected one-shot scopes:
+  `20260827000150_fence_legacy_graph_protocol.sql` first, followed only after
+  exact acceptance by `20260827000200_graph_phase1c_release_lineage.sql`.
+  Their stable LF-normalized SHA-256 identities are
+  `A4B505841D94CC89DFC82E24837DEDB78356B56C5F5698C0748F8B6735341A49`
+  and `23197552DF3F442AE8264BF71BD28A7C479E09A64BF6E298C615B767A96572BE`.
+- Bounds: candidate `ead498b495ac59d920e6f76df7917ea830dbcf8c` is locally
+  audited but not deployed, and neither migration is hosted. The former Claude
+  bot/account was explicitly removed on 2026-08-23; production Steps 8/9 need a
+  fresh supported owner account connection rather than a planner exception.
+  No decision here authorizes credential recovery, worker/provider execution,
+  autonomy, automatic action, kill-switch release, reset, replay, or
+  down-migration. Those execution surfaces remain OFF and the kill switch ON.
+
+## ADR-151 - The AI Factory viewer gate resolves before protected client reads
+
+- Date: 2026-08-28
+- Status: accepted locally; production publication pending
+- Context: a signed-out or unavailable tenant could leave the real AI Factory
+  on its loading shell while the browser waited for every protected workspace
+  read. Adding a leaf-page viewer check removed the fan-out but duplicated the
+  portal layout's verified Supabase lookup.
+- Decision: the leaf page passes a server-verified signed-in presentation hint
+  to `AiFactoryConsole`; a known signed-out viewer renders the gate immediately
+  and starts no protected reads. `readViewer` uses request-scoped
+  `React.cache`, as prescribed by the Next 16 data-access guidance, and a
+  five-second fail-closed deadline so an unavailable identity provider cannot
+  hold the public shell indefinitely.
+- Bounds: this is presentation and availability behavior, not authorization.
+  Every API enforces its own verified identity and tenant policy. No viewer
+  result is shared between requests, and timeout never grants access.

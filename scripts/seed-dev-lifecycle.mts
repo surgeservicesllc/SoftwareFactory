@@ -2,6 +2,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 import { DEFAULT_GRAPH_BUDGET } from "@/lib/graph/budgets";
 import { buildLaunchPlan } from "@/lib/graph/launch-plan";
+import { parseRequiredCheckNames } from "@/lib/graph/release-policy";
 import { budgetForTemplate, findTemplate } from "@/lib/graph/templates";
 import { driveSeedLifecycle, type SeedGate } from "@/scripts/seed-drive.mjs";
 import { SupabaseGraphStore } from "@/lib/worker/graph-store";
@@ -40,6 +41,8 @@ import { SupabaseGraphStore } from "@/lib/worker/graph-store";
  *   NEXT_PUBLIC_SUPABASE_URL=... \
  *   SUPABASE_SERVICE_ROLE_KEY=... \
  *   SEED_OWNER_PASSWORD=... \
+ *   GITHUB_REPOSITORY=owner/repository \
+ *   SOFTWAREFACTORY_REQUIRED_CHECKS='CI|Browser 1/2|Browser 2/2' \
  *   [SEED_PROJECT_ID=...] \
  *   npx tsx scripts/seed-dev-lifecycle.mts [--drain]
  */
@@ -243,7 +246,15 @@ async function main() {
   // 6. Drive the run the way the production worker does: claim, execute,
   //    halt at gates. The loop itself lives in `seed-drive.mts` so a test can
   //    walk the same code against a real database instead of trusting it.
-  const store = SupabaseGraphStore.create({ url, serviceRoleKey, workerId: WORKER_ID });
+  const requiredCheckNames = parseRequiredCheckNames(requiredEnv("SOFTWAREFACTORY_REQUIRED_CHECKS"));
+  if (!requiredCheckNames) throw new Error("The seed required-check policy is invalid.");
+  const store = SupabaseGraphStore.create({
+    url,
+    serviceRoleKey,
+    workerId: WORKER_ID,
+    repositoryFullName: requiredEnv("GITHUB_REPOSITORY"),
+    requiredCheckNames,
+  });
   const outcome = await driveSeedLifecycle({
     store,
     graphId,

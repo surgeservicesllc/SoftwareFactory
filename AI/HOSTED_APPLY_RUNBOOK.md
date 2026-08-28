@@ -22,6 +22,60 @@ and forced-RLS state. Any mismatch stops the run; containment is forward-only.
 The broad `scope=all` path is blocked until this version is recorded exactly
 once under its frozen file hash.
 
+## Graph/Phase 1C atomic-wrapper cutover (2026-08-27)
+
+This is a two-commit database protocol cutover, never a two-file apply. The
+protected file identities are:
+
+- `20260827000150_fence_legacy_graph_protocol.sql` — SHA-256
+  `a4b505841d94cc89dfc82e24837dedb78356b56c5f5698c0748f8b6735341a49`;
+- `20260827000200_graph_phase1c_release_lineage.sql` — SHA-256
+  `23197552df3f442ae8264bf71bd28a7c479e09a64bf6e298c615b767a96572be`.
+
+The mandatory release order is exact:
+
+1. Publish the matching application, worker, workflow, and migration files to
+   exact `surgeservicesllc/SoftwareFactory` `main`. Require the four exact-head
+   CI jobs green and the exact SHA READY in Vercel Production. Keep graph and
+   Phase 1C worker dispatch paused; keep every organization and project at
+   autonomous mode OFF, every automatic action OFF, and every organization
+   kill switch ON. The hosted workflow verifies that neither worker workflow
+   has an active run, but that check does not pause dispatch on the owner's
+   behalf.
+2. Dispatch `apply-hosted-migrations.yml` with
+   `scope=graph-protocol-fence`. This scope stages only `20260827000150`, pins
+   its hash and exact repository/project/ledger/catalog/safety identities, and
+   commits its revocations plus its ledger row in one PostgreSQL transaction.
+   It installs no v2 authority. Verify 00150 exactly once, 00200 absent, and
+   every listed legacy graph/Phase 1C entry point non-executable by `anon`,
+   `authenticated`, and `service_role`.
+3. Keep dispatch paused and drain. Do not start 00200 until `graph_runs` has
+   zero `RUNNING` rows, `agent_runs` has zero `running` rows, there is no fresh
+   active/draining worker heartbeat, and no legacy graph call or lock remains.
+   Recheck autonomy OFF, all nine automatic actions OFF, and kill switches ON.
+   An old call that entered before 00150 may finish; never reset or rerun 00150
+   to hurry it.
+4. Only after that exact acceptance, dispatch a separate run with
+   `scope=graph-phase1c-lineage`. It stages only `20260827000200`, requires the
+   separately committed fence and drain, and atomically commits its DDL and
+   ledger row. The migration repeats the fence, lock, drain, catalog, history,
+   and safety preflights inside the same transaction before installing the v2
+   boundary.
+5. Require the postflight to read back both ledger rows exactly once; private
+   legacy claims/writes and private legacy queue diagnosis; service-only v2
+   claim, repository/policy-scoped diagnosis, atomic abort and release-lineage
+   writers; hardened `SECURITY DEFINER`/`search_path=pg_catalog`; exact table
+   ACLs; enabled and forced RLS; and the still-drained, autonomy-OFF,
+   automatic-actions-OFF, kill-switch-ON state. Reload PostgREST only after the
+   transaction succeeds. Keep dispatch paused until this evidence is saved.
+
+`scope=all` refuses to run unless both 00150 and 00200 are already recorded
+exactly once and their frozen repository hashes plus the v2 catalog/safety
+postflight still match. Never bundle the files, use `db push` to introduce
+either one, repair their ledger rows, reset, down-migrate, rerun 00150, or add a
+direct grant. A mismatch stops the release; containment is a new reviewed
+forward migration.
+
 ## Any-model safe Step 8 -> Step 9 release (2026-08-22, ADR-115)
 
 This section is the current release procedure and supersedes older command-model
@@ -97,7 +151,7 @@ the measured list, not today's total outstanding migration count. Later exact ev
 forward candidates.
 Do not add any of them to the 19-row measurement or
 infer a new overall missing count without another complete ledger probe. As of this release,
-the repository total is 167 migration files. Those two numbers do not stand in a prefix relationship, and the reason
+the repository total is 169 migration files after integration with current `origin/main`. Those two numbers do not stand in a prefix relationship, and the reason
 matters: the
 hosted ledger is **not a contiguous prefix** of the local files. It has gaps in the middle and
 rows well past them. Any sentence of the form "everything after `X` is outstanding" is therefore

@@ -17,7 +17,10 @@ const workerEnvironmentSchema = z.object({
   SOFTWAREFACTORY_WORKER_RUNTIME: z.literal("docker"),
   SOFTWAREFACTORY_WORKER_ID: z.string().trim().min(3).max(120),
   SOFTWAREFACTORY_CODEX_MODEL: z.string().trim().min(1).max(120),
-  SOFTWAREFACTORY_REQUIRED_CHECKS: z.string().trim().min(1).max(1_000),
+  // Twenty 160-character names plus nineteen pipe delimiters. Individual
+  // names are checked below; this bound prevents the transport from silently
+  // narrowing the repository policy domain.
+  SOFTWAREFACTORY_REQUIRED_CHECKS: z.string().trim().min(1).max(3_219),
   SOFTWAREFACTORY_WORK_ROOT: z.string().trim().min(1).default(
     path.join(tmpdir(), "softwarefactory-worker-runs"),
   ),
@@ -100,7 +103,7 @@ export function readWorkerConfiguration(
     .map((value) => value.trim())
     .filter(Boolean))];
   if (requiredChecks.length === 0 || requiredChecks.length > 20
-    || requiredChecks.some((value) => value.length > 300)) {
+    || requiredChecks.some((value) => value.length > 160)) {
     throw new WorkerConfigurationError(
       "SOFTWAREFACTORY_REQUIRED_CHECKS must name 1-20 pipe-delimited GitHub check runs.",
     );

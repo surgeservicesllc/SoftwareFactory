@@ -1,5 +1,6 @@
 import { AiFactoryConsole } from "@/components/ai-factory-console";
 import { type PipelineTemplateSummary } from "@/components/pipelines-console";
+import { readViewer } from "@/lib/auth/viewer";
 import { DEFAULT_GRAPH_BUDGET } from "@/lib/graph/budgets";
 import { previewTemplate } from "@/lib/graph/preview";
 import { GRAPH_TEMPLATES } from "@/lib/graph/templates";
@@ -17,7 +18,13 @@ export const metadata = {
  * server-side on every request — compilation is pure — so the pipeline step
  * states real topology, never a drawing of it.
  */
-export default function AiFactoryPage() {
+export default async function AiFactoryPage() {
+  // The portal layout resolves this too for its navigation, but layouts are
+  // not an authorization boundary and cannot pass that result into a page.
+  // Resolve it at this leaf so a server-known signed-out visitor gets the
+  // truthful gate in the first render and never launches the protected
+  // browser-read fan-out. Every API still authenticates independently.
+  const viewer = await readViewer();
   const templates: PipelineTemplateSummary[] = GRAPH_TEMPLATES.map((template) => {
     const preview = previewTemplate(template, DEFAULT_GRAPH_BUDGET);
     return {
@@ -37,5 +44,5 @@ export default function AiFactoryPage() {
   // The header lives in the console, not here: its action is "Create New AI
   // Factory", which needs the client state that decides which factory the
   // journey is showing.
-  return <AiFactoryConsole builtIns={templates} />;
+  return <AiFactoryConsole authenticated={viewer.signedIn} builtIns={templates} />;
 }

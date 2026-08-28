@@ -2,6 +2,15 @@
 
 Last reviewed: 2026-08-27
 
+**Addendum, 2026-08-28 — AI Factory loading-gate candidate:** the signed-out
+factory gate renders on the first server response and performs zero protected
+browser reads. The portal layout and leaf page share one request-scoped,
+verified viewer lookup with a five-second fail-closed presentation deadline;
+route authorization remains independent. Focused unit/contract tests pass
+56/56, the production build passes, and the real-page Playwright gate passes
+9/9 across desktop, tablet, and mobile. Production status remains pending the
+exact release SHA's CI and Vercel acceptance.
+
 **Addendum, 2026-08-27 — Job Search production acceptance (ADR-147):**
 
 | Evidence tier | Result | What it proves / does not prove |
@@ -930,3 +939,16 @@ unapplied to hosted Supabase.
 | Stale client result lifecycle | Current error retained across ordinary rerenders; project/context change and remount clear it; retry reuses the original idempotency key | Local focused tests pass |
 | Schema-skew response | Exact legacy `22023` command-plan/configuration refusals become bounded actionable `503`; no worker dispatch occurs | Local focused tests pass |
 | Production acceptance | Fresh signed-in Step 8 POST, immutable route evidence, Step 9 correlation, exact-head CI, exact Vercel deployment | Pending release and signed-in verification |
+
+## Ten-step Factory v2 release-candidate scorecard (2026-08-27)
+
+| Gate | Evidence | Status |
+| --- | --- | --- |
+| Rebased release identity | Candidate `ead498b495ac59d920e6f76df7917ea830dbcf8c` on `origin/main` `1e803eba3a931cf6978666723853dee61ea344e8` | Local candidate only |
+| Requirements -> Monitor lifecycle | Exact repository/base/policy identity, explicit gates, durable command/PR/CI/deployment/monitor lineage, exact graph/run UI selection | Implemented and locally audited |
+| Focused verification | 18 files / 207 tests; lint, typecheck, production build, and diff-check green | Pass locally |
+| Protocol fence migration | `20260827000150`, LF-normalized SHA-256 `A4B505841D94CC89DFC82E24837DEDB78356B56C5F5698C0748F8B6735341A49` | Unhosted; protected apply pending |
+| Phase 1C release-lineage migration | `20260827000200`, LF-normalized SHA-256 `23197552DF3F442AE8264BF71BD28A7C479E09A64BF6E298C615B767A96572BE` | Unhosted; apply only after exact 00150 acceptance |
+| Publication | Exact-head CI, READY Vercel identity, production health | Pending; not deployed |
+| Current Step 8/9 production acceptance | Former Claude bot/account was explicitly removed 2026-08-23; fresh supported account connection, reload stickiness, command/route/run correlation required | Pending owner-secure OAuth; absence is not a planner-code failure |
+| Safety envelope | Worker, provider execution, autonomy, and all automatic actions OFF; global kill switch ON | Preserved |

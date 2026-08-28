@@ -61,6 +61,8 @@ const SEED_ORGANIZATION_NAME = "Dev Seed Factory";
 const SEED_ORGANIZATION_SLUG = "dev-seed-factory";
 
 const SEED_GOAL_PREFIX = "Dev seed:";
+const CLAIM_REPOSITORY = "factory/dev-seed-setup";
+const CLAIM_REQUIRED_CHECKS = ["CI"];
 
 const ownerId = "00000000-0000-4000-8000-00000000d5ed";
 
@@ -177,11 +179,48 @@ describe("the development seed's setup sequence", { timeout: 240_000 }, () => {
      */
     await reset();
     const inserted = await db.query<{ id: string }>(
-      `insert into public.projects (organization_id, name, status, default_branch, created_by)
-       values ($1, 'Connected Project', 'active', 'main', $2) returning id`,
-      [organizationId, ownerId],
+      `insert into public.projects (
+         organization_id, name, status, github_repository, default_branch, created_by
+       ) values ($1, 'Connected Project', 'active', $2, 'main', $3) returning id`,
+      [organizationId, CLAIM_REPOSITORY, ownerId],
     );
     projectId = inserted.rows[0].id;
+    await db.exec(`
+      insert into public.connections (
+        id, organization_id, name, provider, status, secret_reference, created_by
+      ) values (
+        '30000000-0000-4000-8000-00000000d5ed', '${organizationId}',
+        'GitHub', 'github', 'connected', 'env://GITHUB_APP', '${ownerId}'
+      );
+      insert into public.github_installations (
+        id, organization_id, connection_id, external_installation_id, app_id,
+        app_slug, account_id, account_login, account_type, target_type,
+        repository_selection, status, installed_at, created_by
+      ) values (
+        '50000000-0000-4000-8000-00000000d5ed', '${organizationId}',
+        '30000000-0000-4000-8000-00000000d5ed', 980001, 980002,
+        'dev-seed-setup-app', 980003, 'factory', 'Organization', 'Organization',
+        'selected', 'active', now(), '${ownerId}'
+      );
+      insert into public.github_repositories (
+        id, organization_id, installation_id, external_repository_id,
+        owner_login, name, full_name, default_branch, html_url, private,
+        visibility, selected, github_updated_at
+      ) values (
+        '60000000-0000-4000-8000-00000000d5ed', '${organizationId}',
+        '50000000-0000-4000-8000-00000000d5ed', 980004,
+        'factory', 'dev-seed-setup', '${CLAIM_REPOSITORY}', 'main',
+        'https://github.com/${CLAIM_REPOSITORY}', true, 'private', true, now()
+      );
+      insert into public.project_connections (
+        organization_id, project_id, connection_id, github_repository_id,
+        is_primary, created_by
+      ) values (
+        '${organizationId}', '${projectId}',
+        '30000000-0000-4000-8000-00000000d5ed',
+        '60000000-0000-4000-8000-00000000d5ed', true, '${ownerId}'
+      );
+    `);
 
     const discovery = "select id, name from public.projects where organization_id = $1 and status = 'active'";
 
@@ -244,8 +283,11 @@ describe("the development seed's setup sequence", { timeout: 240_000 }, () => {
     // leave every factory page empty. This is the assertion that catches it.
     await asServiceRole();
     const claimed = await db.query<{ claim_planned_graph: { graph_id?: string } | null }>(
-      "select public.claim_planned_graph($1, $2::text[]) as claim_planned_graph",
-      ["dev-seed-lifecycle", WORKER_SUPPORTED_EXECUTORS],
+      `select public.claim_planned_graph_v2(
+         $1, $2::text[], $3, $4::jsonb, 2
+       ) as claim_planned_graph`,
+      ["dev-seed-lifecycle", WORKER_SUPPORTED_EXECUTORS, CLAIM_REPOSITORY,
+        JSON.stringify(CLAIM_REQUIRED_CHECKS)],
     );
     await reset();
     expect(claimed.rows[0].claim_planned_graph, "the seed's graph must be claimable").not.toBeNull();

@@ -40,6 +40,8 @@ export type TemplateNode = {
   readonly job: string;
   readonly capability: NodeCapability;
   readonly executor: NodeContract["executor"];
+  /** Override the default execution envelope for an instrument that must poll. */
+  readonly timeoutMs?: number;
   readonly dependsOn?: readonly string[];
   readonly reads?: readonly ResourceRef[];
   readonly writes?: readonly ResourceRef[];
@@ -113,23 +115,161 @@ export function budgetForTemplate(
 const findingsSchema = z.object({
   findings: z.array(
     z.object({
-      title: z.string(),
+      // Reviewer verdict evidence is persisted in a 32 KiB bounded batch.
+      // 64 titles at 400 characters, including JSON/severity overhead, fit
+      // beneath that database boundary without truncating evidence later.
+      title: z.string().min(1).max(400),
       severity: z.enum(["INFO", "LOW", "MEDIUM", "HIGH", "CRITICAL"]),
       location: z.string(),
       evidence: z.string(),
     }),
-  ),
+  ).max(64),
+  dev_seed: z.literal(true).optional(),
 });
 
 const reportSchema = z.object({
   summary: z.string(),
   findings: z.array(z.object({ title: z.string(), severity: z.string() })),
   recommendation: z.string(),
+  dev_seed: z.literal(true).optional(),
 });
 
 const planSchema = z.object({
   steps: z.array(z.object({ description: z.string(), rationale: z.string() })),
+  dev_seed: z.literal(true).optional(),
 });
+
+const discoveryOutputSchema = discoveryPackageSchema.safeExtend({
+  dev_seed: z.literal(true).optional(),
+});
+const evaluationOutputSchema = evaluationPackageSchema.safeExtend({
+  dev_seed: z.literal(true).optional(),
+});
+const decisionOutputSchema = decisionPackageSchema.safeExtend({
+  dev_seed: z.literal(true).optional(),
+});
+
+/** Exact successful outputs of the worker's non-model executors. */
+const deterministicReductionSchema = z.object({
+  findings: z.array(
+    z.object({
+      title: z.string(),
+      severity: z.string(),
+      source: z.string(),
+    }).passthrough(),
+  ),
+  stats: z.object({
+    inputCount: z.number().int().nonnegative(),
+    outputCount: z.number().int().nonnegative(),
+    reductionRatio: z.number().min(0).max(1),
+  }),
+  sources: z.array(z.string()),
+  unusable_rows: z.number().int().nonnegative(),
+  unusable_inputs: z.array(z.string()),
+  missing_inputs: z.array(z.string()),
+  dev_seed: z.literal(true).optional(),
+}).strict();
+
+const exactCommitShaSchema = z.string().regex(/^[0-9a-f]{40}$/);
+const repositoryFullNameSchema = z.string().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/);
+const phase1cBridgeStateSchema = z.enum([
+  "GRAPH_READY",
+  "COMMAND_RECORDED",
+  "PHASE1C_BOUND",
+  "PULL_REQUEST_RECORDED",
+  "MERGE_RECORDED",
+  "DEPLOYMENT_RECORDED",
+  "MONITORING_RECORDED",
+  "VALIDATED",
+]);
+
+const phase1cChangeObservationSchema = z.object({
+  observation: z.literal("phase1c_change_lineage"),
+  repository: repositoryFullNameSchema,
+  baseBranch: z.string().min(1).max(255),
+  baseSha: exactCommitShaSchema,
+  headSha: exactCommitShaSchema,
+  pullRequestNumber: z.number().int().positive(),
+  pullRequestUrl: z.string().url(),
+  bridgeState: phase1cBridgeStateSchema,
+  observedAt: z.string(),
+  latencyMs: z.number().nonnegative(),
+  dev_seed: z.literal(true).optional(),
+}).strict();
+
+const phase1cReviewObservationSchema = z.object({
+  observation: z.literal("phase1c_pull_request_review"),
+  repository: repositoryFullNameSchema,
+  agentRunId: z.string().uuid(),
+  headSha: exactCommitShaSchema,
+  baseBranch: z.string().min(1).max(255),
+  pullRequestNumber: z.number().int().positive(),
+  pullRequestUrl: z.string().url(),
+  state: z.literal("open"),
+  draft: z.boolean(),
+  validationRound: z.number().int().min(1).max(3),
+  validations: z.array(z.object({
+    name: z.string().min(1).max(80),
+    status: z.enum(["passed", "skipped"]),
+    durationMs: z.number().int().min(0).max(3_600_000),
+  }).strict()).min(1).max(50),
+  observedAt: z.string(),
+  latencyMs: z.number().nonnegative(),
+  dev_seed: z.literal(true).optional(),
+}).strict();
+
+const ciObservationSchema = z.object({
+  observation: z.literal("ci_check_runs"),
+  sha: exactCommitShaSchema,
+  repository: repositoryFullNameSchema,
+  total: z.number().int().nonnegative(),
+  checks: z.array(z.object({
+    name: z.string().min(1),
+    conclusion: z.literal("success"),
+    url: z.string().url(),
+  }).strict()).min(1),
+  failing: z.array(z.object({
+    name: z.string(),
+    conclusion: z.string().nullable(),
+    url: z.string(),
+  }).strict()),
+  observedAt: z.string(),
+  latencyMs: z.number().nonnegative(),
+  dev_seed: z.literal(true).optional(),
+}).strict();
+
+const deploymentObservationSchema = z.object({
+  observation: z.literal("github_production_deployment"),
+  repository: repositoryFullNameSchema,
+  sha: exactCommitShaSchema,
+  ref: z.string().min(1).max(255),
+  deploymentId: z.number().int().nullable(),
+  environment: z.literal("Production"),
+  state: z.literal("success"),
+  environmentUrl: z.string().url(),
+  bridgeDeploymentId: z.string().uuid().nullable(),
+  observedAt: z.string(),
+  latencyMs: z.number().nonnegative(),
+  dev_seed: z.literal(true).optional(),
+}).strict();
+
+const productionObservationSchema = z.object({
+  observation: z.literal("production_http_probe"),
+  deploymentId: z.string().uuid(),
+  url: z.string().url(),
+  status: z.number().int().min(100).max(599),
+  healthy: z.literal(true),
+  observedAt: z.string(),
+  latencyMs: z.number().nonnegative(),
+  postDeployValidation: z.literal("inconclusive"),
+  observationWindowComplete: z.literal(false),
+  missingValidationStages: z.tuple([
+    z.literal("data_integration"),
+    z.literal("quality_security"),
+    z.literal("observation"),
+  ]),
+  dev_seed: z.literal(true).optional(),
+}).strict();
 
 /**
  * Which schema a capability's output must satisfy.
@@ -139,6 +279,27 @@ const planSchema = z.object({
  */
 function schemaFor(node: TemplateNode): z.ZodTypeAny {
   if (node.prose) return z.string();
+  if (node.executor === "DETERMINISTIC") return deterministicReductionSchema;
+  if (node.executor === "ANCHOR") {
+    // Lifecycle anchors are instruments, not model-shaped prose. Node identity
+    // matters here: IMPLEMENTATION and DEPLOYMENT deliberately share a
+    // capability while observing different durable facts.
+    if (node.nodeId === "implement") return phase1cChangeObservationSchema;
+    if (node.nodeId === "review") return phase1cReviewObservationSchema;
+    switch (node.capability) {
+      case "qa":
+        return ciObservationSchema;
+      case "implementation":
+        return deploymentObservationSchema;
+      case "synthesis":
+        return productionObservationSchema;
+      default:
+        // No shipped anchor uses another capability. Keeping this
+        // unconstrained would turn a future wiring mistake into a success, so
+        // require an impossible shape until that instrument defines one.
+        return z.never();
+    }
+  }
   switch (node.capability) {
     case "planning":
     case "architecture":
@@ -152,11 +313,11 @@ function schemaFor(node: TemplateNode): z.ZodTypeAny {
     // schema on purpose: the fan-in parses its inputs with the same contract
     // that governs its own output.
     case "discovery":
-      return discoveryPackageSchema;
+      return discoveryOutputSchema;
     case "evaluation":
-      return evaluationPackageSchema;
+      return evaluationOutputSchema;
     case "decision":
-      return decisionPackageSchema;
+      return decisionOutputSchema;
     default:
       return findingsSchema;
   }
@@ -199,8 +360,12 @@ export function templateNodeContracts(template: GraphTemplate): readonly NodeCon
       // A MODEL inspector must actually read the repository before it may
       // answer; the first live drain measured 8 turns and 3 minutes as too
       // small an envelope. Deterministic and anchor nodes keep the tight
-      // default — code either finishes fast or is wrong.
-      ...(node.executor === "MODEL" ? { timeoutMs: 480_000 } : {}),
+      // default unless an instrument declares a bounded polling window.
+      ...(node.timeoutMs !== undefined
+        ? { timeoutMs: node.timeoutMs }
+        : node.executor === "MODEL"
+          ? { timeoutMs: 480_000 }
+          : {}),
     }),
   );
 }
@@ -289,7 +454,7 @@ export function auditTemplate(input: {
     name: input.name,
     category: input.category ?? "AUDIT",
     summary: input.summary,
-    version: 1,
+    version: 2,
     risk: "GREEN",
     nodes: [
       ...inspectors,
@@ -333,8 +498,8 @@ export const GRAPH_TEMPLATES: readonly GraphTemplate[] = Object.freeze([
     name: "Full Lifecycle",
     category: "BUILD",
     summary:
-      "One request through all ten phases of the owner's process: state the goal and requirements, look before you build - scan this repository, its dependencies and known ecosystem candidates in parallel, score the shortlist on the fixed rubric, weigh USE/CONNECT/ADAPT/FORK/BUILD and choose - then design against the decision, build in parallel, review with fresh eyes, prove with evidence, deploy behind the owner's gate, and watch what shipped. Every node reuses an existing capability; nothing here is new machinery.",
-    version: 1,
+      "One request through all ten phases of the owner's process: state the goal and requirements, look before you build, choose and design, then hand the approved architecture to the separately authorized Phase 1C builder. The graph observes its exact pull request and validation, exact-head CI, owner-approved merge, exact Vercel production deployment, and that deployment's health without pretending this worker performed any external mutation.",
+    version: 2,
     risk: "YELLOW",
     /*
      * Fourteen nodes across thirteen sequential levels at the measured
@@ -414,44 +579,56 @@ export const GRAPH_TEMPLATES: readonly GraphTemplate[] = Object.freeze([
       },
       {
         nodeId: "implement",
-        job: "Implement what the architecture named: the change itself, in the files it names, with its tests.",
+        job: "Observe the durable Phase 1C bridge for the exact graph: record its base commit, produced commit, and draft pull request. Do not implement inside the graph worker and do not infer lineage from its checkout.",
         capability: "implementation",
-        executor: "MODEL",
+        executor: "ANCHOR",
         dependsOn: ["architecture"],
-        writes: [file("app"), file("lib"), file("components"), file("tests")],
         lifecycleStage: "IMPLEMENTATION",
       },
       {
         nodeId: "review",
-        job: "Review the change without the implementation transcript, for correctness and for authorization, tenancy, secret handling and row security.",
+        job: "Observe the exact Phase 1C pull request and its bounded deterministic validation evidence. Require the same run and produced commit; do not substitute a model review.",
         capability: "review",
-        executor: "MODEL",
+        executor: "ANCHOR",
         dependsOn: ["implement"],
         lifecycleStage: "REVIEW",
       },
       {
         nodeId: "test",
-        job: "Run lint, typecheck, tests and build, and record the results as evidence rather than describing them.",
+        job: "Read the repository's required CI checks for the exact Phase 1C head commit. After green evidence, wait at a HUMAN gate for the owner's merge decision.",
         capability: "qa",
         executor: "ANCHOR",
+        // Required checks start asynchronously with the Phase 1C pull
+        // request. Observe them within the same measured envelope as a model
+        // node instead of turning an ordinary in-progress check into a
+        // terminal lifecycle gap.
+        timeoutMs: 480_000,
         dependsOn: ["review"],
         lifecycleStage: "TEST",
-        gate: "AUTOMATIC",
+        gate: "HUMAN",
       },
       {
         nodeId: "deploy",
-        job: "Deploy the verified change and record what the deployment API reported.",
+        job: "Verify that Vercel's Git integration deployed this exact reviewed commit to Production, and record GitHub's deployment identity and status without creating a deployment.",
         capability: "implementation",
         executor: "ANCHOR",
+        // Vercel builds are asynchronous. The executor enforces this exact
+        // envelope while polling, and the graph budget already models the
+        // same eight-minute maximum used by the slowest lifecycle nodes.
+        timeoutMs: 480_000,
         dependsOn: ["test"],
         lifecycleStage: "DEPLOYMENT",
         gate: "HUMAN",
       },
       {
         nodeId: "monitor",
-        job: "Observe the running system and report whether it met the acceptance criteria the goal stated.",
+        job: "Probe the exact deployment URL recorded on this graph's bridge, tied to its deployment identity, and report what the running system returned.",
         capability: "synthesis",
         executor: "ANCHOR",
+        // A just-succeeded deployment can still need a bounded warm-up before
+        // its public URL is healthy. Keep that observation inside the same
+        // explicit lifecycle envelope rather than accepting a transient 503.
+        timeoutMs: 480_000,
         dependsOn: ["deploy"],
         lifecycleStage: "MONITORING",
       },
@@ -467,11 +644,11 @@ export const GRAPH_TEMPLATES: readonly GraphTemplate[] = Object.freeze([
       { from: "consolidate", to: "evaluate", reason: "DATA", detail: "The rubric scores the consolidated shortlist." },
       { from: "evaluate", to: "decide", reason: "DATA", detail: "The decision weighs the scored comparison." },
       { from: "decide", to: "architecture", reason: "DATA", detail: "The design answers the chosen path and its boundaries." },
-      { from: "architecture", to: "implement", reason: "DATA", detail: "The design names the work." },
-      { from: "implement", to: "review", reason: "RESOURCE_READ_AFTER_WRITE", detail: "Review reads the implemented tree." },
-      { from: "review", to: "test", reason: "VERIFICATION", detail: "Tests run against a reviewed change." },
-      { from: "test", to: "deploy", reason: "VERIFICATION", detail: "Only a change with test evidence is deployed." },
-      { from: "deploy", to: "monitor", reason: "RESOURCE_READ_AFTER_WRITE", detail: "Monitoring observes what was deployed." },
+      { from: "architecture", to: "implement", reason: "DATA", detail: "The approved design binds the separately authorized Phase 1C run." },
+      { from: "implement", to: "review", reason: "VERIFICATION", detail: "Review observes the exact produced commit, pull request, and deterministic validation." },
+      { from: "review", to: "test", reason: "VERIFICATION", detail: "CI is read for the exact reviewed pull-request head." },
+      { from: "test", to: "deploy", reason: "POLICY", detail: "A HUMAN merge decision and recorded merge identity precede deployment observation." },
+      { from: "deploy", to: "monitor", reason: "VERIFICATION", detail: "Monitoring probes the exact deployment URL the bridge recorded." },
     ],
     feedbackEdges: [
       { from: "monitor", to: "goal", reason: "DATA", detail: "What the running system reported becomes the next goal - the continuous feedback loop on the owner's board." },

@@ -6,11 +6,11 @@ import { FactoryStepConsole } from "@/components/graph/factory-step-console";
 import { factoryStep } from "@/lib/sdlc/factory-steps";
 
 /**
- * A factory step page over the newest lifecycle run.
+ * A factory step page over one exact lifecycle selection.
  *
  * The pages under "02. AI Factory" walk the owner's ten-step process over
- * the newest full-lifecycle run. These cases pin the scope and the honesty:
- * the newest *lifecycle* run is chosen (not a newer analysis run), the
+ * one full-lifecycle run. These cases pin the scope and the honesty:
+ * exact graph/run/project selection never falls through to another run, the
  * REQUIREMENT step covers both of its stages, an open gate is decidable on
  * the step that holds it, and an account with no lifecycle run is offered
  * the launch rather than an empty imitation of one.
@@ -32,10 +32,16 @@ const node = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
-function lifecycleRun(id: string, nodes: readonly Record<string, unknown>[], goal: string) {
+function lifecycleRun(
+  id: string,
+  nodes: readonly Record<string, unknown>[],
+  goal: string,
+  identity: { graphId?: string; projectId?: string } = {},
+) {
   return {
     graphRunId: id,
-    graphId: "70000000-0000-4000-8000-0000000000f1",
+    graphId: identity.graphId ?? "70000000-0000-4000-8000-0000000000f1",
+    projectId: identity.projectId ?? "40000000-0000-4000-8000-000000000001",
     goal,
     topology: "DIAMOND",
     state: "PARTIAL",
@@ -50,14 +56,19 @@ function lifecycleRun(id: string, nodes: readonly Record<string, unknown>[], goa
 }
 
 let gateCalls: { url: string; body: unknown }[] = [];
+let fetchCalls: string[] = [];
 
 function stubFetch(options: {
   runs: readonly unknown[];
   artifacts?: readonly Record<string, unknown>[];
+  artifactsError?: string;
+  launchResult?: Record<string, unknown>;
 }) {
   gateCalls = [];
+  fetchCalls = [];
   vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
+    fetchCalls.push(url);
     if (url.includes("/api/graph-gates/")) {
       gateCalls.push({ url, body: init?.body ? JSON.parse(String(init.body)) : null });
       return Promise.resolve({
@@ -65,6 +76,13 @@ function stubFetch(options: {
       } as Response);
     }
     if (url.includes("/artifacts")) {
+      if (options.artifactsError) {
+        return Promise.resolve({
+          ok: false,
+          status: 503,
+          json: async () => ({ error: { message: options.artifactsError } }),
+        } as Response);
+      }
       return Promise.resolve({
         ok: true, status: 200, json: async () => ({ artifacts: options.artifacts ?? [] }),
       } as Response);
@@ -73,6 +91,21 @@ function stubFetch(options: {
       return Promise.resolve({
         ok: true, status: 200,
         json: async () => ({ projects: [{ id: "40000000-0000-4000-8000-000000000001", name: "Demo" }] }),
+      } as Response);
+    }
+    if (url === "/api/graphs" && init?.method === "POST") {
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: async () => options.launchResult ?? {
+          graphId: "70000000-0000-4000-8000-0000000000f9",
+          topology: "DAG",
+          nodeCount: 14,
+          edgeCount: 16,
+          maxParallelism: 3,
+          requiresOwnerApproval: false,
+          note: "The graph is recorded; worker dispatch remains off.",
+        },
       } as Response);
     }
     return Promise.resolve({
@@ -104,6 +137,23 @@ describe("a factory step page", () => {
     expect(within(strip).getAllByRole("link")).toHaveLength(10);
     expect(within(strip).getByRole("link", { name: /1\. Requirement/ }))
       .toHaveAttribute("aria-current", "page");
+  });
+
+  it("does not complete REQUIREMENT when one of its mapped stages is absent", async () => {
+    stubFetch({
+      runs: [lifecycleRun(
+        "80000000-0000-4000-8000-0000000000f1",
+        [node()],
+        "Only the goal was recorded.",
+      )],
+    });
+    render(<FactoryStepConsole step={factoryStep("requirement")!} />);
+
+    const strip = await screen.findByRole("list", { name: /ten factory steps/i });
+    expect(within(strip).getByRole("link", { name: /1\. Requirement — Not planned/i }))
+      .toBeInTheDocument();
+    expect(within(strip).queryByRole("link", { name: /1\. Requirement — Complete/i }))
+      .not.toBeInTheDocument();
   });
 
   it("points the Runs crumb at Runs", async () => {
@@ -156,7 +206,7 @@ describe("a factory step page", () => {
     expect(screen.queryByRole("button", { name: /^launch/i })).not.toBeInTheDocument();
   });
 
-  it("chooses the newest lifecycle run, not a newer analysis run", async () => {
+  it("uses the only lifecycle run and ignores a newer analysis run", async () => {
     stubFetch({
       runs: [
         { ...lifecycleRun("80000000-0000-4000-8000-0000000000f2", [node()], "A newer analysis."), isLifecycle: false },
@@ -167,6 +217,162 @@ describe("a factory step page", () => {
 
     expect(await screen.findByText("The lifecycle under way.")).toBeInTheDocument();
     expect(screen.queryByText("A newer analysis.")).not.toBeInTheDocument();
+  });
+
+  it("requires an exact choice when multiple projects have lifecycle runs", async () => {
+    const otherRun = lifecycleRun(
+      "80000000-0000-4000-8000-0000000000f2",
+      [node()],
+      "Newest work for another project.",
+      {
+        graphId: "70000000-0000-4000-8000-0000000000f2",
+        projectId: "40000000-0000-4000-8000-000000000002",
+      },
+    );
+    const selectedRun = lifecycleRun(
+      "80000000-0000-4000-8000-0000000000f1",
+      [node()],
+      "The exact project request.",
+    );
+    stubFetch({ runs: [otherRun, selectedRun] });
+    render(<FactoryStepConsole step={factoryStep("requirement")!} />);
+
+    expect(await screen.findByText("Choose the lifecycle run to inspect")).toBeInTheDocument();
+    expect(screen.queryByText("Newest work for another project.")).not.toBeInTheDocument();
+    expect(screen.queryByText("The exact project request.")).not.toBeInTheDocument();
+
+    await userEvent.selectOptions(screen.getByLabelText("Lifecycle run"), selectedRun.graphRunId);
+
+    expect(await screen.findByText("The exact project request.")).toBeInTheDocument();
+    expect(screen.queryByText("Newest work for another project.")).not.toBeInTheDocument();
+    expect(fetchCalls.some((url) => url.includes(`${selectedRun.graphRunId}/artifacts`))).toBe(true);
+    expect(fetchCalls.some((url) => url.includes(`${otherRun.graphRunId}/artifacts`))).toBe(false);
+
+    const strip = screen.getByRole("list", { name: /ten factory steps/i });
+    expect(within(strip).getByRole("link", { name: /2\. Discover/ })).toHaveAttribute(
+      "href",
+      `/solutions/factory/discover?graphId=${selectedRun.graphId}`
+        + `&graphRunId=${selectedRun.graphRunId}&projectId=${selectedRun.projectId}`,
+    );
+  });
+
+  it("binds an explicit graph and project instead of the newer organization-wide run", async () => {
+    const newerOther = lifecycleRun(
+      "80000000-0000-4000-8000-0000000000f2",
+      [node()],
+      "Newer but unrelated.",
+      {
+        graphId: "70000000-0000-4000-8000-0000000000f2",
+        projectId: "40000000-0000-4000-8000-000000000002",
+      },
+    );
+    const selected = lifecycleRun(
+      "80000000-0000-4000-8000-0000000000f1",
+      [node()],
+      "Bound by graph and project.",
+    );
+    stubFetch({ runs: [newerOther, selected] });
+    render(
+      <FactoryStepConsole
+        step={factoryStep("requirement")!}
+        initialSelection={{ graphId: selected.graphId, projectId: selected.projectId }}
+      />,
+    );
+
+    expect(await screen.findByText("Bound by graph and project.")).toBeInTheDocument();
+    expect(screen.queryByText("Newer but unrelated.")).not.toBeInTheDocument();
+    const strip = screen.getByRole("list", { name: /ten factory steps/i });
+    expect(within(strip).getByRole("link", { name: /2\. Discover/ })).toHaveAttribute(
+      "href",
+      `/solutions/factory/discover?graphId=${selected.graphId}`
+        + `&graphRunId=${selected.graphRunId}&projectId=${selected.projectId}`,
+    );
+  });
+
+  it("requires an exact run choice when one graph has more than one run", async () => {
+    const older = lifecycleRun(
+      "80000000-0000-4000-8000-0000000000f1",
+      [node()],
+      "Older attempt of the selected graph.",
+    );
+    const newer = lifecycleRun(
+      "80000000-0000-4000-8000-0000000000f2",
+      [node()],
+      "Newer attempt of the selected graph.",
+    );
+    stubFetch({ runs: [newer, older] });
+    render(
+      <FactoryStepConsole
+        step={factoryStep("requirement")!}
+        initialSelection={{ graphId: newer.graphId, projectId: newer.projectId }}
+      />,
+    );
+
+    expect(await screen.findByText("Choose the lifecycle run to inspect")).toBeInTheDocument();
+    expect(screen.queryByText("Older attempt of the selected graph.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Newer attempt of the selected graph.")).not.toBeInTheDocument();
+
+    await userEvent.selectOptions(screen.getByLabelText("Lifecycle run"), older.graphRunId);
+
+    expect(await screen.findByText("Older attempt of the selected graph.")).toBeInTheDocument();
+    expect(screen.queryByText("Newer attempt of the selected graph.")).not.toBeInTheDocument();
+  });
+
+  it("fails a mismatched run/graph/project selection closed", async () => {
+    const run = lifecycleRun(
+      "80000000-0000-4000-8000-0000000000f1",
+      [node()],
+      "Must not leak into the mismatch.",
+    );
+    stubFetch({ runs: [run] });
+    render(
+      <FactoryStepConsole
+        step={factoryStep("requirement")!}
+        initialSelection={{
+          graphRunId: run.graphRunId,
+          graphId: "70000000-0000-4000-8000-000000000099",
+          projectId: run.projectId,
+        }}
+      />,
+    );
+
+    expect(await screen.findByText("Selected lifecycle run is unavailable")).toBeInTheDocument();
+    expect(screen.queryByText("Must not leak into the mismatch.")).not.toBeInTheDocument();
+    expect(fetchCalls.some((url) => url.includes("/artifacts"))).toBe(false);
+  });
+
+  it("binds a newly recorded graph before it has a run instead of retaining the old run", async () => {
+    const oldRun = lifecycleRun(
+      "80000000-0000-4000-8000-0000000000f1",
+      [node()],
+      "The previous request.",
+    );
+    const newGraphId = "70000000-0000-4000-8000-0000000000f9";
+    stubFetch({
+      runs: [oldRun],
+      launchResult: {
+        graphId: newGraphId,
+        topology: "DAG",
+        nodeCount: 14,
+        edgeCount: 16,
+        maxParallelism: 3,
+        requiresOwnerApproval: false,
+        note: "The graph is recorded; worker dispatch remains off.",
+      },
+    });
+    render(<FactoryStepConsole step={factoryStep("requirement")!} />);
+
+    await userEvent.click(await screen.findByRole("button", { name: /new request/i }));
+    await userEvent.selectOptions(
+      await screen.findByLabelText("Project"),
+      "40000000-0000-4000-8000-000000000001",
+    );
+    await userEvent.type(screen.getByLabelText("Goal"), "The newly selected request.");
+    await userEvent.click(screen.getByRole("button", { name: /launch full lifecycle/i }));
+
+    expect(await screen.findByText("Selected graph has no visible run yet")).toBeInTheDocument();
+    expect(screen.getByText(newGraphId)).toBeInTheDocument();
+    expect(screen.queryByText("The previous request.")).not.toBeInTheDocument();
   });
 
   it("offers an open gate's decision on the step that holds it", async () => {
@@ -192,6 +398,41 @@ describe("a factory step page", () => {
     await waitFor(() => expect(gateCalls).toHaveLength(1));
     expect(gateCalls[0].url).toContain("a0000000-0000-4000-8000-000000000009");
     expect(gateCalls[0].body).toEqual({ approved: true });
+  });
+
+  it("derives the Gate tile from gates stored on this run's nodes", async () => {
+    stubFetch({
+      runs: [lifecycleRun("80000000-0000-4000-8000-0000000000f1", [
+        node({
+          node_key: "decide",
+          lifecycle_stage: "DECISION",
+          capability: "decision",
+          gate_kind: null,
+        }),
+      ], "Choose the implementation path.")],
+    });
+    render(<FactoryStepConsole step={factoryStep("decide")!} />);
+
+    const gateLabel = await screen.findByText("Gate");
+    expect(gateLabel.nextElementSibling).toHaveTextContent("None");
+    expect(gateLabel.nextElementSibling).not.toHaveTextContent("Automatic");
+  });
+
+  it("surfaces an artifact read failure instead of presenting an empty result", async () => {
+    stubFetch({
+      runs: [lifecycleRun(
+        "80000000-0000-4000-8000-0000000000f1",
+        [node()],
+        "Read the recorded evidence.",
+      )],
+      artifactsError: "Artifact evidence is temporarily unavailable.",
+    });
+    render(<FactoryStepConsole step={factoryStep("requirement")!} />);
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Run artifacts could not be read");
+    expect(alert).toHaveTextContent("Artifact evidence is temporarily unavailable.");
+    expect(within(alert).getByRole("button", { name: "Try again" })).toBeInTheDocument();
   });
 
   it("offers the launch when no lifecycle run exists, instead of an empty imitation", async () => {

@@ -39,7 +39,8 @@ afterEach(() => {
 
 describe("the graph launch control", () => {
   it("records a graph and renders the server's own sentence about the wake", async () => {
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const onLaunched = vi.fn();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
       const url = String(input);
       if (url.includes("/api/projects")) return jsonResponse({ projects });
       if (url.includes("/api/graphs")) return jsonResponse(recorded);
@@ -47,10 +48,17 @@ describe("the graph launch control", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<GraphLaunchControl templateKey="feature_build" templateName="Feature build" />);
+    render(
+      <GraphLaunchControl
+        templateKey="feature_build"
+        templateName="Feature build"
+        onLaunched={onLaunched}
+      />,
+    );
 
     const select = await screen.findByLabelText("Project");
     await userEvent.selectOptions(select, projects[0].id);
+    await userEvent.type(screen.getByLabelText("Goal"), "Fix checkout failures without changing auth.");
     await userEvent.click(screen.getByRole("button", { name: /launch feature build/i }));
 
     await waitFor(() => expect(screen.getByText("Recorded")).toBeInTheDocument());
@@ -67,6 +75,15 @@ describe("the graph launch control", () => {
     // an invitation to claim, not a run in progress.
     expect(screen.queryByText(/\brunning\b/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/\bstarted\b/i)).not.toBeInTheDocument();
+
+    const launchRequest = fetchMock.mock.calls.find(([input]) => String(input).includes("/api/graphs"));
+    expect(JSON.parse(String(launchRequest?.[1]?.body))).toEqual({
+      projectId: projects[0].id,
+      templateKey: "feature_build",
+      goal: "Fix checkout failures without changing auth.",
+    });
+    expect(onLaunched).toHaveBeenCalledOnce();
+    expect(onLaunched).toHaveBeenCalledWith({ ...recorded, projectId: projects[0].id });
   });
 
   it("shows the server's own refusal rather than a generic failure", async () => {
@@ -90,6 +107,7 @@ describe("the graph launch control", () => {
 
     render(<GraphLaunchControl templateKey="feature_build" templateName="Feature build" />);
     await userEvent.selectOptions(await screen.findByLabelText("Project"), projects[0].id);
+    await userEvent.type(screen.getByLabelText("Goal"), "Resolve the checkout failures.");
     await userEvent.click(screen.getByRole("button", { name: /launch feature build/i }));
 
     // The write boundary went to the trouble of explaining itself; discarding
@@ -123,5 +141,11 @@ describe("the graph launch control", () => {
     await screen.findByLabelText("Project");
 
     expect(screen.getByRole("button", { name: /launch feature build/i })).toBeDisabled();
+
+    await userEvent.selectOptions(screen.getByLabelText("Project"), projects[0].id);
+    expect(screen.getByRole("button", { name: /launch feature build/i })).toBeDisabled();
+
+    await userEvent.type(screen.getByLabelText("Goal"), "Build the requested feature.");
+    expect(screen.getByRole("button", { name: /launch feature build/i })).toBeEnabled();
   });
 });

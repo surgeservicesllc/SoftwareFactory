@@ -8,11 +8,13 @@ import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { DEFAULT_GRAPH_BUDGET } from "@/lib/graph/budgets";
+import type { CompiledNode } from "@/lib/graph/compiler";
 import { buildLaunchPlan } from "@/lib/graph/launch-plan";
 import type { NodeExecutionResult } from "@/lib/graph/runner";
 import { budgetForTemplate, findTemplate } from "@/lib/graph/templates";
 import { SDLC_STAGES } from "@/lib/sdlc/lifecycle";
 import { WORKER_SUPPORTED_EXECUTORS } from "@/lib/worker/executor-support";
+import { buildAnchorNodeExecutor } from "@/lib/worker/anchor-node-executor";
 import {
   compileClaimedGraph,
   parseClaimedGraph,
@@ -28,10 +30,9 @@ import {
  * drives the whole flow the way production does, end to end: the owner plants
  * the `full_lifecycle` template through `create_graph_from_plan` (the exact
  * write behind the factory pages' launch control), and a worker claims and
- * executes window after window — halting at the ARCHITECTURE human gate, at
- * the TEST anchor's automatic gate, and at the DEPLOYMENT human gate — with
- * the owner approving the human gates and the anchored evidence deciding the
- * automatic one, until the run closes COMPLETED.
+ * executes window after window — halting at the ARCHITECTURE design gate, the
+ * TEST merge gate, and the DEPLOYMENT release-acceptance gate. All three are
+ * HUMAN boundaries; no graph worker approves its own merge or release.
  *
  * What the walk must prove, because the ten factory pages read exactly this:
  *
@@ -50,10 +51,85 @@ import {
 const migrationsRoot = resolve(import.meta.dirname, "../../supabase/migrations");
 
 const WORKER = "ten-step-walk-worker";
+const BASE_SHA = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+const PRODUCED_CHANGE_SHA = "0123456789abcdef0123456789abcdef01234567";
+const MERGE_COMMIT_SHA = "89abcdef0123456789abcdef0123456789abcdef";
+const REPOSITORY = "surgeservicesllc/SoftwareFactory";
+const REQUIRED_CHECKS = ["CI"];
+const PRODUCTION_URL = "https://softwarefactory-exact-test.vercel.app";
+const DEPLOYMENT_ID = "30000000-0000-4000-8000-00000000e2e1";
+const PHASE1C_RUN_ID = "40000000-0000-4000-8000-00000000e2e1";
+const PULL_REQUEST_NUMBER = 309;
 const ownerId = "00000000-0000-4000-8000-00000000e2e1";
 const outsiderId = "00000000-0000-4000-8000-00000000e2e2";
 const organizationId = "10000000-0000-4000-8000-00000000e2e1";
 const projectId = "20000000-0000-4000-8000-00000000e2e1";
+
+function modelFixture(node: Pick<CompiledNode, "nodeKey" | "capability">): unknown {
+  switch (node.capability) {
+    case "planning":
+    case "architecture":
+      return { steps: [{ description: `${node.nodeKey} step`, rationale: "test fixture" }] };
+    case "discovery":
+      return {
+        schemaVersion: 1,
+        searchAreas: ["repository"],
+        candidates: [],
+        keyFindings: ["No candidate is needed for this execution-boundary test."],
+        recommendedNextSteps: ["Continue through the recorded lifecycle."],
+      };
+    case "evaluation":
+      return {
+        schemaVersion: 1,
+        candidates: [{
+          name: "Build",
+          scores: {
+            licenseLegal: 8,
+            securitySafety: 8,
+            maintenanceActivity: 8,
+            featureCompleteness: 8,
+            performanceScalability: 8,
+            documentation: 8,
+            communityEcosystem: 8,
+            easeOfIntegration: 8,
+            reliabilityTesting: 8,
+            codeQuality: 8,
+          },
+          riskLevel: "LOW",
+          recommendation: "CONSIDER",
+          redFlags: [],
+          rationale: "Stable test-data candidate.",
+        }],
+        ranking: ["Build"],
+        topCandidate: { name: "Build", strengths: ["Deterministic"], limitations: [] },
+        recommendationSummary: "Use the deterministic test-data candidate.",
+        assumptions: [],
+      };
+    case "decision":
+      return {
+        schemaVersion: 1,
+        paths: ["USE", "CONNECT", "ADAPT", "FORK", "BUILD"].map((path) => ({
+          path,
+          score: path === "BUILD" ? 90 : 40,
+          pros: ["Test-data pro"],
+          cons: ["Test-data con"],
+          fitNotes: "Deterministic fixture.",
+        })),
+        chosenPath: "BUILD",
+        subject: "",
+        rationale: ["Exercise the lifecycle."],
+        executionPlan: [{ step: "Build", detail: "Continue through the test graph." }],
+        integrationBoundaries: { weOwn: ["fixture"], counterpartOwns: [] },
+        risks: [],
+        openQuestions: [],
+      };
+    case "synthesis":
+    case "reporting":
+      return { summary: "Fixture report", findings: [], recommendation: "Continue." };
+    default:
+      return { findings: [] };
+  }
+}
 
 let db: PGlite;
 let graphId: string;
@@ -95,12 +171,22 @@ function pgliteStore(client: PGlite): GraphRunStore {
     },
     async readPriorNodeResults(priorGraphId) {
       await asServiceRole(client);
-      const result = await client.query<{ node_key: string; payload: unknown }>(
-        "select node_key, payload from public.read_prior_node_results_as_worker($1, $2::uuid)",
+      const result = await client.query<{
+        model: string | null;
+        node_key: string;
+        payload: unknown;
+        provider: string | null;
+      }>(
+        `select node_key, payload, provider, model
+           from public.read_prior_node_results_as_worker_v2($1, $2::uuid, 2)`,
         [WORKER, priorGraphId],
       );
       await reset(client);
-      return new Map(result.rows.map((row) => [row.node_key, row.payload]));
+      return new Map(result.rows.map((row) => [row.node_key, {
+        output: row.payload,
+        provider: row.provider ?? undefined,
+        model: row.model ?? undefined,
+      }]));
     },
     async openGate(nodeId, graphRunId, anchorCount) {
       await asServiceRole(client);
@@ -110,18 +196,22 @@ function pgliteStore(client: PGlite): GraphRunStore {
       );
       await reset(client);
     },
-    async recordVerification(subjectNodeRunId, lens, verdict, evidence, verifierProvider) {
+    async completeReviewerWithVerifications(verifierNodeRunId, artifactPayload, execution, verifications) {
       await asServiceRole(client);
       await client.query(
-        "select public.record_verification_as_worker($1, $2::uuid, $3::public.verification_lens, $4::public.verification_verdict, $5::jsonb, null, $6, false)",
-        [WORKER, subjectNodeRunId, lens, verdict, JSON.stringify(evidence), verifierProvider],
+        `select public.complete_reviewer_with_verifications_as_worker(
+           $1, $2::uuid, $3::jsonb, $4, $5, $6, $7::jsonb
+         )`,
+        [WORKER, verifierNodeRunId, JSON.stringify(artifactPayload),
+          execution.provider, execution.model, execution.latencyMs,
+          JSON.stringify(verifications)],
       );
       await reset(client);
     },
     async completeRun(graphRunId, state, hadPartialInput, detail, usage) {
       await asServiceRole(client);
       await client.query(
-        "select public.complete_graph_run_as_worker($1, $2::uuid, $3::public.graph_run_state, $4, $5, $6, null, $7)",
+        "select public.complete_graph_run_with_phase1c_bridge_as_worker($1, $2::uuid, $3::public.graph_run_state, $4, $5, $6, null, $7)",
         [
           WORKER, graphRunId, state, hadPartialInput,
           usage?.tokensUsed ?? null, usage?.costMicros ?? null, detail ?? null,
@@ -134,12 +224,12 @@ function pgliteStore(client: PGlite): GraphRunStore {
 
 async function claim(): Promise<unknown> {
   await asServiceRole(db);
-  const claimed = await db.query<{ claim_planned_graph: unknown }>(
-    "select public.claim_planned_graph($1, $2::text[])",
-    [WORKER, WORKER_SUPPORTED_EXECUTORS],
+  const claimed = await db.query<{ claim_planned_graph_v2: unknown }>(
+    "select public.claim_planned_graph_v2($1, $2::text[], $3, $4::jsonb, 2)",
+    [WORKER, WORKER_SUPPORTED_EXECUTORS, REPOSITORY, JSON.stringify(REQUIRED_CHECKS)],
   );
   await reset(db);
-  return claimed.rows[0].claim_planned_graph;
+  return claimed.rows[0].claim_planned_graph_v2;
 }
 
 async function listRunsAs(userId: string): Promise<Array<Record<string, unknown>>> {
@@ -179,8 +269,46 @@ beforeAll(async () => {
     insert into auth.users (id) values ('${ownerId}'), ('${outsiderId}');
     insert into public.organizations (id, name, slug, created_by)
     values ('${organizationId}', 'Ten Step Tenant', 'ten-step-tenant', '${ownerId}');
-    insert into public.projects (id, organization_id, name, status, created_by)
-    values ('${projectId}', '${organizationId}', 'Ten Step Project', 'active', '${ownerId}');
+    insert into public.projects (
+      id, organization_id, name, status, github_repository, created_by
+    ) values (
+      '${projectId}', '${organizationId}', 'Ten Step Project', 'active',
+      '${REPOSITORY}', '${ownerId}'
+    );
+    insert into public.connections (
+      id, organization_id, name, provider, status, secret_reference, created_by
+    ) values (
+      '50000000-0000-4000-8000-00000000e2e1', '${organizationId}',
+      'GitHub', 'github', 'connected', 'env://GITHUB_APP', '${ownerId}'
+    );
+    insert into public.github_installations (
+      id, organization_id, connection_id, external_installation_id, app_id,
+      app_slug, account_id, account_login, account_type, target_type,
+      repository_selection, status, installed_at, created_by
+    ) values (
+      '60000000-0000-4000-8000-00000000e2e1', '${organizationId}',
+      '50000000-0000-4000-8000-00000000e2e1', 970001, 970002,
+      'ten-step-app', 970003, 'surgeservicesllc', 'Organization', 'Organization',
+      'selected', 'active', now(), '${ownerId}'
+    );
+    insert into public.github_repositories (
+      id, organization_id, installation_id, external_repository_id,
+      owner_login, name, full_name, default_branch, html_url, private,
+      visibility, selected, github_updated_at
+    ) values (
+      '70000000-0000-4000-8000-00000000e2e1', '${organizationId}',
+      '60000000-0000-4000-8000-00000000e2e1', 970004,
+      'surgeservicesllc', 'SoftwareFactory', '${REPOSITORY}', 'main',
+      'https://github.com/${REPOSITORY}', true, 'private', true, now()
+    );
+    insert into public.project_connections (
+      organization_id, project_id, connection_id, github_repository_id,
+      is_primary, created_by
+    ) values (
+      '${organizationId}', '${projectId}',
+      '50000000-0000-4000-8000-00000000e2e1',
+      '70000000-0000-4000-8000-00000000e2e1', true, '${ownerId}'
+    );
   `);
 
   const template = findTemplate("full_lifecycle");
@@ -215,6 +343,74 @@ describe("the ten steps, walked consecutively", { timeout: 240_000 }, () => {
 
   it("drains the lifecycle to COMPLETED across gate-halted windows", async () => {
     const store = pgliteStore(db);
+    const deploymentStatusUrl = `https://api.github.com/repos/${REPOSITORY}/deployments/42/statuses?per_page=1`;
+    const anchorExecutor = buildAnchorNodeExecutor({
+      templateKey: "full_lifecycle",
+      templateVersion: 2,
+      repositoryFullName: REPOSITORY,
+      baseBranch: "main",
+      baseSha: BASE_SHA,
+      phase1cState: "DEPLOYMENT_RECORDED",
+      producedChangeSha: PRODUCED_CHANGE_SHA,
+      pullRequestNumber: PULL_REQUEST_NUMBER,
+      pullRequestUrl: `https://github.com/${REPOSITORY}/pull/${PULL_REQUEST_NUMBER}`,
+      validationEvidence: {
+        agent_run_id: PHASE1C_RUN_ID,
+        head_sha: PRODUCED_CHANGE_SHA,
+        validation_round: 1,
+        validations: [{ name: "diff-check", status: "passed", duration_ms: 10 }],
+      },
+      mergeCommitSha: MERGE_COMMIT_SHA,
+      deploymentId: DEPLOYMENT_ID,
+      deploymentUrl: PRODUCTION_URL,
+      gitHubToken: "ghs_read_scoped_test_token",
+      requiredCheckNames: REQUIRED_CHECKS,
+      deploymentMaxAttempts: 1,
+      fetchImpl: async (input) => {
+        const url = String(input);
+        if (url.endsWith(`/commits/${PRODUCED_CHANGE_SHA}/check-runs?per_page=100`)) {
+          return new Response(JSON.stringify({
+            check_runs: [{
+              id: 1,
+              name: "CI",
+              status: "completed",
+              conclusion: "success",
+              html_url: "https://github.example/checks/1",
+            }],
+          }), { status: 200 });
+        }
+        if (url.endsWith(`/pulls/${PULL_REQUEST_NUMBER}`)) {
+          return new Response(JSON.stringify({
+            number: PULL_REQUEST_NUMBER,
+            html_url: `https://github.com/${REPOSITORY}/pull/${PULL_REQUEST_NUMBER}`,
+            state: "open",
+            draft: true,
+            merged_at: null,
+            head: { sha: PRODUCED_CHANGE_SHA, repo: { full_name: REPOSITORY } },
+            base: { ref: "main", repo: { full_name: REPOSITORY } },
+          }), { status: 200 });
+        }
+        if (url.endsWith("/deployments?environment=Production&per_page=100")) {
+          return new Response(JSON.stringify([{
+            id: 42,
+            sha: MERGE_COMMIT_SHA,
+            ref: "main",
+            environment: "Production",
+            task: "deploy",
+            creator: { login: "vercel[bot]" },
+          }]), { status: 200 });
+        }
+        if (url === deploymentStatusUrl) {
+          return new Response(JSON.stringify([{
+            state: "success",
+            creator: { login: "vercel[bot]" },
+            environment_url: "https://softwarefactory-exact-test.vercel.app",
+          }]), { status: 200 });
+        }
+        if (url === PRODUCTION_URL) return new Response("ok", { status: 200 });
+        return new Response("not found", { status: 404 });
+      },
+    });
 
     for (let window = 1; window <= 8; window += 1) {
       const claimed = parseClaimedGraph(await claim());
@@ -229,16 +425,17 @@ describe("the ten steps, walked consecutively", { timeout: 240_000 }, () => {
       const summary = await runClaimedGraph(claimed.graph, compiled.graph, store, async (node): Promise<NodeExecutionResult> => {
         executions.set(node.nodeKey, (executions.get(node.nodeKey) ?? 0) + 1);
         if (node.executor === "ANCHOR") {
-          // A non-model observation, as the anchor executor records one.
-          return {
-            status: "SUCCEEDED",
-            output: { kind: "test_observation", subject: node.nodeKey, verdict: "green" },
-            tokensUsed: 0,
-          };
+          // Exercise the production anchor boundary, including exact CI SHA,
+          // exact Vercel deployment identity, and the canonical health probe.
+          // A blanket success here previously hid the permanent Step 9 fail.
+          return anchorExecutor(node);
         }
         return {
           status: "SUCCEEDED",
-          output: { stage_product: node.nodeKey, produced: true },
+          output: modelFixture(node),
+          provider: node.executor === "MODEL" ? "openai" : "deterministic",
+          model: node.executor === "MODEL" ? "gpt-5.3-codex" : undefined,
+          latencyMs: 5,
           tokensUsed: 10,
         };
       });
@@ -316,17 +513,12 @@ describe("the ten steps, walked consecutively", { timeout: 240_000 }, () => {
     );
     const human = gates.rows.filter((row) => row.kind === "HUMAN");
     const automatic = gates.rows.filter((row) => row.kind === "AUTOMATIC");
-    expect(human.map((row) => row.stage).sort()).toEqual(["ARCHITECTURE", "DEPLOYMENT"]);
+    expect(human.map((row) => row.stage).sort()).toEqual(["ARCHITECTURE", "DEPLOYMENT", "TEST"]);
     for (const gate of human) {
       expect(gate.state).toBe("APPROVED");
       expect(gate.decided_by).toBe(ownerId);
     }
-    expect(automatic.length).toBeGreaterThan(0);
-    for (const gate of automatic) {
-      expect(gate.state).toBe("APPROVED");
-      expect(gate.decided_by, "no person decides an automatic gate").toBeNull();
-      expect(gate.anchor_count, "an automatic approval needs anchored evidence").toBeGreaterThan(0);
-    }
+    expect(automatic).toEqual([]);
 
     const events = await db.query<{ event_type: string; n: number }>(
       `select event_type::text as event_type, count(*)::int as n

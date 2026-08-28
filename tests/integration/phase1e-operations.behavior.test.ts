@@ -187,10 +187,11 @@ describe("Phase 1E production operations behavior", () => {
     // the lifecycle graph-gate table, the project pipeline selections, the
     // immutable factory-command routing evidence table, the job-seeker
     // resume-extraction table, and the denied transaction-local factory
-    // record-only submission guard table.
+    // record-only submission guard table, plus the graph/Phase 1C release
+    // bridge and its immutable gate-approval intent table.
     // The filter below is the real guarantee — this count exists so a new
     // table cannot slip in unexamined.
-    expect(rlsRows).toHaveLength(133);
+    expect(rlsRows).toHaveLength(135);
     expect(rlsRows.filter((row) => !row.relrowsecurity || !row.relforcerowsecurity)).toEqual([]);
 
     const { rows: grantRows } = await db.query<{ table_name: string }>(

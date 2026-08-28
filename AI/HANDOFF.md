@@ -2,6 +2,18 @@
 
 Last updated: 2026-08-28
 
+## Newest (2026-08-28): AI Factory loading dead end fixed in the release candidate
+
+The real page could wait indefinitely for the client fan-out of protected
+reads before discovering the viewer was signed out. The leaf page now obtains
+the same verified viewer as the portal layout, passes only its signed-in bit,
+and the console renders the signed-out gate immediately without protected
+reads. The viewer lookup is request-memoized and bounded to five seconds for
+presentation; API authorization is unchanged. Focused tests pass 56/56, the
+production build passes, and the exact real-page suite passes 9/9 on desktop,
+tablet, and mobile. Do not claim production acceptance until the frozen SHA's
+four CI jobs and exact Vercel deployment pass.
+
 ## Newest (2026-08-28 ~01:20Z): Stripe keys configured owner-side; this commit is the redeploy that lets the runtime see them
 
 After the billing release went live, the owner reported creating the
@@ -1553,3 +1565,27 @@ The non-secret repository Actions variable `SOFTWAREFACTORY_PHASE1C_WORKER_ENABL
 - The visible `invalid Phase 1C command plan` result came from an Aug 22 modal that remained mounted; production has received no newer Step 8 POST. The hosted any-model record-only database contract is current and a signed-in Aug 23 request succeeded with `202`.
 - The local hotfix clears stale result state when the exact command intent changes or the composer remounts, offers `Retry command` with the existing idempotency key, and translates only the two known schema-skew database refusals into `factory_command_schema_out_of_date`.
 - Do not claim production acceptance from local tests. After release, hard reload the signed-in Factory, reopen Step 8, submit a fresh request, verify a new POST and immutable command/routing evidence, then verify Step 9 reflects that exact command.
+
+## 2026-08-27 ten-step Factory v2 candidate handoff
+
+- Local candidate `ead498b495ac59d920e6f76df7917ea830dbcf8c` is rebased on
+  `origin/main` `1e803eba3a931cf6978666723853dee61ea344e8`. It carries one
+  Requirements -> Monitor lifecycle, exact repository/base/policy identity,
+  strict approval and release gates, durable Phase 1C-to-production lineage,
+  and exact graph/run selection in the Factory UI. Focused local evidence is
+  green (18 files / 207 tests, lint, typecheck, build, diff-check).
+- This candidate is not deployed. `20260827000150` and `20260827000200` are
+  not hosted. Their LF-normalized SHA-256 identities are
+  `A4B505841D94CC89DFC82E24837DEDB78356B56C5F5698C0748F8B6735341A49`
+  and `23197552DF3F442AE8264BF71BD28A7C479E09A64BF6E298C615B767A96572BE`.
+  Publish and verify exact-head CI/Vercel first; apply only 00150 and accept its
+  fence, then only 00200 and accept its catalog/ACL/RLS/audit/runtime postflight.
+- Production Activity records that `Claude - Daniel` and its exact AI account
+  were deliberately retired and removed on 2026-08-23. A new supported account
+  must complete secure owner OAuth before current signed-in Step 8/9 acceptance
+  can run. Do not diagnose that known missing binding as a planner failure and
+  do not fabricate or recover the retired credential.
+- Keep the worker, provider execution, autonomy, and every automatic action
+  OFF, with the global kill switch ON. After the protected applies, verify a
+  fresh account survives reload and that one new Step 8 command correlates to
+  the exact Step 9 run/evidence before changing **Not Connected** status.

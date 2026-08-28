@@ -2,6 +2,19 @@
 
 Last reviewed: 2026-08-28
 
+## 2026-08-28: AI Factory signed-out loading gate is fail-closed (local candidate)
+
+`/solutions/ai-factory` now passes a server-verified viewer hint into the
+client journey. A signed-out visitor renders the sign-in gate on the first
+response and launches zero protected workspace reads, so one slow endpoint
+cannot leave the whole factory on its loading shell. `readViewer` is
+request-scoped with `React.cache` so the portal layout and leaf page share one
+verified lookup, and the presentation lookup has a five-second fail-closed
+deadline. Every privileged route continues to authorize independently.
+Focused unit/contract evidence is 56/56 and the rebuilt production bundle's
+real-page gate passes 9/9 across desktop, tablet, and mobile. This is local
+evidence only until exact-head CI and Vercel acceptance complete.
+
 ## 2026-08-27: canonical Job Search is live and production accepted
 ## 2026-08-25: Revenue — Stripe subscription billing behind the existing storefront (ADR-149)
 
@@ -1418,3 +1431,31 @@ acceptance criteria and none is claimed to have.
 8. Observe the Phase 1B rollback window, reverse handoff, disconnect/loss, live second-tenant/anonymous/RPC, and remaining stale-SHA, approval-expiry, permission, rate-limit, ordering, deletion/restore, idempotency, and recovery cases before retiring primary access; keep Support ticket `#4660724` open.
 9. Keep Phase 1B incomplete and Phase 1C/Phase 2 **Not Connected**. The intended control policy remains Autonomous Mode OFF, kill switch ON, and automatic actions OFF, but current hosted raw/effective drift must be remediated before that policy may again be claimed as observed fact.
 10. Update this file and `AI/QUALITY_SCORECARD.md` with exact hosted, monitoring, provider, worker, run, branch, commit, PR, CI, deployment, activation, and deactivation evidence before changing any **Not Connected** status.
+
+## 2026-08-27: ten-step Factory v2 release candidate (local only)
+
+Candidate `ead498b495ac59d920e6f76df7917ea830dbcf8c` is rebased on
+`origin/main` `1e803eba3a931cf6978666723853dee61ea344e8`. It implements the
+Requirements -> Monitor lifecycle as one release-identity-bound graph: exact
+repository and base revision, explicit policy and approval gates, immutable
+Phase 1C command/PR/CI/deployment/monitor lineage, and exact run selection in
+the Factory UI. Focused local release verification passes 18 files / 207 tests,
+plus lint, typecheck, production build, and diff-check. This is local candidate
+evidence only; no production deployment or hosted database apply is claimed.
+
+The forward-only database cutover is isolated into two one-shot scopes and
+must remain ordered: `20260827000150_fence_legacy_graph_protocol.sql` first,
+then `20260827000200_graph_phase1c_release_lineage.sql` only after exact fence
+acceptance. Their stable LF-normalized SHA-256 identities are respectively
+`A4B505841D94CC89DFC82E24837DEDB78356B56C5F5698C0748F8B6735341A49`
+and `23197552DF3F442AE8264BF71BD28A7C479E09A64BF6E298C615B767A96572BE`.
+Both remain unhosted pending publication, exact-head CI/Vercel identity, and
+the protected apply/postflight sequence.
+
+Production audit evidence shows that the former `Claude - Daniel` bot and its
+bound AI account were explicitly retired and removed on 2026-08-23. Therefore
+the current Step 8 production reacceptance requires a fresh supported account
+connection and secure owner OAuth completion; it is not evidence of a current
+command-planner code failure. Until that connection exists, the provider path
+remains **Not Connected**. Workers, autonomous mode, provider execution, and
+all automatic actions remain OFF; the global kill switch remains ON.

@@ -245,9 +245,11 @@ function StageIndex({
  * under.
  */
 export function StageNodes({
+  evidenceArtifactIds,
   nodes,
   onDecided,
 }: {
+  evidenceArtifactIds?: Readonly<Record<string, string>>;
   nodes: readonly DetailedNode[];
   onDecided: () => void;
 }) {
@@ -282,7 +284,11 @@ export function StageNodes({
               <p className="mt-1 text-xs text-[var(--danger)]">{detail.stoppedReason}</p>
             ) : null}
             <div className="text-xs">
-              <GateDecision node={node} onDecided={onDecided} />
+              <GateDecision
+                evidenceArtifactId={evidenceArtifactIds?.[node.node_key]}
+                node={node}
+                onDecided={onDecided}
+              />
             </div>
           </li>
         );

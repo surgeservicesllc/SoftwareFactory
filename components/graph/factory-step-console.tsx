@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   Activity,
   ArrowLeft,
@@ -18,7 +18,7 @@ import {
 
 import { shortRunId } from "@/lib/graph/run-label";
 import { FactoryShell, type FactoryViewer, type StepMark } from "@/components/graph/factory-shell";
-import { GraphLaunchControl } from "@/components/graph-launch-control";
+import { GraphLaunchControl, type LaunchedGraph } from "@/components/graph-launch-control";
 import { StageNodes } from "@/components/graph/lifecycle-console";
 import {
   ActivityLog,
@@ -37,34 +37,80 @@ import { FACTORY_STEPS, type FactoryStep } from "@/lib/sdlc/factory-steps";
 import { stageDefinition } from "@/lib/sdlc/lifecycle";
 
 /**
- * One of the owner's ten factory steps, over the newest lifecycle.
+ * One of the owner's ten factory steps, over one exact lifecycle selection.
  *
  * The navigation's "02. AI Factory" pages. Each one answers, for its step of
- * the process: what the newest full-lifecycle run recorded there, what it
+ * the process: what the selected full-lifecycle run recorded there, what it
  * was asked to do, what decision (if any) it is waiting on, and where it
  * goes next. Everything is the same stored data every other console reads —
  * `/api/graphs/runs` plus the run's recorded artifacts — rendered through
  * the same shared readers, so a step page cannot disagree with the lifecycle
  * pages about the same run.
  *
- * "Newest lifecycle" is the deliberate scope: these pages walk *the*
- * process, and the newest full-lifecycle run is where the process stands.
- * Older runs and analysis graphs keep their own surfaces (Pipelines, the
- * Lifecycle pages), and each step links straight into them.
+ * The graph/run identity is carried in the URL between every step. A newly
+ * recorded graph is selected before its first run exists, and an explicit run
+ * remains selected across navigation. With multiple lifecycle runs and no
+ * selection, the page asks instead of borrowing another project's newest run.
  */
+
+export type FactoryRunSelection = {
+  readonly graphId?: string;
+  readonly graphRunId?: string;
+  readonly projectId?: string;
+};
 
 type State =
   | { kind: "loading" }
   | { kind: "error" }
   | { kind: "none" }
-  | { kind: "ready"; run: RunView; artifacts: readonly ArtifactView[] };
+  | { kind: "choose"; runs: readonly RunView[] }
+  | { kind: "waiting"; runs: readonly RunView[]; graphId: string }
+  | { kind: "missing"; runs: readonly RunView[] }
+  | {
+      kind: "ready";
+      run: RunView;
+      runs: readonly RunView[];
+      artifacts: readonly ArtifactView[];
+      artifactsError: string | null;
+    };
+
+const FACTORY_SELECTION_KEYS = ["graphId", "graphRunId", "projectId"] as const;
+
+/** A stable query string that keeps one graph/run bound across all ten pages. */
+function selectionQuery(selection: FactoryRunSelection): string {
+  const params = new URLSearchParams();
+  for (const key of FACTORY_SELECTION_KEYS) {
+    const value = selection[key];
+    if (value) params.set(key, value);
+  }
+  const query = params.toString();
+  return query ? `?${query}` : "";
+}
+
+function replaceBrowserSelection(selection: FactoryRunSelection) {
+  const url = new URL(window.location.href);
+  for (const key of FACTORY_SELECTION_KEYS) url.searchParams.delete(key);
+  for (const key of FACTORY_SELECTION_KEYS) {
+    const value = selection[key];
+    if (value) url.searchParams.set(key, value);
+  }
+  window.history.pushState(null, "", `${url.pathname}${url.search}${url.hash}`);
+}
 
 /** The breadcrumb the boards put in the topbar, into the run when one exists. */
-function FactoryBreadcrumb({ step, runId }: { step: FactoryStep; runId?: string | null }) {
+function FactoryBreadcrumb({
+  step,
+  runId,
+  stepQuery = "",
+}: {
+  step: FactoryStep;
+  runId?: string | null;
+  stepQuery?: string;
+}) {
   return (
     <nav aria-label="Breadcrumb" className="text-sm text-muted">
       <ol className="flex flex-wrap items-center gap-1.5">
-        <li><Link href="/solutions/factory/requirement" className="hover:text-foreground">AI Factory</Link></li>
+        <li><Link href={`/solutions/factory/requirement${stepQuery}`} className="hover:text-foreground">AI Factory</Link></li>
         <li aria-hidden="true" className="text-faint">›</li>
         {/* Runs is /solutions/runs. This crumb pointed at Pipelines, which
             was defensible only while Runs could not show a lifecycle run at
@@ -94,56 +140,169 @@ function FactoryBreadcrumb({ step, runId }: { step: FactoryStep; runId?: string 
 export function FactoryStepConsole({
   step,
   viewer,
+  initialSelection = {},
 }: {
   step: FactoryStep;
   viewer?: FactoryViewer;
+  initialSelection?: FactoryRunSelection;
 }) {
   const [state, setState] = useState<State>({ kind: "loading" });
+  const [selection, setSelection] = useState<FactoryRunSelection>(initialSelection);
+  const loadGeneration = useRef(0);
+  const initialSelectionIdentity = useRef(selectionQuery(initialSelection));
 
   const load = useCallback(async () => {
+    const generation = ++loadGeneration.current;
+    const update = (next: State) => {
+      if (loadGeneration.current === generation) setState(next);
+    };
     try {
       const runsResponse = await fetch("/api/graphs/runs?limit=100", { cache: "no-store" });
       if (!runsResponse.ok) {
-        setState({ kind: "error" });
+        update({ kind: "error" });
         return;
       }
       const runsBody = (await runsResponse.json()) as { runs?: RunView[] };
-      // Newest first from the endpoint; the first lifecycle run is the
-      // process's current standing.
-      const run = (runsBody.runs ?? []).find((candidate) =>
-        (candidate as { isLifecycle?: boolean }).isLifecycle === true,
+      const lifecycleRuns = (runsBody.runs ?? []).filter((candidate) =>
+        candidate.isLifecycle === true,
       );
+
+      let run: RunView | undefined;
+      if (selection.graphRunId) {
+        const exact = lifecycleRuns.find((candidate) =>
+          candidate.graphRunId === selection.graphRunId,
+        );
+        // Every supplied identity must agree. A valid run id paired with a
+        // different graph/project is an identity mismatch, never permission to
+        // fall back to whatever happens to be newest.
+        if (
+          !exact
+          || (selection.graphId && exact.graphId !== selection.graphId)
+          || (selection.projectId && exact.projectId !== selection.projectId)
+        ) {
+          update({ kind: "missing", runs: lifecycleRuns });
+          return;
+        }
+        run = exact;
+      } else if (selection.graphId) {
+        const graphRuns = lifecycleRuns.filter((candidate) =>
+          candidate.graphId === selection.graphId
+          && (!selection.projectId || candidate.projectId === selection.projectId),
+        );
+        if (graphRuns.length === 0) {
+          update({ kind: "waiting", runs: lifecycleRuns, graphId: selection.graphId });
+          return;
+        }
+        if (graphRuns.length > 1) {
+          update({ kind: "choose", runs: graphRuns });
+          return;
+        }
+        run = graphRuns[0];
+      } else if (selection.projectId) {
+        const projectRuns = lifecycleRuns.filter((candidate) =>
+          candidate.projectId === selection.projectId,
+        );
+        if (projectRuns.length === 1) run = projectRuns[0];
+        else {
+          update({ kind: "choose", runs: projectRuns });
+          return;
+        }
+      } else if (lifecycleRuns.length === 1) {
+        // A sole lifecycle is unambiguous. Once rendered, all step links pin
+        // its exact identities so a concurrent launch cannot switch the page.
+        run = lifecycleRuns[0];
+      } else if (lifecycleRuns.length > 1) {
+        update({ kind: "choose", runs: lifecycleRuns });
+        return;
+      }
+
       if (!run) {
-        setState({ kind: "none" });
+        update({ kind: "none" });
         return;
       }
       const artifactsResponse = await fetch(`/api/graphs/runs/${run.graphRunId}/artifacts`, {
         cache: "no-store",
       });
-      // Artifacts failing must not blank the step: the page states the
-      // shortfall where the artifacts would have been.
-      const artifactsBody = artifactsResponse.ok
-        ? ((await artifactsResponse.json()) as { artifacts?: ArtifactView[] })
-        : { artifacts: undefined };
-      setState({ kind: "ready", run, artifacts: artifactsBody.artifacts ?? [] });
+      // Artifacts failing must not blank the step, but an unreadable evidence
+      // boundary is not the same thing as a run with zero artifacts. Keep the
+      // run visible and carry the read failure into the page beside it.
+      const artifactsBody = (await artifactsResponse.json().catch(() => ({}))) as {
+        artifacts?: ArtifactView[];
+        error?: { message?: string };
+      };
+      update({
+        kind: "ready",
+        run,
+        runs: lifecycleRuns,
+        artifacts: artifactsResponse.ok ? (artifactsBody.artifacts ?? []) : [],
+        artifactsError: artifactsResponse.ok
+          ? null
+          : artifactsBody.error?.message
+            ?? `The artifact read answered HTTP ${artifactsResponse.status}.`,
+      });
     } catch {
-      setState({ kind: "error" });
+      update({ kind: "error" });
     }
+  }, [selection.graphId, selection.graphRunId, selection.projectId]);
+
+  const chooseRun = useCallback((run: RunView) => {
+    const next: FactoryRunSelection = {
+      graphId: run.graphId,
+      graphRunId: run.graphRunId,
+      ...(run.projectId ? { projectId: run.projectId } : {}),
+    };
+    loadGeneration.current += 1;
+    setSelection(next);
+    replaceBrowserSelection(next);
+    setState({ kind: "loading" });
+  }, []);
+
+  const bindLaunchedGraph = useCallback((graph: LaunchedGraph) => {
+    // A launch has no graph_run_id until a worker claims it. Bind the graph and
+    // project immediately so an older run can never remain on screen as if it
+    // were the newly recorded request.
+    const next: FactoryRunSelection = { graphId: graph.graphId, projectId: graph.projectId };
+    loadGeneration.current += 1;
+    setSelection(next);
+    replaceBrowserSelection(next);
+    setState({ kind: "loading" });
   }, []);
 
   useEffect(() => {
+    const incoming: FactoryRunSelection = {
+      ...(initialSelection.graphId ? { graphId: initialSelection.graphId } : {}),
+      ...(initialSelection.graphRunId ? { graphRunId: initialSelection.graphRunId } : {}),
+      ...(initialSelection.projectId ? { projectId: initialSelection.projectId } : {}),
+    };
+    const identity = selectionQuery(incoming);
+    if (identity === initialSelectionIdentity.current) return;
+
+    // App Router may retain this Client Component while a URL with a different
+    // server-read selection streams in (including browser Back/Forward).
+    initialSelectionIdentity.current = identity;
+    loadGeneration.current += 1;
+    setSelection(incoming);
+    setState({ kind: "loading" });
+  }, [initialSelection.graphId, initialSelection.graphRunId, initialSelection.projectId]);
+
+  useEffect(() => {
     const timer = window.setTimeout(() => void load(), 0);
-    return () => window.clearTimeout(timer);
+    return () => {
+      window.clearTimeout(timer);
+      loadGeneration.current += 1;
+    };
   }, [load]);
 
   if (state.kind !== "ready") {
+    const stepQuery = selectionQuery(selection);
     return (
       <FactoryShell
         step={step}
         marks={[]}
         run={null}
+        stepQuery={stepQuery}
         viewer={viewer}
-        breadcrumb={<FactoryBreadcrumb step={step} />}
+        breadcrumb={<FactoryBreadcrumb step={step} stepQuery={stepQuery} />}
       >
         {state.kind === "loading" ? (
           <Card className="grid min-h-64 place-items-center">
@@ -159,17 +318,70 @@ export function FactoryStepConsole({
               Try again
             </button>
           </Card>
+        ) : state.kind === "choose" ? (
+          <div className="space-y-6">
+            <PageHeader title={`${step.number}. ${step.title}`} description={step.summary} />
+            <Card className="p-6">
+              <h2 className="text-base font-semibold text-foreground">Choose the lifecycle run to inspect</h2>
+              <p className="mt-2 max-w-2xl text-sm text-muted">
+                More than one lifecycle is recorded. Select the exact run; this page will not
+                borrow the newest run from another project or graph.
+              </p>
+              <RunPicker runs={state.runs} value="" onSelect={chooseRun} />
+            </Card>
+            <GraphLaunchControl
+              templateKey="full_lifecycle"
+              templateName="Full Lifecycle"
+              onLaunched={bindLaunchedGraph}
+            />
+          </div>
+        ) : state.kind === "waiting" ? (
+          <div className="space-y-6">
+            <PageHeader title={`${step.number}. ${step.title}`} description={step.summary} />
+            <Card className="p-6">
+              <h2 className="text-base font-semibold text-foreground">Selected graph has no visible run yet</h2>
+              <p className="mt-2 max-w-2xl text-sm text-muted">
+                Graph <span className="font-mono text-foreground">{state.graphId}</span> is selected.
+                No run for this exact graph is in the newest 100 lifecycle runs. It may still be
+                waiting for a worker claim; no older run is substituted.
+              </p>
+              <button type="button" onClick={() => void load()} className="btn btn-secondary btn-sm mt-4">
+                Refresh selected graph
+              </button>
+              {state.runs.length > 0 ? (
+                <RunPicker runs={state.runs} value="" onSelect={chooseRun} />
+              ) : null}
+            </Card>
+          </div>
+        ) : state.kind === "missing" ? (
+          <div className="space-y-6">
+            <PageHeader title={`${step.number}. ${step.title}`} description={step.summary} />
+            <Card className="p-6">
+              <h2 className="text-base font-semibold text-foreground">Selected lifecycle run is unavailable</h2>
+              <p className="mt-2 max-w-2xl text-sm text-muted">
+                The selected run is not an exact lifecycle match in this organization&apos;s newest
+                100 runs. No other project or graph is shown in its place.
+              </p>
+              {state.runs.length > 0 ? (
+                <RunPicker runs={state.runs} value="" onSelect={chooseRun} />
+              ) : null}
+            </Card>
+          </div>
         ) : (
           <div className="space-y-6">
             <PageHeader title={`${step.number}. ${step.title}`} description={step.summary} />
             <Card className="p-6">
               <h2 className="text-base font-semibold text-foreground">No lifecycle has run yet</h2>
               <p className="mt-2 max-w-2xl text-sm text-muted">
-                These pages walk the newest full-lifecycle run through the ten steps, and none is
+                These pages walk one selected full-lifecycle run through the ten steps, and none is
                 recorded yet. Launch one below and every step fills in as the work moves.
               </p>
             </Card>
-            <GraphLaunchControl templateKey="full_lifecycle" templateName="Full Lifecycle" />
+            <GraphLaunchControl
+              templateKey="full_lifecycle"
+              templateName="Full Lifecycle"
+              onLaunched={bindLaunchedGraph}
+            />
           </div>
         )}
       </FactoryShell>
@@ -177,21 +389,39 @@ export function FactoryStepConsole({
   }
 
   return (
-    <StepView step={step} run={state.run} artifacts={state.artifacts} onReload={load} viewer={viewer} />
+    <StepView
+      step={step}
+      run={state.run}
+      runs={state.runs}
+      artifacts={state.artifacts}
+      artifactsError={state.artifactsError}
+      onReload={load}
+      onSelectRun={chooseRun}
+      onLaunched={bindLaunchedGraph}
+      viewer={viewer}
+    />
   );
 }
 
 function StepView({
   step,
   run,
+  runs,
   artifacts,
+  artifactsError,
   onReload,
+  onSelectRun,
+  onLaunched,
   viewer,
 }: {
   step: FactoryStep;
   run: RunView;
+  runs: readonly RunView[];
   artifacts: readonly ArtifactView[];
+  artifactsError: string | null;
   onReload: () => void;
+  onSelectRun: (run: RunView) => void;
+  onLaunched: (graph: LaunchedGraph) => void;
   viewer?: FactoryViewer;
 }) {
   /*
@@ -207,6 +437,17 @@ function StepView({
   const { stages } = summariseRunStages(nodes);
   const previous = FACTORY_STEPS.find((candidate) => candidate.number === step.number - 1) ?? null;
   const next = FACTORY_STEPS.find((candidate) => candidate.number === step.number + 1) ?? null;
+  // Once a concrete run has been resolved, every link pins all of its known
+  // identities. A graph-only or project-only URL is merely a lookup input;
+  // propagating that partial selector would become ambiguous as soon as a
+  // retry or a second run appeared.
+  const exactSelection: FactoryRunSelection = {
+    graphId: run.graphId,
+    graphRunId: run.graphRunId,
+    ...(run.projectId ? { projectId: run.projectId } : {}),
+  };
+  const stepQuery = selectionQuery(exactSelection);
+  const stepHref = (slug: string) => `/solutions/factory/${slug}${stepQuery}`;
 
   /** A step's standing is its worst stage's standing, in lifecycle order. */
   const stepStanding = (candidate: FactoryStep) => {
@@ -217,7 +458,13 @@ function StepView({
     if (present.length === 0) return stageStanding(undefined);
     if (present.some((slice) => slice!.failed > 0)) return stageStanding(present.find((slice) => slice!.failed > 0));
     if (present.some((slice) => slice!.active > 0)) return stageStanding(present.find((slice) => slice!.active > 0));
-    if (present.every((slice) => slice!.completed === slice!.total)) return stageStanding(present[0]);
+    if (present.length !== candidate.stages.length) return stageStanding(undefined);
+    // A grouped step is complete only when every stage it owns is present.
+    // REQUIREMENT owns GOAL and PRD; a lone completed GOAL must not turn the
+    // whole requirement step green while its PRD is absent.
+    if (
+      present.every((slice) => slice!.completed === slice!.total)
+    ) return stageStanding(present[0]);
     return stageStanding(present.find((slice) => slice!.completed !== slice!.total) ?? present[0]);
   };
 
@@ -245,9 +492,14 @@ function StepView({
     return [node.executor, provider].filter((value): value is string => Boolean(value));
   }))];
   const completedInStep = stepNodes.filter((node) => node.state === "COMPLETED").length;
-  const gates = [...new Set(step.stages
-    .map((stage) => stageDefinition(stage).gate)
-    .filter((gate): gate is "HUMAN" | "AUTOMATIC" => gate !== null))];
+  // The run's stored nodes are the authority for gates. Lifecycle definitions
+  // describe the general stage vocabulary, but a concrete template may not
+  // place every default gate on a node; showing one anyway invents a decision
+  // the run can never open.
+  const gates = [...new Set(stepNodes
+    .map((node) => node.gate_kind)
+    .filter((gate): gate is "HUMAN" | "AUTOMATIC" =>
+      gate === "HUMAN" || gate === "AUTOMATIC"))];
 
   /**
    * The step's recommendations to its successor, from the recorded reports.
@@ -299,8 +551,9 @@ function StepView({
         costMicros: run.costMicros,
         budgetAction: run.budgetAction,
       }}
+      stepQuery={stepQuery}
       viewer={viewer}
-      breadcrumb={<FactoryBreadcrumb step={step} runId={run.graphRunId} />}
+      breadcrumb={<FactoryBreadcrumb step={step} runId={run.graphRunId} stepQuery={stepQuery} />}
     >
     <div className="space-y-5">
       {/* The title row: big numbered step, its live standing, the actions. */}
@@ -330,7 +583,7 @@ function StepView({
           </Link>
           {next ? (
             <Link
-              href={`/solutions/factory/${next.slug}`}
+              href={stepHref(next.slug)}
               className="btn btn-primary btn-sm inline-flex items-center gap-1.5"
             >
               Next Stage <ArrowRight className="size-3.5" aria-hidden="true" />
@@ -350,10 +603,40 @@ function StepView({
       {startingNew ? (
         <div id="factory-new-request" className="space-y-2">
           <p className="text-sm text-muted">
-            A request runs the whole ten-step lifecycle once against the project you choose. It
-            joins the run list when recorded; this page keeps showing the newest run.
+            A request runs the whole ten-step lifecycle once against the project you choose. The
+            exact graph is selected as soon as it is recorded, before its first run exists.
           </p>
-          <GraphLaunchControl templateKey="full_lifecycle" templateName="Full Lifecycle" />
+          <GraphLaunchControl
+            templateKey="full_lifecycle"
+            templateName="Full Lifecycle"
+            onLaunched={onLaunched}
+          />
+        </div>
+      ) : null}
+
+      <Card className="p-4">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className="label">Selected lifecycle run</h2>
+            <p className="mt-1 text-xs text-faint">
+              Graph {run.graphId}{run.projectId ? ` · project ${run.projectId}` : ""}
+            </p>
+          </div>
+          <RunPicker runs={runs} value={run.graphRunId} onSelect={onSelectRun} compact />
+        </div>
+      </Card>
+
+      {artifactsError ? (
+        <div role="alert">
+          <Card className="border-[var(--danger-border,var(--border))] p-5">
+            <h2 className="text-base font-semibold text-foreground">Run artifacts could not be read</h2>
+            <p className="mt-2 text-sm text-muted">
+              {artifactsError} The run standings remain visible, but artifact counts and contents are unavailable.
+            </p>
+            <button type="button" onClick={onReload} className="btn btn-secondary btn-sm mt-4">
+              Try again
+            </button>
+          </Card>
         </div>
       ) : null}
 
@@ -372,7 +655,7 @@ function StepView({
                   <span aria-hidden="true" className="mx-0.5 h-px w-2 shrink-0 bg-[var(--border)]" />
                 ) : null}
                 <Link
-                  href={`/solutions/factory/${entry.slug}`}
+                  href={stepHref(entry.slug)}
                   aria-current={current ? "page" : undefined}
                   aria-label={`${entry.number}. ${entry.title} — ${standingWord(entryStanding)}`}
                   className={cn(
@@ -452,7 +735,7 @@ function StepView({
             <h2 className="label">The request</h2>
             <p className="mt-2 text-sm text-foreground">{run.goal}</p>
             <p className="mt-3 text-xs text-faint">
-              Newest lifecycle run {run.graphRunId} · {run.state}
+              Selected lifecycle run {run.graphRunId} · {run.state}
               {run.startedAt ? ` · started ${clock(run.startedAt)}` : ""}
               {run.completedAt ? ` · closed ${clock(run.completedAt)}` : ""}
             </p>
@@ -467,6 +750,12 @@ function StepView({
             const stageArtifacts = artifacts.filter(
               (artifact) => artifact.nodeKey !== null && stageNodeKeys.has(artifact.nodeKey),
             );
+            const evidenceArtifactIds = Object.fromEntries(stageNodes.flatMap((node) => {
+              const latest = stageArtifacts
+                .filter((artifact) => artifact.nodeKey === node.node_key)
+                .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0];
+              return latest ? [[node.node_key, latest.artifactId]] : [];
+            }));
             return (
               <section key={stage} aria-label={`${stage} in this run`} className="space-y-3">
                 <Card className="p-5">
@@ -495,7 +784,11 @@ function StepView({
                       This run planned no node in this stage.
                     </p>
                   ) : (
-                    <StageNodes nodes={stageNodes} onDecided={onReload} />
+                    <StageNodes
+                      evidenceArtifactIds={evidenceArtifactIds}
+                      nodes={stageNodes}
+                      onDecided={onReload}
+                    />
                   )}
                 </Card>
 
@@ -625,7 +918,7 @@ function StepView({
               {next ? (
                 <li>
                   <Link
-                    href={`/solutions/factory/${next.slug}`}
+                    href={stepHref(next.slug)}
                     className="text-muted underline decoration-dotted underline-offset-2 hover:text-foreground"
                   >
                     Continue to {next.number}. {next.title}
@@ -642,7 +935,7 @@ function StepView({
         <div className="flex flex-wrap items-center justify-between gap-2">
           {previous ? (
             <Link
-              href={`/solutions/factory/${previous.slug}`}
+              href={stepHref(previous.slug)}
               className="btn btn-secondary btn-sm inline-flex items-center gap-1.5"
             >
               <ArrowLeft className="size-3.5" aria-hidden="true" />
@@ -657,7 +950,7 @@ function StepView({
           </Link>
           {next ? (
             <Link
-              href={`/solutions/factory/${next.slug}`}
+              href={stepHref(next.slug)}
               className="btn btn-primary btn-sm inline-flex items-center gap-1.5"
             >
               Next Stage: {next.title}
@@ -668,6 +961,51 @@ function StepView({
       </Card>
     </div>
     </FactoryShell>
+  );
+}
+
+function runOptionLabel(run: RunView): string {
+  const goal = run.goal.replace(/\s+/g, " ").trim();
+  const boundedGoal = goal.length > 72 ? `${goal.slice(0, 69)}…` : goal;
+  const project = run.projectId ? run.projectId.slice(0, 8) : "unknown";
+  return `${shortRunId(run.graphRunId)} · project ${project} · ${boundedGoal}`;
+}
+
+/**
+ * Selects one exact run identity. The option value is never a graph id or a
+ * project id, so two requests with the same goal cannot alias each other.
+ */
+function RunPicker({
+  runs,
+  value,
+  onSelect,
+  compact = false,
+}: {
+  runs: readonly RunView[];
+  value: string;
+  onSelect: (run: RunView) => void;
+  compact?: boolean;
+}) {
+  return (
+    <label className={cn("flex min-w-0 flex-col gap-1 text-sm", compact ? "w-full sm:w-auto" : "mt-4")}>
+      <span className="text-muted">Lifecycle run</span>
+      <select
+        aria-label="Lifecycle run"
+        value={value}
+        onChange={(event) => {
+          const selected = runs.find((run) => run.graphRunId === event.target.value);
+          if (selected) onSelect(selected);
+        }}
+        className="input min-w-0 sm:max-w-xl"
+      >
+        {value === "" ? <option value="">Select an exact run…</option> : null}
+        {runs.map((run) => (
+          <option key={run.graphRunId} value={run.graphRunId}>
+            {runOptionLabel(run)}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 

@@ -124,6 +124,29 @@ describe("templates compile", () => {
 });
 
 describe("template contracts", () => {
+  it("makes Full Lifecycle v2 observe the external build lineage and require human merge/release gates", () => {
+    const template = findTemplate("full_lifecycle")!;
+    const byKey = new Map(template.nodes.map((node) => [node.nodeId, node]));
+
+    expect(template.version).toBe(2);
+    expect(byKey.get("implement")?.executor).toBe("ANCHOR");
+    expect(byKey.get("implement")?.gate).toBeUndefined();
+    expect(byKey.get("review")?.executor).toBe("ANCHOR");
+    expect(byKey.get("review")?.gate).toBeUndefined();
+    expect(byKey.get("test")).toMatchObject({
+      executor: "ANCHOR",
+      gate: "HUMAN",
+      timeoutMs: 480_000,
+    });
+    expect(byKey.get("deploy")).toMatchObject({
+      executor: "ANCHOR",
+      gate: "HUMAN",
+      timeoutMs: 480_000,
+    });
+    expect(byKey.get("monitor")).toMatchObject({ executor: "ANCHOR", timeoutMs: 480_000 });
+    expect(byKey.get("implement")?.writes ?? []).toEqual([]);
+  });
+
   it("requires structured findings from an inspector, not prose", () => {
     const template = findTemplate("rls_audit")!;
     const contracts = templateNodeContracts(template);

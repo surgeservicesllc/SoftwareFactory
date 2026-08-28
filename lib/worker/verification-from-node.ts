@@ -22,7 +22,13 @@ const LENS_BY_CAPABILITY: Readonly<Record<string, VerificationLens>> = Object.fr
   qa: "acceptance_criteria",
 });
 
-export function verificationLensFor(node: Pick<CompiledNode, "capability">): VerificationLens | null {
+export function verificationLensFor(
+  node: Pick<CompiledNode, "capability" | "executor">,
+): VerificationLens | null {
+  // ANCHOR QA nodes execute tests and record machine evidence; they are not
+  // model reviewers and have no provider identity with which to author a
+  // verdict. Likewise deterministic QA work is transformation, not opinion.
+  if (node.executor !== "MODEL") return null;
   return LENS_BY_CAPABILITY[node.capability] ?? null;
 }
 
@@ -43,6 +49,12 @@ export type DerivedVerdict = {
   readonly evidence: readonly string[];
 };
 
+export function verificationEvidenceIsBounded(evidence: readonly string[]): boolean {
+  return evidence.length <= 64
+    && evidence.every((item) => Array.from(item).length <= 1000)
+    && new TextEncoder().encode(JSON.stringify(evidence)).byteLength <= 32768;
+}
+
 /**
  * A verdict, or null when the output does not support one.
  *
@@ -57,10 +69,11 @@ export function deriveVerdict(output: unknown): DerivedVerdict | null {
   const blocked = (output as { blocked?: unknown }).blocked;
   if (blocked === true) {
     const reason = (output as { blocked_reason?: unknown }).blocked_reason;
-    return {
+    const result = {
       verdict: "BLOCK",
       evidence: [typeof reason === "string" && reason.trim() ? reason : "The reviewer reported it could not judge this subject."],
-    };
+    } as const;
+    return verificationEvidenceIsBounded(result.evidence) ? result : null;
   }
 
   const findings = findingsOf(output);
@@ -81,5 +94,6 @@ export function deriveVerdict(output: unknown): DerivedVerdict | null {
   if (findings.length === 0) {
     return { verdict: "PASS", evidence: ["The reviewer reported no findings."] };
   }
-  return { verdict: worst >= 3 ? "REJECT" : "WARN", evidence };
+  const result: DerivedVerdict = { verdict: worst >= 3 ? "REJECT" : "WARN", evidence };
+  return verificationEvidenceIsBounded(result.evidence) ? result : null;
 }

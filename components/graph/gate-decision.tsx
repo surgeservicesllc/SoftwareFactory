@@ -18,6 +18,7 @@ import { useCallback, useState } from "react";
 
 /** The gate columns as the runs endpoint projects them onto a node. */
 export type GateHolder = {
+  readonly gate_evidence_artifact_id?: string | null;
   readonly gate_id?: string | null;
   readonly gate_kind?: string | null;
   readonly gate_state?: string | null;
@@ -25,9 +26,11 @@ export type GateHolder = {
 };
 
 export function GateDecision({
+  evidenceArtifactId,
   node,
   onDecided,
 }: {
+  readonly evidenceArtifactId?: string | null;
   readonly node: GateHolder;
   readonly onDecided: () => void;
 }) {
@@ -43,7 +46,12 @@ export function GateDecision({
         const response = await fetch(`/api/graph-gates/${node.gate_id}/decide`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ approved }),
+          body: JSON.stringify({
+            approved,
+            ...(approved && (evidenceArtifactId ?? node.gate_evidence_artifact_id)
+              ? { evidenceArtifactId: evidenceArtifactId ?? node.gate_evidence_artifact_id }
+              : {}),
+          }),
         });
         const body = (await response.json()) as {
           error?: { message?: string };
@@ -63,7 +71,7 @@ export function GateDecision({
         setBusy(false);
       }
     },
-    [node.gate_id, onDecided],
+    [evidenceArtifactId, node.gate_evidence_artifact_id, node.gate_id, onDecided],
   );
 
   if (!node.gate_id || node.gate_state !== "OPEN") return null;

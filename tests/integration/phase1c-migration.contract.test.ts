@@ -9,7 +9,7 @@ import { describe, expect, it } from "vitest";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const migrationsRoot = resolve(repositoryRoot, "supabase/migrations");
-const latestMigration = "20260827000100_record_job_seeker_job_atomically.sql";
+const latestMigration = "20260827000200_graph_phase1c_release_lineage.sql";
 const ownerId = "00000000-0000-4000-8000-000000000101";
 const organizationId = "10000000-0000-4000-8000-000000000001";
 const projectId = "20000000-0000-4000-8000-000000000001";
@@ -187,7 +187,7 @@ async function claimRun(db: PGlite, workerId: string) {
     recovery_usage: Record<string, unknown>;
     run_id: string;
     task_id: string;
-  }>("select * from public.claim_phase1c_run($1,$2,$3,$4)", [
+  }>("select * from public.claim_phase1c_run_v2($1,$2,$3,$4,2)", [
     workerId, "openai", "gpt-5.3-codex", 120,
   ]);
 }
@@ -257,12 +257,12 @@ const workerFunctions = [
   "register_phase1c_worker(text,text,jsonb)",
   "heartbeat_phase1c_worker(text,uuid)",
   "finish_phase1c_worker(text,text)",
-  "claim_phase1c_run(text,text,text,integer)",
+  "claim_phase1c_run_v2(text,text,text,integer,integer)",
   "heartbeat_phase1c_run(text,uuid,uuid,integer)",
   "append_phase1c_run_event(text,uuid,uuid,text,text,jsonb)",
   "record_phase1c_validation(text,uuid,uuid,integer,text,text,text,integer,text)",
   "record_phase1c_run_artifact(text,uuid,uuid,text,text,integer,jsonb)",
-  "complete_phase1c_run(text,uuid,uuid,text,text,text,jsonb,jsonb,jsonb,text,text,boolean)",
+  "complete_phase1c_run_with_graph_bridge_as_worker(text,uuid,uuid,text,text,text,jsonb,jsonb,jsonb,text,text,boolean)",
 ] as const;
 
 /*
@@ -330,9 +330,32 @@ describe("Phase 1C migration contract", { timeout: 120_000 }, () => {
           'service_role',
           'public.submit_command_phase1a_internal(uuid,text,risk_level,jsonb,text)',
           'EXECUTE'
+        ) and not has_function_privilege(
+          'service_role',
+          'public.complete_phase1c_run(text,uuid,uuid,text,text,text,jsonb,jsonb,jsonb,text,text,boolean)',
+          'EXECUTE'
         ) as closed
       `);
       expect(internal.rows[0]?.closed).toBe(true);
+
+      await db.exec("reset role");
+      const runCountBefore = await db.query<{ count: number }>(
+        "select count(*)::integer as count from public.agent_runs",
+      );
+      await assumeRole(db, "service_role");
+      await expect(db.query(
+        "select * from public.claim_phase1c_run_v2($1,$2,$3,$4,$5)",
+        ["worker.protocol", "openai", "gpt-5.3-codex", 120, 1],
+      )).rejects.toThrow(/Phase 1C worker protocol version 2 is required/i);
+      await expect(db.query(
+        "select * from public.claim_phase1c_run($1,$2,$3,$4)",
+        ["worker.protocol", "openai", "gpt-5.3-codex", 120],
+      )).rejects.toThrow(/permission denied/i);
+      await db.exec("reset role");
+      const runCountAfter = await db.query<{ count: number }>(
+        "select count(*)::integer as count from public.agent_runs",
+      );
+      expect(runCountAfter.rows[0].count).toBe(runCountBefore.rows[0].count);
 
       const runDetailCatalog = await db.query<{
         function_config: string;
@@ -713,7 +736,7 @@ describe("Phase 1C migration contract", { timeout: 120_000 }, () => {
         "worker.contract", "1.0.0", JSON.stringify({ providers: ["openai"] }),
       ]);
       const claim = await db.query<{ lease_token: string; run_id: string }>(
-        "select run_id, lease_token from public.claim_phase1c_run($1,$2,$3,$4)",
+        "select run_id, lease_token from public.claim_phase1c_run_v2($1,$2,$3,$4,2)",
         ["worker.contract", "openai", "gpt-5.3-codex", 120],
       );
       const run = claim.rows[0]!;
@@ -1224,7 +1247,7 @@ describe("Phase 1C migration contract", { timeout: 120_000 }, () => {
       ]);
       await db.exec("set role service_role");
       await expect(db.query(
-        "select * from public.complete_phase1c_run($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9::jsonb,$10,$11,$12)",
+        "select * from public.complete_phase1c_run_with_graph_bridge_as_worker($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9::jsonb,$10,$11,$12)",
         [workerId, run.run_id, run.lease_token, "succeeded", "Invalid evidence must not succeed.",
           null, "{}", "[]", JSON.stringify([{ name: "CI", status: "completed", conclusion: "success" }]),
           null, null, false],
@@ -1267,7 +1290,7 @@ describe("Phase 1C migration contract", { timeout: 120_000 }, () => {
         workerId, first.run_id, first.lease_token, "pull_request", pullUrl, 77,
         JSON.stringify({ commitSha: headSha }),
       ]);
-      await db.query("select * from public.complete_phase1c_run($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9::jsonb,$10,$11,$12)", [
+      await db.query("select * from public.complete_phase1c_run_with_graph_bridge_as_worker($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9::jsonb,$10,$11,$12)", [
         workerId, first.run_id, first.lease_token, "failed", "CI temporarily unavailable.",
         "provider-run-77", JSON.stringify({ inputTokens: 1200, outputTokens: 200 }),
         JSON.stringify(["app/page.tsx"]), JSON.stringify([{ name: "ci", status: "failed" }]),
@@ -1308,7 +1331,7 @@ describe("Phase 1C migration contract", { timeout: 120_000 }, () => {
         recovery_usage: { inputTokens: 1200, outputTokens: 200 },
       });
       const recovery = recoveryClaim.rows[0]!;
-      await db.query("select * from public.complete_phase1c_run($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9::jsonb,$10,$11,$12)", [
+      await db.query("select * from public.complete_phase1c_run_with_graph_bridge_as_worker($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9::jsonb,$10,$11,$12)", [
         workerId, recovery.run_id, recovery.lease_token, "succeeded", "Recovered draft passed CI.",
         "provider-run-77", JSON.stringify({ inputTokens: 1200, outputTokens: 200 }),
         JSON.stringify(["app/page.tsx"]), JSON.stringify([{ name: "ci", status: "passed" }]),
@@ -1387,7 +1410,7 @@ describe("Phase 1C migration contract", { timeout: 120_000 }, () => {
       await registerWorker(db, workerId);
       const first = (await claimRun(db, workerId)).rows[0]!;
       await db.query(
-        "select * from public.complete_phase1c_run($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9::jsonb,$10,$11,$12)",
+        "select * from public.complete_phase1c_run_with_graph_bridge_as_worker($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9::jsonb,$10,$11,$12)",
         [workerId, first.run_id, first.lease_token, "failed", "Provider failed before commit evidence.",
           null, JSON.stringify(partialUsage), "[]", "[]", "provider_timeout",
           "The provider timed out before a commit was created.", true],
@@ -1413,7 +1436,7 @@ describe("Phase 1C migration contract", { timeout: 120_000 }, () => {
       });
 
       await db.query(
-        "select * from public.complete_phase1c_run($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9::jsonb,$10,$11,$12)",
+        "select * from public.complete_phase1c_run_with_graph_bridge_as_worker($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9::jsonb,$10,$11,$12)",
         [workerId, second.run_id, second.lease_token, "failed", "Cumulative turn budget exhausted.",
           null, JSON.stringify(exhaustedUsage), "[]", "[]", "provider_timeout",
           "The provider exhausted the configured cumulative turn budget.", true],
@@ -1463,7 +1486,7 @@ describe("Phase 1C migration contract", { timeout: 120_000 }, () => {
       await db.query("select public.record_phase1c_run_artifact($1,$2,$3,$4,$5,$6,$7::jsonb)", [
         workerId, first.run_id, first.lease_token, "commit", headSha, null, "{}",
       ]);
-      await db.query("select * from public.complete_phase1c_run($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9::jsonb,$10,$11,$12)", [
+      await db.query("select * from public.complete_phase1c_run_with_graph_bridge_as_worker($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9::jsonb,$10,$11,$12)", [
         workerId, first.run_id, first.lease_token, "failed", "Push completed before PR creation failed.",
         "provider-run-branch", "{}", "[]", "[]", "provider_timeout", "PR creation timed out.", true,
       ]);
@@ -1543,7 +1566,7 @@ describe("Phase 1C migration contract", { timeout: 120_000 }, () => {
         JSON.stringify({ pullRequestUrl: pullUrl, repairAttempt: 1 }),
       ]);
       const completion = await db.query<{ status: string }>(
-        "select status from public.complete_phase1c_run($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9::jsonb,$10,$11,$12)",
+        "select status from public.complete_phase1c_run_with_graph_bridge_as_worker($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9::jsonb,$10,$11,$12)",
         [workerId, run.run_id, run.lease_token, "succeeded", "Repair passed stable CI.",
           "provider-repair", "{}", JSON.stringify(["src/change.ts"]),
           JSON.stringify([{ name: "CI", status: "completed", conclusion: "success" }]), null, null, false],
@@ -1697,7 +1720,7 @@ describe("Phase 1C migration contract", { timeout: 120_000 }, () => {
       await db.exec("reset role");
       await db.exec("set role service_role");
       const completion = await db.query<{ status: string }>(
-        "select status from public.complete_phase1c_run($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9::jsonb,$10,$11,$12)",
+        "select status from public.complete_phase1c_run_with_graph_bridge_as_worker($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9::jsonb,$10,$11,$12)",
         [workerId, run.run_id, run.lease_token, "succeeded", "This must not become success.",
           "provider-run-cancel", "{}", "[]", JSON.stringify([{ name: "ci", status: "passed" }]),
           null, null, false],
@@ -1757,7 +1780,7 @@ describe("Phase 1C migration contract", { timeout: 120_000 }, () => {
         [workerId, run.run_id, run.lease_token, "branch", "factory/too-late", null, "{}"],
       )).rejects.toThrow(/active run lease required/i);
       const completion = await db.query<{ status: string }>(
-        "select status from public.complete_phase1c_run($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9::jsonb,$10,$11,$12)",
+        "select status from public.complete_phase1c_run_with_graph_bridge_as_worker($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9::jsonb,$10,$11,$12)",
         [workerId, run.run_id, run.lease_token, "succeeded", "Late success must be rejected.",
           null, "{}", "[]", "[]", null, null, false],
       );

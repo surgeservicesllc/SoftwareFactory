@@ -28,7 +28,7 @@ import { describe, expect, it } from "vitest";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const migrationsRoot = resolve(repositoryRoot, "supabase/migrations");
-const latestMigration = "20260827000100_record_job_seeker_job_atomically.sql";
+const latestMigration = "20260827000200_graph_phase1c_release_lineage.sql";
 
 const ownerId = "00000000-0000-4000-8000-0000000002e1";
 const outsiderId = "00000000-0000-4000-8000-0000000002e2";
@@ -274,7 +274,7 @@ async function succeed(
     JSON.stringify({ commitSha: headSha }),
   ]);
   await db.query(
-    "select * from public.complete_phase1c_run($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9::jsonb,$10,$11,$12)",
+    "select * from public.complete_phase1c_run_with_graph_bridge_as_worker($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9::jsonb,$10,$11,$12)",
     [
       workerId, run.run_id, run.lease_token, "succeeded",
       "The prerequisite work is finished and evidenced.",
@@ -334,7 +334,7 @@ interface ClaimedRun {
 async function claim(db: PGlite, workerId: string) {
   await asWorker(db);
   const { rows } = await db.query<ClaimedRun>(
-    "select run_id, project_id, task_id, lease_token from public.claim_phase1c_run($1,$2,$3,$4)",
+    "select run_id, project_id, task_id, lease_token from public.claim_phase1c_run_v2($1,$2,$3,$4,2)",
     [workerId, "openai", "gpt-5.3-codex", 120],
   );
   return rows[0] ?? null;
@@ -343,7 +343,7 @@ async function claim(db: PGlite, workerId: string) {
 async function finish(db: PGlite, workerId: string, run: ClaimedRun) {
   await asWorker(db);
   await db.query(
-    `select * from public.complete_phase1c_run(
+    `select * from public.complete_phase1c_run_with_graph_bridge_as_worker(
        $1,$2::uuid,$3::uuid,'failed','Stopped for the capacity test.',null,
        '{}'::jsonb,'[]'::jsonb,'[]'::jsonb,'stopped_for_test',
        'Released deliberately so the next claim can be observed.',false)`,
@@ -963,7 +963,7 @@ describe("Phase 2E portfolio scheduling", { timeout: 180_000 }, () => {
       expect(first).not.toBeNull();
       await asWorker(db);
       await db.query(
-        `select * from public.complete_phase1c_run(
+        `select * from public.complete_phase1c_run_with_graph_bridge_as_worker(
            $1,$2::uuid,$3::uuid,'failed','The provider failed mid-run.',null,
            '{}'::jsonb,'[]'::jsonb,'[]'::jsonb,'provider_outage',
            'The provider returned a server error.',true)`,
@@ -1558,7 +1558,7 @@ describe("an agent's context is exactly one project", { timeout: 180_000 }, () =
 
       await asWorker(db);
       const { rows } = await db.query<Record<string, unknown>>(
-        "select * from public.claim_phase1c_run($1,$2,$3,$4)",
+        "select * from public.claim_phase1c_run_v2($1,$2,$3,$4,2)",
         ["context-worker", "openai", "gpt-5.3-codex", 120],
       );
       const payload = rows[0];
@@ -1640,7 +1640,7 @@ describe("an agent's context is exactly one project", { timeout: 180_000 }, () =
       ).rejects.toThrow(/run deadline is missing or expired/);
       await expect(
         db.query(
-          `select * from public.complete_phase1c_run(
+          `select * from public.complete_phase1c_run_with_graph_bridge_as_worker(
              $1,$2::uuid,$3::uuid,'failed','Cross-project completion attempt.',null,
              '{}'::jsonb,'[]'::jsonb,'[]'::jsonb,'cross_project_attempt',
              'This call must never succeed.',false)`,

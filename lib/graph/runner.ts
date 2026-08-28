@@ -1,5 +1,6 @@
 import { assessBudget, type BudgetAssessment, type GraphBudget, type GraphSpend } from "@/lib/graph/budgets";
 import type { CompiledGraph, CompiledNode } from "@/lib/graph/compiler";
+import { validateNodeOutput } from "@/lib/graph/contracts";
 import { applyDecision, initialState, progress, tick, transition, type GraphState } from "@/lib/graph/scheduler";
 import { collectFanIn, incompletenessNotice, type NodeOutcome } from "@/lib/graph/fan-in";
 import { resourceKey, type NodeState } from "@/lib/graph/types";
@@ -175,6 +176,19 @@ export async function runGraph(
   const elapsed = deps.elapsedMs ?? (() => 0);
   const delay = deps.delay
     ?? ((ms: number) => new Promise<void>((resolve) => { setTimeout(resolve, ms); }));
+  const validateOutput = deps.validateOutput
+    ?? ((node: CompiledNode, output: unknown) => {
+      if (!node.outputSchema) {
+        return { valid: false, issues: ["The compiled node has no output contract."] };
+      }
+      const result = validateNodeOutput(
+        { nodeId: node.nodeKey, outputSchema: node.outputSchema },
+        output,
+      );
+      return result.valid
+        ? { valid: true, issues: [] }
+        : { valid: false, issues: result.issues };
+    });
 
   const emit = (event: RunnerEvent) => {
     events.push(event);
@@ -297,8 +311,8 @@ export async function runGraph(
       if (result.costMicros !== undefined) costMicros = (costMicros ?? 0) + result.costMicros;
 
       if (result.status === "SUCCEEDED") {
-        const validation = deps.validateOutput?.(node, result.output);
-        if (validation && !validation.valid) {
+        const validation = validateOutput(node, result.output);
+        if (!validation.valid) {
           // A node that returned the wrong shape has not succeeded, whatever
           // it thinks. Letting it through would poison everything downstream.
           emit({

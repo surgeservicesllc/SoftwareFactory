@@ -2,11 +2,12 @@ import { z } from "zod";
 
 import { compileGraph, type CompiledGraph, type CompiledNode } from "@/lib/graph/compiler";
 import type { GraphBudget } from "@/lib/graph/budgets";
-import { defineNode } from "@/lib/graph/contracts";
+import { defineNode, validateNodeOutput } from "@/lib/graph/contracts";
 import type { ProposedEdge } from "@/lib/graph/dependencies";
 import { runGraph, type NodeExecutionResult, type RunResult } from "@/lib/graph/runner";
+import { rehydrateStoredSchema } from "@/lib/graph/stored-schema";
 import { DEFAULT_RETRY_POLICY, type ResourceRef } from "@/lib/graph/types";
-import type { VerificationLens, VerificationVerdict } from "@/lib/graph/verification";
+import type { VerificationVerdict } from "@/lib/graph/verification";
 import { SDLC_STAGES } from "@/lib/sdlc/lifecycle";
 import { deriveVerdict, verificationLensFor } from "@/lib/worker/verification-from-node";
 
@@ -65,17 +66,66 @@ const claimedEdgeSchema = z.object({
   detail: z.string().nullish(),
 });
 
+const phase1cValidationEvidenceSchema = z.object({
+  agent_run_id: z.string().uuid(),
+  head_sha: z.string().regex(/^[0-9a-f]{40}$/),
+  validation_round: z.number().int().min(1).max(3).nullable(),
+  validations: z.array(z.object({
+    name: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/),
+    status: z.enum(["passed", "failed", "skipped"]),
+    duration_ms: z.number().int().min(0).max(3_600_000),
+  }).strict()).max(50),
+}).strict();
+
+const requiredCheckNamesSchema = z.array(
+  z.string()
+    .min(1)
+    .max(160)
+    .refine((value) => value === value.trim())
+    .refine((value) => !value.includes("|")),
+).min(1).max(20).refine((value) => new Set(value).size === value.length);
+
 const claimedGraphSchema = z.object({
   graph_run_id: z.string().uuid(),
   graph_id: z.string().uuid(),
   organization_id: z.string().uuid(),
   project_id: z.string().uuid(),
+  project_name: z.string().min(1).max(160).refine((value) => value === value.trim()),
   goal: z.string().min(1),
   topology: z.string(),
   risk_level: z.string(),
-  // Null when the project has no repository linked; absent in a projection
-  // from before the column existed. Both mean "nothing to contradict".
-  project_repository: z.string().nullish(),
+  // Protocol v2 claims are repository-scoped. Missing identity is a malformed
+  // claim, never permission to analyze whichever checkout happens to be open.
+  project_repository: z.string().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/).max(201),
+  project_default_branch: z.string().min(1).max(255).refine((value) => value === value.trim()),
+  /*
+   * Durable graph -> Phase 1C lineage. All fields tolerate an older or
+   * non-lifecycle projection by becoming null; anchor nodes then record Not
+   * Connected. Malformed evidence never becomes a guessed identity.
+   */
+  template_key: z.string().min(1).max(80).nullish().catch(null),
+  template_version: z.number().int().positive().nullish().catch(null),
+  base_branch: z.string().min(1).max(255).nullish().catch(null),
+  base_sha: z.string().regex(/^[0-9a-f]{40}$/).nullish().catch(null),
+  required_check_names: requiredCheckNamesSchema.nullish().catch(null),
+  required_checks_sha256: z.string().regex(/^[0-9a-f]{64}$/).nullish().catch(null),
+  phase1c_state: z.enum([
+    "GRAPH_READY",
+    "COMMAND_RECORDED",
+    "PHASE1C_BOUND",
+    "PULL_REQUEST_RECORDED",
+    "MERGE_RECORDED",
+    "DEPLOYMENT_RECORDED",
+    "MONITORING_RECORDED",
+    "VALIDATED",
+  ]).nullish().catch(null),
+  phase1c_head_sha: z.string().regex(/^[0-9a-f]{40}$/).nullish().catch(null),
+  pull_request_number: z.number().int().positive().nullish().catch(null),
+  pull_request_url: z.string().url().max(2_048).nullish().catch(null),
+  validation_evidence: phase1cValidationEvidenceSchema.nullish().catch(null),
+  merge_commit_sha: z.string().regex(/^[0-9a-f]{40}$/).nullish().catch(null),
+  deployment_id: z.string().uuid().nullish().catch(null),
+  deployment_url: z.string().url().max(2_048).nullish().catch(null),
   // Lifecycles judge a capacity-voided run differently (see capacityVoided);
   // tolerant of projections from before the column existed.
   is_lifecycle: z.boolean().nullish().catch(null),
@@ -90,6 +140,16 @@ const claimedGraphSchema = z.object({
   }).nullish(),
   nodes: z.array(claimedNodeSchema).min(1),
   edges: z.array(claimedEdgeSchema),
+}).superRefine((claim, context) => {
+  if (claim.template_key === "full_lifecycle" && claim.template_version === 2) {
+    if (!claim.required_check_names || !claim.required_checks_sha256) {
+      context.addIssue({
+        code: "custom",
+        message: "Full Lifecycle v2 requires an exact repository check policy.",
+        path: ["required_check_names"],
+      });
+    }
+  }
 });
 
 export type ClaimedGraph = z.infer<typeof claimedGraphSchema>;
@@ -127,17 +187,28 @@ export function compileClaimedGraph(claim: ClaimedGraph):
     dependsOn.set(edge.to_node_key, into);
   }
 
-  const nodes = claim.nodes.map((node) =>
-    defineNode({
+  const nodes: ReturnType<typeof defineNode>[] = [];
+  for (const node of claim.nodes) {
+    const input = rehydrateStoredSchema(
+      node.input_schema,
+      `Node ${node.node_key}'s input contract`,
+    );
+    if (!input.ok) return { ok: false, detail: input.detail };
+
+    const output = rehydrateStoredSchema(
+      node.output_schema,
+      `Node ${node.node_key}'s output contract`,
+      { requireConstraint: true },
+    );
+    if (!output.ok) return { ok: false, detail: output.detail };
+
+    nodes.push(defineNode({
       nodeId: node.node_key,
       job: node.job,
       executor: node.executor,
       capability: node.capability as Parameters<typeof defineNode>[0]["capability"],
-      inputSchema: z.unknown(),
-      // Output validation for worker-executed nodes is the provider's
-      // structured-output contract; the stored jsonb schema is display
-      // metadata here, not a second validator pretending to be one.
-      outputSchema: z.unknown(),
+      inputSchema: input.schema,
+      outputSchema: output.schema,
       dependsOn: dependsOn.get(node.node_key) ?? [],
       reads: (node.reads ?? []) as readonly ResourceRef[],
       writes: (node.writes ?? []) as readonly ResourceRef[],
@@ -145,8 +216,8 @@ export function compileClaimedGraph(claim: ClaimedGraph):
       timeoutMs: node.timeout_ms,
       retry: { ...DEFAULT_RETRY_POLICY, maxAttempts: node.max_attempts },
       toleratesPartialInputs: node.tolerates_partial_inputs,
-    }),
-  );
+    }));
+  }
 
   const proposedEdges: ProposedEdge[] = claim.edges.map((edge) => ({
     from: edge.from_node_key,
@@ -186,9 +257,9 @@ export function budgetFromClaim(claim: ClaimedGraph): GraphBudget {
  * A read-only analysis worker reads whatever repository it was checked out
  * on. If the graph's project is bound to a different one, running it anyway
  * produces confident findings about the wrong codebase filed under this
- * project — a wrong answer shaped exactly like a right one. A project with
- * no repository linked has nothing to contradict, and a worker that cannot
- * name its own checkout cannot claim a mismatch either; both proceed.
+ * project — a wrong answer shaped exactly like a right one. Protocol v2
+ * requires both identities, so absence is itself a refusal rather than a
+ * reason to proceed with ambient defaults.
  */
 export function repositoryMismatch(
   projectRepository: string | null | undefined,
@@ -196,7 +267,8 @@ export function repositoryMismatch(
 ): string | null {
   const wanted = (projectRepository ?? "").trim();
   const checkout = (checkoutRepository ?? "").trim();
-  if (!wanted || !checkout) return null;
+  if (!wanted) return "The protocol-v2 claim did not name its canonical repository.";
+  if (!checkout) return "The worker could not prove which repository is checked out.";
   if (wanted.toLowerCase() === checkout.toLowerCase()) return null;
   return `This graph's project is bound to ${wanted}, but the worker is checked out on ${checkout}. `
     + "A read-only analysis of the wrong repository would be a wrong answer, so the run stops here.";
@@ -237,23 +309,26 @@ export type GraphRunStore = {
     nodeRunId?: string | null,
   ) => Promise<void>;
   /**
-   * A reviewing node's verdict about one subject it consumed. Optional so a
-   * store written before verification existed still satisfies this contract
-   * rather than failing a run over a capability it never had.
+   * Commit a model reviewer's terminal state and the complete set of verdicts
+   * derived from that same answer in one database transaction. Production
+   * stores must provide this for reviewer nodes; a runner will never fall
+   * back to a split completion/evidence sequence.
    */
-  readonly recordVerification?: (
-    subjectNodeRunId: string,
-    lens: VerificationLens,
-    verdict: VerificationVerdict,
-    evidence: readonly string[],
-    verifierProvider: string | null,
+  readonly completeReviewerWithVerifications?: (
+    verifierNodeRunId: string,
+    artifactPayload: unknown,
+    execution: { provider: string; model: string; latencyMs: number },
+    verifications: readonly {
+      readonly subjectNodeRunId: string;
+      readonly verdict: VerificationVerdict;
+      readonly evidence: readonly string[];
+    }[],
   ) => Promise<void>;
   /**
    * Open the gate a finished node waits at, and report how it stands.
    *
-   * Optional for the same reason `recordVerification` is: a store written
-   * before gates existed still satisfies this contract rather than failing a
-   * run over a capability it never had.
+   * Optional so a store written before gates existed still satisfies this
+   * contract rather than failing a run over a capability it never had.
    */
   readonly openGate?: (
     nodeId: string,
@@ -273,8 +348,14 @@ export type GraphRunStore = {
    * re-proving finished stages until the provider window caps (optional for
    * the same reason as `openGate`). The database scopes it to lifecycles.
    */
-  readonly readPriorNodeResults?: (graphId: string) => Promise<ReadonlyMap<string, unknown>>;
+  readonly readPriorNodeResults?: (graphId: string) => Promise<ReadonlyMap<string, PriorNodeResult>>;
 };
+
+export type PriorNodeResult = Readonly<{
+  output: unknown;
+  provider?: string;
+  model?: string;
+}>;
 
 export type GraphRunSummary = {
   readonly outcome: RunResult["outcome"];
@@ -356,7 +437,7 @@ export async function runClaimedGraph(
    * tokens. The database scopes the read to lifecycles, so an analysis
    * graph's findings stay fresh.
    */
-  const reusable: ReadonlyMap<string, unknown> = store.readPriorNodeResults
+  const reusable: ReadonlyMap<string, PriorNodeResult> = store.readPriorNodeResults
     ? await store.readPriorNodeResults(claim.graph_id)
     : new Map();
   const reusedNodes = new Set<string>();
@@ -376,11 +457,85 @@ export async function runClaimedGraph(
           missing.push(dependency);
         }
       }
-      const reused = attempt === 1 && reusable.has(node.nodeKey);
+      // Model reviewers must judge the current run's exact subject rows. An
+      // old verdict is useful provenance, but replaying it as a fresh current
+      // verification would be false evidence, so reviewers always execute.
+      const reused = attempt === 1
+        && verificationLensFor(node) === null
+        && reusable.has(node.nodeKey);
       if (reused) reusedNodes.add(node.nodeKey);
-      const outcome: NodeExecutionResult = reused
-        ? { status: "SUCCEEDED", output: reusable.get(node.nodeKey), latencyMs: 0, tokensUsed: 0 }
+      const prior = reused ? reusable.get(node.nodeKey) : undefined;
+      let outcome: NodeExecutionResult = reused
+        ? {
+            status: "SUCCEEDED",
+            output: prior?.output,
+            provider: prior?.provider,
+            model: prior?.model,
+            latencyMs: 0,
+            tokensUsed: 0,
+          }
         : await executeNode(node, attempt, { outputs, missing });
+
+      /*
+       * Validate before any durable write and before the output enters the
+       * dependency map. `runGraph` also validates successful results, but its
+       * validation happens after this injected executor returns; persisting an
+       * artifact here first would make a rejected answer visible and reusable.
+       * This boundary therefore fails the attempt early and returns only a
+       * schema-valid, normalized value to the runner.
+      */
+      if (outcome.status === "SUCCEEDED") {
+        const validation = node.outputSchema
+          ? validateNodeOutput(
+              { nodeId: node.nodeKey, outputSchema: node.outputSchema },
+              outcome.output,
+            )
+          : null;
+        if (validation === null || !validation.valid) {
+          outcome = {
+            status: "FAILED",
+            error: validation === null
+              ? `Node ${node.nodeKey} has no executable output contract.`
+              : `${validation.message} ${validation.issues.join("; ")}`,
+            retryable: true,
+            provider: outcome.provider,
+            model: outcome.model,
+            latencyMs: outcome.latencyMs,
+            tokensUsed: outcome.tokensUsed,
+            costMicros: outcome.costMicros,
+          };
+        } else {
+          outcome = { ...outcome, output: validation.value };
+        }
+      }
+      if (outcome.status === "SUCCEEDED" && verificationLensFor(node)) {
+        const derived = deriveVerdict(outcome.output);
+        const subjects = (incoming.get(node.nodeKey) ?? [])
+          .filter((dependency) => completedOutputs.has(dependency))
+          .map((dependency) => nodeRunIds.get(dependency))
+          .filter((subject): subject is string => Boolean(subject));
+        const refusal = !derived
+          ? "The reviewer output did not contain bounded durable verdict evidence."
+          : subjects.length === 0
+            ? "The reviewer had no completed subject to verify."
+            : !store.completeReviewerWithVerifications
+              ? "The worker store cannot atomically persist reviewer evidence."
+              : !outcome.provider || !outcome.model || outcome.latencyMs === undefined
+                ? "The reviewer execution identity was incomplete."
+                : null;
+        if (refusal) {
+          outcome = {
+            status: "FAILED",
+            error: refusal,
+            retryable: false,
+            provider: outcome.provider,
+            model: outcome.model,
+            latencyMs: outcome.latencyMs,
+            tokensUsed: outcome.tokensUsed,
+            costMicros: outcome.costMicros,
+          };
+        }
+      }
       if (outcome.status === "SUCCEEDED") {
         completedOutputs.set(node.nodeKey, outcome.output);
       }
@@ -454,49 +609,79 @@ export async function runClaimedGraph(
             };
           }
 
-          // The artifact is the node's product, so it lands before the
-          // COMPLETED mark: a refused write can still fail the node cleanly,
-          // where flipping an already-terminal COMPLETED back would be
-          // exactly the finality violation the state machine forbids. A crash
-          // between the two writes leaves an artifact on a non-terminal node
-          // run, which the resume read (COMPLETED/VERIFYING only) ignores.
-          try {
-            await store.recordArtifact(claim.graph_run_id, artifactKindForNode(node), outcome.output, nodeRunId);
-          } catch (error) {
-            const refusal = artifactGuardRefusal(error);
-            if (refusal === null) throw error;
-            finalFailures += 1;
-            await store.recordNodeState(nodeRunId, "FAILED", refusal);
-            return { status: "FAILED", error: refusal, retryable: false };
-          }
-          await store.recordNodeState(nodeRunId, "COMPLETED", null, {
-            provider: outcome.provider,
-            model: outcome.model,
-            latencyMs: outcome.latencyMs,
-          });
-
           // A reviewing node has just judged its inputs. Recording that as a
           // verification — of which subject, under which lens, with the
           // evidence it cited — is what makes the judgement auditable later.
           // It is derived from the answer already given, never a second call:
           // asking again would pay twice for one opinion.
           const lens = verificationLensFor(node);
-          // A reused reviewing node already recorded its verifications in the
-          // run that produced the result; re-recording would duplicate rows
-          // and date the same judgement twice.
-          if (lens && store.recordVerification && !reusedNodes.has(node.nodeKey)) {
+          if (lens) {
             const derived = deriveVerdict(outcome.output);
-            if (derived) {
-              for (const dependency of incoming.get(node.nodeKey) ?? []) {
-                const subject = nodeRunIds.get(dependency);
-                // Only subjects that actually produced something can be
-                // judged; a dependency that never answered was not reviewed.
-                if (!subject || !completedOutputs.has(dependency)) continue;
-                await store.recordVerification(
-                  subject, lens, derived.verdict, derived.evidence, outcome.provider ?? null,
-                );
-              }
+            const subjects = (incoming.get(node.nodeKey) ?? [])
+              .filter((dependency) => completedOutputs.has(dependency))
+              .map((dependency) => nodeRunIds.get(dependency))
+              .filter((subject): subject is string => Boolean(subject));
+            if (
+              !derived
+              || subjects.length === 0
+              || !outcome.provider
+              || !outcome.model
+              || outcome.latencyMs === undefined
+              || !store.completeReviewerWithVerifications
+            ) {
+              const refusal = !derived
+                ? "The reviewer output did not contain a durable verdict."
+                : subjects.length === 0
+                  ? "The reviewer had no completed subject to verify."
+                  : !store.completeReviewerWithVerifications
+                    ? "The worker store cannot atomically persist reviewer evidence."
+                    : "The reviewer execution identity was incomplete.";
+              finalFailures += 1;
+              completedOutputs.delete(node.nodeKey);
+              await store.recordNodeState(nodeRunId, "FAILED", refusal, {
+                provider: outcome.provider,
+                model: outcome.model,
+                latencyMs: outcome.latencyMs,
+              });
+              return { status: "FAILED", error: refusal, retryable: false };
             }
+            await store.completeReviewerWithVerifications(
+              nodeRunId,
+              outcome.output,
+              {
+                provider: outcome.provider,
+                model: outcome.model,
+                latencyMs: outcome.latencyMs,
+              },
+              subjects.map((subjectNodeRunId) => ({
+                subjectNodeRunId,
+                verdict: derived.verdict,
+                evidence: derived.evidence,
+              })),
+            );
+          } else {
+            // Ordinary products use an idempotent node/kind slot. A lost
+            // response therefore replays the same payload instead of
+            // appending a second, ambiguous artifact before completion.
+            try {
+              await store.recordArtifact(
+                claim.graph_run_id,
+                artifactKindForNode(node),
+                outcome.output,
+                nodeRunId,
+              );
+            } catch (error) {
+              const refusal = artifactGuardRefusal(error);
+              if (refusal === null) throw error;
+              finalFailures += 1;
+              await store.recordNodeState(nodeRunId, "FAILED", refusal);
+              return { status: "FAILED", error: refusal, retryable: false };
+            }
+            await store.recordNodeState(nodeRunId, "COMPLETED", null, {
+              provider: outcome.provider,
+              model: outcome.model,
+              latencyMs: outcome.latencyMs,
+            });
           }
         } else if (
           !outcome.retryable
@@ -630,9 +815,12 @@ export async function runClaimedGraph(
  */
 export function artifactGuardRefusal(error: unknown): string | null {
   const message = error instanceof Error ? error.message : String(error);
-  if (!message.includes("graph_artifacts_payload_no_sensitive_data")) return null;
-  return "The node's output was refused by the sensitive-data guard and was not stored. "
-    + "Secret-shaped content must not enter the artifact record.";
+  const sensitive = message.includes("graph_artifacts_payload_no_sensitive_data");
+  const bounded = message.includes("graph_artifacts_payload_size_bounded")
+    || message.includes("graph artifact payload is sensitive or oversized");
+  if (!sensitive && !bounded) return null;
+  return "The node's output was refused by the artifact safety boundary and was not stored. "
+    + "Secret-shaped or oversized content must not enter the artifact record.";
 }
 
 export function anchorsFor(

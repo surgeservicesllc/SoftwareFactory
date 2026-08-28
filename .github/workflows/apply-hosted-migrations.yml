@@ -26,8 +26,8 @@ on:
           20260822000150, 20260822000200, the job-seeker 20260822000400/00500
           pair, executable-model repair 20260822000600,
           clear-controls 20260822000700/00800, and protected
-          20260822000300/00850/00900/01000/01100/01200 are each recorded by
-          their dedicated
+          20260822000300/00850/00900/01000/01100/01200 plus graph-protocol
+          20260827000150/00200 are each recorded by their dedicated
           scopes; "broker-functions"
           applies only the idempotent broker migrations
           (20260816000400 through 20260820000300, plus 20260821000300) and
@@ -108,6 +108,12 @@ on:
           run's recorded artifact payloads, membership-checked and scoped to
           the caller's organization, authenticated execute only, no table or
           row changes;
+          "graph-protocol-fence" applies only 20260827000150, revoking every
+          legacy graph/Phase 1C worker entry point before the old fleet drains;
+          "graph-phase1c-lineage" applies only 20260827000200 after the fence
+          is recorded and every graph/Phase 1C worker and RUNNING row has
+          drained, installing only the version-2 atomic release-lineage
+          protocol; these scopes are forward-only and can never be bundled;
           "resume-gate-halted" applies only 20260824001100, which widens the
           resume read to include gate-halted (VERIFYING) node runs — without
           it an approved gate re-executes work the database already holds and
@@ -203,6 +209,8 @@ on:
           - automatic-gate-decider
           - lifecycle-resume
           - run-artifacts-read
+          - graph-protocol-fence
+          - graph-phase1c-lineage
           - resume-gate-halted
           - gate-approval-voided
           - runs-closure-note
@@ -219,6 +227,7 @@ on:
           - ledger-repair-node-detail
           - probe
 permissions:
+  actions: read
   checks: read
   contents: read
   deployments: read
@@ -261,7 +270,7 @@ jobs:
           if [ "$GH_REPOSITORY" != "surgeservicesllc/SoftwareFactory" ] \
             || [ "$GH_REF" != "refs/heads/main" ] \
             || [ "$GITHUB_SHA" != "$CHECKED_OUT_SHA" ]; then
-            echo "::error::Protected CONTRACT may run only from the exact SoftwareFactory refs/heads/main checkout."
+            echo "::error::Protected database scopes may run only from the exact SoftwareFactory refs/heads/main checkout."
             exit 1
           fi
           CHECK_RUNS=$(curl --fail --silent --show-error \
@@ -330,6 +339,98 @@ jobs:
           VERCEL_DEPLOYMENT_URL=$(jq -r '.[0].environment_url' <<<"$LATEST_STATUS")
           echo "::notice::Exact main SHA ${CHECKED_OUT_SHA} has all four required CI checks green and a successful Vercel Production deployment at ${VERCEL_DEPLOYMENT_URL}."
 
+      - name: Verify exact green release and stopped workers before graph protocol cutover
+        if: ${{ inputs.scope == 'graph-protocol-fence' || inputs.scope == 'graph-phase1c-lineage' }}
+        env:
+          GH_API_URL: ${{ github.api_url }}
+          GH_REF: ${{ github.ref }}
+          GH_REPOSITORY: ${{ github.repository }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          CHECKED_OUT_SHA=$(git rev-parse HEAD)
+          if [ "$GH_REPOSITORY" != "surgeservicesllc/SoftwareFactory" ] \
+            || [ "$GH_REF" != "refs/heads/main" ] \
+            || [ "$GITHUB_SHA" != "$CHECKED_OUT_SHA" ]; then
+            echo "::error::Graph protocol cutover may run only from the exact SoftwareFactory refs/heads/main checkout."
+            exit 1
+          fi
+          for WORKER_WORKFLOW in graph-worker.yml codex-worker.yml; do
+            WORKER_RUNS=$(curl --fail --silent --show-error \
+              --header "Accept: application/vnd.github+json" \
+              --header "Authorization: Bearer ${GH_TOKEN}" \
+              --header "X-GitHub-Api-Version: 2022-11-28" \
+              "${GH_API_URL}/repos/${GH_REPOSITORY}/actions/workflows/${WORKER_WORKFLOW}/runs?per_page=100")
+            ACTIVE_WORKER_RUNS=$(jq '[.workflow_runs[] | select(.status != "completed")] | length' <<<"$WORKER_RUNS")
+            if [ "$ACTIVE_WORKER_RUNS" != "0" ]; then
+              echo "::error::${WORKER_WORKFLOW} still has ${ACTIVE_WORKER_RUNS} active run(s); pause dispatch and drain the fleet before the graph protocol cutover."
+              exit 1
+            fi
+          done
+          CHECK_RUNS=$(curl --fail --silent --show-error \
+            --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            "${GH_API_URL}/repos/${GH_REPOSITORY}/commits/${CHECKED_OUT_SHA}/check-runs?per_page=100")
+          for REQUIRED_CHECK in \
+            "Lint, typecheck, test, and build" \
+            "Browser and accessibility tests 1/3" \
+            "Browser and accessibility tests 2/3" \
+            "Browser and accessibility tests 3/3"; do
+            LATEST_CHECK_STATE=$(jq -r \
+              --arg name "$REQUIRED_CHECK" \
+              --arg sha "$CHECKED_OUT_SHA" '
+                [.check_runs[] | select(
+                  .name == $name
+                  and .head_sha == $sha
+                  and .app.slug == "github-actions"
+                )]
+                | sort_by(.completed_at // .started_at // "")
+                | last
+                | if . == null then "missing|missing"
+                  else "\(.status)|\(.conclusion // "null")" end
+              ' <<<"$CHECK_RUNS")
+            if [ "$LATEST_CHECK_STATE" != "completed|success" ]; then
+              echo "::error::Exact-head CI check '${REQUIRED_CHECK}' is not green (${LATEST_CHECK_STATE})."
+              exit 1
+            fi
+          done
+          DEPLOYMENTS=$(curl --fail --silent --show-error \
+            --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            "${GH_API_URL}/repos/${GH_REPOSITORY}/deployments?environment=Production&per_page=100")
+          LATEST_VERCEL_DEPLOYMENT=$(jq -c '[
+            .[] | select(
+              .environment == "Production"
+              and .task == "deploy"
+              and .creator.login == "vercel[bot]"
+            )
+          ][0] // empty' <<<"$DEPLOYMENTS")
+          if [ -z "$LATEST_VERCEL_DEPLOYMENT" ] || ! jq -e --arg sha "$CHECKED_OUT_SHA" '
+            .sha == $sha and .ref == $sha
+          ' <<<"$LATEST_VERCEL_DEPLOYMENT" >/dev/null; then
+            echo "::error::The latest Vercel-bot Production deployment is not the exact checked-out main SHA/ref."
+            exit 1
+          fi
+          STATUS_URL=$(jq -r '.statuses_url' <<<"$LATEST_VERCEL_DEPLOYMENT")
+          LATEST_STATUS=$(curl --fail --silent --show-error \
+            --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            "${STATUS_URL}?per_page=1")
+          if ! jq -e '
+            length == 1
+            and .[0].state == "success"
+            and .[0].creator.login == "vercel[bot]"
+            and (.[0].environment_url | type == "string")
+            and (.[0].environment_url | test("^https://softwarefactory-[a-z0-9]+-surgeservices-projects\\.vercel\\.app/?$"))
+          ' <<<"$LATEST_STATUS" >/dev/null; then
+            echo "::error::The exact-SHA deployment is not a READY Vercel-bot production for surgeservices-projects/softwarefactory."
+            exit 1
+          fi
+          VERCEL_DEPLOYMENT_URL=$(jq -r '.[0].environment_url' <<<"$LATEST_STATUS")
+          echo "::notice::Exact main SHA ${CHECKED_OUT_SHA} is green, deployed, and has no active graph/Phase 1C worker workflow run (${VERCEL_DEPLOYMENT_URL})."
+
       - name: Choose the connection
         # Decides MODE=token (valid sbp_ token, linked flow) or MODE=dburl
         # (password-only, through the IPv4 session pooler). The URL-encoded
@@ -384,7 +485,7 @@ jobs:
         # do not yet trust the ledger -- but this step sits above the scope
         # branch, so a probe could still rewrite history rows. A read-only
         # question must not be able to edit the thing being questioned.
-        if: ${{ inputs.scope != 'probe' && inputs.scope != 'analysis-launch-doorcheck' && inputs.scope != 'bot-legacy-acl-normalization' && inputs.scope != 'bot-account-binding' && inputs.scope != 'bot-account-binding-contract' && inputs.scope != 'factory-any-model-record-only' && inputs.scope != 'job-seeker-atomic-record' }}
+        if: ${{ inputs.scope != 'probe' && inputs.scope != 'analysis-launch-doorcheck' && inputs.scope != 'bot-legacy-acl-normalization' && inputs.scope != 'bot-account-binding' && inputs.scope != 'bot-account-binding-contract' && inputs.scope != 'factory-any-model-record-only' && inputs.scope != 'job-seeker-atomic-record' && inputs.scope != 'graph-protocol-fence' && inputs.scope != 'graph-phase1c-lineage' }}
         # Two known history-only repairs, each applied only when the live
         # listing shows the stale row. 20260814002000 was renamed to
         # 20260814000100; remote-only 20260814000200 is the pre-split name
@@ -435,6 +536,12 @@ jobs:
             echo "::add-mask::$ENC"
             DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
             echo "::add-mask::$DB_URL"
+          fi
+          CUTOVER_APPLIED=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc \
+            "select exists (select 1 from supabase_migrations.schema_migrations where version >= '20260827000150');")
+          if [ "$CUTOVER_APPLIED" = "t" ]; then
+            echo "::error::scope=broker-functions is retired after the versioned graph protocol cutover; replaying it would restore legacy worker authority."
+            exit 1
           fi
           for FILE in \
             supabase/migrations/20260816000400_inspect_ai_auth_sessions.sql \
@@ -982,7 +1089,7 @@ jobs:
               ('function', 'open_node_gate_as_worker',    null),
               ('function', 'decide_node_gate',            null),
               ('function', 'advance_graph_iteration',     null),
-              ('body',     'claim_planned_graph',         'graph_gates'),
+              ('body',     'claim_planned_graph_v2',      'protocol version 2 is required'),
               ('body',     'list_graph_runs',             'gate_anchor_count')
             )
             select lifecycle.kind,
@@ -4489,6 +4596,12 @@ jobs:
             DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
             echo "::add-mask::$DB_URL"
           fi
+          CUTOVER_APPLIED=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc \
+            "select exists (select 1 from supabase_migrations.schema_migrations where version >= '20260827000150');")
+          if [ "$CUTOVER_APPLIED" = "t" ]; then
+            echo "::error::scope=lifecycle is retired after the versioned graph protocol cutover; replaying it would restore legacy worker authority."
+            exit 1
+          fi
           repair() {
             if [ "$MODE" = "token" ]; then
               npx supabase migration repair --status applied "$1"
@@ -5889,6 +6002,13 @@ jobs:
             echo "::add-mask::$DB_URL"
           fi
 
+          CUTOVER=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
+            "select exists (select 1 from supabase_migrations.schema_migrations where version >= '20260827000150');")
+          if [ "$CUTOVER" = "t" ]; then
+            echo "::error::The graph protocol v2 cutover is recorded; replaying the legacy automatic gate decider is forbidden."
+            exit 1
+          fi
+
           DECIDER_FILE=supabase/migrations/20260824000100_anchored_automatic_gates_decide_themselves.sql
           if [ "$(sha256sum "$DECIDER_FILE" | cut -d' ' -f1)" != "34c5bcbc668a18ff09a49c0ee63941ea23b5603654e98706fa17a775b219ae3c" ]; then
             echo "::error::Migration hash mismatch; refusing production DDL."
@@ -5946,6 +6066,13 @@ jobs:
             echo "::add-mask::$ENC"
             DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
             echo "::add-mask::$DB_URL"
+          fi
+
+          CUTOVER=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
+            "select exists (select 1 from supabase_migrations.schema_migrations where version >= '20260827000150');")
+          if [ "$CUTOVER" = "t" ]; then
+            echo "::error::The graph protocol v2 cutover is recorded; replaying the legacy lifecycle resume read is forbidden."
+            exit 1
           fi
 
           RESUME_FILE=supabase/migrations/20260824000200_lifecycles_resume_from_recorded_results.sql
@@ -6063,6 +6190,13 @@ jobs:
             echo "::add-mask::$ENC"
             DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
             echo "::add-mask::$DB_URL"
+          fi
+
+          CUTOVER=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
+            "select exists (select 1 from supabase_migrations.schema_migrations where version >= '20260827000150');")
+          if [ "$CUTOVER" = "t" ]; then
+            echo "::error::The graph protocol v2 cutover is recorded; replaying the legacy gate-halted resume read is forbidden."
+            exit 1
           fi
 
           HALTED_FILE=supabase/migrations/20260824001100_resume_reuses_gate_halted_work.sql
@@ -6252,6 +6386,13 @@ jobs:
             echo "::add-mask::$DB_URL"
           fi
 
+          CUTOVER=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
+            "select exists (select 1 from supabase_migrations.schema_migrations where version >= '20260827000150');")
+          if [ "$CUTOVER" = "t" ]; then
+            echo "::error::The graph protocol v2 cutover is recorded; replaying the legacy graph claim is forbidden."
+            exit 1
+          fi
+
           VOID_FILE=supabase/migrations/20260825000100_gate_approval_survives_voided_runs.sql
           if [ "$(sha256sum "$VOID_FILE" | cut -d' ' -f1)" != "ff38feb9debcd64e30809639b084305200c440632a8bf05b7b0ee9c0903f324e" ]; then
             echo "::error::Migration hash mismatch; refusing production DDL."
@@ -6423,6 +6564,345 @@ jobs:
             exit 1
           fi
           echo "Recorded: the ledger now agrees with the schema, and scope=all no longer re-runs it."
+
+      - name: Fence the legacy graph protocol (scope=graph-protocol-fence)
+        # Phase one of the worker cutover. Exactly one file and its ledger row
+        # commit together. This revokes new legacy calls before waiting for
+        # already-entered calls and RUNNING rows to drain; it installs no v2
+        # authority and never enables a worker or automatic action.
+        if: ${{ inputs.scope == 'graph-protocol-fence' }}
+        run: |
+          if [ "$GITHUB_REPOSITORY" != "surgeservicesllc/SoftwareFactory" ] \
+            || [ "$GITHUB_REF" != "refs/heads/main" ] \
+            || [ "$PROJECT_REF" != "qpuofpmagrmyamahqwxw" ] \
+            || [ "$GITHUB_SHA" != "$(git rev-parse HEAD)" ]; then
+            echo "::error::The graph protocol fence may run only from the exact SoftwareFactory main checkout against the production project."
+            exit 1
+          fi
+          if [ -z "$SUPABASE_DB_PASSWORD" ]; then
+            echo "::error::This protected scope requires SUPABASE_DB_PASSWORD for exact live ledger/catalog/safety verification."
+            exit 1
+          fi
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+
+          FILE=supabase/migrations/20260827000150_fence_legacy_graph_protocol.sql
+          EXPECTED_SHA256=a4b505841d94cc89dfc82e24837dedb78356b56c5f5698c0748f8b6735341a49
+          if [ "$(sha256sum "$FILE" | cut -d' ' -f1)" != "$EXPECTED_SHA256" ]; then
+            echo "::error::Graph protocol fence hash mismatch; refusing production DDL."
+            exit 1
+          fi
+
+          LEDGER=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+            select
+              (select count(*) from supabase_migrations.schema_migrations where version='20260827000100') || '|' ||
+              (select count(*) from supabase_migrations.schema_migrations where version='20260827000150') || '|' ||
+              (select count(*) from supabase_migrations.schema_migrations where version='20260827000200');")
+          if [ "$LEDGER" != "1|0|0" ]; then
+            echo "::error::Graph protocol fence ledger preflight is not exact (want 00100/00150/00200=1/0/0; got ${LEDGER})."
+            exit 1
+          fi
+
+          LEGACY_CATALOG=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+            set search_path = pg_catalog;
+            with expected(signature) as (values
+              ('public.start_graph_run(uuid)'),
+              ('public.claim_planned_graph(text,text[])'),
+              ('public.claim_phase1c_run(text,text,text,integer)'),
+              ('public.decide_node_gate(uuid,boolean,text)'),
+              ('public.record_node_state(uuid,public.graph_node_state,text,text,text,integer)'),
+              ('public.complete_graph_run(uuid,public.graph_run_state,boolean,bigint,bigint,text)'),
+              ('public.record_handoff(uuid,uuid,jsonb,boolean,jsonb,uuid,jsonb,jsonb,jsonb,text)'),
+              ('public.record_graph_artifact(uuid,public.graph_artifact_kind,jsonb,uuid,integer,integer)'),
+              ('public.record_verification(uuid,public.verification_lens,public.verification_verdict,jsonb,uuid,text,boolean)')
+            )
+            select count(*) = 9 and bool_and(to_regprocedure(signature) is not null)
+              from expected;")
+          if [ "$LEGACY_CATALOG" != "t" ]; then
+            echo "::error::A legacy graph protocol signature is missing; refusing a partial fence."
+            exit 1
+          fi
+
+          CONTAINMENT=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+            set search_path = pg_catalog;
+            select
+              not exists (
+                select 1 from public.organizations organization
+                 where organization.autonomous_mode
+                    or not organization.autonomy_kill_switch_active
+                    or organization.auto_plan or organization.auto_code
+                    or organization.auto_test or organization.auto_repair
+                    or organization.auto_review or organization.auto_approve
+                    or organization.auto_merge or organization.auto_deploy
+                    or organization.auto_rollback
+              )
+              and not exists (
+                select 1 from public.projects project
+                 where project.autonomous_mode
+                    or project.auto_plan or project.auto_code
+                    or project.auto_test or project.auto_repair
+                    or project.auto_review or project.auto_approve
+                    or project.auto_merge or project.auto_deploy
+                    or project.auto_rollback
+              )
+              and not exists (
+                select 1 from public.phase1c_workers worker
+                 where worker.status in ('active','draining')
+                   and worker.last_heartbeat_at > now() - interval '5 minutes'
+                   and worker.last_heartbeat_at <= now() + interval '1 minute'
+              );")
+          if [ "$CONTAINMENT" != "t" ]; then
+            echo "::error::Autonomy, an automatic action, the kill switch, or a fresh worker heartbeat is outside the required containment state."
+            exit 1
+          fi
+
+          STAGE_DIR=$(mktemp -d)
+          trap 'rm -rf -- "$STAGE_DIR"' EXIT
+          STAGED_FILE="$STAGE_DIR/20260827000150_fence_legacy_graph_protocol.sql"
+          cp -- "$FILE" "$STAGED_FILE"
+          if [ "$(sha256sum "$STAGED_FILE" | cut -d' ' -f1)" != "$EXPECTED_SHA256" ] \
+            || [ "$(find "$STAGE_DIR" -maxdepth 1 -type f | wc -l | tr -d ' ')" != "1" ]; then
+            echo "::error::Exact-file staging failed; refusing production DDL."
+            exit 1
+          fi
+
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -X --single-transaction -q \
+            -f "$STAGED_FILE" \
+            -c "insert into supabase_migrations.schema_migrations (version) values ('20260827000150');"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q -c "NOTIFY pgrst, 'reload schema';"
+
+          VERIFIED=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+            set search_path = pg_catalog;
+            with expected(signature) as (values
+              ('public.start_graph_run(uuid)'),
+              ('public.claim_planned_graph(text,text[])'),
+              ('public.claim_phase1c_run(text,text,text,integer)'),
+              ('public.decide_node_gate(uuid,boolean,text)'),
+              ('public.record_node_state(uuid,public.graph_node_state,text,text,text,integer)'),
+              ('public.complete_graph_run(uuid,public.graph_run_state,boolean,bigint,bigint,text)'),
+              ('public.record_handoff(uuid,uuid,jsonb,boolean,jsonb,uuid,jsonb,jsonb,jsonb,text)'),
+              ('public.record_graph_artifact(uuid,public.graph_artifact_kind,jsonb,uuid,integer,integer)'),
+              ('public.record_verification(uuid,public.verification_lens,public.verification_verdict,jsonb,uuid,text,boolean)')
+            ), state as (
+              select signature, to_regprocedure(signature) as routine from expected
+            )
+            select
+              (select count(*) = 1 from supabase_migrations.schema_migrations where version='20260827000150')
+              and (select count(*) = 0 from supabase_migrations.schema_migrations where version='20260827000200')
+              and count(routine) = 9
+              and bool_and(
+                not has_function_privilege('anon', routine, 'EXECUTE')
+                and not has_function_privilege('authenticated', routine, 'EXECUTE')
+                and not has_function_privilege('service_role', routine, 'EXECUTE')
+              )
+            from state;")
+          if [ "$VERIFIED" != "t" ]; then
+            echo "::error::Graph protocol fence ledger/catalog/ACL postflight failed; contain only with a new forward migration."
+            exit 1
+          fi
+          DRAIN_STATUS=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+            select
+              (select count(*) from public.graph_runs where state='RUNNING'::public.graph_run_state) || '|' ||
+              (select count(*) from public.agent_runs where status='running'::public.run_status);")
+          echo "Applied exactly 20260827000150. Legacy authority is fenced. RUNNING graph/Phase1C rows=${DRAIN_STATUS}; do not apply 00200 until this reads 0|0."
+
+      - name: Install graph Phase 1C release lineage (scope=graph-phase1c-lineage)
+        # Phase two runs only after the separately committed 00150 fence and a
+        # complete fleet drain. Exactly one file and its ledger row commit in
+        # one transaction; the migration repeats the fence, lock, safety, and
+        # drain checks before its first DDL.
+        if: ${{ inputs.scope == 'graph-phase1c-lineage' }}
+        run: |
+          if [ "$GITHUB_REPOSITORY" != "surgeservicesllc/SoftwareFactory" ] \
+            || [ "$GITHUB_REF" != "refs/heads/main" ] \
+            || [ "$PROJECT_REF" != "qpuofpmagrmyamahqwxw" ] \
+            || [ "$GITHUB_SHA" != "$(git rev-parse HEAD)" ]; then
+            echo "::error::Graph Phase 1C lineage may run only from the exact SoftwareFactory main checkout against the production project."
+            exit 1
+          fi
+          if [ -z "$SUPABASE_DB_PASSWORD" ]; then
+            echo "::error::This protected scope requires SUPABASE_DB_PASSWORD for exact live ledger/catalog/safety verification."
+            exit 1
+          fi
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+
+          FILE=supabase/migrations/20260827000200_graph_phase1c_release_lineage.sql
+          EXPECTED_SHA256=23197552df3f442ae8264bf71bd28a7c479e09a64bf6e298c615b767a96572be
+          if [ "$(sha256sum "$FILE" | cut -d' ' -f1)" != "$EXPECTED_SHA256" ]; then
+            echo "::error::Graph Phase 1C lineage hash mismatch; refusing production DDL."
+            exit 1
+          fi
+
+          LEDGER=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+            select
+              (select count(*) from supabase_migrations.schema_migrations where version='20260827000100') || '|' ||
+              (select count(*) from supabase_migrations.schema_migrations where version='20260827000150') || '|' ||
+              (select count(*) from supabase_migrations.schema_migrations where version='20260827000200');")
+          if [ "$LEDGER" != "1|1|0" ]; then
+            echo "::error::Graph Phase 1C lineage ledger preflight is not exact (want 00100/00150/00200=1/1/0; got ${LEDGER})."
+            exit 1
+          fi
+
+          READY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+            set search_path = pg_catalog;
+            with expected(signature) as (values
+              ('public.start_graph_run(uuid)'),
+              ('public.claim_planned_graph(text,text[])'),
+              ('public.claim_phase1c_run(text,text,text,integer)'),
+              ('public.decide_node_gate(uuid,boolean,text)'),
+              ('public.record_node_state(uuid,public.graph_node_state,text,text,text,integer)'),
+              ('public.complete_graph_run(uuid,public.graph_run_state,boolean,bigint,bigint,text)'),
+              ('public.record_handoff(uuid,uuid,jsonb,boolean,jsonb,uuid,jsonb,jsonb,jsonb,text)'),
+              ('public.record_graph_artifact(uuid,public.graph_artifact_kind,jsonb,uuid,integer,integer)'),
+              ('public.record_verification(uuid,public.verification_lens,public.verification_verdict,jsonb,uuid,text,boolean)')
+            ), state as (select signature, to_regprocedure(signature) as routine from expected)
+            select count(routine) = 9
+              and bool_and(
+                not has_function_privilege('anon', routine, 'EXECUTE')
+                and not has_function_privilege('authenticated', routine, 'EXECUTE')
+                and not has_function_privilege('service_role', routine, 'EXECUTE')
+              )
+              and to_regclass('public.graphs') is not null
+              and to_regclass('public.graph_runs') is not null
+              and to_regclass('public.node_runs') is not null
+              and to_regclass('public.graph_gates') is not null
+              and to_regclass('public.graph_artifacts') is not null
+              and to_regclass('public.agent_runs') is not null
+              and to_regclass('public.github_repositories') is not null
+              and to_regclass('public.deployments') is not null
+              and to_regclass('public.monitor_observations') is not null
+            from state;")
+          if [ "$READY" != "t" ]; then
+            echo "::error::The committed fence or prerequisite graph/release catalog is not exact."
+            exit 1
+          fi
+
+          DRAINED=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+            set search_path = pg_catalog;
+            select
+              not exists (
+                select 1 from public.organizations organization
+                 where organization.autonomous_mode
+                    or not organization.autonomy_kill_switch_active
+                    or organization.auto_plan or organization.auto_code
+                    or organization.auto_test or organization.auto_repair
+                    or organization.auto_review or organization.auto_approve
+                    or organization.auto_merge or organization.auto_deploy
+                    or organization.auto_rollback
+              )
+              and not exists (
+                select 1 from public.projects project
+                 where project.autonomous_mode
+                    or project.auto_plan or project.auto_code
+                    or project.auto_test or project.auto_repair
+                    or project.auto_review or project.auto_approve
+                    or project.auto_merge or project.auto_deploy
+                    or project.auto_rollback
+              )
+              and not exists (
+                select 1 from public.phase1c_workers worker
+                 where worker.status in ('active','draining')
+                   and worker.last_heartbeat_at > now() - interval '5 minutes'
+                   and worker.last_heartbeat_at <= now() + interval '1 minute'
+              )
+              and not exists (select 1 from public.graph_runs where state='RUNNING'::public.graph_run_state)
+              and not exists (select 1 from public.agent_runs where status='running'::public.run_status)
+              and not exists (
+                select 1 from pg_stat_activity activity
+                 where activity.pid <> pg_backend_pid()
+                   and activity.datid = (select oid from pg_database where datname=current_database())
+                   and activity.state <> 'idle'
+                   and activity.query ~* '(start_graph_run|claim_planned_graph|claim_phase1c_run|decide_node_gate|record_node_state|complete_graph_run|record_handoff|record_graph_artifact|record_verification)'
+              )
+              and not exists (
+                select 1 from pg_locks held_lock
+                 where held_lock.pid <> pg_backend_pid()
+                   and held_lock.granted
+                   and held_lock.relation in (
+                     'public.graphs'::regclass, 'public.graph_runs'::regclass,
+                     'public.agent_runs'::regclass, 'public.node_runs'::regclass,
+                     'public.graph_gates'::regclass, 'public.graph_artifacts'::regclass,
+                     'public.graph_handoffs'::regclass, 'public.graph_verifications'::regclass
+                   )
+              );")
+          if [ "$DRAINED" != "t" ]; then
+            echo "::error::The fleet is not fully drained or production containment is not exact; 00200 remains blocked."
+            exit 1
+          fi
+
+          STAGE_DIR=$(mktemp -d)
+          trap 'rm -rf -- "$STAGE_DIR"' EXIT
+          STAGED_FILE="$STAGE_DIR/20260827000200_graph_phase1c_release_lineage.sql"
+          cp -- "$FILE" "$STAGED_FILE"
+          if [ "$(sha256sum "$STAGED_FILE" | cut -d' ' -f1)" != "$EXPECTED_SHA256" ] \
+            || [ "$(find "$STAGE_DIR" -maxdepth 1 -type f | wc -l | tr -d ' ')" != "1" ]; then
+            echo "::error::Exact-file staging failed; refusing production DDL."
+            exit 1
+          fi
+
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -X --single-transaction -q \
+            -f "$STAGED_FILE" \
+            -c "insert into supabase_migrations.schema_migrations (version) values ('20260827000200');"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q -c "NOTIFY pgrst, 'reload schema';"
+
+          VERIFIED=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+            set search_path = pg_catalog;
+            select
+              (select count(*) = 1 from supabase_migrations.schema_migrations where version='20260827000150')
+              and (select count(*) = 1 from supabase_migrations.schema_migrations where version='20260827000200')
+              and to_regclass('public.graph_phase1c_bridges') is not null
+              and to_regclass('public.graph_release_gate_approval_intents') is not null
+              and (select count(*) = 2 and bool_and(relation.relrowsecurity and relation.relforcerowsecurity)
+                     from pg_class relation join pg_namespace space on space.oid=relation.relnamespace
+                    where space.nspname='public' and relation.relname in ('graph_phase1c_bridges','graph_release_gate_approval_intents'))
+              and not has_table_privilege('service_role', 'public.graph_phase1c_bridges', 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+              and not has_table_privilege('service_role', 'public.graph_release_gate_approval_intents', 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+              and to_regprocedure('public.claim_planned_graph_v2(text,text[],text,jsonb,integer)') is not null
+              and has_function_privilege('service_role', 'public.claim_planned_graph_v2(text,text[],text,jsonb,integer)', 'EXECUTE')
+              and not has_function_privilege('anon', 'public.claim_planned_graph_v2(text,text[],text,jsonb,integer)', 'EXECUTE')
+              and not has_function_privilege('authenticated', 'public.claim_planned_graph_v2(text,text[],text,jsonb,integer)', 'EXECUTE')
+              and to_regprocedure('public.claim_phase1c_run_v2(text,text,text,integer,integer)') is not null
+              and has_function_privilege('service_role', 'public.claim_phase1c_run_v2(text,text,text,integer,integer)', 'EXECUTE')
+              and not has_function_privilege('anon', 'public.claim_phase1c_run_v2(text,text,text,integer,integer)', 'EXECUTE')
+              and not has_function_privilege('authenticated', 'public.claim_phase1c_run_v2(text,text,text,integer,integer)', 'EXECUTE')
+              and not has_function_privilege('service_role', 'public.claim_planned_graph(text,text[])', 'EXECUTE')
+              and not has_function_privilege('service_role', 'public.claim_planned_graph_internal(text,text[],text,jsonb)', 'EXECUTE')
+              and not has_function_privilege('service_role', 'public.claim_phase1c_run(text,text,text,integer)', 'EXECUTE')
+              and to_regprocedure('public.diagnose_graph_queue_as_worker_v2(text,text,jsonb,uuid,integer)') is not null
+              and has_function_privilege('service_role', 'public.diagnose_graph_queue_as_worker_v2(text,text,jsonb,uuid,integer)', 'EXECUTE')
+              and not has_function_privilege('anon', 'public.diagnose_graph_queue_as_worker_v2(text,text,jsonb,uuid,integer)', 'EXECUTE')
+              and not has_function_privilege('authenticated', 'public.diagnose_graph_queue_as_worker_v2(text,text,jsonb,uuid,integer)', 'EXECUTE')
+              and not has_function_privilege('service_role', 'public.diagnose_graph_queue_as_worker(text)', 'EXECUTE')
+              and to_regprocedure('public.abort_graph_run_as_worker(text,uuid,public.graph_run_state,text)') is not null
+              and has_function_privilege('service_role', 'public.abort_graph_run_as_worker(text,uuid,public.graph_run_state,text)', 'EXECUTE')
+              and not has_function_privilege('anon', 'public.abort_graph_run_as_worker(text,uuid,public.graph_run_state,text)', 'EXECUTE')
+              and not has_function_privilege('authenticated', 'public.abort_graph_run_as_worker(text,uuid,public.graph_run_state,text)', 'EXECUTE')
+              and (select count(*) = 4 and bool_and(routine.prosecdef and routine.proconfig @> array['search_path=pg_catalog']::text[])
+                     from pg_proc routine
+                    where routine.oid in (
+                      to_regprocedure('public.claim_planned_graph_v2(text,text[],text,jsonb,integer)'),
+                      to_regprocedure('public.claim_phase1c_run_v2(text,text,text,integer,integer)'),
+                      to_regprocedure('public.diagnose_graph_queue_as_worker_v2(text,text,jsonb,uuid,integer)'),
+                      to_regprocedure('public.abort_graph_run_as_worker(text,uuid,public.graph_run_state,text)')
+                    ))
+              and (select count(*) = 0 from public.graph_runs where state='RUNNING'::public.graph_run_state)
+              and (select count(*) = 0 from public.agent_runs where status='running'::public.run_status)
+              and not exists (select 1 from public.organizations where autonomous_mode or not autonomy_kill_switch_active or auto_plan or auto_code or auto_test or auto_repair or auto_review or auto_approve or auto_merge or auto_deploy or auto_rollback)
+              and not exists (select 1 from public.projects where autonomous_mode or auto_plan or auto_code or auto_test or auto_repair or auto_review or auto_approve or auto_merge or auto_deploy or auto_rollback);")
+          if [ "$VERIFIED" != "t" ]; then
+            echo "::error::Graph Phase 1C lineage ledger/catalog/ACL/RLS/safety postflight failed; contain only with a new forward migration."
+            exit 1
+          fi
+          echo "Applied exactly 20260827000200 after the separately recorded fence and verified the v2 catalog, ACLs, forced RLS, drained fleet, and containment state."
 
       - name: Apply atomic job recording (scope=job-seeker-atomic-record)
         # Exactly one staged file and one transaction. The migration and its
@@ -6757,7 +7237,7 @@ jobs:
           # their dedicated hash, predecessor, catalog, ACL, app-acceptance,
           # and ledger checks above in separate runs.
           if [ -z "$SUPABASE_DB_PASSWORD" ]; then
-            echo "::error::scope=all requires SUPABASE_DB_PASSWORD to prove protected 00150/00200/job-00400/job-00500/model-00600/clear-00700/00800/00300/00850/00900/01000/01100/01200 are already recorded."
+            echo "::error::scope=all requires SUPABASE_DB_PASSWORD to prove protected bot-00150/00200/job-00400/job-00500/model-00600/clear-00700/00800/00300/00850/00900/01000/01100/01200 and graph-00150/00200 are already recorded."
             exit 1
           fi
           if [ "$MODE" != "dburl" ]; then
@@ -6777,7 +7257,9 @@ jobs:
             || [ "$(tr -d '\r' < supabase/migrations/20260822001000_factory_any_model_record_only.sql | sha256sum | cut -d' ' -f1)" != "b09a07b28ec3429e60f373b01d257c7ad16afd0767bc921f6dd645f81a6c1255" ] \
             || [ "$(tr -d '\r' < supabase/migrations/20260822001100_contract_resume_extraction_function_acl.sql | sha256sum | cut -d' ' -f1)" != "dd4bb8ed59d5a46cea66b213fe53b0ad101da18244c161bae543999ae49af789" ] \
             || [ "$(tr -d '\r' < supabase/migrations/20260822001200_contract_clear_function_acls.sql | sha256sum | cut -d' ' -f1)" != "ed90ededc30117434bacadebfffb47e35d39d26c0abf31725a96bc7f829bf87e" ] \
-            || [ "$(tr -d '\r' < supabase/migrations/20260827000100_record_job_seeker_job_atomically.sql | sha256sum | cut -d' ' -f1)" != "2f51bf64ba3fd2bc711e6fbf9e660a2cc0dd5ef4b1f85d932ee574e79e9c7d13" ]; then
+            || [ "$(tr -d '\r' < supabase/migrations/20260827000100_record_job_seeker_job_atomically.sql | sha256sum | cut -d' ' -f1)" != "2f51bf64ba3fd2bc711e6fbf9e660a2cc0dd5ef4b1f85d932ee574e79e9c7d13" ] \
+            || [ "$(tr -d '\r' < supabase/migrations/20260827000150_fence_legacy_graph_protocol.sql | sha256sum | cut -d' ' -f1)" != "a4b505841d94cc89dfc82e24837dedb78356b56c5f5698c0748f8b6735341a49" ] \
+            || [ "$(tr -d '\r' < supabase/migrations/20260827000200_graph_phase1c_release_lineage.sql | sha256sum | cut -d' ' -f1)" != "23197552df3f442ae8264bf71bd28a7c479e09a64bf6e298c615b767a96572be" ]; then
             echo "::error::A protected migration file hash drifted; broad push is forbidden."
             exit 1
           fi
@@ -6809,6 +7291,10 @@ jobs:
             "select count(*) from supabase_migrations.schema_migrations where version = '20260822001200';")
           PROTECTED_JOB_ATOMIC_RECORD=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
             "select count(*) from supabase_migrations.schema_migrations where version = '20260827000100';")
+          PROTECTED_GRAPH_PROTOCOL_FENCE=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
+            "select count(*) from supabase_migrations.schema_migrations where version = '20260827000150';")
+          PROTECTED_GRAPH_PHASE1C_LINEAGE=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
+            "select count(*) from supabase_migrations.schema_migrations where version = '20260827000200';")
           if [ "$PROTECTED_NORMALIZER" != "1" ]; then
             echo "::error::Protected migration 20260822000150 is not recorded exactly once. Apply it only through scope=bot-legacy-acl-normalization; broad push is forbidden."
             exit 1
@@ -6855,6 +7341,42 @@ jobs:
           fi
           if [ "$PROTECTED_JOB_ATOMIC_RECORD" != "1" ]; then
             echo "::error::Protected migration 20260827000100 is not recorded exactly once. Apply it only through scope=job-seeker-atomic-record; broad push is forbidden."
+            exit 1
+          fi
+          if [ "$PROTECTED_GRAPH_PROTOCOL_FENCE" != "1" ]; then
+            echo "::error::Protected migration 20260827000150 is not recorded exactly once. Apply it only through scope=graph-protocol-fence; broad push is forbidden."
+            exit 1
+          fi
+          if [ "$PROTECTED_GRAPH_PHASE1C_LINEAGE" != "1" ]; then
+            echo "::error::Protected migration 20260827000200 is not recorded exactly once. Apply it only through scope=graph-phase1c-lineage after the separately verified fence and drain; broad push is forbidden."
+            exit 1
+          fi
+          PROTECTED_GRAPH_PROTOCOL_READY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+            set search_path = pg_catalog;
+            select
+              to_regprocedure('public.claim_planned_graph_v2(text,text[],text,jsonb,integer)') is not null
+              and has_function_privilege('service_role', 'public.claim_planned_graph_v2(text,text[],text,jsonb,integer)', 'EXECUTE')
+              and not has_function_privilege('anon', 'public.claim_planned_graph_v2(text,text[],text,jsonb,integer)', 'EXECUTE')
+              and not has_function_privilege('authenticated', 'public.claim_planned_graph_v2(text,text[],text,jsonb,integer)', 'EXECUTE')
+              and to_regprocedure('public.diagnose_graph_queue_as_worker_v2(text,text,jsonb,uuid,integer)') is not null
+              and has_function_privilege('service_role', 'public.diagnose_graph_queue_as_worker_v2(text,text,jsonb,uuid,integer)', 'EXECUTE')
+              and not has_function_privilege('service_role', 'public.diagnose_graph_queue_as_worker(text)', 'EXECUTE')
+              and to_regprocedure('public.abort_graph_run_as_worker(text,uuid,public.graph_run_state,text)') is not null
+              and has_function_privilege('service_role', 'public.abort_graph_run_as_worker(text,uuid,public.graph_run_state,text)', 'EXECUTE')
+              and not has_function_privilege('service_role', 'public.claim_planned_graph(text,text[])', 'EXECUTE')
+              and not has_function_privilege('service_role', 'public.claim_planned_graph_internal(text,text[],text,jsonb)', 'EXECUTE')
+              and not has_function_privilege('service_role', 'public.claim_phase1c_run(text,text,text,integer)', 'EXECUTE')
+              and (select count(*) = 2 and bool_and(relation.relrowsecurity and relation.relforcerowsecurity)
+                     from pg_class relation join pg_namespace space on space.oid=relation.relnamespace
+                    where space.nspname='public' and relation.relname in ('graph_phase1c_bridges','graph_release_gate_approval_intents'))
+              and not has_table_privilege('service_role', 'public.graph_phase1c_bridges', 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+              and not has_table_privilege('service_role', 'public.graph_release_gate_approval_intents', 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+              and not exists (select 1 from public.graph_runs where state='RUNNING'::public.graph_run_state)
+              and not exists (select 1 from public.agent_runs where status='running'::public.run_status)
+              and not exists (select 1 from public.organizations where autonomous_mode or not autonomy_kill_switch_active or auto_plan or auto_code or auto_test or auto_repair or auto_review or auto_approve or auto_merge or auto_deploy or auto_rollback)
+              and not exists (select 1 from public.projects where autonomous_mode or auto_plan or auto_code or auto_test or auto_repair or auto_review or auto_approve or auto_merge or auto_deploy or auto_rollback);")
+          if [ "$PROTECTED_GRAPH_PROTOCOL_READY" != "t" ]; then
+            echo "::error::The protected graph protocol rows exist but their v2/private ACL, RLS, drain, or containment state drifted; broad push is forbidden."
             exit 1
           fi
           PROTECTED_RESUME_FUNCTION_ACL_READY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "

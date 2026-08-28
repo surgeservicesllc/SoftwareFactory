@@ -1,6 +1,7 @@
 // @vitest-environment node
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 
 vi.mock("server-only", () => ({}));
 
@@ -32,6 +33,8 @@ const node = {
   nodeKey: "synthesize",
   job: "Synthesize the three inspections",
   capability: "synthesis",
+  inputSchema: z.unknown(),
+  outputSchema: z.object({ ok: z.boolean() }),
   modelTier: "STRONG",
   risk: "GREEN",
   timeoutMs: 180_000,
@@ -51,6 +54,11 @@ const options = {
 function capturedTask(): string {
   const call = executeMock.mock.calls.at(-1);
   return (call?.[1] as { task: string }).task;
+}
+
+function capturedSystem(): string {
+  const call = executeMock.mock.calls.at(-1);
+  return (call?.[1] as { system: string }).system;
 }
 
 beforeEach(() => {
@@ -105,7 +113,13 @@ describe("buildClaudeNodeExecutor", () => {
     expect(executeMock.mock.calls.at(-1)?.[4]).toMatchObject({
       maxTurns: GRAPH_NODE_MAX_TURNS,
       allowedTools: ["Read", "Glob", "Grep"],
+      outputSchema: expect.objectContaining({
+        type: "object",
+        required: ["ok"],
+      }),
     });
+    expect(capturedSystem()).toContain("this exact JSON Schema");
+    expect(capturedSystem()).toContain('"required":["ok"]');
     const task = capturedTask();
     expect(task).toContain("Synthesize the three inspections");
     expect(task).toContain('Input from upstream node "inspect_a"');

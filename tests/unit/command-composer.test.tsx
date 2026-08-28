@@ -281,6 +281,8 @@ describe("CommandComposer", () => {
     expect(await screen.findByText("invalid Phase 1C command plan")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Retry command" })).toBeEnabled();
 
+    // An ordinary parent render is not a new attempt and must not erase the
+    // failure before the person has read or retried it.
     view.rerender(<CommandComposer projectContext={firstProject} />);
     expect(screen.getByText("invalid Phase 1C command plan")).toBeInTheDocument();
 

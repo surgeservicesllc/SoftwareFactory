@@ -1015,4 +1015,32 @@ requested rework is the failure mode to design against.
 - [x] Distinguish the old Aug 22 client error from a current hosted database rejection using production request and migration evidence.
 - [x] Clear result state on a changed/remounted command intent and expose a same-idempotency Retry command action.
 - [x] Map the two exact legacy command-plan/schema-skew refusals to a safe actionable `503` response.
+- [x] Render the server-verified signed-out gate immediately, skip all
+  protected client reads while signed out, deduplicate the layout/page viewer
+  lookup per request, and bound that presentation lookup to five seconds.
 - [ ] Publish the exact candidate, require exact-head CI and READY Vercel identity, reload the signed-in page, submit a new Step 8 request, and record the resulting command/route identity before calling the incident closed.
+
+## Ten-step Factory v2 release candidate (2026-08-27)
+
+- [x] Rebase and locally audit candidate
+  `ead498b495ac59d920e6f76df7917ea830dbcf8c`: Requirements -> Monitor
+  lifecycle, exact release identity, Phase 1C lineage, strict gates, and exact
+  Factory graph/run selection. Focused release verification passes 18 files /
+  207 tests plus lint, typecheck, production build, and diff-check.
+- [x] Isolate the forward cutover into `20260827000150` and `20260827000200`
+  with dedicated one-shot scopes. Stable LF-normalized SHA-256 identities are
+  `A4B505841D94CC89DFC82E24837DEDB78356B56C5F5698C0748F8B6735341A49`
+  and `23197552DF3F442AE8264BF71BD28A7C479E09A64BF6E298C615B767A96572BE`.
+- [ ] Publish the candidate, require the exact-head quality and all browser /
+  accessibility jobs green, and verify the exact READY Vercel production
+  identity and health. No deployment is claimed yet.
+- [ ] Apply only `20260827000150`, verify its ledger/catalog/fence/safety
+  postflight, then apply only `20260827000200` and verify its ledger, catalog,
+  ACL, RLS, audit, runtime, lint, health, and preserved release identity. No
+  hosted apply is claimed yet; never bundle, reset, replay, or down-migrate.
+- [ ] Reconnect a fresh supported owner AI account and verify reload
+  stickiness, then complete signed-in production Steps 8 and 9 against the
+  exact release. The former Claude bot/account was explicitly removed on
+  2026-08-23, so its absence is not a current planner regression.
+- [ ] Preserve workers, provider execution, autonomous mode, and all automatic
+  actions OFF with the global kill switch ON throughout acceptance.

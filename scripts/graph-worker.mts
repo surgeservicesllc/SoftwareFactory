@@ -5,6 +5,7 @@ import { tryResolveClaudeAuth } from "@/lib/providers/claude-auth";
 import { buildClaudeNodeExecutor } from "@/lib/worker/claude-node-executor";
 import { executeDeterministicNode } from "@/lib/worker/deterministic-node-executor";
 import { buildAnchorNodeExecutor } from "@/lib/worker/anchor-node-executor";
+import { parseRequiredCheckNames } from "@/lib/graph/release-policy";
 import { compileClaimedGraph, parseClaimedGraph, repositoryMismatch, runClaimedGraph } from "@/lib/worker/graph-run";
 import { SupabaseGraphStore } from "@/lib/worker/graph-store";
 
@@ -23,6 +24,12 @@ import { SupabaseGraphStore } from "@/lib/worker/graph-store";
 
 const once = process.argv.includes("--once");
 const drain = process.argv.includes("--drain");
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const CLAIM_ABORT_DETAIL = Object.freeze({
+  invalidProjection: "The claimed graph projection failed protocol-v2 validation.",
+  repositoryMismatch: "The claimed graph repository did not match this worker checkout.",
+  compileFailure: "The claimed graph failed the execution contract before any node started.",
+});
 let stopping = false;
 process.once("SIGINT", () => { stopping = true; });
 process.once("SIGTERM", () => { stopping = true; });
@@ -30,6 +37,13 @@ process.once("SIGTERM", () => { stopping = true; });
 function requiredEnv(name: string): string {
   const value = process.env[name]?.trim();
   if (!value) throw new Error(`${name} is required.`);
+  return value;
+}
+
+function optionalUuidEnv(name: string): string | null {
+  const value = process.env[name]?.trim();
+  if (!value) return null;
+  if (!UUID_PATTERN.test(value)) throw new Error(`${name} must be a UUID when supplied.`);
   return value;
 }
 
@@ -48,10 +62,21 @@ async function main() {
     throw new Error(`The Claude subscription credential is not usable: ${auth.failure.message}`);
   }
 
+  const repositoryIdentity = requiredEnv("GITHUB_REPOSITORY");
+  const workerRequiredChecks = parseRequiredCheckNames(
+    requiredEnv("SOFTWAREFACTORY_REQUIRED_CHECKS"),
+  );
+  if (!workerRequiredChecks) {
+    throw new Error("SOFTWAREFACTORY_REQUIRED_CHECKS is not a safe, unique repository policy.");
+  }
+  const targetGraphId = optionalUuidEnv("SOFTWAREFACTORY_TARGET_GRAPH_ID");
   const store = SupabaseGraphStore.create({
     url: requiredEnv("NEXT_PUBLIC_SUPABASE_URL"),
     serviceRoleKey: requiredEnv("SUPABASE_SERVICE_ROLE_KEY"),
     workerId,
+    repositoryFullName: repositoryIdentity,
+    requiredCheckNames: workerRequiredChecks,
+    targetGraphId,
   });
 
   process.stdout.write(`SoftwareFactory graph worker ${workerId} is ready.\n`);
@@ -69,9 +94,11 @@ async function main() {
     if (!parsed.ok) {
       // The claim already created the run; an unusable projection must close
       // it honestly rather than stranding it RUNNING forever.
-      const runId = (claim as { graph_run_id?: string }).graph_run_id;
-      process.stderr.write(`Claimed graph is unusable: ${parsed.detail}\n`);
-      if (runId) await store.completeRun(runId, "FAILED", false, parsed.detail);
+      const runId = (claim as { graph_run_id?: unknown }).graph_run_id;
+      process.stderr.write(`${CLAIM_ABORT_DETAIL.invalidProjection}\n`);
+      if (typeof runId === "string" && UUID_PATTERN.test(runId)) {
+        await store.abortRun(runId, "FAILED", CLAIM_ABORT_DETAIL.invalidProjection);
+      }
       continue;
     }
 
@@ -79,19 +106,21 @@ async function main() {
     // graph's project is bound to a different repository, running it anyway
     // would produce confident findings about the wrong codebase and file them
     // under this project — a wrong answer that looks exactly like a right one.
-    // A project with no repository linked has nothing to contradict, so it
-    // proceeds; only a definite mismatch stops here.
     const mismatch = repositoryMismatch(parsed.graph.project_repository, process.env.GITHUB_REPOSITORY);
     if (mismatch) {
-      process.stderr.write(`${mismatch}\n`);
-      await store.completeRun(parsed.graph.graph_run_id, "FAILED", false, mismatch);
+      process.stderr.write(`${CLAIM_ABORT_DETAIL.repositoryMismatch}\n`);
+      await store.abortRun(
+        parsed.graph.graph_run_id,
+        "FAILED",
+        CLAIM_ABORT_DETAIL.repositoryMismatch,
+      );
       continue;
     }
 
     const compiled = compileClaimedGraph(parsed.graph);
     if (!compiled.ok) {
-      process.stderr.write(`Claimed graph does not compile: ${compiled.detail}\n`);
-      await store.completeRun(parsed.graph.graph_run_id, "FAILED", false, compiled.detail);
+      process.stderr.write(`${CLAIM_ABORT_DETAIL.compileFailure}\n`);
+      await store.abortRun(parsed.graph.graph_run_id, "FAILED", CLAIM_ABORT_DETAIL.compileFailure);
       continue;
     }
 
@@ -101,29 +130,37 @@ async function main() {
       + `max parallelism ${compiled.graph.maxParallelism}): ${parsed.graph.goal}\n`,
     );
 
-    const repositoryFullName = process.env.GITHUB_REPOSITORY ?? "surgeservicesllc/SoftwareFactory";
+    const repositoryFullName = parsed.graph.project_repository;
     const executor = buildClaudeNodeExecutor(auth.resolution, {
       goal: parsed.graph.goal,
-      projectName: "SoftwareFactory",
+      projectName: parsed.graph.project_name,
       repositoryFullName,
-      defaultBranch: "main",
+      defaultBranch: parsed.graph.base_branch ?? parsed.graph.project_default_branch,
       workingDirectory: process.cwd(),
     });
-    // Observations, not actions: CI's verdict for this checked-out commit, a
-    // production health probe, and a policy refusal for deployment. The
-    // instruments come from the workflow environment; an absent one reads as
-    // Not Connected in the node's own record rather than as a guess.
+    // Observations, not actions. Every release identity below came from the
+    // service-role claim's graph-scoped Phase 1C bridge projection. GITHUB_SHA,
+    // the checkout branch, and any ambient production URL describe worker
+    // context, not graph lineage; none may masquerade as this graph's produced
+    // change, merge, or deployment.
     const anchorExecutor = buildAnchorNodeExecutor({
-      repositoryFullName,
-      headSha: process.env.GITHUB_SHA ?? null,
+      templateKey: parsed.graph.template_key ?? null,
+      templateVersion: parsed.graph.template_version ?? null,
+      repositoryFullName: parsed.graph.project_repository,
+      baseBranch: parsed.graph.base_branch ?? null,
+      baseSha: parsed.graph.base_sha ?? null,
+      phase1cState: parsed.graph.phase1c_state ?? null,
+      producedChangeSha: parsed.graph.phase1c_head_sha ?? null,
+      pullRequestNumber: parsed.graph.pull_request_number ?? null,
+      pullRequestUrl: parsed.graph.pull_request_url ?? null,
+      validationEvidence: parsed.graph.validation_evidence ?? null,
+      mergeCommitSha: parsed.graph.merge_commit_sha ?? null,
+      deploymentId: parsed.graph.deployment_id ?? null,
+      deploymentUrl: parsed.graph.deployment_url ?? null,
       gitHubToken: process.env.SOFTWAREFACTORY_CHECKS_TOKEN ?? null,
-      productionUrl: process.env.SOFTWAREFACTORY_PRODUCTION_URL ?? null,
       // The repository's own definition of "CI passed" — the same names the
       // Phase 1C worker waits for. Same env, same pipe-separated format.
-      requiredCheckNames: (process.env.SOFTWAREFACTORY_REQUIRED_CHECKS ?? "")
-        .split("|")
-        .map((name) => name.trim())
-        .filter(Boolean),
+      requiredCheckNames: parsed.graph.required_check_names ?? [],
     });
 
     const summary = await runClaimedGraph(parsed.graph, compiled.graph, store, async (node, attempt, inputs) => {
@@ -159,7 +196,9 @@ async function main() {
      * hidden. An approval makes the graph claimable again, and this same
      * drain loop picks it straight back up.
      */
-    for (const nodeKey of summary.awaitingGate) {
+    for (const nodeKey of summary.finalState === "PARTIAL" || summary.finalState === "COMPLETED"
+      ? summary.awaitingGate
+      : []) {
       const claimedNode = parsed.graph.nodes.find((entry) => entry.node_key === nodeKey);
       if (!claimedNode?.node_id || claimedNode.gate_kind !== "AUTOMATIC") continue;
       const decision = await store.decideAutomaticGate(claimedNode.node_id);

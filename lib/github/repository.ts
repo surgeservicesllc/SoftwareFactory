@@ -4,7 +4,10 @@ import { z } from "zod";
 
 import { GitHubApiError, githubApiRequest } from "@/lib/github/client";
 import { getGitHubCommitIdentity } from "@/lib/github/config";
-import { githubWebUrlSchema } from "@/lib/github/schemas";
+import {
+  githubWebUrlSchema,
+  productionDeploymentUrlSchema,
+} from "@/lib/github/schemas";
 export { isProtectedGitHubWritePath } from "@/lib/github/write-policy";
 
 const repositoryCoordinatePattern = /^[A-Za-z0-9_.-]+$/;
@@ -34,6 +37,12 @@ const pullRequestSchema = z.object({
   }).nullable(),
   head: z.object({ ref: z.string(), sha: z.string().regex(shaPattern) }),
   base: z.object({ ref: z.string() }),
+});
+
+const pullRequestDetailSchema = pullRequestSchema.extend({
+  merged: z.boolean(),
+  merged_at: z.string().datetime({ offset: true }).nullable(),
+  merge_commit_sha: z.string().regex(shaPattern).nullable(),
 });
 
 const commitSchema = z.object({
@@ -92,6 +101,27 @@ const createdPullRequestSchema = z.object({
   state: z.enum(["open", "closed"]),
   draft: z.boolean(),
   html_url: githubWebUrlSchema,
+});
+
+const deploymentSchema = z.object({
+  created_at: z.string().datetime({ offset: true }),
+  creator: z.object({ login: z.string() }).nullable(),
+  environment: z.string().min(1).max(255),
+  id: z.number().int().positive().safe(),
+  production_environment: z.boolean(),
+  ref: z.string().min(1).max(255),
+  sha: z.string().regex(shaPattern),
+  task: z.string().min(1).max(255),
+  updated_at: z.string().datetime({ offset: true }),
+});
+
+const deploymentStatusSchema = z.object({
+  created_at: z.string().datetime({ offset: true }),
+  creator: z.object({ login: z.string() }).nullable(),
+  environment_url: productionDeploymentUrlSchema.nullable(),
+  id: z.number().int().positive().safe(),
+  state: z.string().min(1).max(64),
+  updated_at: z.string().datetime({ offset: true }),
 });
 
 function parseOrThrow<T>(schema: z.ZodType<T>, value: unknown, message: string) {
@@ -212,6 +242,93 @@ export async function listGitHubPullRequests(
     url: pullRequest.html_url,
     });
   });
+}
+
+/**
+ * Reads one pull request from GitHub's authoritative detail endpoint.
+ *
+ * The list projection deliberately omits merge identity because list rows are
+ * presentation data. Release gates need the exact head, base, merged flag,
+ * timestamp, and merge commit from one numbered pull request, all parsed as a
+ * single provider response before any durable gate decision is made.
+ */
+export async function getGitHubPullRequest(
+  token: string,
+  owner: string,
+  repository: string,
+  pullRequestNumber: number,
+) {
+  if (!Number.isSafeInteger(pullRequestNumber) || pullRequestNumber <= 0) {
+    throw new GitHubApiError(400, "invalid_pull_request", "The pull request number is invalid.");
+  }
+  const raw = await githubApiRequest(
+    `${repositoryPath(owner, repository)}/pulls/${pullRequestNumber}`,
+    { token },
+  );
+  const pullRequest = parseOrThrow(
+    pullRequestDetailSchema,
+    raw,
+    "GitHub returned invalid pull request metadata.",
+  );
+  return {
+    baseBranch: pullRequest.base.ref,
+    headBranch: pullRequest.head.ref,
+    headSha: pullRequest.head.sha.toLowerCase(),
+    merged: pullRequest.merged,
+    mergedAt: pullRequest.merged_at,
+    mergeCommitSha: pullRequest.merge_commit_sha?.toLowerCase() ?? null,
+    number: pullRequest.number,
+    state: pullRequest.state,
+    url: pullRequest.html_url,
+  };
+}
+
+/**
+ * Reads one exact GitHub deployment and its latest provider status.
+ *
+ * The caller supplies the deployment id from an already-recorded graph
+ * artifact. Constructing both API paths locally prevents provider-returned
+ * URLs from becoming credential-forwarding destinations.
+ */
+export async function getGitHubDeploymentEvidence(
+  token: string,
+  owner: string,
+  repository: string,
+  deploymentId: number,
+) {
+  if (!Number.isSafeInteger(deploymentId) || deploymentId <= 0) {
+    throw new GitHubApiError(400, "invalid_deployment", "The GitHub deployment identifier is invalid.");
+  }
+  const basePath = `${repositoryPath(owner, repository)}/deployments/${deploymentId}`;
+  const [deploymentRaw, statusesRaw] = await Promise.all([
+    githubApiRequest(basePath, { token }),
+    githubApiRequest(`${basePath}/statuses?per_page=1`, { token }),
+  ]);
+  const deployment = parseOrThrow(
+    deploymentSchema,
+    deploymentRaw,
+    "GitHub returned invalid deployment metadata.",
+  );
+  const statuses = parseOrThrow(
+    z.array(deploymentStatusSchema).min(1),
+    statusesRaw,
+    "GitHub returned invalid deployment status metadata.",
+  );
+  const status = statuses[0];
+  return {
+    completedAt: status.updated_at,
+    creatorLogin: deployment.creator?.login ?? null,
+    deploymentId: deployment.id,
+    environment: deployment.environment,
+    environmentUrl: status.environment_url,
+    productionEnvironment: deployment.production_environment,
+    ref: deployment.ref,
+    sha: deployment.sha.toLowerCase(),
+    startedAt: deployment.created_at,
+    status: status.state,
+    statusCreatorLogin: status.creator?.login ?? null,
+    task: deployment.task,
+  };
 }
 
 export async function listGitHubCommits(

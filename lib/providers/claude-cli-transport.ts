@@ -143,6 +143,11 @@ export interface ClaudeCliTransportOptions {
   readonly workingDirectory: string;
   readonly allowedTools?: readonly string[];
   /**
+   * A graph node's exact persisted output contract. Advisory callers omit it
+   * and retain the provider-neutral report contract.
+   */
+  readonly outputSchema?: Readonly<Record<string, unknown>>;
+  /**
    * How many turns this one request may take. Omitted means one, which is what
    * every advisory caller wants. Clamped to [1, MAX_TURNS_CEILING].
    */
@@ -295,7 +300,10 @@ export async function executeClaudeThroughCli(
           maxTurns: resolveMaxTurns(options.maxTurns),
           // The schema travels with the request, not merely as a sentence in the
           // system prompt. See the note on SCHEMA_ENFORCEMENT below.
-          outputFormat: { type: "json_schema", schema: PROVIDER_RESULT_JSON_SCHEMA },
+          outputFormat: {
+            type: "json_schema",
+            schema: options.outputSchema ?? PROVIDER_RESULT_JSON_SCHEMA,
+          },
           env: childEnvironment(auth, configDir),
           abortController: controller,
           pathToClaudeCodeExecutable: process.env.SOFTWAREFACTORY_CLAUDE_EXECUTABLE || undefined,

@@ -4,6 +4,24 @@ import { WORKER_SUPPORTED_EXECUTORS } from "@/lib/worker/executor-support";
 import type { GraphRunStore } from "@/lib/worker/graph-run";
 import { explainEmptyQueue, type QueueGraphRow } from "@/lib/worker/queue-diagnosis";
 
+function rpcFailureMessage(failure: unknown): string {
+  if (failure && typeof failure === "object" && "message" in failure
+    && typeof failure.message === "string") return failure.message;
+  return failure instanceof Error ? failure.message : "unknown error";
+}
+
+/** A lost response may follow a committed abort, so only ambiguous/transient
+ * failures receive one byte-for-byte-identical retry. The SQL request digest
+ * makes that replay safe; validation/authorization errors fail immediately. */
+function isAmbiguousAbortFailure(failure: unknown): boolean {
+  const code = failure && typeof failure === "object" && "code" in failure
+    && typeof failure.code === "string" ? failure.code : "";
+  if (code.startsWith("08") || code.startsWith("PGRST0")
+    || ["40001", "40P01", "53300", "57P01", "57P02", "57P03"].includes(code)) return true;
+  return /\b(?:fetch|network|timeout|timed out|connection|socket|econn|aborted)\b/i
+    .test(rpcFailureMessage(failure));
+}
+
 /**
  * The worker's half of the graph write boundary, over the service-role
  * client. Every call is one of the `*_as_worker` definer functions from
@@ -15,23 +33,42 @@ export class SupabaseGraphStore implements GraphRunStore {
   private constructor(
     private readonly client: SupabaseClient,
     private readonly workerId: string,
+    private readonly repositoryFullName: string,
+    private readonly requiredCheckNames: readonly string[],
+    private readonly targetGraphId: string | null,
   ) {}
 
-  static create(options: { url: string; serviceRoleKey: string; workerId: string }) {
+  static create(options: {
+    url: string;
+    serviceRoleKey: string;
+    workerId: string;
+    repositoryFullName: string;
+    requiredCheckNames: readonly string[];
+    targetGraphId?: string | null;
+  }) {
     const client = createClient(options.url, options.serviceRoleKey, {
       auth: { persistSession: false, autoRefreshToken: false },
     });
-    return new SupabaseGraphStore(client, options.workerId);
+    return new SupabaseGraphStore(
+      client,
+      options.workerId,
+      options.repositoryFullName,
+      options.requiredCheckNames,
+      options.targetGraphId ?? null,
+    );
   }
 
   /** Null when no runnable graph exists — an idle answer, not a fault. */
   async claimPlannedGraph(): Promise<unknown | null> {
-    const { data, error } = await this.client.rpc("claim_planned_graph", {
+    const { data, error } = await this.client.rpc("claim_planned_graph_v2", {
       p_worker_id: this.workerId,
       // Declared, not defaulted: the claim skips graphs whose nodes need an
       // executor this worker does not provide, so those graphs keep their
       // budget for a worker that can run them.
       p_supported_executors: [...WORKER_SUPPORTED_EXECUTORS],
+      p_repository_full_name: this.repositoryFullName,
+      p_required_check_names: [...this.requiredCheckNames],
+      p_protocol_version: 2,
     });
     if (error) throw new Error(`Claiming a planned graph failed: ${error.message ?? "unknown error"}`);
     return data ?? null;
@@ -39,23 +76,26 @@ export class SupabaseGraphStore implements GraphRunStore {
 
   /**
    * One line per graph saying which claim filter excludes it, for the log a
-   * person reads after "nothing ran". Read-only over the same rows the claim
-   * consults; ids, states, counts and executor names only — never goal text.
+   * person reads after "nothing ran". The bounded worker RPC exposes only ids,
+   * states, timestamps and executor names — never goal text or direct table
+   * authority.
    */
   async explainEmptyQueue(): Promise<readonly string[]> {
-    const { data, error } = await this.client
-      .from("graphs")
-      .select(
-        "id, requires_owner_approval, is_lifecycle, created_at, "
-        + "graph_nodes(executor), graph_runs(state, completed_at), "
-        + "graph_gates(state, opened_at, decided_at)",
-      )
-      .order("created_at", { ascending: true })
-      .limit(25);
+    const { data, error } = await this.client.rpc("diagnose_graph_queue_as_worker_v2", {
+      p_worker_id: this.workerId,
+      p_repository_full_name: this.repositoryFullName,
+      p_required_check_names: [...this.requiredCheckNames],
+      p_target_graph_id: this.targetGraphId,
+      p_protocol_version: 2,
+    });
     if (error) {
       return [`Queue diagnosis unavailable: ${error.message ?? "the read failed"}.`];
     }
-    return explainEmptyQueue((data ?? []) as unknown as QueueGraphRow[], WORKER_SUPPORTED_EXECUTORS);
+    return explainEmptyQueue(
+      (data ?? []) as unknown as QueueGraphRow[],
+      WORKER_SUPPORTED_EXECUTORS,
+      this.targetGraphId,
+    );
   }
 
   async recordNodeState(
@@ -102,21 +142,35 @@ export class SupabaseGraphStore implements GraphRunStore {
    * analysis graph's findings stay fresh and a COMPLETED run is never
    * cannibalized.
    */
-  async readPriorNodeResults(graphId: string): Promise<ReadonlyMap<string, unknown>> {
-    const { data, error } = await this.client.rpc("read_prior_node_results_as_worker", {
+  async readPriorNodeResults(graphId: string): Promise<ReadonlyMap<string, {
+    output: unknown;
+    provider?: string;
+    model?: string;
+  }>> {
+    const { data, error } = await this.client.rpc("read_prior_node_results_as_worker_v2", {
       p_worker_id: this.workerId,
       p_graph_id: graphId,
+      p_protocol_version: 2,
     });
     if (error) {
       // A missing function (hosted not yet applied) or a transient read must
       // not fail the run: no reuse simply means the fresh-execution path.
       return new Map();
     }
-    const rows = (data ?? []) as Array<{ node_key?: string; payload?: unknown }>;
+    const rows = (data ?? []) as Array<{
+      node_key?: string;
+      payload?: unknown;
+      provider?: string | null;
+      model?: string | null;
+    }>;
     return new Map(
       rows
-        .filter((row): row is { node_key: string; payload: unknown } => typeof row.node_key === "string")
-        .map((row) => [row.node_key, row.payload]),
+        .filter((row) => typeof row.node_key === "string")
+        .map((row) => [row.node_key as string, {
+          output: row.payload,
+          provider: row.provider ?? undefined,
+          model: row.model ?? undefined,
+        }]),
     );
   }
 
@@ -160,26 +214,28 @@ export class SupabaseGraphStore implements GraphRunStore {
     if (error) throw new Error(`Recording a graph artifact failed: ${error.message ?? "unknown error"}`);
   }
 
-  async recordVerification(
-    subjectNodeRunId: string,
-    lens: string,
-    verdict: string,
-    evidence: readonly string[],
-    verifierProvider: string | null,
+  async completeReviewerWithVerifications(
+    verifierNodeRunId: string,
+    artifactPayload: unknown,
+    execution: { provider: string; model: string; latencyMs: number },
+    verifications: readonly {
+      readonly subjectNodeRunId: string;
+      readonly verdict: string;
+      readonly evidence: readonly string[];
+    }[],
   ): Promise<void> {
-    const { error } = await this.client.rpc("record_verification_as_worker", {
+    const { error } = await this.client.rpc("complete_reviewer_with_verifications_as_worker", {
       p_worker_id: this.workerId,
-      p_subject_node_run_id: subjectNodeRunId,
-      p_lens: lens,
-      p_verdict: verdict,
-      p_evidence: evidence,
-      p_verifier_provider: verifierProvider,
-      // Every node is a fresh session that received only its declared
-      // inputs, so the verifier genuinely shares no context with the subject.
-      // Recording it as true would be a lie that weakens every row here.
-      p_shared_worker_context: false,
+      p_verifier_node_run_id: verifierNodeRunId,
+      p_artifact_payload: artifactPayload ?? {},
+      p_provider: execution.provider,
+      p_model: execution.model,
+      p_latency_ms: execution.latencyMs,
+      p_verifications: verifications,
     });
-    if (error) throw new Error(`Recording a verification failed: ${error.message ?? "unknown error"}`);
+    if (error) {
+      throw new Error(`Completing a reviewer with its evidence failed: ${error.message ?? "unknown error"}`);
+    }
   }
 
   async completeRun(
@@ -189,7 +245,15 @@ export class SupabaseGraphStore implements GraphRunStore {
     detail?: string | null,
     usage?: { readonly tokensUsed?: number; readonly costMicros?: number },
   ): Promise<void> {
-    const { error } = await this.client.rpc("complete_graph_run_as_worker", {
+    /*
+     * The wrapper is identical for ordinary and non-completed graph runs. For
+     * an exact completed Full Lifecycle v2, it also consumes the already
+     * stored MONITOR anchor artifact and advances the same bridge through its
+     * monitor and final validation evidence in this transaction. Closing the
+     * graph first and adding lineage later would make a lost response an
+     * unrecoverable terminal split.
+     */
+    const { error } = await this.client.rpc("complete_graph_run_with_phase1c_bridge_as_worker", {
       p_worker_id: this.workerId,
       p_graph_run_id: graphRunId,
       p_state: state,
@@ -203,5 +267,35 @@ export class SupabaseGraphStore implements GraphRunStore {
       p_closure_note: detail ?? null,
     });
     if (error) throw new Error(`Closing the graph run failed: ${error.message ?? "unknown error"}`);
+  }
+
+  /**
+   * Contain a claim whose returned projection cannot safely enter execution.
+   * The database cancels the still-unstarted child set and closes the parent in
+   * one transaction, so a parse, repository, or compile refusal cannot strand
+   * a RUNNING run behind its already-created PENDING children.
+   */
+  async abortRun(
+    graphRunId: string,
+    state: "FAILED" | "CANCELLED",
+    detail: string,
+  ): Promise<void> {
+    const request = {
+      p_worker_id: this.workerId,
+      p_graph_run_id: graphRunId,
+      p_state: state,
+      p_detail: detail,
+    };
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      let error: unknown = null;
+      try {
+        ({ error } = await this.client.rpc("abort_graph_run_as_worker", request));
+      } catch (caught) {
+        error = caught;
+      }
+      if (!error) return;
+      if (attempt === 0 && isAmbiguousAbortFailure(error)) continue;
+      throw new Error(`Aborting the claimed graph failed: ${rpcFailureMessage(error)}`);
+    }
   }
 }

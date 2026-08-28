@@ -229,9 +229,27 @@ function StepOverlay({
   );
 }
 
-export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemplateSummary[] }) {
+export function AiFactoryConsole({
+  authenticated = true,
+  builtIns,
+}: {
+  /**
+   * Server-verified presentation hint. A known signed-out visitor must not
+   * fan out across every protected factory endpoint just to rediscover the
+   * same 401 in the browser. Apart from avoiding needless work, this keeps a
+   * cold or unavailable route handler from holding the whole journey on its
+   * loading state while the remaining reads wait for it.
+   *
+   * Authorization remains enforced independently by every route. The default
+   * preserves the component harness, whose fixture server supplies a tenant.
+   */
+  authenticated?: boolean;
+  builtIns: readonly PipelineTemplateSummary[];
+}) {
   const router = useRouter();
-  const [state, setState] = useState<State>({ kind: "loading" });
+  const [state, setState] = useState<State>(
+    authenticated ? { kind: "loading" } : { kind: "signed-out" },
+  );
   // Which step's control is open as an overlay. Nothing opens on its own —
   // an uninvited modal is a trap, not a guide — and closing always lands
   // back on the journey with the fresh records already read.
@@ -555,6 +573,11 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
   }, []);
 
   useEffect(() => {
+    if (!authenticated) {
+      // The page already verified this presentation state on the server. Do
+      // not issue nine protected reads that can only answer 401.
+      return;
+    }
     const kickoff = window.setTimeout(() => void load(), 0);
     const interval = window.setInterval(() => void load(), 20_000);
     return () => {
@@ -562,7 +585,7 @@ export function AiFactoryConsole({ builtIns }: { builtIns: readonly PipelineTemp
       window.clearInterval(interval);
       loadGenerationRef.current += 1;
     };
-  }, [load]);
+  }, [authenticated, load]);
 
   // Return to the page with whatever was just selected already read back in.
   const closeOverlay = useCallback(async (): Promise<boolean> => {

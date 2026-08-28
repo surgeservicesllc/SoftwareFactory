@@ -26,6 +26,9 @@ const outsiderId = "00000000-0000-4000-8000-00000000a002";
 const organizationId = "10000000-0000-4000-8000-00000000a001";
 const otherOrganizationId = "10000000-0000-4000-8000-00000000a002";
 const projectId = "40000000-0000-4000-8000-00000000a001";
+const workerId = "graph-worker-anchor-persistence";
+const claimRepository = "factory/anchor-persistence";
+const claimRequiredChecks = ["CI"];
 
 async function assumeRole(db: PGlite, role: string, userId: string | null = null) {
   await db.exec("reset role");
@@ -36,6 +39,24 @@ async function assumeRole(db: PGlite, role: string, userId: string | null = null
 async function resetRole(db: PGlite) {
   await db.exec("reset role");
   await db.query("select set_config('request.jwt.claim.sub', '', false)");
+}
+
+async function claimGraph(
+  db: PGlite,
+  graphId: string,
+): Promise<{ graph_id: string; graph_run_id: string }> {
+  await assumeRole(db, "service_role");
+  const result = await db.query<{
+    claim: { graph_id: string; graph_run_id: string } | null;
+  }>(
+    `select public.claim_planned_graph_v2($1, $2::text[], $3, $4::jsonb, 2) as claim`,
+    [workerId, ["MODEL", "DETERMINISTIC", "ANCHOR"], claimRepository,
+      JSON.stringify(claimRequiredChecks)],
+  );
+  await resetRole(db);
+  expect(result.rows[0].claim, `worker queue did not offer graph ${graphId}`).not.toBeNull();
+  expect(result.rows[0].claim!.graph_id).toBe(graphId);
+  return result.rows[0].claim!;
 }
 
 const planNodes = [
@@ -113,21 +134,55 @@ describe("anchor persistence", () => {
         ('${organizationId}', 'Anchor Factory', 'anchor-factory', '${ownerId}'),
         ('${otherOrganizationId}', 'Other', 'other-anchor', '${outsiderId}');
 
-      insert into public.projects (id, organization_id, name, status, default_branch, created_by)
-      values ('${projectId}', '${organizationId}', 'Anchored', 'active', 'main', '${ownerId}');
+      insert into public.projects (
+        id, organization_id, name, status, github_repository, default_branch, created_by
+      ) values (
+        '${projectId}', '${organizationId}', 'Anchored', 'active',
+        '${claimRepository}', 'main', '${ownerId}'
+      );
+      insert into public.connections (
+        id, organization_id, name, provider, status, secret_reference, created_by
+      ) values (
+        '30000000-0000-4000-8000-00000000a001', '${organizationId}',
+        'GitHub', 'github', 'connected', 'env://GITHUB_APP', '${ownerId}'
+      );
+      insert into public.github_installations (
+        id, organization_id, connection_id, external_installation_id, app_id,
+        app_slug, account_id, account_login, account_type, target_type,
+        repository_selection, status, installed_at, created_by
+      ) values (
+        '50000000-0000-4000-8000-00000000a001', '${organizationId}',
+        '30000000-0000-4000-8000-00000000a001', 950001, 950002,
+        'anchor-app', 950003, 'factory', 'Organization', 'Organization',
+        'selected', 'active', now(), '${ownerId}'
+      );
+      insert into public.github_repositories (
+        id, organization_id, installation_id, external_repository_id,
+        owner_login, name, full_name, default_branch, html_url, private,
+        visibility, selected, github_updated_at
+      ) values (
+        '60000000-0000-4000-8000-00000000a001', '${organizationId}',
+        '50000000-0000-4000-8000-00000000a001', 950004,
+        'factory', 'anchor-persistence', '${claimRepository}', 'main',
+        'https://github.com/${claimRepository}', true, 'private', true, now()
+      );
+      insert into public.project_connections (
+        organization_id, project_id, connection_id, github_repository_id,
+        is_primary, created_by
+      ) values (
+        '${organizationId}', '${projectId}',
+        '30000000-0000-4000-8000-00000000a001',
+        '60000000-0000-4000-8000-00000000a001', true, '${ownerId}'
+      );
     `);
 
-    // A graph, a run, a node and a node run, created through the write boundary
-    // so the fixture exercises the same path production would.
+    // Planning remains a member action. Execution starts only when the
+    // service-role worker atomically claims that plan and creates its run map.
     await assumeRole(db, "authenticated", ownerId);
 
     const graphId = await createGraph(db);
-
-    const { rows: runRows } = await db.query<{ start_graph_run: string }>(
-      "select public.start_graph_run($1::uuid)",
-      [graphId],
-    );
-    graphRunId = runRows[0].start_graph_run;
+    const claimed = await claimGraph(db, graphId);
+    graphRunId = claimed.graph_run_id;
 
     await resetRole(db);
     const { rows: nodeRunRows } = await db.query<{ id: string }>(
@@ -352,15 +407,13 @@ describe("anchor persistence", () => {
 
     // A second run, with its own passing CI anchor.
     const otherGraphId = await createGraph(db);
-    const { rows: otherRun } = await db.query<{ start_graph_run: string }>(
-      "select public.start_graph_run($1::uuid)",
-      [otherGraphId],
-    );
+    const otherRun = await claimGraph(db, otherGraphId);
+    await assumeRole(db, "authenticated", ownerId);
     const { rows: foreign } = await db.query<{ record_anchor: string }>(
       `select public.record_anchor(
          $1::uuid, 'ci_check'::public.anchor_kind, 'CI', now(), 'Green, but elsewhere', true, null, null
        )`,
-      [otherRun[0].start_graph_run],
+      [otherRun.graph_run_id],
     );
 
     const { rows } = await db.query<{ anchored: boolean; reason: string }>(

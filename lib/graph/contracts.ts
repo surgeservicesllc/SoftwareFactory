@@ -161,7 +161,7 @@ function requiresStructure(schema: z.ZodTypeAny): boolean {
  * policy rather than to a stack unwind.
  */
 export function validateNodeOutput<T = unknown>(
-  contract: NodeContract,
+  contract: Pick<NodeContract, "nodeId" | "outputSchema">,
   output: unknown,
 ): ValidationOutcome<T> {
   if (typeof output === "string" && requiresStructure(contract.outputSchema)) {
