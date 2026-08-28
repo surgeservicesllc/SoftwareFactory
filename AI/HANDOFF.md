@@ -1,6 +1,18 @@
 # Handoff
 
-Last updated: 2026-08-27
+Last updated: 2026-08-28
+
+## Newest (2026-08-28 ~01:20Z): Stripe keys configured owner-side; this commit is the redeploy that lets the runtime see them
+
+After the billing release went live, the owner reported creating the
+Stripe account and adding the keys to Vercel. The running deployment
+still answered `connected: false` — Vercel injects environment values at
+deployment creation, so keys added after a deploy do not reach it. This
+commit exists to produce the next deployment; once it serves,
+`/api/billing/summary` should answer `connected: true` and the checkout
+test (BILLING_GO_LIVE step 7) can run. If it still answers false after
+this deploys, the next suspects are the variable names and the value
+shapes the catalog validates (`sk_`/`rk_` secret key, `price_` ids).
 
 ## Newest (2026-08-27): canonical Job Search is production accepted
 
