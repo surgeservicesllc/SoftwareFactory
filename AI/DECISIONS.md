@@ -2376,3 +2376,20 @@ Use this append-only log for decisions that constrain future implementation. Cha
 - Bounds: this is presentation and availability behavior, not authorization.
   Every API enforces its own verified identity and tenant policy. No viewer
   result is shared between requests, and timeout never grants access.
+
+## ADR-152 - Executable release workflows have a tested size budget
+
+- Date: 2026-08-28
+- Status: accepted locally; recovery publication pending
+- Context: GitHub accepted a protected migration dispatch but never planned a
+  job because its workflow blob was 517,320 bytes, above the platform's 500 KB
+  limit. The run remained queued with zero jobs, which can look like runner or
+  database contention even though no executable step exists.
+- Decision: keep operational explanations in `AI/HOSTED_APPLY_RUNBOOK.md`, keep
+  the workflow's dispatch help concise, and enforce a 490,000-byte UTF-8 ceiling
+  in the graph-protocol scope contract. The recovery removes only comments/help
+  text; scopes, hashes, release gates, SQL staging, and shell bodies are fixed.
+- Bounds: a zero-job oversized workflow is not migration evidence. Recovery
+  still requires a new exact-head CI/READY release and the separate 00150 then
+  00200 one-shot acceptance sequence. It authorizes no worker, autonomy,
+  automatic action, replay, reset, or down-migration.

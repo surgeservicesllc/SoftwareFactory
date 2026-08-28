@@ -1044,3 +1044,19 @@ requested rework is the failure mode to design against.
   2026-08-23, so its absence is not a current planner regression.
 - [ ] Preserve workers, provider execution, autonomous mode, and all automatic
   actions OFF with the global kill switch ON throughout acceptance.
+
+## Hosted apply workflow-size recovery (2026-08-28)
+
+- [x] Diagnose run `33143231202`: exact `fd47242`, queued with zero jobs because
+  the 517,320-byte workflow exceeded GitHub Actions' 500 KB file limit; prove no
+  migration statement executed.
+- [x] Reduce only workflow prose/comment bytes, keep every executable scope and
+  protected identity unchanged, and add a regression test requiring less than
+  490,000 UTF-8 bytes. Focused verification: 8 files / 63 tests, lint, and
+  typecheck green.
+- [ ] Publish the forward recovery, require exact-head CI and READY Vercel,
+  cancel only the zero-job oversized-SHA orphan, then apply `00150` and `00200`
+  once each in their mandatory order.
+- [ ] Hard reload the signed-in owner Factory and submit a fresh Step 8 request;
+  require a production POST, immutable record-only route evidence, and truthful
+  persisted Step 9 state with all execution surfaces still OFF.

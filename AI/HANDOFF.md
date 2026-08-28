@@ -1589,3 +1589,17 @@ The non-secret repository Actions variable `SOFTWAREFACTORY_PHASE1C_WORKER_ENABL
   OFF, with the global kill switch ON. After the protected applies, verify a
   fresh account survives reload and that one new Step 8 command correlates to
   the exact Step 9 run/evidence before changing **Not Connected** status.
+
+## 2026-08-28 hosted-apply queue recovery
+
+- `fd4724240de8312f8a5642968888e591ad085ca6` is exact production with all four
+  required CI jobs green and Vercel `dpl_HLugpE6AfTYzUptJyxycpP3Cb5bK` READY.
+- Apply run `33143231202` executed nothing: the workflow was 517,320 blob bytes,
+  above GitHub's 500 KB ceiling, so the run has zero jobs/checks and no DDL.
+- The recovery removes only comments/long dispatch prose and pins a `< 490,000`
+  byte test. After its exact release is green, cancel only the zero-job orphan,
+  dispatch `graph-protocol-fence` once, accept ledger/fence/drain, then dispatch
+  `graph-phase1c-lineage` once. Never bundle, replay, reset, or down-migrate.
+- Vercel logs after `fd47242` show zero Step 8 POSTs. The repeated raw database
+  text is client state from the Aug 22 tab; require a hard reload and a fresh
+  POST before diagnosing the current server or accepting Steps 8/9.

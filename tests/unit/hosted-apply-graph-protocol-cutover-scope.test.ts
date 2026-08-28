@@ -58,6 +58,13 @@ function mutatesMigrationState(candidate: { run?: string }): boolean {
 }
 
 describe("hosted graph protocol cutover scopes", () => {
+  it("stays below GitHub Actions' workflow-file ceiling with release headroom", () => {
+    // GitHub refuses to plan jobs for a workflow over 500 KB and leaves a
+    // dispatch queued with zero jobs. Keep a deliberate margin so comments or
+    // a small new scope cannot silently strand the production release path.
+    expect(Buffer.byteLength(workflowSource, "utf8")).toBeLessThan(490_000);
+  });
+
   it("exposes each protected phase exactly once and grants Actions read for the fleet check", () => {
     const options = workflow.on.workflow_dispatch.inputs.scope.options;
     expect(options.filter((value) => value === scopes.fence.name)).toEqual([scopes.fence.name]);

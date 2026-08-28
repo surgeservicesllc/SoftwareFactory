@@ -952,3 +952,14 @@ unapplied to hosted Supabase.
 | Publication | Exact-head CI, READY Vercel identity, production health | Pending; not deployed |
 | Current Step 8/9 production acceptance | Former Claude bot/account was explicitly removed 2026-08-23; fresh supported account connection, reload stickiness, command/route/run correlation required | Pending owner-secure OAuth; absence is not a planner-code failure |
 | Safety envelope | Worker, provider execution, autonomy, and all automatic actions OFF; global kill switch ON | Preserved |
+
+## 2026-08-28 exact release and workflow-size recovery
+
+| Gate | Evidence | Status |
+| --- | --- | --- |
+| Exact production | `fd47242`; CI `33142553600` four required jobs green; Vercel `dpl_HLugpE6AfTYzUptJyxycpP3Cb5bK` READY | Pass |
+| Hosted apply attempt | `33143231202` queued with zero jobs/checks; 517,320-byte workflow exceeded 500 KB; no DDL ran | Safely not started |
+| Recovery semantics | Only comment/dispatch-help removal; protected scopes, hashes, shell bodies, and migrations unchanged | Pass locally |
+| Size regression | UTF-8 workflow bytes required `< 490,000` | Pass locally |
+| Focused recovery verification | 8 files / 63 tests; lint; typecheck | Pass locally |
+| Fresh Step 8 request | Zero production `POST /api/commands` after exact deploy; successful GET polling only | Pending hard reload and signed-in POST |

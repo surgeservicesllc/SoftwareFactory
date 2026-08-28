@@ -1,186 +1,11 @@
 name: Apply hosted migrations
 
-# The runbook (AI/HOSTED_APPLY_RUNBOOK.md), executable: repairs the one
-# renamed ledger row, then pushes every outstanding migration to the hosted
-# Supabase project — exactly the steps the owner would type, with the ledger
-# listed before and after so the run's log is its own evidence.
-#
-# Owner-triggered only. Mutating scopes prove their exact repository, release,
-# database, file, catalog, and containment identities before writing production
-# DDL. Secrets (Settings → Secrets and variables → Actions):
-#   SUPABASE_ACCESS_TOKEN  — a personal access token (looks like sbp_0102…)
-#   SUPABASE_DB_PASSWORD   — the project database password
-# A valid token selects the linked project flow; a missing or malformed token
-# falls back to a direct database connection through the IPv4 pooler. Surgical
-# scopes that verify live catalog identity with psql also require the database
-# password even in token mode (the direct project hostname is IPv6-only, which
-# GitHub-hosted runners cannot reach).
-# Never paste either secret into a chat, an issue, or a commit.
 
 on:
   workflow_dispatch:
     inputs:
       scope:
-        description: >-
-          "all" pushes outstanding ordinary migrations only after protected
-          20260822000150, 20260822000200, the job-seeker 20260822000400/00500
-          pair, executable-model repair 20260822000600,
-          clear-controls 20260822000700/00800, and protected
-          20260822000300/00850/00900/01000/01100/01200 plus graph-protocol
-          20260827000150/00200 are each recorded by their dedicated
-          scopes; "broker-functions"
-          applies only the idempotent broker migrations
-          (20260816000400 through 20260820000300, plus 20260821000300) and
-          records them in history;
-          "project-controls" applies the 20260815 range plus the two run-review
-          files, which is what the project detail page and the Runs page need;
-          "graph-stage-backfill" applies only 20260823000700, which derives
-          lifecycle_stage from capability for graph nodes that stored none —
-          data only, no schema change, and it never overwrites a stage a
-          template declared;
-          "executable-model-repair" applies only 20260822000600, which moves
-          bots already provisioned with a model the Codex worker cannot claim
-          onto the one it can, so Issue a Command stops refusing every
-          submission;
-          "pipeline-selection" applies only 20260821000300, which is what makes
-          the AI Factory's Use button record a project's pipelines;
-          "bot-legacy-acl-normalization" applies only 20260822000150, which
-          removes the exact Supabase-default service_role overgrant from the
-          seven frozen legacy bot routines;
-          "bot-account-binding" applies only 20260822000200, which binds a
-          subscription bot to its exact tenant-scoped AI account;
-          "factory-any-model-record-only" atomically applies the exact
-          20260822000300/00850/00900/01000/01100/01200 protected chain, normalizing the exact hosted
-          pre-repair function ACLs, restoring the AgentOS
-          isolation catalog, repairing the frozen PL/pgSQL lint set, and
-          recording every valid non-Codex factory model without dispatch;
-          "lifecycle" applies only the two Agentic SDLC files
-          (20260821000100 and 20260821000200) and records them in history;
-          "audit-guard-acl-contract" applies only 20260822001300, which
-          removes the hosted Supabase default service_role EXECUTE grant from
-          the append-only audit guard reject_activity_event_mutation();
-          "agentos-foundation-cleanup" applies only 20260822001400, which
-          drops the empty partial AgentOS remnant a mixed-era 20260814000300
-          apply left behind, so 20260822000900 can restore the foundation
-          from its proven-absent state;
-          "command-carry-forward" applies 20260815001000 and then
-          20260822001500, bringing submit_command to the exact pre-chain
-          version and owner-plus-authenticated ACL the protected
-          20260822001000 input guard requires;
-          "record-only-postflight" re-runs exactly the three post-commit
-          verifications, the health checks, and the PostgREST reload that the
-          applied protected chain's run never reached, writing nothing except
-          the NOTIFY;
-          "command-analysis-graphs" applies only 20260823000100, which lets a
-          record-only Claude command launch its one read-only analysis graph
-          and report the run truthfully;
-          "analysis-launch-doorcheck" changes no data at all: it rehearses the
-          Run analysis launch inside a rolled-back transaction and reports
-          whether hosted PostgREST resolves and executes the doorway function,
-          because the button's failure mode is invisible from the repository;
-          "analysis-launch-commit" commits the one launch the owner's Run
-          analysis tap asked for, through the same database doorway with the
-          hash-pinned fixture plan, refusing if the command already has its
-          graph; the graph lands PLANNED and only the graph worker runs it;
-          "delete-selected-pipelines" applies only 20260823000200, which lets
-          the Pipelines page delete exactly the rows somebody ticked under the
-          same refusals as the whole-list clear;
-          "stop-and-delete-pipelines" applies only 20260823000300, which makes
-          that selection stop live work before removing it and detach an
-          analysis graph rather than being refused by its foreign key;
-          "discovery-stages" applies exactly 20260823000800 and 20260823000900
-          as separate psql invocations, growing sdlc_stage by DISCOVERY,
-          EVALUATION and DECISION between PRD and ARCHITECTURE and extending
-          the capability-to-stage map to the three capabilities that produce
-          them; additive, replay-safe, and it touches zero existing rows;
-          "automatic-gate-decider" applies only 20260824000100, the worker-side
-          decider for anchored AUTOMATIC gates — the missing piece that let
-          every lifecycle deadlock at its first automatic gate; it adds one
-          security-definer function executable by service_role alone and
-          changes no table, row, or human-gate rule;
-          "lifecycle-resume" applies only 20260824000200, the read-only
-          worker function that lets a re-claimed lifecycle reuse the results
-          it already recorded instead of re-proving finished stages until the
-          provider window caps; one definer function, service_role execute
-          only, no table or row changes;
-          "run-artifacts-read" applies only 20260824001000, the member-facing
-          read behind the per-run stage page: one definer function returning a
-          run's recorded artifact payloads, membership-checked and scoped to
-          the caller's organization, authenticated execute only, no table or
-          row changes;
-          "graph-protocol-fence" applies only 20260827000150, revoking every
-          legacy graph/Phase 1C worker entry point before the old fleet drains;
-          "graph-phase1c-lineage" applies only 20260827000200 after the fence
-          is recorded and every graph/Phase 1C worker and RUNNING row has
-          drained, installing only the version-2 atomic release-lineage
-          protocol; these scopes are forward-only and can never be bundled;
-          "resume-gate-halted" applies only 20260824001100, which widens the
-          resume read to include gate-halted (VERIFYING) node runs — without
-          it an approved gate re-executes work the database already holds and
-          re-pays the provider window for it; replaces one definer function
-          in place, same grants, no table or row changes;
-          "gate-approval-voided" applies only 20260825000100, which scopes
-          the claim's gate-approval freshness watermark to answering runs so
-          a capacity-voided (CANCELLED) run no longer consumes an approval —
-          the sequence that stranded live lifecycle d7241cf4; replaces one
-          definer function in place, same grants, no table or row changes;
-          "billing-foundation" applies only 20260825000400: the billing
-          tables (customers, subscriptions, events) with forced RLS and
-          member-read policies, service_role write grants for the verified
-          Stripe webhook, two activity_event_type values, and
-          ensure_billing_customer granted to authenticated. Purely additive;
-          nothing deployed reads these objects until the billing code ships,
-          so apply first, then deploy;
-          "runs-closure-note" applies only 20260825000300, which gives
-          graph_runs a closure_note column and carries the engine's own
-          account of why a run ended through complete_graph_run_as_worker
-          into list_graph_runs — the explanation was computed on every close
-          and discarded on every close, because neither the function nor the
-          table could hold it; additive column, both functions dropped and
-          recreated with their grants restated, no existing row rewritten;
-          apply this BEFORE deploying the code that sends the note, because
-          the new function's extra parameter is defaulted and therefore still
-          answers the currently deployed seven-argument call;
-          "ledger-repair-node-detail" writes NO DDL. 20260823001000 never ran on
-          hosted, but its effect is present: 20260825000200 replaced
-          list_graph_runs with the current body, node detail included. Leaving
-          the row unrecorded is actively dangerous — 20260823001000 sorts
-          BEFORE 20260825000200, so scope=all would re-apply the older file and
-          overwrite list_graph_runs with the pre-cost version, silently
-          removing tokens_used, cost_micros, budget_action and
-          discovery_rounds from production. This records the row after proving
-          the live function already returns both that migration's node detail
-          and the four spend columns. If it does not, it refuses;
-          "ledger-repair-command-routing" writes NO DDL. 20260821000400 was
-          applied by hand in the SQL editor, which changes the schema without
-          writing the ledger row, so the hosted audit reports it APPLIED while
-          the ledger reports it missing — and scope=all would try to re-run it
-          and abort on 42P07. This records the row that is already true, after
-          proving from pg_class and pg_proc that the table and all three
-          functions really are there. If they are not, it refuses: recording a
-          migration that never ran would skip it forever;
-          "run-cost-and-budget" applies only 20260825000200, which returns the
-          four columns the graph worker has written since 20260819000100 and
-          no read has ever returned — tokens_used, cost_micros, budget_action
-          and discovery_rounds — so a finished run can say what it spent;
-          replaces one definer function in place, same grants, no table or row
-          changes;
-          "clear-autonomy-projects" applies only 20260823000600, which adds the
-          Autonomy page's Clear control as an archive sweep and excludes
-          archived projects from the autonomy list; it deletes nothing and
-          leaves the project deletion guard in place;
-          "finish-credential-vault" applies only 20260823000500, which creates
-          the one function 20260814002500 died before creating - the reason a
-          correct bot sign-in code reads invalid - and then records
-          20260814002500 in the ledger so the preview branch stops replaying it
-          into a 42P07;
-          "release-routing-evidence" applies only 20260823000400, which lets
-          the audited pipeline delete release a command's immutable routing
-          evidence - without it a routed command could never be deleted by
-          anyone, because the guard refuses every delete and the foreign key
-          restricts;
-          "probe" changes nothing at all and just reports which objects already
-          exist, because the ledger has proven to understate the live schema.
+        description: "Choose one exact migration scope; see AI/HOSTED_APPLY_RUNBOOK.md for the forward-only contract."
         required: false
         default: probe
         type: choice
@@ -247,7 +72,6 @@ jobs:
       PROJECT_REF: qpuofpmagrmyamahqwxw
     steps:
       - name: Check out the migrations
-        # actions/checkout v4 (reviewed immutable commit)
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           persist-credentials: false
@@ -432,11 +256,6 @@ jobs:
           echo "::notice::Exact main SHA ${CHECKED_OUT_SHA} is green, deployed, and has no active graph/Phase 1C worker workflow run (${VERCEL_DEPLOYMENT_URL})."
 
       - name: Choose the connection
-        # Decides MODE=token (valid sbp_ token, linked flow) or MODE=dburl
-        # (password-only, through the IPv4 session pooler). The URL-encoded
-        # password and the full URL are masked explicitly: only the raw
-        # secret value is masked automatically, and this repository is
-        # public.
         run: |
           if [[ "$SUPABASE_ACCESS_TOKEN" =~ ^sbp_[A-Za-z0-9]{16,}$ ]]; then
             echo "MODE=token" >> "$GITHUB_ENV"
@@ -480,18 +299,7 @@ jobs:
           fi
 
       - name: Repair stale ledger rows (idempotent)
-        # Never on a probe. `scope: probe` is documented as changing nothing at
-        # all, and it is the step an operator reaches for precisely when they
-        # do not yet trust the ledger -- but this step sits above the scope
-        # branch, so a probe could still rewrite history rows. A read-only
-        # question must not be able to edit the thing being questioned.
         if: ${{ inputs.scope != 'probe' && inputs.scope != 'analysis-launch-doorcheck' && inputs.scope != 'bot-legacy-acl-normalization' && inputs.scope != 'bot-account-binding' && inputs.scope != 'bot-account-binding-contract' && inputs.scope != 'factory-any-model-record-only' && inputs.scope != 'job-seeker-atomic-record' && inputs.scope != 'graph-protocol-fence' && inputs.scope != 'graph-phase1c-lineage' }}
-        # Two known history-only repairs, each applied only when the live
-        # listing shows the stale row. 20260814002000 was renamed to
-        # 20260814000100; remote-only 20260814000200 is the pre-split name
-        # of 20260814000210/000220/000250, all three of which the remote
-        # ledger already records — reverting the stale row is bookkeeping,
-        # not DDL. If neither row is present, this is a no-op.
         run: |
           if [ "$MODE" = "token" ]; then
             LIST=$(npx supabase migration list --linked)
@@ -520,15 +328,6 @@ jobs:
           fi
 
       - name: Apply the broker function migrations surgically (scope=broker-functions)
-        # Every file here is idempotent by construction — `create or replace
-        # function`, `create table if not exists`, `create index if not
-        # exists`, `alter type ... add value if not exists`, and grants — so
-        # applying them directly cannot disturb existing schema. psql runs
-        # each statement autocommitted, which is what lets an enum label be
-        # added and then referenced from a function body defined below it. psql is preinstalled on the runner, and
-        # Supabase's DDL event trigger reloads the PostgREST schema cache
-        # so the functions become callable immediately. History rows are
-        # recorded so the ledger stays truthful.
         if: ${{ inputs.scope == 'broker-functions' }}
         run: |
           if [ "$MODE" != "dburl" ]; then
@@ -637,35 +436,10 @@ jobs:
           repair 20260820000200
           repair 20260820000300
           repair 20260821000300
-          # Supabase's DDL event trigger reloads the PostgREST schema cache
-          # on its own; this explicit reload is insurance, so a browser that
-          # saw PGRST202 seconds ago cannot keep seeing it.
           psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
           echo "Broker function migrations applied, recorded, and the API schema cache reloaded."
 
       - name: Report what the database already has (scope=probe)
-        # Read-only, and the only honest basis for an apply decision.
-        #
-        # Run 32068091179 proved the ledger understates production: it listed
-        # the whole 20260815 range as unapplied, and applying it found the enum
-        # labels and organizations.maximum_concurrent_runs already present —
-        # live DDL with no history row. Run 32103778884 then proved the ledger
-        # is not even a contiguous prefix: it is missing 19 versions in the
-        # middle while carrying every row of the 20260817 range above them.
-        #
-        # The first query is the one that decides what to do. It names the
-        # marker object each ledger-absent migration introduces and prints a
-        # `present` boolean per version, so an absent object is visible as `f`
-        # rather than as a row that simply never appears — the flaw in the
-        # older query, which listed only what existed and so could not tell
-        # "missing" apart from "not asked about".
-        #
-        # present = t  ->  the DDL is live; repair the history row, do not re-run the file.
-        # present = f  ->  the file has genuinely not run; applying it is real DDL.
-        #
-        # Two of the nineteen only replace an existing function, so existence
-        # proves nothing about them. Those are probed by a substring of the
-        # function body that the migration introduced.
         if: ${{ inputs.scope == 'probe' }}
         run: |
           if [ "$MODE" != "dburl" ]; then
@@ -1762,32 +1536,6 @@ jobs:
              order by project.name;"
 
       - name: Apply the project control migrations surgically (scope=project-controls)
-        # The 20260815 range plus the two run-review files: everything the
-        # project detail page's priority, focus, stop and cancel controls need,
-        # and the Runs page's review and delete.
-        #
-        # Exactly the three files run 32068262957's probe showed missing, and
-        # no others.
-        #
-        # The probe is why this list is short. The ledger says the whole
-        # 20260815 range is outstanding; the database says otherwise — every
-        # project scheduling column, and set_project_engineering_pause,
-        # set_project_engineering_priority, focus_portfolio_engineering,
-        # set_portfolio_capacity_limits and update_project_details, are already
-        # live. Applying that range re-runs DDL for objects that exist, which
-        # is exactly how run 32068091179 failed.
-        #
-        # Missing, and therefore here: archive_project and unarchive_project —
-        # the project detail page's cancel and restore — the run review and
-        # deletion pair, and run archiving with the report lifecycle. Every file
-        # is idempotent: enum additions are `add value if not exists`, functions
-        # are `create or replace`, and the two column-adding files use
-        # `add column if not exists` with their constraints dropped before they
-        # are added.
-        #
-        # 20260817001000 also drops and recreates list_agent_runs to add
-        # p_include_archived. The parameter has a default, so the existing
-        # two-argument call sites keep working through the swap.
         if: ${{ inputs.scope == 'project-controls' }}
         run: |
           if [ "$MODE" != "dburl" ]; then
@@ -1803,8 +1551,6 @@ jobs:
               npx supabase migration repair --status applied "$1" --db-url "$DB_URL"
             fi
           }
-          # Each file is applied and immediately recorded, so an interruption
-          # leaves a ledger that is behind rather than one that lies.
           for FILE in \
             supabase/migrations/20260815000700_project_archive_operation.sql \
             supabase/migrations/20260817000200_run_review_activity_types.sql \
@@ -1819,20 +1565,6 @@ jobs:
           done
 
       - name: Apply the pipeline selection migration (scope=pipeline-selection)
-        # One file, because one feature needs it. Running broker-functions to
-        # reach it would re-run unrelated migrations, each idempotent but each
-        # still a change to production nobody asked for in this run.
-        #
-        # 20260821000300 creates public.project_pipelines with RLS and FORCE
-        # RLS, revokes every table privilege from anon, authenticated and
-        # service_role, and adds select_project_pipeline,
-        # deselect_project_pipeline and list_project_pipelines. It adds; it
-        # alters nothing that exists. Every statement is idempotent —
-        # `create table if not exists`, `create index if not exists`,
-        # `alter type ... add value if not exists`, `create or replace
-        # function` — and psql runs each autocommitted, which is what lets the
-        # two new enum labels be added and then named from a function body
-        # defined below them.
         if: ${{ inputs.scope == 'pipeline-selection' }}
         run: |
           if [ "$MODE" != "dburl" ]; then
@@ -1849,18 +1581,10 @@ jobs:
           else
             npx supabase migration repair --status applied 20260821000300 --db-url "$DB_URL"
           fi
-          # Insurance: Supabase's DDL event trigger reloads the PostgREST
-          # schema cache on its own, but a browser that saw PGRST202 seconds
-          # ago must not keep seeing it.
           psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
           echo "Pipeline selection applied and recorded; the API schema cache was reloaded."
 
       - name: Apply the agent selection surgically (scope=agent-selection)
-        # Exactly one file — 20260822000100 — the project_agents mirror of the
-        # pipeline-selection scope above, and replay-safe the same way: enum
-        # labels are `add value if not exists`, the table is `create table if
-        # not exists`, indexes are `if not exists`, and the three definer
-        # functions are `create or replace`.
         if: ${{ inputs.scope == 'agent-selection' }}
         run: |
           if [ "$MODE" != "dburl" ]; then
@@ -1877,17 +1601,10 @@ jobs:
           else
             npx supabase migration repair --status applied 20260822000100 --db-url "$DB_URL"
           fi
-          # Insurance: Supabase's DDL event trigger reloads the PostgREST
-          # schema cache on its own, but a browser that saw PGRST202 seconds
-          # ago must not keep seeing it.
           psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
           echo "Agent selection applied and recorded; the API schema cache was reloaded."
 
       - name: Normalize exact legacy bot ACLs (scope=bot-legacy-acl-normalization)
-        # Forward-only containment for Supabase's function default privileges.
-        # This scope can remove only the direct service_role EXECUTE entry from
-        # seven frozen routines; the migration itself repeats the full catalog
-        # proof before and after inside one atomic DO statement.
         if: ${{ inputs.scope == 'bot-legacy-acl-normalization' }}
         run: |
           if [ -z "$SUPABASE_DB_PASSWORD" ]; then
@@ -2113,10 +1830,6 @@ jobs:
           fi
 
       - name: Apply the exact bot account binding (scope=bot-account-binding)
-        # Exactly one protected file. Its frozen hash is checked before any
-        # database write, the immediately preceding migration must already be
-        # in the ledger, and this version must not be there. Never replace this
-        # scope with `all`: the hosted ledger is intentionally non-contiguous.
         if: ${{ inputs.scope == 'bot-account-binding' }}
         run: |
           if [ -z "$SUPABASE_DB_PASSWORD" ]; then
@@ -2752,13 +2465,6 @@ jobs:
           echo "::notice::Runtime create/bind/assign/configure/readiness/audit behavior, linked database lint, application health, and kill-switch/autonomy/worker containment remain mandatory post-apply release gates."
 
       - name: Apply the exact bot mutator CONTRACT (scope=bot-account-binding-contract)
-        # CONTRACT is deliberately separate from EXPAND. It is safe only after
-        # the exact checked-RPC application SHA is the latest successful
-        # Vercel-bot Production deployment. The pre-connection machine gate
-        # proves that GitHub deployment identity.
-        # Retained only as immutable release evidence. The selectable standalone
-        # scope and its mutation path are retired: 00300 may now land only in
-        # the accepted, atomic 00300 -> 00850 -> 00900 -> 01000 -> 01100 -> 01200 protected chain below.
         if: ${{ false && inputs.scope == 'bot-account-binding-contract' }}
         run: |
           echo "::error::The standalone CONTRACT mutation path is retired; use the exact machine-gated atomic scope."
@@ -3084,11 +2790,6 @@ jobs:
           echo "Exact bot mutator CONTRACT applied, verified, recorded once, and the API schema cache was reloaded."
 
       - name: Apply the exact factory any-model record-only chain (scope=factory-any-model-record-only)
-        # One fail-closed forward-only transaction: CONTRACT, hosted catalog
-        # repair, and record-only routing. A complete rehearsal (including
-        # linked warning-level lint) rolls back before the only production
-        # transaction can write DDL or five ledger rows. Never repairs
-        # history, broad-pushes, resets, reruns, drops, or down-migrates.
         if: ${{ inputs.scope == 'factory-any-model-record-only' }}
         run: |
           if [ -z "$SUPABASE_DB_PASSWORD" ]; then
@@ -3932,13 +3633,6 @@ jobs:
             exit 1
           fi
 
-          # Exercise the entire exact frozen chain and warning-level linked
-          # lint in one transaction, then roll the whole rehearsal back. Any
-          # SQL, catalog, ACL, or lint mismatch therefore stops before commit.
-          # plpgsql_check refuses to lint a trigger function without the
-          # relation that types NEW/OLD ("missing trigger relation"), so the
-          # three trigger rows carry the relation 01000 pins for them in its
-          # trigger_expectations; every non-trigger row stays at 0::regclass.
           LINT_FINDINGS=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atq \
             -c "begin;" \
             -f "$CONTRACT_FILE" \
@@ -3987,11 +3681,6 @@ jobs:
             where finding.level in ('error', 'warning', 'extra')
             order by expected.signature, finding.lineno, finding.position;" \
             -c "rollback;")
-          # The capture holds every byte the rehearsal wrote to stdout, and the
-          # chain files legitimately emit blank lines (void-returning SELECTs
-          # under -Atq), so plain non-emptiness would refuse a finding-free
-          # rehearsal forever. Only sentinel-prefixed rows are findings; the
-          # coalesce above keeps a NULL field from erasing its row's sentinel.
           if printf '%s\n' "$LINT_FINDINGS" | grep -q '^LINTROW|'; then
             echo "::error::Pre-commit linked database lint found error/warning/extra findings in a repaired, restored, record-only, or delegated function."
             printf '%s\n' "$LINT_FINDINGS" | grep '^LINTROW|'
@@ -4290,12 +3979,6 @@ jobs:
           echo "Exact hosted PL/pgSQL catalog and lint repair applied once; catalog, ACL, transactional lint, health, and containment gates passed."
 
       - name: Verify the applied record-only chain postflights (scope=record-only-postflight)
-        # Chain run 32607123713 committed the protected six-file transaction
-        # and then refused at a post-commit postflight whose pinned contract
-        # md5 for list_factory_commands was wrong on every database. This
-        # scope re-runs exactly the three post-commit verifications, the
-        # health checks, and the PostgREST reload that the protected step
-        # never reached. It writes nothing except the NOTIFY.
         if: ${{ inputs.scope == 'record-only-postflight' }}
         run: |
           if [ -z "$SUPABASE_DB_PASSWORD" ]; then
@@ -4564,30 +4247,6 @@ jobs:
           echo "Record-only chain postflights verified on the applied production database; PostgREST schema reload requested."
 
       - name: Apply the Agentic SDLC lifecycle surgically (scope=lifecycle)
-        # Exactly two files — 20260821000100 and 20260821000200 — and no others.
-        # Every other outstanding migration stays outstanding and separately
-        # decidable, which is the whole reason this scope exists rather than a
-        # `scope=all` that would sweep unrelated versions along with it.
-        #
-        # Replay-safe by construction, checked statement by statement: the three
-        # new enum types are created inside DO blocks that first ask pg_type; the
-        # activity labels are `add value if not exists`; every new column is
-        # `add column if not exists`; the three graphs constraints are guarded by
-        # DO blocks, because PostgreSQL has no `add constraint if not exists`;
-        # graph_gates is `create table if not exists` with its policy dropped
-        # before it is created; and the rest is `create or replace function`.
-        # list_graph_runs is the one exception and it is explicit — its return
-        # type changes, so the file drops it first with `drop function if exists`.
-        #
-        # The two files run as separate psql invocations on purpose. PostgreSQL
-        # refuses to use an enum value in the transaction that added it, so the
-        # labels in 20260821000100 must be committed before the function bodies
-        # in 20260821000200 can write them.
-        #
-        # Prerequisites, confirmed by probe run 32531787440 rather than assumed:
-        # 20260821000200 rebuilds claim_planned_graph and list_graph_runs from
-        # 20260819001000 and 20260819000800, and that whole 20260819 range is
-        # recorded on both sides of the hosted ledger.
         if: ${{ inputs.scope == 'lifecycle' }}
         run: |
           if [ "$MODE" != "dburl" ]; then
@@ -4609,8 +4268,6 @@ jobs:
               npx supabase migration repair --status applied "$1" --db-url "$DB_URL"
             fi
           }
-          # Applied and recorded one at a time, so an interruption leaves a
-          # ledger that is behind rather than one that lies.
           for FILE in \
             supabase/migrations/20260821000100_agentic_sdlc_activity_types.sql \
             supabase/migrations/20260821000200_agentic_sdlc_lifecycle.sql
@@ -4620,9 +4277,6 @@ jobs:
             psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
             repair "$VERSION"
           done
-          # Supabase's DDL event trigger reloads the PostgREST schema cache on
-          # its own; this is insurance, so a browser that saw PGRST202 seconds
-          # ago cannot keep seeing it for decide_node_gate.
           psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
           echo ""
           echo "What the run actually produced, read back rather than assumed."
@@ -4665,24 +4319,6 @@ jobs:
                 and routine.proname = 'claim_planned_graph';"
 
       - name: Apply the job-seeker resume extraction migration (scope=job-seeker-resume)
-        # Exactly one file — 20260822000400 — and no others. Every other
-        # outstanding migration stays outstanding and separately decidable,
-        # which is the point of a narrow scope rather than a scope=all that
-        # would sweep unrelated versions along with it.
-        #
-        # Prerequisites are checked against the live ledger rather than
-        # assumed. This file references job_seeker_uploads and
-        # job_seeker_profiles (20260820000200/000300), the validator
-        # job_seeker_text_list_valid (20260820000200), and the enum label
-        # job_seeker.profile_updated (20260820000100). If any of those had not
-        # run, this would create a table and a function referencing objects
-        # that do not exist.
-        #
-        # Replay-safe by construction: create table if not exists, policies
-        # dropped before they are created, indexes if not exists, and one
-        # create or replace function. No other migration defines
-        # apply_resume_extraction, so there is no shared-function ordering
-        # hazard here.
         if: ${{ inputs.scope == 'job-seeker-resume' }}
         run: |
           if [ -z "$SUPABASE_DB_PASSWORD" ]; then
@@ -4704,9 +4340,6 @@ jobs:
             exit 1
           fi
 
-          # The three prerequisites present, and the target genuinely absent.
-          # Applying a migration whose version the ledger already records would
-          # make the row lie about which DDL ran.
           FOUNDATION=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
             "select count(*) from supabase_migrations.schema_migrations where version = '20260820000200';")
           UPLOADS=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
@@ -4720,8 +4353,6 @@ jobs:
             exit 1
           fi
 
-          # The objects themselves, not just their ledger rows — the ledger has
-          # been proven to understate the live schema before.
           READY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
             select (
               exists (select 1 from pg_class c join pg_namespace n on n.oid = c.relnamespace
@@ -4745,9 +4376,6 @@ jobs:
           else
             npx supabase migration repair --status applied 20260822000400 --db-url "$DB_URL"
           fi
-          # Supabase's DDL event trigger reloads the PostgREST schema cache on
-          # its own; this is insurance so a browser that saw PGRST202 seconds
-          # ago cannot keep seeing it for apply_resume_extraction.
           psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
 
           echo ""
@@ -4779,13 +4407,6 @@ jobs:
           echo "Applied, recorded, and verified: RLS forced, three policies, no UPDATE grant, definer function callable by members only."
 
       - name: Contract the resume extraction table's grants (scope=job-seeker-grant-contract)
-        # Takes back the privileges Supabase's default grants handed to
-        # authenticated and service_role when 20260822000400 created the table.
-        # Its own post-apply readback measured auth_update = t and
-        # service_update = t on production, which is the defect this closes.
-        #
-        # Pure REVOKE and GRANT — no schema change, replay-safe by definition,
-        # and its effect is fully described by the readback below.
         if: ${{ inputs.scope == 'job-seeker-grant-contract' }}
         run: |
           if [ -z "$SUPABASE_DB_PASSWORD" ]; then
@@ -4807,7 +4428,6 @@ jobs:
             exit 1
           fi
 
-          # The table it contracts has to exist, which means 20260822000400 ran.
           PREDECESSOR=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
             "select count(*) from supabase_migrations.schema_migrations where version = '20260822000400';")
           if [ "$PREDECESSOR" != "1" ]; then
@@ -4854,15 +4474,6 @@ jobs:
           echo "Contracted: authenticated holds select/insert/delete only, service_role and anon hold nothing."
 
       - name: Contract the audit guard function's ACL (scope=audit-guard-acl-contract)
-        # Exactly one file — 20260822001300 — which removes the hosted
-        # Supabase default service_role EXECUTE grant from
-        # reject_activity_event_mutation(). 20260812000300 revoked PUBLIC,
-        # anon, and authenticated but not service_role, because locally that
-        # grant never existed; hosted default privileges made it real. Probe
-        # run 32599284961 measured the drift as the one containment clause
-        # still refusing the protected chain. Pure REVOKE — no schema change,
-        # replay-safe, fail-closed on any unknown state via the file's own
-        # preflight.
         if: ${{ inputs.scope == 'audit-guard-acl-contract' }}
         run: |
           if [ -z "$SUPABASE_DB_PASSWORD" ]; then
@@ -4918,15 +4529,6 @@ jobs:
           echo "Contracted: the audit guard is owner-only; no browser or server role may execute it directly."
 
       - name: Clear the partial AgentOS foundation (scope=agentos-foundation-cleanup)
-        # Exactly one file — 20260822001400 — which returns the AgentOS
-        # isolation foundation to the proven-absent state 20260822000900
-        # requires. Hosted records 20260814000300 as applied while only a
-        # fragment of its 32 named objects exists (protected-chain run
-        # 32600709789: "expected 0 or 32 named objects; found 4"), the known
-        # mixed-era pattern of a history row recorded around a partial
-        # autocommit apply. The file no-ops on 0 and on a complete 32,
-        # refuses any remnant table that holds rows, and drops with RESTRICT
-        # semantics only, inside one transaction.
         if: ${{ inputs.scope == 'agentos-foundation-cleanup' }}
         run: |
           if [ -z "$SUPABASE_DB_PASSWORD" ]; then
@@ -5003,15 +4605,6 @@ jobs:
           echo "AgentOS roster after cleanup: ${REMAINING} named objects (0 = proven absent, ready for the protected restore)."
 
       - name: Carry submit_command forward and contract its ACL (scope=command-carry-forward)
-        # Exactly two files, in order. 20260815001000 is genuinely unapplied
-        # on hosted (probe: declare_cross_project_dependency absent), so
-        # hosted's submit_command predates the version the protected
-        # 20260822001000 input guard freezes — chain run 32601908933 failed
-        # on exactly that signature. 20260822001500 then converges the three
-        # command-submission functions to the exact owner-plus-authenticated
-        # ACL the guard requires, closing the hosted default-privilege gap
-        # that has recurred all day. Both fail closed via their own in-file
-        # guards; each file is applied in its own transaction.
         if: ${{ inputs.scope == 'command-carry-forward' }}
         run: |
           if [ -z "$SUPABASE_DB_PASSWORD" ]; then
@@ -5046,8 +4639,6 @@ jobs:
             exit 1
           fi
 
-          # Once the protected chain is recorded, its rewritten submit_command
-          # is the live one; replaying the pre-chain carry would regress it.
           CHAIN_RECORDED=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
             select count(*) from supabase_migrations.schema_migrations
              where version = '20260822001000';")
@@ -5065,11 +4656,6 @@ jobs:
              where routine.oid = to_regprocedure('public.submit_command(uuid,text,public.risk_level,jsonb,text)');"
 
           echo "Applying ${CARRY_FILE}"
-          # Autocommit on purpose: the file adds activity_event_type labels and
-          # then defines functions referencing them, the exact shape the
-          # broker-functions scope documents as needing per-statement commits.
-          # Every statement is create-or-replace/add-if-not-exists, so a rerun
-          # after a partial failure converges rather than conflicts.
           psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$CARRY_FILE"
           echo "Applying ${ACL_FILE}"
           psql "$DB_URL" -v ON_ERROR_STOP=1 -1 -q -f "$ACL_FILE"
@@ -5103,13 +4689,6 @@ jobs:
           echo "Carried: submit_command is at the 20260815001000 source with the exact ACL the protected chain expects."
 
       - name: Link record-only commands to analysis graphs (scope=command-analysis-graphs)
-        # Exactly one file — 20260823000100 — which adds the durable
-        # command-to-analysis-graph link table, the launch doorway that reads
-        # the command's own prompt as the goal, and its list read. It replaces
-        # no existing function and adds no enum label; the file's own pre- and
-        # postflight DO blocks refuse unknown state and prove the exact
-        # owner/authenticated posture the hosted default privileges would
-        # otherwise widen.
         if: ${{ inputs.scope == 'command-analysis-graphs' }}
         run: |
           if [ -z "$SUPABASE_DB_PASSWORD" ]; then
@@ -5163,18 +4742,6 @@ jobs:
           echo "Linked: record-only commands can launch and report their one analysis graph."
 
       - name: Rehearse the Run analysis doorway (scope=analysis-launch-doorcheck)
-        # The one failure the suites cannot see: whether the HOSTED database
-        # accepts launch_command_analysis_graph, the function behind the Run
-        # analysis button, for the real recorded command. Two moves, neither
-        # of which keeps any data:
-        #   1. psql rehearsal: the newest record-only Claude command's launch
-        #      runs as its own organization owner inside BEGIN…ROLLBACK, so the
-        #      database's verbatim answer (a graph id or an error) lands in the
-        #      log while the database keeps none of it.
-        #   2. NOTIFY pgrst 'reload schema' — the same cache-refresh signal
-        #      every mutating scope already sends. If the button failed only
-        #      because PostgREST's schema cache predated 20260823000100, this
-        #      signal is the entire repair.
         if: ${{ inputs.scope == 'analysis-launch-doorcheck' }}
         run: |
           if [ -z "$SUPABASE_DB_PASSWORD" ]; then
@@ -5248,19 +4815,6 @@ jobs:
           echo "Signal sent. If the rehearsal above returned a graph id, the database layer is healthy; a Run analysis tap after this run answers whether the edge stack agrees."
 
       - name: Commit the Run analysis launch (scope=analysis-launch-commit)
-        # The owner tapped Run analysis and the browser path left no trace;
-        # the doorcheck rehearsal then proved the hosted database performs the
-        # exact launch and rolled it back. This scope commits that same launch
-        # once, through the same database doorway the button calls, with the
-        # same plan the button would send — the checked-in fixture is pinned
-        # here by hash and pinned in tests against a fresh compile of the
-        # production_readiness template.
-        #
-        # Idempotent by construction: launch_command_analysis_graph returns
-        # the existing graph when the link already exists, and this scope
-        # additionally refuses up front so a re-dispatch cannot even try.
-        # Nothing here executes analysis work — the graph lands PLANNED and
-        # only the graph worker turns it into a run.
         if: ${{ inputs.scope == 'analysis-launch-commit' }}
         run: |
           if [ -z "$SUPABASE_DB_PASSWORD" ]; then
@@ -5368,13 +4922,6 @@ jobs:
              limit 3;"
 
       - name: Delete selected pipelines (scope=delete-selected-pipelines)
-        # Exactly one file — 20260823000200 — which adds the scoped sibling of
-        # clear_all_pipelines: same caller check, same mandatory reason, same
-        # refusal to delete live work or to take run history by surprise, over
-        # the rows somebody actually ticked. It adds no table and no enum
-        # label (the existing command.pipelines_cleared event carries both
-        # scopes, distinguished by its metadata) and replaces no function, so
-        # the file's own pre- and postflight blocks are the whole safety net.
         if: ${{ inputs.scope == 'delete-selected-pipelines' }}
         run: |
           if [ -z "$SUPABASE_DB_PASSWORD" ]; then
@@ -5426,13 +4973,6 @@ jobs:
           echo "Applied and verified: the Pipelines page can delete a selection under the clear's own rules."
 
       - name: Stop live work before deleting a selection (scope=stop-and-delete-pipelines)
-        # Exactly one file — 20260823000300 — which drops and recreates
-        # delete_selected_pipelines so a selected pipeline is cancelled before
-        # it is removed, and so an analysis graph link is detached rather than
-        # blocking the delete through its restrict foreign key. The return
-        # shape changes, which is why the old body is dropped rather than
-        # replaced; the file's preflight refuses unless 20260823000200 is
-        # already there, so the two can only be applied in order.
         if: ${{ inputs.scope == 'stop-and-delete-pipelines' }}
         run: |
           if [ -z "$SUPABASE_DB_PASSWORD" ]; then
@@ -5469,8 +5009,6 @@ jobs:
           fi
           psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
 
-          # The new shape is the evidence: six output columns, stopped_count
-          # among them, is what tells the console a selection stops its rows.
           VERIFIED=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
             set search_path = pg_catalog;
             select to_regprocedure('public.delete_selected_pipelines(uuid,uuid[],text,boolean)') is not null
@@ -5498,14 +5036,6 @@ jobs:
           echo "Applied and verified: selecting a pipeline now stops it, then deletes it."
 
       - name: Release routing evidence on an audited delete (scope=release-routing-evidence)
-        # Exactly one file - 20260823000400 - which relaxes the routing guard
-        # for one named path and rebuilds delete_selected_pipelines to use it.
-        # Without it a routed command is undeletable by ANY caller: the guard
-        # raises on every delete of a route row, and the route's foreign key
-        # to commands is ON DELETE RESTRICT. The relaxation is narrow - an
-        # UPDATE is still refused unconditionally, and the table still carries
-        # no grants for anon, authenticated or service_role, which the file's
-        # own postflight re-checks.
         if: ${{ inputs.scope == 'release-routing-evidence' }}
         run: |
           if [ -z "$SUPABASE_DB_PASSWORD" ]; then
@@ -5542,9 +5072,6 @@ jobs:
           fi
           psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
 
-          # Proof by behaviour, in a transaction that is rolled back: an
-          # UPDATE must still be refused, and a DELETE must still be refused
-          # without the announced permission. Nothing is kept either way.
           echo "Rolled-back proof that the guard still refuses what it always refused."
           psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q <<'GUARD_SQL'
           begin;
@@ -5601,16 +5128,6 @@ jobs:
           echo "Applied and verified: a routed pipeline can be deleted through the audited path, and no other path gained anything."
 
       - name: Finish the provider credential vault (scope=finish-credential-vault)
-        # Two actions, both narrow. First 20260823000500, which creates the one
-        # function probe run 32652393423 measured as missing from an otherwise
-        # complete 20260814002500. Then the ledger row for 20260814002500
-        # itself, because once that file's effects are all present the ledger
-        # was simply wrong - and its absence is what makes Supabase's preview
-        # branch replay the file into a 42P07 on every commit.
-        #
-        # The order matters: the function is created and read back BEFORE the
-        # ledger claims the migration is applied, so the ledger can never say
-        # "applied" about a database that is still short a function.
         if: ${{ inputs.scope == 'finish-credential-vault' }}
         run: |
           if [ -z "$SUPABASE_DB_PASSWORD" ]; then
@@ -5654,7 +5171,6 @@ jobs:
             npx supabase migration repair --status applied 20260823000500 --db-url "$DB_URL"
           fi
 
-          # Read the function back BEFORE the ledger is touched.
           RESOLVED=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
             set search_path = pg_catalog;
             select to_regprocedure('public.resolve_provider_connect_session(text)') is not null
@@ -5668,8 +5184,6 @@ jobs:
             exit 1
           fi
 
-          # Every object 20260814002500 declares must be present before the
-          # ledger is allowed to say it was applied.
           COMPLETE=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
             set search_path = pg_catalog;
             select to_regclass('public.provider_credentials') is not null
@@ -5703,15 +5217,6 @@ jobs:
           echo "Applied and verified: a correct sign-in code can resolve again, and the preview branch has nothing left to replay for this file."
 
       - name: Add the Autonomy Clear control (scope=clear-autonomy-projects)
-        # Exactly one file — 20260823000600 — which adds clear_autonomy_projects
-        # and narrows list_autonomy_status to the projects the loop can still
-        # act on. It deletes nothing: the clear archives, through
-        # archive_project, because refuse_project_deletion states by name that
-        # a project's append-only trail makes it permanent and that archiving
-        # is the supported end of its life. The file's own postflight re-checks
-        # that a project still cannot be deleted, by asserting the
-        # activity_events RESTRICT that actually enforces it on every database
-        # rather than the friendlier trigger, which this one has not applied.
         if: ${{ inputs.scope == 'clear-autonomy-projects' }}
         run: |
           if [ -z "$SUPABASE_DB_PASSWORD" ]; then
@@ -5800,19 +5305,6 @@ jobs:
           echo "Applied and verified: Clear archives, the list hides archived projects, and nothing can delete one."
 
       - name: Backfill graph node lifecycle stages (scope=graph-stage-backfill)
-        # Exactly one file — 20260823000700 — and it changes data, not schema.
-        #
-        # Every graph created before the templates supplied a stage stored null
-        # on every node, so the graph-runs Stage column read as an em dash for
-        # the whole of this workspace's history. The stage is derivable from
-        # `capability`, which those rows already carry.
-        #
-        # Replay-safe by construction: the update is restricted to
-        # `lifecycle_stage is null`, so a second run changes nothing and a stage
-        # a template declared explicitly is never overwritten. A capability
-        # outside the nine the application defines is left null rather than
-        # guessed. No run, artifact, autonomy, worker or approval state is
-        # touched.
         if: ${{ inputs.scope == 'graph-stage-backfill' }}
         run: |
           if [ -z "$SUPABASE_DB_PASSWORD" ]; then
@@ -5839,8 +5331,6 @@ jobs:
             exit 1
           fi
 
-          # The column this writes has to exist, which means 20260821000200's
-          # object — not merely its ledger row — must be present.
           READY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
             select (
               exists (select 1 from information_schema.columns
@@ -5876,8 +5366,6 @@ jobs:
             select coalesce(lifecycle_stage::text, '(none)') as stage, count(*)
               from public.graph_nodes group by 1 order by 1;"
 
-          # The verdict is about the rows this scope is responsible for: a node
-          # whose capability the application defines must no longer be stageless.
           VERIFIED=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
             select count(*) = 0 from public.graph_nodes
              where lifecycle_stage is null
@@ -5892,19 +5380,6 @@ jobs:
           echo "Every node with a known capability now carries its stage."
 
       - name: Grow the lifecycle by DISCOVERY, EVALUATION and DECISION (scope=discovery-stages)
-        # Exactly two files — 20260823000800 and 20260823000900 — run as
-        # separate psql invocations because PostgreSQL refuses to use an enum
-        # value in the transaction that added it (the same physics as the
-        # clear-controls scope). The first adds the three values between PRD
-        # and ARCHITECTURE; the second extends the capability→stage map to the
-        # three capabilities that produce them — zero rows qualify today, so
-        # this is vocabulary and derivation, not a data change.
-        #
-        # ADR-136 conditioned this growth on "a capability that produces
-        # them"; the discovery/evaluation/decision capabilities and the
-        # open_source_scout template are that capability, and the launch path
-        # casts a template's declared stage straight into this enum — so a
-        # scout launch on hosted fails without this scope.
         if: ${{ inputs.scope == 'discovery-stages' }}
         run: |
           if [ -z "$SUPABASE_DB_PASSWORD" ]; then
@@ -5935,8 +5410,6 @@ jobs:
             exit 1
           fi
 
-          # The type this grows must exist — 20260821000200's object, not
-          # merely its ledger row.
           READY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
             select exists (select 1 from pg_type t join pg_namespace n on n.oid = t.typnamespace
                             where n.nspname = 'public' and t.typname = 'sdlc_stage');")
@@ -5965,8 +5438,6 @@ jobs:
           psql "$DB_URL" -v ON_ERROR_STOP=1 -1 -q -f "$MAP_FILE"
           repair 20260823000900
 
-          # The verdict: eleven labels in lifecycle order, and every one of
-          # the three new stages accepted by an actual cast.
           VERIFIED=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
             select (
               (select array_agg(enumlabel::text order by enumsortorder)
@@ -5984,11 +5455,6 @@ jobs:
           echo "Applied and verified: the lifecycle reads GOAL through MONITORING with DISCOVERY, EVALUATION and DECISION between PRD and ARCHITECTURE."
 
       - name: Give anchored automatic gates their decider (scope=automatic-gate-decider)
-        # Exactly one file — 20260824000100 — one security-definer function.
-        # The first live lifecycle (graph 91959362) deadlocked at an automatic
-        # gate because nothing in the system could ever decide one; this is
-        # the missing decider, refusing everything the anchored-evidence rule
-        # refuses (human gates, zero anchors, gates a person already decided).
         if: ${{ inputs.scope == 'automatic-gate-decider' }}
         run: |
           if [ -z "$SUPABASE_DB_PASSWORD" ]; then
@@ -6022,7 +5488,6 @@ jobs:
             exit 1
           fi
 
-          # The gate machinery this decider belongs to must exist first.
           READY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
             select exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
                             where n.nspname = 'public' and p.proname = 'open_node_gate_as_worker');")
@@ -6051,10 +5516,6 @@ jobs:
           echo "Applied and verified: anchored automatic gates now have their decider; the human-gate rule is untouched."
 
       - name: Let lifecycles resume from recorded results (scope=lifecycle-resume)
-        # Exactly one file — 20260824000200 — one read-only definer function.
-        # Three consecutive live windows spent their whole provider budget
-        # re-proving finished stages; this is the read the worker's resume
-        # uses to reuse a lifecycle's own recorded results instead.
         if: ${{ inputs.scope == 'lifecycle-resume' }}
         run: |
           if [ -z "$SUPABASE_DB_PASSWORD" ]; then
@@ -6116,10 +5577,6 @@ jobs:
           echo "Applied and verified: lifecycles can resume from their own recorded results."
 
       - name: Serve a run's recorded artifacts to its members (scope=run-artifacts-read)
-        # Exactly one file — 20260824001000 — one read-only definer function,
-        # authenticated execute only. The per-run stage page renders the
-        # recorded stage packages; this is the read that serves them, with the
-        # same membership rule as list_graph_runs.
         if: ${{ inputs.scope == 'run-artifacts-read' }}
         run: |
           if [ -z "$SUPABASE_DB_PASSWORD" ]; then
@@ -6175,10 +5632,6 @@ jobs:
           echo "Applied and verified: a run's members can read its recorded artifacts."
 
       - name: Resume reuses gate-halted work (scope=resume-gate-halted)
-        # Exactly one file — 20260824001100 — replacing the resume read in
-        # place. Live run e3c4b582 re-executed approved architecture work and
-        # spent the window on it; the widened read offers VERIFYING node runs
-        # so an approved gate passes recorded work through at zero cost.
         if: ${{ inputs.scope == 'resume-gate-halted' }}
         run: |
           if [ -z "$SUPABASE_DB_PASSWORD" ]; then
@@ -6241,12 +5694,6 @@ jobs:
           echo "Applied and verified: an approved gate passes recorded work through at zero cost."
 
       - name: Billing foundation tables and boundary (scope=billing-foundation)
-        # Exactly one file — 20260825000400. Creates billing_customers,
-        # billing_subscriptions, billing_events with RLS forced, member-read
-        # policies, service_role write grants for the verified Stripe webhook,
-        # two activity_event_type values, and ensure_billing_customer granted
-        # to authenticated. Purely additive: nothing deployed reads these
-        # objects until the billing code ships, so apply first, then deploy.
         if: ${{ inputs.scope == 'billing-foundation' }}
         run: |
           if [ -z "$SUPABASE_DB_PASSWORD" ]; then
@@ -6301,12 +5748,6 @@ jobs:
           echo "Applied and verified: billing tables exist with forced RLS and the customer boundary."
 
       - name: A run states its closure reason (scope=runs-closure-note)
-        # Exactly one file — 20260825000300. Adds graph_runs.closure_note and
-        # rebuilds complete_graph_run_as_worker (one new defaulted parameter)
-        # and list_graph_runs (one new projected column). Backward compatible
-        # with the code currently deployed: the new parameter defaults, so the
-        # seven-argument call the live worker makes still resolves. Apply this
-        # first, then deploy the code that sends the note.
         if: ${{ inputs.scope == 'runs-closure-note' }}
         run: |
           if [ -z "$SUPABASE_DB_PASSWORD" ]; then
@@ -6368,11 +5809,6 @@ jobs:
           echo "Applied and verified: a run can state why it ended, and the read returns it."
 
       - name: A gate approval survives voided runs (scope=gate-approval-voided)
-        # Exactly one file — 20260825000100 — replacing claim_planned_graph in
-        # place. Live graph d7241cf4 halted at its approved ARCHITECTURE gate:
-        # the approval was compared against a capacity-voided run's close and
-        # read as stale, stranding the lifecycle. The watermark now considers
-        # only runs that answered (PARTIAL/COMPLETED).
         if: ${{ inputs.scope == 'gate-approval-voided' }}
         run: |
           if [ -z "$SUPABASE_DB_PASSWORD" ]; then
@@ -6434,18 +5870,6 @@ jobs:
           echo "Applied and verified: a voided run no longer consumes a gate approval."
 
       - name: Record the node-detail read a later migration superseded (scope=ledger-repair-node-detail)
-        # No DDL. 20260823001000 never ran here, and must never run now:
-        # 20260825000200 replaced list_graph_runs with the current body -- node
-        # detail AND the four spend columns -- and 20260823001000 sorts first.
-        # scope=all would therefore re-apply the older file over the newer
-        # function and take tokens_used, cost_micros, budget_action and
-        # discovery_rounds off production without a word.
-        #
-        # So the row is recorded rather than the file applied, and the proof
-        # required is that the live function already answers for both: the node
-        # detail this migration introduced, and the spend columns that came
-        # after it. Either missing means the schema is not what this claim says
-        # it is, and the scope refuses.
         if: ${{ inputs.scope == 'ledger-repair-node-detail' }}
         run: |
           if [ -z "$SUPABASE_DB_PASSWORD" ]; then
@@ -6466,15 +5890,12 @@ jobs:
             exit 0
           fi
 
-          # The node detail 20260823001000 introduced, read from the live body.
           DETAIL=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
             select (pg_get_functiondef(p.oid) like '%''job'', n.job%')
                and (pg_get_functiondef(p.oid) like '%''depends_on''%')
                and (pg_get_functiondef(p.oid) like '%''gate_state'', gate.state%')
               from pg_proc p join pg_namespace n on n.oid = p.pronamespace
              where n.nspname = 'public' and p.proname = 'list_graph_runs';")
-          # The spend columns that came after it. Recording the older row while
-          # the newer function is absent would be recording the wrong world.
           SPEND=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
             select (pg_get_function_result(p.oid) like '%tokens_used bigint%')
                and (pg_get_function_result(p.oid) like '%cost_micros bigint%')
@@ -6502,17 +5923,6 @@ jobs:
           echo "Recorded: scope=all can no longer overwrite the cost read with the older one."
 
       - name: Record the routing migration the editor applied (scope=ledger-repair-command-routing)
-        # No DDL. 20260821000400's objects are live -- the hosted audit sees
-        # factory_command_routes with its grants -- but the ledger has no row,
-        # because applying SQL in the editor does not write one. That gap is
-        # not cosmetic: scope=all re-runs anything the ledger omits, and this
-        # one would abort on `42P07: relation already exists`.
-        #
-        # The guard is deliberately the opposite way round from an apply
-        # scope. An apply refuses when the objects are already there; this
-        # refuses when they are NOT, because a ledger row is a claim that the
-        # migration ran, and recording that falsely would make every future
-        # apply skip it -- silently, and permanently.
         if: ${{ inputs.scope == 'ledger-repair-command-routing' }}
         run: |
           if [ -z "$SUPABASE_DB_PASSWORD" ]; then
@@ -6533,7 +5943,6 @@ jobs:
             exit 0
           fi
 
-          # Proof of presence, read from the catalog rather than from a report.
           TABLE=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
             select count(*) from pg_class c join pg_namespace n on n.oid = c.relnamespace
              where n.nspname = 'public' and c.relname = 'factory_command_routes' and c.relkind = 'r';")
@@ -6566,10 +5975,6 @@ jobs:
           echo "Recorded: the ledger now agrees with the schema, and scope=all no longer re-runs it."
 
       - name: Fence the legacy graph protocol (scope=graph-protocol-fence)
-        # Phase one of the worker cutover. Exactly one file and its ledger row
-        # commit together. This revokes new legacy calls before waiting for
-        # already-entered calls and RUNNING rows to drain; it installs no v2
-        # authority and never enables a worker or automatic action.
         if: ${{ inputs.scope == 'graph-protocol-fence' }}
         run: |
           if [ "$GITHUB_REPOSITORY" != "surgeservicesllc/SoftwareFactory" ] \
@@ -6711,10 +6116,6 @@ jobs:
           echo "Applied exactly 20260827000150. Legacy authority is fenced. RUNNING graph/Phase1C rows=${DRAIN_STATUS}; do not apply 00200 until this reads 0|0."
 
       - name: Install graph Phase 1C release lineage (scope=graph-phase1c-lineage)
-        # Phase two runs only after the separately committed 00150 fence and a
-        # complete fleet drain. Exactly one file and its ledger row commit in
-        # one transaction; the migration repeats the fence, lock, safety, and
-        # drain checks before its first DDL.
         if: ${{ inputs.scope == 'graph-phase1c-lineage' }}
         run: |
           if [ "$GITHUB_REPOSITORY" != "surgeservicesllc/SoftwareFactory" ] \
@@ -6905,9 +6306,6 @@ jobs:
           echo "Applied exactly 20260827000200 after the separately recorded fence and verified the v2 catalog, ACLs, forced RLS, drained fleet, and containment state."
 
       - name: Apply atomic job recording (scope=job-seeker-atomic-record)
-        # Exactly one staged file and one transaction. The migration and its
-        # ledger row commit together, so a failed constraint/function change
-        # cannot leave hosted history claiming success (or vice versa).
         if: ${{ inputs.scope == 'job-seeker-atomic-record' }}
         run: |
           if [ "$GITHUB_REPOSITORY" != "surgeservicesllc/SoftwareFactory" ] \
@@ -7000,10 +6398,6 @@ jobs:
           echo "Applied exactly 20260827000100 and verified its ledger, function, ACL, constraints, and forced-RLS contract."
 
       - name: Report what a run cost (scope=run-cost-and-budget)
-        # Exactly one file — 20260825000200 — replacing list_graph_runs in
-        # place. The signature grows by four columns the worker already
-        # writes, so the file drops the function first; nothing else changes,
-        # and no row is touched.
         if: ${{ inputs.scope == 'run-cost-and-budget' }}
         run: |
           if [ -z "$SUPABASE_DB_PASSWORD" ]; then
@@ -7030,9 +6424,6 @@ jobs:
             exit 1
           fi
 
-          # The columns must already exist: this scope changes a read, and
-          # would otherwise fail mid-apply on a database whose graph_runs
-          # predates them.
           COLUMNS=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
             select count(*) from information_schema.columns
              where table_schema = 'public' and table_name = 'graph_runs'
@@ -7050,8 +6441,6 @@ jobs:
             npx supabase migration repair --status applied 20260825000200 --db-url "$DB_URL"
           fi
 
-          # Read the answer back from the function's own signature rather than
-          # trusting the apply: all four columns, or the scope failed.
           VERIFIED=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
             select (pg_get_function_result(p.oid) like '%tokens_used bigint%')
                and (pg_get_function_result(p.oid) like '%cost_micros bigint%')
@@ -7066,16 +6455,6 @@ jobs:
           echo "Applied and verified: a run can now say what it spent."
 
       - name: Apply the Backlog and Pipelines clear controls (scope=clear-controls)
-        # Exactly two files — 20260822000700 and 20260822000800 — and no others.
-        #
-        # They run as separate psql invocations because PostgreSQL refuses to
-        # use an enum value in the transaction that added it, and the functions
-        # in 000800 write the two labels 000700 adds.
-        #
-        # Replay-safe: the labels are `add value if not exists` and the two
-        # functions are `create or replace`. Nothing here deletes a row — the
-        # DELETEs live inside the functions and only run when a person presses
-        # the button and the function's own guards allow it.
         if: ${{ inputs.scope == 'clear-controls' }}
         run: |
           if [ -z "$SUPABASE_DB_PASSWORD" ]; then
@@ -7097,8 +6476,6 @@ jobs:
             exit 1
           fi
 
-          # Neither version already recorded. Applying under a version the
-          # ledger holds is how this repository previously lost a migration.
           TYPES_ROW=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
             "select count(*) from supabase_migrations.schema_migrations where version = '20260822000700';")
           FNS_ROW=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
@@ -7108,7 +6485,6 @@ jobs:
             exit 1
           fi
 
-          # The tables the functions read, checked as objects rather than rows.
           READY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
             select (
               exists (select 1 from pg_class c join pg_namespace n on n.oid = c.relnamespace
@@ -7177,16 +6553,6 @@ jobs:
 
 
       - name: Repair bots onto the executable model (scope=executable-model-repair)
-        # One file, and it rewrites data rather than schema: bots whose model
-        # came from the catalog's openai list move onto the model the Codex
-        # worker actually claims, and posting overrides naming one are cleared.
-        #
-        # Replay-safe by construction — after the first run nothing matches the
-        # stale set, so a second run writes no rows and no events. Every repair
-        # is an activity event carrying the previous model, so the change is
-        # visible to the person whose bot moved rather than silent. A model this
-        # console never offered is deliberately out of scope: it was typed by a
-        # person, and rewriting a deliberate choice is worse than refusing it.
         if: ${{ inputs.scope == 'executable-model-repair' }}
         run: |
           if [ "$MODE" != "dburl" ]; then
@@ -7220,22 +6586,8 @@ jobs:
           psql "$DB_URL" -q -c "select entity_type, metadata ->> 'previous_model' as was, coalesce(metadata ->> 'model', '(cleared)') as now from public.activity_events where metadata ->> 'reason' = 'provider_model_mismatch_repair' order by occurred_at desc limit 50;"
 
       - name: Push the outstanding migrations (scope=all)
-        # The pipe answers the CLI's confirmation prompt when it asks one;
-        # in a non-interactive shell it is simply unread.
-        # Named rather than "everything except broker-functions". The negative
-        # form meant every scope added later fell through into a full
-        # production push: run 32068262957 asked only for a read-only probe and
-        # reached this step anyway. `db push` refused to act — it stops rather
-        # than insert migrations before the remote's last one — so nothing was
-        # applied, but the guard was one CLI safety check away from mattering.
         if: ${{ inputs.scope == 'all' }}
         run: |
-          # `db push` has no per-file exclusion. Refuse the broad path until the
-          # protected ACL normalizer, EXPAND, immutable job-seeker, executable-model,
-          # and clear-control prerequisites, plus the
-          # atomic CONTRACT/catalog-repair/record-only chain have each passed
-          # their dedicated hash, predecessor, catalog, ACL, app-acceptance,
-          # and ledger checks above in separate runs.
           if [ -z "$SUPABASE_DB_PASSWORD" ]; then
             echo "::error::scope=all requires SUPABASE_DB_PASSWORD to prove protected bot-00150/00200/job-00400/job-00500/model-00600/clear-00700/00800/00300/00850/00900/01000/01100/01200 and graph-00150/00200 are already recorded."
             exit 1

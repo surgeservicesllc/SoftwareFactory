@@ -1459,3 +1459,26 @@ connection and secure owner OAuth completion; it is not evidence of a current
 command-planner code failure. Until that connection exists, the provider path
 remains **Not Connected**. Workers, autonomous mode, provider execution, and
 all automatic actions remain OFF; the global kill switch remains ON.
+
+## 2026-08-28: exact production release and hosted-apply recovery
+
+Release `fd4724240de8312f8a5642968888e591ad085ca6` is on `main`; CI run
+`33142553600` passed the quality job and all three browser/accessibility shards,
+and Vercel deployment `dpl_HLugpE6AfTYzUptJyxycpP3Cb5bK` is READY behind
+`www.theagoras.com`. Production safety remains kill switch ON, autonomy and all
+nine automatic actions OFF, provider execution disabled, and no executor or
+graph/Codex worker connected.
+
+The first protected hosted apply did not start. Run `33143231202` stayed queued
+with zero jobs and zero check runs because `apply-hosted-migrations.yml` had
+grown to 517,320 Git-blob bytes, above GitHub Actions' 500 KB workflow-file
+limit. No database statement or migration ran. The forward recovery shortens
+only comments and dispatch help, preserves every scope/hash/gate/shell body,
+and adds a `< 490,000` byte regression contract. Migrations `00150` and `00200`
+remain unhosted pending the recovery release and ordered one-shot acceptance.
+
+Fresh production logs after `fd47242` contain no `POST /api/commands`; the only
+command traffic is successful GET polling. The raw `invalid Phase 1C command
+plan` text cannot be a response from the exact server bundle and is still an
+old mounted client result. A new signed-in POST and its immutable command/route
+identity remain required before Steps 8 and 9 are accepted.
