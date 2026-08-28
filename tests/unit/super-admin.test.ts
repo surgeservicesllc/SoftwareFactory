@@ -46,6 +46,6 @@ describe("super administrator role", () => {
 
   it("falls back rather than locking everyone out on an empty variable", () => {
     vi.stubEnv("SUPER_ADMIN_EMAILS", "   ,  ");
-    expect(superAdminEmails()).toEqual([CONFIGURED]);
+    expect(superAdminEmails()).toEqual([...DEFAULT_SUPER_ADMIN_EMAILS]);
   });
 });
