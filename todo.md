@@ -1,14 +1,17 @@
 # SoftwareFactory — shared working status
 
-## FACTORY RELEASE CHECKPOINT (2026-08-28 08:02 EDT — CURRENT)
+## FACTORY RELEASE CHECKPOINT (2026-08-28 08:26 EDT — CURRENT)
 
-- Current exact `main` is corrected acceptance release
-  `53b84b7952a1e09725f53da5d65c4947b8cb914a`; all four jobs passed in CI
-  `33168368270`; GitHub deployment `6140556549` is READY Vercel
-  `dpl_tBF2s6AtLmqZ13YpYHKWzBRtwiKT`, with exact public health identity.
+- Validated cleanup/application release is
+  `ce86d9c04ff91f237e680a5db4b0cda97feea2ce`; all four jobs passed in CI
+  `33169913723`; GitHub deployment `6140863004` is READY Vercel
+  `dpl_4Zqh4q2yBfaagGtg7stSbV4NSphP`, with exact public health identity.
 - Protected runs completed: initial probe `33165823042`, selector mutation
   `33165886343`, fresh probe `33165944760`, URL-schema mutation `33165992529`.
-- Current hosted ledger: `1|1|1|1|0|0`. Never rerun selector or URL-schema.
+- Probe `33170897689` confirmed `1|1|1|1|0|0`; target-claims run
+  `33170953151` applied only `20260828000200`; independent probe `33171025468`
+  confirmed hosted ledger `1|1|1|1|1|0`. Never rerun selector, URL-schema, or
+  target-claims.
 - First-attempt acceptance run `33168092838` passed exact invocation,
   green/READY release, stopped-workflow, and Supabase connection gates, then
   failed before target resolution or mutation because `psql -c` did not expand
@@ -21,11 +24,14 @@
   session, exact URL write, one immutable owner-attributed audit event, no-op
   replay, signed-in reload, and pre/post stopped containment. The two temporary
   selectors were deleted immediately.
-- The current worktree removes the used disposable workflow/test and records
-  exact acceptance evidence. Publish this forward cleanup, require its four
-  exact-head CI jobs plus READY deployment/health, dispatch a fresh `probe`,
-  then only `target-claims`. Do not apply `postdeploy` until exact-target
-  behavior and a legitimate signed-in Step 8/9 record/reload are accepted.
+- The disposable URL workflow/test is removed and target-bound claims are live.
+  Do not apply `postdeploy` until a legitimate signed-in Step 8 record/reload
+  and truthful Step 9 persistence are exact with workers OFF. Current Full
+  Lifecycle v2 execution acceptance follows `postdeploy` and `verify`.
+- Read-only production browser acceptance found no page or console errors.
+  Historical test run `884d6164` renders Steps 1-8 complete, then truthfully
+  shows Deploy refused by policy and Monitor skipped; it is not current v2
+  evidence.
 - Workers, schedules, auth broker, autonomy, and all automatic actions stay
   OFF. Global kill switch stays ON. The formal goal remains active.
 
@@ -42,13 +48,12 @@ intentionally stopped.
 - Active worktree:
   `C:\Users\Daniel\OneDrive\Documents\ChatGPT\SoftwareFactory-factory-e2e`
 - Branch: `codex/factory-ten-step-e2e`
-- The Factory release is published and exactly validated. The current worktree
-  contains only the forward cleanup that removes the already-used disposable
-  production-URL acceptance workflow/test and records exact release evidence.
-- Current `origin/main`:
-  `53b84b7952a1e09725f53da5d65c4947b8cb914a`
-- Last fully validated Factory deployment:
-  `53b84b7952a1e09725f53da5d65c4947b8cb914a`
+- The Factory cleanup release is published and exactly validated. The current
+  worktree records the hosted target-claim and browser-acceptance evidence.
+- Release used for the exact target-claims acceptance:
+  `ce86d9c04ff91f237e680a5db4b0cda97feea2ce`
+- Matching fully validated Factory deployment:
+  `ce86d9c04ff91f237e680a5db4b0cda97feea2ce`
 - Upstream Stripe ADR-158 and selector/Auth/URL ADR-159/ADR-160/ADR-161 are
   preserved.
 - The original worktree
@@ -215,17 +220,16 @@ Current post-fix evidence:
 
 Run next, in this order:
 
-1. Review and commit the eight-path forward cleanup, fetch `main`, confirm no
-   movement, and push it directly. Verify all four exact-head CI jobs and exact
-   READY Vercel/health identity; both temporary selectors are already deleted.
-2. Dispatch a fresh lifecycle release `probe` on that cleanup SHA and require
-   ledger `1|1|1|1|0|0`; never rerun failed run `33159805326` or either URL
-   acceptance attempt.
-3. If exact, dispatch only `target-claims` with `confirm=apply`, then verify
-   ledger `1|1|1|1|1|0`, catalog, ACL, runtime, audit, and stopped safety.
-4. Never rerun `selector-normalization` or `configure-url`. Apply `postdeploy`
-   only after legitimate signed-in Step 8 record/reload and Step 9 persistence
-   acceptance with a real connected provider route.
+1. Publish this evidence-only memory update and require its exact CI,
+   deployment, and public health identity before any later protected scope.
+2. Establish a legitimate connected Ready bot assignment in the intended
+   organization; never copy provider credentials or rows across tenants.
+3. Accept signed-in Step 8 record/reload and truthful Step 9 persistence while
+   workers remain OFF.
+4. Only then dispatch `postdeploy`; require ledger `1|1|1|1|1|1`, then run
+   read-only `verify`. Never rerun any earlier mutation scope.
+5. After `verify`, separately authorize and accept a current Full Lifecycle v2
+   run through TEST, DEPLOY, and MONITOR.
 
 ### External blockers and safety invariants — do not fabricate around these
 

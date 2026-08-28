@@ -2,6 +2,22 @@
 
 Last reviewed: 2026-08-28
 
+**Addendum, 2026-08-28 — cleanup and target-bound claim production
+acceptance (ADR-155/161):** cleanup SHA
+`ce86d9c04ff91f237e680a5db4b0cda97feea2ce` passed all four jobs in CI
+`33169913723`, exact READY deployment `dpl_4Zqh4q2yBfaagGtg7stSbV4NSphP`, and
+the public health identity join. Local evidence was lint/typecheck green,
+**5,145 tests passed / 7 skipped across 441 files**, a 171/171-page production
+build, **50/50 focused URL tests**, clean secret review, and an independent
+cleanup-policy audit. Probe `33170897689` passed `1|1|1|1|0|0`; first-attempt
+run `33170953151` applied only hash-pinned `20260828000200`; independent probe
+`33171025468` passed `1|1|1|1|1|0`. Catalog, ACL, runtime, audit, linked lint,
+health, worker state, autonomy, and kill-switch checks stayed exact. Read-only
+browser acceptance found no errors and proved existing historical test data is
+rendered truthfully: run `884d6164` is 8/10, with Deploy refused by policy and
+Monitor skipped, and is explicitly not presented as current v2 evidence.
+Verdict: **TARGET-BOUND CLAIMS PRODUCTION PASS; POSTDEPLOY CORRECTLY GATED**.
+
 **Addendum, 2026-08-28 — hosted selector/URL checkpoint and signed acceptance
 gate (ADR-161):** exact cleanup SHA
 `994da2cec81c0cd83aa1e2d87ad848d2f2ff612a` passed all four CI jobs and exact

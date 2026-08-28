@@ -2523,6 +2523,13 @@ Use this append-only log for decisions that constrain future implementation. Cha
   switch. They do not enable provider execution, autonomy, approval, merge,
   deployment, rollback, or automatic action, and do not release the global
   kill switch. A target that fails policy remains unclaimed.
+- Production evidence (2026-08-28): exact cleanup release
+  `ce86d9c04ff91f237e680a5db4b0cda97feea2ce` passed CI `33169913723`, READY
+  deployment `dpl_4Zqh4q2yBfaagGtg7stSbV4NSphP`, and public health. Probe
+  `33170897689` confirmed pre-ledger `1|1|1|1|0|0`; first-attempt run
+  `33170953151` applied only the pinned migration and passed full postflight;
+  independent probe `33171025468` confirmed `1|1|1|1|1|0` with stopped
+  containment unchanged.
 
 ## ADR-156 - The public production URL is explicit owner-managed evidence
 

@@ -75,9 +75,17 @@ Last triaged: 2026-08-28
   audit event, no-op replay, signed-in reload, and pre/post stopped
   containment all passed. Delete both temporary protected selectors, then
   remove the disposable workflow/test in this forward cleanup.
-- [ ] Only after URL acceptance, apply `20260828000200`; accept exact target
-  behavior and signed-in Step 8/9 persistence before applying
-  `20260828000300`, then run read-only `verify`.
+- [x] Publish cleanup `ce86d9c04ff91f237e680a5db4b0cda97feea2ce`, pass all
+  four jobs in CI `33169913723`, exact READY deployment
+  `dpl_4Zqh4q2yBfaagGtg7stSbV4NSphP`, and public health. Probe `33170897689`
+  confirmed `1|1|1|1|0|0`; first-attempt run `33170953151` applied only
+  `20260828000200`; independent probe `33171025468` confirmed
+  `1|1|1|1|1|0` with exact stopped containment. Never rerun target claims.
+- [ ] Accept legitimate signed-in Step 8 record/reload and truthful Step 9
+  persistence with workers OFF before applying `20260828000300`; then run
+  read-only `verify`.
+- [ ] Only after `00300` and `verify`, separately authorize and accept current
+  Full Lifecycle v2 execution through TEST, DEPLOY, and MONITOR.
 - [ ] Complete signed-in production Step 8 record/reload and Step 9 persisted
   observation with a legitimately connected bot. The current organization has
   zero connected accounts, ready linked bots, or assignments. Do not copy a

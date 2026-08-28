@@ -2,42 +2,34 @@
 
 Last updated: 2026-08-28
 
-## Newest (2026-08-28): signed production-URL acceptance passed; publish cleanup then probe
+## Newest (2026-08-28): target claims hosted; stop before postdeploy
 
-Exact cleanup release `994da2cec81c0cd83aa1e2d87ad848d2f2ff612a` is green in
-CI `33164903094` and READY as Vercel deployment
-`dpl_7u7h6GaP2LLNawDtB9wYGAuMTARB`. Protected runs `33165823042`,
-`33165886343`, `33165944760`, and `33165992529` completed the read-only probe,
-selector normalization, fresh probe, and production-URL schema respectively.
-The exact six-field ledger is `1|1|1|1|0|0`; never rerun either mutation.
+Cleanup release `ce86d9c04ff91f237e680a5db4b0cda97feea2ce` removed the
+used production-URL acceptance workflow/test. All four exact-head jobs passed
+in CI `33169913723`; GitHub deployment `6140863004` resolved to READY Vercel
+deployment `dpl_4Zqh4q2yBfaagGtg7stSbV4NSphP`, and public health joined the
+exact Git, deployment, Vercel-project, and Supabase identities.
 
-Disposable acceptance release `540aceb173ec88e67cb982018a80134ece3ec474`
-passed all four exact-head jobs in CI `33167232673`. GitHub deployment
-`6140332126` resolved to READY Vercel deployment
-`dpl_31W7nKgJd6ENoCfuvgP1zzHZM6eT`; public health joined the exact Git,
-deployment, Vercel-project, and Supabase identities. First-attempt acceptance
-run `33168092838` then passed invocation, release, stopped-workflow, and
-Supabase connection gates but failed before target resolution or mutation:
-`psql -c` forwarded literal `psql` variable tokens to PostgreSQL. Both
-temporary selectors were deleted immediately. Do not rerun that attempt.
+Probe `33170897689` passed ledger `1|1|1|1|0|0`. First-attempt mutation run
+`33170953151` applied only SHA-pinned
+`20260828000200_target_bound_worker_claims.sql` and passed exact ledger,
+catalog, ACL, runtime, audit, lint, health, and stopped-safety postflight.
+Independent probe `33171025468` confirmed `1|1|1|1|1|0`. Never rerun selector
+normalization, URL schema, target claims, or either URL-acceptance attempt.
 
-The corrected quoted-stdin release
-`53b84b7952a1e09725f53da5d65c4947b8cb914a` passed all four exact-head jobs
-in CI `33168368270`. GitHub deployment `6140556549` resolved to READY Vercel
-deployment `dpl_tBF2s6AtLmqZ13YpYHKWzBRtwiKT`, and public health joined the
-exact Git, deployment, Vercel-project, and Supabase identities. Fresh
-first-attempt acceptance run `33169297158` passed the real owner/admin session,
-exact public URL write, one owner-attributed immutable audit event, no-op
-replay without a duplicate event, signed-in portfolio reload, and every
-pre/post release/catalog/stopped-containment check. Both temporary selectors
-were deleted immediately.
-
-This forward cleanup removes the used disposable workflow/test and records the
-evidence. Publish it, require all four exact-head CI jobs plus exact READY
-deployment/public health, then run a fresh lifecycle `probe` on that cleanup
-SHA. Continue only with `target-claims` if the ledger remains
-`1|1|1|1|0|0`. Never rerun selector normalization, URL schema, or either URL
-acceptance attempt.
+Do not dispatch `postdeploy`: signed-in production still has no legitimate
+connected Ready bot route for the required record/reload acceptance. Current
+Full Lifecycle v2 also has not executed while workers remain OFF. Read-only
+production browser acceptance found no page or
+console errors. Existing test-data run
+`884d6164-0ecd-4f93-878a-0a7ecda239e5` renders Steps 1-8 complete, then
+truthfully shows Deploy refused by policy and Monitor skipped; it explicitly
+lacks a verifiable current-template identity and cannot prove v2. The next
+legitimate action is a connected Ready bot assignment, then signed-in Step 8/9
+record/reload acceptance with workers still OFF. Only afterward apply `00300`
+and read-only `verify`; current v2 execution is a separate later authorization
+window. Until then, keep workers, schedules, the auth broker, autonomy, and
+automatic actions OFF and the global kill switch ON.
 
 ## Newest (2026-08-28 ~09:45Z): the site sets up its own Stripe account (ADR-158)
 

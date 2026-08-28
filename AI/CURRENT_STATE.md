@@ -2,7 +2,35 @@
 
 Last reviewed: 2026-08-28
 
-## 2026-08-28: production-URL acceptance passed; disposable boundary is removed
+## 2026-08-28: target-bound claims are hosted; final postdeploy remains gated
+
+Forward cleanup release `ce86d9c04ff91f237e680a5db4b0cda97feea2ce`
+removed the disposable production-URL acceptance boundary. All four exact-head
+jobs passed in CI `33169913723`; GitHub deployment `6140863004` resolved to
+READY Vercel deployment `dpl_4Zqh4q2yBfaagGtg7stSbV4NSphP`, and public health
+joined the exact release, deployment, Vercel project, and Supabase project
+`qpuofpmagrmyamahqwxw`.
+
+Read-only probe `33170897689` confirmed ledger `1|1|1|1|0|0`. First-attempt
+mutation run `33170953151` then applied only hash-pinned
+`20260828000200_target_bound_worker_claims.sql`; its exact ledger, catalog, ACL,
+runtime, audit, lint, health, and stopped-safety postflight passed. Independent
+probe `33171025468` confirmed ledger `1|1|1|1|1|0` with containment unchanged.
+Never rerun selector normalization, URL schema, or target claims. Do not apply
+`20260828000300` until a legitimate provider/bot assignment route produces the
+required signed-in Step 8 record/reload and truthful Step 9 persistence while
+workers remain OFF. After `00300` and read-only `verify`, current Full Lifecycle
+v2 execution acceptance remains a separate authorization gate.
+
+Production browser acceptance over existing test data found no page or console
+errors. Historical run `884d6164-0ecd-4f93-878a-0a7ecda239e5` renders Steps
+1-8 complete, then truthfully records Deploy refused by the Phase 1 authority
+boundary and Monitor skipped. It has no verifiable current-template identity,
+so it is not evidence that current `full_lifecycle` v2 completed. Workers,
+schedules, the auth broker, autonomy, and automatic actions remain OFF; the
+global kill switch remains ON.
+
+### Earlier production-URL acceptance evidence
 
 Exact cleanup release `994da2cec81c0cd83aa1e2d87ad848d2f2ff612a` passed all
 four required jobs in CI `33164903094`. GitHub deployment `6139882660`
@@ -12,7 +40,8 @@ Supabase project `qpuofpmagrmyamahqwxw`.
 
 Protected read-only probe `33165823042`, selector-normalization mutation
 `33165886343`, post-selector probe `33165944760`, and configure-URL mutation
-`33165992529` all passed on their first attempts. Hosted ledger state is now
+`33165992529` all passed on their first attempts. Hosted ledger state at that
+checkpoint was
 exactly `1|1|1|1|0|0` for
 `27000200|27000210|28000050|28000100|28000200|28000300`. The stale Phase 1C
 selector is normalized and the owner/admin-only production-URL writer is live;
@@ -47,11 +76,8 @@ Fresh first-attempt acceptance run `33169297158` passed the real owner/admin
 session, exact production URL write, exactly one owner-attributed immutable
 `project.updated` event, no-op replay without a duplicate event, signed-in
 portfolio reload, and pre/post stopped containment. The two temporary selector
-secrets were deleted immediately. This cleanup removes the now-used disposable
-workflow and regression test. The next release step is a fresh lifecycle
-`probe` on the cleanup SHA followed, only if exact, by `target-claims`.
-Workers, schedules, the auth broker, autonomy, and automatic actions remain
-OFF; the global kill switch remains ON.
+secrets were deleted immediately. The subsequent cleanup, probe, and
+target-claim evidence is recorded above.
 
 ## 2026-08-28: exact verified Blackstone Auth bootstrap completed and disposed
 
