@@ -2,6 +2,48 @@
 
 Last reviewed: 2026-08-28
 
+**Addendum, 2026-08-28 — exact Blackstone Auth bootstrap (ADR-160):** the
+temporary workflow is manual-only, permissions-empty, exact-main/project/email,
+first-attempt, and identity-gated to the configured production release actor as
+both actor fields. The password is sourced only from an encrypted temporary
+repository secret; output is limited to created/updated plus a UUID after an
+exact email-confirmed re-read. Focused workflow evidence is **5/5 tests** and
+focused ESLint green. Verdict: **LOCAL PASS; EXACT-HEAD DISPATCH, VERIFIED
+AUTH READBACK, SECRET DELETION, AND WORKFLOW CLEANUP PENDING**. No tenant role,
+provider connection, worker switch, autonomy setting, or kill switch changes.
+
+**Addendum, 2026-08-28 — live application release and selector-normalization
+containment (ADR-159):** exact `main`
+`79ca52f5b92e7d95292210e05565d35d21b4a435` passed the quality job and all
+three browser/accessibility shards in CI `33158801269`. GitHub deployment
+`6138739479` is READY Vercel deployment
+`dpl_57pM3ZEYNyK596VAeLPJMabJLZrH`; public health joined the exact SHA/ref,
+Vercel project `prj_pAsrhftaVWI4SyaqstgRVSWHJkdD`, immutable deployment, and
+Supabase project `qpuofpmagrmyamahqwxw` with the database reachable. Verdict:
+**APPLICATION PRODUCTION PASS**.
+
+Protected read-only probe `33159805326` stopped before mutation because the
+hosted `claim_phase1c_run_budget_internal(text,text,text,integer)` body is
+exact stale MD5 `ed5840b9d8d0efdb513a8576df128e9b`, not breaker-aware target
+`5933952d71f9da90a2a80a05ce6e0378`; its full ABI, postgres owner,
+`SECURITY DEFINER`, pinned search path, private ACL, breaker helpers/table,
+and stopped-safety state otherwise passed. The isolated forward migration
+`20260828000050_normalize_breaker_aware_phase1c_selector.sql` is pinned at LF
+SHA-256
+`8914034508451d1550ebf3f1bedd8f7b71592f1809306e78c57774c458952896`.
+Current containment evidence is lint and typecheck green, **5,127 tests
+passed / 7 skipped across 439 files**, and a **170/170-page production
+build**. Verdict: **SELECTOR CONTAINMENT LOCAL PASS; EXACT-HEAD PUBLICATION,
+PROTECTED APPLY, AND POSTFLIGHT PENDING**.
+
+Signed-in Factory acceptance is not upgraded: the active organization has no
+connected provider account, ready linked bot, or assignment, so no fresh Step
+8 POST or persisted Steps 9-10 correlation has been proven. Workers, provider
+execution, autonomy, schedules, the auth broker, and automatic actions remain
+OFF; the global kill switch remains ON. Seventeen older ledger-missing
+versions beginning at `20260815000200` remain a separate unresolved
+object-by-object forward-reconciliation track.
+
 **Addendum, 2026-08-28 — final ten-step Factory release candidate:** Step 8
 now accepts the assigned bot's provider/model for record-only work, persists
 one immutable command route, and reports disabled execution truthfully. Launch

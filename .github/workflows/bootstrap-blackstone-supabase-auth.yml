@@ -1,0 +1,204 @@
+name: Bootstrap exact Blackstone Supabase Auth user
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type "CONFIRM BLACKSTONE SUPABASE AUTH BOOTSTRAP" exactly'
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: bootstrap-blackstone-supabase-auth
+  cancel-in-progress: false
+
+jobs:
+  bootstrap:
+    name: Create or update the exact confirmed Auth user
+    if: >-
+      ${{ github.ref == 'refs/heads/main' &&
+          inputs.confirm == 'CONFIRM BLACKSTONE SUPABASE AUTH BOOTSTRAP' &&
+          vars.PRODUCTION_RELEASE_ACTOR != '' &&
+          github.actor == vars.PRODUCTION_RELEASE_ACTOR &&
+          github.triggering_actor == vars.PRODUCTION_RELEASE_ACTOR &&
+          github.run_attempt == 1 }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      PROJECT_REF: qpuofpmagrmyamahqwxw
+      TARGET_EMAIL: blackstoneagencyllc@gmail.com
+
+    steps:
+      - name: Verify the immutable invocation identity
+        env:
+          AUTHORIZED_ACTOR: ${{ vars.PRODUCTION_RELEASE_ACTOR }}
+        run: |
+          set +x
+          if [ "$GITHUB_REPOSITORY" != "surgeservicesllc/SoftwareFactory" ] \
+            || [ "$GITHUB_REF" != "refs/heads/main" ] \
+            || [ "$GITHUB_ACTOR" != "$AUTHORIZED_ACTOR" ] \
+            || [ "$GITHUB_TRIGGERING_ACTOR" != "$AUTHORIZED_ACTOR" ] \
+            || [ "$GITHUB_RUN_ATTEMPT" != "1" ] \
+            || [ "$PROJECT_REF" != "qpuofpmagrmyamahqwxw" ] \
+            || [ "$TARGET_EMAIL" != "blackstoneagencyllc@gmail.com" ]; then
+            echo "::error::Exact production invocation identity did not match."
+            exit 1
+          fi
+
+      - name: Idempotently reconcile and verify the exact Auth user
+        env:
+          BOOTSTRAP_PASSWORD: ${{ secrets.BLACKSTONE_SUPABASE_BOOTSTRAP_PASSWORD }}
+          SERVICE_ROLE_KEY: ${{ secrets.SOFTWAREFACTORY_SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          set +x
+          if [ -z "$BOOTSTRAP_PASSWORD" ] || [ -z "$SERVICE_ROLE_KEY" ]; then
+            echo "::error::The two protected bootstrap credentials are required."
+            exit 1
+          fi
+          echo "::add-mask::$BOOTSTRAP_PASSWORD"
+          echo "::add-mask::$SERVICE_ROLE_KEY"
+
+          node <<'NODE'
+          "use strict";
+
+          const projectRef = process.env.PROJECT_REF;
+          const targetEmail = process.env.TARGET_EMAIL;
+          const password = process.env.BOOTSTRAP_PASSWORD;
+          const serviceRoleKey = process.env.SERVICE_ROLE_KEY;
+          const authBaseUrl = `https://${projectRef}.supabase.co/auth/v1`;
+          const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+          function fail(message) {
+            process.stderr.write(`::error::${message}\n`);
+            process.exit(1);
+          }
+
+          async function adminRequest(path, method = "GET", body) {
+            let response;
+            try {
+              response = await fetch(`${authBaseUrl}${path}`, {
+                method,
+                redirect: "error",
+                signal: AbortSignal.timeout(15_000),
+                headers: {
+                  apikey: serviceRoleKey,
+                  authorization: `Bearer ${serviceRoleKey}`,
+                  "cache-control": "no-store",
+                  "content-type": "application/json",
+                },
+                body: body === undefined ? undefined : JSON.stringify(body),
+              });
+            } catch {
+              fail("The exact Supabase Auth Admin endpoint was unreachable.");
+            }
+
+            const responseText = await response.text();
+            let responseBody = null;
+            if (responseText !== "") {
+              try {
+                responseBody = JSON.parse(responseText);
+              } catch {
+                responseBody = null;
+              }
+            }
+            return { ok: response.ok, status: response.status, body: responseBody };
+          }
+
+          async function findExactUsers() {
+            const matches = [];
+            const perPage = 50;
+            for (let page = 1; page <= 200; page += 1) {
+              const result = await adminRequest(`/admin/users?page=${page}&per_page=${perPage}`);
+              if (!result.ok || !Array.isArray(result.body?.users)) {
+                fail("Supabase Auth user enumeration failed closed.");
+              }
+              const users = result.body.users;
+              for (const user of users) {
+                if (typeof user?.email === "string" && user.email.toLowerCase() === targetEmail) {
+                  matches.push(user);
+                }
+              }
+              if (users.length < perPage) {
+                return matches;
+              }
+            }
+            fail("Supabase Auth pagination exceeded its fail-closed bound.");
+          }
+
+          async function main() {
+            if (projectRef !== "qpuofpmagrmyamahqwxw" || targetEmail !== "blackstoneagencyllc@gmail.com") {
+              fail("The hardcoded Supabase Auth target changed.");
+            }
+
+            let matches = await findExactUsers();
+            if (matches.length > 1) {
+              fail("More than one normalized Auth identity matched the exact target.");
+            }
+
+            let operation = "updated";
+            let user;
+            if (matches.length === 0) {
+              const created = await adminRequest("/admin/users", "POST", {
+                email: targetEmail,
+                password,
+                email_confirm: true,
+              });
+              if (created.ok) {
+                operation = "created";
+                user = created.body;
+              } else if (created.status === 400 || created.status === 409 || created.status === 422) {
+                matches = await findExactUsers();
+                if (matches.length !== 1) {
+                  fail("A concurrent Auth create did not resolve to one exact identity.");
+                }
+                user = matches[0];
+              } else {
+                fail("Supabase Auth user creation failed closed.");
+              }
+            } else {
+              user = matches[0];
+            }
+
+            if (!uuidPattern.test(user?.id ?? "")) {
+              fail("Supabase Auth returned a non-canonical user identity.");
+            }
+
+            if (operation !== "created") {
+              const updated = await adminRequest(`/admin/users/${encodeURIComponent(user.id)}`, "PUT", {
+                email: targetEmail,
+                password,
+                email_confirm: true,
+              });
+              if (!updated.ok) {
+                fail("Supabase Auth user update failed closed.");
+              }
+              user = updated.body;
+            }
+
+            if (!uuidPattern.test(user?.id ?? "")) {
+              fail("Supabase Auth mutation returned a non-canonical user identity.");
+            }
+
+            const verified = await adminRequest(`/admin/users/${encodeURIComponent(user.id)}`);
+            const confirmedAt = verified.body?.email_confirmed_at;
+            if (!verified.ok
+              || verified.body?.id !== user.id
+              || verified.body?.email !== targetEmail
+              || typeof confirmedAt !== "string"
+              || confirmedAt.length === 0
+              || !Number.isFinite(Date.parse(confirmedAt))) {
+              fail("The exact confirmed Supabase Auth identity did not verify.");
+            }
+
+            const finalMatches = await findExactUsers();
+            if (finalMatches.length !== 1 || finalMatches[0]?.id !== user.id) {
+              fail("The final normalized Auth identity was not unique and exact.");
+            }
+
+            process.stdout.write(`${operation} user_id=${user.id}\n`);
+          }
+
+          main().catch(() => fail("The Supabase Auth bootstrap failed closed."));
+          NODE

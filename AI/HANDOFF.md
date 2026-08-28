@@ -25,7 +25,22 @@ owner's remaining part is exactly two pastes into Vercel (secret key,
 then the signing secret the card hands them), each followed by a
 redeploy — docs/BILLING_GO_LIVE.md leads with this short path.
 
-## Newest (2026-08-28): final ten-step release candidate awaits publication
+## Newest (2026-08-28): one exact verified Supabase Auth account is queued
+
+The owner confirmed creation/update of `blackstoneagencyllc@gmail.com` in
+Supabase Auth project `qpuofpmagrmyamahqwxw`. The temporary workflow
+`bootstrap-blackstone-supabase-auth.yml` is fixed to that identity and accepts
+the password only from encrypted repository secret
+`BLACKSTONE_SUPABASE_BOOTSTRAP_PASSWORD`; it must never be passed as a workflow
+input or printed. After exact-head publication, dispatch it from `main` with
+confirmation `CONFIRM BLACKSTONE SUPABASE AUTH BOOTSTRAP`, require first-attempt
+success and the bounded `created|updated user_id=<uuid>` result, delete the
+temporary secret immediately, then remove the workflow/test in a forward
+cleanup commit. This creates an email-confirmed Auth identity only; it does not
+grant tenant membership, owner/admin role, provider connection, or execution
+authority.
+
+## Newest (2026-08-28): application is live; apply selector normalization before the release tail
 
 Step 8 no longer treats a provider/model mismatch or a disabled worker as an
 invalid command plan. The durable record-only route accepts the assigned bot's
@@ -44,16 +59,44 @@ autonomy/kill-switch/runtime state.
 immutable deployment ID/URL, main SHA/ref, and Supabase project ref. The
 workflow compares that runtime deployment URL to GitHub's exact Vercel-bot
 Production status twice. Vercel's non-secret expected Supabase/Vercel/host and
-both worker-gate variables are configured for the next deployment.
+both worker-gate variables are configured, with the worker gates explicitly
+`false`. Exact `main`
+`79ca52f5b92e7d95292210e05565d35d21b4a435` passed all four jobs in CI
+`33158801269`; GitHub deployment `6138739479` is exact READY Vercel deployment
+`dpl_57pM3ZEYNyK596VAeLPJMabJLZrH`, and public health joined it to Vercel
+project `prj_pAsrhftaVWI4SyaqstgRVSWHJkdD` and Supabase project
+`qpuofpmagrmyamahqwxw`.
 
-Do not call the three 20260828 migrations hosted until the exact new `main`
-head is green and READY. Apply only `00100`, then `00200`, then `00300` through
-`factory-lifecycle-release-migrations.yml`, using the same exact `release_sha`
-and a first-attempt owner dispatch for each mutation. Steps 9-10 execution is
-not claimed while workers remain OFF; only recorded/planned and observed
-release behavior can be accepted under the current safety constraint. Final
-local gates: lint/typecheck green, 434 test files / 5,121 tests passed (3 / 7
-skipped), and production build 170/170 pages.
+Read-only release probe `33159805326` performed no mutation and stopped on one
+exact catalog drift: the hosted Phase 1C selector body is stale MD5
+`ed5840b9d8d0efdb513a8576df128e9b`; the frozen breaker-aware target is
+`5933952d71f9da90a2a80a05ce6e0378`. ABI, owner, definer/search-path/private
+ACL, three helper identities, and the FORCE-RLS breaker table are exact.
+Migration `20260828000050_normalize_breaker_aware_phase1c_selector.sql`
+(LF SHA-256
+`8914034508451d1550ebf3f1bedd8f7b71592f1809306e78c57774c458952896`)
+is the isolated forward-only containment. It accepts only the exact stale or
+target body, verifies the surrounding catalog, replaces only that function,
+and records no historical ledger repair.
+
+Next: publish the containment, require the four exact-head jobs and exact
+READY Vercel/health identity, dispatch a fresh `probe`, then apply only
+`00050`. After its ledger/catalog/ACL/runtime/safety postflight passes, proceed
+in order with `00100`, `00200`, and `00300`; never rerun `33159805326` or a
+mutation attempt. Current gates are lint/typecheck green, 5,127 tests passed / 7
+skipped across 439 files, and a 170/170-page production build.
+
+Signed-in acceptance remains externally incomplete: the active organization
+for `daniel.hughen@gmail.com` has zero connected AI accounts, ready bots, or
+assignments. Finish a supported provider connection before a fresh Step 8 POST
+and persisted Steps 9-10 evidence; never copy a token or account across
+tenants. Workers, provider execution, autonomy, schedules, the auth broker,
+and automatic actions stay OFF and the global kill switch stays ON.
+
+Seventeen older hosted versions beginning at `20260815000200` remain missing
+from the ledger while partial catalog effects exist. Reconcile each only after
+complete object-by-object proof and any surgical forward compensation. Never
+edit/replay history, blindly mark applied, reset, or down-migrate.
 
 ## Newest (2026-08-28): Step 10 public URL writer is locally complete
 

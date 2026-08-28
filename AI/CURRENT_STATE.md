@@ -2,7 +2,23 @@
 
 Last reviewed: 2026-08-28
 
-## 2026-08-28: ten-step Factory release candidate is fail-closed end to end
+## 2026-08-28: exact verified Blackstone Auth bootstrap is release-gated
+
+The owner requested one email-confirmed Supabase Auth identity for
+`blackstoneagencyllc@gmail.com`. A temporary dispatch-only workflow is fixed to
+that exact email, project `qpuofpmagrmyamahqwxw`, `main`, the configured
+production release actor as both original and triggering actor, and first
+attempt. It receives the requested password only through a temporary encrypted
+repository secret and the existing service-role credential, never through a
+workflow input or log. It idempotently creates or updates the one normalized
+identity through the GoTrue Admin API and re-reads a unique UUID plus
+`email_confirmed_at` before bounded output. Local workflow evidence is 5/5
+tests and focused ESLint green. It is not yet published or executed; after one
+successful run, delete the temporary password secret and remove the temporary
+workflow in a forward cleanup commit. It grants no organization membership,
+application role, worker authority, or autonomous action.
+
+## 2026-08-28: ten-step Factory application release is live; selector containment is local/pass
 
 The remaining Step 8 `invalid Phase 1C command plan` path is corrected in the
 application and the protected database release. A record-only command accepts
@@ -28,16 +44,50 @@ Vercel project ID, immutable Vercel deployment ID/URL, and exact Supabase
 project ref before one bounded anonymous database read. The hosted workflow
 requires the GitHub Vercel deployment URL to equal the deployment URL reported
 by the public alias, closing the independent-evidence gap. Vercel Production
-has all five non-secret identity/containment values configured for the next
-deployment.
+has all five non-secret identity/containment values configured, with both
+worker gates explicitly `false`.
 
-The release remains **local/pass, publication pending** until the reviewed
-commit reaches `main`, all four exact-head CI jobs and the exact Vercel
-deployment are green, and only migrations `20260828000100`, `20260828000200`,
-then `20260828000300` pass their ordered forward-only hosted scopes. No hosted
-ledger claim is made in this section. Final local evidence is lint and
-typecheck green, 434 Vitest files / 5,121 tests passed (3 files / 7 tests
-skipped), and a 170/170-page production build.
+Exact `main` `79ca52f5b92e7d95292210e05565d35d21b4a435` is live. CI run
+`33158801269` passed the quality job and all three browser/accessibility
+shards. GitHub deployment `6138739479` resolves to READY Vercel deployment
+`dpl_57pM3ZEYNyK596VAeLPJMabJLZrH`, and the public health join reported the
+same SHA/ref, exact Vercel project `prj_pAsrhftaVWI4SyaqstgRVSWHJkdD`, and
+exact Supabase project `qpuofpmagrmyamahqwxw` with the database reachable.
+
+The protected read-only lifecycle probe `33159805326` then found one exact
+hosted catalog mismatch before it could admit the release-tail migrations:
+`claim_phase1c_run_budget_internal(text,text,text,integer)` has the stale
+`20260815000300` body MD5 `ed5840b9d8d0efdb513a8576df128e9b`, while the
+required breaker-aware `20260815000500` body is
+`5933952d71f9da90a2a80a05ce6e0378`. Its ABI, postgres ownership,
+`SECURITY DEFINER`, pinned `search_path=pg_catalog`, owner-only execute ACL,
+three breaker helpers, and FORCE-RLS `resource_breakers` dependency otherwise
+match exactly. No hosted mutation ran in that failed probe.
+
+Forward migration
+`20260828000050_normalize_breaker_aware_phase1c_selector.sql` (LF SHA-256
+`8914034508451d1550ebf3f1bedd8f7b71592f1809306e78c57774c458952896`)
+accepts only that exact stale body or the exact clean-chain target, verifies
+the full surrounding catalog and ACL shape, replaces only the selector with
+the frozen breaker-aware body, and re-verifies it. The protected release order
+is now `00050`, `00100`, `00200`, then `00300`; this does not replay or mark
+either historical migration. Current local evidence is lint and typecheck
+green, 5,127 tests passed / 7 skipped across 439 files, and a 170/170-page
+production build.
+
+Signed-in Steps 8-10 are still not accepted for the active organization:
+`daniel.hughen@gmail.com` currently has zero connected AI accounts, ready
+linked bots, or assignments there. Provider OAuth must be completed through
+the supported flow before a fresh Step 8 POST and persisted Step 9/10 evidence
+can be measured; no token or account may be copied from another tenant.
+Workers, provider execution, autonomy, schedules, the auth broker, and all
+automatic actions remain OFF, while the global kill switch remains ON.
+
+Hosted migration history also still has 17 older missing ledger versions,
+beginning at `20260815000200`, despite partial catalog effects. Each needs
+complete catalog proof, surgical forward compensation where necessary, and
+only then protected ledger reconciliation. Historical files must not be
+edited or replayed, and the database must not be reset or down-migrated.
 
 ## 2026-08-28: public production URL configuration is locally complete
 

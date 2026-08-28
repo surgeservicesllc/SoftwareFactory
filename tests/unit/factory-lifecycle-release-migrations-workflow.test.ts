@@ -11,6 +11,11 @@ const root = resolve(import.meta.dirname, "../..");
 const workflowPath = ".github/workflows/factory-lifecycle-release-migrations.yml";
 const migrations = [
   {
+    version: "20260828000050",
+    path: "supabase/migrations/20260828000050_normalize_breaker_aware_phase1c_selector.sql",
+    hash: "8914034508451d1550ebf3f1bedd8f7b71592f1809306e78c57774c458952896",
+  },
+  {
     version: "20260828000100",
     path: "supabase/migrations/20260828000100_project_production_url_configuration.sql",
     hash: "0856ddee447280a1bb4418f25d6a6d4650687e168fffcd5e98e8ce15edd62b27",
@@ -69,7 +74,14 @@ describe("Full Lifecycle v2 hosted release workflow", () => {
       default: "probe",
       required: true,
       type: "choice",
-      options: ["probe", "configure-url", "target-claims", "postdeploy", "verify"],
+      options: [
+        "probe",
+        "selector-normalization",
+        "configure-url",
+        "target-claims",
+        "postdeploy",
+        "verify",
+      ],
     });
     expect(workflow.on.workflow_dispatch.inputs.confirm).toMatchObject({
       default: "",
@@ -97,13 +109,13 @@ describe("Full Lifecycle v2 hosted release workflow", () => {
     );
   });
 
-  it("pins all three LF migration identities to the reviewed bytes", () => {
-    migrations.forEach((migration, index) => {
-      const ordinal = String(index + 1).padStart(2, "0");
-      expect(workflow.jobs.release.env[`MIGRATION_0${ordinal}00`]).toBe(
+  it("pins all four LF migration identities to the reviewed bytes", () => {
+    migrations.forEach((migration) => {
+      const stem = "MIGRATION_" + migration.version.slice(-5);
+      expect(workflow.jobs.release.env[stem]).toBe(
         migration.path,
       );
-      expect(workflow.jobs.release.env[`MIGRATION_0${ordinal}00_SHA256`]).toBe(
+      expect(workflow.jobs.release.env[stem + "_SHA256"]).toBe(
         migration.hash,
       );
       const normalized = readFileSync(resolve(root, migration.path), "utf8").replace(
@@ -114,8 +126,8 @@ describe("Full Lifecycle v2 hosted release workflow", () => {
         migration.hash,
       );
     });
-    const identity = stepByName("Verify the three exact forward files").run ?? "";
-    expect(identity.match(/verify_file/g)).toHaveLength(4);
+    const identity = stepByName("Verify the four exact forward files").run ?? "";
+    expect(identity.match(/verify_file/g)).toHaveLength(5);
     expect(identity).toContain("sha256sum");
   });
 
@@ -128,7 +140,9 @@ describe("Full Lifecycle v2 hosted release workflow", () => {
     });
     const command = authorization.run ?? "";
     expect(command).toContain("probe|verify) exit 0");
-    expect(command).toContain('configure-url|target-claims|postdeploy)');
+    expect(command).toContain(
+      'selector-normalization|configure-url|target-claims|postdeploy)',
+    );
     expect(command).toContain('[ "$CONFIRM" != "apply" ]');
     expect(command).toContain('[ "$GITHUB_ACTOR" != "$AUTHORIZED_ACTOR" ]');
     expect(command).toContain('[ "$GITHUB_TRIGGERING_ACTOR" != "$AUTHORIZED_ACTOR" ]');
@@ -208,10 +222,11 @@ describe("Full Lifecycle v2 hosted release workflow", () => {
       expect(preflight).toContain(version);
     }
     for (const state of [
-      "configure-url:1\\|1\\|0\\|0\\|0",
-      "target-claims:1\\|1\\|1\\|0\\|0",
-      "postdeploy:1\\|1\\|1\\|1\\|0",
-      "verify:1\\|1\\|1\\|1\\|1",
+      "selector-normalization:1\\|1\\|0\\|0\\|0\\|0",
+      "configure-url:1\\|1\\|1\\|0\\|0\\|0",
+      "target-claims:1\\|1\\|1\\|1\\|0\\|0",
+      "postdeploy:1\\|1\\|1\\|1\\|1\\|0",
+      "verify:1\\|1\\|1\\|1\\|1\\|1",
     ]) {
       expect(preflight).toContain(state);
     }
@@ -268,7 +283,7 @@ describe("Full Lifecycle v2 hosted release workflow", () => {
   it("stages and applies one file with DDL and ledger in one locked transaction", () => {
     const apply = stepByName("Apply exactly one ordered forward migration");
     expect(apply.if).toBe(
-      "${{ inputs.scope == 'configure-url' || inputs.scope == 'target-claims' || inputs.scope == 'postdeploy' }}",
+      "${{ inputs.scope == 'selector-normalization' || inputs.scope == 'configure-url' || inputs.scope == 'target-claims' || inputs.scope == 'postdeploy' }}",
     );
     const command = apply.run ?? "";
     expect(command).toContain('find "$STAGE_DIR" -maxdepth 1 -type f');
@@ -302,10 +317,64 @@ describe("Full Lifecycle v2 hosted release workflow", () => {
     }
   });
 
+  it("isolates the exact stale selector in its own forward-only release scope", () => {
+    const apply = stepByName("Apply exactly one ordered forward migration").run ?? "";
+    const postflight =
+      stepByName("Verify ledger catalog ACL runtime and stopped safety").run ?? "";
+    for (const evidence of [
+      "selector-normalization)",
+      "VERSION=20260828000050",
+      "ed5840b9d8d0efdb513a8576df128e9b",
+      "5933952d71f9da90a2a80a05ce6e0378",
+      "fdd3eee3e61c083789ffeb4808ed0a47",
+      "public.claim_phase1c_run_budget_internal(text,text,text,integer)",
+      "selector-normalization base selector overload count drifted",
+      "selector-normalization hosted breaker ACL drifted",
+      "attribute.attacl is not null",
+      "acldefault('r',relation_row.relowner)",
+      "(select privilege_type from actual where grantee=to_regrole('service_role')::oid) except select privilege_type from owner_expected",
+      "(select privilege_type from owner_expected) except select privilege_type from actual where grantee=to_regrole('service_role')::oid",
+      "${E050}",
+    ]) {
+      expect(apply).toContain(evidence);
+    }
+    for (const evidence of [
+      "c050 integer",
+      "c100 > c050",
+      "expected_phase_selector_hash",
+      "ed5840b9d8d0efdb513a8576df128e9b",
+      "5933952d71f9da90a2a80a05ce6e0378",
+      "breaker-aware selector helper catalog drifted",
+      "release resource_breakers catalog or ACL drifted",
+      "breaker_relation oid := to_regclass('public.resource_breakers')",
+      "attribute.attacl is not null",
+      "not index_row.indisvalid",
+      "not index_row.indisready",
+      "not index_row.indislive",
+      "resource_breakers_select_members",
+      "resource_breakers_closed_is_clean",
+      "resource_breakers_target_unique",
+      "f3b72bb359a50b640590970a2ab8e514",
+      "75230039beb12ce952f24927f2bfa2f2",
+      "04012ad5d4aa2f1b2ad25b2451e653f0",
+      "ac9e3f03dd3d27504b3cadcc477aa415",
+      "415d827b30b8846fb40447bd1d968b3e",
+      "2eea03a91826969e8abc25f7f80097f6",
+      "pg_catalog.acldefault('r', relation_row.relowner)",
+      "pg_catalog.to_regrole('service_role')::oid",
+    ]) {
+      expect(postflight).toContain(evidence);
+    }
+    expect(workflowSource).not.toMatch(
+      /insert into supabase_migrations\.schema_migrations[^\n]+20260815000(?:300|500)/i,
+    );
+    expect(workflowSource).not.toMatch(/migration repair[^\n]+20260815000(?:300|500)/i);
+  });
+
   it("reloads schema only after mutation and strongly verifies catalog ACL and runtime", () => {
     const reload = stepByName("Reload the PostgREST schema cache");
     expect(reload.if).toBe(
-      "${{ inputs.scope == 'configure-url' || inputs.scope == 'target-claims' || inputs.scope == 'postdeploy' }}",
+      "${{ inputs.scope == 'selector-normalization' || inputs.scope == 'configure-url' || inputs.scope == 'target-claims' || inputs.scope == 'postdeploy' }}",
     );
     expect(reload.run).toContain("NOTIFY pgrst, 'reload schema'");
 
@@ -350,10 +419,11 @@ describe("Full Lifecycle v2 hosted release workflow", () => {
       expect(postflight).toContain(negativeCatalog);
     }
     for (const state of [
-      "configure-url:1\\|1\\|1\\|0\\|0",
-      "target-claims:1\\|1\\|1\\|1\\|0",
-      "postdeploy:1\\|1\\|1\\|1\\|1",
-      "verify:1\\|1\\|1\\|1\\|1",
+      "selector-normalization:1\\|1\\|1\\|0\\|0\\|0",
+      "configure-url:1\\|1\\|1\\|1\\|0\\|0",
+      "target-claims:1\\|1\\|1\\|1\\|1\\|0",
+      "postdeploy:1\\|1\\|1\\|1\\|1\\|1",
+      "verify:1\\|1\\|1\\|1\\|1\\|1",
     ]) {
       expect(postflight).toContain(state);
     }

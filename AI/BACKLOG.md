@@ -2,6 +2,20 @@
 
 Last triaged: 2026-08-28
 
+## Exact Blackstone Supabase Auth bootstrap (2026-08-28, ADR-160)
+
+- [x] Add an exact-email/project/actor/first-attempt workflow that receives the
+  password only through an encrypted temporary repository secret, creates or
+  updates through the GoTrue Admin API, and re-verifies unique UUID plus
+  `email_confirmed_at` without logging credentials or response payloads.
+- [ ] Publish and run the workflow once with confirmation phrase
+  `CONFIRM BLACKSTONE SUPABASE AUTH BOOTSTRAP`; verify its exact successful
+  bounded result.
+- [ ] Delete `BLACKSTONE_SUPABASE_BOOTSTRAP_PASSWORD` immediately after the
+  accepted run, then remove the temporary workflow and its test in a forward
+  cleanup commit. Do not infer any organization membership or application role
+  from an Auth identity alone.
+
 ## Ten-step Factory final release (2026-08-28)
 
 - [x] Correct Step 8 any-provider/model record-only routing and preserve one
@@ -17,13 +31,45 @@ Last triaged: 2026-08-28
 - [x] Make mutation authorization first-attempt/non-replayable and validate
   active workflows, exact CI/deployment/health, database containment, ledger,
   catalog, ACL, runtime, lint, and Step 8 any-model contracts.
-- [ ] Publish the reviewed head; require all four exact-head jobs and exact
-  Vercel READY identity.
-- [ ] Apply only `20260828000100`, `20260828000200`, then `20260828000300`
-  through their ordered forward-only scopes and accept every postflight.
+- [x] Publish exact `79ca52f5b92e7d95292210e05565d35d21b4a435`; all four jobs
+  passed in CI `33158801269`, and GitHub deployment `6138739479` resolved to
+  exact READY Vercel deployment `dpl_57pM3ZEYNyK596VAeLPJMabJLZrH` with the
+  public release-identity health join green.
+- [x] Diagnose the protected probe's only mismatch: the live Phase 1C
+  selector is exact stale body `ed5840b9d8d0efdb513a8576df128e9b`, not the
+  required breaker-aware body `5933952d71f9da90a2a80a05ce6e0378`; all ABI,
+  ownership, security, search-path, ACL, helper, breaker-table, and safety
+  guards otherwise match.
+- [x] Add isolated forward migration
+  `20260828000050_normalize_breaker_aware_phase1c_selector.sql` (LF SHA-256
+  `8914034508451d1550ebf3f1bedd8f7b71592f1809306e78c57774c458952896`)
+  plus a dedicated protected `selector-normalization` scope. Local gates pass:
+  lint, typecheck, 5,127 tests / 7 skipped across 439 files, and 170/170-page
+  production build.
+- [ ] Publish the selector-normalization containment, pass all four exact-head
+  jobs plus exact READY Vercel/health identity, then run a fresh read-only
+  probe. Do not rerun failed probe `33159805326`.
+- [ ] Apply only `20260828000050`, verify its exact ledger/catalog/ACL/runtime
+  and stopped-safety postflight, then apply only `20260828000100`,
+  `20260828000200`, and `20260828000300` through their ordered forward-only
+  scopes and accept every postflight.
 - [ ] Complete signed-in production Step 8 record/reload and Step 9 persisted
-  observation with an already-connected bot. Do not initiate provider OAuth or
-  enable a worker merely to satisfy this acceptance item.
+  observation with a legitimately connected bot. The current organization has
+  zero connected accounts, ready linked bots, or assignments. Do not copy a
+  provider token/account across tenants or enable a worker merely to satisfy
+  this acceptance item.
+
+## Hosted migration ledger reconciliation (2026-08-28)
+
+- [ ] Reconcile 17 older missing ledger versions beginning at
+  `20260815000200`; Supabase Preview currently reaches the already-present
+  `organizations.maximum_concurrent_runs` column and stops.
+- [ ] For each version, inventory every declared catalog/ACL/RLS/audit effect,
+  add only surgical forward compensation for anything missing, and record the
+  historical ledger row only after the complete effect is proven present.
+- [ ] Never edit/replay historical migrations, reset or down-migrate the
+  hosted database, disable the preview check, or blindly mark a version
+  applied. The isolated `00050` selector repair is not ledger reconciliation.
 
 ## Step 10 public production URL configuration (2026-08-28, ADR-156)
 

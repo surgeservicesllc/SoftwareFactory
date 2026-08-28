@@ -1,5 +1,234 @@
 # SoftwareFactory — shared working status
 
+## FACTORY 10-STEP PRODUCTION RECOVERY (2026-08-28 06:24 EDT — PICK UP HERE)
+
+### Goal and current release
+
+The active owner goal is the signed-in 10-step Factory journey at
+`https://www.theagoras.com/solutions/factory`, Requirement through Monitor,
+with real Supabase persistence and production verification. Do not claim the
+goal complete while a real provider account is absent or while workers remain
+intentionally stopped.
+
+- Active worktree:
+  `C:\Users\Daniel\OneDrive\Documents\ChatGPT\SoftwareFactory-factory-e2e`
+- Branch: `codex/factory-ten-step-e2e`
+- Current `origin/main`:
+  `459be6426a988432f2a8b71595428957674881bb`
+- Last fully validated Factory deployment:
+  `79ca52f5b92e7d95292210e05565d35d21b4a435`
+- `origin/main` advanced by one direct-child Stripe commit. Its only overlap
+  with this work is `AI/DECISIONS.md` and `AI/HANDOFF.md`; preserve both sets
+  of documentation during rebase. Upstream owns ADR-158, so this work uses
+  ADR-159 for selector normalization and ADR-160 for the Auth bootstrap.
+- The original worktree
+  `C:\Users\Daniel\OneDrive\Documents\ChatGPT\SoftwareFactory` is dirty and
+  must remain untouched.
+- `.github/workflows/apply-hosted-migrations.yml` appears modified only because
+  of line-ending normalization. Its HEAD/index/filtered content was previously
+  proven semantically identical. Do not stage, reset, or edit it.
+
+Exact release evidence already green for `79ca52f5...`:
+
+- GitHub Actions run `33158801269`: all four required jobs passed — quality,
+  browser/accessibility 1/3, 2/3, and 3/3.
+- GitHub deployment `6138739479`; Vercel deployment
+  `dpl_57pM3ZEYNyK596VAeLPJMabJLZrH`; READY URL
+  `https://softwarefactory-8phkzqf2b-surgeservices-projects.vercel.app`.
+- `https://www.theagoras.com/api/health` returned exact SHA/ref, Vercel project
+  `prj_pAsrhftaVWI4SyaqstgRVSWHJkdD`, and Supabase project
+  `qpuofpmagrmyamahqwxw` with database reachable.
+- Local gate on that release: lint, typecheck, 5,121 tests, and production
+  build all green.
+
+### Repeated Step 8 error — exact live finding
+
+The current Step 8 any-model/record-only application and database contract is
+already deployed and exact. The protected read-only probe verified migration
+`20260822001000` once in the hosted ledger and all 12 relevant function source,
+signature, volatility, security, search-path, and ACL identities. The raw
+`invalid Phase 1C command plan` screenshot therefore came from a stale mounted
+client/release or an older submission path; current API code maps that legacy
+database message to a bounded schema-out-of-sync reload response.
+
+The lifecycle release probe `33159805326` found a separate exact production
+catalog mismatch that blocks the new target-bound worker claim migration:
+
+| Selector | Hosted MD5 | Required lineage |
+|---|---|---|
+| `claim_planned_graph_internal(text,text[],text,jsonb)` | `fdd3eee3e61c083789ffeb4808ed0a47` | exact/current |
+| `claim_phase1c_run_budget_internal(text,text,text,integer)` | `ed5840b9d8d0efdb513a8576df128e9b` | stale `20260815000300` body |
+| required Phase selector target | `5933952d71f9da90a2a80a05ce6e0378` | exact `20260815000500` breaker-aware body |
+
+All three breaker prerequisites are live and byte-exact, postgres-owned,
+owner-only ACL, `search_path=pg_catalog`:
+
+- `breaker_cooldown_seconds(text)` → `9b46c6e078158e2f2ac1be0126e47e65`
+- `breaker_suppression_reason(uuid,text,text,timestamptz)` →
+  `ce7c51ad47992174634c960b8a8faaaf`
+- `consume_breaker_trial(uuid,text,text)` →
+  `41323ace6fed5d3e5ebc512464bd358d`
+
+`resource_breakers` is postgres-owned with RLS+FORCE RLS, the exact nine-column
+shape, authenticated SELECT-only, and hosted `service_role` full table ACL.
+Never contract that hosted service-role ACL in this selector-only containment.
+
+### Uncommitted forward containment in progress
+
+New file:
+
+- `supabase/migrations/20260828000050_normalize_breaker_aware_phase1c_selector.sql`
+
+It is ordered before the existing `00100 → 00200 → 00300` release tail. It
+accepts only the exact stale hosted hash or exact clean-chain target hash,
+verifies the complete selector ABI/owner/SECURITY DEFINER/search path/private
+ACL, exact helper identities, breaker table/RLS/constraint/policy shape, and
+absence of target-bound selector objects. It replaces only the one selector
+with the byte-exact `20260815000500` body. It never replays or marks
+`20260815000300`/`20260815000500` and performs no history repair.
+
+Files currently intentionally changed/added:
+
+- `.github/workflows/factory-lifecycle-release-migrations.yml`
+- `.github/workflows/bootstrap-blackstone-supabase-auth.yml` (temporary)
+- `AI/BACKLOG.md`
+- `AI/CURRENT_STATE.md`
+- `AI/DECISIONS.md`
+- `AI/HANDOFF.md`
+- `AI/HOSTED_APPLY_RUNBOOK.md` (migration count 173 → 174)
+- `AI/QUALITY_SCORECARD.md`
+- `supabase/migrations/20260828000050_normalize_breaker_aware_phase1c_selector.sql`
+- `tests/integration/breaker-aware-selector-normalization.behavior.test.ts`
+- `tests/integration/breaker-aware-selector-normalization.contract.test.ts`
+- `tests/integration/phase2c-repair-idempotence.test.ts`
+- `tests/unit/factory-lifecycle-release-migrations-workflow.test.ts`
+- `tests/unit/bootstrap-blackstone-supabase-auth-workflow.test.ts` (temporary)
+- `todo.md`
+
+The release workflow now has a separate `selector-normalization` mutation
+scope and ordered six-field ledger:
+`27000200|27000210|28000050|28000100|28000200|28000300`. It reuses the same
+exact-main/green-CI/READY-Vercel/health/stopped-worker gate, SHA-pinned one-file
+staging, transactional linked-DB lint, locked single transaction, ledger write,
+PostgREST reload, and postflight. `probe` and `verify` remain read-only.
+
+### Exact Auth bootstrap queued at this checkpoint
+
+The owner confirmed creation/update of the exact email-confirmed Supabase Auth
+identity requested in this task. The temporary dispatch-only workflow is fixed
+to repository `surgeservicesllc/SoftwareFactory`, `main`, project
+`qpuofpmagrmyamahqwxw`, the exact normalized email, the configured production
+actor, run attempt 1, and an exact confirmation phrase. It uses Supabase's
+supported Admin API and reads the password only from the encrypted temporary
+repository secret; neither the credential nor response payload is logged.
+After exact-head publication, dispatch it once, verify only the bounded
+`created|updated user_id=<uuid>` result, delete the temporary secret
+immediately, then remove the workflow and its test in a forward cleanup commit.
+This creates an Auth identity only, not tenant membership, role, provider
+connection, or execution authority.
+
+### Test status at this checkpoint
+
+Before the final resource-breaker guard strengthening, the focused suite was
+green: 49/49 across the full migration chain, target-claim contract, workflow
+contract, and new selector contract. A one-off live-shape PGlite simulation
+also proved `ed584... → 593395...` with owner/security/search-path/ACL preserved
+and refused a tampered helper.
+
+After adding exact constraint/policy checks, one intermediate run had a setup
+syntax defect: all 33 cases in
+`tests/integration/phase2e-portfolio-scheduling.behavior.test.ts` fail while
+applying `00050` with `syntax error at or near "pg_catalog"`; the other three
+files in that run passed (20 tests). The likely line is the newly added
+schema-qualified special-form call:
+
+```sql
+pg_catalog.position(
+  'is_organization_member' in
+  pg_catalog.pg_get_expr(policy.polqual, policy.polrelid)
+)
+```
+
+It was replaced with ordinary function syntax:
+
+```sql
+pg_catalog.strpos(
+  pg_catalog.pg_get_expr(policy.polqual, policy.polrelid),
+  'is_organization_member'
+) > 0
+```
+
+The normalized LF SHA-256 for `00050` is now
+`8914034508451d1550ebf3f1bedd8f7b71592f1809306e78c57774c458952896`
+and is pinned in both the release workflow and its unit test.
+
+Current post-fix evidence:
+
+- Final hardened focused run: **32/32 passed** across the selector behavior and
+  contract suites, full-chain idempotence, protected release-workflow contract,
+  and temporary Auth-workflow contract.
+- Lint passed with exit 0 and no diagnostics.
+- Typecheck passed with exit 0 (`tsc --noEmit` clean).
+- Production build passed with exit 0: Next.js 16.3.0 compiled, TypeScript
+  completed, and 170/170 static pages generated. The build emitted one
+  non-fatal existing Turbopack trace warning for the dynamic
+  `path.resolve(process.cwd())` use in `lib/worker/env.ts:68`; no file was
+  edited by these gates.
+- The earlier clean full suite passed **5,127 / 7 skipped** across 439 files.
+  After the final exact ACL hardening, a fresh full suite reached **5,137
+  passed / 7 skipped** with one stale string-only contract expectation; that
+  expectation and the follow-on ACL alias expectation are corrected and the
+  focused run is green. A final full-suite rerun remains required after rebase.
+- Workflow scope review completed and confirmed that the new scope remains
+  SHA-pinned, single-file, transaction-locked, identity-gated, safety-gated,
+  and read-only for `probe`/`verify`.
+
+Run next, in this order:
+
+1. Review the working diff, stage only the intentional files listed above,
+   scan added content for secrets, and commit. Do not stage the EOL-only
+   `apply-hosted-migrations.yml` change.
+2. Rebase onto exact `459be642...`, preserving upstream Stripe documentation
+   plus local ADR-159/ADR-160 and both handoff sections; rerun every final gate.
+3. Push directly to `main`, wait for all four
+   exact-head CI jobs and exact READY Vercel/health identity.
+4. Dispatch the one-shot Auth bootstrap, verify its bounded result, delete its
+   temporary password secret, and remove the workflow/test in a forward cleanup
+   release before continuing. Never expose the credential.
+5. Dispatch a fresh lifecycle release `probe`; never rerun failed run
+   `33159805326`.
+6. If exact, dispatch `selector-normalization` with `confirm=apply`, verify
+   ledger/catalog/ACL/runtime/safety, then a fresh read-only `probe`.
+7. Continue exact scopes in order: `configure-url`, `target-claims`, and only
+   after signed-in acceptance, `postdeploy`.
+
+### External blockers and safety invariants — do not fabricate around these
+
+- Signed-in production as `daniel.hughen@gmail.com` currently shows **zero
+  connected AI accounts**, zero ready linked bots, and no assignment in the
+  active organization. AI accounts are organization-shared; `created_by` is
+  provenance, not an ownership filter. A Claude token/row from another tenant
+  must never be copied or reassigned. The supported next step is a real Claude
+  connection in this organization. Do not initiate OAuth or subscription login
+  without exact action-time human confirmation.
+- Workers, autonomy, automatic actions, graph schedules, and the auth broker
+  remain OFF. The global database kill switch remains ON. Keep them that way.
+  Therefore Steps 9/10 can validate recorded/no-dispatch truth, but cannot
+  honestly be claimed as executed production work yet.
+- Hosted migration history has 17 older missing ledger versions beginning at
+  `20260815000200`, while parts of their catalog effects exist. Supabase Preview
+  fails replay on the already-present `organizations.maximum_concurrent_runs`
+  column. Do not edit historical migrations, reset, down-migrate, disable the
+  check, or blindly mark versions applied. Each version needs complete catalog
+  proof, surgical forward compensation for missing effects, then protected
+  ledger reconciliation only for fully present effects.
+- An OpenAI project key was pasted into chat earlier. Never copy it into code,
+  logs, SQL, fixtures, or this file; the owner must rotate it.
+
+The formal goal remains active. Do not mark it complete until the signed-in
+provider connection, Step 8 fresh production submission, and truthful Steps
+9–10 acceptance are all evidenced.
+
 ## GRAPH — THE STAGE PAGES SHOW THEIR NODES (2026-08-24, round 12 — PICK UP HERE)
 
 **Round 11's item 1 is done.** `/solutions/lifecycle/[stage]` listed runs with

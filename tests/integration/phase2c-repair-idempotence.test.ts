@@ -79,6 +79,7 @@ const LATER_DEPENDANTS = [
 // those historical dependants must withhold their 2026-08-28 consumers too,
 // then apply both groups in their real order after the repair.
 const FULL_LIFECYCLE_RELEASE = [
+  "20260828000050_normalize_breaker_aware_phase1c_selector.sql",
   "20260828000100_project_production_url_configuration.sql",
   "20260828000200_target_bound_worker_claims.sql",
   "20260828000300_graph_postdeploy_validation.sql",

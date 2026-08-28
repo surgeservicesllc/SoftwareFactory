@@ -2621,3 +2621,75 @@ Use this append-only log for decisions that constrain future implementation. Cha
   and idempotently; it never deletes, and a webhook that exists without
   a known secret is reported with instructions to reveal it in Stripe
   rather than recreated behind the working one's back.
+## ADR-159 - Normalize the partially applied Phase 1C selector with one isolated forward migration
+
+- Date: 2026-08-28
+- Status: accepted locally; exact-head publication and protected hosted apply pending
+- Context: exact application release
+  `79ca52f5b92e7d95292210e05565d35d21b4a435` is live with all four CI jobs,
+  exact READY Vercel identity, and public release-health join green. Protected
+  read-only probe `33159805326` nevertheless stopped before the release-tail
+  migrations because production has the `20260815000300` body of
+  `claim_phase1c_run_budget_internal(text,text,text,integer)` (MD5
+  `ed5840b9d8d0efdb513a8576df128e9b`) while its breaker helpers and table
+  already have the later catalog shape. The required frozen `20260815000500`
+  selector body is `5933952d71f9da90a2a80a05ce6e0378`. Seventeen older
+  versions beginning at `20260815000200` are absent from the hosted ledger
+  despite partial effects, so replaying history or merely marking it applied
+  cannot establish truth.
+- Decision: add only forward migration
+  `20260828000050_normalize_breaker_aware_phase1c_selector.sql` (LF SHA-256
+  `8914034508451d1550ebf3f1bedd8f7b71592f1809306e78c57774c458952896`)
+  before the existing `00100`, `00200`, and `00300` release tail. Its
+  preflight accepts only the exact stale or already-normalized selector body;
+  verifies the unchanged ABI, postgres owner, `SECURITY DEFINER`, exact
+  `search_path=pg_catalog`, owner-only execute ACL, exact breaker-helper
+  identities, FORCE-RLS breaker table, browser/table ACL, constraints/policy,
+  and absence of target-bound selector objects; replaces only the Phase 1C
+  selector with the frozen breaker-aware body; then repeats the exact target
+  catalog and ACL assertions. A dedicated hash-pinned
+  `selector-normalization` workflow scope preserves exact-main, four-job CI,
+  READY Vercel/health, stopped-runtime, single-file staging, linked lint,
+  transaction/lock, ledger, schema reload, and postflight gates.
+- Consequence: a clean migration chain and the exact observed partially
+  applied hosted shape converge on the same function without changing its
+  signature or authority, replaying `20260815000300`/`20260815000500`, or
+  claiming their history was repaired. Local evidence is lint/typecheck
+  green, 5,127 tests passed / 7 skipped across 439 files, and a 170/170-page
+  production build. The remaining 17-version ledger drift stays explicit and
+  requires separate object-by-object catalog proof, forward compensation, and
+  only then protected reconciliation.
+- Bounds: no token/account is copied between tenants, and no provider OAuth is
+  inferred from catalog repair. Workers, provider execution, autonomy,
+  schedules, the auth broker, and automatic actions remain OFF; the global
+  kill switch remains ON. This decision authorizes no historical edit/replay,
+  blind ledger insertion, reset, down-migration, worker dispatch, or claim of
+  signed-in Steps 8-10 acceptance.
+
+## ADR-160 - Bootstrap one exact verified Auth identity through a disposable secret boundary
+
+- Date: 2026-08-28
+- Status: accepted locally; one-shot production dispatch and cleanup pending
+- Context: the owner requested `blackstoneagencyllc@gmail.com` as a verified
+  Supabase Auth account with a supplied password. A real password must not be
+  committed, passed as a workflow input, copied into a database migration, or
+  printed in logs. Direct `auth.users` writes would bypass GoTrue's supported
+  password hashing and identity invariants.
+- Decision: publish a temporary `workflow_dispatch` path fixed to exact
+  repository `surgeservicesllc/SoftwareFactory`, `main`, Supabase project
+  `qpuofpmagrmyamahqwxw`, and the one normalized email. Require an exact
+  confirmation phrase, configured production actor equality for both actor
+  fields, and run attempt 1 with no GitHub token permissions. Supply the
+  password through a temporary encrypted repository secret and use the
+  existing service-role secret only inside the runner. The script uses the
+  GoTrue Admin API, refuses duplicates, idempotently creates or updates the
+  exact identity, and re-reads its UUID, exact email, and parseable
+  `email_confirmed_at`; it emits no credential or response payload.
+- Consequence: the requested Auth identity can be created through Supabase's
+  supported password boundary without persistent plaintext or an arbitrary
+  admin endpoint. After one accepted run, delete the temporary password secret
+  and remove the temporary workflow/test in a forward cleanup commit.
+- Bounds: an Auth identity is not organization membership or an application
+  role. This decision grants neither, connects no provider, enables no worker,
+  changes no autonomy/action setting, and does not release the global kill
+  switch.
