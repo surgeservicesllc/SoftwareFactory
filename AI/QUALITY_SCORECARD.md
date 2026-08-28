@@ -1,15 +1,20 @@
 # Quality scorecard
 
-Last reviewed: 2026-08-27
+Last reviewed: 2026-08-28
 
-**Addendum, 2026-08-28 — AI Factory loading-gate candidate:** the signed-out
+**Addendum, 2026-08-28 — AI Factory loading gate and Factory v2 release:** the signed-out
 factory gate renders on the first server response and performs zero protected
 browser reads. The portal layout and leaf page share one request-scoped,
 verified viewer lookup with a five-second fail-closed presentation deadline;
 route authorization remains independent. Focused unit/contract tests pass
 56/56, the production build passes, and the real-page Playwright gate passes
-9/9 across desktop, tablet, and mobile. Production status remains pending the
-exact release SHA's CI and Vercel acceptance.
+9/9 across desktop, tablet, and mobile. Exact main
+`bb68659a0ee84370f83dd647ae57f4ccb83ea06c` passed all four required jobs in
+CI `33149814278`; Vercel `dpl_2A2bhtevZeBY6422ZYjVGJE5SuTU` / deployment
+`6137077047` is READY behind `www.theagoras.com`. Hosted containment and
+lineage passed in runs `33150654596` and `33150707932` after exact four-row
+manifest probe `33150619218`. Signed-in Steps 8-9 remain pending provider OAuth
+and route setup, not code release or database lineage.
 
 **Addendum, 2026-08-27 — Job Search production acceptance (ADR-147):**
 
@@ -932,38 +937,43 @@ unapplied to hosted Supabase.
 - Any default-branch write, non-draft PR, approval, merge, deploy, rollback, workflow/provider administration, or Autonomous Mode widening is a failure.
 - A code/schema/provider/deployment change invalidates affected evidence and requires rerunning it.
 
-## Step 8 stale-error candidate (2026-08-27)
+## Step 8 current-production diagnosis (2026-08-28)
 
 | Check | Evidence | Status |
 | --- | --- | --- |
-| Stale client result lifecycle | Current error retained across ordinary rerenders; project/context change and remount clear it; retry reuses the original idempotency key | Local focused tests pass |
-| Schema-skew response | Exact legacy `22023` command-plan/configuration refusals become bounded actionable `503`; no worker dispatch occurs | Local focused tests pass |
-| Production acceptance | Fresh signed-in Step 8 POST, immutable route evidence, Step 9 correlation, exact-head CI, exact Vercel deployment | Pending release and signed-in verification |
+| Stale client result lifecycle | Current error retained across ordinary rerenders; project/context change and remount clear it; retry reuses the original idempotency key | Pass locally and released |
+| Schema-skew response | Exact legacy `22023` command-plan/configuration refusals become bounded actionable `503`; no worker dispatch occurs | Pass locally and released |
+| Exact production traffic | Authenticated GETs reached exact `bb68659`; zero `POST /api/commands`; no command-route 4xx/5xx | Confirms screenshot was stale mounted state, not a current server refusal |
+| Current tenant route | Fresh Chrome as `daniel.hughen@gmail.com`: zero connected AI accounts, ready bots, or assignments; one unfinished Codex account; Claude OAuth incomplete | Provider OAuth and route setup pending |
+| Steps 8-9 acceptance | Fresh signed-in POST, immutable route evidence, reload-persisted Step 9 correlation | Not yet claimed |
 
-## Ten-step Factory v2 release-candidate scorecard (2026-08-27)
+## Ten-step Factory v2 production scorecard (2026-08-28)
 
 | Gate | Evidence | Status |
 | --- | --- | --- |
-| Rebased release identity | Candidate `ead498b495ac59d920e6f76df7917ea830dbcf8c` on `origin/main` `1e803eba3a931cf6978666723853dee61ea344e8` | Local candidate only |
+| Release identity | Exact `main` `bb68659a0ee84370f83dd647ae57f4ccb83ea06c` | Pass |
 | Requirements -> Monitor lifecycle | Exact repository/base/policy identity, explicit gates, durable command/PR/CI/deployment/monitor lineage, exact graph/run UI selection | Implemented and locally audited |
 | Focused verification | 18 files / 207 tests; lint, typecheck, production build, and diff-check green | Pass locally |
 | Protocol fence migration | `20260827000150`, LF-normalized SHA-256 `A4B505841D94CC89DFC82E24837DEDB78356B56C5F5698C0748F8B6735341A49`; run `33144600401` | Hosted once; ledger/fence/drain/safety postflight pass |
-| Phase 1C release-lineage migration | `20260827000200`, LF-normalized SHA-256 `23197552DF3F442AE8264BF71BD28A7C479E09A64BF6E298C615B767A96572BE`; run `33144659265` | Failed closed on legacy sensitive/oversized payload; transaction and ledger rolled back; pending forward containment |
-| Publication | Exact main `0880191b367d12d42f8ce4af9c267657c10c5fce`; CI `33143981765`; Vercel `dpl_9fd1i9M7USTeUEd6NqX7GCi1nF6R` | Pass; exact release READY |
-| Current Step 8/9 production acceptance | Former Claude bot/account was explicitly removed 2026-08-23; fresh supported account connection, reload stickiness, command/route/run correlation required | Pending owner-secure OAuth; absence is not a planner-code failure |
+| Containment probe | Run `33150619218`; 4 rows; manifest `784acaca2b0957ecb0eeea85e3d0dde2e64ba653c744e708ec8d4094f9175b99`; blockers `0|0|0|0` | Pass; payload/row IDs not logged |
+| Forward containment | Run `33150654596`; exact `20260827000210` only | Pass hosted with full postflight |
+| Phase 1C release-lineage migration | Run `33150707932`; unchanged `20260827000200`, LF-normalized SHA-256 `23197552DF3F442AE8264BF71BD28A7C479E09A64BF6E298C615B767A96572BE` | Pass hosted with full postflight |
+| Publication | Exact `main` `bb68659a0ee84370f83dd647ae57f4ccb83ea06c`; CI `33149814278` four jobs green; Vercel `dpl_2A2bhtevZeBY6422ZYjVGJE5SuTU` / deployment `6137077047` READY behind `www.theagoras.com` | Pass |
+| Current Step 8/9 production acceptance | Current bundle loads signed in; tenant has no connected account/ready bot/assignment and provider OAuth is incomplete | Pending route setup; not falsely claimed |
 | Safety envelope | Worker, provider execution, autonomy, and all automatic actions OFF; global kill switch ON | Preserved |
 
 ## 2026-08-28 exact release, protocol fence, and artifact containment
 
 | Gate | Evidence | Status |
 | --- | --- | --- |
-| Exact production | `0880191b367d12d42f8ce4af9c267657c10c5fce`; CI `33143981765` four required jobs green; Vercel `dpl_9fd1i9M7USTeUEd6NqX7GCi1nF6R` READY | Pass |
+| Exact production | `bb68659a0ee84370f83dd647ae57f4ccb83ea06c`; CI `33149814278` four required jobs green; Vercel `dpl_2A2bhtevZeBY6422ZYjVGJE5SuTU` / deployment `6137077047` READY behind `www.theagoras.com` | Pass |
 | Hosted apply attempt | `33143231202` queued with zero jobs/checks; 517,320-byte workflow exceeded 500 KB; no DDL ran | Safely not started |
 | Workflow recovery | 472,229-byte released workflow; executable lines unchanged; UTF-8 size contract `< 490,000` | Pass on exact release |
 | Legacy authority fence | Run `33144600401` applied only `00150`; exact ledger/function ACL/drain/safety postflight; graph/Phase 1C running rows `0|0` | Pass hosted; never replay |
 | Lineage apply | Run `33144659265`; exact `00200` stopped on `legacy graph artifact payload is sensitive or oversized` | Failed closed; single transaction rolled back all DDL and ledger insert |
-| Forward containment migration | `20260827000210`, SHA-256 `c37a55efe74e9a9b4118924e1b2cbd0378a76f0d98c9747c6c66fffda9697de1`; private immutable digest evidence, bounded tombstones, two validated constraints | Security-reviewed local candidate; hosted acceptance pending |
-| Protected containment workflow | Payload-free `probe`, manifest-pinned `contain`, and probe-identity-pinned `lineage` share production-DDL concurrency; `node_runs` lock; future-heartbeat refusal; exact raw ACL/tombstone checks before/under-lock/after; transactional plus post-commit RLS/audit/safety validation | Implemented locally; all hosted operations pending exact release |
-| State-dependent legacy fence | Pre-v2: all 9 legacy signatures fully revoked. Post-v2: 8 remain fully revoked; replaced `decide_node_gate(uuid,boolean,text)` is authenticated-only, owner/admin-checked, `SECURITY DEFINER`, pinned search path, and evidence-bound | Implemented locally; hosted lineage acceptance pending |
-| Release lineage completion | Dedicated `operation=lineage` requires the same positive count/manifest from `probe`, reconstructs it from private audit rows, verifies exact tombstones/ACLs, and stages only unchanged hash-pinned `00200` after accepted `00210` | Pending; no partial v2 catalog hosted |
-| Fresh Step 8 request | Zero production `POST /api/commands` after exact deploy; successful GET polling only | Pending hard reload and signed-in POST |
+| Payload-free probe | Run `33150619218`: four rows; manifest `784acaca2b0957ecb0eeea85e3d0dde2e64ba653c744e708ec8d4094f9175b99`; blockers `0|0|0|0` | Pass |
+| Forward containment migration | Run `33150654596` applied only `20260827000210`, SHA-256 `c37a55efe74e9a9b4118924e1b2cbd0378a76f0d98c9747c6c66fffda9697de1` | Pass hosted; ledger/catalog/constraints/RLS/ACL/audit/safety green |
+| Release lineage completion | Run `33150707932` applied only unchanged hash-pinned `00200` after accepted `00210` | Pass hosted; ledger/catalog/RLS/ACL/audit/runtime/lint/health green |
+| State-dependent legacy fence | Post-v2: 8 legacy signatures fully revoked; replacement `decide_node_gate(uuid,boolean,text)` authenticated-only, owner/admin-checked, `SECURITY DEFINER`, pinned search path, and evidence-bound | Pass hosted |
+| Fresh Step 8 request | Exact deployment: authenticated GETs, zero `POST /api/commands`, no command-route 4xx/5xx; fresh signed-in tenant has no connected account/ready bot/assignment | Pending provider OAuth and route setup; not accepted |
+| Safety envelope | Workers/provider execution/autonomy/automatic actions OFF; global kill switch ON; no running graph or Phase 1C run | Pass hosted |

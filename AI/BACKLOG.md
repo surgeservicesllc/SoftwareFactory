@@ -1,6 +1,6 @@
 # Backlog
 
-Last triaged: 2026-08-27
+Last triaged: 2026-08-28
 
 ## Billing follow-ons (2026-08-25, after go-live)
 
@@ -1018,9 +1018,19 @@ requested rework is the failure mode to design against.
 - [x] Render the server-verified signed-out gate immediately, skip all
   protected client reads while signed out, deduplicate the layout/page viewer
   lookup per request, and bound that presentation lookup to five seconds.
-- [ ] Publish the exact candidate, require exact-head CI and READY Vercel identity, reload the signed-in page, submit a new Step 8 request, and record the resulting command/route identity before calling the incident closed.
+- [x] Publish exact `main` `bb68659a0ee84370f83dd647ae57f4ccb83ea06c`;
+  CI run `33149814278` passed quality and all three browser/accessibility jobs,
+  and Vercel `dpl_2A2bhtevZeBY6422ZYjVGJE5SuTU` / deployment `6137077047`
+  is READY behind `www.theagoras.com`.
+- [x] Reload current production as `daniel.hughen@gmail.com` and close the
+  stale-client diagnosis: exact deployment logs have authenticated GETs but
+  zero `POST /api/commands` and no command-route 4xx/5xx.
+- [ ] Complete provider OAuth and route setup. The fresh tenant currently has
+  zero connected AI accounts, ready bots, or assignments; one Codex account is
+  unfinished and Claude OAuth is incomplete. Only then submit a new Step 8
+  command and accept its persisted Step 9 correlation.
 
-## Ten-step Factory v2 release candidate (2026-08-27)
+## Ten-step Factory v2 production release (2026-08-28)
 
 - [x] Rebase and locally audit candidate
   `ead498b495ac59d920e6f76df7917ea830dbcf8c`: Requirements -> Monitor
@@ -1031,22 +1041,26 @@ requested rework is the failure mode to design against.
   with dedicated one-shot scopes. Stable LF-normalized SHA-256 identities are
   `A4B505841D94CC89DFC82E24837DEDB78356B56C5F5698C0748F8B6735341A49`
   and `23197552DF3F442AE8264BF71BD28A7C479E09A64BF6E298C615B767A96572BE`.
-- [x] Publish exact release `0880191b367d12d42f8ce4af9c267657c10c5fce`;
-  exact-head CI `33143981765` passed quality and all three browser/accessibility
-  jobs, and Vercel `dpl_9fd1i9M7USTeUEd6NqX7GCi1nF6R` is READY.
+- [x] Publish exact release `bb68659a0ee84370f83dd647ae57f4ccb83ea06c`;
+  exact-head CI `33149814278` passed quality and all three browser/accessibility
+  jobs, and Vercel `dpl_2A2bhtevZeBY6422ZYjVGJE5SuTU` / deployment
+  `6137077047` is READY behind `www.theagoras.com`.
 - [x] Apply only `20260827000150` and verify its ledger/catalog/fence/safety
   postflight. Run `33144600401` passed with legacy authority fenced, graph and
   Phase 1C running rows `0|0`, and the stopped safety envelope preserved.
-- [ ] Apply `20260827000200` only after the forward legacy-artifact containment
-  below is hosted and accepted. Run `33144659265` found an unsafe/oversized
-  legacy payload and rolled back migration plus ledger atomically; `00200`
-  remains absent. Never bundle, reset, replay `00150`, or down-migrate.
+- [x] Probe exact hosted legacy state in run `33150619218`: four rows, manifest
+  SHA-256 `784acaca2b0957ecb0eeea85e3d0dde2e64ba653c744e708ec8d4094f9175b99`,
+  and all four downstream blocker counts zero.
+- [x] Apply only `20260827000210` in run `33150654596`, then unchanged
+  `20260827000200` in run `33150707932`. Both exact-manifest operations passed
+  ledger/catalog/ACL/RLS/audit/runtime/lint/health and stopped-safety
+  postflights. Never reset, replay `00150`, or down-migrate.
 - [ ] Reconnect a fresh supported owner AI account and verify reload
   stickiness, then complete signed-in production Steps 8 and 9 against the
   exact release. The former Claude bot/account was explicitly removed on
   2026-08-23, so its absence is not a current planner regression.
-- [ ] Preserve workers, provider execution, autonomous mode, and all automatic
-  actions OFF with the global kill switch ON throughout acceptance.
+- [x] Preserve workers, provider execution, autonomous mode, and all automatic
+  actions OFF with the global kill switch ON throughout hosted acceptance.
 
 ## Hosted apply workflow-size recovery (2026-08-28)
 
@@ -1078,18 +1092,19 @@ requested rework is the failure mode to design against.
   worker-stopped state after apply; and move ACL/RLS/audit-trigger acceptance
   inside each migration transaction so failure rolls back DDL and ledger
   together.
-- [ ] Publish the containment candidate, require exact-head CI and READY
-  Vercel, run `probe`, then pass its exact positive count and manifest SHA-256
-  to one `contain` run. Verify only `00210` was applied, ledger/catalog/
-  constraints/FORCE-RLS/ACL/audit/safety postflight passes, and `00200` remains
-  absent.
-- [ ] Only after exact hosted `00210` acceptance, dispatch
-  `graph-artifact-containment.yml` with `operation=lineage`. It must stage only
-  unchanged hash-pinned `00200`, require `00150/00200/00210=1/0/1` plus the
-  same positive count/manifest SHA-256 from `probe`, reconstitute that manifest
-  from private audit rows, and verify exact tombstones, raw table/function ACLs,
-  state-dependent legacy-function ACLs, and its full transactional and
-  post-commit ledger/catalog/RLS/audit/runtime/lint/health postflight.
-- [ ] Hard reload the signed-in owner Factory and submit a fresh Step 8 request;
-  require a production POST, immutable record-only route evidence, and truthful
-  persisted Step 9 state with all execution surfaces still OFF.
+- [x] Release exact `bb68659a0ee84370f83dd647ae57f4ccb83ea06c`; CI
+  `33149814278` and Vercel `dpl_2A2bhtevZeBY6422ZYjVGJE5SuTU` are exact and
+  green. Probe `33150619218` reported the exact four-row manifest
+  `784acaca2b0957ecb0eeea85e3d0dde2e64ba653c744e708ec8d4094f9175b99`;
+  contain `33150654596` applied only `00210` and passed every postflight.
+- [x] After exact hosted `00210` acceptance, lineage run `33150707932` staged
+  only unchanged hash-pinned `00200`, reconstituted the exact manifest from
+  private audit rows, and passed transactional plus post-commit ledger,
+  catalog, RLS, tombstone, ACL, audit, runtime, lint, health, and stopped-safety
+  checks.
+- [ ] Finish Claude OAuth or the unfinished Codex connection, create a ready
+  bot and project assignment, then submit a fresh signed-in Step 8 request.
+  Require a production POST, immutable record-only route evidence, and truthful
+  persisted Step 9 state with all execution surfaces still OFF. The fresh
+  current-production session has no such route yet, so acceptance is not
+  claimed.

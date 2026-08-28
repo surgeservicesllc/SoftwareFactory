@@ -2,7 +2,7 @@
 
 Last reviewed: 2026-08-28
 
-## 2026-08-28: AI Factory signed-out loading gate is fail-closed (local candidate)
+## 2026-08-28: Factory v2 release and hosted lineage are production accepted
 
 `/solutions/ai-factory` now passes a server-verified viewer hint into the
 client journey. A signed-out visitor renders the sign-in gate on the first
@@ -12,8 +12,29 @@ request-scoped with `React.cache` so the portal layout and leaf page share one
 verified lookup, and the presentation lookup has a five-second fail-closed
 deadline. Every privileged route continues to authorize independently.
 Focused unit/contract evidence is 56/56 and the rebuilt production bundle's
-real-page gate passes 9/9 across desktop, tablet, and mobile. This is local
-evidence only until exact-head CI and Vercel acceptance complete.
+real-page gate passes 9/9 across desktop, tablet, and mobile. Exact `main`
+`bb68659a0ee84370f83dd647ae57f4ccb83ea06c` passed all four required jobs in
+CI run `33149814278`; Vercel deployment
+`dpl_2A2bhtevZeBY6422ZYjVGJE5SuTU` (GitHub deployment `6137077047`) is READY
+behind `www.theagoras.com`.
+
+Hosted database completion is separately measured. Payload-free probe run
+`33150619218` found the exact four-row manifest
+`784acaca2b0957ecb0eeea85e3d0dde2e64ba653c744e708ec8d4094f9175b99`
+with all four downstream blocker counts zero. Containment run `33150654596`
+applied only `20260827000210`; lineage run `33150707932` then applied the
+unchanged `20260827000200`. Ledger, catalog, ACL, RLS, immutable audit,
+tombstone, runtime, lint, and stopped-safety postflights all passed. Workers,
+provider execution, autonomy, and automatic actions remain OFF; the global
+kill switch remains ON.
+
+Signed-in Steps 8-9 are not yet accepted. Exact-deployment logs contain
+authenticated GET traffic but zero `POST /api/commands` and no command-route
+4xx/5xx. A fresh Chrome tab as `daniel.hughen@gmail.com` loads current
+production, but the tenant has zero connected AI accounts, ready bots, or
+assignments; one Codex connection is unfinished and Claude OAuth is not
+complete. Provider OAuth and route setup must finish before a fresh command
+and persisted Step 9 correlation can be measured.
 
 ## 2026-08-27: canonical Job Search is live and production accepted
 ## 2026-08-25: Revenue — Stripe subscription billing behind the existing storefront (ADR-149)
@@ -1415,11 +1436,11 @@ acceptance criteria and none is claimed to have.
 
 ## Release blockers
 
-### Step 8 stale-error containment candidate (2026-08-27)
+### Step 8 provider-route acceptance remains (2026-08-28)
 
-- The repeated `invalid Phase 1C command plan` screenshot is an Aug 22 client result. Production request logs contain no newer Step 8 POST, while the hosted `20260822001000` contract is present and its exact Aug 23 signed-in request returned `202`.
-- `CommandComposer` now keeps a current-attempt error readable, labels the same-idempotency retry explicitly, and clears that result when its intent changes or the composer remounts. The command route maps the two exact legacy schema-skew refusals to a bounded `503 factory_command_schema_out_of_date` response instead of exposing a database error.
-- This is a local candidate only until exact-head CI and production identity are recorded. A browser reload is required to replace the already-loaded Aug 22 JavaScript and React state.
+- The repeated `invalid Phase 1C command plan` screenshot came from a stale Aug 22 mounted client. Release `bb68659a0ee84370f83dd647ae57f4ccb83ea06c` is current, and its logs contain authenticated GETs but zero `POST /api/commands` and no command-route 4xx/5xx.
+- A fresh signed-in Chrome tab proves the current bundle loads for `daniel.hughen@gmail.com`; it also proves the tenant currently has zero connected AI accounts, ready bots, or assignments. One Codex connection is unfinished and Claude OAuth is incomplete.
+- Complete provider OAuth and route setup, then submit one fresh record-only command and verify its persisted Step 9 correlation. Do not claim Steps 8-9 accepted before that evidence exists.
 
 1. Preserve the prior verified production baseline before this update: commit `0c662a24393f682073e6002c5aff9339292226d8`, CI run `31749352644`, and READY deployment `dpl_FJKMapsyLB4hQPDsaykUo1cVUQp7`.
 2. Preserve the passing frozen local candidate and publish only after exact review, recording a new commit, CI run, and matching Vercel deployment. Keep `130015` local until a fresh exact RED approval authorizes only that complete forward migration on `qpuofpmagrmyamahqwxw`, including all four new no-secret constraints; then stop on any ledger, identity, constraint, secret-shaped-text regression, table/function ACL, signature, RLS/direct-denial, runtime, lint, or health mismatch.
@@ -1432,98 +1453,50 @@ acceptance criteria and none is claimed to have.
 9. Keep Phase 1B incomplete and Phase 1C/Phase 2 **Not Connected**. The intended control policy remains Autonomous Mode OFF, kill switch ON, and automatic actions OFF, but current hosted raw/effective drift must be remediated before that policy may again be claimed as observed fact.
 10. Update this file and `AI/QUALITY_SCORECARD.md` with exact hosted, monitoring, provider, worker, run, branch, commit, PR, CI, deployment, activation, and deactivation evidence before changing any **Not Connected** status.
 
-## 2026-08-27: ten-step Factory v2 release candidate (local only)
+## 2026-08-28: ten-step Factory v2 release is live
 
-Candidate `ead498b495ac59d920e6f76df7917ea830dbcf8c` is rebased on
-`origin/main` `1e803eba3a931cf6978666723853dee61ea344e8`. It implements the
+Exact `main` `bb68659a0ee84370f83dd647ae57f4ccb83ea06c` carries the
 Requirements -> Monitor lifecycle as one release-identity-bound graph: exact
-repository and base revision, explicit policy and approval gates, immutable
-Phase 1C command/PR/CI/deployment/monitor lineage, and exact run selection in
-the Factory UI. Focused local release verification passes 18 files / 207 tests,
-plus lint, typecheck, production build, and diff-check. This is local candidate
-evidence only; no production deployment or hosted database apply is claimed.
+repository/base revision, explicit policy and approval gates, immutable Phase
+1C command/PR/CI/deployment/monitor lineage, and exact run selection in the
+Factory UI. CI run `33149814278` passed quality plus browser/accessibility
+shards 1/3, 2/3, and 3/3. Vercel deployment
+`dpl_2A2bhtevZeBY6422ZYjVGJE5SuTU` / GitHub deployment `6137077047` is READY
+behind `www.theagoras.com`.
 
-The forward-only database cutover is isolated into two one-shot scopes and
-must remain ordered: `20260827000150_fence_legacy_graph_protocol.sql` first,
-then `20260827000200_graph_phase1c_release_lineage.sql` only after exact fence
-acceptance. Their stable LF-normalized SHA-256 identities are respectively
-`A4B505841D94CC89DFC82E24837DEDB78356B56C5F5698C0748F8B6735341A49`
-and `23197552DF3F442AE8264BF71BD28A7C479E09A64BF6E298C615B767A96572BE`.
-Both remain unhosted pending publication, exact-head CI/Vercel identity, and
-the protected apply/postflight sequence.
+The forward-only database sequence is complete: the previously accepted
+`20260827000150` fence was not replayed; run `33150654596` applied only
+containment migration `20260827000210`, and run `33150707932` then applied the
+unchanged lineage migration `20260827000200`. All ledger, catalog, ACL, RLS,
+audit, runtime, lint, health, and stopped-safety postflights passed.
 
-Production audit evidence shows that the former `Claude - Daniel` bot and its
-bound AI account were explicitly retired and removed on 2026-08-23. Therefore
-the current Step 8 production reacceptance requires a fresh supported account
-connection and secure owner OAuth completion; it is not evidence of a current
-command-planner code failure. Until that connection exists, the provider path
-remains **Not Connected**. Workers, autonomous mode, provider execution, and
-all automatic actions remain OFF; the global kill switch remains ON.
+Signed-in Steps 8-9 remain **Not Connected**, not failed. A fresh production
+session has no connected account, ready bot, or assignment; the owner must
+finish provider OAuth and route setup before current command/Step 9 acceptance.
+Workers, autonomous mode, provider execution, and all automatic actions remain
+OFF; the global kill switch remains ON.
 
-## 2026-08-28: exact release, committed fence, and forward artifact containment
+## 2026-08-28: exact containment and lineage acceptance
 
-Release `0880191b367d12d42f8ce4af9c267657c10c5fce` is on `main`; exact-head
-CI run `33143981765` passed the quality job and all three browser/accessibility
-shards, and Vercel deployment `dpl_9fd1i9M7USTeUEd6NqX7GCi1nF6R` is READY
-behind `www.theagoras.com`. This release contains the workflow-size recovery:
-the protected workflow is 472,229 Git-blob bytes and its executable lines are
-unchanged. The earlier zero-job run `33143231202` executed no DDL.
+Release `bb68659a0ee84370f83dd647ae57f4ccb83ea06c` is exact production. Probe
+run `33150619218` reported four legacy artifacts, manifest SHA-256
+`784acaca2b0957ecb0eeea85e3d0dde2e64ba653c744e708ec8d4094f9175b99`,
+and downstream blockers `0|0|0|0`, without logging payloads or row identities.
+Run `33150654596` matched that exact manifest and applied only hash-pinned
+`20260827000210`; run `33150707932` then reconstructed the same manifest from
+private immutable audit evidence and applied unchanged hash-pinned
+`20260827000200`.
 
-Protected run `33144600401` then applied exactly
-`20260827000150_fence_legacy_graph_protocol.sql` once to Supabase project
-`qpuofpmagrmyamahqwxw`. Its ledger, function-ACL, drain, and safety postflight
-passed: the nine legacy graph/Phase 1C mutators have no browser or
-`service_role` execute authority, graph and Phase 1C running-row counts were
-`0|0`, no executor is connected, autonomy and all automatic actions are OFF,
-and the global kill switch remains ON. This committed fence must not be
-replayed or reversed.
+Both workflows passed transactional and post-commit ledger, catalog, FORCE
+RLS, raw table/function ACL, immutable audit, constraint, exact tombstone,
+runtime, lint, health, and stopped-worker checks. Post-v2, eight legacy
+signatures remain fully revoked and the replacement
+`decide_node_gate(uuid,boolean,text)` is authenticated-only,
+owner/admin-checked, `SECURITY DEFINER`, pinned to `pg_catalog`, and
+evidence-bound. The prior `00150` fence was not replayed; never reset,
+down-migrate, or restore a legacy grant.
 
-The separately dispatched lineage run `33144659265` failed closed while
-executing unchanged migration
-`20260827000200_graph_phase1c_release_lineage.sql`. At line 2645 its catalog
-preflight raised `legacy graph artifact payload is sensitive or oversized;
-contain with a forward repair`. The workflow invoked the migration and its
-ledger insert in one `psql --single-transaction`; PostgreSQL rolled back every
-`00200` DDL statement and the ledger insert atomically. Migration `00200`
-therefore remains absent and none of its v2 catalog/ACL changes is hosted.
-
-The local forward-only containment candidate is
-`20260827000210_contain_legacy_graph_artifact_payloads.sql`, SHA-256
-`c37a55efe74e9a9b4118924e1b2cbd0378a76f0d98c9747c6c66fffda9697de1`.
-It records only a digest, byte count, bounded classification, and immutable
-identity evidence in a private FORCE-RLS table; replaces each offending legacy
-payload with a bounded evidence-linked tombstone; installs update immutability;
-and validates both sensitive-key and one-megabyte payload constraints. It is
-not hosted yet.
-
-Dedicated workflow `graph-artifact-containment.yml` keeps three operations
-separate under the same `apply-hosted-migrations` concurrency group. `probe`
-reports only candidate counts, a payload-free manifest SHA-256, and downstream
-blocker counts. `contain` requires those exact probe outputs, rechecks them
-while locking `node_runs` and the artifact state, and stages only hash-pinned
-`00210`. `lineage`, available only after accepted `00210`, requires the same
-positive count and manifest SHA-256 from `probe`, reconstructs that identity
-from the private containment-audit rows before locking, under lock, and after
-commit, verifies the exact evidence-linked tombstones and raw table/function
-ACLs, and stages only unchanged hash-pinned `00200`.
-
-Security review makes the legacy catalog fence unconditional but
-state-dependent. Before v2, all nine legacy signatures are fully revoked.
-After unchanged `00200`, eight remain fully revoked while
-`decide_node_gate(uuid,boolean,text)` is deliberately replaced with an
-authenticated-execute-only, owner/admin-checked, `SECURITY DEFINER`,
-`search_path=pg_catalog`, evidence-bound gate-decision RPC; anonymous and
-`service_role` cannot execute it. Any fresh or future-dated active/draining
-worker heartbeat is a stop. Constraints, FORCE RLS, exact raw table/function
-ACLs, and immutable audit triggers validate inside the same transaction as the
-DDL and ledger insert and again after commit, including worker-stopped state.
-No payload or row identifier is logged. Both `00210` and
-unchanged `00200` remain unhosted and separately pending exact `contain` and
-`lineage` acceptance; never bundle, reset, replay `00150`, or down-migrate.
-
-Fresh production logs after the exact release contain no
-`POST /api/commands`; the only command traffic is successful GET polling. The
-raw `invalid Phase 1C command plan` text cannot be a response from the exact
-server bundle and is still an old mounted client result. A new signed-in POST
-and its immutable command/route identity remain required before Steps 8 and 9
-are accepted.
+Fresh production diagnosis remains exact: authenticated GETs reached the new
+deployment, but no command POST or command-route 4xx/5xx exists. Current
+Steps 8-9 acceptance awaits completion of a supported provider OAuth flow and
+the resulting connected account, ready bot, and project assignment.
