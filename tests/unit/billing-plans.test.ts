@@ -6,6 +6,7 @@ vi.mock("server-only", () => ({}));
 
 import {
   billingConnected,
+  describeBillingConfiguration,
   PLANS,
   planByKey,
   planForPriceId,
@@ -103,5 +104,35 @@ describe("billingConnected", () => {
     vi.stubEnv("STRIPE_SECRET_KEY", "sk_test_abcdefgh12345678");
     vi.stubEnv("STRIPE_PRICE_BASIC_MONTHLY", "price_abc123");
     expect(billingConnected()).toBe(true);
+  });
+});
+
+describe("describeBillingConfiguration", () => {
+  it("names each missing or malformed piece without ever echoing a value", () => {
+    clearBillingEnv();
+    vi.stubEnv("STRIPE_WEBHOOK_SECRET", "");
+    const empty = describeBillingConfiguration();
+    expect(empty.secretKey).toBe("missing");
+    expect(empty.webhookSecret).toBe("missing");
+    expect(empty.prices.pro.monthly).toBe(false);
+
+    // The classic paste failure: quotes travel into Vercel with the value.
+    vi.stubEnv("STRIPE_SECRET_KEY", '"sk_live_abcdefgh12345678"');
+    vi.stubEnv("STRIPE_WEBHOOK_SECRET", "whsec_abcdefgh12345678");
+    vi.stubEnv("STRIPE_PRICE_PRO_MONTHLY", "price_Pro123");
+    const quoted = describeBillingConfiguration();
+    expect(quoted.secretKey).toBe("malformed");
+    expect(quoted.webhookSecret).toBe("ok");
+    expect(quoted.prices.pro.monthly).toBe(true);
+
+    // A publishable key where the secret belongs is malformed, not ok.
+    vi.stubEnv("STRIPE_SECRET_KEY", "pk_live_abcdefgh12345678");
+    expect(describeBillingConfiguration().secretKey).toBe("malformed");
+
+    vi.stubEnv("STRIPE_SECRET_KEY", "rk_live_abcdefgh12345678");
+    expect(describeBillingConfiguration().secretKey).toBe("ok");
+
+    // Never a value, only shapes.
+    expect(JSON.stringify(describeBillingConfiguration())).not.toContain("rk_live");
   });
 });

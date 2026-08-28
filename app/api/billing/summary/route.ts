@@ -1,4 +1,4 @@
-import { billingConnected } from "@/lib/billing/plans";
+import { billingConnected, describeBillingConfiguration } from "@/lib/billing/plans";
 import { readUsage, resolveEntitlements } from "@/lib/billing/entitlements";
 import { ApiRequestError, jsonNoStore, requestErrorResponse } from "@/lib/server/http";
 import { supabaseBoundaryErrorResponse } from "@/lib/supabase/http";
@@ -19,8 +19,13 @@ export async function GET() {
       readUsage(client, activeOrganization.id),
     ]);
 
+    const canManage = activeOrganization.role === "owner" || activeOrganization.role === "admin";
+
     return jsonNoStore({
       connected: billingConnected(),
+      // Shapes only, never values, and only for the people who can fix them:
+      // which configuration pieces this deployment can see.
+      configuration: canManage ? describeBillingConfiguration() : undefined,
       plan: {
         key: entitlements.plan.key,
         name: entitlements.plan.name,
