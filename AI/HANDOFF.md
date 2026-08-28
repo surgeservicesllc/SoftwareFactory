@@ -72,7 +72,59 @@ current release. Hard refresh/reopen/submission is the correct next probe. Do
 not add or replay a migration until a failing current-deployment POST has a
 request ID and proves catalog drift.
 
-## Newest (2026-08-25 ~19:15Z): the retry that never happened (ADR-146)
+## Newest (2026-08-25 ~23:00Z): revenue — subscription billing shipped behind a Not Connected gate (ADR-149)
+
+The owner directed a revenue avenue. What ships in this release: Stripe
+subscription billing for the plans the pricing page has always advertised.
+`lib/billing/` (plans, entitlements, thin Stripe REST client + HMAC webhook
+verification, subscription mirror), `/api/billing/{checkout,portal,webhook,summary}`,
+enforcement as HTTP 402 on project creation and graph launches past the plan,
+`/pricing` cards that become checkout buttons only where a configured price
+stands behind them, and `/solutions/billing` under Settings. 56 tests in six new
+files, plus quota regressions inside the existing launch- and
+project-route suites.
+
+**Release order — two migrations now ride this branch, both apply-first:**
+
+1. `scope=runs-closure-note` (20260825000300, ADR-148)
+2. `scope=billing-foundation` (20260825000400, ADR-149)
+3. then merge/deploy the code.
+
+Neither migration depends on the other; both are additive and safe against
+the currently deployed code. Until the owner completes
+`docs/BILLING_GO_LIVE.md` (Stripe account, restricted key, four price ids,
+webhook secret, `SUPABASE_SERVICE_ROLE_KEY` on Vercel, redeploy), every
+billing surface renders **Not Connected** and the storefront behaves exactly
+as it did before this change. The webhook is the only subscription writer;
+browsers hold zero Stripe keys and zero write grants on billing tables.
+
+## Earlier (2026-08-25 ~20:00Z): the run that never said why (ADR-148; 147 was taken by Job Search on main)
+
+Defect #11, from the same live queue read. `graph-run.ts` composes a
+run-level explanation on every close — the fan-in assessment, the "this
+run is void" statement, and the correction that gate-halted nodes did
+not fail — and its own comment says the record should carry it "rather
+than leaving the correction to whoever happens to know the distinction".
+
+It was left to whoever happens to know. The message reached
+`completeRun`, whose parameter was named `_detail` because nothing read
+it: the RPC had no parameter and `graph_runs` had no column. Ten
+CANCELLED runs in the live queue state no reason at all.
+
+Migration `20260825000300` adds `closure_note`, the writer stores it, and
+`list_graph_runs` projects it. **Apply the migration before deploying the
+code** — the new parameter is defaulted, so the currently deployed
+seven-argument call still resolves, but the reverse is not true. The
+apply scope is `runs-closure-note` in `apply-hosted-migrations.yml`.
+
+Two collisions were caught during this change and are worth knowing
+about: #416 landed `20260825000200` while this was in flight, so the
+timestamp was taken (renumbered to `000300`) *and* its rebuild of
+`list_graph_runs` would have been reverted had this file been rebuilt
+from the older `20260823001000`. Twenty-one tests pin the newest
+migration filename; they are re-pointed here.
+
+## Earlier (2026-08-25 ~19:15Z): the retry that never happened (ADR-146)
 
 Inspecting the live queue rather than re-running green tests turned up
 defect #10, and a second defect underneath it. Runs `28b4dedf` (06:02Z)

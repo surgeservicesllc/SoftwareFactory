@@ -186,7 +186,7 @@ export class SupabaseGraphStore implements GraphRunStore {
     graphRunId: string,
     state: "COMPLETED" | "PARTIAL" | "FAILED" | "CANCELLED" | "BUDGET_STOPPED",
     hadPartialInput: boolean,
-    _detail?: string | null,
+    detail?: string | null,
     usage?: { readonly tokensUsed?: number; readonly costMicros?: number },
   ): Promise<void> {
     const { error } = await this.client.rpc("complete_graph_run_as_worker", {
@@ -197,6 +197,10 @@ export class SupabaseGraphStore implements GraphRunStore {
       p_tokens_used: usage?.tokensUsed ?? null,
       p_cost_micros: usage?.costMicros ?? null,
       p_budget_action: state === "BUDGET_STOPPED" ? "STOP_GRACEFULLY" : null,
+      // The engine's own assessment of why this run ended as it did. It was
+      // computed on every close and discarded on every close: this parameter
+      // was named `_detail` because nothing read it.
+      p_closure_note: detail ?? null,
     });
     if (error) throw new Error(`Closing the graph run failed: ${error.message ?? "unknown error"}`);
   }

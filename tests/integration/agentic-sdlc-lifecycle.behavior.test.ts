@@ -132,11 +132,14 @@ function workerStore(db: PGlite): GraphRunStore {
         [WORKER, nodeId, graphRunId, anchorCount]);
       await db.exec("reset role");
     },
-    async completeRun(graphRunId, state, hadPartialInput, _detail, usage) {
+    async completeRun(graphRunId, state, hadPartialInput, detail, usage) {
       await asWorker(db);
       await db.query(
-        `select public.complete_graph_run_as_worker($1, $2::uuid, $3::public.graph_run_state, $4, $5, $6)`,
-        [WORKER, graphRunId, state, hadPartialInput, usage?.tokensUsed ?? null, usage?.costMicros ?? null],
+        `select public.complete_graph_run_as_worker($1, $2::uuid, $3::public.graph_run_state, $4, $5, $6, null, $7)`,
+        [
+          WORKER, graphRunId, state, hadPartialInput,
+          usage?.tokensUsed ?? null, usage?.costMicros ?? null, detail ?? null,
+        ],
       );
       await db.exec("reset role");
     },

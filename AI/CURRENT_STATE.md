@@ -3,6 +3,35 @@
 Last reviewed: 2026-08-27
 
 ## 2026-08-27: canonical Job Search is live and production accepted
+## 2026-08-25: Revenue — Stripe subscription billing behind the existing storefront (ADR-149)
+
+The owner directed that the site needs a revenue avenue. Built and tested,
+shipping with the ADR-148 release: organization-level Stripe subscriptions
+behind the plans `marketing_pricing_plans` has advertised since 20260813000500
+(Free / Basic $29 / Pro $79 / Enterprise).
+
+- **Migration `20260825000400`** (scope=billing-foundation, **not yet
+  hosted**): `billing_customers`, `billing_subscriptions`, `billing_events`
+  with forced RLS, member reads only, service-role webhook writes, audit
+  events, `ensure_billing_customer`. Additive; apply before deploying.
+- **Server**: thin Stripe REST client + HMAC webhook verification
+  (`lib/billing/stripe.ts`, no SDK, no browser key of any kind), plan catalog
+  + entitlements (`lib/billing/plans.ts`, `entitlements.ts`), webhook mirror
+  (`lib/billing/webhook.ts` — idempotent by event id, attribution by ids
+  only). Routes: `/api/billing/{checkout,portal,webhook,summary}`.
+- **Enforcement**: HTTP 402 `plan_limit_reached` on project creation and graph
+  launches past the plan (Free: 1 project, 10 launches/UTC-month, 1 seat;
+  Basic: 50 launches, 5 seats; Pro: 250 launches, 25 seats). Creation-gating
+  only; existing work never stops.
+- **UI**: `/pricing` cards become checkout buttons only where a configured
+  Stripe price stands behind them; `/solutions/billing` (Settings → Billing)
+  shows plan, usage meters, upgrade, and the Stripe portal. Everything renders
+  **Not Connected** until the owner completes `docs/BILLING_GO_LIVE.md`.
+- **To take the first payment** the owner must: apply the migration scope, set
+  the six `STRIPE_*` variables plus `SUPABASE_SERVICE_ROLE_KEY` on Vercel,
+  create the webhook endpoint, and redeploy — the runbook is the exact list.
+
+## 2026-08-25: Search, ported from ai-job-search into Job Seeker
 
 The complete integration is on `main`. Application behavior release
 `aabd82b3a626da94a2478ef26f043a51d059cd15` is deployed through exact Vercel
@@ -95,16 +124,21 @@ live external facts rather than guarantees.
 
 ## 2026-08-25: the ten-step factory, and the defects driving it exposed
 
-Driving the owner's ten-step flow against live production found five graph
+Driving the owner's ten-step flow against live production found six graph
 engine defects that review had not: gate-halted work re-paid (ADR-143), a
 capacity-voided run consuming a gate approval and stranding a lifecycle
 permanently (ADR-144), a flat 24-turn budget too small for implementation
 nodes, the artifact sensitive-data guard's refusal killing an entire
-drain for every organization (both ADR-145), and a 529 overload retried
-zero times over a backoff the engine declared but never applied
-(ADR-146). All five are fixed, each with a regression that fails without
-the fix; ADR-143 and ADR-144's migrations are hosted-applied and
-readback-verified.
+drain for every organization (both ADR-145), a 529 overload retried zero
+times over a backoff the engine declared but never applied (ADR-146),
+and the run's own account of why it ended computed on every close and
+discarded on every close (ADR-148). All six are fixed, each with a
+regression that fails without the fix; ADR-143 and ADR-144's migrations
+are hosted-applied and readback-verified. **ADR-148's migration
+(`20260825000300`) is not yet hosted** — apply it with the
+`runs-closure-note` scope *before* the code that sends the note reaches
+production, since the deployed worker's call still resolves against the
+new function but not the reverse.
 
 The last of them came from reading the live queue rather than re-running
 tests that already pass: two runs of one graph, six minutes apart, lost

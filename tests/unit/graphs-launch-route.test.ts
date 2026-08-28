@@ -42,6 +42,28 @@ const targetRow = {
 
 const rpc = vi.fn();
 
+/**
+ * The billing tables the launch quota reads. Chainable like PostgREST and
+ * thenable at the end; the counts default to an untouched Free organization
+ * so every pre-existing case launches exactly as it did before quotas.
+ */
+const usageCounts = { graphs: 0, projects: 0, members: 1 };
+
+function from(table: string) {
+  const chain: Record<string, unknown> = {};
+  for (const method of ["select", "eq", "neq", "gte", "lt", "order", "limit"]) {
+    chain[method] = () => chain;
+  }
+  (chain as { then: unknown }).then = (resolve: (value: unknown) => void) => {
+    if (table === "billing_subscriptions") return resolve({ data: [], error: null });
+    if (table === "graphs") return resolve({ count: usageCounts.graphs, error: null });
+    if (table === "projects") return resolve({ count: usageCounts.projects, error: null });
+    if (table === "organization_members") return resolve({ count: usageCounts.members, error: null });
+    return resolve({ data: null, error: null });
+  };
+  return chain;
+}
+
 function request(body: unknown) {
   return new Request("https://factory.example/api/graphs", {
     body: JSON.stringify(body),
@@ -62,14 +84,34 @@ beforeEach(() => {
     // resolve_phase1c_command_target
     return { single: async () => ({ data: targetRow, error: null }) };
   });
+  usageCounts.graphs = 0;
+  usageCounts.projects = 0;
   requireActiveOrganization.mockResolvedValue({
     activeOrganization: { id: organizationId, role: "owner" },
-    client: { rpc },
+    client: { rpc, from },
   });
   dispatchGraphWorker.mockResolvedValue(undefined);
 });
 
 describe("POST /api/graphs", () => {
+  it("refuses the launch at the Free plan's monthly allowance, before any compile work", async () => {
+    usageCounts.graphs = 10;
+
+    const response = await POST(request({ projectId, templateKey: "full_lifecycle" }));
+
+    expect(response.status).toBe(402);
+    const body = await response.json() as {
+      error: { code: string; message: string; limit: number; current: number; plan: string };
+    };
+    expect(body.error.code).toBe("plan_limit_reached");
+    expect(body.error.limit).toBe(10);
+    expect(body.error.current).toBe(10);
+    expect(body.error.plan).toBe("free");
+    // The refusal cost nothing: no graph was created, no worker woken.
+    expect(rpc).not.toHaveBeenCalled();
+    expect(dispatchGraphWorker).not.toHaveBeenCalled();
+  });
+
   it("wakes the worker for the graph it just created, and says so", async () => {
     const response = await POST(request({ projectId, templateKey: "full_lifecycle" }));
 
@@ -175,15 +217,20 @@ describe("POST /api/graphs refuses before it records", () => {
       activeOrganization: { id: organizationId, role: "owner" },
       client: {
         rpc,
-        from: () => ({
-          select: () => ({
-            eq: () => ({
-              eq: () => ({
-                eq: () => ({ maybeSingle: async () => ({ data: null, error: null }) }),
-              }),
-            }),
-          }),
-        }),
+        // The quota tables answer through the shared fake; only the custom
+        // template lookup needs its own not-found chain.
+        from: (table: string) =>
+          table === "graph_templates"
+            ? {
+                select: () => ({
+                  eq: () => ({
+                    eq: () => ({
+                      eq: () => ({ maybeSingle: async () => ({ data: null, error: null }) }),
+                    }),
+                  }),
+                }),
+              }
+            : from(table),
       },
     });
 

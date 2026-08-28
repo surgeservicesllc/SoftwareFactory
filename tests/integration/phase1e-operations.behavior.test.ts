@@ -190,14 +190,21 @@ describe("Phase 1E production operations behavior", () => {
     // record-only submission guard table.
     // The filter below is the real guarantee — this count exists so a new
     // table cannot slip in unexamined.
-    expect(rlsRows).toHaveLength(130);
+    expect(rlsRows).toHaveLength(133);
     expect(rlsRows.filter((row) => !row.relrowsecurity || !row.relforcerowsecurity)).toEqual([]);
 
     const { rows: grantRows } = await db.query<{ table_name: string }>(
       `select distinct table_name from information_schema.role_table_grants
        where grantee = 'service_role' and table_schema = 'public' order by table_name`,
     );
+    // The verified-webhook ingress set: GitHub's four and the Stripe billing
+    // mirror's three (20260825000400, ADR-149); billing audit goes through
+    // the record_billing_activity definer. The same list
+    // schema-security-invariants pins.
     expect(grantRows.map((row) => row.table_name)).toEqual([
+      "billing_customers",
+      "billing_events",
+      "billing_subscriptions",
       "github_change_requests",
       "github_installations",
       "github_repositories",

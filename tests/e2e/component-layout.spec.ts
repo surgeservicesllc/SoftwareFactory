@@ -211,6 +211,7 @@ const CASES = [
   "agentos",
   "autonomy",
   "bot-usage",
+  "billing",
   "job-seeker",
   "job-search",
   "resume-review",

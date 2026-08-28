@@ -24,10 +24,23 @@ manual jobs POST route still uses it; a later forward contraction must first
 move and test that final writer. The verdict is **HOSTED DATABASE PASS;
 APPLICATION PRODUCTION ACCEPTANCE PASS**.
 
-**Addendum, 2026-08-25 — the ten-step factory: five engine defects found by
-driving it, and what is actually proven (ADR-144, ADR-145, ADR-146):** the
+**Addendum, 2026-08-25 — billing (ADR-149):** the revenue engine is tested at
+every seam it owns — 56 tests in six new files plus quota regressions in the
+launch and projects route suites: catalog invariants against the advertised
+matrix, price env resolution both directions, HMAC signature vectors
+(tamper, replay ±tolerance, key-roll), mirror idempotency and
+non-attribution refusals, checkout/portal/webhook routes including every
+Not Connected and forbidden path, and 402 enforcement at both creation
+boundaries proving the write RPC is never reached. What is deliberately NOT
+claimed: no test exercises Stripe's live API (the transport is the injected
+seam), and the end-to-end money path remains unproven until the owner runs
+the test-mode purchase in `docs/BILLING_GO_LIVE.md` step 7 — the scorecard
+will say so until a real test-mode webhook has landed on production.
+
+**Addendum, 2026-08-25 — the ten-step factory: six engine defects found by
+driving it, and what is actually proven (ADR-144 through ADR-146, plus ADR-148):** the
 owner's ten-step production-readiness goal was driven against live
-production, and the drive — not review — found five defects in the graph
+production, and the drive — not review — found six defects in the graph
 engine. Each was fixed with a regression that fails without it:
 
 - **Gate-halted re-pay (ADR-143, `20260824001100`).** A gate-approved node's
@@ -59,6 +72,15 @@ engine. Each was fixed with a regression that fails without it:
   and read by nothing, so every retry the engine ever performed fired into
   the instant that had just refused it. Both halves are fixed together;
   fixing either alone would have changed nothing.
+
+- **The run never said why it ended (ADR-148).** The engine composes a
+  run-level explanation on every close — including the correction that
+  gate-halted nodes did not fail — and threw it away: `completeRun`'s
+  parameter was named `_detail` because the RPC had no parameter and
+  `graph_runs` had no column. Ten CANCELLED runs in the live queue state no
+  reason. Migration `20260825000300` adds `closure_note` and carries it
+  through to `list_graph_runs`. **Not yet hosted**; apply before the code
+  ships, not after.
 
 **Ten-step flow, local: PASS.**
 `tests/integration/ten-step-consecutive-flow.behavior.test.ts` drives one

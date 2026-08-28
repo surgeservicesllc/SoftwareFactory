@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { checkGraphLaunch } from "@/lib/billing/entitlements";
 import { buildCustomTemplate, parseStoredDefinition } from "@/lib/graph/custom-templates";
 import { dispatchGraphWorker } from "@/lib/orchestration/dispatch";
 import { buildLaunchPlan } from "@/lib/graph/launch-plan";
@@ -65,6 +66,24 @@ export async function POST(request: Request) {
     const context = await operationsContext();
     const forbidden = requireManager(context);
     if (forbidden) return forbidden;
+
+    // The plan's monthly launch allowance. Checked before any compile work:
+    // a refusal must cost nothing and name the number it enforced.
+    const launchLimit = await checkGraphLaunch(context.client, context.activeOrganization.id);
+    if (!launchLimit.allowed) {
+      return jsonNoStore(
+        {
+          error: {
+            code: launchLimit.code,
+            message: launchLimit.message,
+            plan: launchLimit.planKey,
+            limit: launchLimit.limit,
+            current: launchLimit.current,
+          },
+        },
+        { status: 402 },
+      );
+    }
 
     // Built-in templates come from code; custom ones from the organization's
     // graph_templates rows, rebuilt through the same builder so both launch

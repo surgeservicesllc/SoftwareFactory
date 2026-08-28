@@ -2244,3 +2244,89 @@ Use this append-only log for decisions that constrain future implementation. Cha
   move and test that final writer before a later forward ACL contraction. No
   reset, down-migration, worker, autonomous action or deployment is implied by
   accepting this source decision.
+
+## ADR-148 - A run states why it ended, in the run's own row
+
+- Date: 2026-08-25
+- Status: accepted
+- Context: `lib/worker/graph-run.ts` composes a run-level explanation
+  before every close - whether the fan-in was whole, that a
+  capacity-voided run is void rather than failed, and the correction
+  that matters most to a reader: "N of the nodes counted above did not
+  fail: they halted at an open lifecycle gate and continue once the gate
+  is decided." Its own comment says the record should carry that "rather
+  than leaving the correction to whoever happens to know the
+  distinction". It was left to whoever happens to know. The message
+  reached `GraphRunStore.completeRun`, whose parameter was named
+  `_detail` because nothing read it: `complete_graph_run_as_worker` had
+  no parameter to carry it and `graph_runs` had no column to hold it.
+  Every run-level explanation this engine has produced was computed and
+  discarded. The live queue shows the cost - ten CANCELLED runs, none of
+  which states a reason.
+- Decision: `graph_runs` gains `closure_note`, written by
+  `complete_graph_run_as_worker` from that same assessment and projected
+  by `list_graph_runs` (migration 20260825000300). This is the argument
+  `node_runs.blocked_reason` has made since 20260814000100, one level
+  up: a run whose reason is invisible sends the reader to the event log
+  to learn something the row already knew. A note that trims to nothing
+  is stored as null, because an empty note reads as "a reason was
+  recorded and it was blank".
+- Bounds: no backfill. Runs closed before the column existed have no
+  note because none was ever stored, and writing a plausible one now
+  would put invented text under a heading that reads like a record. The
+  migration is backward compatible with the code already deployed - the
+  new parameter is defaulted, so the live worker's seven-argument call
+  still resolves - which fixes the release order: apply the migration
+  first, then deploy the code that sends the note. The `list_graph_runs`
+  body is restated from 20260825000200 rather than the older
+  20260823001000, because that file landed on main while this change was
+  in flight and rebuilding from the stale version would have silently
+  reverted its cost columns.
+
+## ADR-149 - Revenue: Stripe subscriptions behind the storefront that already existed
+
+- Date: 2026-08-25
+- Status: accepted
+- Context: the owner directed, verbatim, that the site needs a revenue
+  avenue. The storefront predated this decision by two weeks:
+  `marketing_pricing_plans` (20260813000500) has advertised Free / Basic
+  $29 / Pro $79 / Enterprise with yearly discounts, and every "Start
+  Free Trial" button pointed at `/sign-in` with nothing behind it. The
+  gap was not a pricing page; it was that no mechanism existed by which
+  money could move or a plan could mean anything.
+- Decision: organization-level Stripe subscription billing, mirrored
+  into Supabase, enforced at the two creation boundaries that cost
+  compute. Specifically: (1) `billing_customers` /
+  `billing_subscriptions` / `billing_events` (migration 20260825000400,
+  scope=billing-foundation) with forced RLS, member-only reads, and no
+  browser write path - the verified Stripe webhook (service_role, the
+  same posture as the GitHub webhook) is the only subscription writer,
+  idempotent by event id; (2) a deliberately thin Stripe REST client
+  (three endpoints plus HMAC signature verification, no SDK dependency,
+  no Stripe key of any kind in the browser - Checkout and the portal are
+  Stripe-hosted redirects); (3) entitlements resolved from the newest
+  standing subscription (`active`, `trialing`, and `past_due` for
+  Stripe's retry grace) with Free as the absence of one, enforced as
+  HTTP 402 refusals naming plan, limit, and current count on project
+  creation and graph launches - creation-gating only, never revocation
+  of existing work; (4) the pricing page's cards become real checkout
+  buttons only for plans whose Stripe price is actually configured, and
+  `/solutions/billing` (Settings → Billing) shows plan, meters, and the
+  portal. Plan copy stays in the marketing tables; plan entitlements
+  live in `lib/billing/plans.ts` so a limit and its enforcement version
+  together.
+- Bounds: absent configuration everything renders **Not Connected** and
+  the storefront behaves exactly as before - no dead checkout, no
+  pretend success. Prices are never hard-coded; the charged amount is
+  Stripe's price object, the advertised amount is the marketing row, and
+  the go-live runbook (docs/BILLING_GO_LIVE.md) is the owner's checklist
+  for making them agree. Attribution is by ids only (metadata uuid or
+  the customer mapping); a subscription the mirror cannot attribute is
+  recorded and never guessed at. Seat enforcement waits for a member
+  invite surface to exist; Enterprise stays contact-only. The quota gates
+  the Workflows Launch route; command-driven analysis graphs
+  (`launch_command_analysis_graph`) count toward the month's usage but are
+  gated by their own command budgets rather than refused here — pricing a
+  command's implicit graph is a follow-on, recorded in the backlog. The quota
+  check is a read-before-write soft limit by design - one concurrent
+  overshoot costs at most one row and corrects on the next attempt.

@@ -13,7 +13,7 @@ import { GraphRunsPanel } from "@/components/graph-runs-panel";
  * rather than a friendlier substitute.
  */
 
-function runWith(node: Record<string, unknown>) {
+function runWith(node: Record<string, unknown>, run: Record<string, unknown> = {}) {
   return {
     runs: [
       {
@@ -49,6 +49,7 @@ function runWith(node: Record<string, unknown>) {
         isLifecycle: true,
         iteration: 1,
         maxIterations: 3,
+        ...run,
       },
     ],
   };
@@ -200,5 +201,57 @@ describe("a lifecycle gate in the runs panel", () => {
     expect(cells[2]).toHaveTextContent("COMPLETED");
     expect(screen.queryByRole("button", { name: "Approve" })).toBeNull();
     expect(screen.queryByText(/awaiting a decision/i)).toBeNull();
+  });
+
+  it("shows the run's own account of why it ended", async () => {
+    // The engine composed this on every close and the record dropped it, so a
+    // reader met a CANCELLED run with no stated reason and had to infer one
+    // from the node errors — or know the distinction between a node that
+    // failed and one halted at a gate, which is exactly what the note exists
+    // to spare them.
+    const note = "The provider withheld capacity (session or rate limit) for every "
+      + "attempt; the run is void.";
+    vi.stubGlobal("fetch", () =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        json: async () => runWith({
+            node_key: "architecture",
+            executor: "MODEL",
+            capability: "architecture",
+            state: "COMPLETED",
+            provider: null,
+            model: null,
+            latency_ms: null,
+            error_message: null,
+        }, { state: "CANCELLED", closureNote: note }),
+      } as Response),
+    );
+    render(<GraphRunsPanel />);
+
+    expect(await screen.findByTestId("run-closure-note")).toHaveTextContent(note);
+  });
+
+  it("says nothing where there is no note, rather than an empty panel", async () => {
+    vi.stubGlobal("fetch", () =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        json: async () => runWith({
+            node_key: "architecture",
+            executor: "MODEL",
+            capability: "architecture",
+            state: "COMPLETED",
+            provider: null,
+            model: null,
+            latency_ms: null,
+            error_message: null,
+        }, { closureNote: null }),
+      } as Response),
+    );
+    render(<GraphRunsPanel />);
+
+    await screen.findByText("architecture");
+    expect(screen.queryByTestId("run-closure-note")).toBeNull();
   });
 });

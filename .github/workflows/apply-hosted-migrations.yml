@@ -118,6 +118,23 @@ on:
           a capacity-voided (CANCELLED) run no longer consumes an approval —
           the sequence that stranded live lifecycle d7241cf4; replaces one
           definer function in place, same grants, no table or row changes;
+          "billing-foundation" applies only 20260825000400: the billing
+          tables (customers, subscriptions, events) with forced RLS and
+          member-read policies, service_role write grants for the verified
+          Stripe webhook, two activity_event_type values, and
+          ensure_billing_customer granted to authenticated. Purely additive;
+          nothing deployed reads these objects until the billing code ships,
+          so apply first, then deploy;
+          "runs-closure-note" applies only 20260825000300, which gives
+          graph_runs a closure_note column and carries the engine's own
+          account of why a run ended through complete_graph_run_as_worker
+          into list_graph_runs — the explanation was computed on every close
+          and discarded on every close, because neither the function nor the
+          table could hold it; additive column, both functions dropped and
+          recreated with their grants restated, no existing row rewritten;
+          apply this BEFORE deploying the code that sends the note, because
+          the new function's extra parameter is defaulted and therefore still
+          answers the currently deployed seven-argument call;
           "ledger-repair-node-detail" writes NO DDL. 20260823001000 never ran on
           hosted, but its effect is present: 20260825000200 replaced
           list_graph_runs with the current body, node detail included. Leaving
@@ -188,6 +205,8 @@ on:
           - run-artifacts-read
           - resume-gate-halted
           - gate-approval-voided
+          - runs-closure-note
+          - billing-foundation
           - analysis-launch-commit
           - delete-selected-pipelines
           - stop-and-delete-pipelines
@@ -6086,6 +6105,133 @@ jobs:
             exit 1
           fi
           echo "Applied and verified: an approved gate passes recorded work through at zero cost."
+
+      - name: Billing foundation tables and boundary (scope=billing-foundation)
+        # Exactly one file — 20260825000400. Creates billing_customers,
+        # billing_subscriptions, billing_events with RLS forced, member-read
+        # policies, service_role write grants for the verified Stripe webhook,
+        # two activity_event_type values, and ensure_billing_customer granted
+        # to authenticated. Purely additive: nothing deployed reads these
+        # objects until the billing code ships, so apply first, then deploy.
+        if: ${{ inputs.scope == 'billing-foundation' }}
+        run: |
+          if [ -z "$SUPABASE_DB_PASSWORD" ]; then
+            echo "::error::This scope requires SUPABASE_DB_PASSWORD for live verification."
+            exit 1
+          fi
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+
+          BILLING_FILE=supabase/migrations/20260825000400_billing_foundation.sql
+          if [ "$(sha256sum "$BILLING_FILE" | cut -d' ' -f1)" != "0d7d91336a700d3d93765a4a256e3aba29a684c9092653e7487ac5dc6e077ea7" ]; then
+            echo "::error::Migration hash mismatch; refusing production DDL."
+            exit 1
+          fi
+
+          ROW=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
+            "select count(*) from supabase_migrations.schema_migrations where version = '20260825000400';")
+          if [ "$ROW" != "0" ]; then
+            echo "::error::Ledger already records 20260825000400 (want 0)."
+            exit 1
+          fi
+
+          echo "Applying ${BILLING_FILE}"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -1 -q -f "$BILLING_FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied 20260825000400
+          else
+            npx supabase migration repair --status applied 20260825000400 --db-url "$DB_URL"
+          fi
+
+          TABLES=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
+            select count(*) from information_schema.tables
+             where table_schema = 'public'
+               and table_name in ('billing_customers','billing_subscriptions','billing_events');")
+          RLS=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
+            select count(*) from pg_class c join pg_namespace n on n.oid = c.relnamespace
+             where n.nspname = 'public'
+               and c.relname in ('billing_customers','billing_subscriptions','billing_events')
+               and c.relrowsecurity and c.relforcerowsecurity;")
+          FN=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
+            select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+             where n.nspname = 'public'
+               and p.proname in ('ensure_billing_customer','record_billing_activity');")
+          if [ "$TABLES" != "3" ] || [ "$RLS" != "3" ] || [ "$FN" != "2" ]; then
+            echo "::error::Billing foundation verification failed (tables=$TABLES rls=$RLS fn=$FN)."
+            exit 1
+          fi
+          echo "Applied and verified: billing tables exist with forced RLS and the customer boundary."
+
+      - name: A run states its closure reason (scope=runs-closure-note)
+        # Exactly one file — 20260825000300. Adds graph_runs.closure_note and
+        # rebuilds complete_graph_run_as_worker (one new defaulted parameter)
+        # and list_graph_runs (one new projected column). Backward compatible
+        # with the code currently deployed: the new parameter defaults, so the
+        # seven-argument call the live worker makes still resolves. Apply this
+        # first, then deploy the code that sends the note.
+        if: ${{ inputs.scope == 'runs-closure-note' }}
+        run: |
+          if [ -z "$SUPABASE_DB_PASSWORD" ]; then
+            echo "::error::This scope requires SUPABASE_DB_PASSWORD for live verification."
+            exit 1
+          fi
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+
+          NOTE_FILE=supabase/migrations/20260825000300_runs_state_their_closure_reason.sql
+          if [ "$(sha256sum "$NOTE_FILE" | cut -d' ' -f1)" != "dc54e9eaab33982bd70606082bbd42a68399f8452581ba3dd4393fefee573ee3" ]; then
+            echo "::error::Migration hash mismatch; refusing production DDL."
+            exit 1
+          fi
+
+          ROW=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
+            "select count(*) from supabase_migrations.schema_migrations where version = '20260825000300';")
+          if [ "$ROW" != "0" ]; then
+            echo "::error::Ledger already records 20260825000300 (want 0)."
+            exit 1
+          fi
+
+          READY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
+            select exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+                            where n.nspname = 'public' and p.proname = 'list_graph_runs');")
+          if [ "$READY" != "t" ]; then
+            echo "::error::list_graph_runs is missing; apply the lifecycle scopes first."
+            exit 1
+          fi
+
+          echo "Applying ${NOTE_FILE}"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -1 -q -f "$NOTE_FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied 20260825000300
+          else
+            npx supabase migration repair --status applied 20260825000300 --db-url "$DB_URL"
+          fi
+
+          COLUMN=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
+            select exists (select 1 from information_schema.columns
+                            where table_schema = 'public' and table_name = 'graph_runs'
+                              and column_name = 'closure_note');")
+          PROJECTED=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
+            select pg_get_functiondef(p.oid) like '%closure_note%'
+              from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+             where n.nspname = 'public' and p.proname = 'list_graph_runs';")
+          WRITER=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
+            select pg_get_function_identity_arguments(p.oid) like '%p_closure_note text%'
+              from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+             where n.nspname = 'public' and p.proname = 'complete_graph_run_as_worker';")
+          if [ "$COLUMN" != "t" ] || [ "$PROJECTED" != "t" ] || [ "$WRITER" != "t" ]; then
+            echo "::error::closure_note did not read back (column=$COLUMN read=$PROJECTED write=$WRITER)."
+            exit 1
+          fi
+          echo "Applied and verified: a run can state why it ended, and the read returns it."
 
       - name: A gate approval survives voided runs (scope=gate-approval-voided)
         # Exactly one file — 20260825000100 — replacing claim_planned_graph in

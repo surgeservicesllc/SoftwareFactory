@@ -25,6 +25,7 @@ import { AgentOsConsole } from "@/components/agentos-console";
 import { AutonomyConsole } from "@/components/autonomy-console";
 import { BotFabricConsole } from "@/components/bot-fabric-console";
 import { BotManagerHome } from "@/components/bot-manager/home";
+import { BillingConsole } from "@/components/billing-console";
 import { BotUsageConsole } from "@/components/bot-usage-console";
 import { JobSeekerConsole } from "@/components/job-seeker/console";
 import { JobSearchPanel } from "@/components/job-seeker/search-panel";
@@ -257,6 +258,28 @@ function serveFixtures() {
     if (url.includes("/api/autonomy/status")) return json({ status: AUTONOMY_STATUS });
     if (url.includes("/api/autonomy/decisions")) return json({ decisions: AUTONOMY_DECISIONS });
     if (url.includes("/api/worker/status")) return json({ worker: WORKER_STATUS });
+    if (url.includes("/api/billing/summary")) {
+      // A Pro organization mid-month: real numbers against real limits, so
+      // the meters render their bars and the manage action appears — the
+      // densest state the page has.
+      return json({
+        connected: true,
+        plan: {
+          key: "pro",
+          name: "Pro",
+          limits: { maxProjects: 100000, graphLaunchesPerMonth: 250, maxSeats: 25 },
+        },
+        subscription: {
+          planKey: "pro",
+          status: "active",
+          cadence: "yearly",
+          currentPeriodEnd: "2027-08-25T00:00:00.000Z",
+          cancelAtPeriodEnd: false,
+        },
+        usage: { projects: 7, graphLaunchesThisMonth: 41, seats: 9 },
+        role: "owner",
+      });
+    }
     if (url.includes("/api/commands")) return json({ commands: COMMANDS });
     return unserved(url);
   }) as typeof window.fetch;
@@ -287,6 +310,7 @@ const CASES: Record<string, () => React.ReactElement> = {
   agentos: () => <InShell><AgentOsConsole /></InShell>,
   autonomy: () => <InShell><AutonomyConsole /></InShell>,
   "bot-usage": () => <InShell><BotUsageConsole /></InShell>,
+  billing: () => <InShell><BillingConsole /></InShell>,
   "job-seeker": () => <InShell><JobSeekerConsole /></InShell>,
   "job-search": () => <InShell><JobSearchPanel /></InShell>,
   /*

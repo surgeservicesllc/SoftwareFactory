@@ -10,6 +10,7 @@ import {
 import { findSensitiveData } from "@/lib/server/sensitive-data";
 import { supabaseBoundaryErrorResponse } from "@/lib/supabase/http";
 import { assertSameOriginRequest } from "@/lib/supabase/request";
+import { checkProjectCreation } from "@/lib/billing/entitlements";
 import { requireActiveOrganization } from "@/lib/supabase/tenant";
 
 export const runtime = "nodejs";
@@ -223,6 +224,25 @@ export async function POST(request: Request) {
       return jsonNoStore(
         { error: { code: "project_management_forbidden", message: "Organization owner or administrator access is required." } },
         { status: 403 },
+      );
+    }
+
+    // The plan's project allowance gates creation only — existing projects
+    // keep working whatever the plan says, because taking away work someone
+    // already has is not a pricing model.
+    const projectLimit = await checkProjectCreation(client, activeOrganization.id);
+    if (!projectLimit.allowed) {
+      return jsonNoStore(
+        {
+          error: {
+            code: projectLimit.code,
+            message: projectLimit.message,
+            plan: projectLimit.planKey,
+            limit: projectLimit.limit,
+            current: projectLimit.current,
+          },
+        },
+        { status: 402 },
       );
     }
 
