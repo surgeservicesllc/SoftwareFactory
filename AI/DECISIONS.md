@@ -2393,3 +2393,52 @@ Use this append-only log for decisions that constrain future implementation. Cha
   still requires a new exact-head CI/READY release and the separate 00150 then
   00200 one-shot acceptance sequence. It authorizes no worker, autonomy,
   automatic action, replay, reset, or down-migration.
+
+## ADR-153 - Legacy graph payloads are contained by an exact manifest, forward only
+
+- Date: 2026-08-28
+- Status: accepted locally; hosted probe, containment, and lineage acceptance pending
+- Context: exact run `33144600401` committed the `00150` legacy-authority
+  fence. The next protected run, `33144659265`, reached unchanged migration
+  `00200` and failed at its deliberate catalog guard because a pre-existing
+  graph artifact payload is sensitive or exceeds one megabyte. The migration
+  file and ledger insert ran inside one `psql --single-transaction`, so the
+  error atomically rolled back every `00200` DDL statement and its ledger row.
+  Editing the published migration, restoring legacy authority, resetting
+  history, or down-migrating would destroy the release identity or reopen the
+  fenced protocol.
+- Decision: add forward migration
+  `20260827000210_contain_legacy_graph_artifact_payloads.sql` (SHA-256
+  `c37a55efe74e9a9b4118924e1b2cbd0378a76f0d98c9747c6c66fffda9697de1`).
+  It removes only payload bodies that violate the sensitive-key or size guard,
+  records no copy of them, retains a digest/byte-count/classification in a
+  private immutable FORCE-RLS/no-ACL evidence table, replaces each body with a
+  bounded evidence-linked tombstone, installs update immutability, and
+  validates both payload constraints. One dedicated workflow separates
+  payload-free `probe`, manifest-pinned `contain`, and prerequisite-pinned
+  `lineage`, while sharing the `apply-hosted-migrations` concurrency group so
+  no production DDL scope overlaps them. Probe emits only an exact candidate
+  count, manifest SHA-256, and downstream blocker counts. Contain rechecks the
+  same values while locking `node_runs` and artifact state, then stages only
+  hash-pinned `00210`. Lineage requires accepted `00210`, the same positive
+  count and manifest SHA-256 from probe, and reconstructs that manifest from
+  private audit rows before locking, under lock, and after commit while checking
+  exact evidence-linked tombstones and raw table/function ACLs. It then stages
+  only the frozen unchanged `00200`.
+  The legacy fence is always exact but changes shape at the intentional v2
+  boundary: before v2, all nine legacy signatures are fully revoked; after v2,
+  eight remain revoked and `decide_node_gate(uuid,boolean,text)` becomes an
+  authenticated-only, owner/admin-checked, `SECURITY DEFINER`, pinned-search-
+  path, evidence-bound RPC, with anonymous and `service_role` still refused. A
+  fresh or future-dated active/draining heartbeat blocks. Constraints, FORCE
+  RLS, exact raw ACLs, audit triggers, and stopped safety state are validated
+  inside the DDL/ledger transaction and repeated after commit.
+  Payloads and row identifiers are never logged.
+- Bounds: `00150` remains hosted exactly once and must never be replayed.
+  `00210` is irreversible containment of policy-violating payload bodies, so a
+  changed manifest or any identity/evidence blocker stops rather than guessing.
+  Unchanged `00200` remains absent and may be admitted only as a separate
+  protected action after exact hosted `00210` acceptance. Workers, provider
+  execution, autonomy, and all automatic actions stay OFF; the global kill
+  switch stays ON. This decision authorizes no reset, down-migration, legacy
+  grant restoration, status upgrade, or worker dispatch.

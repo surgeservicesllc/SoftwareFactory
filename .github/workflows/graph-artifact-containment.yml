@@ -1,0 +1,918 @@
+name: Contain legacy graph artifact payloads
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: "Probe, contain the exact manifest, then install unchanged lineage as separate runs."
+        required: true
+        default: probe
+        type: choice
+        options:
+          - probe
+          - contain
+          - lineage
+      expected_manifest_sha256:
+        description: "Required for contain and lineage: exact SHA-256 reported by probe."
+        required: false
+        type: string
+      expected_count:
+        description: "Required for contain and lineage: exact candidate count reported by probe."
+        required: false
+        type: string
+
+permissions:
+  actions: read
+  checks: read
+  contents: read
+  deployments: read
+
+concurrency:
+  group: apply-hosted-migrations
+  cancel-in-progress: false
+
+jobs:
+  containment:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PROJECT_REF: qpuofpmagrmyamahqwxw
+    steps:
+      - name: Authorize production mutation
+        env:
+          AUTHORIZED_ACTOR: ${{ vars.PRODUCTION_RELEASE_ACTOR }}
+          OPERATION: ${{ inputs.operation }}
+        run: |
+          if [ "$OPERATION" != "probe" ] \
+            && { [ -z "$AUTHORIZED_ACTOR" ] || [ "$GITHUB_ACTOR" != "$AUTHORIZED_ACTOR" ]; }; then
+            echo "::error::Production mutation requires the exact configured release actor."
+            exit 1
+          fi
+
+      - name: Check out the exact release
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Verify exact green production and stopped execution workflows
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          SHA=$(git rev-parse HEAD)
+          if [ "$GITHUB_REPOSITORY" != "surgeservicesllc/SoftwareFactory" ] \
+            || [ "$GITHUB_REF" != "refs/heads/main" ] \
+            || [ "$GITHUB_SHA" != "$SHA" ]; then
+            echo "::error::Containment may run only from the exact SoftwareFactory main checkout."
+            exit 1
+          fi
+          for WORKFLOW in graph-worker.yml codex-worker.yml claude-worker.yml graph-live-canary.yml handoff-canary.yml ai-factory-journey.yml journey-prod-user.yml; do
+            ACTIVE=$(curl --fail --silent --show-error \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/workflows/${WORKFLOW}/runs?per_page=100" \
+              | jq '[.workflow_runs[] | select(.status != "completed")] | length')
+            if [ "$ACTIVE" != "0" ]; then
+              echo "::error::${WORKFLOW} has ${ACTIVE} active run(s)."
+              exit 1
+            fi
+          done
+          CHECKS=$(curl --fail --silent --show-error \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/commits/${SHA}/check-runs?per_page=100")
+          for NAME in \
+            "Lint, typecheck, test, and build" \
+            "Browser and accessibility tests 1/3" \
+            "Browser and accessibility tests 2/3" \
+            "Browser and accessibility tests 3/3"; do
+            STATE=$(jq -r --arg name "$NAME" --arg sha "$SHA" '
+              [.check_runs[] | select(.name==$name and .head_sha==$sha and .app.slug=="github-actions")]
+              | sort_by(.completed_at // .started_at // "") | last
+              | if .==null then "missing|missing" else "\(.status)|\(.conclusion // "null")" end
+            ' <<<"$CHECKS")
+            if [ "$STATE" != "completed|success" ]; then
+              echo "::error::Exact-head check '$NAME' is not green ($STATE)."
+              exit 1
+            fi
+          done
+          DEPLOYMENT=$(curl --fail --silent --show-error \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/deployments?environment=Production&per_page=100" \
+            | jq -c '[.[] | select(.environment=="Production" and .task=="deploy" and .creator.login=="vercel[bot]")][0] // empty')
+          if [ -z "$DEPLOYMENT" ] || ! jq -e --arg sha "$SHA" '.sha==$sha and .ref==$sha' <<<"$DEPLOYMENT" >/dev/null; then
+            echo "::error::Latest Vercel Production identity is not the exact checked-out SHA."
+            exit 1
+          fi
+          STATUS_URL=$(jq -r '.statuses_url' <<<"$DEPLOYMENT")
+          STATUS=$(curl --fail --silent --show-error \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${STATUS_URL}?per_page=1")
+          if ! jq -e 'length==1 and .[0].state=="success" and .[0].creator.login=="vercel[bot]" and (.[0].environment_url | test("^https://softwarefactory-[a-z0-9]+-surgeservices-projects\\.vercel\\.app/?$"))' <<<"$STATUS" >/dev/null; then
+            echo "::error::Exact-SHA Vercel Production is not READY."
+            exit 1
+          fi
+          echo "::notice::Exact main SHA ${SHA} is green, deployed, and has no active execution workflow."
+
+      - name: Connect to the exact Supabase project
+        env:
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          if [ -z "$SUPABASE_DB_PASSWORD" ]; then
+            echo "::error::SUPABASE_DB_PASSWORD is required."
+            exit 1
+          fi
+          ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+          echo "::add-mask::$ENC"
+          for HOST in aws-0-us-west-2.pooler.supabase.com aws-1-us-west-2.pooler.supabase.com; do
+            URL="postgresql://postgres.${PROJECT_REF}:${ENC}@${HOST}:5432/postgres"
+            echo "::add-mask::$URL"
+            if psql "$URL" -X -Atqc "select current_database()" >/dev/null 2>&1; then
+              echo "DB_URL=$URL" >> "$GITHUB_ENV"
+              exit 0
+            fi
+          done
+          echo "::error::Could not connect to exact Supabase project ${PROJECT_REF}."
+          exit 1
+
+      - name: Diagnose payload-free candidate manifest and next blockers
+        if: ${{ inputs.operation != 'lineage' }}
+        id: diagnose
+        run: |
+          MANIFEST=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+            with candidates as (
+              select artifact.id, artifact.organization_id, artifact.graph_run_id,
+                artifact.node_run_id, artifact.kind,
+                encode(sha256(convert_to(artifact.payload::text,'UTF8')),'hex') payload_sha256,
+                octet_length(artifact.payload::text) payload_octets,
+                public.jsonb_has_sensitive_keys(artifact.payload) sensitive,
+                octet_length(artifact.payload::text)>1048576 oversized
+              from public.graph_artifacts artifact
+              where public.jsonb_has_sensitive_keys(artifact.payload)
+                 or octet_length(artifact.payload::text)>1048576
+            ), summary as (
+              select count(*) candidate_count,
+                count(*) filter (where sensitive) sensitive_count,
+                count(*) filter (where oversized) oversized_count,
+                coalesce(max(payload_octets),0) max_octets,
+                encode(sha256(convert_to(coalesce(string_agg(
+                  concat_ws('|',id::text,organization_id::text,graph_run_id::text,
+                    coalesce(node_run_id::text,'-'),kind::text,payload_sha256,
+                    payload_octets::text,sensitive::text,oversized::text),
+                  E'\n' order by id::text),''),'UTF8')),'hex') manifest_sha256
+              from candidates
+            )
+            select candidate_count||'|'||sensitive_count||'|'||oversized_count||'|'||
+              max_octets||'|'||manifest_sha256 from summary;")
+          IFS='|' read -r COUNT SENSITIVE OVERSIZED MAX_OCTETS MANIFEST_SHA <<<"$MANIFEST"
+          if ! [[ "$COUNT" =~ ^[0-9]+$ ]] || ! [[ "$SENSITIVE" =~ ^[0-9]+$ ]] \
+            || ! [[ "$OVERSIZED" =~ ^[0-9]+$ ]] || ! [[ "$MAX_OCTETS" =~ ^[0-9]+$ ]] \
+            || ! [[ "$MANIFEST_SHA" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "::error::Candidate classification was not canonical."
+            exit 1
+          fi
+          BLOCKERS=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+            select
+              (select count(*) from public.graph_artifacts artifact
+                left join public.node_runs node_run on node_run.id=artifact.node_run_id and node_run.organization_id=artifact.organization_id
+                where artifact.node_run_id is not null and (node_run.id is null or artifact.graph_run_id is distinct from node_run.graph_run_id)) || '|' ||
+              (select count(*) from (select 1 from public.graph_artifacts where node_run_id is not null group by node_run_id,kind having count(*)>1) duplicate_slot) || '|' ||
+              (select count(*) from public.graph_verifications verification
+                left join public.node_runs subject on subject.id=verification.subject_node_run_id and subject.organization_id=verification.organization_id
+                where subject.id is null or verification.graph_run_id is distinct from subject.graph_run_id) || '|' ||
+              (select count(*) from public.graph_verifications verification where case
+                when verification.evidence is null or jsonb_typeof(verification.evidence)<>'array' then true
+                when pg_column_size(verification.evidence)>32768 or jsonb_array_length(verification.evidence)>64 or public.jsonb_has_sensitive_keys(verification.evidence) then true
+                else exists (select 1 from jsonb_array_elements(verification.evidence) item(value)
+                  where jsonb_typeof(item.value)<>'string' or char_length(item.value #>> '{}')>1000)
+              end);
+          ")
+          if ! [[ "$BLOCKERS" =~ ^[0-9]+\|[0-9]+\|[0-9]+\|[0-9]+$ ]]; then
+            echo "::error::Downstream blocker classification was not canonical."
+            exit 1
+          fi
+          echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+          echo "manifest_sha256=$MANIFEST_SHA" >> "$GITHUB_OUTPUT"
+          echo "blockers=$BLOCKERS" >> "$GITHUB_OUTPUT"
+          echo "::notice::Candidate manifest sha256=${MANIFEST_SHA}, count=${COUNT}, sensitive=${SENSITIVE}, oversized=${OVERSIZED}, max_octets=${MAX_OCTETS}; next_blockers=${BLOCKERS}. No payload or row identifier was logged."
+
+      - name: Apply the exact forward containment
+        if: ${{ inputs.operation == 'contain' }}
+        env:
+          EXPECTED_COUNT: ${{ inputs.expected_count }}
+          EXPECTED_MANIFEST_SHA256: ${{ inputs.expected_manifest_sha256 }}
+          LIVE_COUNT: ${{ steps.diagnose.outputs.count }}
+          LIVE_MANIFEST_SHA256: ${{ steps.diagnose.outputs.manifest_sha256 }}
+          NEXT_BLOCKERS: ${{ steps.diagnose.outputs.blockers }}
+        run: |
+          if ! [[ "$EXPECTED_COUNT" =~ ^[1-9][0-9]*$ ]] \
+            || ! [[ "$EXPECTED_MANIFEST_SHA256" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "::error::Contain requires the positive count and SHA-256 from the completed probe."
+            exit 1
+          fi
+          if [ "$LIVE_COUNT" != "$EXPECTED_COUNT" ] || [ "$LIVE_MANIFEST_SHA256" != "$EXPECTED_MANIFEST_SHA256" ]; then
+            echo "::error::Live candidate identity changed after the probe."
+            exit 1
+          fi
+          if [ "$NEXT_BLOCKERS" != "0|0|0|0" ]; then
+            echo "::error::A downstream artifact/verification identity or evidence blocker requires a separate forward repair ($NEXT_BLOCKERS)."
+            exit 1
+          fi
+          FILE=supabase/migrations/20260827000210_contain_legacy_graph_artifact_payloads.sql
+          EXPECTED_FILE_SHA256=c37a55efe74e9a9b4118924e1b2cbd0378a76f0d98c9747c6c66fffda9697de1
+          if [ "$(sha256sum "$FILE" | cut -d' ' -f1)" != "$EXPECTED_FILE_SHA256" ]; then
+            echo "::error::Forward containment migration hash mismatch."
+            exit 1
+          fi
+          LEDGER=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+            select
+              (select count(*) from supabase_migrations.schema_migrations where version='20260827000100')||'|'||
+              (select count(*) from supabase_migrations.schema_migrations where version='20260827000150')||'|'||
+              (select count(*) from supabase_migrations.schema_migrations where version='20260827000200')||'|'||
+              (select count(*) from supabase_migrations.schema_migrations where version='20260827000210')||'|'||
+              (to_regclass('public.graph_artifact_payload_containments') is null)::text;")
+          if [ "$LEDGER" != "1|1|0|0|true" ]; then
+            echo "::error::Containment ledger/catalog preflight is not exact ($LEDGER)."
+            exit 1
+          fi
+          FENCE=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+            set search_path=pg_catalog;
+            with expected(signature) as (values
+              ('public.start_graph_run(uuid)'),('public.claim_planned_graph(text,text[])'),
+              ('public.claim_phase1c_run(text,text,text,integer)'),('public.decide_node_gate(uuid,boolean,text)'),
+              ('public.record_node_state(uuid,public.graph_node_state,text,text,text,integer)'),
+              ('public.complete_graph_run(uuid,public.graph_run_state,boolean,bigint,bigint,text)'),
+              ('public.record_handoff(uuid,uuid,jsonb,boolean,jsonb,uuid,jsonb,jsonb,jsonb,text)'),
+              ('public.record_graph_artifact(uuid,public.graph_artifact_kind,jsonb,uuid,integer,integer)'),
+              ('public.record_verification(uuid,public.verification_lens,public.verification_verdict,jsonb,uuid,text,boolean)')
+            ), routines as (select to_regprocedure(signature) routine from expected)
+            select count(routine)=9 and bool_and(
+              not has_function_privilege('anon',routine,'EXECUTE')
+              and not has_function_privilege('authenticated',routine,'EXECUTE')
+              and not has_function_privilege('service_role',routine,'EXECUTE'))
+              and not exists (select 1 from routines expected_routine
+                join pg_proc routine_catalog on routine_catalog.oid=expected_routine.routine
+                where pg_get_userbyid(routine_catalog.proowner)<>'postgres'
+                  or routine_catalog.proacl is null
+                  or (select count(*) from aclexplode(routine_catalog.proacl))<>1
+                  or not exists (select 1 from aclexplode(routine_catalog.proacl) privilege
+                    where privilege.grantor=routine_catalog.proowner and privilege.grantee=routine_catalog.proowner
+                      and privilege.privilege_type='EXECUTE' and not privilege.is_grantable)
+                  or exists (select 1 from aclexplode(routine_catalog.proacl) privilege
+                    where privilege.grantor<>routine_catalog.proowner or privilege.grantee<>routine_catalog.proowner
+                      or privilege.privilege_type<>'EXECUTE' or privilege.is_grantable))
+              and to_regprocedure('public.claim_planned_graph_v2(text,text[],text,jsonb,integer)') is null
+            from routines;")
+          if [ "$FENCE" != "t" ]; then
+            echo "::error::Committed legacy fence or pre-v2 catalog identity is not exact."
+            exit 1
+          fi
+          SAFE=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+            select not exists (select 1 from public.organizations where autonomous_mode or not autonomy_kill_switch_active or auto_plan or auto_code or auto_test or auto_repair or auto_review or auto_approve or auto_merge or auto_deploy or auto_rollback)
+              and not exists (select 1 from public.projects where autonomous_mode or auto_plan or auto_code or auto_test or auto_repair or auto_review or auto_approve or auto_merge or auto_deploy or auto_rollback)
+              and not exists (select 1 from public.phase1c_workers where status in ('active','draining') and last_heartbeat_at>now()-interval '5 minutes')
+              and not exists (select 1 from public.graph_runs where state='RUNNING'::public.graph_run_state)
+              and not exists (select 1 from public.agent_runs where status='running'::public.run_status);")
+          if [ "$SAFE" != "t" ]; then
+            echo "::error::Production is outside the required stopped containment state."
+            exit 1
+          fi
+          STAGE_DIR=$(mktemp -d)
+          trap 'rm -rf -- "$STAGE_DIR"' EXIT
+          STAGED_FILE="$STAGE_DIR/20260827000210_contain_legacy_graph_artifact_payloads.sql"
+          cp -- "$FILE" "$STAGED_FILE"
+          if [ "$(sha256sum "$STAGED_FILE" | cut -d' ' -f1)" != "$EXPECTED_FILE_SHA256" ] \
+            || [ "$(find "$STAGE_DIR" -maxdepth 1 -type f | wc -l | tr -d ' ')" != "1" ]; then
+            echo "::error::Exact-file staging failed."
+            exit 1
+          fi
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -X --single-transaction -q \
+            -c "lock table public.organizations,public.projects,public.phase1c_workers,public.graph_runs,public.agent_runs,public.node_runs in share mode;
+                lock table public.graph_artifacts,public.graph_verifications in access exclusive mode;
+                do \$manifest\$
+                declare actual_count bigint; actual_manifest text;
+                begin
+                  with candidates as (
+                    select artifact.id,artifact.organization_id,artifact.graph_run_id,artifact.node_run_id,artifact.kind,
+                      encode(sha256(convert_to(artifact.payload::text,'UTF8')),'hex') payload_sha256,
+                      octet_length(artifact.payload::text) payload_octets,
+                      public.jsonb_has_sensitive_keys(artifact.payload) sensitive,
+                      octet_length(artifact.payload::text)>1048576 oversized
+                    from public.graph_artifacts artifact
+                    where public.jsonb_has_sensitive_keys(artifact.payload) or octet_length(artifact.payload::text)>1048576
+                  )
+                  select count(*),encode(sha256(convert_to(coalesce(string_agg(
+                    concat_ws('|',id::text,organization_id::text,graph_run_id::text,coalesce(node_run_id::text,'-'),kind::text,payload_sha256,payload_octets::text,sensitive::text,oversized::text),
+                    E'\n' order by id::text),''),'UTF8')),'hex')
+                  into actual_count,actual_manifest from candidates;
+                  if actual_count<>${EXPECTED_COUNT} or actual_manifest<>'${EXPECTED_MANIFEST_SHA256}' then
+                    raise exception using errcode='55000',message='locked graph artifact candidate manifest mismatch';
+                  end if;
+                end
+                \$manifest\$;" \
+            -f "$STAGED_FILE" \
+            -c "insert into supabase_migrations.schema_migrations(version) values ('20260827000210');"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q -c "NOTIFY pgrst, 'reload schema';"
+          VERIFIED=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+            select
+              (select count(*)=1 from supabase_migrations.schema_migrations where version='20260827000150')
+              and (select count(*)=0 from supabase_migrations.schema_migrations where version='20260827000200')
+              and (select count(*)=1 from supabase_migrations.schema_migrations where version='20260827000210')
+              and (select count(*)=${EXPECTED_COUNT} from public.graph_artifact_payload_containments)
+              and not exists (select 1 from public.graph_artifacts where public.jsonb_has_sensitive_keys(payload) or octet_length(payload::text)>1048576)
+              and (select count(*)=2 and bool_and(convalidated) from pg_constraint where conrelid='public.graph_artifacts'::regclass and conname in ('graph_artifacts_payload_no_sensitive_data','graph_artifacts_payload_size_bounded'))
+              and (select relrowsecurity and relforcerowsecurity and pg_get_userbyid(relowner)='postgres' from pg_class where oid='public.graph_artifact_payload_containments'::regclass)
+              and not has_table_privilege('anon','public.graph_artifact_payload_containments','SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+              and not has_table_privilege('authenticated','public.graph_artifact_payload_containments','SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+              and not has_table_privilege('service_role','public.graph_artifact_payload_containments','SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+              and not exists (select 1 from pg_class relation cross join lateral aclexplode(coalesce(relation.relacl,acldefault('r',relation.relowner))) privilege
+                where relation.oid='public.graph_artifact_payload_containments'::regclass and privilege.grantee<>relation.relowner)
+              and not exists (select 1 from pg_constraint where conrelid='public.graph_artifact_payload_containments'::regclass and contype='f')
+              and not has_function_privilege('anon','public.enforce_graph_artifact_payload_containment_immutable()','EXECUTE')
+              and not has_function_privilege('authenticated','public.enforce_graph_artifact_payload_containment_immutable()','EXECUTE')
+              and not has_function_privilege('service_role','public.enforce_graph_artifact_payload_containment_immutable()','EXECUTE')
+              and (select routine_language.lanname='plpgsql' and pg_get_userbyid(routine.proowner)='postgres'
+                    and routine.prokind='f' and routine.provolatile='v' and routine.prorettype='trigger'::regtype
+                    and routine.prosecdef and routine.proconfig=array['search_path=pg_catalog']::text[]
+                    and btrim(replace(replace(routine.prosrc,E'\r\n',E'\n'),E'\r',E'\n'),E' \n')=E'begin\n  raise exception using errcode = ''55000'',\n    message = ''graph artifact payload containment evidence is immutable'';\nend;'
+                    and routine.proacl is not null and (select count(*) from aclexplode(routine.proacl))=1
+                    and exists (select 1 from aclexplode(routine.proacl) privilege
+                      where privilege.grantor=routine.proowner and privilege.grantee=routine.proowner
+                        and privilege.privilege_type='EXECUTE' and not privilege.is_grantable)
+                    and not exists (select 1 from aclexplode(routine.proacl) privilege
+                      where privilege.grantor<>routine.proowner or privilege.grantee<>routine.proowner
+                        or privilege.privilege_type<>'EXECUTE' or privilege.is_grantable)
+                   from pg_proc routine join pg_language routine_language on routine_language.oid=routine.prolang
+                   where routine.oid=to_regprocedure('public.enforce_graph_artifact_payload_containment_immutable()'))
+              and (select count(*)=1 from pg_trigger where tgrelid='public.graph_artifact_payload_containments'::regclass and tgname='graph_artifact_payload_containments_immutable' and not tgisinternal and tgenabled='O' and tgtype=58 and tgfoid=to_regprocedure('public.enforce_graph_artifact_payload_containment_immutable()'))
+              and (select count(*)=1 from pg_trigger where tgrelid='public.graph_artifacts'::regclass and tgname='graph_artifacts_update_immutable' and not tgisinternal and tgenabled='O')
+              and not exists (select 1 from (values ('anon'),('authenticated'),('service_role')) role_name(name)
+                cross join (values ('public.graph_artifacts'),('public.graph_verifications')) relation_name(name)
+                where has_table_privilege(role_name.name,relation_name.name,'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER'))
+              and not exists (select 1 from pg_class relation
+                cross join lateral aclexplode(coalesce(relation.relacl,acldefault('r',relation.relowner))) privilege
+                where relation.oid in ('public.graph_artifacts'::regclass,'public.graph_verifications'::regclass)
+                  and privilege.grantee<>relation.relowner
+                  and privilege.privilege_type in ('INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER'))
+              and not exists (select 1 from public.organizations where autonomous_mode or not autonomy_kill_switch_active or auto_plan or auto_code or auto_test or auto_repair or auto_review or auto_approve or auto_merge or auto_deploy or auto_rollback)
+              and not exists (select 1 from public.projects where autonomous_mode or auto_plan or auto_code or auto_test or auto_repair or auto_review or auto_approve or auto_merge or auto_deploy or auto_rollback)
+              and not exists (select 1 from public.phase1c_workers where status in ('active','draining') and last_heartbeat_at>now()-interval '5 minutes')
+              and not exists (select 1 from public.graph_runs where state='RUNNING'::public.graph_run_state)
+              and not exists (select 1 from public.agent_runs where status='running'::public.run_status);")
+          if [ "$VERIFIED" != "t" ]; then
+            echo "::error::Containment ledger/catalog/RLS/ACL/audit/safety postflight failed."
+            exit 1
+          fi
+          echo "Applied exact forward migration 20260827000210 to ${EXPECTED_COUNT} manifest-pinned artifact(s); 00200 remains unapplied."
+
+      - name: Install the unchanged graph Phase 1C lineage after containment
+        if: ${{ inputs.operation == 'lineage' }}
+        env:
+          EXPECTED_COUNT: ${{ inputs.expected_count }}
+          EXPECTED_MANIFEST_SHA256: ${{ inputs.expected_manifest_sha256 }}
+        run: |
+          if ! [[ "$EXPECTED_COUNT" =~ ^[1-9][0-9]*$ ]] \
+            || ! [[ "$EXPECTED_MANIFEST_SHA256" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "::error::Lineage requires the positive count and SHA-256 from the completed probe."
+            exit 1
+          fi
+          FILE=supabase/migrations/20260827000200_graph_phase1c_release_lineage.sql
+          EXPECTED_FILE_SHA256=23197552df3f442ae8264bf71bd28a7c479e09a64bf6e298c615b767a96572be
+          if [ "$(sha256sum "$FILE" | cut -d' ' -f1)" != "$EXPECTED_FILE_SHA256" ]; then
+            echo "::error::Unchanged graph Phase 1C lineage migration hash mismatch."
+            exit 1
+          fi
+
+          LEDGER=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+            select
+              (select count(*) from supabase_migrations.schema_migrations where version='20260827000100')||'|'||
+              (select count(*) from supabase_migrations.schema_migrations where version='20260827000150')||'|'||
+              (select count(*) from supabase_migrations.schema_migrations where version='20260827000200')||'|'||
+              (select count(*) from supabase_migrations.schema_migrations where version='20260827000210')||'|'||
+              (to_regclass('public.graph_artifact_payload_containments') is not null)::text;")
+          if [ "$LEDGER" != "1|1|0|1|true" ]; then
+            echo "::error::Lineage ledger/containment identity is not exact ($LEDGER)."
+            exit 1
+          fi
+
+          AUDIT_MANIFEST=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+            select count(*)||'|'||encode(sha256(convert_to(coalesce(string_agg(
+              concat_ws('|',artifact_id::text,organization_id::text,graph_run_id::text,
+                coalesce(node_run_id::text,'-'),artifact_kind::text,original_payload_sha256,
+                original_payload_octets::text,sensitive_data_detected::text,size_limit_exceeded::text),
+              E'\\n' order by artifact_id::text),''),'UTF8')),'hex')
+            from public.graph_artifact_payload_containments;")
+          IFS='|' read -r AUDIT_COUNT AUDIT_MANIFEST_SHA256 <<<"$AUDIT_MANIFEST"
+          if [ "$AUDIT_COUNT" != "$EXPECTED_COUNT" ] \
+            || [ "$AUDIT_MANIFEST_SHA256" != "$EXPECTED_MANIFEST_SHA256" ]; then
+            echo "::error::Contained audit manifest does not match the exact probe."
+            exit 1
+          fi
+
+          READY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+            set search_path=pg_catalog;
+            with expected(signature) as (values
+              ('public.start_graph_run(uuid)'),('public.claim_planned_graph(text,text[])'),
+              ('public.claim_phase1c_run(text,text,text,integer)'),('public.decide_node_gate(uuid,boolean,text)'),
+              ('public.record_node_state(uuid,public.graph_node_state,text,text,text,integer)'),
+              ('public.complete_graph_run(uuid,public.graph_run_state,boolean,bigint,bigint,text)'),
+              ('public.record_handoff(uuid,uuid,jsonb,boolean,jsonb,uuid,jsonb,jsonb,jsonb,text)'),
+              ('public.record_graph_artifact(uuid,public.graph_artifact_kind,jsonb,uuid,integer,integer)'),
+              ('public.record_verification(uuid,public.verification_lens,public.verification_verdict,jsonb,uuid,text,boolean)')
+            ), routines as (select to_regprocedure(signature) routine from expected)
+            select count(routine)=9 and bool_and(
+              not has_function_privilege('anon',routine,'EXECUTE')
+              and not has_function_privilege('authenticated',routine,'EXECUTE')
+              and not has_function_privilege('service_role',routine,'EXECUTE'))
+              and not exists (select 1 from routines expected_routine
+                join pg_proc routine_catalog on routine_catalog.oid=expected_routine.routine
+                where pg_get_userbyid(routine_catalog.proowner)<>'postgres'
+                  or routine_catalog.proacl is null
+                  or (select count(*) from aclexplode(routine_catalog.proacl))<>1
+                  or not exists (select 1 from aclexplode(routine_catalog.proacl) privilege
+                    where privilege.grantor=routine_catalog.proowner and privilege.grantee=routine_catalog.proowner
+                      and privilege.privilege_type='EXECUTE' and not privilege.is_grantable)
+                  or exists (select 1 from aclexplode(routine_catalog.proacl) privilege
+                    where privilege.grantor<>routine_catalog.proowner or privilege.grantee<>routine_catalog.proowner
+                      or privilege.privilege_type<>'EXECUTE' or privilege.is_grantable))
+              and to_regprocedure('public.claim_planned_graph_v2(text,text[],text,jsonb,integer)') is null
+              and (select relrowsecurity and relforcerowsecurity and pg_get_userbyid(relowner)='postgres' from pg_class
+                    where oid='public.graph_artifact_payload_containments'::regclass)
+              and not has_table_privilege('anon','public.graph_artifact_payload_containments','SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+              and not has_table_privilege('authenticated','public.graph_artifact_payload_containments','SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+              and not has_table_privilege('service_role','public.graph_artifact_payload_containments','SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+              and not exists (select 1 from pg_class relation cross join lateral aclexplode(coalesce(relation.relacl,acldefault('r',relation.relowner))) privilege
+                where relation.oid='public.graph_artifact_payload_containments'::regclass and privilege.grantee<>relation.relowner)
+              and not has_function_privilege('anon','public.enforce_graph_artifact_payload_containment_immutable()','EXECUTE')
+              and not has_function_privilege('authenticated','public.enforce_graph_artifact_payload_containment_immutable()','EXECUTE')
+              and not has_function_privilege('service_role','public.enforce_graph_artifact_payload_containment_immutable()','EXECUTE')
+              and not exists (select 1 from pg_proc routine cross join lateral aclexplode(coalesce(routine.proacl,acldefault('f',routine.proowner))) privilege
+                where routine.oid=to_regprocedure('public.enforce_graph_artifact_payload_containment_immutable()') and privilege.grantee<>routine.proowner)
+              and (select routine_language.lanname='plpgsql' and pg_get_userbyid(routine.proowner)='postgres'
+                    and routine.prokind='f' and routine.provolatile='v' and routine.prorettype='trigger'::regtype
+                    and routine.prosecdef and routine.proconfig=array['search_path=pg_catalog']::text[]
+                    and btrim(replace(replace(routine.prosrc,E'\r\n',E'\n'),E'\r',E'\n'),E' \n')=E'begin\n  raise exception using errcode = ''55000'',\n    message = ''graph artifact payload containment evidence is immutable'';\nend;'
+                    and routine.proacl is not null and (select count(*) from aclexplode(routine.proacl))=1
+                    and exists (select 1 from aclexplode(routine.proacl) privilege
+                      where privilege.grantor=routine.proowner and privilege.grantee=routine.proowner
+                        and privilege.privilege_type='EXECUTE' and not privilege.is_grantable)
+                   from pg_proc routine join pg_language routine_language on routine_language.oid=routine.prolang
+                   where routine.oid=to_regprocedure('public.enforce_graph_artifact_payload_containment_immutable()'))
+              and (select count(*)=1 from pg_trigger where tgrelid='public.graph_artifact_payload_containments'::regclass and tgname='graph_artifact_payload_containments_immutable' and not tgisinternal and tgenabled='O' and tgtype=58 and tgfoid=to_regprocedure('public.enforce_graph_artifact_payload_containment_immutable()'))
+              and (select count(*)=1 from pg_trigger where tgrelid='public.graph_artifacts'::regclass and tgname='graph_artifacts_update_immutable' and not tgisinternal and tgenabled='O')
+              and not exists (select 1 from pg_constraint where conrelid='public.graph_artifact_payload_containments'::regclass and contype='f')
+              and not exists (select 1 from (values ('anon'),('authenticated'),('service_role')) role_name(name)
+                cross join (values ('public.graph_artifacts'),('public.graph_verifications')) relation_name(name)
+                where has_table_privilege(role_name.name,relation_name.name,'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER'))
+              and not exists (select 1 from pg_class relation
+                cross join lateral aclexplode(coalesce(relation.relacl,acldefault('r',relation.relowner))) privilege
+                where relation.oid in ('public.graph_artifacts'::regclass,'public.graph_verifications'::regclass)
+                  and privilege.grantee<>relation.relowner
+                  and privilege.privilege_type in ('INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER'))
+              and not exists (select 1 from public.graph_artifacts where public.jsonb_has_sensitive_keys(payload) or octet_length(payload::text)>1048576)
+              and not exists (select 1 from public.graph_artifact_payload_containments containment
+                left join public.graph_artifacts artifact on artifact.id=containment.artifact_id
+                where artifact.id is null or artifact.payload is distinct from jsonb_build_object(
+                  'contained',true,'containmentEvidenceId',containment.id,'reason','legacy_artifact_policy_violation'))
+              and (select count(*)=2 and bool_and(convalidated) from pg_constraint
+                   where conrelid='public.graph_artifacts'::regclass
+                     and conname in ('graph_artifacts_payload_no_sensitive_data','graph_artifacts_payload_size_bounded'))
+            from routines;")
+          if [ "$READY" != "t" ]; then
+            echo "::error::The contained pre-lineage catalog, legacy fence, RLS, ACL, or payload boundary is not exact."
+            exit 1
+          fi
+
+          SAFE=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+            select not exists (select 1 from public.organizations where autonomous_mode or not autonomy_kill_switch_active or auto_plan or auto_code or auto_test or auto_repair or auto_review or auto_approve or auto_merge or auto_deploy or auto_rollback)
+              and not exists (select 1 from public.projects where autonomous_mode or auto_plan or auto_code or auto_test or auto_repair or auto_review or auto_approve or auto_merge or auto_deploy or auto_rollback)
+              and not exists (select 1 from public.phase1c_workers where status in ('active','draining') and last_heartbeat_at>now()-interval '5 minutes')
+              and not exists (select 1 from public.graph_runs where state='RUNNING'::public.graph_run_state)
+              and not exists (select 1 from public.agent_runs where status='running'::public.run_status)
+              and not exists (select 1 from pg_stat_activity activity
+                where activity.pid<>pg_backend_pid()
+                  and activity.datid=(select oid from pg_database where datname=current_database())
+                  and activity.state<>'idle'
+                  and activity.query~*'(start_graph_run|claim_planned_graph|claim_phase1c_run|decide_node_gate|record_node_state|complete_graph_run|record_handoff|record_graph_artifact|record_verification)')
+              and not exists (select 1 from pg_locks held_lock
+                where held_lock.pid<>pg_backend_pid() and held_lock.granted
+                  and held_lock.relation in ('public.graphs'::regclass,'public.graph_runs'::regclass,
+                    'public.agent_runs'::regclass,'public.node_runs'::regclass,'public.graph_gates'::regclass,
+                    'public.graph_artifacts'::regclass,'public.graph_handoffs'::regclass,'public.graph_verifications'::regclass));")
+          if [ "$SAFE" != "t" ]; then
+            echo "::error::Production is outside the required stopped lineage state."
+            exit 1
+          fi
+
+          STAGE_DIR=$(mktemp -d)
+          trap 'rm -rf -- "$STAGE_DIR"' EXIT
+          STAGED_FILE="$STAGE_DIR/20260827000200_graph_phase1c_release_lineage.sql"
+          cp -- "$FILE" "$STAGED_FILE"
+          if [ "$(sha256sum "$STAGED_FILE" | cut -d' ' -f1)" != "$EXPECTED_FILE_SHA256" ] \
+            || [ "$(find "$STAGE_DIR" -maxdepth 1 -type f | wc -l | tr -d ' ')" != "1" ]; then
+            echo "::error::Exact lineage-file staging failed."
+            exit 1
+          fi
+
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -X --single-transaction -q \
+            -c "lock table public.organizations in share mode;
+                lock table public.projects in share mode;
+                lock table public.phase1c_workers in share mode;
+                lock table public.graph_artifact_payload_containments in access exclusive mode;
+                lock table public.graph_runs in exclusive mode;
+                lock table public.graphs in exclusive mode;
+                lock table public.node_runs in exclusive mode;
+                lock table public.graph_gates in exclusive mode;
+                lock table public.graph_artifacts in exclusive mode;
+                lock table public.graph_handoffs in exclusive mode;
+                lock table public.graph_verifications in exclusive mode;
+                lock table public.agent_runs in exclusive mode;
+                do \$lineage_guard\$
+                begin
+                  if (select
+                    (select count(*) from supabase_migrations.schema_migrations where version='20260827000100')||'|'||
+                    (select count(*) from supabase_migrations.schema_migrations where version='20260827000150')||'|'||
+                    (select count(*) from supabase_migrations.schema_migrations where version='20260827000200')||'|'||
+                    (select count(*) from supabase_migrations.schema_migrations where version='20260827000210')) <> '1|1|0|1' then
+                    raise exception using errcode='55000',message='locked lineage ledger identity mismatch';
+                  end if;
+                  if exists (
+                    with expected(signature) as (values
+                      ('public.start_graph_run(uuid)'),('public.claim_planned_graph(text,text[])'),
+                      ('public.claim_phase1c_run(text,text,text,integer)'),('public.decide_node_gate(uuid,boolean,text)'),
+                      ('public.record_node_state(uuid,public.graph_node_state,text,text,text,integer)'),
+                      ('public.complete_graph_run(uuid,public.graph_run_state,boolean,bigint,bigint,text)'),
+                      ('public.record_handoff(uuid,uuid,jsonb,boolean,jsonb,uuid,jsonb,jsonb,jsonb,text)'),
+                      ('public.record_graph_artifact(uuid,public.graph_artifact_kind,jsonb,uuid,integer,integer)'),
+                      ('public.record_verification(uuid,public.verification_lens,public.verification_verdict,jsonb,uuid,text,boolean)')
+                    ), routines as (select to_regprocedure(signature) routine from expected)
+                    select 1 from routines expected_routine
+                    join pg_proc routine_catalog on routine_catalog.oid=expected_routine.routine
+                    where pg_get_userbyid(routine_catalog.proowner)<>'postgres'
+                      or routine_catalog.proacl is null
+                      or (select count(*) from aclexplode(routine_catalog.proacl))<>1
+                      or not exists (select 1 from aclexplode(routine_catalog.proacl) privilege
+                        where privilege.grantor=routine_catalog.proowner and privilege.grantee=routine_catalog.proowner
+                          and privilege.privilege_type='EXECUTE' and not privilege.is_grantable)
+                      or exists (select 1 from aclexplode(routine_catalog.proacl) privilege
+                        where privilege.grantor<>routine_catalog.proowner or privilege.grantee<>routine_catalog.proowner
+                          or privilege.privilege_type<>'EXECUTE' or privilege.is_grantable)
+                  ) then
+                    raise exception using errcode='55000',message='locked legacy function ACL has an unexpected grantee';
+                  end if;
+                  if exists (select 1 from public.organizations where autonomous_mode or not autonomy_kill_switch_active or auto_plan or auto_code or auto_test or auto_repair or auto_review or auto_approve or auto_merge or auto_deploy or auto_rollback)
+                    or exists (select 1 from public.projects where autonomous_mode or auto_plan or auto_code or auto_test or auto_repair or auto_review or auto_approve or auto_merge or auto_deploy or auto_rollback)
+                    or exists (select 1 from public.phase1c_workers where status in ('active','draining') and last_heartbeat_at>now()-interval '5 minutes')
+                    or exists (select 1 from public.graph_runs where state='RUNNING'::public.graph_run_state)
+                    or exists (select 1 from public.agent_runs where status='running'::public.run_status) then
+                    raise exception using errcode='55000',message='locked lineage safety state is not stopped';
+                  end if;
+                  if exists (select 1 from public.graph_artifacts where public.jsonb_has_sensitive_keys(payload) or octet_length(payload::text)>1048576) then
+                    raise exception using errcode='55000',message='locked legacy graph artifact containment is incomplete';
+                  end if;
+                  if not (select relrowsecurity and relforcerowsecurity and pg_get_userbyid(relowner)='postgres' from pg_class
+                          where oid='public.graph_artifact_payload_containments'::regclass)
+                    or has_table_privilege('anon','public.graph_artifact_payload_containments','SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+                    or has_table_privilege('authenticated','public.graph_artifact_payload_containments','SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+                    or has_table_privilege('service_role','public.graph_artifact_payload_containments','SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+                    or exists (select 1 from pg_class relation cross join lateral aclexplode(coalesce(relation.relacl,acldefault('r',relation.relowner))) privilege
+                      where relation.oid='public.graph_artifact_payload_containments'::regclass and privilege.grantee<>relation.relowner)
+                    or has_function_privilege('anon','public.enforce_graph_artifact_payload_containment_immutable()','EXECUTE')
+                    or has_function_privilege('authenticated','public.enforce_graph_artifact_payload_containment_immutable()','EXECUTE')
+                    or has_function_privilege('service_role','public.enforce_graph_artifact_payload_containment_immutable()','EXECUTE')
+                    or exists (select 1 from pg_proc routine cross join lateral aclexplode(coalesce(routine.proacl,acldefault('f',routine.proowner))) privilege
+                      where routine.oid=to_regprocedure('public.enforce_graph_artifact_payload_containment_immutable()') and privilege.grantee<>routine.proowner)
+                    or not exists (select 1 from pg_proc routine join pg_language routine_language on routine_language.oid=routine.prolang
+                      where routine.oid=to_regprocedure('public.enforce_graph_artifact_payload_containment_immutable()')
+                        and routine_language.lanname='plpgsql' and pg_get_userbyid(routine.proowner)='postgres'
+                        and routine.prokind='f' and routine.provolatile='v' and routine.prorettype='trigger'::regtype
+                        and routine.prosecdef and routine.proconfig=array['search_path=pg_catalog']::text[]
+                        and btrim(replace(replace(routine.prosrc,E'\r\n',E'\n'),E'\r',E'\n'),E' \n')=E'begin\n  raise exception using errcode = ''55000'',\n    message = ''graph artifact payload containment evidence is immutable'';\nend;'
+                        and routine.proacl is not null and (select count(*) from aclexplode(routine.proacl))=1
+                        and exists (select 1 from aclexplode(routine.proacl) privilege
+                          where privilege.grantor=routine.proowner and privilege.grantee=routine.proowner
+                            and privilege.privilege_type='EXECUTE' and not privilege.is_grantable))
+                    or exists (select 1 from pg_constraint where conrelid='public.graph_artifact_payload_containments'::regclass and contype='f')
+                    or not exists (select 1 from pg_trigger where tgrelid='public.graph_artifact_payload_containments'::regclass and tgname='graph_artifact_payload_containments_immutable' and not tgisinternal and tgenabled='O' and tgtype=58 and tgfoid=to_regprocedure('public.enforce_graph_artifact_payload_containment_immutable()'))
+                    or not exists (select 1 from pg_trigger where tgrelid='public.graph_artifacts'::regclass and tgname='graph_artifacts_update_immutable' and not tgisinternal and tgenabled='O') then
+                    raise exception using errcode='55000',message='locked containment RLS ACL or audit boundary is not exact';
+                  end if;
+                  if (select count(*) from public.graph_artifact_payload_containments)<>${EXPECTED_COUNT}
+                    or (select encode(sha256(convert_to(coalesce(string_agg(
+                      concat_ws('|',artifact_id::text,organization_id::text,graph_run_id::text,
+                        coalesce(node_run_id::text,'-'),artifact_kind::text,original_payload_sha256,
+                        original_payload_octets::text,sensitive_data_detected::text,size_limit_exceeded::text),
+                      E'\\n' order by artifact_id::text),''),'UTF8')),'hex')
+                      from public.graph_artifact_payload_containments)<>'${EXPECTED_MANIFEST_SHA256}'
+                    or exists (select 1 from public.graph_artifact_payload_containments containment
+                      left join public.graph_artifacts artifact on artifact.id=containment.artifact_id
+                      where artifact.id is null or artifact.payload is distinct from jsonb_build_object(
+                        'contained',true,'containmentEvidenceId',containment.id,'reason','legacy_artifact_policy_violation')) then
+                    raise exception using errcode='55000',message='locked containment manifest or tombstone identity mismatch';
+                  end if;
+                end
+                \$lineage_guard\$;" \
+            -f "$STAGED_FILE" \
+            -c "do \$lineage_acl_postflight\$
+                declare
+                  signature text;
+                  routine_oid regprocedure;
+                  authenticated_oid oid;
+                  service_role_oid oid;
+                  routine_definition text;
+                begin
+                  select oid into authenticated_oid from pg_roles where rolname='authenticated';
+                  select oid into service_role_oid from pg_roles where rolname='service_role';
+                  if authenticated_oid is null or service_role_oid is null then
+                    raise exception using errcode='55000',message='lineage app-role identity is missing';
+                  end if;
+
+                  foreach signature in array array[
+                    'start_graph_run(uuid)',
+                    'claim_planned_graph(text,text[])',
+                    'claim_planned_graph_internal(text,text[],text,jsonb)',
+                    'claim_phase1c_run(text,text,text,integer)',
+                    'record_node_state(uuid,public.graph_node_state,text,text,text,integer)',
+                    'complete_graph_run(uuid,public.graph_run_state,boolean,bigint,bigint,text)',
+                    'record_handoff(uuid,uuid,jsonb,boolean,jsonb,uuid,jsonb,jsonb,jsonb,text)',
+                    'record_graph_artifact(uuid,public.graph_artifact_kind,jsonb,uuid,integer,integer)',
+                    'record_verification(uuid,public.verification_lens,public.verification_verdict,jsonb,uuid,text,boolean)',
+                    'read_prior_node_results_as_worker(text,uuid)',
+                    'diagnose_graph_queue_as_worker(text)'
+                  ] loop
+                    routine_oid:=to_regprocedure('public.'||signature);
+                    if routine_oid is null
+                      or has_function_privilege('anon',routine_oid,'EXECUTE')
+                      or has_function_privilege('authenticated',routine_oid,'EXECUTE')
+                      or has_function_privilege('service_role',routine_oid,'EXECUTE')
+                      or exists (select 1 from pg_proc routine where routine.oid=routine_oid and (
+                        pg_get_userbyid(routine.proowner)<>'postgres' or routine.proacl is null
+                        or (select count(*) from aclexplode(routine.proacl))<>1
+                        or not exists (select 1 from aclexplode(routine.proacl) privilege
+                          where privilege.grantor=routine.proowner and privilege.grantee=routine.proowner
+                            and privilege.privilege_type='EXECUTE' and not privilege.is_grantable)
+                        or exists (select 1 from aclexplode(routine.proacl) privilege
+                          where privilege.grantor<>routine.proowner or privilege.grantee<>routine.proowner
+                            or privilege.privilege_type<>'EXECUTE' or privilege.is_grantable))) then
+                      raise exception using errcode='55000',message='private lineage function ACL is not owner-only';
+                    end if;
+                  end loop;
+
+                  routine_oid:=to_regprocedure('public.decide_node_gate(uuid,boolean,text)');
+                  select pg_get_functiondef(routine_oid) into routine_definition;
+                  if routine_oid is null
+                    or has_function_privilege('anon',routine_oid,'EXECUTE')
+                    or not has_function_privilege('authenticated',routine_oid,'EXECUTE')
+                    or has_function_privilege('service_role',routine_oid,'EXECUTE')
+                    or not exists (select 1 from pg_proc routine where routine.oid=routine_oid
+                      and pg_get_userbyid(routine.proowner)='postgres'
+                      and routine.prosecdef and routine.proconfig=array['search_path=pg_catalog']::text[])
+                    or strpos(routine_definition,'full lifecycle release gates require evidence-bound approval')=0
+                    or strpos(routine_definition,'owner or admin role is required to decide a gate')=0
+                    or strpos(routine_definition,'automatic gate approval is worker-only and evidence-bound')=0
+                    or exists (select 1 from pg_proc routine where routine.oid=routine_oid and (
+                      routine.proacl is null or (select count(*) from aclexplode(routine.proacl))<>2
+                      or not exists (select 1 from aclexplode(routine.proacl) privilege
+                        where privilege.grantor=routine.proowner and privilege.grantee=routine.proowner
+                          and privilege.privilege_type='EXECUTE' and not privilege.is_grantable)
+                      or not exists (select 1 from aclexplode(routine.proacl) privilege
+                        where privilege.grantor=routine.proowner and privilege.grantee=authenticated_oid
+                          and privilege.privilege_type='EXECUTE' and not privilege.is_grantable)
+                      or exists (select 1 from aclexplode(routine.proacl) privilege
+                        where privilege.grantor<>routine.proowner or privilege.privilege_type<>'EXECUTE'
+                          or privilege.is_grantable or privilege.grantee not in (routine.proowner,authenticated_oid)))) then
+                    raise exception using errcode='55000',message='owner gate function ACL or definition is not exact';
+                  end if;
+
+                  foreach signature in array array[
+                    'claim_planned_graph_v2(text,text[],text,jsonb,integer)',
+                    'claim_phase1c_run_v2(text,text,text,integer,integer)',
+                    'read_prior_node_results_as_worker_v2(text,uuid,integer)',
+                    'open_node_gate_as_worker(text,uuid,uuid,integer)',
+                    'decide_automatic_gate_as_worker(text,uuid)',
+                    'record_node_state_as_worker(text,uuid,public.graph_node_state,text,text,text,integer)',
+                    'record_graph_artifact_as_worker(text,uuid,public.graph_artifact_kind,jsonb,uuid,integer,integer)',
+                    'complete_reviewer_with_verifications_as_worker(text,uuid,jsonb,text,text,integer,jsonb)',
+                    'diagnose_graph_queue_as_worker_v2(text,text,jsonb,uuid,integer)',
+                    'abort_graph_run_as_worker(text,uuid,public.graph_run_state,text)',
+                    'create_graph_from_plan_with_release_identity_as_server(uuid,uuid,uuid,text,public.graph_topology,jsonb,public.risk_level,boolean,jsonb,jsonb,jsonb,text,integer,uuid,text,text,jsonb)',
+                    'bind_graph_phase1c_run_by_command_as_worker(uuid,uuid,uuid)',
+                    'complete_phase1c_run_with_graph_bridge_as_worker(text,uuid,uuid,text,text,text,jsonb,jsonb,jsonb,text,text,boolean)',
+                    'approve_graph_phase1c_test_gate_as_worker(uuid,uuid,integer,text,text,text,text,timestamp with time zone)',
+                    'approve_graph_phase1c_deployment_gate_as_worker(uuid,uuid,uuid,bigint,text,text,text,text,timestamp with time zone,timestamp with time zone)',
+                    'complete_graph_run_with_phase1c_bridge_as_worker(text,uuid,public.graph_run_state,boolean,bigint,bigint,text,text)'
+                  ] loop
+                    routine_oid:=to_regprocedure('public.'||signature);
+                    if routine_oid is null
+                      or has_function_privilege('anon',routine_oid,'EXECUTE')
+                      or has_function_privilege('authenticated',routine_oid,'EXECUTE')
+                      or not has_function_privilege('service_role',routine_oid,'EXECUTE')
+                      or not exists (select 1 from pg_proc routine where routine.oid=routine_oid
+                        and pg_get_userbyid(routine.proowner)='postgres'
+                        and routine.prosecdef and routine.proconfig=array['search_path=pg_catalog']::text[])
+                      or exists (select 1 from pg_proc routine where routine.oid=routine_oid and (
+                        routine.proacl is null or (select count(*) from aclexplode(routine.proacl))<>2
+                        or not exists (select 1 from aclexplode(routine.proacl) privilege
+                          where privilege.grantor=routine.proowner and privilege.grantee=routine.proowner
+                            and privilege.privilege_type='EXECUTE' and not privilege.is_grantable)
+                        or not exists (select 1 from aclexplode(routine.proacl) privilege
+                          where privilege.grantor=routine.proowner and privilege.grantee=service_role_oid
+                            and privilege.privilege_type='EXECUTE' and not privilege.is_grantable)
+                        or exists (select 1 from aclexplode(routine.proacl) privilege
+                          where privilege.grantor<>routine.proowner or privilege.privilege_type<>'EXECUTE'
+                            or privilege.is_grantable or privilege.grantee not in (routine.proowner,service_role_oid)))) then
+                      raise exception using errcode='55000',message='worker lineage function ACL is not service-role-only';
+                    end if;
+                  end loop;
+
+                  if exists (select 1 from (values ('anon'),('authenticated'),('service_role')) role_name(name)
+                    cross join (values ('public.graph_artifacts'),('public.graph_verifications')) relation_name(name)
+                    where has_table_privilege(role_name.name,relation_name.name,'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER'))
+                    or exists (select 1 from pg_class relation
+                      cross join lateral aclexplode(coalesce(relation.relacl,acldefault('r',relation.relowner))) privilege
+                      where relation.oid in ('public.graph_artifacts'::regclass,'public.graph_verifications'::regclass)
+                        and privilege.grantee<>relation.relowner
+                        and privilege.privilege_type in ('INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER')) then
+                    raise exception using errcode='55000',message='graph evidence mutation ACL is not closed';
+                  end if;
+
+                  if exists (select 1 from public.organizations where autonomous_mode or not autonomy_kill_switch_active or auto_plan or auto_code or auto_test or auto_repair or auto_review or auto_approve or auto_merge or auto_deploy or auto_rollback)
+                    or exists (select 1 from public.projects where autonomous_mode or auto_plan or auto_code or auto_test or auto_repair or auto_review or auto_approve or auto_merge or auto_deploy or auto_rollback)
+                    or exists (select 1 from public.phase1c_workers where status in ('active','draining') and last_heartbeat_at>now()-interval '5 minutes')
+                    or exists (select 1 from public.graph_runs where state='RUNNING'::public.graph_run_state)
+                    or exists (select 1 from public.agent_runs where status='running'::public.run_status) then
+                    raise exception using errcode='55000',message='locked lineage postflight safety state is not stopped';
+                  end if;
+                end
+                \$lineage_acl_postflight\$;" \
+            -c "insert into supabase_migrations.schema_migrations(version) values ('20260827000200');"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q -c "NOTIFY pgrst, 'reload schema';"
+
+          VERIFIED=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+            set search_path=pg_catalog;
+            with private_legacy_expected(signature) as (values
+              ('public.start_graph_run(uuid)'),('public.claim_planned_graph(text,text[])'),
+              ('public.claim_phase1c_run(text,text,text,integer)'),
+              ('public.record_node_state(uuid,public.graph_node_state,text,text,text,integer)'),
+              ('public.complete_graph_run(uuid,public.graph_run_state,boolean,bigint,bigint,text)'),
+              ('public.record_handoff(uuid,uuid,jsonb,boolean,jsonb,uuid,jsonb,jsonb,jsonb,text)'),
+              ('public.record_graph_artifact(uuid,public.graph_artifact_kind,jsonb,uuid,integer,integer)'),
+              ('public.record_verification(uuid,public.verification_lens,public.verification_verdict,jsonb,uuid,text,boolean)')
+            ), private_legacy as (select to_regprocedure(signature) routine from private_legacy_expected),
+            worker_expected(signature) as (values
+              ('public.claim_planned_graph_v2(text,text[],text,jsonb,integer)'),
+              ('public.claim_phase1c_run_v2(text,text,text,integer,integer)'),
+              ('public.read_prior_node_results_as_worker_v2(text,uuid,integer)'),
+              ('public.open_node_gate_as_worker(text,uuid,uuid,integer)'),
+              ('public.decide_automatic_gate_as_worker(text,uuid)'),
+              ('public.record_node_state_as_worker(text,uuid,public.graph_node_state,text,text,text,integer)'),
+              ('public.record_graph_artifact_as_worker(text,uuid,public.graph_artifact_kind,jsonb,uuid,integer,integer)'),
+              ('public.complete_reviewer_with_verifications_as_worker(text,uuid,jsonb,text,text,integer,jsonb)'),
+              ('public.diagnose_graph_queue_as_worker_v2(text,text,jsonb,uuid,integer)'),
+              ('public.abort_graph_run_as_worker(text,uuid,public.graph_run_state,text)'),
+              ('public.create_graph_from_plan_with_release_identity_as_server(uuid,uuid,uuid,text,public.graph_topology,jsonb,public.risk_level,boolean,jsonb,jsonb,jsonb,text,integer,uuid,text,text,jsonb)'),
+              ('public.bind_graph_phase1c_run_by_command_as_worker(uuid,uuid,uuid)'),
+              ('public.complete_phase1c_run_with_graph_bridge_as_worker(text,uuid,uuid,text,text,text,jsonb,jsonb,jsonb,text,text,boolean)'),
+              ('public.approve_graph_phase1c_test_gate_as_worker(uuid,uuid,integer,text,text,text,text,timestamp with time zone)'),
+              ('public.approve_graph_phase1c_deployment_gate_as_worker(uuid,uuid,uuid,bigint,text,text,text,text,timestamp with time zone,timestamp with time zone)'),
+              ('public.complete_graph_run_with_phase1c_bridge_as_worker(text,uuid,public.graph_run_state,boolean,bigint,bigint,text,text)')
+            ), worker_routines as (select to_regprocedure(signature) routine from worker_expected)
+            select
+              (select count(*)=1 from supabase_migrations.schema_migrations where version='20260827000100')
+              and (select count(*)=1 from supabase_migrations.schema_migrations where version='20260827000150')
+              and (select count(*)=1 from supabase_migrations.schema_migrations where version='20260827000200')
+              and (select count(*)=1 from supabase_migrations.schema_migrations where version='20260827000210')
+              and (select count(routine)=8 and bool_and(
+                    not has_function_privilege('anon',routine,'EXECUTE')
+                    and not has_function_privilege('authenticated',routine,'EXECUTE')
+                    and not has_function_privilege('service_role',routine,'EXECUTE')) from private_legacy)
+              and not exists (select 1 from private_legacy expected_routine
+                join pg_proc routine_catalog on routine_catalog.oid=expected_routine.routine
+                where pg_get_userbyid(routine_catalog.proowner)<>'postgres'
+                  or routine_catalog.proacl is null
+                  or (select count(*) from aclexplode(routine_catalog.proacl))<>1
+                  or not exists (select 1 from aclexplode(routine_catalog.proacl) privilege
+                    where privilege.grantor=routine_catalog.proowner and privilege.grantee=routine_catalog.proowner
+                      and privilege.privilege_type='EXECUTE' and not privilege.is_grantable)
+                  or exists (select 1 from aclexplode(routine_catalog.proacl) privilege
+                    where privilege.grantor<>routine_catalog.proowner or privilege.grantee<>routine_catalog.proowner
+                      or privilege.privilege_type<>'EXECUTE' or privilege.is_grantable))
+              and to_regprocedure('public.decide_node_gate(uuid,boolean,text)') is not null
+              and not has_function_privilege('anon','public.decide_node_gate(uuid,boolean,text)','EXECUTE')
+              and has_function_privilege('authenticated','public.decide_node_gate(uuid,boolean,text)','EXECUTE')
+              and not has_function_privilege('service_role','public.decide_node_gate(uuid,boolean,text)','EXECUTE')
+              and (select pg_get_userbyid(proowner)='postgres' and prosecdef and proconfig=array['search_path=pg_catalog']::text[]
+                    and strpos(pg_get_functiondef(oid),'full lifecycle release gates require evidence-bound approval')>0
+                    and strpos(pg_get_functiondef(oid),'owner or admin role is required to decide a gate')>0
+                    and strpos(pg_get_functiondef(oid),'automatic gate approval is worker-only and evidence-bound')>0
+                   from pg_proc where oid=to_regprocedure('public.decide_node_gate(uuid,boolean,text)'))
+              and not exists (select 1 from pg_proc routine
+                where routine.oid=to_regprocedure('public.decide_node_gate(uuid,boolean,text)') and (
+                  routine.proacl is null or (select count(*) from aclexplode(routine.proacl))<>2
+                  or not exists (select 1 from aclexplode(routine.proacl) privilege
+                    where privilege.grantor=routine.proowner and privilege.grantee=routine.proowner
+                      and privilege.privilege_type='EXECUTE' and not privilege.is_grantable)
+                  or not exists (select 1 from aclexplode(routine.proacl) privilege
+                    where privilege.grantor=routine.proowner and privilege.grantee=to_regrole('authenticated')::oid
+                      and privilege.privilege_type='EXECUTE' and not privilege.is_grantable)
+                  or exists (select 1 from aclexplode(routine.proacl) privilege
+                    where privilege.grantor<>routine.proowner or privilege.privilege_type<>'EXECUTE'
+                      or privilege.is_grantable or privilege.grantee not in (routine.proowner,to_regrole('authenticated')::oid))))
+              and (select count(routine)=16 and bool_and(
+                    not has_function_privilege('anon',routine,'EXECUTE')
+                    and not has_function_privilege('authenticated',routine,'EXECUTE')
+                    and has_function_privilege('service_role',routine,'EXECUTE')
+                    and (select pg_get_userbyid(proowner)='postgres' and prosecdef and proconfig=array['search_path=pg_catalog']::text[] from pg_proc where oid=routine))
+                   from worker_routines)
+              and not exists (select 1 from worker_routines expected_routine
+                join pg_proc routine_catalog on routine_catalog.oid=expected_routine.routine
+                where routine_catalog.proacl is null
+                  or (select count(*) from aclexplode(routine_catalog.proacl))<>2
+                  or not exists (select 1 from aclexplode(routine_catalog.proacl) privilege
+                    where privilege.grantor=routine_catalog.proowner and privilege.grantee=routine_catalog.proowner
+                      and privilege.privilege_type='EXECUTE' and not privilege.is_grantable)
+                  or not exists (select 1 from aclexplode(routine_catalog.proacl) privilege
+                    where privilege.grantor=routine_catalog.proowner and privilege.grantee=to_regrole('service_role')::oid
+                      and privilege.privilege_type='EXECUTE' and not privilege.is_grantable)
+                  or exists (select 1 from aclexplode(routine_catalog.proacl) privilege
+                    where privilege.grantor<>routine_catalog.proowner or privilege.privilege_type<>'EXECUTE'
+                      or privilege.is_grantable or privilege.grantee not in (routine_catalog.proowner,to_regrole('service_role')::oid)))
+              and to_regclass('public.graph_phase1c_bridges') is not null
+              and to_regclass('public.graph_release_gate_approval_intents') is not null
+              and (select count(*)=2 and bool_and(relrowsecurity and relforcerowsecurity) from pg_class
+                   where oid in ('public.graph_phase1c_bridges'::regclass,'public.graph_release_gate_approval_intents'::regclass))
+              and (select relrowsecurity and relforcerowsecurity and pg_get_userbyid(relowner)='postgres' from pg_class
+                   where oid='public.graph_artifact_payload_containments'::regclass)
+              and not has_table_privilege('anon','public.graph_artifact_payload_containments','SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+              and not has_table_privilege('authenticated','public.graph_artifact_payload_containments','SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+              and not has_table_privilege('service_role','public.graph_artifact_payload_containments','SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+              and not exists (select 1 from pg_class relation cross join lateral aclexplode(coalesce(relation.relacl,acldefault('r',relation.relowner))) privilege
+                where relation.oid='public.graph_artifact_payload_containments'::regclass and privilege.grantee<>relation.relowner)
+              and not has_function_privilege('anon','public.enforce_graph_artifact_payload_containment_immutable()','EXECUTE')
+              and not has_function_privilege('authenticated','public.enforce_graph_artifact_payload_containment_immutable()','EXECUTE')
+              and not has_function_privilege('service_role','public.enforce_graph_artifact_payload_containment_immutable()','EXECUTE')
+              and not exists (select 1 from pg_proc routine cross join lateral aclexplode(coalesce(routine.proacl,acldefault('f',routine.proowner))) privilege
+                where routine.oid=to_regprocedure('public.enforce_graph_artifact_payload_containment_immutable()') and privilege.grantee<>routine.proowner)
+              and (select routine_language.lanname='plpgsql' and pg_get_userbyid(routine.proowner)='postgres'
+                    and routine.prokind='f' and routine.provolatile='v' and routine.prorettype='trigger'::regtype
+                    and routine.prosecdef and routine.proconfig=array['search_path=pg_catalog']::text[]
+                    and btrim(replace(replace(routine.prosrc,E'\r\n',E'\n'),E'\r',E'\n'),E' \n')=E'begin\n  raise exception using errcode = ''55000'',\n    message = ''graph artifact payload containment evidence is immutable'';\nend;'
+                    and routine.proacl is not null and (select count(*) from aclexplode(routine.proacl))=1
+                    and exists (select 1 from aclexplode(routine.proacl) privilege
+                      where privilege.grantor=routine.proowner and privilege.grantee=routine.proowner
+                        and privilege.privilege_type='EXECUTE' and not privilege.is_grantable)
+                   from pg_proc routine join pg_language routine_language on routine_language.oid=routine.prolang
+                   where routine.oid=to_regprocedure('public.enforce_graph_artifact_payload_containment_immutable()'))
+              and not exists (select 1 from pg_constraint where conrelid='public.graph_artifact_payload_containments'::regclass and contype='f')
+              and not exists (select 1 from (values ('anon'),('authenticated'),('service_role')) role_name(name)
+                cross join (values ('public.graph_artifacts'),('public.graph_verifications')) relation_name(name)
+                where has_table_privilege(role_name.name,relation_name.name,'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER'))
+              and not exists (select 1 from pg_class relation
+                cross join lateral aclexplode(coalesce(relation.relacl,acldefault('r',relation.relowner))) privilege
+                where relation.oid in ('public.graph_artifacts'::regclass,'public.graph_verifications'::regclass)
+                  and privilege.grantee<>relation.relowner
+                  and privilege.privilege_type in ('INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER'))
+              and to_regprocedure('public.claim_planned_graph_v2(text,text[],text,jsonb,integer)') is not null
+              and has_function_privilege('service_role','public.claim_planned_graph_v2(text,text[],text,jsonb,integer)','EXECUTE')
+              and not has_function_privilege('anon','public.claim_planned_graph_v2(text,text[],text,jsonb,integer)','EXECUTE')
+              and not has_function_privilege('authenticated','public.claim_planned_graph_v2(text,text[],text,jsonb,integer)','EXECUTE')
+              and to_regprocedure('public.claim_phase1c_run_v2(text,text,text,integer,integer)') is not null
+              and has_function_privilege('service_role','public.claim_phase1c_run_v2(text,text,text,integer,integer)','EXECUTE')
+              and not has_function_privilege('anon','public.claim_phase1c_run_v2(text,text,text,integer,integer)','EXECUTE')
+              and not has_function_privilege('authenticated','public.claim_phase1c_run_v2(text,text,text,integer,integer)','EXECUTE')
+              and to_regprocedure('public.diagnose_graph_queue_as_worker_v2(text,text,jsonb,uuid,integer)') is not null
+              and has_function_privilege('service_role','public.diagnose_graph_queue_as_worker_v2(text,text,jsonb,uuid,integer)','EXECUTE')
+              and not has_function_privilege('anon','public.diagnose_graph_queue_as_worker_v2(text,text,jsonb,uuid,integer)','EXECUTE')
+              and not has_function_privilege('authenticated','public.diagnose_graph_queue_as_worker_v2(text,text,jsonb,uuid,integer)','EXECUTE')
+              and to_regprocedure('public.abort_graph_run_as_worker(text,uuid,public.graph_run_state,text)') is not null
+              and has_function_privilege('service_role','public.abort_graph_run_as_worker(text,uuid,public.graph_run_state,text)','EXECUTE')
+              and not has_function_privilege('anon','public.abort_graph_run_as_worker(text,uuid,public.graph_run_state,text)','EXECUTE')
+              and not has_function_privilege('authenticated','public.abort_graph_run_as_worker(text,uuid,public.graph_run_state,text)','EXECUTE')
+              and (select count(*)=1 from pg_trigger where tgrelid='public.graph_artifact_payload_containments'::regclass and tgname='graph_artifact_payload_containments_immutable' and not tgisinternal and tgenabled='O' and tgtype=58 and tgfoid=to_regprocedure('public.enforce_graph_artifact_payload_containment_immutable()'))
+              and (select count(*)=1 from pg_trigger where tgrelid='public.graph_artifacts'::regclass and tgname='graph_artifacts_update_immutable' and not tgisinternal and tgenabled='O')
+              and (select count(*)=${EXPECTED_COUNT} from public.graph_artifact_payload_containments)
+              and (select encode(sha256(convert_to(coalesce(string_agg(
+                    concat_ws('|',artifact_id::text,organization_id::text,graph_run_id::text,
+                      coalesce(node_run_id::text,'-'),artifact_kind::text,original_payload_sha256,
+                      original_payload_octets::text,sensitive_data_detected::text,size_limit_exceeded::text),
+                    E'\\n' order by artifact_id::text),''),'UTF8')),'hex')='${EXPECTED_MANIFEST_SHA256}'
+                   from public.graph_artifact_payload_containments)
+              and not exists (select 1 from public.graph_artifact_payload_containments containment
+                left join public.graph_artifacts artifact on artifact.id=containment.artifact_id
+                where artifact.id is null or artifact.payload is distinct from jsonb_build_object(
+                  'contained',true,'containmentEvidenceId',containment.id,'reason','legacy_artifact_policy_violation'))
+              and not exists (select 1 from public.organizations where autonomous_mode or not autonomy_kill_switch_active or auto_plan or auto_code or auto_test or auto_repair or auto_review or auto_approve or auto_merge or auto_deploy or auto_rollback)
+              and not exists (select 1 from public.projects where autonomous_mode or auto_plan or auto_code or auto_test or auto_repair or auto_review or auto_approve or auto_merge or auto_deploy or auto_rollback)
+              and not exists (select 1 from public.phase1c_workers where status in ('active','draining') and last_heartbeat_at>now()-interval '5 minutes')
+              and not exists (select 1 from public.graph_runs where state='RUNNING'::public.graph_run_state)
+              and not exists (select 1 from public.agent_runs where status='running'::public.run_status);")
+          if [ "$VERIFIED" != "t" ]; then
+            echo "::error::Lineage ledger/catalog/ACL/RLS/safety postflight failed."
+            exit 1
+          fi
+          echo "Applied unchanged 20260827000200 after exact 00210 containment; v2 lineage is installed and execution remains stopped."

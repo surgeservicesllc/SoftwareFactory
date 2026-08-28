@@ -86,6 +86,12 @@ const INTENTIONALLY_POLICYLESS: Readonly<Record<string, string>> = Object.freeze
     "Ephemeral one-use capabilities for the nested factory command transaction. "
     + "Every table privilege is denied; only the SECURITY DEFINER factory/public "
     + "command pair may create and consume a row, and successful calls leave none.",
+  graph_artifact_payload_containments:
+    "Private immutable digest and classification evidence for forward-only legacy "
+    + "artifact containment. FORCE RLS is required and every non-owner table ACL is "
+    + "closed, including anon, authenticated, and service_role; the postgres-owned "
+    + "migration path is the only writer, so a policy would create an unintended "
+    + "second access path to the audit rows.",
   graph_release_gate_approval_intents:
     "Append-only, one-use owner intent evidence for TEST and DEPLOYMENT gates. "
     + "Browsers request an intent and the server consumes it only through bounded "

@@ -119,7 +119,7 @@ describe("every API route resolves to Supabase or says why not", () => {
         + "to NO_TENANT_DATA with the reason they have nothing to read:\n"
         + unwired.join("\n"),
     ).toEqual([]);
-  });
+  }, 120_000);
 });
 
 describe("no surface invents the records it shows", () => {

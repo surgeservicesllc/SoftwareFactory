@@ -12,7 +12,7 @@ const migrationsDirectory = resolve(repositoryRoot, "supabase/migrations");
 const grantsMigration =
   "20260812002600_narrow_hosted_service_role_table_grants.sql";
 const latestMigration =
-  "20260827000200_graph_phase1c_release_lineage.sql";
+  "20260827000210_contain_legacy_graph_artifact_payloads.sql";
 
 const publicTables = [
   // Sorted alphabetically to match the catalogue query. Keep it sorted when
@@ -73,6 +73,7 @@ const publicTables = [
   "github_repositories",
   "github_webhook_deliveries",
   "graph_anchors",
+  "graph_artifact_payload_containments",
   "graph_artifacts",
   "graph_budgets",
   "graph_edges",

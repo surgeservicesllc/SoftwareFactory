@@ -947,19 +947,23 @@ unapplied to hosted Supabase.
 | Rebased release identity | Candidate `ead498b495ac59d920e6f76df7917ea830dbcf8c` on `origin/main` `1e803eba3a931cf6978666723853dee61ea344e8` | Local candidate only |
 | Requirements -> Monitor lifecycle | Exact repository/base/policy identity, explicit gates, durable command/PR/CI/deployment/monitor lineage, exact graph/run UI selection | Implemented and locally audited |
 | Focused verification | 18 files / 207 tests; lint, typecheck, production build, and diff-check green | Pass locally |
-| Protocol fence migration | `20260827000150`, LF-normalized SHA-256 `A4B505841D94CC89DFC82E24837DEDB78356B56C5F5698C0748F8B6735341A49` | Unhosted; protected apply pending |
-| Phase 1C release-lineage migration | `20260827000200`, LF-normalized SHA-256 `23197552DF3F442AE8264BF71BD28A7C479E09A64BF6E298C615B767A96572BE` | Unhosted; apply only after exact 00150 acceptance |
-| Publication | Exact-head CI, READY Vercel identity, production health | Pending; not deployed |
+| Protocol fence migration | `20260827000150`, LF-normalized SHA-256 `A4B505841D94CC89DFC82E24837DEDB78356B56C5F5698C0748F8B6735341A49`; run `33144600401` | Hosted once; ledger/fence/drain/safety postflight pass |
+| Phase 1C release-lineage migration | `20260827000200`, LF-normalized SHA-256 `23197552DF3F442AE8264BF71BD28A7C479E09A64BF6E298C615B767A96572BE`; run `33144659265` | Failed closed on legacy sensitive/oversized payload; transaction and ledger rolled back; pending forward containment |
+| Publication | Exact main `0880191b367d12d42f8ce4af9c267657c10c5fce`; CI `33143981765`; Vercel `dpl_9fd1i9M7USTeUEd6NqX7GCi1nF6R` | Pass; exact release READY |
 | Current Step 8/9 production acceptance | Former Claude bot/account was explicitly removed 2026-08-23; fresh supported account connection, reload stickiness, command/route/run correlation required | Pending owner-secure OAuth; absence is not a planner-code failure |
 | Safety envelope | Worker, provider execution, autonomy, and all automatic actions OFF; global kill switch ON | Preserved |
 
-## 2026-08-28 exact release and workflow-size recovery
+## 2026-08-28 exact release, protocol fence, and artifact containment
 
 | Gate | Evidence | Status |
 | --- | --- | --- |
-| Exact production | `fd47242`; CI `33142553600` four required jobs green; Vercel `dpl_HLugpE6AfTYzUptJyxycpP3Cb5bK` READY | Pass |
+| Exact production | `0880191b367d12d42f8ce4af9c267657c10c5fce`; CI `33143981765` four required jobs green; Vercel `dpl_9fd1i9M7USTeUEd6NqX7GCi1nF6R` READY | Pass |
 | Hosted apply attempt | `33143231202` queued with zero jobs/checks; 517,320-byte workflow exceeded 500 KB; no DDL ran | Safely not started |
-| Recovery semantics | Only comment/dispatch-help removal; protected scopes, hashes, shell bodies, and migrations unchanged | Pass locally |
-| Size regression | UTF-8 workflow bytes required `< 490,000` | Pass locally |
-| Focused recovery verification | 8 files / 63 tests; lint; typecheck | Pass locally |
+| Workflow recovery | 472,229-byte released workflow; executable lines unchanged; UTF-8 size contract `< 490,000` | Pass on exact release |
+| Legacy authority fence | Run `33144600401` applied only `00150`; exact ledger/function ACL/drain/safety postflight; graph/Phase 1C running rows `0|0` | Pass hosted; never replay |
+| Lineage apply | Run `33144659265`; exact `00200` stopped on `legacy graph artifact payload is sensitive or oversized` | Failed closed; single transaction rolled back all DDL and ledger insert |
+| Forward containment migration | `20260827000210`, SHA-256 `c37a55efe74e9a9b4118924e1b2cbd0378a76f0d98c9747c6c66fffda9697de1`; private immutable digest evidence, bounded tombstones, two validated constraints | Security-reviewed local candidate; hosted acceptance pending |
+| Protected containment workflow | Payload-free `probe`, manifest-pinned `contain`, and probe-identity-pinned `lineage` share production-DDL concurrency; `node_runs` lock; future-heartbeat refusal; exact raw ACL/tombstone checks before/under-lock/after; transactional plus post-commit RLS/audit/safety validation | Implemented locally; all hosted operations pending exact release |
+| State-dependent legacy fence | Pre-v2: all 9 legacy signatures fully revoked. Post-v2: 8 remain fully revoked; replaced `decide_node_gate(uuid,boolean,text)` is authenticated-only, owner/admin-checked, `SECURITY DEFINER`, pinned search path, and evidence-bound | Implemented locally; hosted lineage acceptance pending |
+| Release lineage completion | Dedicated `operation=lineage` requires the same positive count/manifest from `probe`, reconstructs it from private audit rows, verifies exact tombstones/ACLs, and stages only unchanged hash-pinned `00200` after accepted `00210` | Pending; no partial v2 catalog hosted |
 | Fresh Step 8 request | Zero production `POST /api/commands` after exact deploy; successful GET polling only | Pending hard reload and signed-in POST |

@@ -24,13 +24,15 @@ once under its frozen file hash.
 
 ## Graph/Phase 1C atomic-wrapper cutover (2026-08-27)
 
-This is a two-commit database protocol cutover, never a two-file apply. The
+This is an ordered database protocol cutover, never a bundled apply. The
 protected file identities are:
 
 - `20260827000150_fence_legacy_graph_protocol.sql` — SHA-256
   `a4b505841d94cc89dfc82e24837dedb78356b56c5f5698c0748f8b6735341a49`;
 - `20260827000200_graph_phase1c_release_lineage.sql` — SHA-256
-  `23197552df3f442ae8264bf71bd28a7c479e09a64bf6e298c615b767a96572be`.
+  `23197552df3f442ae8264bf71bd28a7c479e09a64bf6e298c615b767a96572be`;
+- forward containment `20260827000210_contain_legacy_graph_artifact_payloads.sql`
+  — SHA-256 `c37a55efe74e9a9b4118924e1b2cbd0378a76f0d98c9747c6c66fffda9697de1`.
 
 The mandatory release order is exact:
 
@@ -51,23 +53,68 @@ The mandatory release order is exact:
    `authenticated`, and `service_role`.
 3. Keep dispatch paused and drain. Do not start 00200 until `graph_runs` has
    zero `RUNNING` rows, `agent_runs` has zero `running` rows, there is no fresh
-   active/draining worker heartbeat, and no legacy graph call or lock remains.
+   or future-dated active/draining worker heartbeat, and no legacy graph call
+   or lock remains. A future-skewed heartbeat is ambiguous active evidence and
+   fails closed; it is never treated as stale or ignored.
    Recheck autonomy OFF, all nine automatic actions OFF, and kill switches ON.
    An old call that entered before 00150 may finish; never reset or rerun 00150
    to hurry it.
-4. Only after that exact acceptance, dispatch a separate run with
-   `scope=graph-phase1c-lineage`. It stages only `20260827000200`, requires the
-   separately committed fence and drain, and atomically commits its DDL and
-   ledger row. The migration repeats the fence, lock, drain, catalog, history,
-   and safety preflights inside the same transaction before installing the v2
-   boundary.
-5. Require the postflight to read back both ledger rows exactly once; private
-   legacy claims/writes and private legacy queue diagnosis; service-only v2
+4. If `00200` stops at `legacy graph artifact payload is sensitive or
+   oversized`, do not rerun it against the same catalog. Its protected
+   `--single-transaction` invocation rolls back both DDL and ledger. Publish
+   forward migration
+   `20260827000210_contain_legacy_graph_artifact_payloads.sql` (SHA-256
+   `c37a55efe74e9a9b4118924e1b2cbd0378a76f0d98c9747c6c66fffda9697de1`)
+   plus `.github/workflows/graph-artifact-containment.yml`. From the exact
+   green/READY `main` release, dispatch `operation=probe`; it may report only
+   the positive candidate count, payload-free manifest SHA-256, aggregate
+   classification, and four zero downstream blocker counts. Never log a
+   payload or row identifier.
+5. Dispatch `operation=contain` only with that exact count and manifest. The
+   workflow rechecks them while holding the graph state locks, stages only the
+   hash-pinned `00210` file, removes the unsafe bodies, preserves private
+   immutable digest/classification evidence, validates both payload guards,
+   and records only `00210`. Before v2 exists, the migration and wrapper must
+   require all nine legacy signatures to remain non-executable by `anon`,
+   `authenticated`, and `service_role`; freeze `node_runs` with the artifact
+   tables; reject fresh or future-skewed active/draining heartbeats; and
+   validate payload constraints, FORCE RLS, zero app-role table ACLs, and both
+   immutable triggers inside the same transaction before its ledger insert can
+   commit. Repeat those checks after commit, including worker-stopped state.
+   Require `00150/00200/00210=1/0/1` and zero remaining violations. A changed
+   manifest or nonzero downstream blocker requires another reviewed forward
+   repair.
+6. Only after that exact acceptance, dispatch the same dedicated
+   `graph-artifact-containment.yml` with `operation=lineage`. All three
+   operations share the `apply-hosted-migrations` concurrency group, so no
+   other production DDL scope can overlap them. `lineage` requires the same
+   positive candidate count and manifest SHA-256 recorded from `probe`, then
+   reconstitutes that exact manifest from the private containment-audit rows
+   before locking, under the exclusive lock, and after commit. It also requires
+   `00150/00200/00210=1/0/1`, all nine legacy signatures fully revoked in the
+   pre-v2 state, the stopped/future-heartbeat safety state, exact
+   evidence-linked tombstones, owner-only raw table/function ACLs for the
+   private audit boundary, and the frozen unchanged `00200` SHA-256. It stages
+   only `00200` and atomically validates its new ACL/RLS/audit catalog before
+   committing its DDL and ledger row.
+7. Require the postflight to read back all three ledger rows exactly once;
+   eight private legacy claims/writes/recorders; and the intentionally replaced
+   `decide_node_gate(uuid,boolean,text)` as authenticated-execute only (anonymous
+   and service-role refused), `SECURITY DEFINER`, exact
+   `search_path=pg_catalog`, owner/admin-gated, and evidence-bound for full
+   lifecycle and automatic approvals. Also require service-only v2
    claim, repository/policy-scoped diagnosis, atomic abort and release-lineage
    writers; hardened `SECURITY DEFINER`/`search_path=pg_catalog`; exact table
-   ACLs; enabled and forced RLS; and the still-drained, autonomy-OFF,
+   and function ACLs (including raw ACL entries); exact manifest and tombstone
+   identity; enabled and forced RLS; and the still-drained, autonomy-OFF,
    automatic-actions-OFF, kill-switch-ON state. Reload PostgREST only after the
    transaction succeeds. Keep dispatch paused until this evidence is saved.
+
+Current recovery state on 2026-08-28: `00150` is hosted exactly once; protected
+run `33144659265` rolled `00200` back at the payload preflight; `00210` and the
+unchanged `00200` remain pending separate `contain` and `lineage` acceptance
+runs. The final reviewed `00210` identity is pinned above and must match before
+publication or dispatch.
 
 `scope=all` refuses to run unless both 00150 and 00200 are already recorded
 exactly once and their frozen repository hashes plus the v2 catalog/safety
@@ -151,7 +198,7 @@ the measured list, not today's total outstanding migration count. Later exact ev
 forward candidates.
 Do not add any of them to the 19-row measurement or
 infer a new overall missing count without another complete ledger probe. As of this release,
-the repository total is 169 migration files after integration with current `origin/main`. Those two numbers do not stand in a prefix relationship, and the reason
+the repository total is 170 migration files after integration with current `origin/main`. Those two numbers do not stand in a prefix relationship, and the reason
 matters: the
 hosted ledger is **not a contiguous prefix** of the local files. It has gaps in the middle and
 rows well past them. Any sentence of the form "everything after `X` is outstanding" is therefore

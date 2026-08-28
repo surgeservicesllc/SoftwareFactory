@@ -1031,13 +1031,16 @@ requested rework is the failure mode to design against.
   with dedicated one-shot scopes. Stable LF-normalized SHA-256 identities are
   `A4B505841D94CC89DFC82E24837DEDB78356B56C5F5698C0748F8B6735341A49`
   and `23197552DF3F442AE8264BF71BD28A7C479E09A64BF6E298C615B767A96572BE`.
-- [ ] Publish the candidate, require the exact-head quality and all browser /
-  accessibility jobs green, and verify the exact READY Vercel production
-  identity and health. No deployment is claimed yet.
-- [ ] Apply only `20260827000150`, verify its ledger/catalog/fence/safety
-  postflight, then apply only `20260827000200` and verify its ledger, catalog,
-  ACL, RLS, audit, runtime, lint, health, and preserved release identity. No
-  hosted apply is claimed yet; never bundle, reset, replay, or down-migrate.
+- [x] Publish exact release `0880191b367d12d42f8ce4af9c267657c10c5fce`;
+  exact-head CI `33143981765` passed quality and all three browser/accessibility
+  jobs, and Vercel `dpl_9fd1i9M7USTeUEd6NqX7GCi1nF6R` is READY.
+- [x] Apply only `20260827000150` and verify its ledger/catalog/fence/safety
+  postflight. Run `33144600401` passed with legacy authority fenced, graph and
+  Phase 1C running rows `0|0`, and the stopped safety envelope preserved.
+- [ ] Apply `20260827000200` only after the forward legacy-artifact containment
+  below is hosted and accepted. Run `33144659265` found an unsafe/oversized
+  legacy payload and rolled back migration plus ledger atomically; `00200`
+  remains absent. Never bundle, reset, replay `00150`, or down-migrate.
 - [ ] Reconnect a fresh supported owner AI account and verify reload
   stickiness, then complete signed-in production Steps 8 and 9 against the
   exact release. The former Claude bot/account was explicitly removed on
@@ -1054,9 +1057,39 @@ requested rework is the failure mode to design against.
   protected identity unchanged, and add a regression test requiring less than
   490,000 UTF-8 bytes. Focused verification: 8 files / 63 tests, lint, and
   typecheck green.
-- [ ] Publish the forward recovery, require exact-head CI and READY Vercel,
-  cancel only the zero-job oversized-SHA orphan, then apply `00150` and `00200`
-  once each in their mandatory order.
+- [x] Publish the forward recovery as exact main
+  `0880191b367d12d42f8ce4af9c267657c10c5fce`, require exact-head CI and READY
+  Vercel, prove the zero-job oversized-SHA orphan never executed, and apply
+  `00150` exactly once.
+- [x] Diagnose failed lineage run `33144659265`: legacy graph artifact payload
+  violates the new sensitive-data or size boundary. The single transaction
+  rolled back all `00200` DDL and its ledger insert; no partial v2 catalog
+  survived.
+- [x] Add forward migration
+  `20260827000210_contain_legacy_graph_artifact_payloads.sql` and a dedicated
+  payload-free, manifest-pinned `probe` / `contain` / `lineage` workflow. The candidate
+  stores only bounded immutable digest/classification evidence and tombstones
+  the offending payload; it never logs payloads or row identifiers.
+- [x] Harden the local candidate after security review: serialize all three
+  operations with every hosted-migration scope; lock `node_runs` with artifact
+  state; require all nine legacy signatures revoked before v2 and, afterward,
+  eight revoked plus exact authenticated-only/evidence-bound
+  `decide_node_gate`; reject future-dated active/draining heartbeats; recheck
+  worker-stopped state after apply; and move ACL/RLS/audit-trigger acceptance
+  inside each migration transaction so failure rolls back DDL and ledger
+  together.
+- [ ] Publish the containment candidate, require exact-head CI and READY
+  Vercel, run `probe`, then pass its exact positive count and manifest SHA-256
+  to one `contain` run. Verify only `00210` was applied, ledger/catalog/
+  constraints/FORCE-RLS/ACL/audit/safety postflight passes, and `00200` remains
+  absent.
+- [ ] Only after exact hosted `00210` acceptance, dispatch
+  `graph-artifact-containment.yml` with `operation=lineage`. It must stage only
+  unchanged hash-pinned `00200`, require `00150/00200/00210=1/0/1` plus the
+  same positive count/manifest SHA-256 from `probe`, reconstitute that manifest
+  from private audit rows, and verify exact tombstones, raw table/function ACLs,
+  state-dependent legacy-function ACLs, and its full transactional and
+  post-commit ledger/catalog/RLS/audit/runtime/lint/health postflight.
 - [ ] Hard reload the signed-in owner Factory and submit a fresh Step 8 request;
   require a production POST, immutable record-only route evidence, and truthful
   persisted Step 9 state with all execution surfaces still OFF.

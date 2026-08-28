@@ -1598,8 +1598,63 @@ The non-secret repository Actions variable `SOFTWAREFACTORY_PHASE1C_WORKER_ENABL
   above GitHub's 500 KB ceiling, so the run has zero jobs/checks and no DDL.
 - The recovery removes only comments/long dispatch prose and pins a `< 490,000`
   byte test. After its exact release is green, cancel only the zero-job orphan,
-  dispatch `graph-protocol-fence` once, accept ledger/fence/drain, then dispatch
-  `graph-phase1c-lineage` once. Never bundle, replay, reset, or down-migrate.
+  dispatch `graph-protocol-fence` once and accept ledger/fence/drain. The first
+  lineage dispatch then rolled back on the legacy-payload guard; the current
+  recovery sequence is the dedicated `probe` / `contain` / `lineage` procedure
+  below. Never bundle, replay, reset, or down-migrate.
 - Vercel logs after `fd47242` show zero Step 8 POSTs. The repeated raw database
   text is client state from the Aug 22 tab; require a hard reload and a fresh
   POST before diagnosing the current server or accepting Steps 8/9.
+
+## 2026-08-28 legacy graph artifact containment handoff
+
+- Exact release `0880191b367d12d42f8ce4af9c267657c10c5fce` passed all four
+  required jobs in CI `33143981765` and is READY in Vercel deployment
+  `dpl_9fd1i9M7USTeUEd6NqX7GCi1nF6R` behind `www.theagoras.com`.
+- Run `33144600401` applied only
+  `20260827000150_fence_legacy_graph_protocol.sql`. Its ledger/fence/drain/
+  safety checks passed. Keep that fence committed: do not replay it, restore a
+  legacy grant, reset history, or down-migrate.
+- Run `33144659265` attempted only unchanged `00200` and stopped at its own
+  catalog preflight: at least one legacy `graph_artifacts.payload` is sensitive
+  or over one megabyte. The migration and ledger insert shared one PostgreSQL
+  transaction, so the error rolled back all `00200` DDL and left its ledger row
+  absent. Do not treat the preceding NOTICE messages as persisted objects.
+- Local forward migration
+  `20260827000210_contain_legacy_graph_artifact_payloads.sql` has SHA-256
+  `c37a55efe74e9a9b4118924e1b2cbd0378a76f0d98c9747c6c66fffda9697de1`.
+  It irreversibly removes only offending payload bodies, retains payload-free
+  immutable digest/size/classification evidence in a private FORCE-RLS table,
+  writes bounded evidence-linked tombstones, and validates the two payload
+  constraints. It is not hosted yet.
+- `.github/workflows/graph-artifact-containment.yml` is the only intended
+  apply path for `00210` and the subsequent unchanged `00200`. Its `probe`,
+  `contain`, and `lineage` operations share the `apply-hosted-migrations`
+  concurrency group with every other production DDL scope. First dispatch
+  `operation=probe`; record its candidate
+  count, manifest SHA-256, and `0|0|0|0` downstream blockers. Only after the
+  exact release is green and READY, dispatch `operation=contain` with that same
+  positive count and manifest. The job rechecks under lock, stages only the
+  hash-pinned file, and logs no payload or row identifier. Stop if the manifest,
+  blockers, ledger, catalog, release, or safety state changed.
+- Accept `00210` only after ledger, zero remaining offending artifacts, both
+  validated constraints, private table FORCE RLS/no ACL, immutable triggers,
+  and stopped-safety postflight all pass. Before v2, all nine legacy signatures
+  must remain fully revoked. `node_runs` must be locked with artifact state;
+  fresh or future-dated active/draining heartbeats must block; and exact raw
+  table/function ACL plus RLS/audit-trigger validation must occur before the
+  transaction and ledger commit, then repeat afterward with worker-stopped
+  state.
+- Only then dispatch the same workflow with `operation=lineage`. It requires
+  `00150/00200/00210=1/0/1`, accepted containment, the same positive count and
+  manifest SHA-256 from `probe`, the stopped state, and stages only unchanged
+  hash-pinned `00200`. It reconstitutes the manifest from private audit rows and
+  verifies the exact tombstones/raw ACLs before locking, under lock, and after
+  commit. Post-v2 acceptance requires eight legacy signatures still fully
+  revoked and the replaced `decide_node_gate(uuid,boolean,text)` exactly
+  authenticated-only, owner/admin-checked, `SECURITY DEFINER`, pinned
+  `search_path`, and evidence-bound; anonymous and `service_role` remain
+  refused. `00200` stays pending until this complete acceptance passes.
+- Throughout: execution workers/provider execution/autonomy/all automatic
+  actions remain OFF, the global kill switch remains ON, running graph and
+  Phase 1C rows remain zero, and no status changes to Connected.

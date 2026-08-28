@@ -304,11 +304,15 @@ describe("the verified ledger recorder", () => {
 
   async function bootstrapWithLedger(): Promise<PGlite> {
     const db = await bootstrap();
+    // Replay the schema as a clean, ledgerless database first. Protected graph
+    // migrations deliberately reject a present-but-empty hosted ledger because
+    // that state falsely claims there is authoritative migration history.
+    // The empty ledger belongs to the recorder fixture, not to migration replay.
+    await applyChain(db);
     await db.exec(`
       create schema if not exists supabase_migrations;
       create table supabase_migrations.schema_migrations (version text primary key);
     `);
-    await applyChain(db);
     return db;
   }
 

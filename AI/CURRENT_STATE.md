@@ -1460,25 +1460,70 @@ command-planner code failure. Until that connection exists, the provider path
 remains **Not Connected**. Workers, autonomous mode, provider execution, and
 all automatic actions remain OFF; the global kill switch remains ON.
 
-## 2026-08-28: exact production release and hosted-apply recovery
+## 2026-08-28: exact release, committed fence, and forward artifact containment
 
-Release `fd4724240de8312f8a5642968888e591ad085ca6` is on `main`; CI run
-`33142553600` passed the quality job and all three browser/accessibility shards,
-and Vercel deployment `dpl_HLugpE6AfTYzUptJyxycpP3Cb5bK` is READY behind
-`www.theagoras.com`. Production safety remains kill switch ON, autonomy and all
-nine automatic actions OFF, provider execution disabled, and no executor or
-graph/Codex worker connected.
+Release `0880191b367d12d42f8ce4af9c267657c10c5fce` is on `main`; exact-head
+CI run `33143981765` passed the quality job and all three browser/accessibility
+shards, and Vercel deployment `dpl_9fd1i9M7USTeUEd6NqX7GCi1nF6R` is READY
+behind `www.theagoras.com`. This release contains the workflow-size recovery:
+the protected workflow is 472,229 Git-blob bytes and its executable lines are
+unchanged. The earlier zero-job run `33143231202` executed no DDL.
 
-The first protected hosted apply did not start. Run `33143231202` stayed queued
-with zero jobs and zero check runs because `apply-hosted-migrations.yml` had
-grown to 517,320 Git-blob bytes, above GitHub Actions' 500 KB workflow-file
-limit. No database statement or migration ran. The forward recovery shortens
-only comments and dispatch help, preserves every scope/hash/gate/shell body,
-and adds a `< 490,000` byte regression contract. Migrations `00150` and `00200`
-remain unhosted pending the recovery release and ordered one-shot acceptance.
+Protected run `33144600401` then applied exactly
+`20260827000150_fence_legacy_graph_protocol.sql` once to Supabase project
+`qpuofpmagrmyamahqwxw`. Its ledger, function-ACL, drain, and safety postflight
+passed: the nine legacy graph/Phase 1C mutators have no browser or
+`service_role` execute authority, graph and Phase 1C running-row counts were
+`0|0`, no executor is connected, autonomy and all automatic actions are OFF,
+and the global kill switch remains ON. This committed fence must not be
+replayed or reversed.
 
-Fresh production logs after `fd47242` contain no `POST /api/commands`; the only
-command traffic is successful GET polling. The raw `invalid Phase 1C command
-plan` text cannot be a response from the exact server bundle and is still an
-old mounted client result. A new signed-in POST and its immutable command/route
-identity remain required before Steps 8 and 9 are accepted.
+The separately dispatched lineage run `33144659265` failed closed while
+executing unchanged migration
+`20260827000200_graph_phase1c_release_lineage.sql`. At line 2645 its catalog
+preflight raised `legacy graph artifact payload is sensitive or oversized;
+contain with a forward repair`. The workflow invoked the migration and its
+ledger insert in one `psql --single-transaction`; PostgreSQL rolled back every
+`00200` DDL statement and the ledger insert atomically. Migration `00200`
+therefore remains absent and none of its v2 catalog/ACL changes is hosted.
+
+The local forward-only containment candidate is
+`20260827000210_contain_legacy_graph_artifact_payloads.sql`, SHA-256
+`c37a55efe74e9a9b4118924e1b2cbd0378a76f0d98c9747c6c66fffda9697de1`.
+It records only a digest, byte count, bounded classification, and immutable
+identity evidence in a private FORCE-RLS table; replaces each offending legacy
+payload with a bounded evidence-linked tombstone; installs update immutability;
+and validates both sensitive-key and one-megabyte payload constraints. It is
+not hosted yet.
+
+Dedicated workflow `graph-artifact-containment.yml` keeps three operations
+separate under the same `apply-hosted-migrations` concurrency group. `probe`
+reports only candidate counts, a payload-free manifest SHA-256, and downstream
+blocker counts. `contain` requires those exact probe outputs, rechecks them
+while locking `node_runs` and the artifact state, and stages only hash-pinned
+`00210`. `lineage`, available only after accepted `00210`, requires the same
+positive count and manifest SHA-256 from `probe`, reconstructs that identity
+from the private containment-audit rows before locking, under lock, and after
+commit, verifies the exact evidence-linked tombstones and raw table/function
+ACLs, and stages only unchanged hash-pinned `00200`.
+
+Security review makes the legacy catalog fence unconditional but
+state-dependent. Before v2, all nine legacy signatures are fully revoked.
+After unchanged `00200`, eight remain fully revoked while
+`decide_node_gate(uuid,boolean,text)` is deliberately replaced with an
+authenticated-execute-only, owner/admin-checked, `SECURITY DEFINER`,
+`search_path=pg_catalog`, evidence-bound gate-decision RPC; anonymous and
+`service_role` cannot execute it. Any fresh or future-dated active/draining
+worker heartbeat is a stop. Constraints, FORCE RLS, exact raw table/function
+ACLs, and immutable audit triggers validate inside the same transaction as the
+DDL and ledger insert and again after commit, including worker-stopped state.
+No payload or row identifier is logged. Both `00210` and
+unchanged `00200` remain unhosted and separately pending exact `contain` and
+`lineage` acceptance; never bundle, reset, replay `00150`, or down-migrate.
+
+Fresh production logs after the exact release contain no
+`POST /api/commands`; the only command traffic is successful GET polling. The
+raw `invalid Phase 1C command plan` text cannot be a response from the exact
+server bundle and is still an old mounted client result. A new signed-in POST
+and its immutable command/route identity remain required before Steps 8 and 9
+are accepted.
