@@ -2,7 +2,7 @@
 
 Last reviewed: 2026-08-28
 
-## 2026-08-28: selector and production-URL schema are hosted; signed acceptance transport is being corrected
+## 2026-08-28: production-URL acceptance passed; disposable boundary is removed
 
 Exact cleanup release `994da2cec81c0cd83aa1e2d87ad848d2f2ff612a` passed all
 four required jobs in CI `33164903094`. GitHub deployment `6139882660`
@@ -35,13 +35,23 @@ immediately before and after. First-attempt run `33168092838` passed immutable
 invocation, exact green/READY release, stopped-workflow, and Supabase connection
 gates, then stopped before target resolution or mutation: `psql -c` sent the
 literal protected-variable tokens to PostgreSQL instead of expanding them.
-Both temporary selectors were deleted immediately. The forward fix moves only
+Both temporary selectors were deleted immediately. The forward fix moved only
 that read-only target query to a quoted stdin heredoc, where `psql` variable
-quoting is supported, and adds a regression guard. Publish the fix as a new
-exact SHA and use a fresh first-attempt dispatch; never rerun `33168092838`.
-Only after exact acceptance may `target-claims` continue. Workers, schedules,
-the auth broker, autonomy, and automatic actions remain OFF; the global kill
-switch remains ON.
+quoting is supported, and added a regression guard.
+
+Corrected release `53b84b7952a1e09725f53da5d65c4947b8cb914a` passed all
+four required jobs in CI `33168368270`. GitHub deployment `6140556549`
+resolved to READY Vercel deployment `dpl_tBF2s6AtLmqZ13YpYHKWzBRtwiKT`, and
+public health joined the exact release/deployment/Vercel/Supabase identities.
+Fresh first-attempt acceptance run `33169297158` passed the real owner/admin
+session, exact production URL write, exactly one owner-attributed immutable
+`project.updated` event, no-op replay without a duplicate event, signed-in
+portfolio reload, and pre/post stopped containment. The two temporary selector
+secrets were deleted immediately. This cleanup removes the now-used disposable
+workflow and regression test. The next release step is a fresh lifecycle
+`probe` on the cleanup SHA followed, only if exact, by `target-claims`.
+Workers, schedules, the auth broker, autonomy, and automatic actions remain
+OFF; the global kill switch remains ON.
 
 ## 2026-08-28: exact verified Blackstone Auth bootstrap completed and disposed
 

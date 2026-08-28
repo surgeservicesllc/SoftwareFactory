@@ -21,10 +21,15 @@ clean focused ESLint, clean TypeScript, valid YAML, and every shell block passes
 public health identity join. First-attempt run `33168092838` passed all
 pre-write release/safety/connection gates and then failed closed before target
 resolution or mutation because `psql -c` did not expand its protected variable
-tokens. Both temporary selectors were deleted. A quoted-stdin correction and
-regression guard are required on a new exact release; the failed attempt must
-not be rerun. Verdict: **HOSTED DDL AND APPLICATION RELEASE PASS; SIGNED-IN
-VALUE/AUDIT ACCEPTANCE PENDING FORWARD TRANSPORT FIX**. No worker or autonomous
+tokens. Both temporary selectors were deleted. Corrected release
+`53b84b7952a1e09725f53da5d65c4947b8cb914a` then passed all four jobs in CI
+`33168368270`, READY deployment `dpl_tBF2s6AtLmqZ13YpYHKWzBRtwiKT`, and the
+public health identity join. Fresh first-attempt run `33169297158` passed the
+real owner/admin session, exact URL write, one immutable owner-attributed audit
+event, no-op replay without a duplicate, signed-in reload, and every pre/post
+stopped-containment check. Both temporary selectors were deleted immediately;
+this cleanup removes the disposable workflow/test. Verdict: **PRODUCTION URL
+ACCEPTANCE PASS; DISPOSABLE SESSION PATH REMOVED**. No worker or autonomous
 action was enabled.
 
 **Addendum, 2026-08-28 — exact Blackstone Auth bootstrap (ADR-160):** the

@@ -1,11 +1,11 @@
 # SoftwareFactory — shared working status
 
-## FACTORY RELEASE CHECKPOINT (2026-08-28 07:42 EDT — CURRENT)
+## FACTORY RELEASE CHECKPOINT (2026-08-28 08:02 EDT — CURRENT)
 
-- Current exact `main` is disposable acceptance release
-  `540aceb173ec88e67cb982018a80134ece3ec474`; all four jobs passed in
-  `33167232673`; GitHub deployment `6140332126` is READY Vercel
-  `dpl_31W7nKgJd6ENoCfuvgP1zzHZM6eT`, with exact public health identity.
+- Current exact `main` is corrected acceptance release
+  `53b84b7952a1e09725f53da5d65c4947b8cb914a`; all four jobs passed in CI
+  `33168368270`; GitHub deployment `6140556549` is READY Vercel
+  `dpl_tBF2s6AtLmqZ13YpYHKWzBRtwiKT`, with exact public health identity.
 - Protected runs completed: initial probe `33165823042`, selector mutation
   `33165886343`, fresh probe `33165944760`, URL-schema mutation `33165992529`.
 - Current hosted ledger: `1|1|1|1|0|0`. Never rerun selector or URL-schema.
@@ -14,14 +14,18 @@
   failed before target resolution or mutation because `psql -c` did not expand
   the quoted owner/project variables. Both temporary encrypted selectors were
   deleted immediately. Never rerun this failed attempt.
-- The next commit must publish only the quoted-stdin variable-expansion fix,
-  its regression guard, and current evidence. After its new exact green/READY
-  release, recreate the two temporary selectors and use a fresh first-attempt
-  dispatch. Delete the selectors after the terminal run. Remove the disposable
-  workflow/test only after exact write/audit/no-op/reload acceptance.
-- After cleanup publication, dispatch a fresh `probe`, then only
-  `target-claims`. Do not apply `postdeploy` until exact-target behavior and a
-  legitimate signed-in Step 8/9 record/reload are accepted.
+- Quoted-stdin correction `53b84b7952a1e09725f53da5d65c4947b8cb914a`
+  passed all four jobs in CI `33168368270`; GitHub deployment `6140556549` is
+  READY Vercel `dpl_tBF2s6AtLmqZ13YpYHKWzBRtwiKT`, with exact public health.
+- Fresh first-attempt acceptance `33169297158` passed the real owner/admin
+  session, exact URL write, one immutable owner-attributed audit event, no-op
+  replay, signed-in reload, and pre/post stopped containment. The two temporary
+  selectors were deleted immediately.
+- The current worktree removes the used disposable workflow/test and records
+  exact acceptance evidence. Publish this forward cleanup, require its four
+  exact-head CI jobs plus READY deployment/health, dispatch a fresh `probe`,
+  then only `target-claims`. Do not apply `postdeploy` until exact-target
+  behavior and a legitimate signed-in Step 8/9 record/reload are accepted.
 - Workers, schedules, auth broker, autonomy, and all automatic actions stay
   OFF. Global kill switch stays ON. The formal goal remains active.
 
@@ -40,12 +44,13 @@ intentionally stopped.
 - Branch: `codex/factory-ten-step-e2e`
 - The Factory release is published and exactly validated. The current worktree
   contains only the forward cleanup that removes the already-used disposable
-  Auth workflow/test and records immutable release/account evidence.
+  production-URL acceptance workflow/test and records exact release evidence.
 - Current `origin/main`:
-  `298264b02fe5a29e3c139f8077e65d6270f19167`
+  `53b84b7952a1e09725f53da5d65c4947b8cb914a`
 - Last fully validated Factory deployment:
-  `298264b02fe5a29e3c139f8077e65d6270f19167`
-- Upstream Stripe ADR-158 and local selector/Auth ADR-159/ADR-160 are preserved.
+  `53b84b7952a1e09725f53da5d65c4947b8cb914a`
+- Upstream Stripe ADR-158 and selector/Auth/URL ADR-159/ADR-160/ADR-161 are
+  preserved.
 - The original worktree
   `C:\Users\Daniel\OneDrive\Documents\ChatGPT\SoftwareFactory` is dirty and
   must remain untouched.
@@ -113,7 +118,8 @@ with the byte-exact `20260815000500` body. It never replays or marks
 `20260815000300`/`20260815000500` and performs no history repair.
 
 The 15-file release listed below is on `main`. The current forward cleanup
-changes only eight paths: deletion of the temporary Auth workflow/test plus
+changes only eight paths: deletion of the disposable production-URL acceptance
+workflow/test plus
 `AI/BACKLOG.md`, `AI/CURRENT_STATE.md`, `AI/DECISIONS.md`, `AI/HANDOFF.md`,
 `AI/QUALITY_SCORECARD.md`, and `todo.md`.
 
@@ -211,13 +217,15 @@ Run next, in this order:
 
 1. Review and commit the eight-path forward cleanup, fetch `main`, confirm no
    movement, and push it directly. Verify all four exact-head CI jobs and exact
-   READY Vercel/health identity; the temporary credential is already deleted.
-2. Dispatch a fresh lifecycle release `probe`; never rerun failed run
-   `33159805326`.
-3. If exact, dispatch `selector-normalization` with `confirm=apply`, verify
-   ledger/catalog/ACL/runtime/safety, then a fresh read-only `probe`.
-4. Continue exact scopes in order: `configure-url`, `target-claims`, and only
-   after signed-in acceptance, `postdeploy`.
+   READY Vercel/health identity; both temporary selectors are already deleted.
+2. Dispatch a fresh lifecycle release `probe` on that cleanup SHA and require
+   ledger `1|1|1|1|0|0`; never rerun failed run `33159805326` or either URL
+   acceptance attempt.
+3. If exact, dispatch only `target-claims` with `confirm=apply`, then verify
+   ledger `1|1|1|1|1|0`, catalog, ACL, runtime, audit, and stopped safety.
+4. Never rerun `selector-normalization` or `configure-url`. Apply `postdeploy`
+   only after legitimate signed-in Step 8 record/reload and Step 9 persistence
+   acceptance with a real connected provider route.
 
 ### External blockers and safety invariants — do not fabricate around these
 

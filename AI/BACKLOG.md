@@ -66,12 +66,15 @@ Last triaged: 2026-08-28
   safety, and connection gates, then failed closed before target resolution or
   mutation because protected `psql` variables were placed in a `-c` command.
   Delete both temporary selector secrets immediately and do not rerun it.
-- [ ] Publish the quoted-stdin `psql` variable-expansion correction with its
-  regression guard, require a new exact green/READY release, then use a fresh
-  first-attempt acceptance dispatch.
-- [ ] Complete the disposable signed-in owner/admin production-URL write,
-  immutable audit, no-op replay, reload, and pre/post containment acceptance;
-  remove its two temporary protected selectors and workflow/test afterward.
+- [x] Publish quoted-stdin correction release
+  `53b84b7952a1e09725f53da5d65c4947b8cb914a`; pass all four exact-head jobs
+  in CI `33168368270`, READY deployment
+  `dpl_tBF2s6AtLmqZ13YpYHKWzBRtwiKT`, and public health identity.
+- [x] Complete fresh first-attempt acceptance run `33169297158`: real
+  owner/admin session, exact URL write, exactly one owner-attributed immutable
+  audit event, no-op replay, signed-in reload, and pre/post stopped
+  containment all passed. Delete both temporary protected selectors, then
+  remove the disposable workflow/test in this forward cleanup.
 - [ ] Only after URL acceptance, apply `20260828000200`; accept exact target
   behavior and signed-in Step 8/9 persistence before applying
   `20260828000300`, then run read-only `verify`.

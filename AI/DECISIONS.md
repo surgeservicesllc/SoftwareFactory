@@ -2738,6 +2738,17 @@ Use this append-only log for decisions that constrain future implementation. Cha
   protected variables only to a single-quoted stdin heredoc, enforce that
   transport in the workflow regression test, publish a new exact release, and
   use a fresh first-attempt dispatch rather than rerunning the failed attempt.
+- Acceptance evidence: corrected release
+  `53b84b7952a1e09725f53da5d65c4947b8cb914a` passed exact CI
+  `33168368270`, READY Vercel deployment
+  `dpl_tBF2s6AtLmqZ13YpYHKWzBRtwiKT`, and public health. Fresh first-attempt
+  run `33169297158` proved the production session, owner/admin tenant,
+  same-origin write, one owner-attributed immutable event, no-op replay,
+  signed-in reload, and unchanged stopped containment. Both temporary selectors
+  were deleted immediately; the workflow/test are removed in the next forward
+  cleanup release.
+- Outcome (2026-08-28): accepted and proven in production; the disposable
+  boundary was removed in the next forward cleanup.
 - Bounds: this changes only the one public URL and its existing immutable
   audit trail. It grants no membership, connects no provider, enables no
   worker/autonomy/automatic action, does not release the kill switch, and does
