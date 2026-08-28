@@ -19,6 +19,7 @@ const nextConfig: NextConfig = {
       "ai-factory",
       "autonomy",
       "backlog",
+      "billing",
       "bot-manager",
       "bot-usage",
       "connections",

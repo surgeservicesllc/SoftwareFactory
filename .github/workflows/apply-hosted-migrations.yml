@@ -118,6 +118,13 @@ on:
           a capacity-voided (CANCELLED) run no longer consumes an approval —
           the sequence that stranded live lifecycle d7241cf4; replaces one
           definer function in place, same grants, no table or row changes;
+          "billing-foundation" applies only 20260825000400: the billing
+          tables (customers, subscriptions, events) with forced RLS and
+          member-read policies, service_role write grants for the verified
+          Stripe webhook, two activity_event_type values, and
+          ensure_billing_customer granted to authenticated. Purely additive;
+          nothing deployed reads these objects until the billing code ships,
+          so apply first, then deploy;
           "runs-closure-note" applies only 20260825000300, which gives
           graph_runs a closure_note column and carries the engine's own
           account of why a run ended through complete_graph_run_as_worker
@@ -175,6 +182,7 @@ on:
           - resume-gate-halted
           - gate-approval-voided
           - runs-closure-note
+          - billing-foundation
           - analysis-launch-commit
           - delete-selected-pipelines
           - stop-and-delete-pipelines
@@ -6069,6 +6077,66 @@ jobs:
             exit 1
           fi
           echo "Applied and verified: an approved gate passes recorded work through at zero cost."
+
+      - name: Billing foundation tables and boundary (scope=billing-foundation)
+        # Exactly one file — 20260825000400. Creates billing_customers,
+        # billing_subscriptions, billing_events with RLS forced, member-read
+        # policies, service_role write grants for the verified Stripe webhook,
+        # two activity_event_type values, and ensure_billing_customer granted
+        # to authenticated. Purely additive: nothing deployed reads these
+        # objects until the billing code ships, so apply first, then deploy.
+        if: ${{ inputs.scope == 'billing-foundation' }}
+        run: |
+          if [ -z "$SUPABASE_DB_PASSWORD" ]; then
+            echo "::error::This scope requires SUPABASE_DB_PASSWORD for live verification."
+            exit 1
+          fi
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+
+          BILLING_FILE=supabase/migrations/20260825000400_billing_foundation.sql
+          if [ "$(sha256sum "$BILLING_FILE" | cut -d' ' -f1)" != "0d7d91336a700d3d93765a4a256e3aba29a684c9092653e7487ac5dc6e077ea7" ]; then
+            echo "::error::Migration hash mismatch; refusing production DDL."
+            exit 1
+          fi
+
+          ROW=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
+            "select count(*) from supabase_migrations.schema_migrations where version = '20260825000400';")
+          if [ "$ROW" != "0" ]; then
+            echo "::error::Ledger already records 20260825000400 (want 0)."
+            exit 1
+          fi
+
+          echo "Applying ${BILLING_FILE}"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -1 -q -f "$BILLING_FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied 20260825000400
+          else
+            npx supabase migration repair --status applied 20260825000400 --db-url "$DB_URL"
+          fi
+
+          TABLES=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
+            select count(*) from information_schema.tables
+             where table_schema = 'public'
+               and table_name in ('billing_customers','billing_subscriptions','billing_events');")
+          RLS=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
+            select count(*) from pg_class c join pg_namespace n on n.oid = c.relnamespace
+             where n.nspname = 'public'
+               and c.relname in ('billing_customers','billing_subscriptions','billing_events')
+               and c.relrowsecurity and c.relforcerowsecurity;")
+          FN=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
+            select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+             where n.nspname = 'public'
+               and p.proname in ('ensure_billing_customer','record_billing_activity');")
+          if [ "$TABLES" != "3" ] || [ "$RLS" != "3" ] || [ "$FN" != "2" ]; then
+            echo "::error::Billing foundation verification failed (tables=$TABLES rls=$RLS fn=$FN)."
+            exit 1
+          fi
+          echo "Applied and verified: billing tables exist with forced RLS and the customer boundary."
 
       - name: A run states its closure reason (scope=runs-closure-note)
         # Exactly one file — 20260825000300. Adds graph_runs.closure_note and

@@ -2225,3 +2225,51 @@ Use this append-only log for decisions that constrain future implementation. Cha
   20260823001000, because that file landed on main while this change was
   in flight and rebuilding from the stale version would have silently
   reverted its cost columns.
+
+## ADR-148 - Revenue: Stripe subscriptions behind the storefront that already existed
+
+- Date: 2026-08-25
+- Status: accepted
+- Context: the owner directed, verbatim, that the site needs a revenue
+  avenue. The storefront predated this decision by two weeks:
+  `marketing_pricing_plans` (20260813000500) has advertised Free / Basic
+  $29 / Pro $79 / Enterprise with yearly discounts, and every "Start
+  Free Trial" button pointed at `/sign-in` with nothing behind it. The
+  gap was not a pricing page; it was that no mechanism existed by which
+  money could move or a plan could mean anything.
+- Decision: organization-level Stripe subscription billing, mirrored
+  into Supabase, enforced at the two creation boundaries that cost
+  compute. Specifically: (1) `billing_customers` /
+  `billing_subscriptions` / `billing_events` (migration 20260825000400,
+  scope=billing-foundation) with forced RLS, member-only reads, and no
+  browser write path - the verified Stripe webhook (service_role, the
+  same posture as the GitHub webhook) is the only subscription writer,
+  idempotent by event id; (2) a deliberately thin Stripe REST client
+  (three endpoints plus HMAC signature verification, no SDK dependency,
+  no Stripe key of any kind in the browser - Checkout and the portal are
+  Stripe-hosted redirects); (3) entitlements resolved from the newest
+  standing subscription (`active`, `trialing`, and `past_due` for
+  Stripe's retry grace) with Free as the absence of one, enforced as
+  HTTP 402 refusals naming plan, limit, and current count on project
+  creation and graph launches - creation-gating only, never revocation
+  of existing work; (4) the pricing page's cards become real checkout
+  buttons only for plans whose Stripe price is actually configured, and
+  `/solutions/billing` (Settings → Billing) shows plan, meters, and the
+  portal. Plan copy stays in the marketing tables; plan entitlements
+  live in `lib/billing/plans.ts` so a limit and its enforcement version
+  together.
+- Bounds: absent configuration everything renders **Not Connected** and
+  the storefront behaves exactly as before - no dead checkout, no
+  pretend success. Prices are never hard-coded; the charged amount is
+  Stripe's price object, the advertised amount is the marketing row, and
+  the go-live runbook (docs/BILLING_GO_LIVE.md) is the owner's checklist
+  for making them agree. Attribution is by ids only (metadata uuid or
+  the customer mapping); a subscription the mirror cannot attribute is
+  recorded and never guessed at. Seat enforcement waits for a member
+  invite surface to exist; Enterprise stays contact-only. The quota gates
+  the Workflows Launch route; command-driven analysis graphs
+  (`launch_command_analysis_graph`) count toward the month's usage but are
+  gated by their own command budgets rather than refused here — pricing a
+  command's implicit graph is a follow-on, recorded in the backlog. The quota
+  check is a read-before-write soft limit by design - one concurrent
+  overshoot costs at most one row and corrects on the next attempt.

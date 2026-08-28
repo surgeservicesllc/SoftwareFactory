@@ -2,7 +2,33 @@
 
 Last updated: 2026-08-25
 
-## Newest (2026-08-25 ~20:00Z): the run that never said why (ADR-147)
+## Newest (2026-08-25 ~23:00Z): revenue — subscription billing shipped behind a Not Connected gate (ADR-148)
+
+The owner directed a revenue avenue. What ships in this release: Stripe
+subscription billing for the plans the pricing page has always advertised.
+`lib/billing/` (plans, entitlements, thin Stripe REST client + HMAC webhook
+verification, subscription mirror), `/api/billing/{checkout,portal,webhook,summary}`,
+enforcement as HTTP 402 on project creation and graph launches past the plan,
+`/pricing` cards that become checkout buttons only where a configured price
+stands behind them, and `/solutions/billing` under Settings. 56 tests in six new
+files, plus quota regressions inside the existing launch- and
+project-route suites.
+
+**Release order — two migrations now ride this branch, both apply-first:**
+
+1. `scope=runs-closure-note` (20260825000300, ADR-147)
+2. `scope=billing-foundation` (20260825000400, ADR-148)
+3. then merge/deploy the code.
+
+Neither migration depends on the other; both are additive and safe against
+the currently deployed code. Until the owner completes
+`docs/BILLING_GO_LIVE.md` (Stripe account, restricted key, four price ids,
+webhook secret, `SUPABASE_SERVICE_ROLE_KEY` on Vercel, redeploy), every
+billing surface renders **Not Connected** and the storefront behaves exactly
+as it did before this change. The webhook is the only subscription writer;
+browsers hold zero Stripe keys and zero write grants on billing tables.
+
+## Earlier (2026-08-25 ~20:00Z): the run that never said why (ADR-147)
 
 Defect #11, from the same live queue read. `graph-run.ts` composes a
 run-level explanation on every close — the fan-in assessment, the "this

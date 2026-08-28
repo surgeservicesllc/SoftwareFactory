@@ -33,6 +33,7 @@ const ROUTES = [
   "/solutions/ai-factory",
   "/solutions/autonomy",
   "/solutions/backlog",
+  "/solutions/billing",
   "/solutions/bot-manager",
   "/solutions/bot-usage",
   "/solutions/connections",

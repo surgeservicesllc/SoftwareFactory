@@ -8,6 +8,7 @@ import {
   CircleGauge,
   ClipboardList,
   Cpu,
+  CreditCard,
   DraftingCompass,
   Eye,
   FileText,
@@ -205,9 +206,11 @@ const navigationEntries: readonly NavigationEntry[] = [
     subpages: [
       { label: "General", href: "/solutions/settings", icon: Settings },
       // Provider configuration lives on the settings page; the anchor lands
-      // there. Members/Teams/Permissions/Billing from the design have no
-      // backing surfaces yet and are deliberately absent.
+      // there. Members/Teams/Permissions from the design have no backing
+      // surfaces yet and are deliberately absent. Billing has one now: the
+      // plan, usage meters, and the Stripe checkout/portal actions.
       { label: "Bots & Integrations", href: "/solutions/settings#providers", icon: PlugZap },
+      { label: "Billing", href: "/solutions/billing", icon: CreditCard },
     ],
   },
   {

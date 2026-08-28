@@ -2,6 +2,19 @@
 
 Last reviewed: 2026-08-25
 
+**Addendum, 2026-08-25 — billing (ADR-148):** the revenue engine is tested at
+every seam it owns — 56 tests in six new files plus quota regressions in the
+launch and projects route suites: catalog invariants against the advertised
+matrix, price env resolution both directions, HMAC signature vectors
+(tamper, replay ±tolerance, key-roll), mirror idempotency and
+non-attribution refusals, checkout/portal/webhook routes including every
+Not Connected and forbidden path, and 402 enforcement at both creation
+boundaries proving the write RPC is never reached. What is deliberately NOT
+claimed: no test exercises Stripe's live API (the transport is the injected
+seam), and the end-to-end money path remains unproven until the owner runs
+the test-mode purchase in `docs/BILLING_GO_LIVE.md` step 7 — the scorecard
+will say so until a real test-mode webhook has landed on production.
+
 **Addendum, 2026-08-25 — the ten-step factory: six engine defects found by
 driving it, and what is actually proven (ADR-144 through ADR-147):** the
 owner's ten-step production-readiness goal was driven against live

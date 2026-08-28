@@ -2,6 +2,28 @@
 
 Last triaged: 2026-08-25
 
+## Billing follow-ons (2026-08-25, after go-live)
+
+The subscription engine shipped with ADR-148; these are the deliberate
+deferrals, in the order they become worth doing once money moves:
+
+- **Seat enforcement** waits for a member-invite surface to exist; the limit
+  is declared in `lib/billing/plans.ts` and read by nothing yet.
+- **Run-credit packs** (one-time purchases topping up graph launches) need a
+  credit ledger with expiry semantics — designed away from v1 to keep the
+  mirror trivially idempotent.
+- **Job Seeker Pro** as a second product: the schema already keys plans by
+  slug, so a `job-seeker-pro` plan is additive when priced.
+- **Dunning surface**: `past_due` currently grants Stripe's whole retry
+  window silently; a banner on `/solutions/billing` naming the failing card
+  would recover more of them.
+- **Command-launched graphs**: `launch_command_analysis_graph` counts toward
+  the month's launch usage but is gated by command budgets, not the plan
+  quota. Pricing the command surface needs a decision about whether a
+  command's implicit graph is a launch or an overhead.
+- **`node_runs.attempt` bridge** (task #56) is unrelated to billing but
+  queued behind the same release for migration-ordering reasons.
+
 ## One graph stranded behind an undecidable gate (2026-08-25, needs an owner call)
 
 Graph `91959362` (test lifecycle from an earlier session, run `6ac300ae`,

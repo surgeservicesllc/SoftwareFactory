@@ -2,6 +2,7 @@
 
 import { Check, Minus } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useId, useState } from "react";
 
 import { resolveAccent } from "@/components/marketing/icon";
@@ -17,8 +18,55 @@ import {
 
 type Cadence = "monthly" | "yearly";
 
-export function PricingPlans({ plans }: { plans: readonly MarketingPricingPlan[] }) {
+/**
+ * Which plans the deployment can actually charge for, per cadence — derived
+ * server-side from the configured Stripe prices. A slug absent here keeps its
+ * stored link (today, /sign-in): the card only becomes a checkout button when
+ * a real price stands behind it.
+ */
+export type PurchasablePlans = Readonly<Record<string, Readonly<Record<Cadence, boolean>>>>;
+
+export function PricingPlans({
+  plans,
+  purchasable = {},
+}: {
+  plans: readonly MarketingPricingPlan[];
+  purchasable?: PurchasablePlans;
+}) {
   const [cadence, setCadence] = useState<Cadence>("monthly");
+  const [pendingSlug, setPendingSlug] = useState<string | null>(null);
+  const [checkoutMessage, setCheckoutMessage] = useState("");
+  const router = useRouter();
+
+  const startCheckout = async (slug: string) => {
+    setPendingSlug(slug);
+    setCheckoutMessage("");
+    try {
+      const response = await fetch("/api/billing/checkout", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ plan: slug, cadence }),
+      });
+      if (response.status === 401) {
+        // Not signed in: sign in first, then come back to buy.
+        router.push(`/sign-in?returnTo=${encodeURIComponent("/pricing")}`);
+        return;
+      }
+      const payload = (await response.json().catch(() => null)) as
+        | { url?: string; error?: { message?: string } }
+        | null;
+      if (!response.ok || !payload?.url) {
+        setCheckoutMessage(payload?.error?.message ?? "Checkout could not be started.");
+        setPendingSlug(null);
+        return;
+      }
+      window.location.assign(payload.url);
+    } catch {
+      setCheckoutMessage("Checkout could not be started.");
+      setPendingSlug(null);
+    }
+  };
   const toggleId = useId();
   const rows = matrixRows(plans);
 
@@ -75,6 +123,12 @@ export function PricingPlans({ plans }: { plans: readonly MarketingPricingPlan[]
         ) : null}
       </div>
 
+      {checkoutMessage ? (
+        <p role="alert" className="text-center text-sm text-red-400">
+          {checkoutMessage}
+        </p>
+      ) : null}
+
       <ul className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         {plans.map((plan) => {
           const tone = resolveAccent(plan.accent);
@@ -114,17 +168,33 @@ export function PricingPlans({ plans }: { plans: readonly MarketingPricingPlan[]
 
                 <p className="mt-4 text-xs leading-5 text-[#8593a5]">{plan.blurb}</p>
 
-                <Link
-                  href={plan.ctaHref}
-                  className={cn(
-                    "mt-5 inline-flex min-h-11 items-center justify-center rounded-xl px-4 text-sm font-semibold transition-opacity hover:opacity-90",
-                    plan.highlighted
-                      ? "bg-gradient-to-r from-[#7c5cff] to-[#4d8dff] text-white"
-                      : cn("border bg-transparent", tone.border, tone.text),
-                  )}
-                >
-                  {plan.ctaLabel}
-                </Link>
+                {purchasable[plan.slug]?.[cadence] ? (
+                  <button
+                    type="button"
+                    onClick={() => void startCheckout(plan.slug)}
+                    disabled={pendingSlug !== null}
+                    className={cn(
+                      "mt-5 inline-flex min-h-11 items-center justify-center rounded-xl px-4 text-sm font-semibold transition-opacity hover:opacity-90 disabled:opacity-60",
+                      plan.highlighted
+                        ? "bg-gradient-to-r from-[#7c5cff] to-[#4d8dff] text-white"
+                        : cn("border bg-transparent", tone.border, tone.text),
+                    )}
+                  >
+                    {pendingSlug === plan.slug ? "Opening checkout…" : plan.ctaLabel}
+                  </button>
+                ) : (
+                  <Link
+                    href={plan.ctaHref}
+                    className={cn(
+                      "mt-5 inline-flex min-h-11 items-center justify-center rounded-xl px-4 text-sm font-semibold transition-opacity hover:opacity-90",
+                      plan.highlighted
+                        ? "bg-gradient-to-r from-[#7c5cff] to-[#4d8dff] text-white"
+                        : cn("border bg-transparent", tone.border, tone.text),
+                    )}
+                  >
+                    {plan.ctaLabel}
+                  </Link>
+                )}
 
                 <ul className="mt-6 space-y-3">
                   {cardFeatures.map((feature) => (

@@ -2,6 +2,34 @@
 
 Last reviewed: 2026-08-25
 
+## 2026-08-25: Revenue — Stripe subscription billing behind the existing storefront (ADR-148)
+
+The owner directed that the site needs a revenue avenue. Built and tested,
+shipping with the ADR-147 release: organization-level Stripe subscriptions
+behind the plans `marketing_pricing_plans` has advertised since 20260813000500
+(Free / Basic $29 / Pro $79 / Enterprise).
+
+- **Migration `20260825000400`** (scope=billing-foundation, **not yet
+  hosted**): `billing_customers`, `billing_subscriptions`, `billing_events`
+  with forced RLS, member reads only, service-role webhook writes, audit
+  events, `ensure_billing_customer`. Additive; apply before deploying.
+- **Server**: thin Stripe REST client + HMAC webhook verification
+  (`lib/billing/stripe.ts`, no SDK, no browser key of any kind), plan catalog
+  + entitlements (`lib/billing/plans.ts`, `entitlements.ts`), webhook mirror
+  (`lib/billing/webhook.ts` — idempotent by event id, attribution by ids
+  only). Routes: `/api/billing/{checkout,portal,webhook,summary}`.
+- **Enforcement**: HTTP 402 `plan_limit_reached` on project creation and graph
+  launches past the plan (Free: 1 project, 10 launches/UTC-month, 1 seat;
+  Basic: 50 launches, 5 seats; Pro: 250 launches, 25 seats). Creation-gating
+  only; existing work never stops.
+- **UI**: `/pricing` cards become checkout buttons only where a configured
+  Stripe price stands behind them; `/solutions/billing` (Settings → Billing)
+  shows plan, usage meters, upgrade, and the Stripe portal. Everything renders
+  **Not Connected** until the owner completes `docs/BILLING_GO_LIVE.md`.
+- **To take the first payment** the owner must: apply the migration scope, set
+  the six `STRIPE_*` variables plus `SUPABASE_SERVICE_ROLE_KEY` on Vercel,
+  create the webhook endpoint, and redeploy — the runbook is the exact list.
+
 ## 2026-08-25: Search, ported from ai-job-search into Job Seeker
 
 Branch `claude/ui-simplification-cbyx5t`, **not merged**. `/job-seeker/search`
