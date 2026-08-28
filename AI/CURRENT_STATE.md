@@ -2,7 +2,7 @@
 
 Last reviewed: 2026-08-28
 
-## 2026-08-28: selector and production-URL schema are hosted; signed acceptance is next
+## 2026-08-28: selector and production-URL schema are hosted; signed acceptance transport is being corrected
 
 Exact cleanup release `994da2cec81c0cd83aa1e2d87ad848d2f2ff612a` passed all
 four required jobs in CI `33164903094`. GitHub deployment `6139882660`
@@ -18,16 +18,30 @@ exactly `1|1|1|1|0|0` for
 selector is normalized and the owner/admin-only production-URL writer is live;
 neither scope may be rerun.
 
-The next release adds a disposable acceptance workflow. It uses protected
+Disposable acceptance release `540aceb173ec88e67cb982018a80134ece3ec474`
+passed all four required jobs in CI `33167232673`. GitHub deployment
+`6140332126` resolved to READY Vercel deployment
+`dpl_31W7nKgJd6ENoCfuvgP1zzHZM6eT`, and public health joined that exact
+SHA/ref, deployment URL, Vercel project, and Supabase project.
+
+The disposable acceptance workflow uses protected
 owner/project selectors and one ephemeral GoTrue magic-link session—never an
 owner password—to call the real production application route. It requires an
 unset target value, writes `https://www.theagoras.com`, proves exactly one
 owner-attributed immutable `project.updated` event, repeats the same write as a
 no-op with no duplicate event, reloads through the signed-in portfolio API,
 and rechecks exact main/CI/Vercel/health/catalog plus fully stopped containment
-immediately before and after. Only after that exact run may `target-claims`
-continue. Workers, schedules, the auth broker, autonomy, and automatic actions
-remain OFF; the global kill switch remains ON.
+immediately before and after. First-attempt run `33168092838` passed immutable
+invocation, exact green/READY release, stopped-workflow, and Supabase connection
+gates, then stopped before target resolution or mutation: `psql -c` sent the
+literal protected-variable tokens to PostgreSQL instead of expanding them.
+Both temporary selectors were deleted immediately. The forward fix moves only
+that read-only target query to a quoted stdin heredoc, where `psql` variable
+quoting is supported, and adds a regression guard. Publish the fix as a new
+exact SHA and use a fresh first-attempt dispatch; never rerun `33168092838`.
+Only after exact acceptance may `target-claims` continue. Workers, schedules,
+the auth broker, autonomy, and automatic actions remain OFF; the global kill
+switch remains ON.
 
 ## 2026-08-28: exact verified Blackstone Auth bootstrap completed and disposed
 

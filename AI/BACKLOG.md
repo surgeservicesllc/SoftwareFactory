@@ -58,6 +58,17 @@ Last triaged: 2026-08-28
 - [x] Apply only `20260828000050` in first-attempt run `33165886343`, pass
   fresh probe `33165944760`, then apply only `20260828000100` in first-attempt
   run `33165992529`. Exact ledger is `1|1|1|1|0|0`; never rerun either scope.
+- [x] Publish disposable acceptance release
+  `540aceb173ec88e67cb982018a80134ece3ec474`; pass all four exact-head jobs in
+  CI `33167232673`, exact READY deployment
+  `dpl_31W7nKgJd6ENoCfuvgP1zzHZM6eT`, and public health identity.
+- [x] Dispatch first-attempt acceptance run `33168092838`; it passed release,
+  safety, and connection gates, then failed closed before target resolution or
+  mutation because protected `psql` variables were placed in a `-c` command.
+  Delete both temporary selector secrets immediately and do not rerun it.
+- [ ] Publish the quoted-stdin `psql` variable-expansion correction with its
+  regression guard, require a new exact green/READY release, then use a fresh
+  first-attempt acceptance dispatch.
 - [ ] Complete the disposable signed-in owner/admin production-URL write,
   immutable audit, no-op replay, reload, and pre/post containment acceptance;
   remove its two temporary protected selectors and workflow/test afterward.

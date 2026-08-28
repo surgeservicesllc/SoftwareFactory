@@ -2702,7 +2702,7 @@ Use this append-only log for decisions that constrain future implementation. Cha
 ## ADR-161 - Accept the public project URL through a disposable signed-in boundary
 
 - Date: 2026-08-28
-- Status: accepted locally; exact production dispatch pending
+- Status: accepted; first dispatch failed closed before mutation, forward transport correction pending
 - Context: protected first-attempt runs have installed the selector
   normalization and owner/admin-only URL writer, leaving the release ledger at
   `1|1|1|1|0|0`. The migration workflow proves catalog/ACL/runtime shape but
@@ -2729,6 +2729,15 @@ Use this append-only log for decisions that constrain future implementation. Cha
   ACL, moved release, active worker, or duplicate audit event. Delete the two
   temporary selectors immediately after the accepted run and remove the
   disposable workflow/test in the next forward commit.
+- Production evidence: release `540aceb173ec88e67cb982018a80134ece3ec474`
+  passed exact CI `33167232673`, READY Vercel deployment
+  `dpl_31W7nKgJd6ENoCfuvgP1zzHZM6eT`, and public health. First-attempt run
+  `33168092838` passed all pre-write gates and then stopped before target
+  resolution or mutation because `psql` variable substitution was embedded in
+  a `-c` command. Its temporary selectors were deleted immediately. Supply
+  protected variables only to a single-quoted stdin heredoc, enforce that
+  transport in the workflow regression test, publish a new exact release, and
+  use a fresh first-attempt dispatch rather than rerunning the failed attempt.
 - Bounds: this changes only the one public URL and its existing immutable
   audit trail. It grants no membership, connects no provider, enables no
   worker/autonomy/automatic action, does not release the kill switch, and does

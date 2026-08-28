@@ -189,4 +189,18 @@ describe("the one-shot Factory production URL acceptance", () => {
     ])
       expect(commands).toContain(marker);
   });
+
+  it("resolves protected selectors through psql stdin so variable quoting is honored", () => {
+    expect(commands).toMatch(
+      /ROWS=\$\(psql "\$DB_URL" -v ON_ERROR_STOP=1 -X -AtF '\|' \\\n\s+-v owner_email="\$OWNER_EMAIL" -v project_name="\$PROJECT_NAME" <<'SQL'\nselect auth_user\.id/,
+    );
+    expect(commands).toContain(
+      "where lower(auth_user.email)=lower(:'owner_email')",
+    );
+    expect(commands).toContain("and project.name=:'project_name'");
+    expect(commands).toMatch(/project\.status::text<>'archived';\nSQL\n\)/);
+    expect(commands).not.toMatch(
+      /-v owner_email="\$OWNER_EMAIL" -v project_name="\$PROJECT_NAME" -c\s/,
+    );
+  });
 });

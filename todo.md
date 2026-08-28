@@ -1,18 +1,24 @@
 # SoftwareFactory — shared working status
 
-## FACTORY RELEASE CHECKPOINT (2026-08-28 07:27 EDT — CURRENT)
+## FACTORY RELEASE CHECKPOINT (2026-08-28 07:42 EDT — CURRENT)
 
-- Current exact `main` before the disposable acceptance release:
-  `994da2cec81c0cd83aa1e2d87ad848d2f2ff612a`; four CI jobs green in
-  `33164903094`; READY Vercel `dpl_7u7h6GaP2LLNawDtB9wYGAuMTARB`.
+- Current exact `main` is disposable acceptance release
+  `540aceb173ec88e67cb982018a80134ece3ec474`; all four jobs passed in
+  `33167232673`; GitHub deployment `6140332126` is READY Vercel
+  `dpl_31W7nKgJd6ENoCfuvgP1zzHZM6eT`, with exact public health identity.
 - Protected runs completed: initial probe `33165823042`, selector mutation
   `33165886343`, fresh probe `33165944760`, URL-schema mutation `33165992529`.
 - Current hosted ledger: `1|1|1|1|0|0`. Never rerun selector or URL-schema.
-- The next commit publishes only a disposable signed-in production-URL
-  acceptance workflow/test plus this checkpoint documentation. After exact
-  green CI/READY deployment, set temporary encrypted owner/project selectors,
-  dispatch once, require exact write/audit/no-op/reload evidence, delete the
-  selectors, and remove the workflow/test in a forward cleanup.
+- First-attempt acceptance run `33168092838` passed exact invocation,
+  green/READY release, stopped-workflow, and Supabase connection gates, then
+  failed before target resolution or mutation because `psql -c` did not expand
+  the quoted owner/project variables. Both temporary encrypted selectors were
+  deleted immediately. Never rerun this failed attempt.
+- The next commit must publish only the quoted-stdin variable-expansion fix,
+  its regression guard, and current evidence. After its new exact green/READY
+  release, recreate the two temporary selectors and use a fresh first-attempt
+  dispatch. Delete the selectors after the terminal run. Remove the disposable
+  workflow/test only after exact write/audit/no-op/reload acceptance.
 - After cleanup publication, dispatch a fresh `probe`, then only
   `target-claims`. Do not apply `postdeploy` until exact-target behavior and a
   legitimate signed-in Step 8/9 record/reload are accepted.

@@ -2,7 +2,7 @@
 
 Last updated: 2026-08-28
 
-## Newest (2026-08-28): hosted release tail is at URL acceptance
+## Newest (2026-08-28): URL acceptance stopped before mutation; publish the variable-transport fix
 
 Exact cleanup release `994da2cec81c0cd83aa1e2d87ad848d2f2ff612a` is green in
 CI `33164903094` and READY as Vercel deployment
@@ -11,16 +11,30 @@ CI `33164903094` and READY as Vercel deployment
 selector normalization, fresh probe, and production-URL schema respectively.
 The exact six-field ledger is `1|1|1|1|0|0`; never rerun either mutation.
 
-Next, publish and run the disposable exact-release URL-acceptance workflow. Its
+Disposable acceptance release `540aceb173ec88e67cb982018a80134ece3ec474`
+passed all four exact-head jobs in CI `33167232673`. GitHub deployment
+`6140332126` resolved to READY Vercel deployment
+`dpl_31W7nKgJd6ENoCfuvgP1zzHZM6eT`; public health joined the exact Git,
+deployment, Vercel-project, and Supabase identities. First-attempt acceptance
+run `33168092838` then passed invocation, release, stopped-workflow, and
+Supabase connection gates but failed before target resolution or mutation:
+`psql -c` forwarded literal `psql` variable tokens to PostgreSQL. Both
+temporary selectors were deleted immediately. Do not rerun that attempt.
+
+Next, publish the narrow forward correction that supplies the read-only target
+query through a quoted heredoc/stdin and the regression guard that forbids
+protected `psql` variables inside `-c`. Require a new exact green/READY release,
+restore the two temporary selectors, and issue a fresh first-attempt dispatch
+of the disposable exact-release URL-acceptance workflow. Its
 owner email and project name exist only as temporary encrypted repository
 secrets. It creates an ephemeral magic-link session without reading/changing a
 password, selects the exact owner/admin organization, requires the current URL
 to be unset, writes the public URL through the production API, verifies one
 owner-attributed immutable audit event, proves no-op replay, reloads, and
 rechecks exact main/CI/deployment/health/catalog and full stopped containment
-before and after. Delete both selectors and remove the workflow/test after the
-accepted run. Then restart at a fresh lifecycle `probe` on the cleanup SHA and
-continue only with `target-claims`.
+before and after. Delete both selectors after every terminal run and remove the
+workflow/test only after the accepted run. Then restart at a fresh lifecycle
+`probe` on the cleanup SHA and continue only with `target-claims`.
 
 ## Newest (2026-08-28 ~09:45Z): the site sets up its own Stripe account (ADR-158)
 

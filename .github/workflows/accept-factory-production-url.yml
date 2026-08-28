@@ -411,17 +411,19 @@ jobs:
           verify_database_containment_and_catalog
 
           ROWS=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -AtF '|' \
-            -v owner_email="$OWNER_EMAIL" -v project_name="$PROJECT_NAME" -c "
-              select auth_user.id, membership.organization_id, project.id,
-                     membership.role::text, coalesce(project.production_url,'')
-              from auth.users auth_user
-              join public.organization_members membership on membership.user_id=auth_user.id
-              join public.projects project on project.organization_id=membership.organization_id
-              where lower(auth_user.email)=lower(:'owner_email')
-                and auth_user.email_confirmed_at is not null
-                and project.name=:'project_name'
-                and membership.role::text in ('owner','admin')
-                and project.status::text<>'archived';")
+            -v owner_email="$OWNER_EMAIL" -v project_name="$PROJECT_NAME" <<'SQL'
+          select auth_user.id, membership.organization_id, project.id,
+                 membership.role::text, coalesce(project.production_url,'')
+          from auth.users auth_user
+          join public.organization_members membership on membership.user_id=auth_user.id
+          join public.projects project on project.organization_id=membership.organization_id
+          where lower(auth_user.email)=lower(:'owner_email')
+            and auth_user.email_confirmed_at is not null
+            and project.name=:'project_name'
+            and membership.role::text in ('owner','admin')
+            and project.status::text<>'archived';
+          SQL
+          )
           [ "$(printf '%s\n' "$ROWS" | sed '/^$/d' | wc -l | tr -d ' ')" = "1" ] \
             || fail "The protected owner/admin and project target did not resolve uniquely."
           IFS='|' read -r OWNER_USER_ID ORGANIZATION_ID PROJECT_ID OWNER_ROLE CURRENT_URL <<<"$ROWS"

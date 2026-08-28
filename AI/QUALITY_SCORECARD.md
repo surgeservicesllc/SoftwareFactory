@@ -13,10 +13,19 @@ is manual, exact-main/actor/first-attempt, serialized with migrations, and
 rechecks exact CI/deployment/health plus full stopped database/GitHub state
 three times. It uses no password and requires a confirmed owner/admin, an unset
 value, one immutable owner-attributed event, no-op replay, and signed-in reload.
-Focused evidence is **6/6 workflow guard tests**, **86/86 URL-focused tests**,
+Focused evidence is **7/7 workflow guard tests**, **86/86 URL-focused tests**,
 clean focused ESLint, clean TypeScript, valid YAML, and every shell block passes
-`bash -n`. Verdict: **HOSTED DDL PASS; SIGNED-IN VALUE/AUDIT ACCEPTANCE
-PENDING**. No worker or autonomous action was enabled.
+`bash -n`. Exact disposable release
+`540aceb173ec88e67cb982018a80134ece3ec474` passed all four jobs in CI
+`33167232673`, READY deployment `dpl_31W7nKgJd6ENoCfuvgP1zzHZM6eT`, and the
+public health identity join. First-attempt run `33168092838` passed all
+pre-write release/safety/connection gates and then failed closed before target
+resolution or mutation because `psql -c` did not expand its protected variable
+tokens. Both temporary selectors were deleted. A quoted-stdin correction and
+regression guard are required on a new exact release; the failed attempt must
+not be rerun. Verdict: **HOSTED DDL AND APPLICATION RELEASE PASS; SIGNED-IN
+VALUE/AUDIT ACCEPTANCE PENDING FORWARD TRANSPORT FIX**. No worker or autonomous
+action was enabled.
 
 **Addendum, 2026-08-28 — exact Blackstone Auth bootstrap (ADR-160):** the
 temporary workflow is manual-only, permissions-empty, exact-main/project/email,
