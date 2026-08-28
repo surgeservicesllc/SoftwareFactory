@@ -25,19 +25,16 @@ owner's remaining part is exactly two pastes into Vercel (secret key,
 then the signing secret the card hands them), each followed by a
 redeploy — docs/BILLING_GO_LIVE.md leads with this short path.
 
-## Newest (2026-08-28): one exact verified Supabase Auth account is queued
+## Newest (2026-08-28): one exact Supabase Auth account is verified; secret and bootstrap removed
 
-The owner confirmed creation/update of `blackstoneagencyllc@gmail.com` in
-Supabase Auth project `qpuofpmagrmyamahqwxw`. The temporary workflow
-`bootstrap-blackstone-supabase-auth.yml` is fixed to that identity and accepts
-the password only from encrypted repository secret
-`BLACKSTONE_SUPABASE_BOOTSTRAP_PASSWORD`; it must never be passed as a workflow
-input or printed. After exact-head publication, dispatch it from `main` with
-confirmation `CONFIRM BLACKSTONE SUPABASE AUTH BOOTSTRAP`, require first-attempt
-success and the bounded `created|updated user_id=<uuid>` result, delete the
-temporary secret immediately, then remove the workflow/test in a forward
-cleanup commit. This creates an email-confirmed Auth identity only; it does not
-grant tenant membership, owner/admin role, provider connection, or execution
+Exact first-attempt workflow run `33164766560` on release
+`298264b02fe5a29e3c139f8077e65d6270f19167` created or updated the requested
+normalized identity in Supabase Auth project `qpuofpmagrmyamahqwxw`, then
+re-read one exact UUID with a parseable `email_confirmed_at`. Its only output
+was the bounded updated UUID. The temporary encrypted password secret was
+deleted immediately. This forward cleanup removes the disposable workflow and
+test. The result is an email-confirmed Auth identity only; it does not grant
+tenant membership, owner/admin role, provider connection, or execution
 authority.
 
 ## Newest (2026-08-28): application is live; apply selector normalization before the release tail

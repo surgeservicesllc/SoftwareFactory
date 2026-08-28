@@ -1,6 +1,6 @@
 # SoftwareFactory — shared working status
 
-## FACTORY 10-STEP PRODUCTION RECOVERY (2026-08-28 06:33 EDT — PICK UP HERE)
+## FACTORY 10-STEP PRODUCTION RECOVERY (2026-08-28 06:49 EDT — PICK UP HERE)
 
 ### Goal and current release
 
@@ -13,17 +13,14 @@ intentionally stopped.
 - Active worktree:
   `C:\Users\Daniel\OneDrive\Documents\ChatGPT\SoftwareFactory-factory-e2e`
 - Branch: `codex/factory-ten-step-e2e`
-- The Factory release, final Auth response-shape hardening, and evidence refresh
-  are committed with a clean worktree and rebased directly on the exact
-  `origin/main` shown below. Publication is the next step.
+- The Factory release is published and exactly validated. The current worktree
+  contains only the forward cleanup that removes the already-used disposable
+  Auth workflow/test and records immutable release/account evidence.
 - Current `origin/main`:
-  `459be6426a988432f2a8b71595428957674881bb`
+  `298264b02fe5a29e3c139f8077e65d6270f19167`
 - Last fully validated Factory deployment:
-  `79ca52f5b92e7d95292210e05565d35d21b4a435`
-- `origin/main` advanced by one direct-child Stripe commit. Its only overlap
-  with this work is `AI/DECISIONS.md` and `AI/HANDOFF.md`; preserve both sets
-  of documentation during rebase; that merge is complete. Upstream owns ADR-158, so this work uses
-  ADR-159 for selector normalization and ADR-160 for the Auth bootstrap.
+  `298264b02fe5a29e3c139f8077e65d6270f19167`
+- Upstream Stripe ADR-158 and local selector/Auth ADR-159/ADR-160 are preserved.
 - The original worktree
   `C:\Users\Daniel\OneDrive\Documents\ChatGPT\SoftwareFactory` is dirty and
   must remain untouched.
@@ -31,18 +28,18 @@ intentionally stopped.
   of line-ending normalization. Its HEAD/index/filtered content was previously
   proven semantically identical. Do not stage, reset, or edit it.
 
-Exact release evidence already green for `79ca52f5...`:
+Exact release evidence green for `298264b...`:
 
-- GitHub Actions run `33158801269`: all four required jobs passed — quality,
+- GitHub Actions run `33163838800`: all four required jobs passed — quality,
   browser/accessibility 1/3, 2/3, and 3/3.
-- GitHub deployment `6138739479`; Vercel deployment
-  `dpl_57pM3ZEYNyK596VAeLPJMabJLZrH`; READY URL
-  `https://softwarefactory-8phkzqf2b-surgeservices-projects.vercel.app`.
+- GitHub deployment `6139678648`; Vercel deployment
+  `dpl_ChxG5EdgPzh3vybRZgBRz9EA9gg1`; READY URL
+  `https://softwarefactory-gb1bslp8n-surgeservices-projects.vercel.app`.
 - `https://www.theagoras.com/api/health` returned exact SHA/ref, Vercel project
   `prj_pAsrhftaVWI4SyaqstgRVSWHJkdD`, and Supabase project
   `qpuofpmagrmyamahqwxw` with database reachable.
-- Local gate on that release: lint, typecheck, 5,121 tests, and production
-  build all green.
+- Local and exact-head gates: lint, typecheck, 5,150 tests / 7 skipped, a
+  171/171-page production build, and all three browser shards green.
 
 ### Repeated Step 8 error — exact live finding
 
@@ -90,7 +87,12 @@ absence of target-bound selector objects. It replaces only the one selector
 with the byte-exact `20260815000500` body. It never replays or marks
 `20260815000300`/`20260815000500` and performs no history repair.
 
-Files currently intentionally changed/added:
+The 15-file release listed below is on `main`. The current forward cleanup
+changes only eight paths: deletion of the temporary Auth workflow/test plus
+`AI/BACKLOG.md`, `AI/CURRENT_STATE.md`, `AI/DECISIONS.md`, `AI/HANDOFF.md`,
+`AI/QUALITY_SCORECARD.md`, and `todo.md`.
+
+Published release files:
 
 - `.github/workflows/factory-lifecycle-release-migrations.yml`
 - `.github/workflows/bootstrap-blackstone-supabase-auth.yml` (temporary)
@@ -115,20 +117,15 @@ exact-main/green-CI/READY-Vercel/health/stopped-worker gate, SHA-pinned one-file
 staging, transactional linked-DB lint, locked single transaction, ledger write,
 PostgREST reload, and postflight. `probe` and `verify` remain read-only.
 
-### Exact Auth bootstrap queued at this checkpoint
+### Exact Auth bootstrap completed and disposed at this checkpoint
 
-The owner confirmed creation/update of the exact email-confirmed Supabase Auth
-identity requested in this task. The temporary dispatch-only workflow is fixed
-to repository `surgeservicesllc/SoftwareFactory`, `main`, project
-`qpuofpmagrmyamahqwxw`, the exact normalized email, the configured production
-actor, run attempt 1, and an exact confirmation phrase. It uses Supabase's
-supported Admin API and reads the password only from the encrypted temporary
-repository secret; neither the credential nor response payload is logged.
-After exact-head publication, dispatch it once, verify only the bounded
-`created|updated user_id=<uuid>` result, delete the temporary secret
-immediately, then remove the workflow and its test in a forward cleanup commit.
-This creates an Auth identity only, not tenant membership, role, provider
-connection, or execution authority.
+Exact first-attempt run `33164766560` on `298264b...` ran as the configured
+release actor, updated one normalized Supabase Auth identity, and re-read one
+exact UUID with a parseable `email_confirmed_at`. Its only result was the
+bounded operation and UUID. The temporary password secret was deleted
+immediately and is absent from repository secrets. This forward cleanup removes
+the disposable workflow/test. The Auth identity has no inferred tenant
+membership, role, provider connection, or execution authority.
 
 ### Test status at this checkpoint
 
@@ -187,20 +184,14 @@ Current post-fix evidence:
 
 Run next, in this order:
 
-1. Fetch `main` once more, verify the clean intentional diff and zero added
-   secret patterns, then push directly to `main`. The previously observed
-   EOL-only `apply-hosted-migrations.yml` artifact is semantically clean and
-   absent from the committed diff.
-2. Wait for all four
-   exact-head CI jobs and exact READY Vercel/health identity.
-3. Dispatch the one-shot Auth bootstrap, verify its bounded result, delete its
-   temporary password secret, and remove the workflow/test in a forward cleanup
-   release before continuing. Never expose the credential.
-4. Dispatch a fresh lifecycle release `probe`; never rerun failed run
+1. Review and commit the eight-path forward cleanup, fetch `main`, confirm no
+   movement, and push it directly. Verify all four exact-head CI jobs and exact
+   READY Vercel/health identity; the temporary credential is already deleted.
+2. Dispatch a fresh lifecycle release `probe`; never rerun failed run
    `33159805326`.
-5. If exact, dispatch `selector-normalization` with `confirm=apply`, verify
+3. If exact, dispatch `selector-normalization` with `confirm=apply`, verify
    ledger/catalog/ACL/runtime/safety, then a fresh read-only `probe`.
-6. Continue exact scopes in order: `configure-url`, `target-claims`, and only
+4. Continue exact scopes in order: `configure-url`, `target-claims`, and only
    after signed-in acceptance, `postdeploy`.
 
 ### External blockers and safety invariants — do not fabricate around these

@@ -8,9 +8,12 @@ first-attempt, and identity-gated to the configured production release actor as
 both actor fields. The password is sourced only from an encrypted temporary
 repository secret; output is limited to created/updated plus a UUID after an
 exact email-confirmed re-read. Focused workflow evidence is **5/5 tests** and
-focused ESLint green. Verdict: **LOCAL PASS; EXACT-HEAD DISPATCH, VERIFIED
-AUTH READBACK, SECRET DELETION, AND WORKFLOW CLEANUP PENDING**. No tenant role,
-provider connection, worker switch, autonomy setting, or kill switch changes.
+focused ESLint green. Exact first-attempt run `33164766560` on production
+release `298264b02fe5a29e3c139f8077e65d6270f19167` returned one bounded updated
+UUID after verified readback; the temporary password secret was then deleted,
+and this forward cleanup removes the workflow/test. Verdict: **PRODUCTION
+PASS; DISPOSABLE CREDENTIAL PATH REMOVED**. No tenant role, provider
+connection, worker switch, autonomy setting, or kill switch changed.
 
 **Addendum, 2026-08-28 — live application release and selector-normalization
 containment (ADR-159):** exact `main`

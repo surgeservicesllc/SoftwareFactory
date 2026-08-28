@@ -8,13 +8,14 @@ Last triaged: 2026-08-28
   password only through an encrypted temporary repository secret, creates or
   updates through the GoTrue Admin API, and re-verifies unique UUID plus
   `email_confirmed_at` without logging credentials or response payloads.
-- [ ] Publish and run the workflow once with confirmation phrase
-  `CONFIRM BLACKSTONE SUPABASE AUTH BOOTSTRAP`; verify its exact successful
-  bounded result.
-- [ ] Delete `BLACKSTONE_SUPABASE_BOOTSTRAP_PASSWORD` immediately after the
-  accepted run, then remove the temporary workflow and its test in a forward
-  cleanup commit. Do not infer any organization membership or application role
-  from an Auth identity alone.
+- [x] Publish and run the workflow once with confirmation phrase
+  `CONFIRM BLACKSTONE SUPABASE AUTH BOOTSTRAP`; exact first-attempt run
+  `33164766560` on release `298264b02fe5a29e3c139f8077e65d6270f19167`
+  returned one bounded updated UUID after confirmed readback.
+- [x] Delete `BLACKSTONE_SUPABASE_BOOTSTRAP_PASSWORD` immediately after the
+  accepted run and remove the temporary workflow and its test in this forward
+  cleanup. No organization membership or application role was inferred from
+  the Auth identity.
 
 ## Ten-step Factory final release (2026-08-28)
 
@@ -34,6 +35,10 @@ Last triaged: 2026-08-28
 - [x] Publish exact `79ca52f5b92e7d95292210e05565d35d21b4a435`; all four jobs
   passed in CI `33158801269`, and GitHub deployment `6138739479` resolved to
   exact READY Vercel deployment `dpl_57pM3ZEYNyK596VAeLPJMabJLZrH` with the
+  public release-identity health join green.
+- [x] Publish exact `298264b02fe5a29e3c139f8077e65d6270f19167`; all four jobs
+  passed in CI `33163838800`, and GitHub deployment `6139678648` resolved to
+  exact READY Vercel deployment `dpl_ChxG5EdgPzh3vybRZgBRz9EA9gg1` with the
   public release-identity health join green.
 - [x] Diagnose the protected probe's only mismatch: the live Phase 1C
   selector is exact stale body `ed5840b9d8d0efdb513a8576df128e9b`, not the

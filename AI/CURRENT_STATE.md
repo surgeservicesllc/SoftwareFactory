@@ -2,7 +2,7 @@
 
 Last reviewed: 2026-08-28
 
-## 2026-08-28: exact verified Blackstone Auth bootstrap is release-gated
+## 2026-08-28: exact verified Blackstone Auth bootstrap completed and disposed
 
 The owner requested one email-confirmed Supabase Auth identity for
 `blackstoneagencyllc@gmail.com`. A temporary dispatch-only workflow is fixed to
@@ -12,10 +12,12 @@ attempt. It receives the requested password only through a temporary encrypted
 repository secret and the existing service-role credential, never through a
 workflow input or log. It idempotently creates or updates the one normalized
 identity through the GoTrue Admin API and re-reads a unique UUID plus
-`email_confirmed_at` before bounded output. Local workflow evidence is 5/5
-tests and focused ESLint green. It is not yet published or executed; after one
-successful run, delete the temporary password secret and remove the temporary
-workflow in a forward cleanup commit. It grants no organization membership,
+`email_confirmed_at` before bounded output. Exact first-attempt production run
+`33164766560` on release `298264b02fe5a29e3c139f8077e65d6270f19167`
+completed successfully as the configured release actor and returned one
+bounded updated UUID after exact confirmed readback. The temporary password
+secret was deleted immediately. This forward cleanup removes the disposable
+workflow and its test. The operation granted no organization membership,
 application role, worker authority, or autonomous action.
 
 ## 2026-08-28: ten-step Factory application release is live; selector containment is local/pass
@@ -53,6 +55,12 @@ shards. GitHub deployment `6138739479` resolves to READY Vercel deployment
 `dpl_57pM3ZEYNyK596VAeLPJMabJLZrH`, and the public health join reported the
 same SHA/ref, exact Vercel project `prj_pAsrhftaVWI4SyaqstgRVSWHJkdD`, and
 exact Supabase project `qpuofpmagrmyamahqwxw` with the database reachable.
+
+The newer exact Factory release
+`298264b02fe5a29e3c139f8077e65d6270f19167` passed all four jobs in CI
+`33163838800`. GitHub deployment `6139678648` resolves to READY Vercel
+deployment `dpl_ChxG5EdgPzh3vybRZgBRz9EA9gg1`; public health joined that exact
+SHA/ref and deployment URL to the same Vercel and Supabase project identities.
 
 The protected read-only lifecycle probe `33159805326` then found one exact
 hosted catalog mismatch before it could admit the release-tail migrations:

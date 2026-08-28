@@ -2669,7 +2669,7 @@ Use this append-only log for decisions that constrain future implementation. Cha
 ## ADR-160 - Bootstrap one exact verified Auth identity through a disposable secret boundary
 
 - Date: 2026-08-28
-- Status: accepted locally; one-shot production dispatch and cleanup pending
+- Status: accepted; one-shot production dispatch completed and disposed
 - Context: the owner requested `blackstoneagencyllc@gmail.com` as a verified
   Supabase Auth account with a supplied password. A real password must not be
   committed, passed as a workflow input, copied into a database migration, or
@@ -2689,6 +2689,11 @@ Use this append-only log for decisions that constrain future implementation. Cha
   supported password boundary without persistent plaintext or an arbitrary
   admin endpoint. After one accepted run, delete the temporary password secret
   and remove the temporary workflow/test in a forward cleanup commit.
+- Evidence: exact first-attempt run `33164766560` on exact release
+  `298264b02fe5a29e3c139f8077e65d6270f19167` returned one bounded updated UUID
+  after exact confirmed readback. The temporary password secret was deleted
+  immediately, and the disposable workflow/test are removed by the next
+  forward cleanup release.
 - Bounds: an Auth identity is not organization membership or an application
   role. This decision grants neither, connects no provider, enables no worker,
   changes no autonomy/action setting, and does not release the global kill
