@@ -84,14 +84,12 @@ stands behind them, and `/solutions/billing` under Settings. 56 tests in six new
 files, plus quota regressions inside the existing launch- and
 project-route suites.
 
-**Release order — two migrations now ride this branch, both apply-first:**
+**Released 2026-08-28 (owner-directed):** both migrations hosted-applied
+apply-first and postflight-verified — `runs-closure-note` (20260825000300,
+ADR-148) in run `33131066501`, `billing-foundation` (20260825000400,
+ADR-149) in run `33131128140` — then PR #421 squash-merged as `98ef9b2`.
 
-1. `scope=runs-closure-note` (20260825000300, ADR-148)
-2. `scope=billing-foundation` (20260825000400, ADR-149)
-3. then merge/deploy the code.
-
-Neither migration depends on the other; both are additive and safe against
-the currently deployed code. Until the owner completes
+Until the owner completes
 `docs/BILLING_GO_LIVE.md` (Stripe account, restricted key, four price ids,
 webhook secret, `SUPABASE_SERVICE_ROLE_KEY` on Vercel, redeploy), every
 billing surface renders **Not Connected** and the storefront behaves exactly

@@ -10,10 +10,11 @@ shipping with the ADR-148 release: organization-level Stripe subscriptions
 behind the plans `marketing_pricing_plans` has advertised since 20260813000500
 (Free / Basic $29 / Pro $79 / Enterprise).
 
-- **Migration `20260825000400`** (scope=billing-foundation, **not yet
-  hosted**): `billing_customers`, `billing_subscriptions`, `billing_events`
-  with forced RLS, member reads only, service-role webhook writes, audit
-  events, `ensure_billing_customer`. Additive; apply before deploying.
+- **Migration `20260825000400`** (scope=billing-foundation, **hosted-applied
+  2026-08-28**, run `33131128140`, postflight-verified: three tables with
+  forced RLS plus both definer boundaries): `billing_customers`,
+  `billing_subscriptions`, `billing_events`, `ensure_billing_customer`,
+  `record_billing_activity`.
 - **Server**: thin Stripe REST client + HMAC webhook verification
   (`lib/billing/stripe.ts`, no SDK, no browser key of any kind), plan catalog
   + entitlements (`lib/billing/plans.ts`, `entitlements.ts`), webhook mirror
@@ -135,10 +136,9 @@ and the run's own account of why it ended computed on every close and
 discarded on every close (ADR-148). All six are fixed, each with a
 regression that fails without the fix; ADR-143 and ADR-144's migrations
 are hosted-applied and readback-verified. **ADR-148's migration
-(`20260825000300`) is not yet hosted** — apply it with the
-`runs-closure-note` scope *before* the code that sends the note reaches
-production, since the deployed worker's call still resolves against the
-new function but not the reverse.
+(`20260825000300`) was hosted-applied 2026-08-28, run `33131066501`,
+postflight-verified** under the `runs-closure-note` scope, honoring the
+apply-before-deploy order its defaulted parameter required.
 
 The last of them came from reading the live queue rather than re-running
 tests that already pass: two runs of one graph, six minutes apart, lost
