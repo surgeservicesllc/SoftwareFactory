@@ -13,9 +13,9 @@ intentionally stopped.
 - Active worktree:
   `C:\Users\Daniel\OneDrive\Documents\ChatGPT\SoftwareFactory-factory-e2e`
 - Branch: `codex/factory-ten-step-e2e`
-- The Factory release change is committed and rebased directly on the exact
-  `origin/main` shown below. Only the final Auth response-shape hardening and
-  this evidence refresh remain to commit before publication.
+- The Factory release, final Auth response-shape hardening, and evidence refresh
+  are committed with a clean worktree and rebased directly on the exact
+  `origin/main` shown below. Publication is the next step.
 - Current `origin/main`:
   `459be6426a988432f2a8b71595428957674881bb`
 - Last fully validated Factory deployment:
@@ -187,11 +187,11 @@ Current post-fix evidence:
 
 Run next, in this order:
 
-1. Commit the final Auth response-shape hardening and evidence refresh, verify
-   the intentional diff and zero added secret patterns, and fetch `main` once
-   more. The EOL-only `apply-hosted-migrations.yml` artifact is semantically
-   clean and must not be staged or edited.
-2. Push directly to `main`, wait for all four
+1. Fetch `main` once more, verify the clean intentional diff and zero added
+   secret patterns, then push directly to `main`. The previously observed
+   EOL-only `apply-hosted-migrations.yml` artifact is semantically clean and
+   absent from the committed diff.
+2. Wait for all four
    exact-head CI jobs and exact READY Vercel/health identity.
 3. Dispatch the one-shot Auth bootstrap, verify its bounded result, delete its
    temporary password secret, and remove the workflow/test in a forward cleanup
