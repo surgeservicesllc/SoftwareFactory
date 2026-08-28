@@ -115,3 +115,40 @@ export function billingConnected(): boolean {
 export function planByKey(key: string): Plan | null {
   return key in PLANS ? PLANS[key as PlanKey] : null;
 }
+
+export type SecretShape = "missing" | "malformed" | "ok";
+
+export type BillingConfigurationReport = {
+  readonly secretKey: SecretShape;
+  readonly webhookSecret: SecretShape;
+  readonly prices: Readonly<Record<"basic" | "pro", Readonly<Record<BillingCadence, boolean>>>>;
+};
+
+/**
+ * Which pieces of the Stripe configuration this deployment can actually see,
+ * as shapes only — never values. Exists because "Not Connected" alone sent
+ * the owner guessing across four dashboards; this names the broken piece.
+ * "malformed" almost always means quotes or whitespace pasted into Vercel,
+ * or a publishable key where the secret belongs.
+ */
+export function describeBillingConfiguration(): BillingConfigurationReport {
+  const shape = (raw: string | undefined, pattern: RegExp): SecretShape => {
+    const value = raw?.trim();
+    if (!value) return "missing";
+    return pattern.test(value) ? "ok" : "malformed";
+  };
+  return {
+    secretKey: shape(process.env.STRIPE_SECRET_KEY, /^(sk|rk)_(test|live)_[A-Za-z0-9]{8,}$/),
+    webhookSecret: shape(process.env.STRIPE_WEBHOOK_SECRET, /^whsec_[A-Za-z0-9]{8,}$/),
+    prices: {
+      basic: {
+        monthly: priceIdFor("basic", "monthly") !== null,
+        yearly: priceIdFor("basic", "yearly") !== null,
+      },
+      pro: {
+        monthly: priceIdFor("pro", "monthly") !== null,
+        yearly: priceIdFor("pro", "yearly") !== null,
+      },
+    },
+  };
+}
