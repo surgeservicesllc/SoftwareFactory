@@ -1,6 +1,11 @@
 import { z } from "zod";
 
-import { billingConnected, planByKey, priceIdFor } from "@/lib/billing/plans";
+import {
+  billingSecretConfigured,
+  planByKey,
+  resolvePriceId,
+  webhookSecretConfigured,
+} from "@/lib/billing/plans";
 import {
   createCheckoutSession,
   createStripeCustomer,
@@ -38,7 +43,9 @@ export async function POST(request: Request) {
   try {
     assertSameOriginRequest(request);
 
-    if (!billingConnected()) {
+    // The webhook secret is part of "can charge": a checkout that charges
+    // while the mirror cannot hear about it takes money without granting.
+    if (!billingSecretConfigured() || !webhookSecretConfigured()) {
       return jsonNoStore(
         {
           error: {
@@ -59,7 +66,9 @@ export async function POST(request: Request) {
     }
 
     const plan = planByKey(parsed.data.plan);
-    const priceId = plan?.selfServe ? priceIdFor(plan.key, parsed.data.cadence) : null;
+    const priceId = plan?.selfServe
+      ? await resolvePriceId(plan.key, parsed.data.cadence)
+      : null;
     if (!plan || !priceId) {
       return jsonNoStore(
         {

@@ -10,7 +10,7 @@ import {
   SecondaryCta,
   SurfacePanel,
 } from "@/components/marketing/primitives";
-import { billingConnected, priceIdFor } from "@/lib/billing/plans";
+import { resolvePurchasablePlans } from "@/lib/billing/plans";
 import { getMarketingContent, getMarketingMetadata } from "@/lib/marketing/queries";
 import { featuresInGroup } from "@/lib/marketing/types";
 
@@ -21,18 +21,9 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function PricingPage() {
   const content = await getMarketingContent("pricing");
   // Which cards can actually charge, decided server-side from the configured
-  // Stripe prices. Nothing about the keys reaches the browser — only booleans.
-  const purchasable = billingConnected()
-    ? Object.fromEntries(
-        (["basic", "pro"] as const).map((plan) => [
-          plan,
-          {
-            monthly: priceIdFor(plan, "monthly") !== null,
-            yearly: priceIdFor(plan, "yearly") !== null,
-          },
-        ]),
-      )
-    : {};
+  // Stripe prices (environment variables or lookup keys). Nothing about the
+  // keys reaches the browser — only booleans.
+  const { purchasable } = await resolvePurchasablePlans();
   const pillars = featuresInGroup(content.features, "pillar");
   const security = featuresInGroup(content.features, "security");
   const testimonial = content.testimonials[0];

@@ -37,16 +37,22 @@ export type StripeTransport = (
   path: string,
   body: URLSearchParams,
   secretKey: string,
+  method?: "POST" | "GET",
 ) => Promise<{ status: number; json: unknown }>;
 
-const realTransport: StripeTransport = async (path, body, secretKey) => {
-  const response = await fetch(`${STRIPE_API}${path}`, {
-    method: "POST",
+const realTransport: StripeTransport = async (path, body, secretKey, method = "POST") => {
+  const url = method === "GET" && body.size > 0
+    ? `${STRIPE_API}${path}?${body.toString()}`
+    : `${STRIPE_API}${path}`;
+  const response = await fetch(url, {
+    method,
     headers: {
       Authorization: `Bearer ${secretKey}`,
-      "Content-Type": "application/x-www-form-urlencoded",
+      ...(method === "POST"
+        ? { "Content-Type": "application/x-www-form-urlencoded" }
+        : {}),
     },
-    body: body.toString(),
+    body: method === "POST" ? body.toString() : undefined,
   });
   return { status: response.status, json: await response.json().catch(() => null) };
 };
@@ -61,9 +67,10 @@ async function post(
   path: string,
   fields: Record<string, string>,
   transport: StripeTransport,
+  method: "POST" | "GET" = "POST",
 ): Promise<Record<string, unknown>> {
   const body = new URLSearchParams(fields);
-  const { status, json } = await transport(path, body, secretKey());
+  const { status, json } = await transport(path, body, secretKey(), method);
   if (status >= 400 || json === null || typeof json !== "object") {
     const message =
       json !== null && typeof json === "object" && "error" in json
@@ -190,4 +197,110 @@ export function verifyStripeSignature(
   } catch {
     return null;
   }
+}
+
+/** The slice of a Stripe list response the catalog helpers read. */
+function listData(payload: Record<string, unknown>): Array<Record<string, unknown>> {
+  const data = payload.data;
+  return Array.isArray(data) ? (data as Array<Record<string, unknown>>) : [];
+}
+
+/** Active prices carrying any of the given lookup keys. */
+export async function listPricesByLookupKeys(
+  lookupKeys: readonly string[],
+  transport: StripeTransport = realTransport,
+): Promise<Array<{ id: string; lookupKey: string }>> {
+  const fields: Record<string, string> = { active: "true", limit: "100" };
+  lookupKeys.forEach((key, index) => {
+    fields[`lookup_keys[${index}]`] = key;
+  });
+  const payload = await post("/prices", fields, transport, "GET");
+  return listData(payload).flatMap((row) => {
+    const id = row.id;
+    const lookupKey = row.lookup_key;
+    return typeof id === "string" && typeof lookupKey === "string"
+      ? [{ id, lookupKey }]
+      : [];
+  });
+}
+
+/** Create a product; the metadata key marks it as this deployment's. */
+export async function createStripeProduct(
+  input: { name: string; planKey: string },
+  transport: StripeTransport = realTransport,
+): Promise<string> {
+  const product = await post(
+    "/products",
+    { name: input.name, "metadata[factory_plan]": input.planKey },
+    transport,
+  );
+  const id = product.id;
+  if (typeof id !== "string" || !id.startsWith("prod_")) {
+    throw new StripeRequestError(502, "Stripe did not return a product id.");
+  }
+  return id;
+}
+
+/** Create a recurring price under a product, addressable by lookup key. */
+export async function createStripePrice(
+  input: {
+    productId: string;
+    unitAmountCents: number;
+    interval: "month" | "year";
+    lookupKey: string;
+  },
+  transport: StripeTransport = realTransport,
+): Promise<string> {
+  const price = await post(
+    "/prices",
+    {
+      product: input.productId,
+      currency: "usd",
+      unit_amount: String(input.unitAmountCents),
+      "recurring[interval]": input.interval,
+      lookup_key: input.lookupKey,
+      // If a stale price holds the key, the key moves to this one.
+      transfer_lookup_key: "true",
+    },
+    transport,
+  );
+  const id = price.id;
+  if (typeof id !== "string" || !id.startsWith("price_")) {
+    throw new StripeRequestError(502, "Stripe did not return a price id.");
+  }
+  return id;
+}
+
+/** The webhook endpoints Stripe currently holds for this account. */
+export async function listWebhookEndpoints(
+  transport: StripeTransport = realTransport,
+): Promise<Array<{ id: string; url: string }>> {
+  const payload = await post("/webhook_endpoints", { limit: "100" }, transport, "GET");
+  return listData(payload).flatMap((row) => {
+    const id = row.id;
+    const url = row.url;
+    return typeof id === "string" && typeof url === "string" ? [{ id, url }] : [];
+  });
+}
+
+/**
+ * Create the webhook endpoint. The signing secret is returned by Stripe on
+ * creation and never again; the caller shows it to the owner exactly once and
+ * must not log it.
+ */
+export async function createStripeWebhookEndpoint(
+  input: { url: string; events: readonly string[] },
+  transport: StripeTransport = realTransport,
+): Promise<{ id: string; secret: string }> {
+  const fields: Record<string, string> = { url: input.url };
+  input.events.forEach((event, index) => {
+    fields[`enabled_events[${index}]`] = event;
+  });
+  const endpoint = await post("/webhook_endpoints", fields, transport);
+  const id = endpoint.id;
+  const secret = endpoint.secret;
+  if (typeof id !== "string" || typeof secret !== "string" || !secret.startsWith("whsec_")) {
+    throw new StripeRequestError(502, "Stripe did not return the webhook endpoint secret.");
+  }
+  return { id, secret };
 }

@@ -2,6 +2,29 @@
 
 Last updated: 2026-08-28
 
+## Newest (2026-08-28 ~09:45Z): the site sets up its own Stripe account (ADR-158)
+
+The six-paste configuration path failed in practice: the shape diagnostic
+(#427) proved the production runtime saw none of the six STRIPE_* values
+across seven hours and four fresh deployments — "missing", never
+"malformed", so the values simply never reached the Production
+environment. The owner asked for everything to be done for them; a cloud
+container cannot reach their browser, and secrets must not transit the
+transcript regardless.
+
+So the deployment now does its own setup. Prices are addressable by fixed
+lookup keys with `resolvePriceId` falling back from env vars to a cached
+Stripe lookup; `POST /api/billing/bootstrap` (super administrator only,
+idempotent, find-first) creates the Basic/Pro products, the four
+lookup-keyed prices at the advertised amounts, and the webhook endpoint,
+returning the show-once signing secret to the admin's screen; the Billing
+page carries the "Finish payment setup" card that drives it; and
+`billingConnected` now also requires the webhook secret, because charging
+while the mirror is deaf would take money without granting anything. The
+owner's remaining part is exactly two pastes into Vercel (secret key,
+then the signing secret the card hands them), each followed by a
+redeploy — docs/BILLING_GO_LIVE.md leads with this short path.
+
 ## Newest (2026-08-28): final ten-step release candidate awaits publication
 
 Step 8 no longer treats a provider/model mismatch or a disabled worker as an
