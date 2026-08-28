@@ -544,7 +544,7 @@ describe("GET /api/commands", () => {
 describe("POST /api/commands", () => {
   beforeEach(() => {
     createGitHubInstallationToken.mockReset().mockResolvedValue({ token: "installation-token" });
-    dispatchGraphWorker.mockReset().mockResolvedValue(undefined);
+    dispatchGraphWorker.mockReset().mockResolvedValue({ dispatched: true, reason: "dispatched" });
     dispatchPhase1CWorker.mockReset().mockResolvedValue(undefined);
     getGitHubAppConfigurationForAppId.mockReset().mockReturnValue({ appId: 4582606 });
     getGitHubBranchReference.mockReset().mockResolvedValue({
@@ -696,12 +696,13 @@ describe("POST /api/commands", () => {
     expect(body).toMatchObject({
       idempotentReplay: true,
       // Replaying a recorded Claude command launches (or returns) its one
-      // analysis graph — this is how a command recorded before the launch
-      // feature existed gains its run.
+      // analysis graph. With no reusable dispatch binding, the graph remains
+      // durably planned behind the global worker gate and is not reported as
+      // started.
       execution: {
-        started: true,
+        started: false,
         workerDispatch: "not_applicable",
-        analysisGraph: { launched: true, graphId: analysisGraphId },
+        analysisGraph: { launched: true, graphId: analysisGraphId, workerWoken: false },
       },
       orchestration: {
         executionMode: "record_only",
@@ -710,6 +711,7 @@ describe("POST /api/commands", () => {
       },
     });
     expect(body.execution.message).toContain("analysis graph is planned");
+    expect(body.execution.message).toContain("Not Connected");
     expect(rpc).toHaveBeenCalledWith("launch_command_analysis_graph", expect.objectContaining({
       p_organization_id: organizationId,
     }));

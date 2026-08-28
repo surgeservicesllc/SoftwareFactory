@@ -105,6 +105,7 @@ const claimedGraphSchema = z.object({
    */
   template_key: z.string().min(1).max(80).nullish().catch(null),
   template_version: z.number().int().positive().nullish().catch(null),
+  template_plan_sha256: z.string().regex(/^[0-9a-f]{64}$/).nullish().catch(null),
   base_branch: z.string().min(1).max(255).nullish().catch(null),
   base_sha: z.string().regex(/^[0-9a-f]{40}$/).nullish().catch(null),
   required_check_names: requiredCheckNamesSchema.nullish().catch(null),
@@ -126,6 +127,7 @@ const claimedGraphSchema = z.object({
   merge_commit_sha: z.string().regex(/^[0-9a-f]{40}$/).nullish().catch(null),
   deployment_id: z.string().uuid().nullish().catch(null),
   deployment_url: z.string().url().max(2_048).nullish().catch(null),
+  project_production_url: z.string().url().max(2_048).nullish().catch(null),
   // Lifecycles judge a capacity-voided run differently (see capacityVoided);
   // tolerant of projections from before the column existed.
   is_lifecycle: z.boolean().nullish().catch(null),

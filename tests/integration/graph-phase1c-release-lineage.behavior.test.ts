@@ -61,7 +61,7 @@ const baseSha = "a".repeat(40);
 const headSha = "b".repeat(40);
 const mergeSha = "c".repeat(40);
 const canonicalTemplatePlanSha256 =
-  "ac9bde8fc1cdd21e735f02b1fa7d940ab680c2bde8c1ec24d704d42c59045a09";
+  "0ec1e97b80dc8696872d88162c5271f9ea822e7dea79556c5470730a025d3b49";
 const requiredCheckNames = [
   "Lint, typecheck, test, and build",
   "Browser and accessibility tests 1/3",
@@ -1654,6 +1654,47 @@ describe("graph to Phase 1C release lineage", { timeout: 240_000 }, () => {
     const built = buildLaunchPlan(template!, budgetForTemplate(template!, DEFAULT_GRAPH_BUDGET));
     if (!built.ok) throw new Error(built.errors.join("; "));
 
+    // Reconstruct the exact pre-post-deploy plan so the forward migration
+    // proves it replaced one digest instead of widening template admission.
+    const legacyNodes = JSON.parse(JSON.stringify(built.plan.nodes)) as Array<{
+      job: string;
+      node_key: string;
+      output_schema: {
+        $schema?: string;
+        anyOf?: unknown[];
+        properties?: Record<string, unknown>;
+      };
+    }>;
+    const legacyDeploy = legacyNodes.find((node) => node.node_key === "deploy");
+    const legacyMonitor = legacyNodes.find((node) => node.node_key === "monitor");
+    if (!legacyDeploy?.output_schema.properties || !legacyMonitor?.output_schema.anyOf?.[1]) {
+      throw new Error("current lifecycle schemas cannot reconstruct the prior canonical plan");
+    }
+    delete legacyDeploy.output_schema.properties.providerRef;
+    legacyMonitor.job =
+      "Probe the exact deployment URL recorded on this graph's bridge, tied to its deployment identity, and report what the running system returned.";
+    legacyMonitor.output_schema = {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      ...(legacyMonitor.output_schema.anyOf[1] as Record<string, unknown>),
+    };
+    const legacyCanonicalPlan = {
+      topology: built.plan.topology,
+      topologyReasons: built.plan.topologyReasons,
+      riskLevel: built.plan.riskLevel,
+      requiresOwnerApproval: built.plan.requiresOwnerApproval,
+      nodes: legacyNodes,
+      edges: built.plan.edges,
+      budget: built.plan.budget,
+    };
+    await resetRole(db);
+    const legacyDigest = await db.query<{ digest: string }>(
+      `select encode(sha256(convert_to($1::jsonb::text, 'UTF8')), 'hex') as digest`,
+      [JSON.stringify(legacyCanonicalPlan)],
+    );
+    expect(legacyDigest.rows[0].digest).toBe(
+      "ac9bde8fc1cdd21e735f02b1fa7d940ab680c2bde8c1ec24d704d42c59045a09",
+    );
+
     await resetRole(db);
     const beforeLaunch = (await db.query<{ count: number }>(
       "select count(*)::integer as count from public.graphs",
@@ -1689,6 +1730,54 @@ describe("graph to Phase 1C release lineage", { timeout: 240_000 }, () => {
     )).rows[0].count).toBe(beforeLaunch);
 
     await asWorker(db);
+    await expect(db.query(
+      `select public.create_graph_from_plan_with_release_identity_as_server(
+         $1, $2, $3, $4, $5::public.graph_topology, $6::jsonb,
+         $7::public.risk_level, $8, $9::jsonb, $10::jsonb, $11::jsonb,
+         'full_lifecycle', 2, $12, 'main', $13, $14::jsonb
+       ) as graph_id`,
+      [
+        organizationId,
+        ownerId,
+        projectId,
+        built.plan.goal,
+        built.plan.topology,
+        JSON.stringify(built.plan.topologyReasons),
+        built.plan.riskLevel,
+        built.plan.requiresOwnerApproval,
+        JSON.stringify(legacyNodes),
+        JSON.stringify(built.plan.edges),
+        JSON.stringify(built.plan.budget),
+        repositoryId,
+        baseSha,
+        requiredCheckNamesJson,
+      ],
+    )).rejects.toThrow(/canonical digest/i);
+
+    await expect(db.query(
+      `select public.create_graph_from_plan_with_release_identity_as_server(
+         $1, $2, $3, $4, $5::public.graph_topology, $6::jsonb,
+         $7::public.risk_level, $8, $9::jsonb, $10::jsonb, $11::jsonb,
+         'full_lifecycle_plus', 2, $12, 'main', $13, $14::jsonb
+       ) as graph_id`,
+      [
+        organizationId,
+        ownerId,
+        projectId,
+        built.plan.goal,
+        built.plan.topology,
+        JSON.stringify(built.plan.topologyReasons),
+        built.plan.riskLevel,
+        built.plan.requiresOwnerApproval,
+        JSON.stringify(built.plan.nodes),
+        JSON.stringify(built.plan.edges),
+        JSON.stringify(built.plan.budget),
+        repositoryId,
+        baseSha,
+        requiredCheckNamesJson,
+      ],
+    )).rejects.toThrow(/exact built-in full_lifecycle v2 launch identity/i);
+
     await expect(db.query(
       `select public.create_graph_from_plan_with_release_identity_as_server(
          $1, $2, $3, $4, $5::public.graph_topology, $6::jsonb,

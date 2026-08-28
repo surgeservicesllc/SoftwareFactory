@@ -178,12 +178,14 @@ describe("required check wiring", () => {
     expect(graphWorkerScript).not.toMatch(/abortRun\([^)]*mismatch/);
   });
 
-  it("threads the dispatch graph id only into versioned queue diagnosis", () => {
+  it("threads the dispatch graph id into an exact database claim and queue diagnosis", () => {
     expect(graphWorker).toMatch(
-      /SOFTWAREFACTORY_TARGET_GRAPH_ID:\s*\$\{\{ github\.event\.client_payload\.graph_id \|\| '' \}\}/,
+      /SOFTWAREFACTORY_TARGET_GRAPH_ID:\s*\$\{\{ github\.event\.client_payload\.graph_id \|\| inputs\.graph_id \|\| '' \}\}/,
     );
+    expect(graphWorker).toContain("SOFTWAREFACTORY_TARGET_CLAIM_REQUIRED:");
     expect(graphWorkerScript).toContain('optionalUuidEnv("SOFTWAREFACTORY_TARGET_GRAPH_ID")');
     expect(graphWorkerScript).toMatch(/SupabaseGraphStore\.create\([\s\S]*?targetGraphId/);
+    expect(graphWorkerScript).toContain("An exact-target graph dispatch must use --once, not --drain.");
   });
 
   it("preloads exactly the validation image the validator demands", async () => {

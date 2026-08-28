@@ -156,6 +156,7 @@ export class SupabaseWorkerStore implements WorkerStore {
     private readonly provider: string,
     private readonly model: string,
     private readonly leaseSeconds = 120,
+    private readonly targetCommandId: string | null = null,
   ) {}
 
   static create(input: {
@@ -164,11 +165,18 @@ export class SupabaseWorkerStore implements WorkerStore {
     provider: string;
     model: string;
     leaseSeconds?: number;
+    targetCommandId?: string | null;
   }) {
     const client = createClient(input.url, input.serviceRoleKey, {
       auth: { autoRefreshToken: false, detectSessionInUrl: false, persistSession: false },
     });
-    return new SupabaseWorkerStore(client, input.provider, input.model, input.leaseSeconds);
+    return new SupabaseWorkerStore(
+      client,
+      input.provider,
+      input.model,
+      input.leaseSeconds,
+      input.targetCommandId ?? null,
+    );
   }
 
   async register(workerId: string, version: string) {
@@ -203,13 +211,19 @@ export class SupabaseWorkerStore implements WorkerStore {
   }
 
   async claim(workerId: string): Promise<WorkerJob | null> {
-    const { data, error } = await this.client.rpc("claim_phase1c_run_v2", {
+    const claimRequest = {
       p_worker_id: workerId,
       p_provider: this.provider,
       p_model: this.model,
       p_lease_seconds: this.leaseSeconds,
       p_protocol_version: 2,
-    });
+    };
+    const { data, error } = this.targetCommandId
+      ? await this.client.rpc("claim_phase1c_run_by_command_v2", {
+        ...claimRequest,
+        p_target_command_id: this.targetCommandId,
+      })
+      : await this.client.rpc("claim_phase1c_run_v2", claimRequest);
     if (error) databaseFailure("Run claim", error);
     const row = singleRow<ClaimRow>(data);
     if (!row) return null;

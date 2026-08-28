@@ -58,6 +58,30 @@ function claimRow() {
 }
 
 describe("SupabaseWorkerStore retry usage", () => {
+  it("makes the dispatched command UUID part of the database claim", async () => {
+    const rpc = vi.fn()
+      .mockResolvedValueOnce({ data: [claimRow()], error: null })
+      .mockResolvedValueOnce({ data: null, error: null });
+    const targetCommandId = "10000000-0000-4000-8000-000000000004";
+    const store = new SupabaseWorkerStore(
+      { rpc } as never,
+      "openai",
+      "gpt-5.3-codex",
+      120,
+      targetCommandId,
+    );
+
+    await expect(store.claim("worker-1")).resolves.not.toBeNull();
+    expect(rpc).toHaveBeenNthCalledWith(1, "claim_phase1c_run_by_command_v2", {
+      p_worker_id: "worker-1",
+      p_provider: "openai",
+      p_model: "gpt-5.3-codex",
+      p_lease_seconds: 120,
+      p_target_command_id: targetCommandId,
+      p_protocol_version: 2,
+    });
+  });
+
   it("maps cumulative prior usage without branch recovery and never resets it on failure", async () => {
     const rpc = vi.fn()
       .mockResolvedValueOnce({

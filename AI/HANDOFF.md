@@ -2,6 +2,83 @@
 
 Last updated: 2026-08-28
 
+## Newest (2026-08-28): final ten-step release candidate awaits publication
+
+Step 8 no longer treats a provider/model mismatch or a disabled worker as an
+invalid command plan. The durable record-only route accepts the assigned bot's
+provider/model, and both launch and gate controls preserve exact server wake
+evidence. When the global worker gate is OFF the UI says **Not Connected**,
+does not enter an unbounded polling loop, and keeps a manual exact refresh.
+
+Production containment is explicit in both control planes: GitHub variables
+hold Phase 1C/graph/schedule/auth-broker execution OFF, the auth-broker run was
+cancelled, and Vercel Production holds the same application dispatch gates at
+`false`. The release workflow rejects mutation reruns, non-owner triggering
+actors, non-main graph manual runs, active execution workflows, or any changed
+autonomy/kill-switch/runtime state.
+
+`/api/health` now joins `www.theagoras.com` to the exact Vercel project,
+immutable deployment ID/URL, main SHA/ref, and Supabase project ref. The
+workflow compares that runtime deployment URL to GitHub's exact Vercel-bot
+Production status twice. Vercel's non-secret expected Supabase/Vercel/host and
+both worker-gate variables are configured for the next deployment.
+
+Do not call the three 20260828 migrations hosted until the exact new `main`
+head is green and READY. Apply only `00100`, then `00200`, then `00300` through
+`factory-lifecycle-release-migrations.yml`, using the same exact `release_sha`
+and a first-attempt owner dispatch for each mutation. Steps 9-10 execution is
+not claimed while workers remain OFF; only recorded/planned and observed
+release behavior can be accepted under the current safety constraint. Final
+local gates: lint/typecheck green, 434 test files / 5,121 tests passed (3 / 7
+skipped), and production build 170/170 pages.
+
+## Newest (2026-08-28): Step 10 public URL writer is locally complete
+
+`20260828000100_project_production_url_configuration.sql` (LF SHA-256
+`0856ddee447280a1bb4418f25d6a6d4650687e168fffcd5e98e8ce15edd62b27`) is the isolated
+forward migration for the public project address used by lifecycle monitoring.
+It leaves `update_project_details(uuid,text,text)` unchanged and adds only an
+authenticated owner/admin setter, a safe-target predicate/constraint, and
+postflight assertions for projects FORCE RLS plus the existing audit trigger.
+The project detail page now has a dedicated configuration field and clear
+unsafe-target feedback. The database independently rejects likely-secret path
+material through `text_has_likely_secret`; no live project value was changed.
+
+Vercel Production has the non-secret expected Supabase project ref configured
+for the next deployment. `/api/health` will fail closed unless the runtime URL
+matches it, exposing only bounded match status plus exact release SHA/ref.
+
+Local evidence is 89/89 focused tests, including the full migration chain and
+native SQL authorization/ACL/audit behavior, plus clean focused ESLint and full
+typecheck. Do not call it hosted until the exact migration is applied once and
+signed-in owner/admin acceptance confirms the stored value and immutable
+`project.updated` event. The release must keep workers, provider execution,
+autonomy, and automatic actions OFF and the global kill switch ON.
+
+## Newest (2026-08-28): one-shot wakes are exact-target claims locally
+
+Migration `20260828000200_target_bound_worker_claims.sql` and its worker/
+workflow callers are locally complete under ADR-155. Repository-dispatch and
+manual graph runs require `graph_id`; Phase 1C requires `command_id`. The UUID
+is enforced inside the authoritative PostgreSQL selector before locking and
+claiming, so an older or higher-priority neighbor cannot consume the wake. A
+Phase 1C target that is not claimable returns no row after its target-scoped
+stale cleanup, so cleanup commits and the caller can report persisted state.
+Scheduled calls retain their prior global selector through null-target
+delegation and remain gated OFF. All graph-worker event types plus application
+wakes share a second exact global activation switch, also OFF. The graph claim exposes
+`project_production_url` separately from release-lineage `deployment_url`.
+
+Local evidence: 106/106 focused contract/behavior/unit tests passed, including
+full-chain schema-security and graph-worker execution; focused ESLint and
+scoped diff checks are clean. Do not call this hosted: the migration must be
+published and applied once through the protected exact-hash path, then an
+explicit-ID canary must prove target identity. Keep workers/schedules,
+provider execution, autonomy, and automatic actions OFF and the global kill
+switch ON. Full-chain tail/digest fixtures belong to the adjacent post-deploy
+validation change and must move with that migration rather than being patched
+independently here.
+
 ## Newest (2026-08-28): Factory v2 is live; provider route remains
 
 The real page could wait indefinitely for the client fan-out of protected
@@ -1505,7 +1582,7 @@ The workflow maps the four App values to runtime `GITHUB_*` names only inside th
 
 The non-secret repository Actions variable `SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED` must equal literal `true` or every repository-dispatch/schedule job is skipped. It is the final fail-closed activation gate. It was enabled only long enough for the first approved acceptance claim and is now absent/OFF; any further activation remains bounded by the exact owner approval.
 
-`SOFTWAREFACTORY_REQUIRED_CHECKS` must be a non-empty, unique pipe-delimited list of 1-20 exact check names. The reviewed workflow value is `Lint, typecheck, test, and build|Browser and accessibility tests`, matching `.github/workflows/ci.yml`. Before activation, verify no CI job rename drift. Missing/invalid configuration blocks worker startup; incomplete/missing/unstable checks or a changed draft PR cannot pass CI.
+`SOFTWAREFACTORY_REQUIRED_CHECKS` must be a non-empty, unique pipe-delimited list of 1-20 exact check names. The reviewed workflow value is `Lint, typecheck, test, and build|Browser and accessibility tests 1/3|Browser and accessibility tests 2/3|Browser and accessibility tests 3/3`, matching `.github/workflows/ci.yml`. Before activation, verify no CI job rename drift. Missing/invalid configuration blocks worker startup; incomplete/missing/unstable checks or a changed draft PR cannot pass CI.
 
 ## Verification state
 

@@ -2,6 +2,72 @@
 
 Last triaged: 2026-08-28
 
+## Ten-step Factory final release (2026-08-28)
+
+- [x] Correct Step 8 any-provider/model record-only routing and preserve one
+  durable command/task/graph identity.
+- [x] Preserve exact worker wake evidence in launch/gate UI; show **Not
+  Connected**, stop automatic polling when no wake occurred, and bound live
+  refresh when a wake was accepted.
+- [x] Put Phase 1C and graph application dispatch plus every workflow trigger
+  behind explicit fail-closed gates; require exact one-shot target IDs and
+  main-only manual execution.
+- [x] Bind public health to exact main SHA/ref, public host, Vercel project and
+  immutable deployment identity, and Supabase project identity.
+- [x] Make mutation authorization first-attempt/non-replayable and validate
+  active workflows, exact CI/deployment/health, database containment, ledger,
+  catalog, ACL, runtime, lint, and Step 8 any-model contracts.
+- [ ] Publish the reviewed head; require all four exact-head jobs and exact
+  Vercel READY identity.
+- [ ] Apply only `20260828000100`, `20260828000200`, then `20260828000300`
+  through their ordered forward-only scopes and accept every postflight.
+- [ ] Complete signed-in production Step 8 record/reload and Step 9 persisted
+  observation with an already-connected bot. Do not initiate provider OAuth or
+  enable a worker merely to satisfy this acceptance item.
+
+## Step 10 public production URL configuration (2026-08-28, ADR-156)
+
+- [x] Add a dedicated owner/admin RPC without changing the compatible
+  three-argument project-detail function.
+- [x] Reject credentials, likely-secret path material, query/fragment state, non-HTTPS, localhost/private
+  and ambiguous network targets at both request and database boundaries.
+- [x] Preserve projects FORCE RLS and route real changes through the existing
+  immutable `project.updated` activity trigger; refuse archived projects and
+  no-op replays.
+- [x] Add the project-detail field, clear behavior, accessible failure text,
+  API/unit/contract/native-SQL behavior coverage, focused lint and typecheck.
+- [x] Configure Vercel Production with an independent non-secret expected
+  Supabase project ref; make `/api/health` fail closed on mismatch.
+- [ ] Publish and apply only
+  `20260828000100_project_production_url_configuration.sql` (LF SHA-256
+  `0856ddee447280a1bb4418f25d6a6d4650687e168fffcd5e98e8ce15edd62b27`) through the
+  protected hosted path, then configure the intended project through its
+  signed-in owner/admin UI and verify one immutable audit event. No live value
+  was set by the local implementation.
+
+## Exact-target one-shot worker claims (2026-08-28, ADR-155)
+
+- [x] Move graph and Phase 1C target UUIDs into the authoritative database
+  selectors so a requested wake cannot consume an unrelated eligible item.
+- [x] Preserve the existing scheduled/global claim APIs through null-target
+  delegation and leave both scheduled worker gates disabled by default.
+- [x] Require explicit target UUIDs for repository-dispatch and manual canary
+  workflows; commit target-scoped cleanup and return no row for ineligible
+  Phase 1C targets without claiming a neighbor.
+- [x] Put every graph-worker event and application dispatch behind one exact
+  global activation switch; keep it OFF in both GitHub and Vercel.
+- [x] Keep the exact provider deployment URL and public project production URL
+  as distinct release-evidence fields.
+- [x] Cover target preference, ACL denial, workflow wiring, migration order,
+  schema security, environment parsing, and graph execution locally (106/106
+  focused tests; focused ESLint clean).
+- [ ] Publish an exact reviewed head, pass the complete required gate set, and
+  apply only `20260828000200_target_bound_worker_claims.sql` through the
+  protected hosted path.
+- [ ] Run one explicit-ID graph canary and one explicit-ID Phase 1C canary (or
+  record exact policy ineligibility) while schedules, autonomy, and automatic
+  actions remain OFF and the global kill switch remains ON.
+
 ## Billing follow-ons (2026-08-25, after go-live)
 
 The subscription engine shipped with ADR-149; these are the deliberate

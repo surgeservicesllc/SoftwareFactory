@@ -70,6 +70,15 @@ async function main() {
     throw new Error("SOFTWAREFACTORY_REQUIRED_CHECKS is not a safe, unique repository policy.");
   }
   const targetGraphId = optionalUuidEnv("SOFTWAREFACTORY_TARGET_GRAPH_ID");
+  if (
+    process.env.SOFTWAREFACTORY_TARGET_CLAIM_REQUIRED?.trim() === "true"
+    && !targetGraphId
+  ) {
+    throw new Error("SOFTWAREFACTORY_TARGET_GRAPH_ID is required for this one-shot dispatch.");
+  }
+  if (targetGraphId && drain) {
+    throw new Error("An exact-target graph dispatch must use --once, not --drain.");
+  }
   const store = SupabaseGraphStore.create({
     url: requiredEnv("NEXT_PUBLIC_SUPABASE_URL"),
     serviceRoleKey: requiredEnv("SUPABASE_SERVICE_ROLE_KEY"),
@@ -146,6 +155,7 @@ async function main() {
     const anchorExecutor = buildAnchorNodeExecutor({
       templateKey: parsed.graph.template_key ?? null,
       templateVersion: parsed.graph.template_version ?? null,
+      templatePlanSha256: parsed.graph.template_plan_sha256 ?? null,
       repositoryFullName: parsed.graph.project_repository,
       baseBranch: parsed.graph.base_branch ?? null,
       baseSha: parsed.graph.base_sha ?? null,
@@ -157,6 +167,7 @@ async function main() {
       mergeCommitSha: parsed.graph.merge_commit_sha ?? null,
       deploymentId: parsed.graph.deployment_id ?? null,
       deploymentUrl: parsed.graph.deployment_url ?? null,
+      projectProductionUrl: parsed.graph.project_production_url ?? null,
       gitHubToken: process.env.SOFTWAREFACTORY_CHECKS_TOKEN ?? null,
       // The repository's own definition of "CI passed" — the same names the
       // Phase 1C worker waits for. Same env, same pipe-separated format.

@@ -30,6 +30,7 @@ const recorded = {
   edgeCount: 7,
   maxParallelism: 3,
   requiresOwnerApproval: false,
+  workerWoken: true,
   note: "The graph is recorded and the executor worker has been woken to claim it.",
 };
 

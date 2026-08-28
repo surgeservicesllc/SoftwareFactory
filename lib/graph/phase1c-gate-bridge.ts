@@ -113,6 +113,7 @@ export const deploymentAnchorArtifactSchema = z.object({
   observation: z.literal("github_production_deployment"),
   observedAt: z.string().datetime({ offset: true }),
   ref: z.string().trim().min(1).max(255),
+  providerRef: z.string().trim().min(1).max(255).optional(),
   repository: z.string().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/),
   sha: shaSchema,
   state: z.literal("success"),
@@ -145,7 +146,12 @@ export function productionDeploymentMismatch(
 ) {
   if (evidence.deploymentId !== expected.deploymentId) return "GitHub returned a different deployment identifier.";
   if (evidence.sha !== expected.sha) return "The deployment commit does not match the merged lifecycle commit.";
-  if (evidence.ref !== expected.ref) return "The deployment branch does not match the lifecycle base branch.";
+  if (evidence.ref !== expected.ref && evidence.ref.toLowerCase() !== expected.sha) {
+    return "The deployment ref matches neither the lifecycle base branch nor its exact commit.";
+  }
+  if (expected.providerRef && evidence.ref !== expected.providerRef) {
+    return "The deployment provider ref changed after the completed DEPLOY anchor.";
+  }
   if (evidence.environment !== "Production" || !evidence.productionEnvironment) {
     return "The exact GitHub deployment is not a Production deployment.";
   }

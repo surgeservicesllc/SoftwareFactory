@@ -2,14 +2,17 @@ import { describe, expect, it, vi } from "vitest";
 
 import { SupabaseGraphStore } from "@/lib/worker/graph-store";
 
-function storeWith(rpc: ReturnType<typeof vi.fn>) {
+function storeWith(
+  rpc: ReturnType<typeof vi.fn>,
+  targetGraphId: string | null = "10000000-0000-4000-8000-000000000099",
+) {
   const store = Object.create(SupabaseGraphStore.prototype) as SupabaseGraphStore;
   Object.assign(store, {
     client: { rpc },
     workerId: "graph-worker-test",
     repositoryFullName: "owner/repository",
     requiredCheckNames: ["CI"],
-    targetGraphId: "10000000-0000-4000-8000-000000000099",
+    targetGraphId,
   });
   return store;
 }
@@ -23,9 +26,25 @@ const completion = {
 };
 
 describe("SupabaseGraphStore Full Lifecycle terminal boundary", () => {
-  it("claims graphs only through protocol v2", async () => {
+  it("makes the dispatched graph UUID part of the database claim", async () => {
     const rpc = vi.fn().mockResolvedValue({ data: null, error: null });
     const store = storeWith(rpc);
+
+    await expect(store.claimPlannedGraph()).resolves.toBeNull();
+    expect(rpc).toHaveBeenCalledWith("claim_planned_graph_by_id_v2", {
+      p_worker_id: "graph-worker-test",
+      p_supported_executors: ["DETERMINISTIC", "MODEL", "ANCHOR"],
+      p_repository_full_name: "owner/repository",
+      p_required_check_names: ["CI"],
+      p_target_graph_id: "10000000-0000-4000-8000-000000000099",
+      p_protocol_version: 2,
+    });
+    expect(rpc).not.toHaveBeenCalledWith("claim_planned_graph", expect.anything());
+  });
+
+  it("keeps the disabled-by-default scheduled drain on the established protocol-v2 claim", async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: null, error: null });
+    const store = storeWith(rpc, null);
 
     await expect(store.claimPlannedGraph()).resolves.toBeNull();
     expect(rpc).toHaveBeenCalledWith("claim_planned_graph_v2", {
@@ -35,7 +54,7 @@ describe("SupabaseGraphStore Full Lifecycle terminal boundary", () => {
       p_required_check_names: ["CI"],
       p_protocol_version: 2,
     });
-    expect(rpc).not.toHaveBeenCalledWith("claim_planned_graph", expect.anything());
+    expect(rpc).not.toHaveBeenCalledWith("claim_planned_graph_by_id_v2", expect.anything());
   });
 
   it("atomically completes a reviewer with its exact verification batch", async () => {
@@ -132,7 +151,7 @@ describe("SupabaseGraphStore Full Lifecycle terminal boundary", () => {
       completion.usage,
     );
 
-    expect(rpc).toHaveBeenCalledWith("complete_graph_run_with_phase1c_bridge_as_worker", {
+    expect(rpc).toHaveBeenCalledWith("complete_graph_run_with_validated_release_as_worker", {
       p_worker_id: "graph-worker-test",
       p_graph_run_id: completion.graphRunId,
       p_state: "COMPLETED",
@@ -161,7 +180,7 @@ describe("SupabaseGraphStore Full Lifecycle terminal boundary", () => {
     });
     expect(rpc.mock.calls[0]).toEqual(rpc.mock.calls[1]);
     expect(rpc).not.toHaveBeenCalledWith(
-      "complete_graph_run_with_phase1c_bridge_as_worker",
+      "complete_graph_run_with_validated_release_as_worker",
       expect.anything(),
     );
   });

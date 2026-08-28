@@ -34,6 +34,7 @@ async function main() {
     serviceRoleKey: configuration.supabaseServiceRoleKey,
     provider: "openai",
     model: configuration.model,
+    targetCommandId: configuration.targetCommandId,
   });
   let registered = false;
   let cleanExit = false;

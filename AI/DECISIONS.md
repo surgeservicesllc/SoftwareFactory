@@ -344,7 +344,7 @@ Use this append-only log for decisions that constrain future implementation. Cha
 
 - Date: 2026-08-13
 - Status: Accepted and published; activation gate exercised, successful live proof pending
-- Decision: Keep repository Actions variable `SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED` absent or not equal to literal `true` through migration, secret configuration, code publication, ordinary CI, and Vercel verification; every repository-dispatch and schedule worker trigger must skip while it is OFF. Omit branch-selectable manual workflow dispatch from this secret-bearing workflow. Treat setting the variable to `true` as the final exact owner-approved RED activation. Separately require `SOFTWAREFACTORY_REQUIRED_CHECKS` to contain 1-20 unique pipe-delimited exact GitHub check names. The reviewed workflow fixes `Lint, typecheck, test, and build|Browser and accessibility tests`. A run may pass CI only when GitHub returns the complete check set, every observed check is terminal with an acceptable conclusion, every required name is present with exact `success`, the identical passing fingerprint is observed twice, and the draft PR number/base/head still match.
+- Decision: Keep repository Actions variable `SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED` absent or not equal to literal `true` through migration, secret configuration, code publication, ordinary CI, and Vercel verification; every repository-dispatch and schedule worker trigger must skip while it is OFF. Omit branch-selectable manual workflow dispatch from this secret-bearing workflow. Treat setting the variable to `true` as the final exact owner-approved RED activation. Separately require `SOFTWAREFACTORY_REQUIRED_CHECKS` to contain 1-20 unique pipe-delimited exact GitHub check names. The reviewed workflow fixes `Lint, typecheck, test, and build|Browser and accessibility tests 1/3|Browser and accessibility tests 2/3|Browser and accessibility tests 3/3`. A run may pass CI only when GitHub returns the complete check set, every observed check is terminal with an acceptable conclusion, every required name is present with exact `success`, the identical passing fingerprint is observed twice, and the draft PR number/base/head still match.
 - Consequence: Configuration of secrets or publication of the workflow cannot start a worker while the activation variable remains OFF. Missing/invalid required-check configuration prevents worker startup; missing, renamed, truncated, unstable, or non-successful required evidence cannot degrade to a pass. After the bounded acceptance window, activation returns to OFF unless the owner separately approves continued operation. A clean one-shot exit records `idle`; its heartbeat is briefly Available/Connected while fresh and becomes stale/Not Connected after the bounded threshold, without being treated as end-to-end execution proof.
 
 ## ADR-049 - Reconcile hosted history before applying the canonical inert/Phase 1C forward chain
@@ -2442,3 +2442,142 @@ Use this append-only log for decisions that constrain future implementation. Cha
   execution, autonomy, and all automatic actions stay OFF; the global kill
   switch stays ON. This decision authorizes no reset, down-migration, legacy
   grant restoration, status upgrade, or worker dispatch.
+
+## ADR-154 - Full Lifecycle closes only through atomic exact-release validation
+
+- Date: 2026-08-28
+- Status: accepted locally; publication and hosted migration pending
+- Context: the lifecycle could record a successful HTTP probe after deployment,
+  but that alone did not prove that the public alias served the exact accepted
+  merge, that Supabase was reachable, tenant APIs still refused anonymous
+  access, required security headers were present, exact-release CI stayed
+  green, or that all evidence closed atomically with the Phase 1C bridge.
+- Decision: `20260828000300_graph_postdeploy_validation.sql` (SHA-256
+  `0104f4b6514eb42fddb931b76a8026cea4834547f8dff011c2fff956d11579a5`)
+  admits enhanced post-deploy completion only for the canonical
+  `full_lifecycle` version-2 plan digest
+  (`0ec1e97b80dc8696872d88162c5271f9ea822e7dea79556c5470730a025d3b49`)
+  while preserving the launch function's signature, `SECURITY DEFINER`, pinned
+  search path, ACL, and structural guards. The service-role-only terminal RPC
+  accepts a completed version-2 run only when its single MONITOR anchor carries
+  five distinct passing stages: release identity, public availability,
+  Supabase/data integration, exact CI plus security/auth boundaries, and a
+  bounded consecutive observation window. In one transaction it closes the
+  run, writes the disabled production monitor and immutable observation,
+  writes the passing deployment validation, and advances the exact Phase 1C
+  bridge to `VALIDATED`; any identity, timing, evidence, or lineage mismatch
+  rolls back all of them. Pre-release version-2 graphs keep their stored strict
+  DEPLOY/MONITOR schemas and legacy completion path, so a forward migration
+  never strands a run that was already planned. Exact lost-response replay
+  writes no duplicates.
+- Consequence: a 200 response, an immutable provider deployment URL, or a
+  user-entered public alias cannot independently complete the lifecycle. The
+  stable public URL is probed while the immutable Vercel deployment URL stays
+  release identity, and `/api/health` binds the public surface back to the
+  exact Vercel project/deployment ID and URL, deployment SHA/ref, and an
+  independently configured exact Supabase project identity. The hosted gate
+  additionally requires GitHub's Vercel-bot Production URL to equal the URL
+  reported by the public alias, so two independent deployments serving the
+  same SHA cannot satisfy the release join.
+- Bounds: the monitor record remains disabled and this decision does not
+  create a deployment, merge a pull request, dispatch a provider, enable a
+  worker, enable autonomy or automatic action, or release the global kill
+  switch. Hosted application remains forward-only after exact-head release
+  acceptance.
+
+## ADR-155 - A one-shot worker wake claims only its immutable target
+
+- Date: 2026-08-28
+- Status: accepted locally; publication and hosted migration pending
+- Context: repository dispatch carried an opaque graph or Phase 1C command
+  UUID, but the worker used that UUID only for graph queue diagnosis. Both
+  database claims still selected the globally highest-priority eligible item.
+  In a shared production queue, a wake for one owner-reviewed lifecycle could
+  therefore execute an unrelated item, and an older item could indefinitely
+  prevent the requested canary from advancing.
+- Decision: forward migration `20260828000200_target_bound_worker_claims.sql`
+  (LF SHA-256
+  `f7d87242534e16bacd22c0244784a992bded3c335fcb0a38e85d8a6b9168eaa5`)
+  adds service-role-only target claim RPCs. Uniquely named target-aware private
+  selectors are now the
+  authoritative graph and Phase 1C selectors: the target UUID is applied in
+  stale cleanup, eligibility/admission, locking, and withheld-work diagnosis.
+  Existing four-argument internal APIs delegate with a null target, preserving
+  the disabled-by-default scheduled queue behavior, while dispatch/manual
+  workflows require a UUID and execute once. A defensive projection assertion
+  aborts if a future refactor returns a different identity. An ineligible
+  Phase 1C target returns no row after its target-scoped stale cleanup, so that
+  cleanup commits and the caller can report bounded persisted state without
+  claiming a neighbor. The graph claim separately
+  projects `project_production_url`; it never replaces the exact provider
+  `deployment_url` recorded in release lineage.
+- Consequence: a dispatch is a wake, not authority, but its identity is now a
+  database filter. Eligibility, repository binding, budgets, leases, circuit
+  breakers, exact audit writes, RLS, and existing public ACLs are unchanged.
+  Any future claim-policy change must update the target-aware selector; the
+  legacy scheduled wrapper inherits it automatically through the null-target
+  delegation.
+- Bounds: the migration and workflows do not enable either worker or its
+  schedule. Every graph-worker event and every application dispatch is behind
+  the same exact `SOFTWAREFACTORY_GRAPH_WORKER_ENABLED == true` fail-closed
+  switch. They do not enable provider execution, autonomy, approval, merge,
+  deployment, rollback, or automatic action, and do not release the global
+  kill switch. A target that fails policy remains unclaimed.
+
+## ADR-156 - The public production URL is explicit owner-managed evidence
+
+- Date: 2026-08-28
+- Status: accepted locally; publication and hosted migration pending
+- Context: Full Lifecycle Step 10 must probe the public address customers use,
+  which can differ from the exact provider deployment URL retained in release
+  lineage. `projects.production_url` was readable but had no supported writer,
+  and its original constraint checked only an `https://` prefix. A protected
+  provider URL cannot be silently substituted without changing the evidence's
+  meaning.
+- Decision: forward migration
+  `20260828000100_project_production_url_configuration.sql` (LF SHA-256
+  `0856ddee447280a1bb4418f25d6a6d4650687e168fffcd5e98e8ce15edd62b27`) preserves
+  `update_project_details(uuid,text,text)` and adds a separate authenticated
+  owner/admin `SECURITY DEFINER` setter with pinned search path. Request and
+  database boundaries both reject credentials and likely-secret-bearing path
+  material (the database calls the existing secret predicate directly), query/fragment material,
+  non-HTTPS, localhost/private/intranet, ambiguous numeric, IPv6-literal, and
+  non-standard-port targets. Real changes use the existing immutable
+  `project.updated` trigger; no-op replays do not fabricate events, archived
+  projects refuse edits, and projects FORCE RLS remains asserted. The project
+  detail UI is the human configuration surface.
+- Consequence: a lifecycle claim may carry a separately configured stable
+  public URL without overwriting exact deployment lineage. Lexical validation
+  is not treated as DNS proof: the monitor's guarded connection-bound lookup
+  still rejects a hostname whose actual socket address is private or reserved.
+  A missing URL remains **Not Connected**, never an inferred default.
+- Bounds: the migration and UI do not set a live value, initiate a probe,
+  enable a worker, expand autonomy, authorize deployment, or release the kill
+  switch. Hosted application and signed-in value/audit acceptance remain
+  separate release evidence.
+
+## ADR-157 - Production release authorization is non-replayable and identity-joined
+
+- Date: 2026-08-28
+- Status: accepted locally; publication and hosted acceptance pending
+- Context: an Actions rerun retains the original `GITHUB_ACTOR` while naming
+  the person who requested the rerun separately, and a manual workflow can be
+  dispatched against a selected branch. Separately checking a Git SHA in
+  GitHub, a generated Vercel hostname, and a public alias did not prove they
+  represented one Vercel project/deployment.
+- Decision: mutation scopes require the configured actor to equal both
+  `GITHUB_ACTOR` and `GITHUB_TRIGGERING_ACTOR` and require run attempt 1; a
+  failed mutation is retried only as a fresh dispatch with the same exact
+  `release_sha`. Manual graph execution is main-only in addition to its global
+  OFF-by-default switch. `/api/health` fails closed unless the request arrived
+  through the configured production host and Vercel's system project ID,
+  deployment ID/URL, target environment, Git SHA/ref, and Supabase project all
+  match configured identities. The release workflow compares the health
+  deployment URL with the exact Vercel-bot GitHub deployment status twice.
+- Consequence: an earlier owner's failed approval cannot be replayed by a
+  different actor; unreviewed manual graph refs cannot receive production
+  worker credentials through the reviewed workflow; and alias, deployment,
+  repository, and database evidence form one exact release identity.
+- Bounds: project/deployment IDs and hostnames are non-secret identity values.
+  No worker, provider, autonomy, automatic action, merge, deployment, reset,
+  or down-migration is enabled or initiated by this decision.

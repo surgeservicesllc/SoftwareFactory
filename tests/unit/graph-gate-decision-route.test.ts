@@ -290,8 +290,8 @@ beforeEach(() => {
       url: "https://github.com/owner/repository/pull/42",
     };
   });
-  harness.dispatchGraphWorker.mockResolvedValue(undefined);
-  harness.dispatchPhase1CWorker.mockResolvedValue(undefined);
+  harness.dispatchGraphWorker.mockResolvedValue({ dispatched: true, reason: "dispatched" });
+  harness.dispatchPhase1CWorker.mockResolvedValue({ dispatched: true, reason: "dispatched" });
 });
 
 describe("deciding a lifecycle gate", () => {
@@ -411,6 +411,24 @@ describe("deciding a lifecycle gate", () => {
       "submit_and_attach_graph_phase1c_command",
       expect.anything(),
     );
+  });
+
+  it("reports Not Connected when the Phase 1C application gate is off", async () => {
+    setLifecycle("ARCHITECTURE");
+    harness.tableRows.set("node_runs", { id: nodeRunId, state: "VERIFYING" });
+    harness.tableRows.set("graph_artifacts", { id: artifactId, kind: "RAW", payload: { answer: "Add the feature." } });
+    harness.dispatchPhase1CWorker.mockResolvedValue({
+      dispatched: false,
+      reason: "worker_disabled",
+    });
+
+    const response = await POST(request({ approved: true, evidenceArtifactId: artifactId }), params);
+    const body = await response.json() as { workerWoken: boolean; note: string };
+
+    expect(response.status).toBe(200);
+    expect(body.workerWoken).toBe(false);
+    expect(body.note).toContain("Not Connected");
+    expect(harness.dispatchPhase1CWorker).toHaveBeenCalledWith(expect.anything(), commandId);
   });
 
   it("attaches an awaiting-approval command before returning and dispatches nothing", async () => {

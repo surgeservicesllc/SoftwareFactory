@@ -1,5 +1,6 @@
 import type { CompiledNode } from "@/lib/graph/compiler";
 import type { NodeExecutionResult } from "@/lib/graph/runner";
+import { FULL_LIFECYCLE_V2_POSTDEPLOY_PLAN_SHA256 } from "@/lib/graph/templates";
 import { probeHttpTarget } from "@/lib/operations/probe-core";
 
 /**
@@ -19,9 +20,11 @@ import { probeHttpTarget } from "@/lib/operations/probe-core";
  *     check runs GitHub recorded — and the evidence is that observation: sha,
  *     conclusions, URL. The graph worker's own checkout is not change
  *     lineage and must never satisfy this anchor.
- *   * A MONITOR anchor (`synthesis`) probes the exact deployment URL stored on
- *     that same bridge and records what came back: status, latency, time. An
- *     ambient URL is never accepted as this graph's deployment identity.
+ *   * A legacy MONITOR anchor (`synthesis`) probes the exact provider URL that
+ *     its stored schema names. The release-validation plan instead probes the
+ *     project's public URL and binds the full result to the exact provider
+ *     deployment. The immutable plan digest, not the mutable template key or
+ *     worker configuration, chooses between those contracts.
  *   * A DEPLOY anchor (`implementation`) does not deploy. Vercel's reviewed
  *     Git integration already performs that externally visible action when a
  *     commit reaches main. The anchor verifies GitHub's Vercel-bot Production
@@ -49,6 +52,8 @@ export type AnchorExecutorOptions = Readonly<{
   /** Durable graph-template identity, never an ambient worker setting. */
   templateKey: string | null;
   templateVersion: number | null;
+  /** Exact canonical plan digest persisted at launch and projected at claim. */
+  templatePlanSha256?: string | null;
   /** Repository/base identity captured when this graph was launched. */
   repositoryFullName: string | null;
   baseBranch: string | null;
@@ -71,6 +76,10 @@ export type AnchorExecutorOptions = Readonly<{
   /** Internal deployment row identity and its exact provider URL. */
   deploymentId: string | null;
   deploymentUrl: string | null;
+  /** Public project URL. Distinct from Vercel's immutable, possibly protected URL. */
+  projectProductionUrl?: string | null;
+  /** Consecutive public observations required to complete the bounded window. */
+  validationObservationAttempts?: number;
   /** Actions-injected token with checks:read; absent outside CI. */
   gitHubToken: string | null;
   /**
@@ -88,7 +97,7 @@ export type AnchorExecutorOptions = Readonly<{
   /** Bounded wait for the exact-head required checks to reach a verdict. */
   ciMaxAttempts?: number;
   ciPollMs?: number;
-  /** Bounded warm-up observation for the exact recorded deployment URL. */
+  /** Bounded warm-up observation for the public production surface. */
   monitorMaxAttempts?: number;
   monitorPollMs?: number;
   /** Bounded wait for Vercel's GitHub deployment status to become terminal. */
@@ -564,12 +573,32 @@ export function buildAnchorNodeExecutor(options: AnchorExecutorOptions) {
         "the exact bridge deployment identity and URL are absent or invalid.",
       );
     }
+    const requireFullValidation =
+      options.templateKey === "full_lifecycle"
+      && options.templateVersion === 2
+      && options.templatePlanSha256 === FULL_LIFECYCLE_V2_POSTDEPLOY_PLAN_SHA256;
+    const publicUrl = requireFullValidation
+      ? options.projectProductionUrl?.trim().replace(/\/$/, "") ?? ""
+      : deploymentUrl;
+    if (!/^https:\/\/[^\s]{1,2039}$/.test(publicUrl)) {
+      return notConnected(node, "the project's public production URL is absent or invalid.");
+    }
+    const mergeCommitSha = options.mergeCommitSha?.trim().toLowerCase() ?? "";
+    if (requireFullValidation && !EXACT_COMMIT_SHA.test(mergeCommitSha)) {
+      return notConnected(node, "the exact merge-commit SHA is absent from production validation.");
+    }
     const startedAt = Date.now();
     const attemptLimit = Math.max(1, options.monitorMaxAttempts ?? DEFAULT_MONITOR_MAX_ATTEMPTS);
     const pollMs = Math.max(0, options.monitorPollMs ?? DEFAULT_MONITOR_POLL_MS);
     const deadlineAt = startedAt + Math.max(1_000, node.timeoutMs - 5_000);
     let attemptsMade = 0;
-    let lastDetail = `the production probe of ${deploymentUrl} has not returned a healthy response.`;
+    let lastDetail = `the production probe of ${publicUrl} has not returned a healthy response.`;
+    let consecutivePasses = 0;
+    const requiredPasses = requireFullValidation
+      ? Math.max(2, options.validationObservationAttempts ?? 3)
+      : 1;
+    const observations: Array<{ observedAt: string; latencyMs: number; status: number }> = [];
+    const observedResponses: Response[] = [];
 
     for (let attempt = 1; attempt <= attemptLimit; attempt += 1) {
       const remainingMs = deadlineAt - Date.now();
@@ -580,17 +609,22 @@ export function buildAnchorNodeExecutor(options: AnchorExecutorOptions) {
       attemptsMade = attempt;
       const probe = await probeHttpTarget(
         {
-          targetUrl: deploymentUrl,
+          targetUrl: publicUrl,
           expectedStatusCode: 200,
           degradedLatencyMs: MONITOR_DEGRADED_LATENCY_MS,
           timeoutMs: Math.max(1, Math.min(OBSERVATION_TIMEOUT_MS, remainingMs)),
         },
-        (input, init) => fetchImpl(input, init),
+        async (input, init) => {
+          const response = await fetchImpl(input, init);
+          observedResponses.push(response);
+          return response;
+        },
       );
       const evidence = {
         observation: "production_http_probe",
         deploymentId,
-        url: deploymentUrl,
+        url: publicUrl,
+        deploymentUrl,
         status: probe.statusCode,
         healthy: probe.outcome === "pass",
         observedAt: new Date().toISOString(),
@@ -600,12 +634,17 @@ export function buildAnchorNodeExecutor(options: AnchorExecutorOptions) {
         missingValidationStages: ["data_integration", "quality_security", "observation"] as const,
       };
       if (probe.outcome === "pass" && probe.statusCode !== null && probe.latencyMs !== null) {
-        return {
-          status: "SUCCEEDED",
-          output: evidence,
+        consecutivePasses += 1;
+        observations.push({
+          observedAt: evidence.observedAt,
           latencyMs: probe.latencyMs,
-          tokensUsed: 0,
-        };
+          status: probe.statusCode,
+        });
+        if (consecutivePasses >= requiredPasses) break;
+      } else {
+        consecutivePasses = 0;
+        observations.length = 0;
+        observedResponses.length = 0;
       }
       lastDetail = probe.failureReason
         ? `${probe.failureReason} Evidence: ${JSON.stringify(evidence)}`
@@ -626,6 +665,177 @@ export function buildAnchorNodeExecutor(options: AnchorExecutorOptions) {
       if (attempt < attemptLimit && pollMs > 0) {
         await sleep(Math.min(pollMs, Math.max(0, deadlineAt - Date.now())));
       }
+    }
+
+    if (consecutivePasses >= requiredPasses && observations.length > 0) {
+      const finalObservation = observations.at(-1)!;
+      if (!requireFullValidation) {
+        return {
+          status: "SUCCEEDED",
+          output: {
+            observation: "production_http_probe",
+            deploymentId,
+            url: publicUrl,
+            status: finalObservation.status,
+            healthy: true,
+            observedAt: finalObservation.observedAt,
+            latencyMs: finalObservation.latencyMs,
+            postDeployValidation: "inconclusive",
+            observationWindowComplete: false,
+            missingValidationStages: ["data_integration", "quality_security", "observation"],
+          },
+          latencyMs: finalObservation.latencyMs,
+          tokensUsed: 0,
+        };
+      }
+
+      if (!options.gitHubToken) {
+        return notConnected(node, "the read-scoped GitHub token is absent from production validation.");
+      }
+      const requiredChecks = (options.requiredCheckNames ?? []).filter((name) => name.trim().length > 0);
+      if (requiredChecks.length === 0) {
+        return notConnected(node, "the repository's exact required-check policy is absent from production validation.");
+      }
+
+      const securityHeaders = [
+        "content-security-policy",
+        "strict-transport-security",
+        "x-content-type-options",
+        "x-frame-options",
+        "referrer-policy",
+      ] as const;
+      const observedResponse = observedResponses.at(-1);
+      const missingSecurityHeaders = securityHeaders.filter((name) => !observedResponse?.headers.get(name));
+      if (missingSecurityHeaders.length > 0) {
+        return failed(
+          `Anchor node ${node.nodeKey}: public production is missing required security header(s): `
+          + `${missingSecurityHeaders.join(", ")}.`,
+        );
+      }
+
+      const healthUrl = new URL("/api/health", `${publicUrl}/`).toString();
+      let healthResponse: Response | null = null;
+      const healthProbe = await probeHttpTarget({
+        targetUrl: healthUrl,
+        expectedStatusCode: 200,
+        degradedLatencyMs: MONITOR_DEGRADED_LATENCY_MS,
+        timeoutMs: Math.max(1, Math.min(OBSERVATION_TIMEOUT_MS, deadlineAt - Date.now())),
+      }, async (input, init) => {
+        healthResponse = await fetchImpl(input, init);
+        return healthResponse;
+      });
+      if (healthProbe.outcome !== "pass" || !healthResponse) {
+        return failed(
+          `Anchor node ${node.nodeKey}: the release-bound Supabase health probe did not pass. `
+          + `${healthProbe.failureReason ?? "No healthy response was recorded."}`,
+        );
+      }
+      const healthText = await (healthResponse as Response).text();
+      if (healthText.length > 4_096) {
+        return failed(`Anchor node ${node.nodeKey}: the health response exceeded its evidence bound.`);
+      }
+      let health: unknown;
+      try {
+        health = JSON.parse(healthText) as unknown;
+      } catch {
+        return failed(`Anchor node ${node.nodeKey}: the health response was not valid JSON evidence.`);
+      }
+      const healthRecord = health !== null && typeof health === "object" && !Array.isArray(health)
+        ? health as Record<string, unknown>
+        : null;
+      if (
+        !healthRecord
+        || healthRecord.status !== "ok"
+        || healthRecord.service !== "SoftwareFactory"
+        || healthRecord.database !== "reachable"
+        || healthRecord.databaseProject !== "matched"
+        || healthRecord.releaseSha !== mergeCommitSha
+        || healthRecord.releaseRef !== lineage.baseBranch
+      ) {
+        return failed(
+          `Anchor node ${node.nodeKey}: the public health endpoint does not identify exact release `
+          + `${mergeCommitSha.slice(0, 8)} on ${lineage.baseBranch} with reachable Supabase.`,
+        );
+      }
+
+      const authBoundaryUrl = new URL("/api/graphs/runs?limit=1", `${publicUrl}/`).toString();
+      const authProbe = await probeHttpTarget({
+        targetUrl: authBoundaryUrl,
+        expectedStatusCode: 401,
+        degradedLatencyMs: MONITOR_DEGRADED_LATENCY_MS,
+        timeoutMs: Math.max(1, Math.min(OBSERVATION_TIMEOUT_MS, deadlineAt - Date.now())),
+      }, (input, init) => fetchImpl(input, init));
+      if (authProbe.outcome !== "pass") {
+        return failed(
+          `Anchor node ${node.nodeKey}: the unauthenticated tenant-data boundary did not return HTTP 401.`,
+        );
+      }
+
+      let checksResponse: Response;
+      try {
+        checksResponse = await fetchImpl(
+          `https://api.github.com/repos/${lineage.repository}/commits/${mergeCommitSha}/check-runs?per_page=100`,
+          { headers: gitHubHeaders, signal: AbortSignal.timeout(OBSERVATION_TIMEOUT_MS) },
+        );
+      } catch {
+        return failed(`Anchor node ${node.nodeKey}: exact-release CI could not be observed.`);
+      }
+      if (!checksResponse.ok) {
+        return failed(`Anchor node ${node.nodeKey}: exact-release CI answered HTTP ${checksResponse.status}.`);
+      }
+      let checkRuns: CheckRun[];
+      try {
+        const body = await checksResponse.json() as { check_runs?: unknown };
+        if (!Array.isArray(body.check_runs) || !body.check_runs.every(isCheckRun)) throw new Error("invalid");
+        checkRuns = body.check_runs;
+      } catch {
+        return failed(`Anchor node ${node.nodeKey}: exact-release CI returned unusable evidence.`);
+      }
+      const latestByName = new Map<string, CheckRun>();
+      for (const run of checkRuns) {
+        if (!requiredChecks.includes(run.name)) continue;
+        const known = latestByName.get(run.name);
+        if (!known || run.id >= known.id) latestByName.set(run.name, run);
+      }
+      const nonGreen = requiredChecks.filter((name) => {
+        const run = latestByName.get(name);
+        return !run || run.status !== "completed" || run.conclusion !== "success";
+      });
+      if (nonGreen.length > 0) {
+        return failed(
+          `Anchor node ${node.nodeKey}: exact-release required CI is not green: ${nonGreen.join(", ")}.`,
+        );
+      }
+
+      const completedAt = new Date().toISOString();
+      const checks = [
+        { stage: "identity", name: "exact_release_sha", required: true, result: "pass", releaseSha: mergeCommitSha },
+        { stage: "availability", name: "public_http_observation_window", required: true, result: "pass", observations },
+        { stage: "data_integration", name: "supabase_health", required: true, result: "pass", url: healthUrl },
+        { stage: "quality_security", name: "required_ci_and_security_headers", required: true, result: "pass", requiredChecks, securityHeaders },
+        { stage: "observation", name: "bounded_consecutive_observations", required: true, result: "pass", observationWindowComplete: true, observationCount: observations.length },
+      ] as const;
+      return {
+        status: "SUCCEEDED",
+        output: {
+          observation: "production_http_probe",
+          deploymentId,
+          deploymentUrl,
+          url: publicUrl,
+          status: finalObservation.status,
+          healthy: true,
+          releaseSha: mergeCommitSha,
+          observedAt: finalObservation.observedAt,
+          startedAt: observations[0]!.observedAt,
+          completedAt,
+          latencyMs: finalObservation.latencyMs,
+          postDeployValidation: "passed",
+          observationWindowComplete: true,
+          checks,
+        },
+        latencyMs: Date.now() - startedAt,
+        tokensUsed: 0,
+      };
     }
 
     return {
@@ -733,7 +943,11 @@ export function buildAnchorNodeExecutor(options: AnchorExecutorOptions) {
           && candidate.task === "deploy"
           && candidate.creator?.login === "vercel[bot]"
           && candidate.sha?.toLowerCase() === wantedSha
-          && candidate.ref === baseBranch
+          // Vercel currently records either the base branch or the immutable
+          // deployment SHA in GitHub's `ref` field. The separately matched
+          // `sha` remains the release identity; accepting only the branch made
+          // every SHA-ref production deployment invisible.
+          && (candidate.ref === baseBranch || candidate.ref?.toLowerCase() === wantedSha)
           && Number.isSafeInteger(candidate.id)
           && (candidate.id ?? 0) > 0
         ));
@@ -782,14 +996,14 @@ export function buildAnchorNodeExecutor(options: AnchorExecutorOptions) {
               : undefined;
             const state = status?.state ?? "missing";
             const environmentUrl = status?.environment_url ?? null;
-            const evidence = {
+            const legacyEvidence = {
               // Avoid the provider-token prefix `vercel_`: artifact storage
               // correctly rejects secret-shaped strings, and an observation
               // label must not resemble a credential.
               observation: "github_production_deployment",
               repository: lineage.repository,
               sha: mergeCommitSha,
-              ref: deployment.ref,
+              ref: baseBranch,
               deploymentId: deployment.id ?? null,
               environment: deployment.environment,
               state,
@@ -798,6 +1012,17 @@ export function buildAnchorNodeExecutor(options: AnchorExecutorOptions) {
               observedAt: new Date().toISOString(),
               latencyMs: Date.now() - startedAt,
             };
+            const providerEvidence = {
+              ...legacyEvidence,
+              // The lifecycle contract names the reviewed base branch. Keep
+              // Vercel's raw ref alongside it only when this graph's immutable
+              // stored schema admits the stronger provider-identity field.
+              providerRef: deployment.ref,
+            };
+            const evidence = node.outputSchema
+              && !node.outputSchema.safeParse(providerEvidence).success
+              ? legacyEvidence
+              : providerEvidence;
 
             if (
               state === "success"

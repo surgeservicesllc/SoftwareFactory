@@ -3,6 +3,72 @@
 Written 2026-08-14, after verifying the whole chain on a real PostgreSQL 16 cluster.
 Rebased 2026-08-16 on an owner-measured hosted position (see the section directly below).
 
+## Full Lifecycle v2 release tail (2026-08-28)
+
+Use only `.github/workflows/factory-lifecycle-release-migrations.yml` for this
+three-file release. Do not add these files to the broad hosted-migration
+workflow. The protected LF byte identities are:
+
+- `20260828000100_project_production_url_configuration.sql` — SHA-256
+  `0856ddee447280a1bb4418f25d6a6d4650687e168fffcd5e98e8ce15edd62b27`;
+- `20260828000200_target_bound_worker_claims.sql` — SHA-256
+  `f7d87242534e16bacd22c0244784a992bded3c335fcb0a38e85d8a6b9168eaa5`;
+- `20260828000300_graph_postdeploy_validation.sql` — SHA-256
+  `0104f4b6514eb42fddb931b76a8026cea4834547f8dff011c2fff956d11579a5`.
+
+The workflow is manual and shares the global `apply-hosted-migrations`
+concurrency lock. Every scope binds exact repository `main`, the four named
+exact-head CI checks, the latest successful Vercel Production deployment, and
+Supabase project `qpuofpmagrmyamahqwxw`. Public health must join the exact
+GitHub deployment URL to Vercel project
+`prj_pAsrhftaVWI4SyaqstgRVSWHJkdD`, its immutable deployment ID/URL, main
+SHA/ref, and `www.theagoras.com`. Mutation scopes additionally require
+`confirm=apply`, the configured exact production-release actor as both the
+original and triggering actor, and run attempt 1. **Never rerun a mutation
+workflow attempt**; create a fresh dispatch after diagnosing a failure. Before
+and after every operation it refuses an active execution/auth workflow, a
+running graph or agent run, Autonomous Mode, any of the nine automatic
+actions, a worker switch outside OFF, an enabled auth broker, or an
+organization whose global kill switch is not ON.
+
+Choose the reviewed 40-character `main` commit once and pass that same exact
+value as `release_sha` to every dispatch below. The workflow requires it to
+equal both the dispatch snapshot and the live `main` ref at preflight, then
+rechecks live `main` immediately before any database mutation. Never replace
+the value between scopes; publish a new release and restart at `probe` if main
+advances.
+
+Run the scopes separately and in this exact order:
+
+1. `scope=probe` — read-only. Require prerequisite ledger rows `20260827000200`
+   and `20260827000210` exactly once and one of the four canonical release-tail
+   prefixes (`000`, `100`, `110`, or `111`). Record no secrets or row payloads.
+2. `scope=configure-url`, `confirm=apply` — stages only the hash-pinned `00100`
+   file. Under the ledger and stopped-state locks, it requires all three new
+   rows and catalog objects absent, then commits DDL and the `00100` ledger row
+   in one PostgreSQL transaction.
+3. Accept the application and safe owner/admin production-URL writer before
+   continuing. Then dispatch `scope=target-claims`, `confirm=apply`. It requires
+   `00100=1` and `00200/00300=0`, stages only `00200`, and atomically records
+   only `00200`.
+4. Accept the exact target-bound claim behavior and the signed-in production
+   lifecycle UI before dispatching `scope=postdeploy`, `confirm=apply`. It
+   requires `00100/00200/00300=1/1/0`, stages only `00300`, and atomically
+   records only `00300`.
+5. Dispatch `scope=verify` — read-only. It requires all three rows exactly
+   once, rechecks the public-URL constraint/RLS/audit boundary and safe/unsafe
+   runtime values, the service-only exact-target wrappers and target assertion,
+   the canonical Full Lifecycle v2 plan digest, the service-only validated
+   completion boundary and its fail-closed runtime, PostgREST reload, stopped
+   database state, and stopped GitHub worker workflows.
+
+Every mutation stages exactly one file in an isolated temporary directory and
+uses `psql --single-transaction` for its locked catalog guard, migration DDL,
+and ledger insert. It reloads PostgREST only after commit. On any identity,
+ledger, catalog, ACL, runtime, safety, worker, CI, or deployment mismatch, stop.
+Never reset, rerun an already recorded version, down-migrate, or broaden the
+scope. Contain a defect with a newly reviewed forward migration.
+
 ## Atomic job recording release (2026-08-27)
 
 Migration `20260827000100_record_job_seeker_job_atomically.sql` is a protected,
@@ -198,7 +264,7 @@ the measured list, not today's total outstanding migration count. Later exact ev
 forward candidates.
 Do not add any of them to the 19-row measurement or
 infer a new overall missing count without another complete ledger probe. As of this release,
-the repository total is 170 migration files after integration with current `origin/main`. Those two numbers do not stand in a prefix relationship, and the reason
+the repository total is 173 migration files after integration with current `origin/main`. Those two numbers do not stand in a prefix relationship, and the reason
 matters: the
 hosted ledger is **not a contiguous prefix** of the local files. It has gaps in the middle and
 rows well past them. Any sentence of the form "everything after `X` is outstanding" is therefore

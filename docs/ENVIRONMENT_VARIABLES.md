@@ -47,11 +47,20 @@ The Node worker validates all required values before registration:
 | `SOFTWAREFACTORY_WORKER_POLL_MS` | Persistent-worker poll interval, default 5000 ms |
 | `SOFTWAREFACTORY_WORKER_HEARTBEAT_MS` | Lease heartbeat interval, default 10000 ms |
 | `SOFTWAREFACTORY_CODEX_MODEL` | Reviewed model, currently `gpt-5.3-codex` |
-| `SOFTWAREFACTORY_REQUIRED_CHECKS` | Required exact CI job names, pipe-delimited; reviewed value is `Lint, typecheck, test, and build|Browser and accessibility tests` |
+| `SOFTWAREFACTORY_REQUIRED_CHECKS` | Required exact CI job names, pipe-delimited; reviewed value is `Lint, typecheck, test, and build|Browser and accessibility tests 1/3|Browser and accessibility tests 2/3|Browser and accessibility tests 3/3` |
+| `SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED` | Shared fail-closed application/workflow gate for Phase 1C dispatch; keep `false` under production containment |
+| `SOFTWAREFACTORY_GRAPH_WORKER_ENABLED` | Global fail-closed graph-worker activation gate; keep `false` unless a bounded release explicitly enables execution |
+| `SOFTWAREFACTORY_GRAPH_WORKER_SCHEDULED` | Scheduled-drain gate; has no effect while the global graph-worker gate is off |
+| `SOFTWAREFACTORY_TARGET_GRAPH_ID` | Exact graph UUID required by repository/manual one-shot graph claims; scheduled drains leave it empty |
 | `NEXT_PUBLIC_SUPABASE_URL` | Runtime Supabase URL; public value used server-side here |
+| `SOFTWAREFACTORY_EXPECTED_SUPABASE_PROJECT_REF` | Server-only exact Supabase project identity; `/api/health` fails closed if the configured public URL points anywhere else |
+| `SOFTWAREFACTORY_EXPECTED_VERCEL_PROJECT_ID` | Server-only exact Vercel project ID; `/api/health` joins the public alias to this project and its immutable deployment identity |
+| `SOFTWAREFACTORY_EXPECTED_PRODUCTION_HOST` | Server-only exact public production hostname accepted by `/api/health` (for example `www.theagoras.com`) |
 | `SUPABASE_SERVICE_ROLE_KEY` | Server-only worker RPC credential |
 | `SOFTWAREFACTORY_CODEX_AUTH_JSON` | Contents of `~/.codex/auth.json` from a subscription `codex login`. The zero-token default; the worker refuses to start without it |
 | `SOFTWAREFACTORY_CODEX_AUTH_MODE` | `subscription` (default) or `api_key`. The billed mode must name itself; it is never selected implicitly |
+| `SOFTWAREFACTORY_TARGET_COMMAND_ID` | Non-secret exact Phase 1C command UUID for a repository/manual one-shot claim; empty for the disabled scheduled path |
+| `SOFTWAREFACTORY_TARGET_CLAIM_REQUIRED` | Non-secret `true`/`false` guard. `true` refuses startup unless `SOFTWAREFACTORY_TARGET_COMMAND_ID` is present and valid |
 | `OPENAI_API_KEY` | Only read in `api_key` mode, which bills per token. Setting it without that mode is a refused configuration |
 | `GITHUB_APP_ID` / `GITHUB_APP_PRIVATE_KEY_BASE64` | Primary installation-token identity/key |
 | `GITHUB_CANDIDATE_APP_ID` / `GITHUB_CANDIDATE_APP_PRIVATE_KEY_BASE64` | Candidate installation-token identity/key |
@@ -60,7 +69,14 @@ The Node worker validates all required values before registration:
 
 The worker checks that the Supabase credential is a service-role credential, that URLs and identities are valid, and that the work root is safe. General Git/npm/Codex child processes receive a narrow environment rather than the full parent secret environment.
 
-`SOFTWAREFACTORY_REQUIRED_CHECKS` is required and fail closed. Parsing trims and deduplicates pipe-delimited names and requires 1-20 unique entries, each no longer than 300 characters. Both reviewed names must continue to exactly match the job display names in `.github/workflows/ci.yml`; a missing, empty, renamed, duplicate-only, oversized, or drifting value prevents safe acceptance.
+Repository-dispatch and manual one-shot workflows set
+`SOFTWAREFACTORY_TARGET_CLAIM_REQUIRED=true` together with the exact dispatched
+`SOFTWAREFACTORY_TARGET_COMMAND_ID`. The database claim uses that UUID as an
+authoritative filter, not a diagnostic hint. Schedules keep the required guard
+false and omit the target; neither variable is a credential or enables a
+worker, schedule, provider, or autonomous action.
+
+`SOFTWAREFACTORY_REQUIRED_CHECKS` is required and fail closed. Parsing trims and deduplicates pipe-delimited names and requires 1-20 unique entries, each no longer than 300 characters. All four reviewed names must continue to exactly match the job display names in `.github/workflows/ci.yml`; a missing, empty, renamed, duplicate-only, oversized, or drifting value prevents safe acceptance.
 
 ## GitHub Actions repository secrets
 
@@ -78,7 +94,7 @@ GitHub does not permit Actions secret names beginning with `GITHUB_`. Store work
 
 `.github/workflows/codex-worker.yml` performs this mapping only on the final worker step. It does not pass secrets to checkout, Node setup, dependency install, or validation-image preload. The public commit identity is set in workflow environment, not stored as a secret.
 
-The workflow sets `SOFTWAREFACTORY_REQUIRED_CHECKS` to `Lint, typecheck, test, and build|Browser and accessibility tests`. It is public policy configuration, not a secret. Do not change it independently of the exact CI job display names or the worker publisher tests.
+The workflow sets `SOFTWAREFACTORY_REQUIRED_CHECKS` to `Lint, typecheck, test, and build|Browser and accessibility tests 1/3|Browser and accessibility tests 2/3|Browser and accessibility tests 3/3`. It is public policy configuration, not a secret. Do not change it independently of the exact CI job display names or the worker publisher tests.
 
 Six non-OpenAI Actions secrets are currently verified configured. `SOFTWAREFACTORY_OPENAI_API_KEY` is intentionally absent, and it is now absent **permanently rather than pending**: Phase 1C no longer has a paid-API path to restore it to. The exposed key was removed after diagnostic run `31748582858` classified the prior project's failure as `credit_balance_exhausted`, and that failure is what prompted the architecture change — a funded API balance is no longer a precondition for any run.
 

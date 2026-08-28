@@ -51,6 +51,7 @@ const connectionId = "30000000-0000-4000-8000-0000000000d1";
 const installationId = "40000000-0000-4000-8000-0000000000d1";
 const repositoryId = "50000000-0000-4000-8000-0000000000d1";
 const repositoryFullName = "factory/graph-worker";
+const projectProductionUrl = "https://factory.example.test";
 const requiredCheckNames = ["CI"] as const;
 
 async function asOwner(db: PGlite) {
@@ -270,10 +271,11 @@ describe("the graph executor boundary", { timeout: 180_000 }, () => {
       insert into public.organizations (id, name, slug, created_by)
       values ('${organizationId}', 'Factory', 'factory-graph-worker', '${ownerId}');
       insert into public.projects (
-        id, organization_id, name, status, github_repository, default_branch, created_by
+        id, organization_id, name, status, github_repository, default_branch,
+        production_url, created_by
       ) values (
         '${projectId}', '${organizationId}', 'Graph Project', 'active',
-        '${repositoryFullName}', 'main', '${ownerId}'
+        '${repositoryFullName}', 'main', '${projectProductionUrl}', '${ownerId}'
       );
       insert into public.connections (
         id, organization_id, name, provider, status, secret_reference, created_by
@@ -328,6 +330,9 @@ describe("the graph executor boundary", { timeout: 180_000 }, () => {
     // The project's repository travels with the claim, so the worker can
     // refuse to analyse a tree that is not the one this project is bound to.
     expect(parsed.graph.project_repository).toBe(repositoryFullName);
+    // Public health validation is available to scheduled/global claims too;
+    // it remains distinct from exact provider deployment lineage.
+    expect(parsed.graph.project_production_url).toBe(projectProductionUrl);
 
     // The claim is the run: RUNNING with every node PENDING, evented.
     const runs = await db.query<{ state: string }>(

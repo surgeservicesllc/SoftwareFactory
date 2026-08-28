@@ -4,7 +4,10 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { AlertTriangle, Loader2, ShieldCheck, UserCheck } from "lucide-react";
 
-import { GateDecision } from "@/components/graph/gate-decision";
+import {
+  GateDecision,
+  type GateDecisionResult,
+} from "@/components/graph/gate-decision";
 import { GraphLaunchControl } from "@/components/graph-launch-control";
 import { Card, PageHeader, StatusBadge } from "@/components/ui";
 import { SDLC_LIFECYCLE, stageDefinition, type SdlcStage } from "@/lib/sdlc/lifecycle";
@@ -245,13 +248,17 @@ function StageIndex({
  * under.
  */
 export function StageNodes({
+  approvalRequiresEvidence = false,
+  approvalUnavailableMessage,
   evidenceArtifactIds,
   nodes,
   onDecided,
 }: {
+  approvalRequiresEvidence?: boolean;
+  approvalUnavailableMessage?: string;
   evidenceArtifactIds?: Readonly<Record<string, string>>;
   nodes: readonly DetailedNode[];
-  onDecided: () => void;
+  onDecided: (approved: boolean, result: GateDecisionResult) => void;
 }) {
   if (nodes.length === 0) return null;
   return (
@@ -285,6 +292,8 @@ export function StageNodes({
             ) : null}
             <div className="text-xs">
               <GateDecision
+                approvalRequiresEvidence={approvalRequiresEvidence}
+                approvalUnavailableMessage={approvalUnavailableMessage}
                 evidenceArtifactId={evidenceArtifactIds?.[node.node_key]}
                 node={node}
                 onDecided={onDecided}

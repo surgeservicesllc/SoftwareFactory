@@ -151,7 +151,7 @@ beforeEach(() => {
     path: ".softwarefactory/release-policy.json",
     ref: baseSha,
   });
-  dispatchGraphWorker.mockResolvedValue(undefined);
+  dispatchGraphWorker.mockResolvedValue({ dispatched: true, reason: "dispatched" });
 });
 
 describe("POST /api/graphs", () => {
@@ -245,7 +245,7 @@ describe("POST /api/graphs", () => {
     const body = await response.json() as { graphId: string; workerWoken: boolean; note: string };
     expect(body.graphId).toBe(graphId);
     expect(body.workerWoken).toBe(false);
-    expect(body.note).toContain("scheduled or manual dispatch");
+    expect(body.note).toContain("global worker gate");
   });
 
   it("refuses Full Lifecycle before recording when no exact repository is connected", async () => {

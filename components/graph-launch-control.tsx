@@ -20,7 +20,7 @@ import { Card, EmptyState, SectionTitle, StatusBadge } from "@/components/ui";
  * wake can fail without failing the launch, so this control never states on its
  * own authority that anything is running: the badge says **Recorded** — which is
  * always true — and the server's `note` sentence says whether the worker was
- * woken or the graph waits for the scheduled or manual dispatch. Run evidence
+ * woken or the graph stays planned behind the global worker gate. Run evidence
  * itself lives on the Pipelines page's runs panel, not here.
  */
 
@@ -35,6 +35,7 @@ type LaunchResult = {
   readonly edgeCount: number;
   readonly maxParallelism: number;
   readonly requiresOwnerApproval: boolean;
+  readonly workerWoken: boolean;
   readonly note: string;
 };
 
@@ -135,7 +136,15 @@ export function GraphLaunchControl({
         });
         return;
       }
-      const launched = body as LaunchResult;
+      const received = body as LaunchResult;
+      const launched: LaunchResult = {
+        ...received,
+        // The server must positively attest to a wake. An absent or malformed
+        // field remains fail-closed even if an older response shape reaches us.
+        workerWoken: received.workerWoken === true,
+        note: received.note
+          ?? "The graph is recorded. No worker wake was confirmed.",
+      };
       setResult({ key: templateKey, value: launched });
       launchedGraph = { ...launched, projectId };
     } catch {

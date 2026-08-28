@@ -278,31 +278,34 @@ describe("CommandComposer", () => {
     });
     await user.type(screen.getByLabelText("What do you want done?"), "Fix the current factory");
     await user.click(screen.getByRole("button", { name: "Queue command" }));
-    expect(await screen.findByText("invalid Phase 1C command plan")).toBeInTheDocument();
+    const releaseSkewMessage =
+      "Factory command routing is out of sync with this page. Reload the latest release, then retry the command.";
+    expect(await screen.findByText(releaseSkewMessage)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Reload latest release" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Retry command" })).toBeEnabled();
 
     // An ordinary parent render is not a new attempt and must not erase the
     // failure before the person has read or retried it.
     view.rerender(<CommandComposer projectContext={firstProject} />);
-    expect(screen.getByText("invalid Phase 1C command plan")).toBeInTheDocument();
+    expect(screen.getByText(releaseSkewMessage)).toBeInTheDocument();
 
     view.rerender(<CommandComposer projectContext={secondProject} />);
     await waitFor(() => {
       expect(screen.getByRole("combobox", { name: "Project" })).toHaveValue(secondProject.id);
       expect(screen.getByRole("combobox", { name: "Pipeline" })).toHaveValue("second_pipeline");
     });
-    expect(screen.queryByText("invalid Phase 1C command plan")).not.toBeInTheDocument();
+    expect(screen.queryByText(releaseSkewMessage)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Queue command" })).toBeEnabled();
 
     await user.click(screen.getByRole("button", { name: "Queue command" }));
-    expect(await screen.findByText("invalid Phase 1C command plan")).toBeInTheDocument();
+    expect(await screen.findByText(releaseSkewMessage)).toBeInTheDocument();
     view.unmount();
 
     render(<CommandComposer projectContext={secondProject} />);
     await waitFor(() => {
       expect(screen.getByRole("combobox", { name: "Pipeline" })).toHaveValue("second_pipeline");
     });
-    expect(screen.queryByText("invalid Phase 1C command plan")).not.toBeInTheDocument();
+    expect(screen.queryByText(releaseSkewMessage)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Queue command" })).toBeDisabled();
   });
 

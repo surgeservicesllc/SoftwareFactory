@@ -12,12 +12,17 @@ on:
   # limits execution to main, so a manual dispatch cannot run an unreviewed
   # branch's job with these secrets; GitHub's throttled cron had left queued
   # runs unclaimed for tens of minutes with no owner recourse.
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      command_id:
+        description: Exact Phase 1C command UUID to execute once
+        required: true
+        type: string
 permissions:
   contents: read
 
 concurrency:
-  group: phase1c-worker-${{ github.event.client_payload.command_id || github.run_id }}
+  group: phase1c-worker-${{ github.event.client_payload.command_id || inputs.command_id || github.run_id }}
   cancel-in-progress: false
 
 jobs:
@@ -34,6 +39,8 @@ jobs:
       SOFTWAREFACTORY_CODEX_MODEL: gpt-5.3-codex
       SOFTWAREFACTORY_REQUIRED_CHECKS: Lint, typecheck, test, and build|Browser and accessibility tests 1/3|Browser and accessibility tests 2/3|Browser and accessibility tests 3/3
       SOFTWAREFACTORY_WORKER_RUNTIME: docker
+      SOFTWAREFACTORY_TARGET_COMMAND_ID: ${{ github.event.client_payload.command_id || inputs.command_id || '' }}
+      SOFTWAREFACTORY_TARGET_CLAIM_REQUIRED: ${{ github.event_name != 'schedule' && github.event.action != 'softwarefactory_phase1c_preflight' }}
       GITHUB_COMMIT_IDENTITY_NAME: surgeservicesllc
       GITHUB_COMMIT_IDENTITY_EMAIL: surgeservicesllc@gmail.com
     steps:

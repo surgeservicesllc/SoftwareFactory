@@ -26,6 +26,8 @@ const workerEnvironmentSchema = z.object({
   ),
   SOFTWAREFACTORY_WORKER_POLL_MS: positiveInteger(5_000, 500, 60_000),
   SOFTWAREFACTORY_WORKER_HEARTBEAT_MS: positiveInteger(10_000, 1_000, 60_000),
+  SOFTWAREFACTORY_TARGET_COMMAND_ID: z.string().uuid().optional(),
+  SOFTWAREFACTORY_TARGET_CLAIM_REQUIRED: z.enum(["true", "false"]).default("false"),
   NEXT_PUBLIC_SUPABASE_URL: z.string().url().startsWith("https://"),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(20),
   // Deliberately absent: OPENAI_API_KEY. Codex authentication is resolved by
@@ -44,6 +46,7 @@ export type WorkerConfiguration = Readonly<{
   pollMs: number;
   heartbeatMs: number;
   model: string;
+  targetCommandId: string | null;
   requiredChecks: readonly string[];
   supabaseUrl: string;
   supabaseServiceRoleKey: string;
@@ -108,6 +111,14 @@ export function readWorkerConfiguration(
       "SOFTWAREFACTORY_REQUIRED_CHECKS must name 1-20 pipe-delimited GitHub check runs.",
     );
   }
+  if (
+    parsed.data.SOFTWAREFACTORY_TARGET_CLAIM_REQUIRED === "true"
+    && !parsed.data.SOFTWAREFACTORY_TARGET_COMMAND_ID
+  ) {
+    throw new WorkerConfigurationError(
+      "SOFTWAREFACTORY_TARGET_COMMAND_ID is required for this one-shot dispatch.",
+    );
+  }
 
   return Object.freeze({
     enabled: parsed.data.SOFTWAREFACTORY_WORKER_ENABLED === "true",
@@ -117,6 +128,7 @@ export function readWorkerConfiguration(
     pollMs: parsed.data.SOFTWAREFACTORY_WORKER_POLL_MS,
     heartbeatMs: parsed.data.SOFTWAREFACTORY_WORKER_HEARTBEAT_MS,
     model: parsed.data.SOFTWAREFACTORY_CODEX_MODEL,
+    targetCommandId: parsed.data.SOFTWAREFACTORY_TARGET_COMMAND_ID ?? null,
     requiredChecks: Object.freeze(requiredChecks),
     supabaseUrl: parsed.data.NEXT_PUBLIC_SUPABASE_URL,
     supabaseServiceRoleKey: parsed.data.SUPABASE_SERVICE_ROLE_KEY,

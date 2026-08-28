@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { PortfolioProject, PortfolioView } from "@/lib/portfolio/aggregate";
 import { ProjectBots } from "@/components/project-bots";
 import { Card, Notice, SectionTitle, StatusBadge } from "@/components/ui";
+import { normalizeProjectProductionUrl } from "@/lib/projects/production-url";
 
 /**
  * One project, in the factory's terms — and the place it is operated from.
@@ -16,7 +17,8 @@ import { Card, Notice, SectionTitle, StatusBadge } from "@/components/ui";
  * source, same null-means-Unknown rule, same attention derivation.
  *
  * What changed is that this page now *does* things. Every control below lands
- * on an existing owner-gated RPC — `update_project_details`,
+ * on an owner-gated RPC — `update_project_details`,
+ * `set_project_production_url`,
  * `set_project_engineering_priority`, `set_project_engineering_pause`,
  * `focus_portfolio_engineering`, `archive_project` — through routes that
  * already existed. Nothing here is a new mutation path; the page was simply
@@ -94,6 +96,9 @@ export function ProjectDetailConsole({ projectId }: { projectId: string }) {
   const [draftName, setDraftName] = useState("");
   const [draftDescription, setDraftDescription] = useState("");
   const [identityState, setIdentityState] = useState<ActionPhase>({ phase: "idle" });
+  const [editingProductionUrl, setEditingProductionUrl] = useState(false);
+  const [draftProductionUrl, setDraftProductionUrl] = useState("");
+  const [productionUrlState, setProductionUrlState] = useState<ActionPhase>({ phase: "idle" });
 
   const [controlState, setControlState] = useState<ActionPhase>({ phase: "idle" });
   const [notice, setNotice] = useState("");
@@ -152,6 +157,39 @@ export function ProjectDetailConsole({ projectId }: { projectId: string }) {
       await load();
     } catch (cause) {
       setIdentityState({
+        message: cause instanceof Error ? cause.message : "The change was refused.",
+        phase: "failed",
+      });
+    }
+  }
+
+  async function saveProductionUrl() {
+    const normalized = normalizeProjectProductionUrl(draftProductionUrl);
+    if (normalized.error) {
+      setProductionUrlState({ message: normalized.error, phase: "failed" });
+      return;
+    }
+
+    setProductionUrlState({ phase: "working" });
+    try {
+      const response = await fetch(
+        `/api/projects/${encodeURIComponent(projectId)}/production-url`,
+        {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ productionUrl: normalized.productionUrl }),
+        },
+      );
+      const payload = (await response.json().catch(() => null)) as
+        | { error?: { message?: string } } | null;
+      if (!response.ok) throw new Error(payload?.error?.message ?? "The change was refused.");
+
+      setProductionUrlState({ phase: "idle" });
+      setEditingProductionUrl(false);
+      setNotice(normalized.productionUrl ? "Production URL saved." : "Production URL cleared.");
+      await load();
+    } catch (cause) {
+      setProductionUrlState({
         message: cause instanceof Error ? cause.message : "The change was refused.",
         phase: "failed",
       });
@@ -363,9 +401,8 @@ export function ProjectDetailConsole({ projectId }: { projectId: string }) {
                 </p>
               ) : null}
               <p className="text-xs text-muted">
-                The repository, branch and production URL are not edited here. They are the
-                connection this project is bound to, and re-pointing a project at different ground
-                is a connection operation rather than a rename.
+                Repository and branch identity are managed by the GitHub connection. The stable
+                public production URL is configured separately below.
               </p>
             </div>
           ) : (
@@ -391,6 +428,92 @@ export function ProjectDetailConsole({ projectId }: { projectId: string }) {
               </div>
             </div>
           )}
+
+          <div className="border-t border-line pt-4">
+            {editingProductionUrl ? (
+              <div className="flex flex-col gap-3">
+                <label className="flex flex-col gap-1" htmlFor="project-production-url">
+                  <span className="text-xs text-muted">Public production URL</span>
+                  <input
+                    id="project-production-url"
+                    type="url"
+                    inputMode="url"
+                    autoComplete="url"
+                    className="w-full min-w-0 rounded border border-line bg-surface px-3 py-2 text-sm"
+                    maxLength={208}
+                    placeholder="https://www.example.com"
+                    value={draftProductionUrl}
+                    onChange={(event) => {
+                      setDraftProductionUrl(event.target.value);
+                      if (productionUrlState.phase === "failed") {
+                        setProductionUrlState({ phase: "idle" });
+                      }
+                    }}
+                    aria-describedby="project-production-url-help"
+                  />
+                </label>
+                <p id="project-production-url-help" className="text-xs text-muted">
+                  Full Lifecycle Step 10 observes this public address after an exact deployment.
+                  Use a stable HTTPS URL with no credentials, query string, fragment, localhost,
+                  private host, or non-standard port. Leave it blank to clear the setting.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    disabled={productionUrlState.phase === "working" || archived}
+                    onClick={() => void saveProductionUrl()}
+                  >
+                    {productionUrlState.phase === "working"
+                      ? <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                      : <Save className="size-4" aria-hidden="true" />}
+                    Save production URL
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    disabled={productionUrlState.phase === "working"}
+                    onClick={() => {
+                      setEditingProductionUrl(false);
+                      setProductionUrlState({ phase: "idle" });
+                    }}
+                  >
+                    Discard
+                  </button>
+                </div>
+                {productionUrlState.phase === "failed" ? (
+                  <p className="text-sm text-[var(--danger)]" aria-live="polite">
+                    {productionUrlState.message}
+                  </p>
+                ) : null}
+                {archived ? (
+                  <p className="text-xs text-muted">Restore this project before changing its URL.</p>
+                ) : null}
+              </div>
+            ) : (
+              <div className="flex flex-col gap-3">
+                <Fact label="Public production URL" value={project.productionUrl ?? "Not set"} />
+                <div>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    disabled={archived}
+                    onClick={() => {
+                      setDraftProductionUrl(project.productionUrl ?? "");
+                      setProductionUrlState({ phase: "idle" });
+                      setEditingProductionUrl(true);
+                    }}
+                  >
+                    <Pencil className="size-4" aria-hidden="true" />
+                    Configure production URL
+                  </button>
+                </div>
+                {archived ? (
+                  <p className="text-xs text-muted">Restore this project before changing its URL.</p>
+                ) : null}
+              </div>
+            )}
+          </div>
         </Card>
       </section>
 

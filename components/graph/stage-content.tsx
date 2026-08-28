@@ -32,6 +32,9 @@ export type RunVerification = {
 export type RunView = {
   graphRunId: string;
   graphId: string;
+  /** The immutable template identity that produced this historical graph. */
+  templateKey?: string | null;
+  templateVersion?: number | null;
   /** Tenant-scoped project identity returned by the graph-run projection. */
   projectId?: string;
   goal: string;

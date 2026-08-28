@@ -83,6 +83,14 @@ describe("Full Lifecycle Phase 1C gate bridge", () => {
     }, deploymentAnchor)).toContain("does not match");
   });
 
+  it("preserves and rechecks Vercel's immutable SHA provider ref independently of the lifecycle branch", () => {
+    const shaRefAnchor = { ...deploymentAnchor, providerRef: mergeSha };
+
+    expect(productionDeploymentMismatch({ ...production, ref: mergeSha }, shaRefAnchor)).toBeNull();
+    expect(productionDeploymentMismatch({ ...production, ref: "main" }, shaRefAnchor))
+      .toContain("provider ref changed");
+  });
+
   it("normalizes only scheme, host, and the default port when comparing deployment URLs", () => {
     const expectedWithPath = {
       ...deploymentAnchor,

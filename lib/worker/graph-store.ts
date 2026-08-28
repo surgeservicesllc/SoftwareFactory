@@ -60,7 +60,7 @@ export class SupabaseGraphStore implements GraphRunStore {
 
   /** Null when no runnable graph exists — an idle answer, not a fault. */
   async claimPlannedGraph(): Promise<unknown | null> {
-    const { data, error } = await this.client.rpc("claim_planned_graph_v2", {
+    const claimRequest = {
       p_worker_id: this.workerId,
       // Declared, not defaulted: the claim skips graphs whose nodes need an
       // executor this worker does not provide, so those graphs keep their
@@ -69,7 +69,13 @@ export class SupabaseGraphStore implements GraphRunStore {
       p_repository_full_name: this.repositoryFullName,
       p_required_check_names: [...this.requiredCheckNames],
       p_protocol_version: 2,
-    });
+    };
+    const { data, error } = this.targetGraphId
+      ? await this.client.rpc("claim_planned_graph_by_id_v2", {
+        ...claimRequest,
+        p_target_graph_id: this.targetGraphId,
+      })
+      : await this.client.rpc("claim_planned_graph_v2", claimRequest);
     if (error) throw new Error(`Claiming a planned graph failed: ${error.message ?? "unknown error"}`);
     return data ?? null;
   }
@@ -253,7 +259,7 @@ export class SupabaseGraphStore implements GraphRunStore {
      * graph first and adding lineage later would make a lost response an
      * unrecoverable terminal split.
      */
-    const { error } = await this.client.rpc("complete_graph_run_with_phase1c_bridge_as_worker", {
+    const { error } = await this.client.rpc("complete_graph_run_with_validated_release_as_worker", {
       p_worker_id: this.workerId,
       p_graph_run_id: graphRunId,
       p_state: state,

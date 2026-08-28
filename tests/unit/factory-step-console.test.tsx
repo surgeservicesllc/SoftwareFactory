@@ -1,8 +1,12 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { FactoryStepConsole } from "@/components/graph/factory-step-console";
+import {
+  FactoryStepConsole,
+  factoryRunNeedsLiveRefresh,
+} from "@/components/graph/factory-step-console";
+import type { RunView } from "@/components/graph/stage-content";
 import { factoryStep } from "@/lib/sdlc/factory-steps";
 
 /**
@@ -36,15 +40,23 @@ function lifecycleRun(
   id: string,
   nodes: readonly Record<string, unknown>[],
   goal: string,
-  identity: { graphId?: string; projectId?: string } = {},
+  identity: {
+    graphId?: string;
+    projectId?: string;
+    templateKey?: string | null;
+    templateVersion?: number | null;
+    state?: string;
+  } = {},
 ) {
   return {
     graphRunId: id,
     graphId: identity.graphId ?? "70000000-0000-4000-8000-0000000000f1",
     projectId: identity.projectId ?? "40000000-0000-4000-8000-000000000001",
+    templateKey: identity.templateKey === undefined ? "full_lifecycle" : identity.templateKey,
+    templateVersion: identity.templateVersion === undefined ? 2 : identity.templateVersion,
     goal,
     topology: "DIAMOND",
-    state: "PARTIAL",
+    state: identity.state ?? "PARTIAL",
     hadPartialInput: true,
     startedAt: "2026-08-24T12:00:00.000Z",
     completedAt: null,
@@ -60,19 +72,27 @@ let fetchCalls: string[] = [];
 
 function stubFetch(options: {
   runs: readonly unknown[];
+  runsAfterGate?: readonly unknown[];
+  runsAfterGateSequence?: readonly (readonly unknown[])[];
   artifacts?: readonly Record<string, unknown>[];
   artifactsError?: string;
+  gateResult?: { readonly note?: string; readonly workerWoken?: boolean };
   launchResult?: Record<string, unknown>;
 }) {
   gateCalls = [];
   fetchCalls = [];
+  let gateRecorded = false;
+  let postGateRunReads = 0;
   vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     fetchCalls.push(url);
     if (url.includes("/api/graph-gates/")) {
       gateCalls.push({ url, body: init?.body ? JSON.parse(String(init.body)) : null });
+      gateRecorded = true;
       return Promise.resolve({
-        ok: true, status: 200, json: async () => ({ note: "Recorded." }),
+        ok: true,
+        status: 200,
+        json: async () => options.gateResult ?? { note: "Recorded.", workerWoken: true },
       } as Response);
     }
     if (url.includes("/artifacts")) {
@@ -104,12 +124,23 @@ function stubFetch(options: {
           edgeCount: 16,
           maxParallelism: 3,
           requiresOwnerApproval: false,
+          workerWoken: false,
           note: "The graph is recorded; worker dispatch remains off.",
         },
       } as Response);
     }
+    const sequencedRuns = gateRecorded && options.runsAfterGateSequence
+      ? options.runsAfterGateSequence[
+        Math.min(postGateRunReads++, options.runsAfterGateSequence.length - 1)
+      ]
+      : undefined;
     return Promise.resolve({
-      ok: true, status: 200, json: async () => ({ runs: options.runs }),
+      ok: true,
+      status: 200,
+      json: async () => ({
+        runs: sequencedRuns
+          ?? (gateRecorded && options.runsAfterGate ? options.runsAfterGate : options.runs),
+      }),
     } as Response);
   });
 }
@@ -348,6 +379,7 @@ describe("a factory step page", () => {
       "The previous request.",
     );
     const newGraphId = "70000000-0000-4000-8000-0000000000f9";
+    const intervalSpy = vi.spyOn(window, "setInterval");
     stubFetch({
       runs: [oldRun],
       launchResult: {
@@ -357,7 +389,8 @@ describe("a factory step page", () => {
         edgeCount: 16,
         maxParallelism: 3,
         requiresOwnerApproval: false,
-        note: "The graph is recorded; worker dispatch remains off.",
+        workerWoken: false,
+        note: "The graph is recorded. The executor is Not Connected, so no worker was woken.",
       },
     });
     render(<FactoryStepConsole step={factoryStep("requirement")!} />);
@@ -370,12 +403,19 @@ describe("a factory step page", () => {
     await userEvent.type(screen.getByLabelText("Goal"), "The newly selected request.");
     await userEvent.click(screen.getByRole("button", { name: /launch full lifecycle/i }));
 
-    expect(await screen.findByText("Selected graph has no visible run yet")).toBeInTheDocument();
+    expect(await screen.findByText("Graph recorded — executor Not Connected")).toBeInTheDocument();
+    expect(screen.getByText("The graph is recorded. The executor is Not Connected, so no worker was woken."))
+      .toBeInTheDocument();
+    expect(screen.getByText(/Automatic polling is off because this request did not wake a worker/i))
+      .toBeInTheDocument();
     expect(screen.getByText(newGraphId)).toBeInTheDocument();
     expect(screen.queryByText("The previous request.")).not.toBeInTheDocument();
+    expect(intervalSpy.mock.calls.filter(([, delay]) => delay === 15_000)).toHaveLength(0);
+    intervalSpy.mockRestore();
   });
 
   it("offers an open gate's decision on the step that holds it", async () => {
+    const artifactId = "b0000000-0000-4000-8000-000000000009";
     stubFetch({
       runs: [lifecycleRun("80000000-0000-4000-8000-0000000000f1", [
         node({
@@ -389,6 +429,14 @@ describe("a factory step page", () => {
           gate_anchor_count: 0,
         }),
       ], "Design under decision.")],
+      artifacts: [{
+        artifactId,
+        nodeRunId: "c0000000-0000-4000-8000-000000000009",
+        nodeKey: "architecture",
+        kind: "RAW",
+        payload: { summary: "The exact architecture." },
+        createdAt: "2026-08-28T12:00:00.000Z",
+      }],
     });
     const user = userEvent.setup();
     render(<FactoryStepConsole step={factoryStep("architect")!} />);
@@ -397,7 +445,202 @@ describe("a factory step page", () => {
 
     await waitFor(() => expect(gateCalls).toHaveLength(1));
     expect(gateCalls[0].url).toContain("a0000000-0000-4000-8000-000000000009");
-    expect(gateCalls[0].body).toEqual({ approved: true });
+    expect(gateCalls[0].body).toEqual({ approved: true, evidenceArtifactId: artifactId });
+    expect(await screen.findByText("Gate approved — waiting for continuation")).toBeInTheDocument();
+  });
+
+  it("keeps a recorded gate approval Not Connected when no worker was woken", async () => {
+    const graphId = "70000000-0000-4000-8000-0000000000f1";
+    const held = lifecycleRun("80000000-0000-4000-8000-0000000000f1", [
+      node({
+        node_key: "architecture",
+        lifecycle_stage: "ARCHITECTURE",
+        capability: "architecture",
+        state: "VERIFYING",
+        gate_kind: "HUMAN",
+        gate_id: "a0000000-0000-4000-8000-000000000009",
+        gate_state: "OPEN",
+      }),
+    ], "Held attempt.", { graphId });
+    const approvedHeld = lifecycleRun(held.graphRunId, [
+      node({
+        node_key: "architecture",
+        lifecycle_stage: "ARCHITECTURE",
+        capability: "architecture",
+        state: "COMPLETED",
+        gate_kind: "HUMAN",
+        gate_id: "a0000000-0000-4000-8000-000000000009",
+        gate_state: "APPROVED",
+      }),
+    ], "Held attempt.", { graphId, state: "PARTIAL" });
+    const artifactId = "b0000000-0000-4000-8000-000000000009";
+    const note = "The gate is approved. The executor is Not Connected, so no worker was woken.";
+    const intervalSpy = vi.spyOn(window, "setInterval");
+    stubFetch({
+      runs: [held],
+      runsAfterGate: [approvedHeld],
+      gateResult: { workerWoken: false, note },
+      artifacts: [{
+        artifactId,
+        nodeRunId: "c0000000-0000-4000-8000-000000000009",
+        nodeKey: "architecture",
+        kind: "RAW",
+        payload: { summary: "The exact architecture." },
+        createdAt: "2026-08-28T12:00:00.000Z",
+      }],
+    });
+    const user = userEvent.setup();
+    render(
+      <FactoryStepConsole
+        step={factoryStep("architect")!}
+        initialSelection={{
+          graphId,
+          graphRunId: held.graphRunId,
+          projectId: held.projectId,
+        }}
+      />,
+    );
+
+    const approve = await screen.findByRole("button", { name: "Approve" });
+    const intervalCallsBeforeGate = intervalSpy.mock.calls.filter(([, delay]) => delay === 15_000).length;
+    await user.click(approve);
+
+    expect(await screen.findByText("Gate approved — executor Not Connected")).toBeInTheDocument();
+    expect(screen.getByText(note)).toBeInTheDocument();
+    expect(screen.getByText(/Automatic continuation polling is off/i)).toBeInTheDocument();
+    expect(screen.queryByText("Gate approved — waiting for continuation")).not.toBeInTheDocument();
+    expect(intervalSpy.mock.calls.filter(([, delay]) => delay === 15_000))
+      .toHaveLength(intervalCallsBeforeGate);
+    intervalSpy.mockRestore();
+  });
+
+  it("follows only a newly recorded continuation attempt after approving a gate", async () => {
+    const graphId = "70000000-0000-4000-8000-0000000000f1";
+    const held = lifecycleRun("80000000-0000-4000-8000-0000000000f1", [
+      node({
+        node_key: "architecture",
+        lifecycle_stage: "ARCHITECTURE",
+        capability: "architecture",
+        state: "VERIFYING",
+        gate_kind: "HUMAN",
+        gate_id: "a0000000-0000-4000-8000-000000000009",
+        gate_state: "OPEN",
+      }),
+    ], "Held attempt.", { graphId });
+    const continuation = lifecycleRun("80000000-0000-4000-8000-0000000000f2", [
+      node({ node_key: "architecture", lifecycle_stage: "ARCHITECTURE" }),
+    ], "Continued attempt.", { graphId, state: "RUNNING" });
+    const artifactId = "b0000000-0000-4000-8000-000000000009";
+    stubFetch({
+      runs: [held],
+      runsAfterGate: [continuation, held],
+      artifacts: [{
+        artifactId,
+        nodeRunId: "c0000000-0000-4000-8000-000000000009",
+        nodeKey: "architecture",
+        kind: "RAW",
+        payload: { summary: "The exact architecture." },
+        createdAt: "2026-08-28T12:00:00.000Z",
+      }],
+    });
+    const user = userEvent.setup();
+    render(
+      <FactoryStepConsole
+        step={factoryStep("architect")!}
+        initialSelection={{
+          graphId,
+          graphRunId: held.graphRunId,
+          projectId: held.projectId,
+        }}
+      />,
+    );
+
+    await user.click(await screen.findByRole("button", { name: "Approve" }));
+
+    expect(await screen.findByText("Continued attempt.")).toBeInTheDocument();
+    expect(screen.queryByText("Held attempt.")).not.toBeInTheDocument();
+    expect(fetchCalls.some((url) => url.includes(`${continuation.graphRunId}/artifacts`))).toBe(true);
+  });
+
+  it("keeps polling a terminal approved attempt until its continuation is recorded", async () => {
+    const graphId = "70000000-0000-4000-8000-0000000000f1";
+    const held = lifecycleRun("80000000-0000-4000-8000-0000000000f1", [
+      node({
+        node_key: "architecture",
+        lifecycle_stage: "ARCHITECTURE",
+        capability: "architecture",
+        state: "VERIFYING",
+        gate_kind: "HUMAN",
+        gate_id: "a0000000-0000-4000-8000-000000000009",
+        gate_state: "OPEN",
+      }),
+    ], "Held attempt.", { graphId });
+    const approvedHeld = lifecycleRun(held.graphRunId, [
+      node({
+        node_key: "architecture",
+        lifecycle_stage: "ARCHITECTURE",
+        capability: "architecture",
+        state: "COMPLETED",
+        gate_kind: "HUMAN",
+        gate_id: "a0000000-0000-4000-8000-000000000009",
+        gate_state: "APPROVED",
+      }),
+    ], "Held attempt.", { graphId, state: "PARTIAL" });
+    const continuation = lifecycleRun("80000000-0000-4000-8000-0000000000f2", [
+      node({ node_key: "architecture", lifecycle_stage: "ARCHITECTURE" }),
+    ], "Delayed continuation.", { graphId, state: "RUNNING" });
+    const artifactId = "b0000000-0000-4000-8000-000000000009";
+    stubFetch({
+      runs: [held],
+      runsAfterGateSequence: [[approvedHeld], [continuation, approvedHeld]],
+      artifacts: [{
+        artifactId,
+        nodeRunId: "c0000000-0000-4000-8000-000000000009",
+        nodeKey: "architecture",
+        kind: "RAW",
+        payload: { summary: "The exact architecture." },
+        createdAt: "2026-08-28T12:00:00.000Z",
+      }],
+    });
+    const intervalSpy = vi.spyOn(window, "setInterval");
+    const user = userEvent.setup();
+    render(
+      <FactoryStepConsole
+        step={factoryStep("architect")!}
+        initialSelection={{
+          graphId,
+          graphRunId: held.graphRunId,
+          projectId: held.projectId,
+        }}
+      />,
+    );
+
+    const approve = await screen.findByRole("button", { name: "Approve" });
+    const factoryIntervalCallsBeforeGate = intervalSpy.mock.calls.filter(([, delay]) =>
+      delay === 15_000
+    ).length;
+    await user.click(approve);
+    expect(await screen.findByText("Gate approved — waiting for continuation")).toBeInTheDocument();
+    expect(screen.getByText("Held attempt.")).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(intervalSpy.mock.calls.filter(([, delay]) => delay === 15_000).length)
+        .toBeGreaterThan(factoryIntervalCallsBeforeGate);
+    });
+    const poll = intervalSpy.mock.calls.filter(([, delay]) => delay === 15_000).at(-1)?.[0];
+    expect(typeof poll).toBe("function");
+    const readsBeforePoll = fetchCalls.filter((url) => url.startsWith("/api/graphs/runs?")).length;
+    await act(async () => {
+      if (typeof poll === "function") poll();
+    });
+    await waitFor(() => {
+      expect(fetchCalls.filter((url) => url.startsWith("/api/graphs/runs?")).length)
+        .toBeGreaterThan(readsBeforePoll);
+    });
+
+    expect(await screen.findByText("Delayed continuation.")).toBeInTheDocument();
+    expect(screen.queryByText("Gate approved — waiting for continuation")).not.toBeInTheDocument();
+    intervalSpy.mockRestore();
   });
 
   it("derives the Gate tile from gates stored on this run's nodes", async () => {
@@ -452,5 +695,225 @@ describe("a factory step page", () => {
     render(<FactoryStepConsole step={factoryStep("deploy")!} />);
 
     expect(await screen.findByText("This run planned no node in this stage.")).toBeInTheDocument();
+  });
+
+  it("offers a manual refresh after a run is loaded", async () => {
+    stubFetch({
+      runs: [lifecycleRun(
+        "80000000-0000-4000-8000-0000000000f1",
+        [node({ state: "RUNNING" })],
+        "Refresh this exact run.",
+        { state: "RUNNING" },
+      )],
+    });
+    const user = userEvent.setup();
+    render(<FactoryStepConsole step={factoryStep("requirement")!} />);
+
+    const refresh = await screen.findByRole("button", { name: "Refresh run" });
+    const readsBefore = fetchCalls.filter((url) => url.startsWith("/api/graphs/runs?")).length;
+    await user.click(refresh);
+
+    await waitFor(() => {
+      expect(fetchCalls.filter((url) => url.startsWith("/api/graphs/runs?")).length)
+        .toBeGreaterThan(readsBefore);
+    });
+  });
+
+  it("polls only attempts whose stored work can still change", () => {
+    const running = lifecycleRun(
+      "80000000-0000-4000-8000-0000000000f1",
+      [node({ state: "RUNNING" })],
+      "Still executing.",
+      { state: "RUNNING" },
+    );
+    const held = lifecycleRun(
+      "80000000-0000-4000-8000-0000000000f2",
+      [node({ state: "VERIFYING", gate_state: "OPEN" })],
+      "Waiting for its gate.",
+    );
+    const complete = lifecycleRun(
+      "80000000-0000-4000-8000-0000000000f3",
+      [node()],
+      "Finished.",
+      { state: "COMPLETED" },
+    );
+
+    expect(factoryRunNeedsLiveRefresh(running as unknown as RunView)).toBe(true);
+    expect(factoryRunNeedsLiveRefresh(held as unknown as RunView)).toBe(true);
+    expect(factoryRunNeedsLiveRefresh(complete as unknown as RunView)).toBe(false);
+  });
+
+  it("states when bounded automatic refresh has stopped", async () => {
+    stubFetch({
+      runs: [lifecycleRun(
+        "80000000-0000-4000-8000-0000000000f1",
+        [node({ state: "RUNNING" })],
+        "A long-running attempt.",
+        { state: "RUNNING" },
+      )],
+    });
+    const intervalSpy = vi.spyOn(window, "setInterval");
+    render(<FactoryStepConsole step={factoryStep("requirement")!} />);
+
+    expect(await screen.findByText("A long-running attempt.")).toBeInTheDocument();
+    const poll = intervalSpy.mock.calls.filter(([, delay]) => delay === 15_000).at(-1)?.[0];
+    expect(typeof poll).toBe("function");
+
+    await act(async () => {
+      for (let tick = 0; tick < 40; tick += 1) {
+        if (typeof poll === "function") poll();
+      }
+      await Promise.resolve();
+    });
+
+    expect(await screen.findByText("Automatic refresh paused")).toBeInTheDocument();
+    expect(screen.getByText(/this page is no longer checking automatically/i)).toBeInTheDocument();
+    intervalSpy.mockRestore();
+  });
+
+  it("identifies a legacy lifecycle and offers the current version", async () => {
+    stubFetch({
+      runs: [lifecycleRun(
+        "80000000-0000-4000-8000-0000000000f1",
+        [node()],
+        "A historical request.",
+        { templateKey: "full_lifecycle", templateVersion: 1 },
+      )],
+    });
+    const user = userEvent.setup();
+    render(<FactoryStepConsole step={factoryStep("requirement")!} />);
+
+    expect(await screen.findByText("Historical lifecycle definition")).toBeInTheDocument();
+    expect(screen.getByText(/full_lifecycle v1.*full_lifecycle v2/i)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Start the current Full Lifecycle" }));
+    expect(await screen.findByRole("button", { name: /Launch Full Lifecycle/ })).toBeInTheDocument();
+  });
+
+  it("does not offer a release approval without the exact evidence artifact", async () => {
+    stubFetch({
+      runs: [lifecycleRun("80000000-0000-4000-8000-0000000000f1", [
+        node({
+          node_key: "test",
+          lifecycle_stage: "TEST",
+          capability: "qa",
+          executor: "ANCHOR",
+          state: "VERIFYING",
+          gate_kind: "HUMAN",
+          gate_id: "a0000000-0000-4000-8000-000000000010",
+          gate_state: "OPEN",
+          gate_anchor_count: 1,
+        }),
+      ], "Verify the exact release.")],
+      artifacts: [],
+    });
+    render(<FactoryStepConsole step={factoryStep("test")!} />);
+
+    const approval = await screen.findByRole("button", { name: "Accept merged pull request" });
+    expect(approval).toBeDisabled();
+    expect(screen.getByText(/Approval is unavailable until this stage records its exact evidence artifact/i))
+      .toBeInTheDocument();
+    expect(gateCalls).toEqual([]);
+  });
+
+  it("links TEST to the exact pull request and states that acceptance never merges", async () => {
+    const pullRequestUrl = "https://github.com/surgeservicesllc/SoftwareFactory/pull/999";
+    stubFetch({
+      runs: [lifecycleRun("80000000-0000-4000-8000-0000000000f1", [
+        node({
+          node_key: "test",
+          lifecycle_stage: "TEST",
+          capability: "qa",
+          executor: "ANCHOR",
+          state: "VERIFYING",
+          gate_kind: "HUMAN",
+          gate_id: "a0000000-0000-4000-8000-000000000010",
+          gate_state: "OPEN",
+        }),
+      ], "Verify the exact release.")],
+      artifacts: [
+        {
+          artifactId: "b0000000-0000-4000-8000-000000000001",
+          nodeRunId: "c0000000-0000-4000-8000-000000000001",
+          nodeKey: "review",
+          kind: "ANCHOR",
+          payload: {
+            observation: "phase1c_pull_request_review",
+            pullRequestUrl,
+            headSha: "1".repeat(40),
+          },
+          createdAt: "2026-08-28T12:00:00.000Z",
+        },
+        {
+          artifactId: "b0000000-0000-4000-8000-000000000002",
+          nodeRunId: "c0000000-0000-4000-8000-000000000002",
+          nodeKey: "test",
+          kind: "ANCHOR",
+          payload: { observation: "ci_check_runs", sha: "1".repeat(40), total: 4, failing: [] },
+          createdAt: "2026-08-28T12:01:00.000Z",
+        },
+        {
+          artifactId: "b0000000-0000-4000-8000-000000000099",
+          nodeRunId: "c0000000-0000-4000-8000-000000000099",
+          nodeKey: "deploy",
+          kind: "ANCHOR",
+          payload: {
+            observation: "github_production_deployment",
+            sha: "2".repeat(40),
+            deploymentId: 6137000001,
+            environmentUrl: "https://softwarefactory-exact.vercel.app",
+            state: "success",
+          },
+          createdAt: "2026-08-28T12:02:00.000Z",
+        },
+      ],
+    });
+    render(<FactoryStepConsole step={factoryStep("test")!} />);
+
+    const link = await screen.findByRole("link", { name: "Open exact pull request" });
+    expect(link).toHaveAttribute("href", pullRequestUrl);
+    expect(screen.getAllByText("11111111").length).toBeGreaterThan(0);
+    expect(screen.queryByText("22222222")).not.toBeInTheDocument();
+    expect(screen.getAllByText(/never merges/i).length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "Accept merged pull request" })).toBeEnabled();
+  });
+
+  it("renders exact DEPLOY evidence and explains that acceptance never deploys", async () => {
+    const deploymentUrl = "https://softwarefactory-exact.vercel.app";
+    stubFetch({
+      runs: [lifecycleRun("80000000-0000-4000-8000-0000000000f1", [
+        node({
+          node_key: "deploy",
+          lifecycle_stage: "DEPLOYMENT",
+          capability: "implementation",
+          executor: "ANCHOR",
+          state: "VERIFYING",
+          gate_kind: "HUMAN",
+          gate_id: "a0000000-0000-4000-8000-000000000011",
+          gate_state: "OPEN",
+        }),
+      ], "Ship the exact release.")],
+      artifacts: [{
+        artifactId: "b0000000-0000-4000-8000-000000000003",
+        nodeRunId: "c0000000-0000-4000-8000-000000000003",
+        nodeKey: "deploy",
+        kind: "ANCHOR",
+        payload: {
+          observation: "github_production_deployment",
+          sha: "2".repeat(40),
+          deploymentId: 6137000001,
+          environmentUrl: deploymentUrl,
+          state: "success",
+        },
+        createdAt: "2026-08-28T12:02:00.000Z",
+      }],
+    });
+    render(<FactoryStepConsole step={factoryStep("deploy")!} />);
+
+    expect(await screen.findByText("DEPLOY handoff: accept observed Production")).toBeInTheDocument();
+    expect(screen.getByText("6137000001")).toBeInTheDocument();
+    expect(screen.getAllByText(/never deploys/i).length).toBeGreaterThan(0);
+    expect(screen.getByRole("link", { name: "Open observed deployment" }))
+      .toHaveAttribute("href", `${deploymentUrl}/`);
+    expect(screen.getByRole("button", { name: "Accept production deployment" })).toBeEnabled();
   });
 });

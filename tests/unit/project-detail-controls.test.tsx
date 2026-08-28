@@ -182,6 +182,54 @@ describe("project detail controls", () => {
     expect(calls[0].body).toMatchObject({ name: "Storefront web" });
   });
 
+  it("configures the public production URL used by Full Lifecycle Step 10", async () => {
+    const calls = mockFetch();
+    const user = userEvent.setup();
+    render(<ProjectDetailConsole projectId={projectId} />);
+    await screen.findByRole("heading", { name: "Storefront" });
+
+    await user.click(screen.getByRole("button", { name: /configure production url/i }));
+    const input = screen.getByLabelText(/public production url/i);
+    await user.clear(input);
+    await user.type(input, "HTTPS://WWW.THEAGORAS.COM/");
+    await user.click(screen.getByRole("button", { name: /save production url/i }));
+
+    await waitFor(() => expect(calls).toHaveLength(1));
+    expect(calls[0]).toEqual({
+      body: { productionUrl: "https://www.theagoras.com" },
+      method: "PATCH",
+      url: `/api/projects/${projectId}/production-url`,
+    });
+  });
+
+  it("refuses an unsafe production URL before issuing a request", async () => {
+    const calls = mockFetch();
+    const user = userEvent.setup();
+    render(<ProjectDetailConsole projectId={projectId} />);
+    await screen.findByRole("heading", { name: "Storefront" });
+
+    await user.click(screen.getByRole("button", { name: /configure production url/i }));
+    const input = screen.getByLabelText(/public production url/i);
+    await user.clear(input);
+    await user.type(input, "http://localhost:3000");
+    await user.click(screen.getByRole("button", { name: /save production url/i }));
+
+    expect(await screen.findByText(/use a public HTTPS URL/i)).toBeTruthy();
+    expect(calls).toHaveLength(0);
+  });
+
+  it("keeps archived project production configuration read-only", async () => {
+    mockFetch({ status: "archived" });
+    render(<ProjectDetailConsole projectId={projectId} />);
+    await screen.findByRole("heading", { name: "Storefront" });
+
+    expect(
+      (screen.getByRole("button", { name: /configure production url/i }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    expect(screen.getByText(/restore this project before changing its URL/i)).toBeTruthy();
+  });
+
   it("shows the database's refusal word for word", async () => {
     mockFetch(
       {},

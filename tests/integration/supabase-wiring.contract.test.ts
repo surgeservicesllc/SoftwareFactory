@@ -41,7 +41,6 @@ const BOUNDARY = /@\/lib\/supabase\/(tenant|server|browser|anon|proxy|auth|env)|
  * tenant data to read, and it is the only way to pass this test without one.
  */
 const NO_TENANT_DATA: Record<string, string> = {
-  "app/api/health/route.ts": "liveness only; deliberately reads nothing",
   "app/api/csp-report/route.ts": "browser-posted violation report",
 };
 

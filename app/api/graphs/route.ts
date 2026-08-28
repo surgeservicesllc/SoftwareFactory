@@ -331,8 +331,8 @@ export async function POST(request: Request) {
      * default, so the owner's first full_lifecycle launch sat PLANNED until a
      * manual dispatch. The whole wake sits inside the try, binding lookup
      * included, so the launch's answer never depends on it — a wake that
-     * cannot happen leaves the graph planned for the scheduled or manual
-     * dispatch, reported rather than hidden.
+     * cannot happen leaves the graph planned until a separately enabled exact
+     * target dispatch, reported rather than hidden.
      */
     let workerWoken = false;
     try {
@@ -348,7 +348,7 @@ export async function POST(request: Request) {
         dispatchBinding = resolvedFallback?.success ? resolvedFallback.data : null;
       }
       if (dispatchBinding?.repository_full_name) {
-        await dispatchGraphWorker(
+        const dispatchResult = await dispatchGraphWorker(
           {
             appId: dispatchBinding.app_id,
             externalInstallationId: dispatchBinding.external_installation_id,
@@ -357,7 +357,7 @@ export async function POST(request: Request) {
           },
           String(data),
         );
-        workerWoken = true;
+        workerWoken = dispatchResult.dispatched;
       }
     } catch {
       workerWoken = false;
@@ -384,9 +384,9 @@ export async function POST(request: Request) {
       workerWoken,
       note: workerWoken
         ? "The graph is recorded and the executor worker has been woken to claim it."
-        : "The graph is recorded. The worker could not be woken through the project's "
-          + "GitHub binding, so it stays planned until the scheduled or manual dispatch "
-          + "picks it up.",
+        : "The graph is recorded, but the executor is Not Connected or its verified "
+          + "GitHub binding could not dispatch. It stays planned; manual and scheduled "
+          + "events cannot bypass the global worker gate.",
     });
   } catch (error) {
     if (error instanceof ApiRequestError) return requestErrorResponse(error);

@@ -474,8 +474,11 @@ async function approveArchitecture(
 
   let workerWoken = false;
   try {
-    await dispatchPhase1CWorker(dispatchTarget(target), submission.data.command_id);
-    workerWoken = true;
+    const dispatchResult = await dispatchPhase1CWorker(
+      dispatchTarget(target),
+      submission.data.command_id,
+    );
+    workerWoken = dispatchResult.dispatched;
   } catch {
     workerWoken = false;
   }
@@ -572,8 +575,8 @@ async function approveMergedTest(
   ) {
     let workerWoken = false;
     try {
-      await dispatchGraphWorker(dispatchTarget(target), graph.id);
-      workerWoken = true;
+      const dispatchResult = await dispatchGraphWorker(dispatchTarget(target), graph.id);
+      workerWoken = dispatchResult.dispatched;
     } catch {
       workerWoken = false;
     }
@@ -671,8 +674,8 @@ async function approveMergedTest(
 
   let workerWoken = false;
   try {
-    await dispatchGraphWorker(dispatchTarget(target), graph.id);
-    workerWoken = true;
+    const dispatchResult = await dispatchGraphWorker(dispatchTarget(target), graph.id);
+    workerWoken = dispatchResult.dispatched;
   } catch {
     workerWoken = false;
   }
@@ -765,8 +768,8 @@ async function approveObservedDeployment(
     }
     let workerWoken = false;
     try {
-      await dispatchGraphWorker(dispatchTarget(target), graph.id);
-      workerWoken = true;
+      const dispatchResult = await dispatchGraphWorker(dispatchTarget(target), graph.id);
+      workerWoken = dispatchResult.dispatched;
     } catch {
       workerWoken = false;
     }
@@ -881,8 +884,8 @@ async function approveObservedDeployment(
 
   let workerWoken = false;
   try {
-    await dispatchGraphWorker(dispatchTarget(target), graph.id);
-    workerWoken = true;
+    const dispatchResult = await dispatchGraphWorker(dispatchTarget(target), graph.id);
+    workerWoken = dispatchResult.dispatched;
   } catch {
     workerWoken = false;
   }
@@ -919,8 +922,8 @@ async function decideOrdinaryGate(
     try {
       const targetResult = await readTarget(client, organizationId, graph.project_id);
       if ("target" in targetResult && targetResult.target) {
-        await dispatchGraphWorker(dispatchTarget(targetResult.target), graph.id);
-        workerWoken = true;
+        const dispatchResult = await dispatchGraphWorker(dispatchTarget(targetResult.target), graph.id);
+        workerWoken = dispatchResult.dispatched;
       }
     } catch {
       workerWoken = false;
@@ -932,7 +935,7 @@ async function decideOrdinaryGate(
     note: approved
       ? workerWoken
         ? "The gate is approved and the executor worker has been woken to continue the graph."
-        : "The gate is approved. Nothing runs at this moment; the worker continues the graph on its next scheduled or manual dispatch."
+        : "The gate is approved. The executor is Not Connected, so nothing runs; manual and scheduled events cannot bypass the global worker gate."
       : "The gate is rejected. The stage stays blocked and its dependents stay skipped.",
   });
 }

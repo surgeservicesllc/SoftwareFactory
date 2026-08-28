@@ -234,6 +234,23 @@ describe("worker configuration no longer requires a paid key", () => {
     expect(configuration.codexAuth.apiKey).toBeNull();
   });
 
+  it("requires and preserves an exact command UUID for a one-shot dispatch", () => {
+    expect(() => readWorkerConfiguration({
+      ...base,
+      SOFTWAREFACTORY_CODEX_AUTH_JSON: subscriptionJson,
+      SOFTWAREFACTORY_TARGET_CLAIM_REQUIRED: "true",
+    })).toThrow("SOFTWAREFACTORY_TARGET_COMMAND_ID is required");
+
+    const commandId = "10000000-0000-4000-8000-000000000004";
+    const configuration = readWorkerConfiguration({
+      ...base,
+      SOFTWAREFACTORY_CODEX_AUTH_JSON: subscriptionJson,
+      SOFTWAREFACTORY_TARGET_CLAIM_REQUIRED: "true",
+      SOFTWAREFACTORY_TARGET_COMMAND_ID: commandId,
+    });
+    expect(configuration.targetCommandId).toBe(commandId);
+  });
+
   it("refuses to start with no Codex credential at all", () => {
     expect(() => readWorkerConfiguration(base)).toThrowError(
       expect.objectContaining({ code: "SUBSCRIPTION_CREDENTIAL_MISSING" }),

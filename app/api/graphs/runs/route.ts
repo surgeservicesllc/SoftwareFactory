@@ -11,8 +11,9 @@ export const runtime = "nodejs";
  *
  * The worker executes graphs and persists every node transition and
  * artifact; this is the read that makes those rows a surface instead of a
- * secret. It reports exactly what `list_graph_runs` returns — states as the
- * database holds them, node errors verbatim, artifact counts by kind — and
+ * secret. It reports the run facts `list_graph_runs` returns — states as the
+ * database holds them, node errors verbatim, artifact counts by kind — plus
+ * the graph's immutable template identity read directly through RLS. It
  * derives nothing, because a summary a browser invents is a summary nobody
  * audited.
  */
@@ -48,6 +49,21 @@ type GraphRunRow = {
   iteration: number | null;
   max_iterations: number | null;
 };
+
+const graphTemplateIdentityRowsSchema = z.array(z.object({
+  id: z.string().uuid(),
+  template_key: z.string().min(1).nullable(),
+  template_version: z.number().int().positive().nullable(),
+}).strict().superRefine((row, context) => {
+  if ((row.template_key === null) !== (row.template_version === null)) {
+    context.addIssue({
+      code: "custom",
+      message: "Graph template identity must be wholly present or wholly absent.",
+    });
+  }
+}));
+
+type GraphTemplateIdentity = z.infer<typeof graphTemplateIdentityRowsSchema>[number];
 
 /** A bigint the driver may hand back as a string, kept null when it is null. */
 function numberOrNull(value: string | number | null | undefined): number | null {
@@ -111,6 +127,37 @@ export async function GET(request: Request) {
           };
         })
       : null;
+
+    // `list_graph_runs` predates the immutable template identity added for the
+    // full-lifecycle v2 release bridge. Read that identity through the same
+    // authenticated, tenant-scoped client until the RPC itself can be extended
+    // by a forward migration. Never infer v2 from lifecycle stages: legacy v1
+    // runs have the same stage shape and must stay distinguishable.
+    const graphIds = [...new Set(rows.map((row) => row.graph_id))];
+    const identitiesByGraphId = new Map<string, GraphTemplateIdentity>();
+    if (!briefing && graphIds.length > 0) {
+      const identityResult = await client
+        .from("graphs")
+        .select("id,template_key,template_version")
+        .eq("organization_id", activeOrganization.id)
+        .in("id", graphIds);
+      if (identityResult.error) return databaseErrorResponse(identityResult.error);
+
+      const parsedIdentities = graphTemplateIdentityRowsSchema.safeParse(identityResult.data ?? []);
+      if (!parsedIdentities.success) {
+        throw new Error("Graph template identity evidence is malformed.");
+      }
+      for (const identity of parsedIdentities.data) {
+        identitiesByGraphId.set(identity.id, identity);
+      }
+      if (
+        identitiesByGraphId.size !== graphIds.length
+        || graphIds.some((graphId) => !identitiesByGraphId.has(graphId))
+      ) {
+        throw new Error("Graph template identity evidence is incomplete.");
+      }
+    }
+
     return jsonNoStore({
       activeOrganizationId: activeOrganization.id,
       runs: briefingRuns ?? rows.map((row) => ({
@@ -150,6 +197,8 @@ export async function GET(request: Request) {
         // Reported rather than derived: a graph is a lifecycle because its plan
         // staged its nodes, and the database is where that was decided.
         isLifecycle: row.is_lifecycle === true,
+        templateKey: identitiesByGraphId.get(row.graph_id)?.template_key ?? null,
+        templateVersion: identitiesByGraphId.get(row.graph_id)?.template_version ?? null,
         iteration: row.iteration ?? 1,
         maxIterations: row.max_iterations ?? 1,
       })),

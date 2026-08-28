@@ -290,6 +290,10 @@ describe("SECURITY DEFINER functions", () => {
       // `complete_` accepts only an already-sealed credential — plaintext
       // never crosses this boundary in either direction.
       "claim_ai_auth_session",
+      // A dispatch-bound Phase 1C wake may commit only the exact command UUID
+      // supplied by the trusted server. The established v2 claim remains for
+      // the disabled-by-default scheduled drain.
+      "claim_phase1c_run_by_command_v2",
       "claim_phase1c_run_v2",
       // The graph executor's four capabilities, mirroring the Phase 1C
       // pattern: claim an unrun graph atomically (run + node_runs + the whole
@@ -297,6 +301,7 @@ describe("SECURITY DEFINER functions", () => {
       // terminal-states-are-final rule the member path enforces, append
       // artifacts, and close the run — where incomplete input can never be
       // recorded as COMPLETED. No credential material crosses any of them.
+      "claim_planned_graph_by_id_v2",
       "claim_planned_graph_v2",
       // The provider sign-in path, added with the credential vault. `claim_`
       // and `resolve_` are reachable only by presenting a valid one-time code,
@@ -310,6 +315,7 @@ describe("SECURITY DEFINER functions", () => {
       // wrappers. The legacy completion functions remain implementation
       // details, so a terminal run can never strand its graph bridge.
       "complete_graph_run_with_phase1c_bridge_as_worker",
+      "complete_graph_run_with_validated_release_as_worker",
       "complete_phase1c_run_with_graph_bridge_as_worker",
       "complete_reviewer_with_verifications_as_worker",
       "create_graph_from_plan_with_release_identity_as_server",

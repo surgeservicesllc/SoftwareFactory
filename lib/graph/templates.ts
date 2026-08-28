@@ -35,6 +35,18 @@ import type { ResourceRef, RiskLevel } from "@/lib/graph/types";
 export const TEMPLATE_CATEGORIES = ["AUDIT", "BUILD", "REVIEW", "INVESTIGATION"] as const;
 export type TemplateCategory = (typeof TEMPLATE_CATEGORIES)[number];
 
+/**
+ * Exact canonical JSONB digest admitted by the Full Lifecycle v2 launch
+ * boundary after release-bound post-deploy validation was introduced.
+ *
+ * This identity is also carried in every worker claim. It is intentionally a
+ * digest, not a template-version shortcut: graphs launched before this plan
+ * revision retain their stored schemas and must finish through the legacy
+ * one-shot monitor contract.
+ */
+export const FULL_LIFECYCLE_V2_POSTDEPLOY_PLAN_SHA256 =
+  "0ec1e97b80dc8696872d88162c5271f9ea822e7dea79556c5470730a025d3b49";
+
 export type TemplateNode = {
   readonly nodeId: string;
   readonly job: string;
@@ -243,6 +255,7 @@ const deploymentObservationSchema = z.object({
   repository: repositoryFullNameSchema,
   sha: exactCommitShaSchema,
   ref: z.string().min(1).max(255),
+  providerRef: z.string().min(1).max(255).optional(),
   deploymentId: z.number().int().nullable(),
   environment: z.literal("Production"),
   state: z.literal("success"),
@@ -253,7 +266,7 @@ const deploymentObservationSchema = z.object({
   dev_seed: z.literal(true).optional(),
 }).strict();
 
-const productionObservationSchema = z.object({
+const legacyProductionObservationSchema = z.object({
   observation: z.literal("production_http_probe"),
   deploymentId: z.string().uuid(),
   url: z.string().url(),
@@ -270,6 +283,38 @@ const productionObservationSchema = z.object({
   ]),
   dev_seed: z.literal(true).optional(),
 }).strict();
+
+const productionValidationCheckSchema = z.object({
+  stage: z.enum(["identity", "availability", "data_integration", "quality_security", "observation"]),
+  name: z.string().min(1).max(120),
+  required: z.literal(true),
+  result: z.literal("pass"),
+}).passthrough();
+
+const passedProductionObservationSchema = z.object({
+  observation: z.literal("production_http_probe"),
+  deploymentId: z.string().uuid(),
+  /** Immutable Vercel/GitHub deployment URL, retained as provider identity. */
+  deploymentUrl: z.string().url(),
+  /** Public project URL that was actually probed. */
+  url: z.string().url(),
+  status: z.number().int().min(200).max(299),
+  healthy: z.literal(true),
+  releaseSha: exactCommitShaSchema,
+  observedAt: z.string(),
+  startedAt: z.string(),
+  completedAt: z.string(),
+  latencyMs: z.number().nonnegative(),
+  postDeployValidation: z.literal("passed"),
+  observationWindowComplete: z.literal(true),
+  checks: z.array(productionValidationCheckSchema).length(5),
+  dev_seed: z.literal(true).optional(),
+}).strict();
+
+const productionObservationSchema = z.union([
+  passedProductionObservationSchema,
+  legacyProductionObservationSchema,
+]);
 
 /**
  * Which schema a capability's output must satisfy.
@@ -622,12 +667,13 @@ export const GRAPH_TEMPLATES: readonly GraphTemplate[] = Object.freeze([
       },
       {
         nodeId: "monitor",
-        job: "Probe the exact deployment URL recorded on this graph's bridge, tied to its deployment identity, and report what the running system returned.",
+        job: "Probe the project's public production URL, bind its health response to the bridge's exact deployment commit, and require availability, Supabase reachability, tenant-auth refusal, security headers, exact-release CI, and a bounded observation window.",
         capability: "synthesis",
         executor: "ANCHOR",
         // A just-succeeded deployment can still need a bounded warm-up before
-        // its public URL is healthy. Keep that observation inside the same
-        // explicit lifecycle envelope rather than accepting a transient 503.
+        // its public alias is healthy. Keep release identity plus the complete
+        // observation contract inside the lifecycle envelope rather than
+        // accepting a transient 503 or a protected provider URL redirect.
         timeoutMs: 480_000,
         dependsOn: ["deploy"],
         lifecycleStage: "MONITORING",
@@ -648,7 +694,7 @@ export const GRAPH_TEMPLATES: readonly GraphTemplate[] = Object.freeze([
       { from: "implement", to: "review", reason: "VERIFICATION", detail: "Review observes the exact produced commit, pull request, and deterministic validation." },
       { from: "review", to: "test", reason: "VERIFICATION", detail: "CI is read for the exact reviewed pull-request head." },
       { from: "test", to: "deploy", reason: "POLICY", detail: "A HUMAN merge decision and recorded merge identity precede deployment observation." },
-      { from: "deploy", to: "monitor", reason: "VERIFICATION", detail: "Monitoring probes the exact deployment URL the bridge recorded." },
+      { from: "deploy", to: "monitor", reason: "VERIFICATION", detail: "Monitoring probes the project's public production URL while preserving the bridge's exact provider deployment identity." },
     ],
     feedbackEdges: [
       { from: "monitor", to: "goal", reason: "DATA", detail: "What the running system reported becomes the next goal - the continuous feedback loop on the owner's board." },

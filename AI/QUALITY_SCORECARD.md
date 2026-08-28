@@ -2,6 +2,54 @@
 
 Last reviewed: 2026-08-28
 
+**Addendum, 2026-08-28 — final ten-step Factory release candidate:** Step 8
+now accepts the assigned bot's provider/model for record-only work, persists
+one immutable command route, and reports disabled execution truthfully. Launch
+and gate UI retain `workerWoken` plus the exact server note, suppress automatic
+polling when the worker is OFF, and expose bounded/manual refresh. Application
+and workflow gates are exact-`true`, target-bound, and manual graph dispatch is
+main-only. Mutation scopes reject reruns and a different triggering actor.
+Public health joins the exact alias, Vercel project/deployment ID and URL,
+main SHA/ref, and Supabase project; the hosted workflow compares that URL to
+GitHub's exact Vercel Production status before and after database work.
+Production worker/auth-broker variables are explicitly OFF and no execution
+workflow is active. Verdict: **LOCAL PASS; EXACT-HEAD PUBLICATION, ORDERED
+HOSTED MIGRATIONS, AND SIGNED-IN RECORD/RELOAD ACCEPTANCE PENDING**. Workers,
+autonomy, and automatic actions remain OFF; the kill switch remains ON. Final
+local evidence: lint/typecheck green, **434 test files / 5,121 tests passed**
+(3 files / 7 tests skipped), and a **170/170-page production build**.
+
+**Addendum, 2026-08-28 — Step 10 public URL configuration (ADR-156):**
+the project detail page now supplies the missing owner/admin writer for the
+public production URL, without changing the existing three-argument detail
+RPC or provider deployment identity. The forward migration validates the
+durable column, uses a pinned `SECURITY DEFINER` boundary, refuses archived
+projects, retains projects FORCE RLS, and routes real changes through the
+existing immutable project audit trigger. URL safety rejects credentials and
+likely-secret path material at the database boundary, query/fragment material,
+non-HTTPS, private/localhost/intranet, ambiguous
+numeric, IPv6-literal, and non-standard-port targets; runtime monitoring still
+pins and checks the address actually connected. Vercel Production now carries
+an independent expected Supabase project ref, and `/api/health` fails closed
+with bounded status when the configured URL does not match it. Focused evidence is **89/89
+tests**, focused ESLint clean, and full typecheck green. Verdict: **LOCAL PASS;
+HOSTED MIGRATION AND SIGNED-IN VALUE/AUDIT ACCEPTANCE PENDING**. No live value
+or execution control changed. Migration LF SHA-256:
+`0856ddee447280a1bb4418f25d6a6d4650687e168fffcd5e98e8ce15edd62b27`.
+
+**Addendum, 2026-08-28 — exact-target one-shot claims (ADR-155):** local
+evidence passes 106/106 focused tests across target-claim behavior and
+contracts, graph/Phase 1C stores, environment validation, workflow contracts,
+full-chain schema-security invariants, and graph-worker execution. Focused
+ESLint and scoped diff checks pass. The database selector itself filters the
+requested UUID before lock/claim, preserves every existing scheduler, budget,
+lease, breaker, RLS, ACL, and audit boundary, and exposes public project URL
+without overwriting exact deployment lineage. Scheduled and one-shot graph
+workers share an exact global gate that remains OFF; provider execution,
+autonomy, and automatic actions remain OFF; the kill
+switch remains ON. Verdict: **LOCAL PASS; HOSTED MIGRATION AND TARGET CANARY
+PENDING**. This addendum does not upgrade production or end-to-end acceptance.
+
 **Addendum, 2026-08-28 — AI Factory loading gate and Factory v2 release:** the signed-out
 factory gate renders on the first server response and performs zero protected
 browser reads. The portal layout and leaf page share one request-scoped,

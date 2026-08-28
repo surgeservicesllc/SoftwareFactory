@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 
 import type { CompiledNode } from "@/lib/graph/compiler";
+import { FULL_LIFECYCLE_V2_POSTDEPLOY_PLAN_SHA256 } from "@/lib/graph/templates";
 import { buildAnchorNodeExecutor } from "@/lib/worker/anchor-node-executor";
 
 /**
@@ -37,6 +39,9 @@ function anchorNode(capability: CompiledNode["capability"], nodeKey = "verify"):
 const connected = {
   templateKey: "full_lifecycle",
   templateVersion: 2,
+  // A graph keeps the plan identity it launched with. Most tests exercise the
+  // legacy contract; validation-specific tests opt into the exact new digest.
+  templatePlanSha256: "ac9bde8fc1cdd21e735f02b1fa7d940ab680c2bde8c1ec24d704d42c59045a09",
   repositoryFullName: "owner/repository",
   baseBranch: "main",
   baseSha: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -56,6 +61,7 @@ const connected = {
   mergeCommitSha: "89abcdef0123456789abcdef0123456789abcdef",
   deploymentId: "30000000-0000-4000-8000-000000000309",
   deploymentUrl: "https://softwarefactory-exact-owner.vercel.app",
+  projectProductionUrl: "https://www.theagoras.com",
   gitHubToken: "ghs_workflow-token",
   requiredCheckNames: ["CI"],
   ciMaxAttempts: 1,
@@ -471,7 +477,7 @@ describe("the TEST anchor (qa): the CI verdict for this commit", () => {
 });
 
 describe("the MONITOR anchor (synthesis): the production probe", () => {
-  it("records a healthy probe with its status and latency", async () => {
+  it("keeps a pre-release plan digest on the legacy provider-URL probe", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(new Response("ok", { status: 200 }));
     const execute = buildAnchorNodeExecutor({ ...connected, fetchImpl });
 
@@ -504,6 +510,156 @@ describe("the MONITOR anchor (synthesis): the production probe", () => {
     if (result.status !== "FAILED") return;
     expect(result.error).toContain("received 503");
     expect(result.error).toContain("production_http_probe");
+  });
+
+  it("completes release-bound validation only after public health, auth, security, CI, and a bounded window pass", async () => {
+    const publicHeaders = {
+      "content-security-policy": "default-src 'self'",
+      "strict-transport-security": "max-age=63072000",
+      "x-content-type-options": "nosniff",
+      "x-frame-options": "DENY",
+      "referrer-policy": "strict-origin-when-cross-origin",
+    };
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === connected.projectProductionUrl) {
+        return new Response("ok", { status: 200, headers: publicHeaders });
+      }
+      if (url === `${connected.projectProductionUrl}/api/health`) {
+        return new Response(JSON.stringify({
+          status: "ok",
+          service: "SoftwareFactory",
+          database: "reachable",
+          databaseProject: "matched",
+          releaseSha: connected.mergeCommitSha,
+          releaseRef: connected.baseBranch,
+        }), { status: 200 });
+      }
+      if (url === `${connected.projectProductionUrl}/api/graphs/runs?limit=1`) {
+        return new Response(JSON.stringify({ error: "Authentication required." }), { status: 401 });
+      }
+      if (url.includes(`/commits/${connected.mergeCommitSha}/check-runs`)) {
+        return checkRunsResponse([{
+          name: "CI",
+          status: "completed",
+          conclusion: "success",
+          html_url: "https://github.com/owner/repository/actions/runs/1",
+        }]);
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    });
+    const execute = buildAnchorNodeExecutor({
+      ...connected,
+      templatePlanSha256: FULL_LIFECYCLE_V2_POSTDEPLOY_PLAN_SHA256,
+      validationObservationAttempts: 3,
+      monitorMaxAttempts: 3,
+      fetchImpl,
+    });
+
+    const result = await execute(anchorNode("synthesis", "monitor"));
+
+    expect(result.status).toBe("SUCCEEDED");
+    if (result.status !== "SUCCEEDED") return;
+    expect(result.output).toMatchObject({
+      observation: "production_http_probe",
+      deploymentId: connected.deploymentId,
+      deploymentUrl: connected.deploymentUrl,
+      url: connected.projectProductionUrl,
+      releaseSha: connected.mergeCommitSha,
+      status: 200,
+      healthy: true,
+      postDeployValidation: "passed",
+      observationWindowComplete: true,
+      checks: [
+        { stage: "identity", result: "pass" },
+        { stage: "availability", result: "pass" },
+        { stage: "data_integration", result: "pass" },
+        { stage: "quality_security", result: "pass" },
+        { stage: "observation", result: "pass" },
+      ],
+    });
+    expect(fetchImpl.mock.calls.filter(([input]) => String(input) === connected.projectProductionUrl)).toHaveLength(3);
+  });
+
+  it("refuses to validate a healthy public alias whose health endpoint identifies another release", async () => {
+    const publicHeaders = {
+      "content-security-policy": "default-src 'self'",
+      "strict-transport-security": "max-age=63072000",
+      "x-content-type-options": "nosniff",
+      "x-frame-options": "DENY",
+      "referrer-policy": "strict-origin-when-cross-origin",
+    };
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === connected.projectProductionUrl) {
+        return new Response("ok", { status: 200, headers: publicHeaders });
+      }
+      if (url === `${connected.projectProductionUrl}/api/health`) {
+        return new Response(JSON.stringify({
+          status: "ok",
+          service: "SoftwareFactory",
+          database: "reachable",
+          databaseProject: "matched",
+          releaseSha: "ffffffffffffffffffffffffffffffffffffffff",
+          releaseRef: connected.baseBranch,
+        }), { status: 200 });
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    });
+    const execute = buildAnchorNodeExecutor({
+      ...connected,
+      templatePlanSha256: FULL_LIFECYCLE_V2_POSTDEPLOY_PLAN_SHA256,
+      validationObservationAttempts: 3,
+      monitorMaxAttempts: 3,
+      fetchImpl,
+    });
+
+    const result = await execute(anchorNode("synthesis", "monitor"));
+
+    expect(result.status).toBe("FAILED");
+    if (result.status !== "FAILED") return;
+    expect(result.error).toContain("does not identify exact release");
+    expect(result.error).toContain(connected.mergeCommitSha.slice(0, 8));
+  });
+
+  it("refuses a public health response that is not bound to the configured Supabase project", async () => {
+    const publicHeaders = {
+      "content-security-policy": "default-src 'self'",
+      "strict-transport-security": "max-age=63072000",
+      "x-content-type-options": "nosniff",
+      "x-frame-options": "DENY",
+      "referrer-policy": "strict-origin-when-cross-origin",
+    };
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === connected.projectProductionUrl) {
+        return new Response("ok", { status: 200, headers: publicHeaders });
+      }
+      if (url === `${connected.projectProductionUrl}/api/health`) {
+        return new Response(JSON.stringify({
+          status: "ok",
+          service: "SoftwareFactory",
+          database: "reachable",
+          databaseProject: "mismatch",
+          releaseSha: connected.mergeCommitSha,
+          releaseRef: connected.baseBranch,
+        }), { status: 200 });
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    });
+    const execute = buildAnchorNodeExecutor({
+      ...connected,
+      templatePlanSha256: FULL_LIFECYCLE_V2_POSTDEPLOY_PLAN_SHA256,
+      validationObservationAttempts: 3,
+      monitorMaxAttempts: 3,
+      fetchImpl,
+    });
+
+    const result = await execute(anchorNode("synthesis", "monitor"));
+
+    expect(result.status).toBe("FAILED");
+    if (result.status !== "FAILED") return;
+    expect(result.error).toContain("reachable Supabase");
   });
 
   it("polls boundedly while the exact deployment is warming up", async () => {
@@ -630,6 +786,54 @@ describe("the DEPLOY anchor: the exact Vercel Production deployment", () => {
       deploymentStatusUrl,
       expect.any(Object),
     );
+  });
+
+  it("accepts Vercel's immutable SHA provider ref while preserving the lifecycle base branch", async () => {
+    const shaRefDeployment = { ...deployment, ref: connected.mergeCommitSha };
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify([shaRefDeployment]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([{
+        state: "success",
+        creator: { login: "vercel[bot]" },
+        environment_url: connected.deploymentUrl,
+      }]), { status: 200 }));
+    const execute = buildAnchorNodeExecutor({ ...connected, fetchImpl });
+
+    const result = await execute(anchorNode("implementation", "deploy"));
+
+    expect(result.status).toBe("SUCCEEDED");
+    if (result.status !== "SUCCEEDED") return;
+    expect(result.output).toMatchObject({
+      sha: connected.mergeCommitSha,
+      ref: connected.baseBranch,
+      providerRef: connected.mergeCommitSha,
+    });
+  });
+
+  it("omits providerRef when an existing graph's stored DEPLOY schema rejects it", async () => {
+    const shaRefDeployment = { ...deployment, ref: connected.mergeCommitSha };
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify([shaRefDeployment]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([{
+        state: "success",
+        creator: { login: "vercel[bot]" },
+        environment_url: connected.deploymentUrl,
+      }]), { status: 200 }));
+    const execute = buildAnchorNodeExecutor({ ...connected, fetchImpl });
+    const legacyDeployNode = {
+      ...anchorNode("implementation", "deploy"),
+      outputSchema: z.object({ providerRef: z.never().optional() }).passthrough(),
+    } as CompiledNode;
+
+    const result = await execute(legacyDeployNode);
+
+    expect(result.status).toBe("SUCCEEDED");
+    if (result.status !== "SUCCEEDED") return;
+    expect(result.output).toMatchObject({
+      sha: connected.mergeCommitSha,
+      ref: connected.baseBranch,
+    });
+    expect(result.output).not.toHaveProperty("providerRef");
   });
 
   it("waits boundedly while the exact deployment is still pending", async () => {

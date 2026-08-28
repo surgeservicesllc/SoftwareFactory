@@ -2,6 +2,93 @@
 
 Last reviewed: 2026-08-28
 
+## 2026-08-28: ten-step Factory release candidate is fail-closed end to end
+
+The remaining Step 8 `invalid Phase 1C command plan` path is corrected in the
+application and the protected database release. A record-only command accepts
+the bot assignment's real provider/model (including Claude), persists one
+command/task route, and launches at most its one analysis graph. The UI now
+retains the server's exact `workerWoken` and `note` result: with production
+containment engaged it says **Not Connected**, does not claim execution
+started, does not poll forever, and retains an exact manual refresh. Gate
+continuations use the same fail-closed behavior.
+
+Both Phase 1C and graph dispatches now require an exact application-side
+`true` switch as well as their GitHub job switch. One-shot workflows require
+the exact command/graph UUID, graph manual dispatch is main-only, and the
+release workflow refuses reruns of mutation scopes. Production GitHub
+variables explicitly hold Phase 1C, graph, schedules, and the auth broker OFF;
+the previously active auth-broker run was cancelled and there are no active
+execution runs. Autonomy/automatic actions remain OFF and the global database
+kill switch remains ON.
+
+The new public `/api/health` is now a release identity join, not a generic
+liveness response. It requires the exact main SHA, exact public alias, exact
+Vercel project ID, immutable Vercel deployment ID/URL, and exact Supabase
+project ref before one bounded anonymous database read. The hosted workflow
+requires the GitHub Vercel deployment URL to equal the deployment URL reported
+by the public alias, closing the independent-evidence gap. Vercel Production
+has all five non-secret identity/containment values configured for the next
+deployment.
+
+The release remains **local/pass, publication pending** until the reviewed
+commit reaches `main`, all four exact-head CI jobs and the exact Vercel
+deployment are green, and only migrations `20260828000100`, `20260828000200`,
+then `20260828000300` pass their ordered forward-only hosted scopes. No hosted
+ledger claim is made in this section. Final local evidence is lint and
+typecheck green, 434 Vitest files / 5,121 tests passed (3 files / 7 tests
+skipped), and a 170/170-page production build.
+
+## 2026-08-28: public production URL configuration is locally complete
+
+Forward migration `20260828000100_project_production_url_configuration.sql`
+(LF SHA-256 `0856ddee447280a1bb4418f25d6a6d4650687e168fffcd5e98e8ce15edd62b27`)
+adds the missing writer for the public project URL that Full Lifecycle Step 10
+observes. The original three-argument `update_project_details` RPC remains
+unchanged. A separate authenticated, owner/admin-only `SECURITY DEFINER` RPC
+with a pinned search path refuses archived projects and rejects non-HTTPS,
+credential-bearing, query/fragment, localhost/private, ambiguous numeric,
+likely-secret-bearing path, IPv6-literal, and non-standard-port targets. The projects column now carries a
+validated safe-target constraint while its forced RLS and existing immutable
+`project.updated` audit trigger remain in force.
+
+Project detail now exposes a clear **Configure production URL** field and the
+same validation runs before the request for useful feedback; the database
+independently repeats it. Focused local evidence is 89/89 tests plus clean
+focused ESLint and full typecheck. No live project value was changed, the
+migration is not hosted, and workers, autonomy, automatic actions, and the
+global kill switch are unchanged.
+
+Vercel Production now has the non-secret
+`SOFTWAREFACTORY_EXPECTED_SUPABASE_PROJECT_REF` config bound to exact project
+`qpuofpmagrmyamahqwxw`. The new `/api/health` refuses a missing/mismatched
+identity before touching Supabase and reports only `matched`/`mismatched`; the
+next production deployment is required before that config and route are live.
+
+## 2026-08-28: exact-target one-shot worker claims are locally complete
+
+Forward migration `20260828000200_target_bound_worker_claims.sql` makes a
+repository-dispatch or manual one-shot wake an immutable database claim
+filter, not a diagnostic hint. Graph and Phase 1C selectors apply the requested
+UUID during stale cleanup, eligibility/admission, locking, and withheld-work
+diagnosis; they cannot claim and execute a neighboring queue item. Existing
+scheduled calls delegate to the same selectors with a null target, preserving
+their current global semantics and disabled-by-default gates. The target graph
+claim also projects the project's public production URL separately from the
+exact provider deployment URL used by release-lineage evidence.
+
+The workflows now require a graph/command UUID for repository-dispatch and
+manual one-shot execution. Every graph-worker trigger and application wake is
+also behind the exact global `SOFTWAREFACTORY_GRAPH_WORKER_ENABLED` switch,
+which is absent/OFF in production. They do not enable either worker, either schedule,
+provider execution, autonomy, automatic actions, or the release kill switch.
+An ineligible exact Phase 1C target returns no row after target-scoped stale
+cleanup, allowing that cleanup to commit without ever claiming a neighbor.
+Focused local evidence includes the exact claim/cleanup and catalog suites plus clean focused ESLint and migration
+chain/schema-security coverage. This is not hosted or production acceptance:
+publication, exact-head gates, protected application of only `20260828000200`,
+and a target-bound canary remain pending.
+
 ## 2026-08-28: Factory v2 release and hosted lineage are production accepted
 
 `/solutions/ai-factory` now passes a server-verified viewer hint into the
@@ -1268,7 +1355,7 @@ Phase 2C is the intelligence layer that picks agent, provider, and model per uni
 - Codex runs with workspace-write sandboxing, approval policy `never`, workspace network disabled, web search disabled, a controlled process environment, an isolated `CODEX_HOME`, bounded turns/tokens/time, and redacted event projection.
 - Dependency bootstrap runs `npm ci --ignore-scripts` in a restricted pinned Node container with bridge networking. Deterministic `git diff --check`, lint, typecheck, tests, and build run in the same pinned image with `--network none`, a read-only root, dropped capabilities, no-new-privileges, PID/CPU/memory limits, and bounded output.
 - Publication fails closed for forbidden paths, symlinks, binary changes, likely secrets, more than 200 changed files, a file over 2 MiB, or more than 10 MiB total changed content. Protected paths require an exact unexpired approval containing every protected path, while RED work is still categorically non-executable.
-- `SOFTWAREFACTORY_REQUIRED_CHECKS` is mandatory for an enabled worker. The reviewed workflow fixes it to `Lint, typecheck, test, and build|Browser and accessibility tests`. CI passes only after the complete check set is returned, every observed check is terminal and acceptable, both required names are present with exact `success`, the same passing set is observed twice, and the draft PR still has the exact number/base/head.
+- `SOFTWAREFACTORY_REQUIRED_CHECKS` is mandatory for an enabled worker. The reviewed workflow fixes it to `Lint, typecheck, test, and build|Browser and accessibility tests 1/3|Browser and accessibility tests 2/3|Browser and accessibility tests 3/3`. CI passes only after the complete check set is returned, every observed check is terminal and acceptable, all four required names are present with exact `success`, the same passing set is observed twice, and the draft PR still has the exact number/base/head.
 - The worker commits and pushes only the isolated branch, creates or recovers an open draft pull request, observes checks for the exact head SHA, performs at most one configured repair attempt, and never merges or deploys.
 - Run events, artifacts, validations, check summaries, changed paths, cumulative usage, cancellation, retryability, terminal results, and activity events are bounded and durable. New evidence tables are append-only. Migration `130010` makes artifact replay exact, persists a coherent draft-PR projection, permits retry only from no-provider/branch-only or fully coherent branch/commit/optional-draft evidence, revalidates remote recovery state, converts exhausted stale leases/cancellation to terminal evidence, and publishes bounded structured reports. Migration `130011` ensures retries consume, rather than reset, the original total turn/input/output budgets.
 - The first live attempt proved the failure boundary: command `0c4d0ca8-1867-4d00-80cf-476401491a17` produced run `f4594556-6f72-4763-a480-6993939e3651`; worker Actions run `31746057998` claimed attempt 1 of 2, recorded a provider thread identifier, then failed on Codex startup before any changed file or GitHub publication. The row is durably failed and mechanically retryable, but its immutable planned base is older than current `main`; retry would correctly fail `stale_base_sha`, so it must remain historical evidence.
@@ -1313,7 +1400,7 @@ Phase 2C is the intelligence layer that picks agent, provider, and model per uni
 - GitHub Actions forbids secret names beginning with `GITHUB_`. The workflow expects protected repository secrets named `SOFTWAREFACTORY_SUPABASE_URL`, `SOFTWAREFACTORY_SUPABASE_SERVICE_ROLE_KEY`, `SOFTWAREFACTORY_CODEX_AUTH_JSON`, `SOFTWAREFACTORY_GITHUB_APP_ID`, `SOFTWAREFACTORY_GITHUB_APP_PRIVATE_KEY_BASE64`, `SOFTWAREFACTORY_GITHUB_CANDIDATE_APP_ID`, and `SOFTWAREFACTORY_GITHUB_CANDIDATE_APP_PRIVATE_KEY_BASE64`, mapping the final four to runtime `GITHUB_*` variables only inside the worker step.
 - `SOFTWAREFACTORY_OPENAI_API_KEY` is absent and must stay absent. Do not restore that value and do not add a replacement: Phase 1C has no paid-API path. The worker requires `SOFTWAREFACTORY_CODEX_AUTH_JSON` instead — the contents of `~/.codex/auth.json` from a subscription `codex login`. Supplying an API key without an explicit `SOFTWAREFACTORY_CODEX_AUTH_MODE=api_key` is a refused configuration, not a fallback.
 - The non-secret Actions variable `SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED` is a final fail-closed gate. Unless it equals literal `true`, repository-dispatch and schedule triggers skip the job. It is currently absent/OFF.
-- `SOFTWAREFACTORY_REQUIRED_CHECKS` is a non-secret runtime policy value, not an activation switch. It must contain 1-20 unique pipe-delimited exact GitHub check names (maximum 300 characters each) and is fixed in the reviewed workflow to the two CI job names above. Missing/invalid/mismatched required checks stop or time out the worker; they never degrade to "all available checks."
+- `SOFTWAREFACTORY_REQUIRED_CHECKS` is a non-secret runtime policy value, not an activation switch. It must contain 1-20 unique pipe-delimited exact GitHub check names (maximum 300 characters each) and is fixed in the reviewed workflow to the four CI job names above. Missing/invalid/mismatched required checks stop or time out the worker; they never degrade to "all available checks."
 - Secret values never belong in source, Supabase rows, prompts, model output, browser payloads, logs, fixtures, reports, screenshots, or repository artifacts.
 
 ## Current verification evidence
