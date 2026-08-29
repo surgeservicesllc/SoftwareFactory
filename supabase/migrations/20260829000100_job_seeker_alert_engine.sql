@@ -131,7 +131,14 @@ as $function$
     s.id,
     a.organization_id,
     a.user_id,
-    u.email::text,
+    -- Read through the row, not the column name: this text parses against
+    -- real Supabase (where auth.users.email exists) AND the integration
+    -- harness's minimal auth shim (where it does not) — a named column here
+    -- would fail CREATE FUNCTION on the shim and take the whole migration
+    -- chain down with it. On the shim the projection is null, and the WHERE
+    -- below filters those rows out, which is also the honest behavior for a
+    -- real account with no email.
+    (to_jsonb(u) ->> 'email'),
     s.name,
     s.query,
     a.cadence,
@@ -170,7 +177,7 @@ as $function$
   left join public.job_seeker_preferences pref
     on pref.organization_id = a.organization_id
   where a.active
-    and u.email is not null
+    and (to_jsonb(u) ->> 'email') is not null
     and (
       a.last_scanned_at is null
       or (a.cadence = 'asap'   and a.last_scanned_at <= p_now - interval '55 minutes')
