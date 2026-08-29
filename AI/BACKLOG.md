@@ -17,24 +17,30 @@ Last triaged: 2026-08-29
   every unified card from the recorded-facts evaluator with reasons, gaps,
   qualified accent, best-match sort, and a minimum-score filter; per-board
   search metering events feeding the discovery credit meter.
-- [ ] Increment 2 remainder: alert cadence UI stays unexposed until the
-  delivery engine exists (ADR-141's rule); seen-jobs/delivery ledger
-  arrives with the alerts engine.
-- [x] Increment 3 (built; hosted apply + owner env still ahead): alert
-  engine as a Vercel Cron route over two service_role-only definer
-  functions; pure dedupe → saved filters → score → never-repeat →
-  email-composition core; env-gated Resend adapter; delivery ledger with
-  the never-repeat UNIQUE constraint, append-only by trigger; ASAP/Daily/
-  Weekly cadence controls that render **Not Connected** and refuse writes
-  until RESEND_API_KEY, JOB_ALERT_EMAIL_FROM and CRON_SECRET exist
-  (ADR-164). To light it up: apply scope job-seeker-alert-engine, set the
-  three env vars, redeploy.
-- [ ] E2E acceptance: real end-to-end pass over auth/RLS, search, filters,
-  saved searches, dedup, alerts, email, mobile UX before any
-  "production ready" claim.
+- [x] Increment 2 remainder (superseded by increment 3): the cadence UI
+  shipped with the delivery engine, gated behind the connected check;
+  the seen-jobs/delivery ledger arrived in 20260829000300.
+- [x] Increment 3 (code merged #437, schema applied to hosted 2026-08-29
+  run 33263020948 with green postflight): alert engine as a Vercel Cron
+  route over two service_role-only definer functions; pure dedupe →
+  saved filters → score → never-repeat → email-composition core;
+  env-gated Resend adapter; delivery ledger with the never-repeat UNIQUE
+  constraint, append-only by trigger; ASAP/Daily/Weekly cadence controls
+  that render **Not Connected** and refuse writes until RESEND_API_KEY,
+  JOB_ALERT_EMAIL_FROM and CRON_SECRET exist (ADR-164). Remaining to
+  light it up: the owner sets those three env vars in Vercel and
+  redeploys — nothing else.
+- [ ] E2E acceptance: CI's browser/accessibility shards passed on the
+  exact merged head; a dedicated harness re-run of the job-seeker
+  journey + layout suites on merged main is in flight (result to be
+  recorded here). The live email leg stays unverifiable until the owner
+  env vars exist, so no unqualified "production ready" claim yet — the
+  alert path's honest state in production is **Not Connected**, verified
+  live (503 fail-closed probe).
 - [ ] Owner-supplied credentials would light up: USAJOBS, Adzuna, Jooble,
-  Careerjet, Reed, ZipRecruiter (see catalogue notes). The Muse is the
-  strongest next live-adapter candidate (public API, no key needed).
+  Careerjet, Reed, ZipRecruiter (see catalogue notes). All keyless
+  general boards worth adapting are live (13); the rest are honest
+  link-outs.
 
 ## Exact Blackstone Supabase Auth bootstrap (2026-08-28, ADR-160)
 

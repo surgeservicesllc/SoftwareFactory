@@ -2,7 +2,36 @@
 
 Last updated: 2026-08-29
 
-## Newest (2026-08-29 later): Job Search increment 2 — match scores live on results, saved searches real (ADR-163 addendum)
+## Newest (2026-08-29 evening): Job Search increments 2–3 shipped end to end — alert engine live in schema, waiting only on owner env (ADR-164)
+
+PR #437 (increments 2+3 together) squash-merged to main as `2319970` after
+four real CI checks on the exact head and a fully green local suite
+(455 files / 5,412 tests); Vercel deploy verified and production probed
+(`/api/job-seeker/alerts/run` answers 503 `alerts_not_configured` — the
+designed fail-closed state; saved-searches 401 anonymous). #440 followed:
+the apply step's `workflow_dispatch` choice option had never been added,
+so scope `job-seeker-alert-engine` was undispatchable — one line, merged,
+then the hosted apply ran green (run `33263020948`, postflight verified
+forced RLS + definer ACLs).
+
+What remains for live email alerts is owner-side only: set
+`RESEND_API_KEY`, `JOB_ALERT_EMAIL_FROM`, `CRON_SECRET` in Vercel and
+redeploy (documented in `.env.example`). Until then every surface says
+**Not Connected** honestly and refuses cadence writes with 409.
+
+Traps for the next agent: the alert runner reaches the database ONLY
+through the two service_role-only definer functions — never grant the
+role a table; `record_job_seeker_alert_scan` takes camelCase jsonb keys
+from `toDeliveryRows`; 22 tests pin the latest-migration filename as a
+chain sentinel but `budget-tracker.behavior.test.ts:~423` re-applies the
+BUDGET migration semantically and must keep `20260829000200…` (a blind
+sweep broke it once — audit for semantic references before sweeping);
+`check_suite.completed` webhooks can be false-green before real jobs
+register, so gate merges on ≥4 real completed check runs; a PR whose
+`mergeable_state` is `dirty` gets NO pull_request workflow runs at all —
+merge the base first when CI seems to never schedule.
+
+## Older (2026-08-29 later): Job Search increment 2 — match scores live on results, saved searches real (ADR-163 addendum)
 
 Merged main's Job Discovery surface (ADR-141) and built on it: the search
 route scores every unified card via `loadEvaluationInputs` +

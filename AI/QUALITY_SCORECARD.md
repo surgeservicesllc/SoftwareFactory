@@ -2,6 +2,26 @@
 
 Last reviewed: 2026-08-29
 
+**Addendum, 2026-08-29 evening — Job Search increments 2–3: match scores,
+saved searches, metering, alert engine (ADR-163 addendum, ADR-164):** merged
+as #437 squash `2319970` after four real completed CI checks on the exact
+head; local suite on the merged tree **5,412 tests passed / 2 skipped across
+455 files**, lint zero-warning, typecheck clean, production build green.
+Vercel deploy of `2319970` verified `success` and production probed: the new
+alert runner answers **503 `alerts_not_configured`** (designed fail-closed
+while `CRON_SECRET` is unset), saved-searches refuses anonymous callers 401,
+`/job-seeker/search` serves 200. Hosted schema applied the same hour via
+scope `job-seeker-alert-engine` (#440 added the missing dispatch option;
+apply run `33263020948` success with in-step postflight: deliveries ledger
+exists with forced RLS, `last_scanned_at` present, both alert functions
+SECURITY DEFINER and not executable by anon/authenticated). New tests this
+increment: 10 alert-planning, 7 runner-route, 13 saved-searches-route
+(3 alert cases), 20 search-route, 21 panel. Verdict: **INCREMENT GATES PASS;
+EMAIL ALERTS ARE HONESTLY "NOT CONNECTED" IN PRODUCTION UNTIL THE OWNER SETS
+RESEND_API_KEY, JOB_ALERT_EMAIL_FROM AND CRON_SECRET; NO UNQUALIFIED
+"PRODUCTION READY" CLAIM FOR THE EMAIL LEG BEFORE A REAL DELIVERY IS
+OBSERVED.**
+
 **Addendum, 2026-08-29 — Job Search increments 1–2: thirteen live boards,
 unified dedupe, honest 52-source catalogue (ADR-163):** on the branch merged
 with main `ed1fc34` (which brought the parallel Job Discovery surface): lint
