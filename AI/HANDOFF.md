@@ -44,6 +44,8 @@ Three things the next agent must not undo:
 - **`budget_monthly_flow` and `budget_category_spend` are SECURITY INVOKER.**
   Making either a definer hands every member of an organization every other
   member's monthly totals, past a row policy that is otherwise correct.
+Both migrations are applied to hosted (run 33257354301) and the page is live.
+
 - **The `service_role` revoke in `20260829000200` is load-bearing.** That role
   is BYPASSRLS and the hosted default privileges re-grant it on every new
   table; without the revoke the six budget tables are readable past every
