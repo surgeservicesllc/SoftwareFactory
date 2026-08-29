@@ -1094,7 +1094,7 @@ export function JobSearchPanel() {
                       className="rounded-full border border-[var(--border)] px-2 py-0.5 text-xs text-[var(--muted)]"
                       title={alertsChannel.emailConnected
                         ? "The alert scheduler needs CRON_SECRET set in Vercel."
-                        : "Email alerts need RESEND_API_KEY and JOB_ALERT_EMAIL_FROM set in Vercel."}
+                        : "Email alerts need JOB_ALERT_EMAIL_FROM plus RESEND_API_KEY (or a dev-stack JOB_ALERT_SMTP_URL)."}
                     >
                       Alerts: Not Connected
                     </span>

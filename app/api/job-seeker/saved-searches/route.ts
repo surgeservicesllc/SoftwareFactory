@@ -283,7 +283,7 @@ export async function PATCH(request: Request) {
                 code: "alerts_not_connected",
                 message: channel.emailConnected
                   ? "The alert scheduler is Not Connected (CRON_SECRET is unset)."
-                  : "Alert email is Not Connected (RESEND_API_KEY, JOB_ALERT_EMAIL_FROM).",
+                  : "Alert email is Not Connected (JOB_ALERT_EMAIL_FROM plus RESEND_API_KEY or JOB_ALERT_SMTP_URL).",
               },
             },
             { status: 409 },

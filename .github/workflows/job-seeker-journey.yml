@@ -107,7 +107,9 @@ jobs:
           SUPABASE_AUTH_SMTP_SENDER_NAME: journey
           SUPABASE_AUTH_SMTP_ADMIN_EMAIL: journey@example.com
         run: |
-          npx --yes supabase@2 start -x realtime,storage-api,imgproxy,mailpit,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
+          # Mailpit stays IN this lane's stack: it is the SMTP sink the
+          # alert-email leg delivers into and reads back from over its API.
+          npx --yes supabase@2 start -x realtime,storage-api,imgproxy,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
 
       - name: Mint the journey user and point the app at the stack
         if: ${{ inputs.base_url == '' || inputs.base_url == null }}
@@ -128,6 +130,14 @@ jobs:
             echo "NEXT_PUBLIC_APP_URL=http://localhost:3000"
             echo "NEXT_PUBLIC_SUPABASE_URL=$SUPA_URL"
             echo "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=$ANON"
+            # The alert engine, wired to the lane's own local pieces: the
+            # stack's development service key, a throwaway cron bearer, and
+            # the Mailpit SMTP sink from supabase/config.toml. None of these
+            # reach beyond the runner; production email stays Resend-gated.
+            echo "SUPABASE_SERVICE_ROLE_KEY=$SERVICE"
+            echo "CRON_SECRET=journey-cron-secret-2026"
+            echo "JOB_ALERT_EMAIL_FROM=Job Alerts <alerts@journey.local>"
+            echo "JOB_ALERT_SMTP_URL=smtp://127.0.0.1:54325"
           } > .env.local
 
       - name: Build and serve the production app
@@ -147,6 +157,9 @@ jobs:
         if: ${{ inputs.base_url == '' || inputs.base_url == null }}
         env:
           JOB_SEEKER_E2E: 1
+          JOB_SEEKER_E2E_ALERTS: 1
+          JOB_SEEKER_E2E_CRON_SECRET: journey-cron-secret-2026
+          JOB_SEEKER_E2E_MAILPIT_URL: http://127.0.0.1:54324
           PLAYWRIGHT_BASE_URL: http://localhost:3000
         run: npx playwright test tests/e2e/job-seeker-journey.spec.ts --project=desktop-chromium --reporter=line
 

@@ -3015,3 +3015,30 @@ place (alert-engine functions present, ledger count 178); 000850 verified
 taking the fresh-defaults branch on .165 and the already-normalized branch
 in the PGlite harness (19 harness tests across the 000850 suites, plus the
 full-chain behavior tests, all green).
+
+## ADR-166 - The alert mailer gains a dev-stack SMTP transport so the email leg is testable end to end
+
+Date: 2026-08-29
+
+The alert engine's email step was the one part of the Job Search goal no
+automated lane could verify: Resend is the production transport and its key
+is the owner's. Rather than mock a provider (forbidden) or leave the step
+untested, the mailer gains a second transport — a deliberately minimal
+plain-SMTP conversation (EHLO, MAIL FROM, RCPT TO, DATA with RFC 5321 dot
+transparency, QUIT) over `JOB_ALERT_SMTP_URL`. It exists for exactly one
+consumer: the local Supabase stack's Mailpit sink, published on the host by
+`smtp_port = 54325` under config.toml's `[local_smtp]`. TLS or credentials
+in the URL are refused outright rather than half-implemented; Resend wins
+whenever both transports are configured; `alertEmailConnected()` treats
+either transport plus JOB_ALERT_EMAIL_FROM as connected, so the panel's
+cadence controls light up in the lane exactly as they will in production.
+
+The journey lane now proves the goal's full alert chain from outside the
+process: save a search in the browser, set its cadence through the panel's
+own control, invoke `/api/job-seeker/alerts/run` with the lane's throwaway
+CRON_SECRET exactly as Vercel Cron would, read the message back from
+Mailpit's API (direct link and the never-repeat promise asserted in the
+body), run the engine again, and count exactly one message still in the
+sink. The lane's wiring (service key, cron bearer, SMTP URL) is all local
+development material; production email remains Resend-gated and honestly
+**Not Connected** until the owner's key exists.
