@@ -1,7 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { dispatchGraphWorker, requireActiveOrganization } = vi.hoisted(() => ({
+const {
+  createGitHubInstallationToken,
+  createSupabaseGitHubWebhookClient,
+  dispatchGraphWorker,
+  getGitHubAppConfigurationForAppId,
+  getGitHubBranchReference,
+  getGitHubFile,
+  requireActiveOrganization,
+} = vi.hoisted(() => ({
+  createGitHubInstallationToken: vi.fn(),
+  createSupabaseGitHubWebhookClient: vi.fn(),
   dispatchGraphWorker: vi.fn(),
+  getGitHubAppConfigurationForAppId: vi.fn(),
+  getGitHubBranchReference: vi.fn(),
+  getGitHubFile: vi.fn(),
   requireActiveOrganization: vi.fn(),
 }));
 
@@ -11,6 +24,20 @@ vi.mock("@/lib/supabase/tenant", async (importOriginal) => ({
   requireActiveOrganization,
 }));
 vi.mock("@/lib/orchestration/dispatch", () => ({ dispatchGraphWorker }));
+vi.mock("@/lib/github/client", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/github/client")>()),
+  createGitHubInstallationToken,
+}));
+vi.mock("@/lib/github/config", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/github/config")>()),
+  getGitHubAppConfigurationForAppId,
+}));
+vi.mock("@/lib/github/service-role", () => ({ createSupabaseGitHubWebhookClient }));
+vi.mock("@/lib/github/repository", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/github/repository")>()),
+  getGitHubBranchReference,
+  getGitHubFile,
+}));
 
 import { POST } from "@/app/api/graphs/route";
 
@@ -31,16 +58,52 @@ import { POST } from "@/app/api/graphs/route";
 
 const organizationId = "44444444-4444-4444-8444-444444444444";
 const projectId = "55555555-5555-4555-8555-555555555555";
+const ownerId = "33333333-3333-4333-8333-333333333333";
 const graphId = "66666666-6666-4666-8666-666666666666";
+const baseSha = "a".repeat(40);
+const defaultGoal = "Deliver the exact requested production change.";
+const requiredChecks = [
+  "Lint, typecheck, test, and build",
+  "Browser and accessibility tests 1/3",
+  "Browser and accessibility tests 2/3",
+  "Browser and accessibility tests 3/3",
+];
 
 const targetRow = {
   app_id: 99,
+  base_branch: "main",
+  connection_id: "77777777-7777-4777-8777-777777777777",
   external_installation_id: 1234,
   external_repository_id: 5678,
+  internal_installation_id: "88888888-8888-4888-8888-888888888888",
+  project_id: projectId,
   repository_full_name: "owner/repository",
+  repository_id: "99999999-9999-4999-8999-999999999999",
 };
 
 const rpc = vi.fn();
+
+/**
+ * The billing tables the launch quota reads. Chainable like PostgREST and
+ * thenable at the end; the counts default to an untouched Free organization
+ * so every pre-existing case launches exactly as it did before quotas.
+ */
+const usageCounts = { graphs: 0, projects: 0, members: 1 };
+
+function from(table: string) {
+  const chain: Record<string, unknown> = {};
+  for (const method of ["select", "eq", "neq", "gte", "lt", "order", "limit"]) {
+    chain[method] = () => chain;
+  }
+  (chain as { then: unknown }).then = (resolve: (value: unknown) => void) => {
+    if (table === "billing_subscriptions") return resolve({ data: [], error: null });
+    if (table === "graphs") return resolve({ count: usageCounts.graphs, error: null });
+    if (table === "projects") return resolve({ count: usageCounts.projects, error: null });
+    if (table === "organization_members") return resolve({ count: usageCounts.members, error: null });
+    return resolve({ data: null, error: null });
+  };
+  return chain;
+}
 
 function request(body: unknown) {
   return new Request("https://factory.example/api/graphs", {
@@ -53,25 +116,69 @@ function request(body: unknown) {
   });
 }
 
+function rawRequest(body: BodyInit, contentType?: string) {
+  const headers = new Headers({ Origin: "https://factory.example" });
+  if (contentType) headers.set("Content-Type", contentType);
+  return new Request("https://factory.example/api/graphs", {
+    body,
+    headers,
+    method: "POST",
+  });
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   rpc.mockImplementation((functionName: string) => {
-    if (functionName === "create_graph_from_plan") {
+    if (functionName === "create_graph_from_plan_with_release_identity_as_server") {
       return Promise.resolve({ data: graphId, error: null });
     }
     // resolve_phase1c_command_target
     return { single: async () => ({ data: targetRow, error: null }) };
   });
+  usageCounts.graphs = 0;
+  usageCounts.projects = 0;
   requireActiveOrganization.mockResolvedValue({
     activeOrganization: { id: organizationId, role: "owner" },
-    client: { rpc },
+    client: { rpc, from },
+    user: { id: ownerId },
   });
-  dispatchGraphWorker.mockResolvedValue(undefined);
+  createSupabaseGitHubWebhookClient.mockReturnValue({ rpc });
+  createGitHubInstallationToken.mockResolvedValue({ token: "installation-token" });
+  getGitHubAppConfigurationForAppId.mockReturnValue({ appId: targetRow.app_id });
+  getGitHubBranchReference.mockResolvedValue({ object: { sha: baseSha } });
+  getGitHubFile.mockResolvedValue({
+    content: JSON.stringify({ version: 1, requiredChecks }),
+    path: ".softwarefactory/release-policy.json",
+    ref: baseSha,
+  });
+  dispatchGraphWorker.mockResolvedValue({ dispatched: true, reason: "dispatched" });
 });
 
 describe("POST /api/graphs", () => {
-  it("wakes the worker for the graph it just created, and says so", async () => {
+  it("refuses the launch at the Free plan's monthly allowance, before any compile work", async () => {
+    usageCounts.graphs = 10;
+
     const response = await POST(request({ projectId, templateKey: "full_lifecycle" }));
+
+    expect(response.status).toBe(402);
+    const body = await response.json() as {
+      error: { code: string; message: string; limit: number; current: number; plan: string };
+    };
+    expect(body.error.code).toBe("plan_limit_reached");
+    expect(body.error.limit).toBe(10);
+    expect(body.error.current).toBe(10);
+    expect(body.error.plan).toBe("free");
+    // The refusal cost nothing: no graph was created, no worker woken.
+    expect(rpc).not.toHaveBeenCalled();
+    expect(dispatchGraphWorker).not.toHaveBeenCalled();
+  });
+
+  it("wakes the worker for the graph it just created, and says so", async () => {
+    const response = await POST(request({
+      projectId,
+      templateKey: "full_lifecycle",
+      goal: "  Repair checkout failures and preserve authentication.  ",
+    }));
 
     expect(response.status).toBe(200);
     const body = await response.json() as {
@@ -81,6 +188,42 @@ describe("POST /api/graphs", () => {
     expect(body.state).toBe("PLANNED");
     expect(body.workerWoken).toBe(true);
     expect(body.note).toContain("woken");
+
+    expect(createGitHubInstallationToken).toHaveBeenCalledWith(
+      { appId: targetRow.app_id },
+      targetRow.external_installation_id,
+      {
+        permissions: { contents: "read", metadata: "read" },
+        repositoryIds: [targetRow.external_repository_id],
+      },
+    );
+    expect(getGitHubBranchReference).toHaveBeenCalledWith(
+      "installation-token",
+      "owner",
+      "repository",
+      "main",
+    );
+    expect(getGitHubFile).toHaveBeenCalledWith(
+      "installation-token",
+      "owner",
+      "repository",
+      baseSha,
+      ".softwarefactory/release-policy.json",
+    );
+
+    const createCall = rpc.mock.calls.find(
+      ([functionName]) => functionName === "create_graph_from_plan_with_release_identity_as_server",
+    );
+    expect(createCall?.[1]).toMatchObject({
+      p_base_branch: "main",
+      p_base_sha: baseSha,
+      p_goal: "Repair checkout failures and preserve authentication.",
+      p_github_repository_id: targetRow.repository_id,
+      p_requested_by: ownerId,
+      p_required_check_names: requiredChecks,
+      p_template_key: "full_lifecycle",
+      p_template_version: 2,
+    });
 
     expect(dispatchGraphWorker).toHaveBeenCalledWith(
       {
@@ -96,36 +239,60 @@ describe("POST /api/graphs", () => {
   it("keeps the launch's answer independent of a wake that throws", async () => {
     dispatchGraphWorker.mockRejectedValue(new Error("GitHub is unreachable"));
 
-    const response = await POST(request({ projectId, templateKey: "full_lifecycle" }));
+    const response = await POST(request({ projectId, templateKey: "full_lifecycle", goal: defaultGoal }));
 
     expect(response.status).toBe(200);
     const body = await response.json() as { graphId: string; workerWoken: boolean; note: string };
     expect(body.graphId).toBe(graphId);
     expect(body.workerWoken).toBe(false);
-    expect(body.note).toContain("scheduled or manual dispatch");
+    expect(body.note).toContain("global worker gate");
   });
 
-  it("reports an unwakeable project the same honest way", async () => {
-    // No verified GitHub binding: the target resolves to nothing, which is a
-    // state, not an error — the graph is still created.
-    rpc.mockImplementation((functionName: string) => {
-      if (functionName === "create_graph_from_plan") {
-        return Promise.resolve({ data: graphId, error: null });
-      }
+  it("refuses Full Lifecycle before recording when no exact repository is connected", async () => {
+    rpc.mockImplementation(() => {
       return { single: async () => ({ data: null, error: { code: "PGRST116" } }) };
     });
 
-    const response = await POST(request({ projectId, templateKey: "full_lifecycle" }));
+    const response = await POST(request({ projectId, templateKey: "full_lifecycle", goal: defaultGoal }));
 
-    expect(response.status).toBe(200);
-    const body = await response.json() as { workerWoken: boolean };
-    expect(body.workerWoken).toBe(false);
+    expect(response.status).toBeGreaterThanOrEqual(400);
+    expect(rpc).not.toHaveBeenCalledWith(
+      "create_graph_from_plan_with_release_identity_as_server",
+      expect.anything(),
+    );
     expect(dispatchGraphWorker).not.toHaveBeenCalled();
+  });
+
+  it("refuses Full Lifecycle before recording when GitHub returns no exact base SHA", async () => {
+    getGitHubBranchReference.mockResolvedValue({ object: { sha: "not-a-commit" } });
+
+    const response = await POST(request({ projectId, templateKey: "full_lifecycle", goal: defaultGoal }));
+
+    expect(response.status).toBe(503);
+    expect(rpc).not.toHaveBeenCalledWith(
+      "create_graph_from_plan_with_release_identity_as_server",
+      expect.anything(),
+    );
+    expect(dispatchGraphWorker).not.toHaveBeenCalled();
+  });
+
+  it("refuses Full Lifecycle when the exact base has no usable repository release policy", async () => {
+    getGitHubFile.mockResolvedValue({ content: "{}" });
+
+    const response = await POST(request({ projectId, templateKey: "full_lifecycle", goal: defaultGoal }));
+
+    expect(response.status).toBe(409);
+    expect((await response.json() as { error: { code: string } }).error.code)
+      .toBe("release_policy_invalid");
+    expect(rpc).not.toHaveBeenCalledWith(
+      "create_graph_from_plan_with_release_identity_as_server",
+      expect.anything(),
+    );
   });
 
   it("never wakes anything when the plan was refused", async () => {
     rpc.mockImplementation((functionName: string) => {
-      if (functionName === "create_graph_from_plan") {
+      if (functionName === "create_graph_from_plan_with_release_identity_as_server") {
         return Promise.resolve({
           data: null,
           error: { code: "42501", message: "organization membership is required" },
@@ -134,7 +301,7 @@ describe("POST /api/graphs", () => {
       return { single: async () => ({ data: targetRow, error: null }) };
     });
 
-    const response = await POST(request({ projectId, templateKey: "full_lifecycle" }));
+    const response = await POST(request({ projectId, templateKey: "full_lifecycle", goal: defaultGoal }));
 
     expect(response.status).toBeGreaterThanOrEqual(400);
     expect(dispatchGraphWorker).not.toHaveBeenCalled();
@@ -151,6 +318,41 @@ describe("POST /api/graphs", () => {
  * graph, never a woken worker.
  */
 describe("POST /api/graphs refuses before it records", () => {
+  it("returns the bounded JSON error for malformed JSON", async () => {
+    const response = await POST(rawRequest("{not-json", "application/json"));
+
+    expect(response.status).toBe(400);
+    expect((await response.json() as { error: { code: string } }).error.code).toBe("invalid_json");
+    expect(requireActiveOrganization).not.toHaveBeenCalled();
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["a missing content type", new Uint8Array(new TextEncoder().encode("{}")), undefined],
+    ["a wrong content type", "{}", "text/plain"],
+  ] as const)("returns the bounded JSON error for %s", async (_label, body, contentType) => {
+    const response = await POST(rawRequest(body, contentType));
+
+    expect(response.status).toBe(415);
+    expect((await response.json() as { error: { code: string } }).error.code)
+      .toBe("unsupported_media_type");
+    expect(requireActiveOrganization).not.toHaveBeenCalled();
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it("returns the bounded JSON error for an oversized body", async () => {
+    const response = await POST(rawRequest(
+      JSON.stringify({ padding: "x".repeat(21 * 1024) }),
+      "application/json",
+    ));
+
+    expect(response.status).toBe(413);
+    expect((await response.json() as { error: { code: string } }).error.code)
+      .toBe("payload_too_large");
+    expect(requireActiveOrganization).not.toHaveBeenCalled();
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
   it("refuses a body that does not name a project and a template", async () => {
     const response = await POST(request({ templateKey: "full_lifecycle" }));
 
@@ -166,6 +368,28 @@ describe("POST /api/graphs refuses before it records", () => {
     expect(response.status).toBe(400);
     expect(rpc).not.toHaveBeenCalled();
   });
+  it("refuses an empty, oversized, or secret-shaped goal before persistence", async () => {
+    for (const goal of ["   ", "x".repeat(4_001), `sk-${"a".repeat(32)}`]) {
+      const response = await POST(request({ projectId, templateKey: "full_lifecycle", goal }));
+      expect(response.status).toBe(400);
+    }
+
+    expect(rpc).not.toHaveBeenCalled();
+    expect(dispatchGraphWorker).not.toHaveBeenCalled();
+  });
+
+  it("refuses Full Lifecycle when no real user goal was supplied", async () => {
+    const response = await POST(request({ projectId, templateKey: "full_lifecycle" }));
+
+    expect(response.status).toBe(400);
+    expect((await response.json() as { error: { message: string } }).error.message)
+      .toContain("concrete goal");
+    expect(rpc).not.toHaveBeenCalledWith(
+      "create_graph_from_plan_with_release_identity_as_server",
+      expect.anything(),
+    );
+    expect(dispatchGraphWorker).not.toHaveBeenCalled();
+  });
 
   it("names the template a caller asked for and could not have", async () => {
     // A typo or a stale client. The message says which key failed, because
@@ -175,15 +399,20 @@ describe("POST /api/graphs refuses before it records", () => {
       activeOrganization: { id: organizationId, role: "owner" },
       client: {
         rpc,
-        from: () => ({
-          select: () => ({
-            eq: () => ({
-              eq: () => ({
-                eq: () => ({ maybeSingle: async () => ({ data: null, error: null }) }),
-              }),
-            }),
-          }),
-        }),
+        // The quota tables answer through the shared fake; only the custom
+        // template lookup needs its own not-found chain.
+        from: (table: string) =>
+          table === "graph_templates"
+            ? {
+                select: () => ({
+                  eq: () => ({
+                    eq: () => ({
+                      eq: () => ({ maybeSingle: async () => ({ data: null, error: null }) }),
+                    }),
+                  }),
+                }),
+              }
+            : from(table),
       },
     });
 

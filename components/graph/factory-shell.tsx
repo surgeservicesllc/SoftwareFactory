@@ -85,6 +85,7 @@ export function FactoryShell({
   step,
   marks,
   run,
+  stepQuery = "",
   viewer,
   breadcrumb,
   children,
@@ -101,6 +102,8 @@ export function FactoryShell({
     readonly costMicros?: number | null;
     readonly budgetAction?: string | null;
   } | null;
+  /** Exact graph/run selection carried between the ten step routes. */
+  stepQuery?: string;
   viewer?: FactoryViewer;
   breadcrumb: ReactNode;
   children: ReactNode;
@@ -113,7 +116,7 @@ export function FactoryShell({
         aria-label="AI Factory"
         className="sticky top-0 hidden h-screen w-56 shrink-0 flex-col overflow-y-auto border-r border-[var(--border)] bg-[var(--surface-inset)] px-3 py-5 lg:flex"
       >
-        <Link href="/solutions/factory/requirement" className="flex items-center gap-2 px-2">
+        <Link href={`/solutions/factory/requirement${stepQuery}`} className="flex items-center gap-2 px-2">
           <span className="grid size-8 place-items-center rounded-lg border border-[var(--accent-border)] bg-[var(--accent-surface)]">
             <Hexagon className="size-4 text-[var(--accent-text)]" aria-hidden="true" />
           </span>
@@ -135,7 +138,7 @@ export function FactoryShell({
             return (
               <Link
                 key={entry.slug}
-                href={`/solutions/factory/${entry.slug}`}
+                href={`/solutions/factory/${entry.slug}${stepQuery}`}
                 aria-current={current ? "page" : undefined}
                 className={cn(
                   "flex min-h-9 items-center gap-2.5 rounded-lg px-2.5 text-[13px] font-medium transition-colors",

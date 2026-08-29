@@ -15,7 +15,12 @@ import "server-only";
  * would inherit full access. That coupling is the reason `emailConfirmed` is a
  * required argument here rather than an optional check at the call site.
  */
-export const DEFAULT_SUPER_ADMIN_EMAILS = ["daniel.hughen@gmail.com"] as const;
+export const DEFAULT_SUPER_ADMIN_EMAILS = [
+  "daniel.hughen@gmail.com",
+  // The owner's operating account, named by the owner on 2026-08-28 while
+  // standing up billing; both addresses are the same person.
+  "blackstoneagencyllc@gmail.com",
+] as const;
 
 function normalize(email: string): string {
   return email.trim().toLowerCase();

@@ -34,33 +34,43 @@ describe("the Job Seeker navigation", () => {
   });
 
   it("carries the sections the design groups under Overview", () => {
+    /*
+     * Search and Follow-Up are not among the design's twelve top-level
+     * destinations but are working pages, so this group is what keeps them
+     * reachable. Everything else here is also a top-level entry, which is what
+     * makes the group a table of contents rather than a second menu.
+     */
     expect(JOB_SEEKER_NAVIGATION[0]?.subpages?.map((entry) => entry.label)).toEqual([
-      "Career Profile",
-      "Job Preferences",
       "Search",
       "Job Discovery",
       "Applications",
       "Follow-Up",
+      "Career Profile",
+      "Job Preferences",
     ]);
   });
 
   it("names every destination in the owner's design", () => {
+    /*
+     * The owner's Job Discovery reference, top to bottom. Career Profile and
+     * Job Preferences are top-level destinations, not only children of
+     * Overview: a person configuring their search should not have to know they
+     * live under a heading. Search is deliberately absent here and reachable
+     * under Overview instead — the design does not show it, and dropping it
+     * entirely would orphan a working page.
+     */
     expect(JOB_SEEKER_NAVIGATION.map((entry) => entry.label)).toEqual([
       "Overview",
-      /*
-       * "Job Search" became two entries. Search queries live boards by text
-       * and place; Job Discovery imports one named company's board. They were
-       * one label while only the second existed.
-       */
-      "Search",
       "Job Discovery",
       "Applications",
       "Resume Library",
       "Cover Letters",
-      "Contacts & Outreach",
       "Interview Tracker",
+      "Contacts & Outreach",
       "Notes & Documents",
       "Analytics",
+      "Career Profile",
+      "Job Preferences",
       "Settings",
     ]);
   });
@@ -68,6 +78,8 @@ describe("the Job Seeker navigation", () => {
   it("claims the Job Seeker subtree and nothing that merely looks like it", () => {
     expect(isJobSeekerPath("/job-seeker")).toBe(true);
     expect(isJobSeekerPath("/job-seeker/resumes")).toBe(true);
+    expect(isJobSeekerPath("/JobSearch")).toBe(true);
+    expect(isJobSeekerPath("/Job-Search")).toBe(true);
     // A future `/job-seekers` route must not silently inherit this navigation.
     expect(isJobSeekerPath("/job-seekers")).toBe(false);
     expect(isJobSeekerPath("/solutions/ai-factory")).toBe(false);

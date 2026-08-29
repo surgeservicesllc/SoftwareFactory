@@ -19,6 +19,7 @@ const nextConfig: NextConfig = {
       "ai-factory",
       "autonomy",
       "backlog",
+      "billing",
       "bot-manager",
       "bot-usage",
       "connections",
@@ -33,6 +34,7 @@ const nextConfig: NextConfig = {
       "reports",
       "runs",
       "settings",
+      "trail",
       "workflows",
     ].flatMap((route) => [
       { source: `/${route}`, destination: `/solutions/${route}`, permanent: true },

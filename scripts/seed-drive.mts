@@ -1,4 +1,5 @@
 import type { NodeExecutionResult } from "@/lib/graph/runner";
+import type { CompiledNode } from "@/lib/graph/compiler";
 import {
   compileClaimedGraph,
   parseClaimedGraph,
@@ -54,18 +55,258 @@ export type SeedDriveOutcome = Readonly<{
 
 /** Deterministic, clearly-labelled output. Development seed, not real work. */
 export async function seedExecutor(
-  node: { nodeKey: string; executor: string },
+  node: Pick<CompiledNode, "nodeKey" | "executor" | "capability">,
 ): Promise<NodeExecutionResult> {
   if (node.executor === "ANCHOR") {
+    const observedAt = new Date().toISOString();
+    if (node.nodeKey === "implement") {
+      return {
+        status: "SUCCEEDED",
+        output: {
+          observation: "phase1c_change_lineage",
+          repository: "demo-data/example",
+          baseBranch: "main",
+          baseSha: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          headSha: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          pullRequestNumber: 1,
+          pullRequestUrl: "https://github.com/demo-data/example/pull/1",
+          bridgeState: "PULL_REQUEST_RECORDED",
+          observedAt,
+          latencyMs: 0,
+          dev_seed: true,
+        },
+        tokensUsed: 0,
+      };
+    }
+    if (node.nodeKey === "review") {
+      return {
+        status: "SUCCEEDED",
+        output: {
+          observation: "phase1c_pull_request_review",
+          repository: "demo-data/example",
+          agentRunId: "10000000-0000-4000-8000-000000000001",
+          headSha: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          baseBranch: "main",
+          pullRequestNumber: 1,
+          pullRequestUrl: "https://github.com/demo-data/example/pull/1",
+          state: "open",
+          draft: true,
+          validationRound: 1,
+          validations: [{ name: "diff-check", status: "passed", durationMs: 0 }],
+          observedAt,
+          latencyMs: 0,
+          dev_seed: true,
+        },
+        tokensUsed: 0,
+      };
+    }
+    if (node.capability === "qa") {
+      return {
+        status: "SUCCEEDED",
+        output: {
+          observation: "ci_check_runs",
+          sha: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          repository: "demo-data/example",
+          total: 1,
+          checks: [{
+            name: "CI",
+            conclusion: "success",
+            url: "https://github.com/demo-data/example/actions/runs/1",
+          }],
+          failing: [],
+          observedAt,
+          latencyMs: 0,
+          dev_seed: true,
+        },
+        tokensUsed: 0,
+      };
+    }
+    if (node.capability === "implementation") {
+      return {
+        status: "SUCCEEDED",
+        output: {
+          observation: "github_production_deployment",
+          repository: "demo-data/example",
+          sha: "cccccccccccccccccccccccccccccccccccccccc",
+          ref: "main",
+          deploymentId: null,
+          environment: "Production",
+          state: "success",
+          environmentUrl: "https://dev-seed.invalid",
+          bridgeDeploymentId: null,
+          observedAt,
+          latencyMs: 0,
+          dev_seed: true,
+        },
+        tokensUsed: 0,
+      };
+    }
     return {
       status: "SUCCEEDED",
-      output: { dev_seed: true, kind: "seed_observation", subject: node.nodeKey, verdict: "green" },
+      output: {
+        observation: "production_http_probe",
+        deploymentId: "20000000-0000-4000-8000-000000000001",
+        url: "https://dev-seed.invalid",
+        status: 200,
+        healthy: true,
+        observedAt,
+        latencyMs: 0,
+        postDeployValidation: "inconclusive",
+        observationWindowComplete: false,
+        missingValidationStages: ["data_integration", "quality_security", "observation"],
+        dev_seed: true,
+      },
       tokensUsed: 0,
     };
   }
+
+  if (node.executor === "DETERMINISTIC") {
+    return {
+      status: "SUCCEEDED",
+      output: {
+        findings: [{
+          title: `Seed result for ${node.nodeKey}`,
+          severity: "INFO",
+          source: "dev-seed",
+        }],
+        stats: { inputCount: 1, outputCount: 1, reductionRatio: 0 },
+        sources: ["dev-seed"],
+        unusable_rows: 0,
+        unusable_inputs: [],
+        missing_inputs: [],
+        dev_seed: true,
+      },
+      tokensUsed: 0,
+    };
+  }
+
+  if (node.capability === "planning" || node.capability === "architecture") {
+    return {
+      status: "SUCCEEDED",
+      output: {
+        steps: [{
+          description: `Seed step for ${node.nodeKey}`,
+          rationale: "Development seed output — not real work.",
+        }],
+        dev_seed: true,
+      },
+      tokensUsed: 0,
+    };
+  }
+
+  if (node.capability === "discovery") {
+    return {
+      status: "SUCCEEDED",
+      output: {
+        schemaVersion: 1,
+        searchAreas: ["Demo Data"],
+        candidates: [{
+          name: "Seed candidate",
+          summary: "Development seed output — not a live discovery.",
+          source: "REPOSITORY",
+          evidence: "Demo Data",
+          verification: "VERIFIED_IN_REPO",
+          matchScore: 100,
+          strengths: ["Deterministic"],
+          limitations: ["Not real work"],
+        }],
+        keyFindings: ["Demo Data"],
+        recommendedNextSteps: ["Run the real worker."],
+        dev_seed: true,
+      },
+      tokensUsed: 0,
+    };
+  }
+
+  if (node.capability === "evaluation") {
+    const scores = {
+      licenseLegal: 10,
+      securitySafety: 10,
+      maintenanceActivity: 10,
+      featureCompleteness: 10,
+      performanceScalability: 10,
+      documentation: 10,
+      communityEcosystem: 10,
+      easeOfIntegration: 10,
+      reliabilityTesting: 10,
+      codeQuality: 10,
+    };
+    return {
+      status: "SUCCEEDED",
+      output: {
+        schemaVersion: 1,
+        candidates: [{
+          name: "Seed candidate",
+          scores,
+          riskLevel: "LOW",
+          recommendation: "STRONGLY_CONSIDER",
+          redFlags: [],
+          rationale: "Development seed output — not a live evaluation.",
+        }],
+        ranking: ["Seed candidate"],
+        topCandidate: {
+          name: "Seed candidate",
+          strengths: ["Deterministic"],
+          limitations: ["Not real work"],
+        },
+        recommendationSummary: "Demo Data",
+        assumptions: ["This is a development seed."],
+        dev_seed: true,
+      },
+      tokensUsed: 0,
+    };
+  }
+
+  if (node.capability === "decision") {
+    const paths = ["USE", "CONNECT", "ADAPT", "FORK", "BUILD"].map((path) => ({
+      path,
+      score: path === "BUILD" ? 100 : 0,
+      pros: ["Demonstrates the contract"],
+      cons: ["Demo Data only"],
+      fitNotes: "Development seed output — not a real decision.",
+    }));
+    return {
+      status: "SUCCEEDED",
+      output: {
+        schemaVersion: 1,
+        paths,
+        chosenPath: "BUILD",
+        subject: "",
+        rationale: ["Exercise the development seed."],
+        executionPlan: [{ step: "Seed", detail: "Record Demo Data." }],
+        integrationBoundaries: { weOwn: ["Demo Data"], counterpartOwns: [] },
+        risks: [{ risk: "Mistaken for real work", mitigation: "Carry dev_seed=true." }],
+        openQuestions: [],
+        dev_seed: true,
+      },
+      tokensUsed: 0,
+    };
+  }
+
+  if (node.capability === "synthesis" || node.capability === "reporting") {
+    return {
+      status: "SUCCEEDED",
+      output: {
+        summary: `Seed report for ${node.nodeKey}`,
+        findings: [{ title: "Demo Data", severity: "INFO" }],
+        recommendation: "Run the real worker.",
+        dev_seed: true,
+      },
+      tokensUsed: 0,
+    };
+  }
+
   return {
     status: "SUCCEEDED",
-    output: { dev_seed: true, stage_product: node.nodeKey, note: "Development seed output — not real work." },
+    output: {
+      findings: [{
+        title: `Seed result for ${node.nodeKey}`,
+        severity: "INFO",
+        location: "Demo Data",
+        evidence: "Development seed output — not real work.",
+      }],
+      dev_seed: true,
+    },
     tokensUsed: 0,
   };
 }

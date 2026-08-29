@@ -28,14 +28,16 @@ import { driveSeedLifecycle, type SeedGate } from "@/scripts/seed-drive.mjs";
  * The claim it exists to support is the one that must not be taken on trust:
  * the seeded flow completes all ten steps. Which means, concretely — the run
  * closes COMPLETED, every one of the eleven stages holds a COMPLETED node
- * with an artifact recorded, the two human gates were approved by a person
- * and the anchored gate decided itself, and the lineage from the request to
- * the monitoring probe is unbroken.
+ * with an artifact recorded, all three human authority gates were approved by
+ * a person, and the lineage from the request to the monitoring probe is
+ * unbroken.
  */
 
 const migrationsRoot = resolve(import.meta.dirname, "../../supabase/migrations");
 
 const WORKER = "dev-seed-lifecycle";
+const CLAIM_REPOSITORY = "factory/dev-seed";
+const CLAIM_REQUIRED_CHECKS = ["CI"];
 const ownerId = "00000000-0000-4000-8000-00000000d21e";
 const organizationId = "10000000-0000-4000-8000-00000000d21e";
 const projectId = "20000000-0000-4000-8000-00000000d21e";
@@ -65,8 +67,9 @@ function pgliteStore(): GraphRunStore & { claimPlannedGraph: () => Promise<unkno
     async claimPlannedGraph() {
       await asServiceRole();
       const claimed = await db.query<{ claim: unknown }>(
-        "select public.claim_planned_graph($1, $2::text[]) as claim",
-        [WORKER, WORKER_SUPPORTED_EXECUTORS],
+        "select public.claim_planned_graph_v2($1, $2::text[], $3, $4::jsonb, 2) as claim",
+        [WORKER, WORKER_SUPPORTED_EXECUTORS, CLAIM_REPOSITORY,
+          JSON.stringify(CLAIM_REQUIRED_CHECKS)],
       );
       await reset();
       return claimed.rows[0].claim ?? null;
@@ -89,12 +92,22 @@ function pgliteStore(): GraphRunStore & { claimPlannedGraph: () => Promise<unkno
     },
     async readPriorNodeResults(priorGraphId) {
       await asServiceRole();
-      const result = await db.query<{ node_key: string; payload: unknown }>(
-        "select node_key, payload from public.read_prior_node_results_as_worker($1, $2::uuid)",
+      const result = await db.query<{
+        model: string | null;
+        node_key: string;
+        payload: unknown;
+        provider: string | null;
+      }>(
+        `select node_key, payload, provider, model
+           from public.read_prior_node_results_as_worker_v2($1, $2::uuid, 2)`,
         [WORKER, priorGraphId],
       );
       await reset();
-      return new Map(result.rows.map((row) => [row.node_key, row.payload]));
+      return new Map(result.rows.map((row) => [row.node_key, {
+        output: row.payload,
+        provider: row.provider ?? undefined,
+        model: row.model ?? undefined,
+      }]));
     },
     async openGate(nodeId, graphRunId, anchorCount) {
       await asServiceRole();
@@ -104,19 +117,26 @@ function pgliteStore(): GraphRunStore & { claimPlannedGraph: () => Promise<unkno
       );
       await reset();
     },
-    async recordVerification(subjectNodeRunId, lens, verdict, evidence, verifierProvider) {
+    async completeReviewerWithVerifications(verifierNodeRunId, artifactPayload, execution, verifications) {
       await asServiceRole();
       await db.query(
-        "select public.record_verification_as_worker($1, $2::uuid, $3::public.verification_lens, $4::public.verification_verdict, $5::jsonb, null, $6, false)",
-        [WORKER, subjectNodeRunId, lens, verdict, JSON.stringify(evidence), verifierProvider],
+        `select public.complete_reviewer_with_verifications_as_worker(
+           $1, $2::uuid, $3::jsonb, $4, $5, $6, $7::jsonb
+         )`,
+        [WORKER, verifierNodeRunId, JSON.stringify(artifactPayload),
+          execution.provider, execution.model, execution.latencyMs,
+          JSON.stringify(verifications)],
       );
       await reset();
     },
-    async completeRun(graphRunId, state, hadPartialInput, _detail, usage) {
+    async completeRun(graphRunId, state, hadPartialInput, detail, usage) {
       await asServiceRole();
       await db.query(
-        "select public.complete_graph_run_as_worker($1, $2::uuid, $3::public.graph_run_state, $4, $5, $6)",
-        [WORKER, graphRunId, state, hadPartialInput, usage?.tokensUsed ?? null, usage?.costMicros ?? null],
+        "select public.complete_graph_run_with_phase1c_bridge_as_worker($1, $2::uuid, $3::public.graph_run_state, $4, $5, $6, null, $7)",
+        [
+          WORKER, graphRunId, state, hadPartialInput,
+          usage?.tokensUsed ?? null, usage?.costMicros ?? null, detail ?? null,
+        ],
       );
       await reset();
     },
@@ -183,8 +203,46 @@ beforeAll(async () => {
     insert into auth.users (id) values ('${ownerId}');
     insert into public.organizations (id, name, slug, created_by)
     values ('${organizationId}', 'Dev Seed Factory', 'dev-seed-drive', '${ownerId}');
-    insert into public.projects (id, organization_id, name, status, default_branch, created_by)
-    values ('${projectId}', '${organizationId}', 'Connected Project', 'active', 'main', '${ownerId}');
+    insert into public.projects (
+      id, organization_id, name, status, github_repository, default_branch, created_by
+    ) values (
+      '${projectId}', '${organizationId}', 'Connected Project', 'active',
+      '${CLAIM_REPOSITORY}', 'main', '${ownerId}'
+    );
+    insert into public.connections (
+      id, organization_id, name, provider, status, secret_reference, created_by
+    ) values (
+      '30000000-0000-4000-8000-00000000d21e', '${organizationId}',
+      'GitHub', 'github', 'connected', 'env://GITHUB_APP', '${ownerId}'
+    );
+    insert into public.github_installations (
+      id, organization_id, connection_id, external_installation_id, app_id,
+      app_slug, account_id, account_login, account_type, target_type,
+      repository_selection, status, installed_at, created_by
+    ) values (
+      '50000000-0000-4000-8000-00000000d21e', '${organizationId}',
+      '30000000-0000-4000-8000-00000000d21e', 940001, 940002,
+      'dev-seed-app', 940003, 'factory', 'Organization', 'Organization',
+      'selected', 'active', now(), '${ownerId}'
+    );
+    insert into public.github_repositories (
+      id, organization_id, installation_id, external_repository_id,
+      owner_login, name, full_name, default_branch, html_url, private,
+      visibility, selected, github_updated_at
+    ) values (
+      '60000000-0000-4000-8000-00000000d21e', '${organizationId}',
+      '50000000-0000-4000-8000-00000000d21e', 940004,
+      'factory', 'dev-seed', '${CLAIM_REPOSITORY}', 'main',
+      'https://github.com/${CLAIM_REPOSITORY}', true, 'private', true, now()
+    );
+    insert into public.project_connections (
+      organization_id, project_id, connection_id, github_repository_id,
+      is_primary, created_by
+    ) values (
+      '${organizationId}', '${projectId}',
+      '30000000-0000-4000-8000-00000000d21e',
+      '60000000-0000-4000-8000-00000000d21e', true, '${ownerId}'
+    );
   `);
 
   // The seed's own plant: the product's template through the product's RPC.
@@ -227,8 +285,29 @@ describe("the seeded ten-step flow, driven by the seed's own loop", { timeout: 2
 
   it("walks all ten steps to a COMPLETED run with --drain", async () => {
     const outcome = await driveSeedLifecycle(pgliteDeps(true, (line) => lines.push(line)));
+    await reset();
+    const incomplete = await db.query<{
+      blocked_reason: string | null;
+      error_message: string | null;
+      node_key: string;
+      run_state: string;
+      state: string;
+    }>(
+      `select node.node_key, run.state::text as run_state,
+              node_run.state::text as state,
+              node_run.blocked_reason, node_run.error_message
+       from public.graph_runs run
+       join public.node_runs node_run on node_run.graph_run_id = run.id
+       join public.graph_nodes node on node.id = node_run.node_id
+       where run.graph_id = $1 and node_run.state <> 'COMPLETED'
+       order by run.created_at, node.node_key`,
+      [graphId],
+    );
 
-    expect(outcome.finalState, "the seeded flow must reach a completed run").toBe("COMPLETED");
+    expect(
+      outcome.finalState,
+      `the seeded flow must reach a completed run:\n${lines.join("\n")}\n${JSON.stringify(incomplete.rows)}`,
+    ).toBe("COMPLETED");
     expect(outcome.windows, "gates must have split the walk into several windows").toBeGreaterThan(1);
   });
 
@@ -254,7 +333,7 @@ describe("the seeded ten-step flow, driven by the seed's own loop", { timeout: 2
     }
   });
 
-  it("decided the gates as policy places them: a person, then the anchors", async () => {
+  it("keeps architecture, merge, and release acceptance with a person", async () => {
     await reset();
     const gates = await db.query<{ stage: string; kind: string; state: string; decided_by: string | null; anchor_count: number }>(
       `select stage::text as stage, kind::text as kind, state::text as state, decided_by, anchor_count
@@ -264,17 +343,12 @@ describe("the seeded ten-step flow, driven by the seed's own loop", { timeout: 2
     const human = gates.rows.filter((row) => row.kind === "HUMAN");
     const automatic = gates.rows.filter((row) => row.kind === "AUTOMATIC");
 
-    expect(human.map((row) => row.stage).sort()).toEqual(["ARCHITECTURE", "DEPLOYMENT"]);
+    expect(human.map((row) => row.stage).sort()).toEqual(["ARCHITECTURE", "DEPLOYMENT", "TEST"]);
     for (const gate of human) {
       expect(gate.state).toBe("APPROVED");
       expect(gate.decided_by, "a human gate is decided by a person").toBe(ownerId);
     }
-    expect(automatic.length).toBeGreaterThan(0);
-    for (const gate of automatic) {
-      expect(gate.state).toBe("APPROVED");
-      expect(gate.decided_by, "no person decides an automatic gate").toBeNull();
-      expect(gate.anchor_count, "an automatic approval needs anchored evidence").toBeGreaterThan(0);
-    }
+    expect(automatic).toEqual([]);
   });
 
   it("labels everything it wrote as seed output, so nothing reads as real work", async () => {

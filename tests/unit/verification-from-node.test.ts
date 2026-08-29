@@ -5,7 +5,10 @@ import { describe, expect, it } from "vitest";
 import type { CompiledNode } from "@/lib/graph/compiler";
 import { deriveVerdict, verificationLensFor } from "@/lib/worker/verification-from-node";
 
-const node = (capability: string) => ({ capability }) as unknown as CompiledNode;
+const node = (
+  capability: CompiledNode["capability"],
+  executor: CompiledNode["executor"] = "MODEL",
+): Pick<CompiledNode, "capability" | "executor"> => ({ capability, executor });
 
 describe("verificationLensFor", () => {
   it("names the lens for capabilities whose job is judging other work", () => {
@@ -20,6 +23,11 @@ describe("verificationLensFor", () => {
     expect(verificationLensFor(node("extraction"))).toBeNull();
     expect(verificationLensFor(node("synthesis"))).toBeNull();
     expect(verificationLensFor(node("implementation"))).toBeNull();
+  });
+
+  it("does not turn deterministic or anchored evidence into a model-authored verdict", () => {
+    expect(verificationLensFor(node("review", "DETERMINISTIC"))).toBeNull();
+    expect(verificationLensFor(node("qa", "ANCHOR"))).toBeNull();
   });
 });
 

@@ -156,6 +156,7 @@ export class SupabaseWorkerStore implements WorkerStore {
     private readonly provider: string,
     private readonly model: string,
     private readonly leaseSeconds = 120,
+    private readonly targetCommandId: string | null = null,
   ) {}
 
   static create(input: {
@@ -164,11 +165,18 @@ export class SupabaseWorkerStore implements WorkerStore {
     provider: string;
     model: string;
     leaseSeconds?: number;
+    targetCommandId?: string | null;
   }) {
     const client = createClient(input.url, input.serviceRoleKey, {
       auth: { autoRefreshToken: false, detectSessionInUrl: false, persistSession: false },
     });
-    return new SupabaseWorkerStore(client, input.provider, input.model, input.leaseSeconds);
+    return new SupabaseWorkerStore(
+      client,
+      input.provider,
+      input.model,
+      input.leaseSeconds,
+      input.targetCommandId ?? null,
+    );
   }
 
   async register(workerId: string, version: string) {
@@ -203,15 +211,42 @@ export class SupabaseWorkerStore implements WorkerStore {
   }
 
   async claim(workerId: string): Promise<WorkerJob | null> {
-    const { data, error } = await this.client.rpc("claim_phase1c_run", {
+    const claimRequest = {
       p_worker_id: workerId,
       p_provider: this.provider,
       p_model: this.model,
       p_lease_seconds: this.leaseSeconds,
-    });
+      p_protocol_version: 2,
+    };
+    const { data, error } = this.targetCommandId
+      ? await this.client.rpc("claim_phase1c_run_by_command_v2", {
+        ...claimRequest,
+        p_target_command_id: this.targetCommandId,
+      })
+      : await this.client.rpc("claim_phase1c_run_v2", claimRequest);
     if (error) databaseFailure("Run claim", error);
     const row = singleRow<ClaimRow>(data);
-    return row ? mapClaim(row) : null;
+    if (!row) return null;
+
+    const job = mapClaim(row);
+    /*
+     * A graph-launched command is attached to its bridge before dispatch. The
+     * claimed run is the first boundary that owns all three exact runtime
+     * identities (command, task, run), so bind it before returning the job and
+     * before any workspace, model, or GitHub action can begin. The RPC is a
+     * no-op for ordinary Phase 1C commands and idempotent for an exact replay;
+     * it never infers a bridge from project or prompt content.
+     */
+    const { error: bridgeError } = await this.client.rpc(
+      "bind_graph_phase1c_run_by_command_as_worker",
+      {
+        p_command_id: job.commandId,
+        p_task_id: job.taskId,
+        p_agent_run_id: job.runId,
+      },
+    );
+    if (bridgeError) databaseFailure("Graph Phase 1C run binding", bridgeError);
+    return job;
   }
 
   async heartbeat(job: WorkerJob, workerId: string) {
@@ -282,7 +317,13 @@ export class SupabaseWorkerStore implements WorkerStore {
   }
 
   async complete(job: WorkerJob, workerId: string, result: WorkerResult) {
-    const { error } = await this.client.rpc("complete_phase1c_run", {
+    /*
+     * This wrapper preserves ordinary completion and, when this exact command
+     * is attached to a graph, records the PR head and advances its bridge in
+     * the same database transaction. A separate post-completion call would be
+     * unrecoverable if the run became terminal before the bridge write failed.
+     */
+    const { error } = await this.client.rpc("complete_phase1c_run_with_graph_bridge_as_worker", {
       p_worker_id: workerId,
       p_run_id: job.runId,
       p_lease_token: job.worker.leaseToken,
@@ -318,7 +359,7 @@ export class SupabaseWorkerStore implements WorkerStore {
       changedFiles?: WorkerResult["changedFiles"];
     },
   ) {
-    const { error } = await this.client.rpc("complete_phase1c_run", {
+    const { error } = await this.client.rpc("complete_phase1c_run_with_graph_bridge_as_worker", {
       p_worker_id: workerId,
       p_run_id: job.runId,
       p_lease_token: job.worker.leaseToken,
@@ -347,7 +388,7 @@ export class SupabaseWorkerStore implements WorkerStore {
   }
 
   async cancel(job: WorkerJob, workerId: string, reason: string, usage: WorkerUsage = job.priorUsage) {
-    const { error } = await this.client.rpc("complete_phase1c_run", {
+    const { error } = await this.client.rpc("complete_phase1c_run_with_graph_bridge_as_worker", {
       p_worker_id: workerId,
       p_run_id: job.runId,
       p_lease_token: job.worker.leaseToken,

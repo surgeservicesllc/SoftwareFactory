@@ -8,7 +8,18 @@ const workflow = readFileSync(
   "utf8",
 );
 
+const graphWorkflow = readFileSync(
+  path.join(process.cwd(), ".github/workflows/graph-worker.yml"),
+  "utf8",
+);
+
 describe("Phase 1C durable worker workflow", () => {
+  it("keeps every graph-worker trigger behind one exact global activation gate", () => {
+    expect(graphWorkflow).toContain(
+      "if: ${{ vars.SOFTWAREFACTORY_GRAPH_WORKER_ENABLED == 'true' && (github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main') && (github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch' || vars.SOFTWAREFACTORY_GRAPH_WORKER_SCHEDULED == 'true') }}",
+    );
+    expect(graphWorkflow).toContain('SOFTWAREFACTORY_GRAPH_WORKER_ENABLED: "true"');
+  });
   it("runs from dispatch, the scheduled recovery wake-up, or main-guarded manual dispatch", () => {
     expect(workflow).toContain("repository_dispatch:");
     expect(workflow).toContain("softwarefactory_phase1c_command");
@@ -16,7 +27,7 @@ describe("Phase 1C durable worker workflow", () => {
     // Owner-ordered 2026-08-16: manual dispatch is enabled. The job guard is
     // the contract that keeps it from executing a non-main ref's job with the
     // workflow's secrets — a dispatch of any other branch is skipped.
-    expect(workflow).toContain("workflow_dispatch: {}");
+    expect(workflow).toMatch(/workflow_dispatch:\s*\r?\n\s+inputs:\s*\r?\n\s+command_id:/);
     expect(workflow).toContain(
       "(github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main')",
     );
@@ -92,6 +103,9 @@ describe("Phase 1C durable worker workflow", () => {
     expect(workflow).toContain("if: ${{ vars.SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED == 'true' && (github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main') }}");
     expect(workflow).toContain('SOFTWAREFACTORY_WORKER_ENABLED: "true"');
     expect(workflow).toContain("npm run worker:once");
+    expect(workflow).toContain("SOFTWAREFACTORY_TARGET_COMMAND_ID:");
+    expect(workflow).toContain("github.event.client_payload.command_id || inputs.command_id || ''");
+    expect(workflow).toContain("SOFTWAREFACTORY_TARGET_CLAIM_REQUIRED:");
     expect(workflow).toContain("timeout-minutes: 70");
   });
 });

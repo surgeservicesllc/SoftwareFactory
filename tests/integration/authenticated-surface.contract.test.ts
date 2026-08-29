@@ -24,6 +24,8 @@ describe("Signed-in surface contracts", () => {
   it("derives the viewer from a verified user, never from a cookie", () => {
     const viewer = source("lib/auth/viewer.ts");
     expect(viewer).toMatch(/auth\.getUser\(\)/);
+    expect(viewer).toMatch(/readViewer = cache\(async/);
+    expect(viewer).toMatch(/readBeforeDeadline\(supabase\.auth\.getUser\(\)\)/);
     // A signed-in viewer must be impossible to produce from cookie contents.
     expect(viewer).not.toMatch(/getSession\(/);
     // The public site must still render when Supabase is absent.
@@ -45,6 +47,12 @@ describe("Signed-in surface contracts", () => {
     const admin = source("app/(portal)/solutions/admin/page.tsx");
     expect(admin).toMatch(/readViewer\(\)/);
     expect(admin).toMatch(/!viewer\.signedIn \|\| !viewer\.isSuperAdmin/);
+  });
+
+  it("server-gates the AI Factory before its protected browser-read fan-out", () => {
+    const page = source("app/(portal)/solutions/ai-factory/page.tsx");
+    expect(page).toMatch(/const viewer = await readViewer\(\)/);
+    expect(page).toMatch(/authenticated=\{viewer\.signedIn\}/);
   });
 
   it("ends the session with a same-origin POST rather than a link", () => {

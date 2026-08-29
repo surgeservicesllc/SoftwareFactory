@@ -41,7 +41,12 @@ type State =
   | { kind: "loading" }
   | { kind: "error" }
   | { kind: "missing" }
-  | { kind: "ready"; run: RunView; artifacts: readonly ArtifactView[] };
+  | {
+      kind: "ready";
+      run: RunView;
+      artifacts: readonly ArtifactView[];
+      artifactsError: string | null;
+    };
 
 export function RunStageConsole({
   graphRunId,
@@ -70,10 +75,18 @@ export function RunStageConsole({
       }
       // Artifacts failing must not blank the run: the page states the
       // shortfall where the artifacts would have been.
-      const artifactsBody = artifactsResponse.ok
-        ? ((await artifactsResponse.json()) as { artifacts?: ArtifactView[] })
-        : { artifacts: undefined };
-      setState({ kind: "ready", run, artifacts: artifactsBody.artifacts ?? [] });
+      const artifactsBody = (await artifactsResponse.json().catch(() => ({}))) as {
+        artifacts?: ArtifactView[];
+        error?: { message?: string };
+      };
+      setState({
+        kind: "ready",
+        run,
+        artifacts: artifactsResponse.ok ? (artifactsBody.artifacts ?? []) : [],
+        artifactsError: artifactsResponse.ok
+          ? null
+          : artifactsBody.error?.message ?? `The artifact read answered HTTP ${artifactsResponse.status}.`,
+      });
     } catch {
       setState({ kind: "error" });
     }
@@ -120,18 +133,28 @@ export function RunStageConsole({
     );
   }
 
-  return <StageView stage={stage} run={state.run} artifacts={state.artifacts} onReload={load} />;
+  return (
+    <StageView
+      stage={stage}
+      run={state.run}
+      artifacts={state.artifacts}
+      artifactsError={state.artifactsError}
+      onReload={load}
+    />
+  );
 }
 
 function StageView({
   stage,
   run,
   artifacts,
+  artifactsError,
   onReload,
 }: {
   stage: SdlcStage;
   run: RunView;
   artifacts: readonly ArtifactView[];
+  artifactsError: string | null;
   onReload: () => void;
 }) {
   const definition = stageDefinition(stage);
@@ -147,6 +170,14 @@ function StageView({
   const stageArtifacts = artifacts.filter(
     (artifact) => artifact.nodeKey !== null && stageNodeKeys.has(artifact.nodeKey),
   );
+  const evidenceArtifactIds = Object.fromEntries(stageNodes.flatMap((node) => {
+    const latest = stageArtifacts
+      .filter((artifact) => artifact.nodeKey === node.node_key)
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0];
+    return latest ? [[node.node_key, latest.artifactId]] : [];
+  }));
+  const approvalRequiresEvidence = ["ARCHITECTURE", "TEST", "DEPLOYMENT"].includes(stage)
+    && stageNodes.some((node) => node.gate_kind === "HUMAN");
   const stageVerifications = (run.verifications ?? []).filter(
     (verification) => stageNodeKeys.has(verification.subject_node_key),
   );
@@ -292,7 +323,16 @@ function StageView({
           rendered from the stored payloads themselves. */}
       <section aria-label={`What ${stage} recorded`}>
         <h2 className="label">What this stage recorded</h2>
-        {stageArtifacts.length === 0 ? (
+        {artifactsError ? (
+          <Card className="mt-2 border-[var(--danger-border,var(--border))] p-5">
+            <p role="alert" className="text-sm text-muted">
+              {artifactsError} The exact evidence cannot be reviewed or approved until this read succeeds.
+            </p>
+            <button type="button" onClick={onReload} className="btn btn-secondary btn-sm mt-3">
+              Retry artifact read
+            </button>
+          </Card>
+        ) : stageArtifacts.length === 0 ? (
           <Card className="mt-2 p-5">
             <p className="text-sm text-muted">
               No artifact is recorded for this stage&apos;s nodes in this run. A stage that has not
@@ -348,7 +388,15 @@ function StageView({
             <p className="text-sm text-muted">This run planned no node in this stage.</p>
           </Card>
         ) : (
-          <StageNodes nodes={stageNodes} onDecided={onReload} />
+          <StageNodes
+            approvalRequiresEvidence={approvalRequiresEvidence}
+            approvalUnavailableMessage={artifactsError
+              ? "Approval is unavailable because the exact run artifacts could not be read. Retry the artifact read first."
+              : "Approval is unavailable until this stage records its exact evidence artifact. Refresh the run after the node finishes."}
+            evidenceArtifactIds={evidenceArtifactIds}
+            nodes={stageNodes}
+            onDecided={onReload}
+          />
         )}
       </section>
 

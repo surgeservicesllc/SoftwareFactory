@@ -12,7 +12,7 @@ const migrationsDirectory = resolve(repositoryRoot, "supabase/migrations");
 const grantsMigration =
   "20260812002600_narrow_hosted_service_role_table_grants.sql";
 const latestMigration =
-  "20260826000200_budget_tracker_foundation.sql";
+  "20260829000200_budget_tracker_foundation.sql";
 
 const publicTables = [
   // Sorted alphabetically to match the catalogue query. Keep it sorted when
@@ -48,6 +48,9 @@ const publicTables = [
   "ai_auth_sessions",
   "approvals",
   "autonomy_decisions",
+  "billing_customers",
+  "billing_events",
+  "billing_subscriptions",
   "bot_assignments",
   "bot_roles",
   "bots",
@@ -80,6 +83,7 @@ const publicTables = [
   "github_repositories",
   "github_webhook_deliveries",
   "graph_anchors",
+  "graph_artifact_payload_containments",
   "graph_artifacts",
   "graph_budgets",
   "graph_edges",
@@ -87,6 +91,8 @@ const publicTables = [
   "graph_gates",
   "graph_handoffs",
   "graph_nodes",
+  "graph_phase1c_bridges",
+  "graph_release_gate_approval_intents",
   "graph_runs",
   "graph_templates",
   "graph_verifications",
@@ -102,6 +108,9 @@ const publicTables = [
   "job_seeker_preferences",
   "job_seeker_profiles",
   "job_seeker_resume_extractions",
+  "job_seeker_saved_searches",
+  "job_seeker_search_alerts",
+  "job_seeker_search_events",
   "job_seeker_uploads",
   "marketing_features",
   "marketing_logos",

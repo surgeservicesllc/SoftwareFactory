@@ -2,29 +2,368 @@
 
 ## 2026-08-29: Budget Tracker
 
-Built on `claude/github-connection-confirm-qe3tqm`. Detail in
-`AI/CURRENT_STATE.md`; decisions in ADR-147 and ADR-148.
+Detail in `AI/CURRENT_STATE.md`; decisions in ADR-147 and ADR-148.
 
-Two things the next agent must not undo:
+Three things the next agent must not undo:
 
 - **The owner's real financial workbook is not in this repository, and must not
   be put there.** It was used to develop and verify the spreadsheet reader
-  against real shapes, and deliberately left out of every fixture, seed and
-  test. If a test needs data, construct it — `tests/unit/budget-import.test.ts`
-  builds a minimal `.xlsx` in memory rather than checking one in.
+  against real shapes, and left out of every fixture, seed and test. If a test
+  needs data, construct it — `tests/unit/budget-import.test.ts` builds a
+  minimal `.xlsx` in memory rather than checking one in.
 - **`budget_monthly_flow` and `budget_category_spend` are SECURITY INVOKER.**
-  Making either a definer would hand every member of an organization every
-  other member's monthly totals, past a row policy that is otherwise correct.
-  A test asserts the current behaviour; it is not a formality.
+  Making either a definer hands every member of an organization every other
+  member's monthly totals, past a row policy that is otherwise correct.
+- **The `service_role` revoke in `20260829000200` is load-bearing.** That role
+  is BYPASSRLS and the hosted default privileges re-grant it on every new
+  table; without the revoke the six budget tables are readable past every
+  policy on them. The behaviour test grants those privileges the way hosted
+  would and checks they are taken away, so it fails if the revoke is removed.
 
-Not yet applied to hosted. Both migrations are outstanding, and the page cannot
-load its data until they are — an owner-directed apply is the next step, and
-`.github/workflows/apply-hosted-migrations.yml` has no scope for them yet.
 
+Last updated: 2026-08-28
 
-Last updated: 2026-08-29
+## Newest (2026-08-28 ~11:30Z): Agent Trail — a live map of the factory's runs (ADR-162)
 
-## Newest (2026-08-25 ~19:15Z): the retry that never happened (ADR-146)
+The owner directed sodiumsun/agenttrail (MIT) be built into the site.
+Adapted, not vendored: `/solutions/trail` renders each graph run as a
+live dependency map — `layoutTrail` (pure Kahn layering, unit-tested),
+`GET /api/graphs/edges` (member-scoped, zero migrations since
+graph_edges already had a member SELECT policy), states/gates/errors/
+closure notes from the existing runs projection on a 10s poll, and a
+declared-vs-observed panel per node. Attribution in
+THIRD_PARTY_NOTICES.md and on the page. The daemon/fs-watcher half of
+agenttrail is deliberately not ported (ADR-162 records why).
+
+Billing, same hour: the owner's one-click bootstrap ran in production —
+all four lookup-keyed prices and the webhook created, both secrets read
+ok, `connected: true`, and a real LIVE-mode checkout session was created
+through the API. The owner reports buying Basic with a real card;
+verification of the plan flip is theirs to read (RLS keeps their org's
+subscription invisible to the test account — working as designed).
+
+## Newest (2026-08-28): target claims hosted; stop before postdeploy
+
+Cleanup release `ce86d9c04ff91f237e680a5db4b0cda97feea2ce` removed the
+used production-URL acceptance workflow/test. All four exact-head jobs passed
+in CI `33169913723`; GitHub deployment `6140863004` resolved to READY Vercel
+deployment `dpl_4Zqh4q2yBfaagGtg7stSbV4NSphP`, and public health joined the
+exact Git, deployment, Vercel-project, and Supabase identities.
+
+Probe `33170897689` passed ledger `1|1|1|1|0|0`. First-attempt mutation run
+`33170953151` applied only SHA-pinned
+`20260828000200_target_bound_worker_claims.sql` and passed exact ledger,
+catalog, ACL, runtime, audit, lint, health, and stopped-safety postflight.
+Independent probe `33171025468` confirmed `1|1|1|1|1|0`. Never rerun selector
+normalization, URL schema, target claims, or either URL-acceptance attempt.
+
+Do not dispatch `postdeploy`: signed-in production still has no legitimate
+connected Ready bot route for the required record/reload acceptance. Current
+Full Lifecycle v2 also has not executed while workers remain OFF. Read-only
+production browser acceptance found no page or
+console errors. Existing test-data run
+`884d6164-0ecd-4f93-878a-0a7ecda239e5` renders Steps 1-8 complete, then
+truthfully shows Deploy refused by policy and Monitor skipped; it explicitly
+lacks a verifiable current-template identity and cannot prove v2. The next
+legitimate action is a connected Ready bot assignment, then signed-in Step 8/9
+record/reload acceptance with workers still OFF. Only afterward apply `00300`
+and read-only `verify`; current v2 execution is a separate later authorization
+window. Until then, keep workers, schedules, the auth broker, autonomy, and
+automatic actions OFF and the global kill switch ON.
+
+## Newest (2026-08-28 ~09:45Z): the site sets up its own Stripe account (ADR-158)
+
+The six-paste configuration path failed in practice: the shape diagnostic
+(#427) proved the production runtime saw none of the six STRIPE_* values
+across seven hours and four fresh deployments — "missing", never
+"malformed", so the values simply never reached the Production
+environment. The owner asked for everything to be done for them; a cloud
+container cannot reach their browser, and secrets must not transit the
+transcript regardless.
+
+So the deployment now does its own setup. Prices are addressable by fixed
+lookup keys with `resolvePriceId` falling back from env vars to a cached
+Stripe lookup; `POST /api/billing/bootstrap` (super administrator only,
+idempotent, find-first) creates the Basic/Pro products, the four
+lookup-keyed prices at the advertised amounts, and the webhook endpoint,
+returning the show-once signing secret to the admin's screen; the Billing
+page carries the "Finish payment setup" card that drives it; and
+`billingConnected` now also requires the webhook secret, because charging
+while the mirror is deaf would take money without granting anything. The
+owner's remaining part is exactly two pastes into Vercel (secret key,
+then the signing secret the card hands them), each followed by a
+redeploy — docs/BILLING_GO_LIVE.md leads with this short path.
+
+## Newest (2026-08-28): one exact Supabase Auth account is verified; secret and bootstrap removed
+
+Exact first-attempt workflow run `33164766560` on release
+`298264b02fe5a29e3c139f8077e65d6270f19167` created or updated the requested
+normalized identity in Supabase Auth project `qpuofpmagrmyamahqwxw`, then
+re-read one exact UUID with a parseable `email_confirmed_at`. Its only output
+was the bounded updated UUID. The temporary encrypted password secret was
+deleted immediately. This forward cleanup removes the disposable workflow and
+test. The result is an email-confirmed Auth identity only; it does not grant
+tenant membership, owner/admin role, provider connection, or execution
+authority.
+
+## Newest (2026-08-28): application is live; apply selector normalization before the release tail
+
+Step 8 no longer treats a provider/model mismatch or a disabled worker as an
+invalid command plan. The durable record-only route accepts the assigned bot's
+provider/model, and both launch and gate controls preserve exact server wake
+evidence. When the global worker gate is OFF the UI says **Not Connected**,
+does not enter an unbounded polling loop, and keeps a manual exact refresh.
+
+Production containment is explicit in both control planes: GitHub variables
+hold Phase 1C/graph/schedule/auth-broker execution OFF, the auth-broker run was
+cancelled, and Vercel Production holds the same application dispatch gates at
+`false`. The release workflow rejects mutation reruns, non-owner triggering
+actors, non-main graph manual runs, active execution workflows, or any changed
+autonomy/kill-switch/runtime state.
+
+`/api/health` now joins `www.theagoras.com` to the exact Vercel project,
+immutable deployment ID/URL, main SHA/ref, and Supabase project ref. The
+workflow compares that runtime deployment URL to GitHub's exact Vercel-bot
+Production status twice. Vercel's non-secret expected Supabase/Vercel/host and
+both worker-gate variables are configured, with the worker gates explicitly
+`false`. Exact `main`
+`79ca52f5b92e7d95292210e05565d35d21b4a435` passed all four jobs in CI
+`33158801269`; GitHub deployment `6138739479` is exact READY Vercel deployment
+`dpl_57pM3ZEYNyK596VAeLPJMabJLZrH`, and public health joined it to Vercel
+project `prj_pAsrhftaVWI4SyaqstgRVSWHJkdD` and Supabase project
+`qpuofpmagrmyamahqwxw`.
+
+Read-only release probe `33159805326` performed no mutation and stopped on one
+exact catalog drift: the hosted Phase 1C selector body is stale MD5
+`ed5840b9d8d0efdb513a8576df128e9b`; the frozen breaker-aware target is
+`5933952d71f9da90a2a80a05ce6e0378`. ABI, owner, definer/search-path/private
+ACL, three helper identities, and the FORCE-RLS breaker table are exact.
+Migration `20260828000050_normalize_breaker_aware_phase1c_selector.sql`
+(LF SHA-256
+`8914034508451d1550ebf3f1bedd8f7b71592f1809306e78c57774c458952896`)
+is the isolated forward-only containment. It accepts only the exact stale or
+target body, verifies the surrounding catalog, replaces only that function,
+and records no historical ledger repair.
+
+Next: publish the containment, require the four exact-head jobs and exact
+READY Vercel/health identity, dispatch a fresh `probe`, then apply only
+`00050`. After its ledger/catalog/ACL/runtime/safety postflight passes, proceed
+in order with `00100`, `00200`, and `00300`; never rerun `33159805326` or a
+mutation attempt. Current gates are lint/typecheck green, 5,150 tests passed / 7
+skipped across 442 files, and a 171/171-page production build.
+
+Signed-in acceptance remains externally incomplete: the active organization
+for `daniel.hughen@gmail.com` has zero connected AI accounts, ready bots, or
+assignments. Finish a supported provider connection before a fresh Step 8 POST
+and persisted Steps 9-10 evidence; never copy a token or account across
+tenants. Workers, provider execution, autonomy, schedules, the auth broker,
+and automatic actions stay OFF and the global kill switch stays ON.
+
+Seventeen older hosted versions beginning at `20260815000200` remain missing
+from the ledger while partial catalog effects exist. Reconcile each only after
+complete object-by-object proof and any surgical forward compensation. Never
+edit/replay history, blindly mark applied, reset, or down-migrate.
+
+## Newest (2026-08-28): Step 10 public URL writer is locally complete
+
+`20260828000100_project_production_url_configuration.sql` (LF SHA-256
+`0856ddee447280a1bb4418f25d6a6d4650687e168fffcd5e98e8ce15edd62b27`) is the isolated
+forward migration for the public project address used by lifecycle monitoring.
+It leaves `update_project_details(uuid,text,text)` unchanged and adds only an
+authenticated owner/admin setter, a safe-target predicate/constraint, and
+postflight assertions for projects FORCE RLS plus the existing audit trigger.
+The project detail page now has a dedicated configuration field and clear
+unsafe-target feedback. The database independently rejects likely-secret path
+material through `text_has_likely_secret`; no live project value was changed.
+
+Vercel Production has the non-secret expected Supabase project ref configured
+for the next deployment. `/api/health` will fail closed unless the runtime URL
+matches it, exposing only bounded match status plus exact release SHA/ref.
+
+Local evidence is 89/89 focused tests, including the full migration chain and
+native SQL authorization/ACL/audit behavior, plus clean focused ESLint and full
+typecheck. Do not call it hosted until the exact migration is applied once and
+signed-in owner/admin acceptance confirms the stored value and immutable
+`project.updated` event. The release must keep workers, provider execution,
+autonomy, and automatic actions OFF and the global kill switch ON.
+
+## Newest (2026-08-28): one-shot wakes are exact-target claims locally
+
+Migration `20260828000200_target_bound_worker_claims.sql` and its worker/
+workflow callers are locally complete under ADR-155. Repository-dispatch and
+manual graph runs require `graph_id`; Phase 1C requires `command_id`. The UUID
+is enforced inside the authoritative PostgreSQL selector before locking and
+claiming, so an older or higher-priority neighbor cannot consume the wake. A
+Phase 1C target that is not claimable returns no row after its target-scoped
+stale cleanup, so cleanup commits and the caller can report persisted state.
+Scheduled calls retain their prior global selector through null-target
+delegation and remain gated OFF. All graph-worker event types plus application
+wakes share a second exact global activation switch, also OFF. The graph claim exposes
+`project_production_url` separately from release-lineage `deployment_url`.
+
+Local evidence: 106/106 focused contract/behavior/unit tests passed, including
+full-chain schema-security and graph-worker execution; focused ESLint and
+scoped diff checks are clean. Do not call this hosted: the migration must be
+published and applied once through the protected exact-hash path, then an
+explicit-ID canary must prove target identity. Keep workers/schedules,
+provider execution, autonomy, and automatic actions OFF and the global kill
+switch ON. Full-chain tail/digest fixtures belong to the adjacent post-deploy
+validation change and must move with that migration rather than being patched
+independently here.
+
+## Newest (2026-08-28): Factory v2 is live; provider route remains
+
+The real page could wait indefinitely for the client fan-out of protected
+reads before discovering the viewer was signed out. The leaf page now obtains
+the same verified viewer as the portal layout, passes only its signed-in bit,
+and the console renders the signed-out gate immediately without protected
+reads. The viewer lookup is request-memoized and bounded to five seconds for
+presentation; API authorization is unchanged. Exact `main`
+`bb68659a0ee84370f83dd647ae57f4ccb83ea06c` passed all four required jobs in
+CI `33149814278`; Vercel `dpl_2A2bhtevZeBY6422ZYjVGJE5SuTU` / GitHub
+deployment `6137077047` is READY behind `www.theagoras.com`.
+
+Hosted containment and lineage are accepted in runs `33150654596` and
+`33150707932` after payload-free exact-manifest probe `33150619218`. The only
+remaining Factory acceptance gate is provider setup: a fresh signed-in Chrome
+tab as `daniel.hughen@gmail.com` has zero connected accounts, ready bots, or
+assignments; one Codex connection is unfinished and Claude OAuth is incomplete.
+Do not claim Steps 8-9 until OAuth, routing, a fresh POST, and persisted Step 9
+correlation are observed.
+
+## Newest (2026-08-28 ~01:20Z): Stripe keys configured owner-side; this commit is the redeploy that lets the runtime see them
+
+After the billing release went live, the owner reported creating the
+Stripe account and adding the keys to Vercel. The running deployment
+still answered `connected: false` — Vercel injects environment values at
+deployment creation, so keys added after a deploy do not reach it. This
+commit exists to produce the next deployment; once it serves,
+`/api/billing/summary` should answer `connected: true` and the checkout
+test (BILLING_GO_LIVE step 7) can run. If it still answers false after
+this deploys, the next suspects are the variable names and the value
+shapes the catalog validates (`sk_`/`rk_` secret key, `price_` ids).
+
+## Newest (2026-08-27): canonical Job Search is production accepted
+
+The completed integration is on `main`. Application behavior release
+`aabd82b3a626da94a2478ef26f043a51d059cd15` is bound to exact-head CI
+`33114868741` and Vercel Production deployment `6130751384`
+(`https://softwarefactory-14wpknnsx-surgeservices-projects.vercel.app`); the
+stable alias serves `/JobSearch` as `200`. Search originally landed through
+#416 (`5cfd839`). This release completes it with one canonical product entry,
+current live-board contracts, sealed save provenance, transactional
+persistence and signed-in production acceptance. `AI/SEARCH_MIGRATION_REPORT.md`
+is the detailed source, disposition, probe and rollout record.
+
+**Surface and source.** `/JobSearch` is canonical and **Job Search** is the
+signed-in global-navigation label. `/Job-Search` and `/job-seeker/search` are
+compatibility routes over the same content and gate. The entire 214-file
+upstream repository is vendored byte-for-byte at exact head
+`79cd383e58f0af7948c7c6462a3a289e9b67421e`, excluded from runtime/tooling.
+Four safe, keyless board capabilities are adapted: Jobnet, Jobindex,
+Jobdanmark and Freehire. LinkedIn remains excluded on service-terms grounds;
+Jobbank is deferred until its intermittent Cloudflare/WebSearch fallback can
+be made reliable and reviewed, not declared permanently impossible.
+
+**What the direct probes and production walk proved.** Non-persistent calls through the actual
+adapters returned Jobnet 2/4, Jobindex 2/736, Jobdanmark 0/0 for London and
+Freehire 2/6752. Jobnet's current BFF path/order, Jobindex's nested company
+shape and lack of free-text location, and Freehire's `cities` parameter are
+now executable request contracts. A Jobdanmark 0/0 is a valid empty live
+answer, not a parser error. Signed-in production returned Jobnet 4/4,
+Jobindex 20 shown of 736, Jobdanmark 0/0 and Freehire 25 shown of 6,752.
+
+**Trust and persistence.** Search responses mint a 30-minute sealed token per
+result, bound to organization, user, board and exact normalized fields. Save
+refuses missing/tampered/expired evidence. `insertScoredJob` preserves its API
+but calls only `record_job_seeker_job`, supplied by local forward migration
+`20260827000100_record_job_seeker_job_atomically.sql`. The authenticated-only,
+exact-path `SECURITY DEFINER` function derives `auth.uid()`, checks membership,
+and records job + match + initial application + immutable
+`job_seeker.job_recorded` activity in one transaction. Composite owner foreign
+keys close the cross-user child-reference gap. Behavior tests prove success,
+dedupe no-op, child-failure rollback, outsider refusal, cross-user refusal,
+ACL/search-path and forced RLS.
+
+**Database gate passed.** Workflow run `33111692239` applied only exact
+`20260827000100_record_job_seeker_job_atomically.sql` (SHA-256
+`2f51bf64ba3fd2bc711e6fbf9e660a2cc0dd5ef4b1f85d932ee574e79e9c7d13`) to
+project `qpuofpmagrmyamahqwxw`. Its postflight accepted the ledger, function
+identity/security/search path/ACL, owner constraints, superseded-key removal,
+PostgREST reload, and forced RLS. Direct INSERT remains authenticated because
+the manual jobs POST route still depends on it; move that final writer to the
+RPC before a later ACL contraction. Nothing here authorizes a reset,
+down-migration, worker or autonomy action.
+
+**Production acceptance.** Remote journey `33115019633` passed the
+returning-account gate on exact `aabd82b`; its live sample had no unsaved row
+and skipped the mutation honestly. The authenticated browser walk closed that
+sample gap: all four board sections rendered, a sealed Jobnet posting was
+saved, and Supabase-backed Discovery read it back `via jobnet`, score 35/100,
+stage FOUND. Activity rendered one immutable `job_seeker.job_recorded` event,
+entity `7637e796-b172-40d6-833f-408407b6f5b2`, at 16:55 EDT. Desktop and 390px
+mobile acceptance passed with no horizontal overflow.
+
+**Separate AI Factory Step 8 trace.** Postflight run `33114160835` verified
+the current any-model record-only database contract, exact definitions/ACL,
+zero-agent-run boundary and schema reload. Vercel logs showed zero new
+`POST /api/commands` requests after that postflight; the owner's repeated red
+message was retained state in an already-open modal, not a response from the
+current release. Hard refresh/reopen/submission is the correct next probe. Do
+not add or replay a migration until a failing current-deployment POST has a
+request ID and proves catalog drift.
+
+## Newest (2026-08-25 ~23:00Z): revenue — subscription billing shipped behind a Not Connected gate (ADR-149)
+
+The owner directed a revenue avenue. What ships in this release: Stripe
+subscription billing for the plans the pricing page has always advertised.
+`lib/billing/` (plans, entitlements, thin Stripe REST client + HMAC webhook
+verification, subscription mirror), `/api/billing/{checkout,portal,webhook,summary}`,
+enforcement as HTTP 402 on project creation and graph launches past the plan,
+`/pricing` cards that become checkout buttons only where a configured price
+stands behind them, and `/solutions/billing` under Settings. 56 tests in six new
+files, plus quota regressions inside the existing launch- and
+project-route suites.
+
+**Released 2026-08-28 (owner-directed):** both migrations hosted-applied
+apply-first and postflight-verified — `runs-closure-note` (20260825000300,
+ADR-148) in run `33131066501`, `billing-foundation` (20260825000400,
+ADR-149) in run `33131128140` — then PR #421 squash-merged as `98ef9b2`.
+
+Until the owner completes
+`docs/BILLING_GO_LIVE.md` (Stripe account, restricted key, four price ids,
+webhook secret, `SUPABASE_SERVICE_ROLE_KEY` on Vercel, redeploy), every
+billing surface renders **Not Connected** and the storefront behaves exactly
+as it did before this change. The webhook is the only subscription writer;
+browsers hold zero Stripe keys and zero write grants on billing tables.
+
+## Earlier (2026-08-25 ~20:00Z): the run that never said why (ADR-148; 147 was taken by Job Search on main)
+
+Defect #11, from the same live queue read. `graph-run.ts` composes a
+run-level explanation on every close — the fan-in assessment, the "this
+run is void" statement, and the correction that gate-halted nodes did
+not fail — and its own comment says the record should carry it "rather
+than leaving the correction to whoever happens to know the distinction".
+
+It was left to whoever happens to know. The message reached
+`completeRun`, whose parameter was named `_detail` because nothing read
+it: the RPC had no parameter and `graph_runs` had no column. Ten
+CANCELLED runs in the live queue state no reason at all.
+
+Migration `20260825000300` adds `closure_note`, the writer stores it, and
+`list_graph_runs` projects it. **Apply the migration before deploying the
+code** — the new parameter is defaulted, so the currently deployed
+seven-argument call still resolves, but the reverse is not true. The
+apply scope is `runs-closure-note` in `apply-hosted-migrations.yml`.
+
+Two collisions were caught during this change and are worth knowing
+about: #416 landed `20260825000200` while this was in flight, so the
+timestamp was taken (renumbered to `000300`) *and* its rebuild of
+`list_graph_runs` would have been reverted had this file been rebuilt
+from the older `20260823001000`. Twenty-one tests pin the newest
+migration filename; they are re-pointed here.
+
+## Earlier (2026-08-25 ~19:15Z): the retry that never happened (ADR-146)
 
 Inspecting the live queue rather than re-running green tests turned up
 defect #10, and a second defect underneath it. Runs `28b4dedf` (06:02Z)
@@ -68,7 +407,7 @@ Nothing on the ten-step goal is outstanding. The next lifecycle work is
 whatever the owner asks for; a Phase-2 deployment instrument is what would
 let step 9 pass rather than refuse.
 
-## Also 2026-08-25 (parallel branch): Search is built; the graph branch was parked
+## Earlier 2026-08-25 (parallel branch): the graph branch was parked for Search
 
 **Branch reset, deliberately and with the owner's direction.**
 `claude/ui-simplification-cbyx5t` was reset onto `main` to build Search. The
@@ -79,24 +418,12 @@ own ten-stage lifecycle (#370, #372, #374, #375, #385–#388, #399, #401),
 including marking ADR-136 superseded itself. Anything still wanted from #347
 should be taken from that backup ref, not from the PR.
 
-**Search.** `/job-seeker/search` over Jobnet, Jobindex and Freehire, ported from
-the MIT-licensed `MadsLorentzen/ai-job-search`. See
-`AI/SEARCH_MIGRATION_REPORT.md` for the full disposition, and
-`THIRD_PARTY_NOTICES.md` for attribution. No migration, no new dependency, no
-new environment variable.
-
-**What a next session should know.**
-
-1. **Jobindex is the fragile adapter, by construction.** It reads a page and
-   lifts the payload out of a `var Stash` blob, because Jobindex serves results
-   client-side. When Jobindex changes its markup this breaks — and it is built
-   to throw rather than return an empty list, because "no matches" and "the
-   parser is broken" look identical to a person.
-2. **No test touches a live board.** Fixtures only, deliberately. So a green
-   suite does not prove the boards still answer in the shape the parsers expect.
-3. **Jobdanmark is unported, not rejected** — the largest source adapter, no
-   obstacle in principle. Jobbank and LinkedIn are refusals with reasons, both
-   recorded in `registry.ts`.
+The Search status recorded here at the time (fixture-only, Jobdanmark unported,
+no migration) is superseded by the 2026-08-27 handoff above. Jobdanmark is now
+adapted, all four adapters have direct live probe evidence, and atomic audited
+persistence requires a new local forward migration. Attribution remains in
+`THIRD_PARTY_NOTICES.md`; exact current disposition is in
+`AI/SEARCH_MIGRATION_REPORT.md`.
 
 ## Earlier (2026-08-25 ~12:55Z): the live walk reaches step 6, and ADR-145 is proven live
 
@@ -1387,7 +1714,7 @@ The workflow maps the four App values to runtime `GITHUB_*` names only inside th
 
 The non-secret repository Actions variable `SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED` must equal literal `true` or every repository-dispatch/schedule job is skipped. It is the final fail-closed activation gate. It was enabled only long enough for the first approved acceptance claim and is now absent/OFF; any further activation remains bounded by the exact owner approval.
 
-`SOFTWAREFACTORY_REQUIRED_CHECKS` must be a non-empty, unique pipe-delimited list of 1-20 exact check names. The reviewed workflow value is `Lint, typecheck, test, and build|Browser and accessibility tests`, matching `.github/workflows/ci.yml`. Before activation, verify no CI job rename drift. Missing/invalid configuration blocks worker startup; incomplete/missing/unstable checks or a changed draft PR cannot pass CI.
+`SOFTWAREFACTORY_REQUIRED_CHECKS` must be a non-empty, unique pipe-delimited list of 1-20 exact check names. The reviewed workflow value is `Lint, typecheck, test, and build|Browser and accessibility tests 1/3|Browser and accessibility tests 2/3|Browser and accessibility tests 3/3`, matching `.github/workflows/ci.yml`. Before activation, verify no CI job rename drift. Missing/invalid configuration blocks worker startup; incomplete/missing/unstable checks or a changed draft PR cannot pass CI.
 
 ## Verification state
 
@@ -1449,3 +1776,49 @@ The non-secret repository Actions variable `SOFTWAREFACTORY_PHASE1C_WORKER_ENABL
 - Do not let a Vercel READY state, workflow file, configured secret name, queued command, or mocked SDK response count as a live worker.
 - Keep the Phase 1B candidate/primary distinctions and remaining tenant/adverse gaps intact.
 - Any new code/schema/provider/deployment change invalidates affected evidence and requires rerunning its gates.
+
+## 2026-08-28 Step 8 current-production handoff
+
+- The visible `invalid Phase 1C command plan` result came from an Aug 22 modal
+  that remained mounted. Exact-deployment logs now show authenticated GETs,
+  zero `POST /api/commands`, and no command-route 4xx/5xx.
+- A fresh Chrome tab as `daniel.hughen@gmail.com` loads the current production
+  bundle. It has zero connected AI accounts, ready bots, or assignments; one
+  Codex connection is unfinished and Claude OAuth is incomplete.
+- Finish one provider OAuth flow and project route setup, then submit a fresh
+  Step 8 command and verify immutable record-only route evidence plus persisted
+  Step 9 correlation. No worker dispatch or execution enablement is required.
+
+## 2026-08-28 ten-step Factory v2 release handoff
+
+- Exact production is `bb68659a0ee84370f83dd647ae57f4ccb83ea06c`.
+  CI `33149814278` passed quality and browser/accessibility 1/3, 2/3, and 3/3;
+  Vercel `dpl_2A2bhtevZeBY6422ZYjVGJE5SuTU` / deployment `6137077047` is
+  READY behind `www.theagoras.com`.
+- Requirements -> Monitor, exact repository/base/policy identity, strict gates,
+  durable Phase 1C-to-production lineage, and exact graph/run selection are
+  released. Hosted `00210` containment and unchanged `00200` lineage are also
+  accepted; do not replay `00150`, reset history, or down-migrate.
+- Keep the worker, provider execution, autonomy, and every automatic action
+  OFF, with the global kill switch ON. Complete provider OAuth and route setup,
+  then verify one new record-only Step 8 command survives reload and correlates
+  to Step 9 before changing **Not Connected** status.
+
+## 2026-08-28 hosted containment and lineage acceptance
+
+- Probe run `33150619218` on exact project `qpuofpmagrmyamahqwxw` returned four
+  candidates, payload-free manifest SHA-256
+  `784acaca2b0957ecb0eeea85e3d0dde2e64ba653c744e708ec8d4094f9175b99`,
+  and downstream blockers `0|0|0|0`.
+- Containment run `33150654596` matched that exact manifest, applied only
+  `20260827000210`, and passed ledger, zero-offender, constraints, private
+  FORCE-RLS/no-ACL, immutable-audit, exact tombstone, ACL, and safety checks.
+- Lineage run `33150707932` then reconstructed the manifest from private audit
+  evidence and applied only unchanged `20260827000200`. Ledger, catalog, RLS,
+  eight revoked legacy signatures, exact authenticated-only/evidence-bound
+  `decide_node_gate`, audit, runtime, lint, health, and stopped-worker
+  postflights all passed.
+- The production safety envelope is unchanged: execution workers, provider
+  execution, autonomy, and automatic actions are OFF; the global kill switch
+  is ON; no running graph or Phase 1C run was introduced. Never replay `00150`,
+  reset migration history, restore legacy authority, or down-migrate.

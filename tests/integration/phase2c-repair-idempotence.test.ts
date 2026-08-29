@@ -74,6 +74,17 @@ const LATER_DEPENDANTS = [
   "20260815000600_phase2e_portfolio_visibility.sql",
 ] as const;
 
+// These forward releases deliberately pin the final selector/catalog source
+// produced by the dependant migrations above. A reconstruction that withholds
+// those historical dependants must withhold their 2026-08-28 consumers too,
+// then apply both groups in their real order after the repair.
+const FULL_LIFECYCLE_RELEASE = [
+  "20260828000050_normalize_breaker_aware_phase1c_selector.sql",
+  "20260828000100_project_production_url_configuration.sql",
+  "20260828000200_target_bound_worker_claims.sql",
+  "20260828000300_graph_postdeploy_validation.sql",
+] as const;
+
 async function applyChain(db: PGlite, options: { skip?: readonly string[] } = {}): Promise<void> {
   const skip = new Set(options.skip ?? []);
   const files = (await readdir(migrationsDirectory))
@@ -193,7 +204,9 @@ describe("the phase2c repair", () => {
     const db = await bootstrap();
     // Everything except the target, then only the first table it creates —
     // reconstructing the exact state hosted is in.
-    await applyChain(db, { skip: [TARGET, DEPENDS_ON_TARGET, ...LATER_DEPENDANTS] });
+    await applyChain(db, {
+      skip: [TARGET, DEPENDS_ON_TARGET, ...LATER_DEPENDANTS, ...FULL_LIFECYCLE_RELEASE],
+    });
 
     const original = await readFile(resolve(migrationsDirectory, TARGET), "utf8");
     const firstTable = original.slice(0, original.indexOf("comment on table public.resource_breakers"));
@@ -246,6 +259,7 @@ describe("the phase2c repair", () => {
     // function bodies are resolved at creation, so they only apply at all if
     // `resource_breakers` is genuinely there with its real columns.
     for (const dependant of LATER_DEPENDANTS) await applyOne(db, dependant);
+    for (const release of FULL_LIFECYCLE_RELEASE) await applyOne(db, release);
     const { rows: scheduling } = await db.query<{ suppressed: string | null }>(
       `select public.breaker_suppression_reason(
          '00000000-0000-4000-8000-000000000000'::uuid, 'openai', 'gpt-5.3-codex', now()
@@ -304,11 +318,15 @@ describe("the verified ledger recorder", () => {
 
   async function bootstrapWithLedger(): Promise<PGlite> {
     const db = await bootstrap();
+    // Replay the schema as a clean, ledgerless database first. Protected graph
+    // migrations deliberately reject a present-but-empty hosted ledger because
+    // that state falsely claims there is authoritative migration history.
+    // The empty ledger belongs to the recorder fixture, not to migration replay.
+    await applyChain(db);
     await db.exec(`
       create schema if not exists supabase_migrations;
       create table supabase_migrations.schema_migrations (version text primary key);
     `);
-    await applyChain(db);
     return db;
   }
 

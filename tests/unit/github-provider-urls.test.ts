@@ -7,14 +7,20 @@ vi.mock("server-only", () => ({}));
 import { listGitHubInstallationRepositories } from "@/lib/github/client";
 import {
   createGitHubDraftPullRequest,
+  getGitHubDeploymentEvidence,
   getGitHubFile,
+  getGitHubPullRequest,
   listGitHubCheckRuns,
   listGitHubCommits,
   listGitHubPullRequests,
   listGitHubTree,
   updateGitHubFileOnBranch,
 } from "@/lib/github/repository";
-import { githubWebUrlSchema } from "@/lib/github/schemas";
+import {
+  canonicalizeProductionDeploymentUrl,
+  githubWebUrlSchema,
+  productionDeploymentUrlSchema,
+} from "@/lib/github/schemas";
 
 const sha = "a".repeat(40);
 const now = "2026-08-12T20:00:00.000Z";
@@ -47,6 +53,26 @@ describe("GitHub provider web URLs", () => {
   it("accepts only the canonical HTTPS GitHub web origin", () => {
     expect(githubWebUrlSchema.parse("https://github.com/example/repository"))
       .toBe("https://github.com/example/repository");
+  });
+
+  it("canonicalizes only deployment transport identity and preserves path case", () => {
+    expect(canonicalizeProductionDeploymentUrl(
+      "HTTPS://SoftwareFactory-Exact.VERCEL.APP:443/Releases/Exact",
+    )).toBe("https://softwarefactory-exact.vercel.app/Releases/Exact");
+    expect(canonicalizeProductionDeploymentUrl(
+      "https://SoftwareFactory-Exact.VERCEL.APP:8443/Releases/Exact",
+    )).toBe("https://softwarefactory-exact.vercel.app:8443/Releases/Exact");
+  });
+
+  it.each([
+    "http://softwarefactory-exact.vercel.app",
+    "https://owner:password@softwarefactory-exact.vercel.app",
+    "https://softwarefactory-exact.vercel.app/?token=value",
+    "https://softwarefactory-exact.vercel.app/#deployment",
+    `https://softwarefactory-exact.vercel.app/sk-${"a".repeat(32)}`,
+    `https://softwarefactory-exact.vercel.app/sk-%61${"a".repeat(31)}`,
+  ])("rejects an unsafe production deployment URL: %s", (url) => {
+    expect(productionDeploymentUrlSchema.safeParse(url).success).toBe(false);
   });
 
   it("loads bounded per-pull details so mergeability is real provider data", async () => {
@@ -94,6 +120,130 @@ describe("GitHub provider web URLs", () => {
 
     await expect(listGitHubPullRequests("token", "example", "repository", { includeMergeability: true }))
       .resolves.toEqual([expect.objectContaining({ mergeability: "unknown", number: 1 })]);
+  });
+
+  it("reads exact merged pull-request identity from the numbered detail endpoint", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response({
+      base: { ref: "main" },
+      created_at: now,
+      draft: false,
+      head: { ref: "factory/change", sha },
+      html_url: "https://github.com/example/repository/pull/42",
+      id: 42,
+      merge_commit_sha: "b".repeat(40),
+      mergeable: null,
+      mergeable_state: "unknown",
+      merged: true,
+      merged_at: now,
+      number: 42,
+      state: "closed",
+      title: "Change",
+      updated_at: now,
+      user: null,
+    })));
+
+    await expect(getGitHubPullRequest("token", "example", "repository", 42))
+      .resolves.toEqual({
+        baseBranch: "main",
+        headBranch: "factory/change",
+        headSha: sha,
+        merged: true,
+        mergedAt: now,
+        mergeCommitSha: "b".repeat(40),
+        number: 42,
+        state: "closed",
+        url: "https://github.com/example/repository/pull/42",
+      });
+  });
+
+  it("refuses incomplete merge identity from the detail endpoint", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response({
+      base: { ref: "main" }, created_at: now, draft: false,
+      head: { ref: "factory/change", sha },
+      html_url: "https://github.com/example/repository/pull/42",
+      id: 42, merge_commit_sha: null, merged_at: null,
+      number: 42, state: "closed", title: "Change", updated_at: now, user: null,
+    })));
+
+    await expect(getGitHubPullRequest("token", "example", "repository", 42))
+      .rejects.toMatchObject({ code: "github_invalid_response", status: 502 });
+  });
+
+  it("reads one exact GitHub deployment and its latest safe status", async () => {
+    const completedAt = "2026-08-12T20:05:00.000Z";
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(response({
+        created_at: now,
+        creator: { login: "vercel[bot]" },
+        environment: "Production",
+        id: 6130925898,
+        production_environment: true,
+        ref: "main",
+        sha,
+        task: "deploy",
+        updated_at: completedAt,
+      }))
+      .mockResolvedValueOnce(response([{
+        created_at: completedAt,
+        creator: { login: "vercel[bot]" },
+        environment_url: "https://softwarefactory-exact.vercel.app",
+        id: 9130925898,
+        state: "success",
+        updated_at: completedAt,
+      }]));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(getGitHubDeploymentEvidence("token", "example", "repository", 6130925898))
+      .resolves.toEqual({
+        completedAt,
+        creatorLogin: "vercel[bot]",
+        deploymentId: 6130925898,
+        environment: "Production",
+        environmentUrl: "https://softwarefactory-exact.vercel.app",
+        productionEnvironment: true,
+        ref: "main",
+        sha,
+        startedAt: now,
+        status: "success",
+        statusCreatorLogin: "vercel[bot]",
+        task: "deploy",
+      });
+    expect(String(fetchMock.mock.calls[0]?.[0]))
+      .toBe("https://api.github.com/repos/example/repository/deployments/6130925898");
+    expect(String(fetchMock.mock.calls[1]?.[0]))
+      .toBe("https://api.github.com/repos/example/repository/deployments/6130925898/statuses?per_page=1");
+  });
+
+  it.each([
+    "http://softwarefactory-exact.vercel.app",
+    "https://owner:password@softwarefactory-exact.vercel.app",
+    "https://softwarefactory-exact.vercel.app/?signature=unsafe",
+    "https://softwarefactory-exact.vercel.app/#release",
+    `https://softwarefactory-exact.vercel.app/vercel_${"a".repeat(24)}`,
+  ])("refuses an unsafe deployment environment URL: %s", async (environmentUrl) => {
+    vi.stubGlobal("fetch", vi.fn()
+      .mockResolvedValueOnce(response({
+        created_at: now,
+        creator: { login: "vercel[bot]" },
+        environment: "Production",
+        id: 6130925898,
+        production_environment: true,
+        ref: "main",
+        sha,
+        task: "deploy",
+        updated_at: now,
+      }))
+      .mockResolvedValueOnce(response([{
+        created_at: now,
+        creator: { login: "vercel[bot]" },
+        environment_url: environmentUrl,
+        id: 9130925898,
+        state: "success",
+        updated_at: now,
+      }])));
+
+    await expect(getGitHubDeploymentEvidence("token", "example", "repository", 6130925898))
+      .rejects.toMatchObject({ code: "github_invalid_response", status: 502 });
   });
 
   it("rejects an unsafe repository URL from installation synchronization", async () => {

@@ -89,7 +89,7 @@ const replayCommandParametersSchema = z.object({
 /**
  * The stored binding fields a replay needs to wake the graph worker. Parsed
  * separately and tolerantly: a binding that predates these fields skips the
- * wake (the scheduled or manual worker still drains the graph) rather than
+ * wake (the graph stays planned until a separately enabled exact dispatch) rather than
  * failing the replay.
  */
 const replayDispatchBindingSchema = z.object({
@@ -229,6 +229,14 @@ function isFactoryIdempotencyConflict(error: DatabaseError | null): boolean {
       "idempotent factory command routing evidence conflicts",
       "idempotent command predates factory routing evidence",
       "idempotency key was already used for a different factory command intent",
+    ].includes(error.message ?? "");
+}
+
+function isFactoryCommandSchemaOutOfDate(error: DatabaseError | null): boolean {
+  return error?.code === "22023"
+    && [
+      "invalid Phase 1C command plan",
+      "Phase 1C execution configuration is not supported",
     ].includes(error.message ?? "");
 }
 
@@ -381,7 +389,7 @@ export async function POST(request: Request) {
             const dispatchBinding = replayDispatchBindingSchema.safeParse(parameters.repositoryBinding);
             if (dispatchBinding.success && replay.repository_full_name) {
               try {
-                await dispatchGraphWorker(
+                const dispatchResult = await dispatchGraphWorker(
                   {
                     appId: dispatchBinding.data.appId,
                     externalInstallationId: dispatchBinding.data.externalInstallationId,
@@ -390,9 +398,9 @@ export async function POST(request: Request) {
                   },
                   outcome.graphId,
                 );
-                workerWoken = true;
+                workerWoken = dispatchResult.dispatched;
               } catch {
-                // The graph stays planned for the scheduled or manual worker.
+                // The graph stays planned behind the global worker gate.
                 workerWoken = false;
               }
             }
@@ -412,11 +420,13 @@ export async function POST(request: Request) {
             command: { id: replay.command_id, status: replay.command_state },
             task: { id: replay.task_id, status: replay.task_state },
             execution: {
-              started: replayAnalysisGraph?.launched === true,
+              started: replayAnalysisGraph?.launched === true && replayAnalysisGraph.workerWoken,
               message: replay.requires_owner_approval
                 ? "Persisted only. Owner approval remains required; this replay did not dispatch a worker or change autonomy."
                 : replayAnalysisGraph?.launched
-                  ? "Recorded, and its analysis graph is planned. The subscription worker executes read-only analysis; no repository write, merge, or deploy can result."
+                  ? replayAnalysisGraph.workerWoken
+                    ? "Recorded, its analysis graph is planned, and the read-only subscription worker was woken; no repository write, merge, or deploy can result."
+                    : "Recorded, and its analysis graph is planned. The executor is Not Connected, so nothing runs; no repository write, merge, or deploy occurred."
                   : replayExecutionMode === "record_only"
                     ? "Recorded only for the selected bot. No execution run was created, and no worker or autonomy setting changed."
                     : "Persisted only. This exact replay returned its stored route; this request did not dispatch a worker or change autonomy.",
@@ -762,6 +772,12 @@ export async function POST(request: Request) {
       if (isFactoryIdempotencyConflict(error)) {
         return factoryIdempotencyConflict();
       }
+      if (isFactoryCommandSchemaOutOfDate(error)) {
+        return unavailableRead(
+          "factory_command_schema_out_of_date",
+          "Factory command routing is temporarily out of sync with this release. Reload after the database release finishes.",
+        );
+      }
       return databaseErrorResponse(error);
     }
 
@@ -830,7 +846,7 @@ export async function POST(request: Request) {
       if (outcome.launched) {
         let workerWoken = false;
         try {
-          await dispatchGraphWorker(
+          const dispatchResult = await dispatchGraphWorker(
             {
               appId: target.app_id,
               externalInstallationId: target.external_installation_id,
@@ -839,10 +855,10 @@ export async function POST(request: Request) {
             },
             outcome.graphId,
           );
-          workerWoken = true;
+          workerWoken = dispatchResult.dispatched;
         } catch {
-          // The graph stays planned; a manual or scheduled worker dispatch
-          // still drains it. Reported as false rather than hidden.
+          // The graph stays planned behind the global worker gate. Reported
+          // as false rather than hidden.
           workerWoken = false;
         }
         analysisGraph = { launched: true, graphId: outcome.graphId, templateKey: outcome.templateKey, workerWoken };
@@ -862,11 +878,13 @@ export async function POST(request: Request) {
           status: result.task_state,
         },
         execution: {
-          started: analysisGraph?.launched === true,
+          started: analysisGraph?.launched === true && analysisGraph.workerWoken,
           message: result.requires_owner_approval
             ? "Persisted only. Owner approval remains required; this request did not dispatch a worker or change autonomy."
             : analysisGraph?.launched
-              ? "Recorded, and its analysis graph is planned. The subscription worker executes read-only analysis; no repository write, merge, or deploy can result."
+              ? analysisGraph.workerWoken
+                ? "Recorded, its analysis graph is planned, and the read-only subscription worker was woken; no repository write, merge, or deploy can result."
+                : "Recorded, and its analysis graph is planned. The executor is Not Connected, so nothing runs; no repository write, merge, or deploy occurred."
               : commandExecution.executionMode === "record_only"
                 ? "Recorded only for the selected bot. No execution run was created, and no worker or autonomy setting changed."
                 : "Persisted only. This request did not dispatch a worker or change autonomy.",

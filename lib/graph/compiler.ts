@@ -54,6 +54,12 @@ export type CompiledNode = {
   readonly job: string;
   readonly executor: NodeContract["executor"];
   readonly capability: NodeContract["capability"];
+  /**
+   * Contracts survive compilation because a worker may execute this graph in
+   * another process after the plan has been persisted and claimed again.
+   */
+  readonly inputSchema?: NodeContract["inputSchema"];
+  readonly outputSchema?: NodeContract["outputSchema"];
   readonly modelTier: ReturnType<typeof modelTierFor>;
   readonly risk: RiskLevel;
   readonly timeoutMs: number;
@@ -215,6 +221,8 @@ export function compileGraph(input: CompileInput): CompileResult {
         job: node.job,
         executor: node.executor,
         capability: node.capability,
+        inputSchema: node.inputSchema,
+        outputSchema: node.outputSchema,
         modelTier: modelTierFor(node),
         risk: node.risk,
         timeoutMs: node.timeoutMs,

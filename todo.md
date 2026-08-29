@@ -1,5 +1,311 @@
 # SoftwareFactory — shared working status
 
+## JOB SEEKER — JOB DISCOVERY MATCHES THE DESIGN, AND FOUR FIGURES GOT REAL DATA (2026-08-28 — PICK UP HERE)
+
+The owner's Job Discovery reference was built against the existing surface
+rather than beside it. `JobView.match` already carried `score`, `reasons`,
+`gaps` and `breakdown`, which are exactly the design's ring, "Why you're a
+strong match", "Potential Gaps" and "Top Matching Skills" — so the most
+valuable half of the page is reused scored data, not new code.
+
+**Four visible features had nothing behind them** and got tables, not
+appearances (`20260828000400`, ADR-141):
+
+| Feature | Now backed by |
+|---|---|
+| Bookmark / Saved Jobs | `job_seeker_jobs.saved_at` (timestamp + partial index) |
+| Saved Searches | `job_seeker_saved_searches` |
+| Alerts | `job_seeker_search_alerts` (FK-cascaded from the search) |
+| Search Credits | `job_seeker_search_events`, append-only, + `weekly_search_allowance` |
+
+**Two things deliberately NOT rendered, and why — do not "finish" these
+without writing the data first:**
+
+1. **Saved Searches and Alerts tabs.** The tables exist; nothing writes them.
+   A tab onto a permanently empty list is scaffolding. Writing them is the
+   next item: `POST /api/job-seeker/search/save` currently saves a *job* from
+   a result, not the *query* — that name collision is worth resolving when you
+   build the saved-search route.
+2. **The credit meter when no allowance exists.** It is omitted, not drawn
+   empty.
+
+**Traps in this area:**
+
+- **`qualification_threshold` is per-seeker and defaults to 80.** The design's
+  card says "High Match (80%+)"; the code reads each job's own recorded
+  threshold and drops the qualifier when postings disagree. Do not hard-code
+  80 — a mutation test fails if you do.
+- **An unscored posting is not a zero-scored one.** It is excluded from a
+  minimum-score filter and sorts last. A test asserts this at a bar of **0**,
+  because at any higher bar the honest check and the `?? 0` shortcut agree and
+  the case proves nothing.
+- **Search and Follow-Up are not in the design's twelve nav items** but are
+  working pages. They stay reachable under Overview's contents group rather
+  than being orphaned.
+
+**Still open here:** the design's own "Estimated Next Steps" (Customize Resume
+→ Generate Cover Letter → Review Application → Apply) is not built; the
+application stage exists but the four-step ladder does not map onto it yet.
+Company Insights shows only what the posting carried and says so.
+
+## FACTORY RELEASE CHECKPOINT (2026-08-28 08:26 EDT — CURRENT)
+
+- Validated cleanup/application release is
+  `ce86d9c04ff91f237e680a5db4b0cda97feea2ce`; all four jobs passed in CI
+  `33169913723`; GitHub deployment `6140863004` is READY Vercel
+  `dpl_4Zqh4q2yBfaagGtg7stSbV4NSphP`, with exact public health identity.
+- Protected runs completed: initial probe `33165823042`, selector mutation
+  `33165886343`, fresh probe `33165944760`, URL-schema mutation `33165992529`.
+- Probe `33170897689` confirmed `1|1|1|1|0|0`; target-claims run
+  `33170953151` applied only `20260828000200`; independent probe `33171025468`
+  confirmed hosted ledger `1|1|1|1|1|0`. Never rerun selector, URL-schema, or
+  target-claims.
+- First-attempt acceptance run `33168092838` passed exact invocation,
+  green/READY release, stopped-workflow, and Supabase connection gates, then
+  failed before target resolution or mutation because `psql -c` did not expand
+  the quoted owner/project variables. Both temporary encrypted selectors were
+  deleted immediately. Never rerun this failed attempt.
+- Quoted-stdin correction `53b84b7952a1e09725f53da5d65c4947b8cb914a`
+  passed all four jobs in CI `33168368270`; GitHub deployment `6140556549` is
+  READY Vercel `dpl_tBF2s6AtLmqZ13YpYHKWzBRtwiKT`, with exact public health.
+- Fresh first-attempt acceptance `33169297158` passed the real owner/admin
+  session, exact URL write, one immutable owner-attributed audit event, no-op
+  replay, signed-in reload, and pre/post stopped containment. The two temporary
+  selectors were deleted immediately.
+- The disposable URL workflow/test is removed and target-bound claims are live.
+  Do not apply `postdeploy` until a legitimate signed-in Step 8 record/reload
+  and truthful Step 9 persistence are exact with workers OFF. Current Full
+  Lifecycle v2 execution acceptance follows `postdeploy` and `verify`.
+- Read-only production browser acceptance found no page or console errors.
+  Historical test run `884d6164` renders Steps 1-8 complete, then truthfully
+  shows Deploy refused by policy and Monitor skipped; it is not current v2
+  evidence.
+- Workers, schedules, auth broker, autonomy, and all automatic actions stay
+  OFF. Global kill switch stays ON. The formal goal remains active.
+
+## FACTORY 10-STEP PRODUCTION RECOVERY (2026-08-28 06:49 EDT — PICK UP HERE)
+
+### Goal and current release
+
+The active owner goal is the signed-in 10-step Factory journey at
+`https://www.theagoras.com/solutions/factory`, Requirement through Monitor,
+with real Supabase persistence and production verification. Do not claim the
+goal complete while a real provider account is absent or while workers remain
+intentionally stopped.
+
+- Active worktree:
+  `C:\Users\Daniel\OneDrive\Documents\ChatGPT\SoftwareFactory-factory-e2e`
+- Branch: `codex/factory-ten-step-e2e`
+- The Factory cleanup release is published and exactly validated. The current
+  worktree records the hosted target-claim and browser-acceptance evidence.
+- Release used for the exact target-claims acceptance:
+  `ce86d9c04ff91f237e680a5db4b0cda97feea2ce`
+- Matching fully validated Factory deployment:
+  `ce86d9c04ff91f237e680a5db4b0cda97feea2ce`
+- Upstream Stripe ADR-158 and selector/Auth/URL ADR-159/ADR-160/ADR-161 are
+  preserved.
+- The original worktree
+  `C:\Users\Daniel\OneDrive\Documents\ChatGPT\SoftwareFactory` is dirty and
+  must remain untouched.
+- `.github/workflows/apply-hosted-migrations.yml` appears modified only because
+  of line-ending normalization. Its HEAD/index/filtered content was previously
+  proven semantically identical. Do not stage, reset, or edit it.
+
+Exact release evidence green for `298264b...`:
+
+- GitHub Actions run `33163838800`: all four required jobs passed — quality,
+  browser/accessibility 1/3, 2/3, and 3/3.
+- GitHub deployment `6139678648`; Vercel deployment
+  `dpl_ChxG5EdgPzh3vybRZgBRz9EA9gg1`; READY URL
+  `https://softwarefactory-gb1bslp8n-surgeservices-projects.vercel.app`.
+- `https://www.theagoras.com/api/health` returned exact SHA/ref, Vercel project
+  `prj_pAsrhftaVWI4SyaqstgRVSWHJkdD`, and Supabase project
+  `qpuofpmagrmyamahqwxw` with database reachable.
+- Local and exact-head gates: lint, typecheck, 5,150 tests / 7 skipped, a
+  171/171-page production build, and all three browser shards green.
+
+### Repeated Step 8 error — exact live finding
+
+The current Step 8 any-model/record-only application and database contract is
+already deployed and exact. The protected read-only probe verified migration
+`20260822001000` once in the hosted ledger and all 12 relevant function source,
+signature, volatility, security, search-path, and ACL identities. The raw
+`invalid Phase 1C command plan` screenshot therefore came from a stale mounted
+client/release or an older submission path; current API code maps that legacy
+database message to a bounded schema-out-of-sync reload response.
+
+The lifecycle release probe `33159805326` found a separate exact production
+catalog mismatch that blocks the new target-bound worker claim migration:
+
+| Selector | Hosted MD5 | Required lineage |
+|---|---|---|
+| `claim_planned_graph_internal(text,text[],text,jsonb)` | `fdd3eee3e61c083789ffeb4808ed0a47` | exact/current |
+| `claim_phase1c_run_budget_internal(text,text,text,integer)` | `ed5840b9d8d0efdb513a8576df128e9b` | stale `20260815000300` body |
+| required Phase selector target | `5933952d71f9da90a2a80a05ce6e0378` | exact `20260815000500` breaker-aware body |
+
+All three breaker prerequisites are live and byte-exact, postgres-owned,
+owner-only ACL, `search_path=pg_catalog`:
+
+- `breaker_cooldown_seconds(text)` → `9b46c6e078158e2f2ac1be0126e47e65`
+- `breaker_suppression_reason(uuid,text,text,timestamptz)` →
+  `ce7c51ad47992174634c960b8a8faaaf`
+- `consume_breaker_trial(uuid,text,text)` →
+  `41323ace6fed5d3e5ebc512464bd358d`
+
+`resource_breakers` is postgres-owned with RLS+FORCE RLS, the exact nine-column
+shape, authenticated SELECT-only, and hosted `service_role` full table ACL.
+Never contract that hosted service-role ACL in this selector-only containment.
+
+### Committed and rebased forward containment
+
+New file:
+
+- `supabase/migrations/20260828000050_normalize_breaker_aware_phase1c_selector.sql`
+
+It is ordered before the existing `00100 → 00200 → 00300` release tail. It
+accepts only the exact stale hosted hash or exact clean-chain target hash,
+verifies the complete selector ABI/owner/SECURITY DEFINER/search path/private
+ACL, exact helper identities, breaker table/RLS/constraint/policy shape, and
+absence of target-bound selector objects. It replaces only the one selector
+with the byte-exact `20260815000500` body. It never replays or marks
+`20260815000300`/`20260815000500` and performs no history repair.
+
+The 15-file release listed below is on `main`. The current forward cleanup
+changes only eight paths: deletion of the disposable production-URL acceptance
+workflow/test plus
+`AI/BACKLOG.md`, `AI/CURRENT_STATE.md`, `AI/DECISIONS.md`, `AI/HANDOFF.md`,
+`AI/QUALITY_SCORECARD.md`, and `todo.md`.
+
+Published release files:
+
+- `.github/workflows/factory-lifecycle-release-migrations.yml`
+- `.github/workflows/bootstrap-blackstone-supabase-auth.yml` (temporary)
+- `AI/BACKLOG.md`
+- `AI/CURRENT_STATE.md`
+- `AI/DECISIONS.md`
+- `AI/HANDOFF.md`
+- `AI/HOSTED_APPLY_RUNBOOK.md` (migration count 173 → 174)
+- `AI/QUALITY_SCORECARD.md`
+- `supabase/migrations/20260828000050_normalize_breaker_aware_phase1c_selector.sql`
+- `tests/integration/breaker-aware-selector-normalization.behavior.test.ts`
+- `tests/integration/breaker-aware-selector-normalization.contract.test.ts`
+- `tests/integration/phase2c-repair-idempotence.test.ts`
+- `tests/unit/factory-lifecycle-release-migrations-workflow.test.ts`
+- `tests/unit/bootstrap-blackstone-supabase-auth-workflow.test.ts` (temporary)
+- `todo.md`
+
+The release workflow now has a separate `selector-normalization` mutation
+scope and ordered six-field ledger:
+`27000200|27000210|28000050|28000100|28000200|28000300`. It reuses the same
+exact-main/green-CI/READY-Vercel/health/stopped-worker gate, SHA-pinned one-file
+staging, transactional linked-DB lint, locked single transaction, ledger write,
+PostgREST reload, and postflight. `probe` and `verify` remain read-only.
+
+### Exact Auth bootstrap completed and disposed at this checkpoint
+
+Exact first-attempt run `33164766560` on `298264b...` ran as the configured
+release actor, updated one normalized Supabase Auth identity, and re-read one
+exact UUID with a parseable `email_confirmed_at`. Its only result was the
+bounded operation and UUID. The temporary password secret was deleted
+immediately and is absent from repository secrets. This forward cleanup removes
+the disposable workflow/test. The Auth identity has no inferred tenant
+membership, role, provider connection, or execution authority.
+
+### Test status at this checkpoint
+
+Before the final resource-breaker guard strengthening, the focused suite was
+green: 49/49 across the full migration chain, target-claim contract, workflow
+contract, and new selector contract. A one-off live-shape PGlite simulation
+also proved `ed584... → 593395...` with owner/security/search-path/ACL preserved
+and refused a tampered helper.
+
+After adding exact constraint/policy checks, one intermediate run had a setup
+syntax defect: all 33 cases in
+`tests/integration/phase2e-portfolio-scheduling.behavior.test.ts` fail while
+applying `00050` with `syntax error at or near "pg_catalog"`; the other three
+files in that run passed (20 tests). The likely line is the newly added
+schema-qualified special-form call:
+
+```sql
+pg_catalog.position(
+  'is_organization_member' in
+  pg_catalog.pg_get_expr(policy.polqual, policy.polrelid)
+)
+```
+
+It was replaced with ordinary function syntax:
+
+```sql
+pg_catalog.strpos(
+  pg_catalog.pg_get_expr(policy.polqual, policy.polrelid),
+  'is_organization_member'
+) > 0
+```
+
+The normalized LF SHA-256 for `00050` is now
+`8914034508451d1550ebf3f1bedd8f7b71592f1809306e78c57774c458952896`
+and is pinned in both the release workflow and its unit test.
+
+Current post-fix evidence:
+
+- Final hardened focused run: **33/33 passed** across the selector behavior and
+  contract suites, full-chain idempotence, protected release-workflow contract,
+  and temporary Auth-workflow contract.
+- Lint passed with exit 0 and no diagnostics.
+- Typecheck passed with exit 0 (`tsc --noEmit` clean).
+- Production build passed with exit 0: Next.js 16.3.0 compiled, TypeScript
+  completed, and 171/171 static pages generated. The build emitted one
+  non-fatal existing Turbopack trace warning for the dynamic
+  `path.resolve(process.cwd())` use in `lib/worker/env.ts:68`; no file was
+  edited by these gates.
+- The final post-rebase full suite passed with exit 0: **5,150 passed / 7
+  skipped**, across **439 passed / 3 skipped test files** (442 total), with no
+  failures. The follow-on raw GoTrue response-shape hardening passed its focused
+  workflow suite **5/5**.
+- Workflow scope review completed and confirmed that the new scope remains
+  SHA-pinned, single-file, transaction-locked, identity-gated, safety-gated,
+  and read-only for `probe`/`verify`.
+
+Run next, in this order:
+
+1. Publish this evidence-only memory update and require its exact CI,
+   deployment, and public health identity before any later protected scope.
+2. Establish a legitimate connected Ready bot assignment in the intended
+   organization; never copy provider credentials or rows across tenants.
+3. Accept signed-in Step 8 record/reload and truthful Step 9 persistence while
+   workers remain OFF.
+4. Only then dispatch `postdeploy`; require ledger `1|1|1|1|1|1`, then run
+   read-only `verify`. Never rerun any earlier mutation scope.
+5. After `verify`, separately authorize and accept a current Full Lifecycle v2
+   run through TEST, DEPLOY, and MONITOR.
+
+### External blockers and safety invariants — do not fabricate around these
+
+- Signed-in production as `daniel.hughen@gmail.com` currently shows **zero
+  connected AI accounts**, zero ready linked bots, and no assignment in the
+  active organization. AI accounts are organization-shared; `created_by` is
+  provenance, not an ownership filter. A Claude token/row from another tenant
+  must never be copied or reassigned. The supported next step is a real Claude
+  connection in this organization. Do not initiate OAuth or subscription login
+  without exact action-time human confirmation.
+- Workers, autonomy, automatic actions, graph schedules, and the auth broker
+  remain OFF. The global database kill switch remains ON. Keep them that way.
+  Therefore Steps 9/10 can validate recorded/no-dispatch truth, but cannot
+  honestly be claimed as executed production work yet.
+- Hosted migration history has 17 older missing ledger versions beginning at
+  `20260815000200`, while parts of their catalog effects exist. Supabase Preview
+  fails replay on the already-present `organizations.maximum_concurrent_runs`
+  column. Do not edit historical migrations, reset, down-migrate, disable the
+  check, or blindly mark versions applied. Each version needs complete catalog
+  proof, surgical forward compensation for missing effects, then protected
+  ledger reconciliation only for fully present effects.
+- An OpenAI project key was pasted into chat earlier. Never copy it into code,
+  logs, SQL, fixtures, or this file; the owner must rotate it.
+
+The formal goal remains active. Do not mark it complete until the signed-in
+provider connection, Step 8 fresh production submission, and truthful Steps
+9–10 acceptance are all evidenced.
+
 ## GRAPH — THE STAGE PAGES SHOW THEIR NODES (2026-08-24, round 12 — PICK UP HERE)
 
 **Round 11's item 1 is done.** `/solutions/lifecycle/[stage]` listed runs with

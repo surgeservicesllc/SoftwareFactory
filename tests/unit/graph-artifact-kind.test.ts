@@ -40,11 +40,13 @@ describe("repositoryMismatch", () => {
     expect(repositoryMismatch("SurgeServicesLLC/SoftwareFactory", "surgeservicesllc/softwarefactory")).toBeNull();
   });
 
-  it("has nothing to contradict when either side is unknown", () => {
-    // A project with no repository linked, and a worker that cannot name its
-    // own checkout, are both silence — not evidence of a mismatch.
-    expect(repositoryMismatch(null, "surgeservicesllc/SoftwareFactory")).toBeNull();
-    expect(repositoryMismatch("acme/other", undefined)).toBeNull();
-    expect(repositoryMismatch("  ", "  ")).toBeNull();
+  it("fails closed when either protocol-v2 identity is unknown", () => {
+    expect(repositoryMismatch(null, "surgeservicesllc/SoftwareFactory")).toContain(
+      "did not name its canonical repository",
+    );
+    expect(repositoryMismatch("acme/other", undefined)).toContain(
+      "could not prove which repository",
+    );
+    expect(repositoryMismatch("  ", "  ")).toContain("did not name");
   });
 });

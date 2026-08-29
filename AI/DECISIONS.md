@@ -344,7 +344,7 @@ Use this append-only log for decisions that constrain future implementation. Cha
 
 - Date: 2026-08-13
 - Status: Accepted and published; activation gate exercised, successful live proof pending
-- Decision: Keep repository Actions variable `SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED` absent or not equal to literal `true` through migration, secret configuration, code publication, ordinary CI, and Vercel verification; every repository-dispatch and schedule worker trigger must skip while it is OFF. Omit branch-selectable manual workflow dispatch from this secret-bearing workflow. Treat setting the variable to `true` as the final exact owner-approved RED activation. Separately require `SOFTWAREFACTORY_REQUIRED_CHECKS` to contain 1-20 unique pipe-delimited exact GitHub check names. The reviewed workflow fixes `Lint, typecheck, test, and build|Browser and accessibility tests`. A run may pass CI only when GitHub returns the complete check set, every observed check is terminal with an acceptable conclusion, every required name is present with exact `success`, the identical passing fingerprint is observed twice, and the draft PR number/base/head still match.
+- Decision: Keep repository Actions variable `SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED` absent or not equal to literal `true` through migration, secret configuration, code publication, ordinary CI, and Vercel verification; every repository-dispatch and schedule worker trigger must skip while it is OFF. Omit branch-selectable manual workflow dispatch from this secret-bearing workflow. Treat setting the variable to `true` as the final exact owner-approved RED activation. Separately require `SOFTWAREFACTORY_REQUIRED_CHECKS` to contain 1-20 unique pipe-delimited exact GitHub check names. The reviewed workflow fixes `Lint, typecheck, test, and build|Browser and accessibility tests 1/3|Browser and accessibility tests 2/3|Browser and accessibility tests 3/3`. A run may pass CI only when GitHub returns the complete check set, every observed check is terminal with an acceptable conclusion, every required name is present with exact `success`, the identical passing fingerprint is observed twice, and the draft PR number/base/head still match.
 - Consequence: Configuration of secrets or publication of the workflow cannot start a worker while the activation variable remains OFF. Missing/invalid required-check configuration prevents worker startup; missing, renamed, truncated, unstable, or non-successful required evidence cannot degrade to a pass. After the bounded acceptance window, activation returns to OFF unless the owner separately approves continued operation. A clean one-shot exit records `idle`; its heartbeat is briefly Available/Connected while fresh and becomes stale/Not Connected after the bounded threshold, without being treated as end-to-end execution proof.
 
 ## ADR-049 - Reconcile hosted history before applying the canonical inert/Phase 1C forward chain
@@ -2188,44 +2188,649 @@ Use this append-only log for decisions that constrain future implementation. Cha
   graph width - plus guards that an exhausted overload stops retrying
   and a clean round waits for nothing.
 
-## ADR-147 - The Budget Tracker holds money as integer cents, and holds nobody else's
+## ADR-147 - Job Search has one canonical product entry and one audited recording transaction
 
-- Date: 2026-08-29
+- Date: 2026-08-27
+- Status: accepted; hosted migration applied and verified; application production accepted
+- Context: Search arrived in increments: four adapted public-board clients,
+  `/job-seeker/search`, then the owner-named `/Job-Search` entry and a complete
+  vendored upstream reference. The active goal names `/JobSearch` exactly and
+  asks for a global product entry. Review also found two trust gaps beneath the
+  page. Save accepted a browser-reposted job without evidence that the server
+  had returned it, and `insertScoredJob` committed job, match and application
+  in three independent requests, so a child refusal could strand an orphan
+  that the next attempt called a duplicate. Child foreign keys named only the
+  job id while child RLS checked the independently supplied child owner,
+  leaving no schema proof that parent and child belonged to the same person.
+  The exact upstream source reviewed for the correction is the complete
+  214-file MIT snapshot at
+  `79cd383e58f0af7948c7c6462a3a289e9b67421e`.
+- Decision: `/JobSearch` is canonical and the signed-in global header names it
+  **Job Search**. `/Job-Search` and `/job-seeker/search` remain compatibility
+  entries but render the same content, use the same auth gate, and select the
+  same Job Seeker shell; aliases do not own behavior. The four adapted,
+  keyless boards remain Jobnet, Jobindex, Jobdanmark and Freehire, and each
+  declares whether it can truthfully apply free-text location. LinkedIn stays
+  excluded because service terms are authority separate from an MIT licence.
+  Jobbank is deferred until the upstream's intermittent Cloudflare/WebSearch
+  fallback has a reliable reviewed product contract; the deferral is not a
+  permanent impossibility claim.
+- Decision: every returned posting is accompanied by a short-lived sealed
+  token scoped to organization and user and containing a digest of board plus
+  every normalized job field. Save verifies that evidence before scoring or
+  persistence. Persistence crosses one authenticated-only `SECURITY DEFINER`
+  function, `record_job_seeker_job`, with exact
+  `search_path=pg_catalog`. It derives ownership from `auth.uid()`, verifies
+  organization membership, and writes job, match, initial application and
+  immutable `job_seeker.job_recorded` evidence in one transaction. The dedupe
+  index remains the concurrency authority and returns a no-write `duplicate`
+  outcome. Composite `(job_id, organization_id, user_id)` foreign keys prove
+  child/parent ownership identity. RLS stays enabled and forced.
+- Bounds: direct, non-persistent probes (Jobnet 2/4, Jobindex 2/736,
+  Jobdanmark 0/0 for London, Freehire 2/6752) prove current board contracts,
+  not production acceptance or future third-party stability. The new RPC is
+  supplied by forward migration
+  `20260827000100_record_job_seeker_job_atomically.sql`. Database-first workflow
+  run `33111692239` applied its exact SHA-256
+  `2f51bf64ba3fd2bc711e6fbf9e660a2cc0dd5ef4b1f85d932ee574e79e9c7d13` to
+  project `qpuofpmagrmyamahqwxw` and verified ledger, routine identity/ACL,
+  constraints, PostgREST reload and forced RLS. Application release
+  `aabd82b3a626da94a2478ef26f043a51d059cd15` passed exact-head CI
+  `33114868741`, exact Vercel Production deployment `6130751384`, health and
+  signed-in production search/save/readback. The accepted record was attributed
+  `jobnet`, scored 35/100, initialized at FOUND and matched exactly one immutable
+  event. Authenticated direct INSERT is not revoked in
+  this migration because the existing manual jobs POST route still uses it;
+  move and test that final writer before a later forward ACL contraction. No
+  reset, down-migration, worker, autonomous action or deployment is implied by
+  accepting this source decision.
+
+## ADR-148 - A run states why it ended, in the run's own row
+
+- Date: 2026-08-25
+- Status: accepted
+- Context: `lib/worker/graph-run.ts` composes a run-level explanation
+  before every close - whether the fan-in was whole, that a
+  capacity-voided run is void rather than failed, and the correction
+  that matters most to a reader: "N of the nodes counted above did not
+  fail: they halted at an open lifecycle gate and continue once the gate
+  is decided." Its own comment says the record should carry that "rather
+  than leaving the correction to whoever happens to know the
+  distinction". It was left to whoever happens to know. The message
+  reached `GraphRunStore.completeRun`, whose parameter was named
+  `_detail` because nothing read it: `complete_graph_run_as_worker` had
+  no parameter to carry it and `graph_runs` had no column to hold it.
+  Every run-level explanation this engine has produced was computed and
+  discarded. The live queue shows the cost - ten CANCELLED runs, none of
+  which states a reason.
+- Decision: `graph_runs` gains `closure_note`, written by
+  `complete_graph_run_as_worker` from that same assessment and projected
+  by `list_graph_runs` (migration 20260825000300). This is the argument
+  `node_runs.blocked_reason` has made since 20260814000100, one level
+  up: a run whose reason is invisible sends the reader to the event log
+  to learn something the row already knew. A note that trims to nothing
+  is stored as null, because an empty note reads as "a reason was
+  recorded and it was blank".
+- Bounds: no backfill. Runs closed before the column existed have no
+  note because none was ever stored, and writing a plausible one now
+  would put invented text under a heading that reads like a record. The
+  migration is backward compatible with the code already deployed - the
+  new parameter is defaulted, so the live worker's seven-argument call
+  still resolves - which fixes the release order: apply the migration
+  first, then deploy the code that sends the note. The `list_graph_runs`
+  body is restated from 20260825000200 rather than the older
+  20260823001000, because that file landed on main while this change was
+  in flight and rebuilding from the stale version would have silently
+  reverted its cost columns.
+
+## ADR-149 - Revenue: Stripe subscriptions behind the storefront that already existed
+
+- Date: 2026-08-25
+- Status: accepted
+- Context: the owner directed, verbatim, that the site needs a revenue
+  avenue. The storefront predated this decision by two weeks:
+  `marketing_pricing_plans` (20260813000500) has advertised Free / Basic
+  $29 / Pro $79 / Enterprise with yearly discounts, and every "Start
+  Free Trial" button pointed at `/sign-in` with nothing behind it. The
+  gap was not a pricing page; it was that no mechanism existed by which
+  money could move or a plan could mean anything.
+- Decision: organization-level Stripe subscription billing, mirrored
+  into Supabase, enforced at the two creation boundaries that cost
+  compute. Specifically: (1) `billing_customers` /
+  `billing_subscriptions` / `billing_events` (migration 20260825000400,
+  scope=billing-foundation) with forced RLS, member-only reads, and no
+  browser write path - the verified Stripe webhook (service_role, the
+  same posture as the GitHub webhook) is the only subscription writer,
+  idempotent by event id; (2) a deliberately thin Stripe REST client
+  (three endpoints plus HMAC signature verification, no SDK dependency,
+  no Stripe key of any kind in the browser - Checkout and the portal are
+  Stripe-hosted redirects); (3) entitlements resolved from the newest
+  standing subscription (`active`, `trialing`, and `past_due` for
+  Stripe's retry grace) with Free as the absence of one, enforced as
+  HTTP 402 refusals naming plan, limit, and current count on project
+  creation and graph launches - creation-gating only, never revocation
+  of existing work; (4) the pricing page's cards become real checkout
+  buttons only for plans whose Stripe price is actually configured, and
+  `/solutions/billing` (Settings → Billing) shows plan, meters, and the
+  portal. Plan copy stays in the marketing tables; plan entitlements
+  live in `lib/billing/plans.ts` so a limit and its enforcement version
+  together.
+- Bounds: absent configuration everything renders **Not Connected** and
+  the storefront behaves exactly as before - no dead checkout, no
+  pretend success. Prices are never hard-coded; the charged amount is
+  Stripe's price object, the advertised amount is the marketing row, and
+  the go-live runbook (docs/BILLING_GO_LIVE.md) is the owner's checklist
+  for making them agree. Attribution is by ids only (metadata uuid or
+  the customer mapping); a subscription the mirror cannot attribute is
+  recorded and never guessed at. Seat enforcement waits for a member
+  invite surface to exist; Enterprise stays contact-only. The quota gates
+  the Workflows Launch route; command-driven analysis graphs
+  (`launch_command_analysis_graph`) count toward the month's usage but are
+  gated by their own command budgets rather than refused here — pricing a
+  command's implicit graph is a follow-on, recorded in the backlog. The quota
+  check is a read-before-write soft limit by design - one concurrent
+  overshoot costs at most one row and corrects on the next attempt.
+
+## ADR-150 - The ten-step Factory is one release-identity-bound protocol
+
+- Date: 2026-08-27
+- Status: accepted locally; production publication, hosted cutover, and
+  signed-in owner acceptance pending
+- Context: the existing ten-step presentation could describe progress without
+  proving that Requirements, planning, implementation, review, CI, deployment,
+  and monitoring belonged to the same repository revision and release. Legacy
+  graph claim/read functions also remained callable, so a mixed-version worker
+  could create evidence outside the new protocol.
+- Decision: Factory v2 binds every lifecycle launch to the exact active
+  project, primary repository, base SHA, policy, and protocol version; carries
+  immutable Phase 1C command, draft PR, exact-head checks, merge, deployment,
+  health, and monitor lineage; and renders the exact graph/run requested by the
+  URL. Cutover is forward-only and split into two protected one-shot scopes:
+  `20260827000150_fence_legacy_graph_protocol.sql` first, followed only after
+  exact acceptance by `20260827000200_graph_phase1c_release_lineage.sql`.
+  Their stable LF-normalized SHA-256 identities are
+  `A4B505841D94CC89DFC82E24837DEDB78356B56C5F5698C0748F8B6735341A49`
+  and `23197552DF3F442AE8264BF71BD28A7C479E09A64BF6E298C615B767A96572BE`.
+- Bounds: candidate `ead498b495ac59d920e6f76df7917ea830dbcf8c` is locally
+  audited but not deployed, and neither migration is hosted. The former Claude
+  bot/account was explicitly removed on 2026-08-23; production Steps 8/9 need a
+  fresh supported owner account connection rather than a planner exception.
+  No decision here authorizes credential recovery, worker/provider execution,
+  autonomy, automatic action, kill-switch release, reset, replay, or
+  down-migration. Those execution surfaces remain OFF and the kill switch ON.
+
+## ADR-151 - The AI Factory viewer gate resolves before protected client reads
+
+- Date: 2026-08-28
+- Status: accepted locally; production publication pending
+- Context: a signed-out or unavailable tenant could leave the real AI Factory
+  on its loading shell while the browser waited for every protected workspace
+  read. Adding a leaf-page viewer check removed the fan-out but duplicated the
+  portal layout's verified Supabase lookup.
+- Decision: the leaf page passes a server-verified signed-in presentation hint
+  to `AiFactoryConsole`; a known signed-out viewer renders the gate immediately
+  and starts no protected reads. `readViewer` uses request-scoped
+  `React.cache`, as prescribed by the Next 16 data-access guidance, and a
+  five-second fail-closed deadline so an unavailable identity provider cannot
+  hold the public shell indefinitely.
+- Bounds: this is presentation and availability behavior, not authorization.
+  Every API enforces its own verified identity and tenant policy. No viewer
+  result is shared between requests, and timeout never grants access.
+
+## ADR-152 - Executable release workflows have a tested size budget
+
+- Date: 2026-08-28
+- Status: accepted locally; recovery publication pending
+- Context: GitHub accepted a protected migration dispatch but never planned a
+  job because its workflow blob was 517,320 bytes, above the platform's 500 KB
+  limit. The run remained queued with zero jobs, which can look like runner or
+  database contention even though no executable step exists.
+- Decision: keep operational explanations in `AI/HOSTED_APPLY_RUNBOOK.md`, keep
+  the workflow's dispatch help concise, and enforce a 490,000-byte UTF-8 ceiling
+  in the graph-protocol scope contract. The recovery removes only comments/help
+  text; scopes, hashes, release gates, SQL staging, and shell bodies are fixed.
+- Bounds: a zero-job oversized workflow is not migration evidence. Recovery
+  still requires a new exact-head CI/READY release and the separate 00150 then
+  00200 one-shot acceptance sequence. It authorizes no worker, autonomy,
+  automatic action, replay, reset, or down-migration.
+
+## ADR-153 - Legacy graph payloads are contained by an exact manifest, forward only
+
+- Date: 2026-08-28
+- Status: accepted locally; hosted probe, containment, and lineage acceptance pending
+- Context: exact run `33144600401` committed the `00150` legacy-authority
+  fence. The next protected run, `33144659265`, reached unchanged migration
+  `00200` and failed at its deliberate catalog guard because a pre-existing
+  graph artifact payload is sensitive or exceeds one megabyte. The migration
+  file and ledger insert ran inside one `psql --single-transaction`, so the
+  error atomically rolled back every `00200` DDL statement and its ledger row.
+  Editing the published migration, restoring legacy authority, resetting
+  history, or down-migrating would destroy the release identity or reopen the
+  fenced protocol.
+- Decision: add forward migration
+  `20260827000210_contain_legacy_graph_artifact_payloads.sql` (SHA-256
+  `c37a55efe74e9a9b4118924e1b2cbd0378a76f0d98c9747c6c66fffda9697de1`).
+  It removes only payload bodies that violate the sensitive-key or size guard,
+  records no copy of them, retains a digest/byte-count/classification in a
+  private immutable FORCE-RLS/no-ACL evidence table, replaces each body with a
+  bounded evidence-linked tombstone, installs update immutability, and
+  validates both payload constraints. One dedicated workflow separates
+  payload-free `probe`, manifest-pinned `contain`, and prerequisite-pinned
+  `lineage`, while sharing the `apply-hosted-migrations` concurrency group so
+  no production DDL scope overlaps them. Probe emits only an exact candidate
+  count, manifest SHA-256, and downstream blocker counts. Contain rechecks the
+  same values while locking `node_runs` and artifact state, then stages only
+  hash-pinned `00210`. Lineage requires accepted `00210`, the same positive
+  count and manifest SHA-256 from probe, and reconstructs that manifest from
+  private audit rows before locking, under lock, and after commit while checking
+  exact evidence-linked tombstones and raw table/function ACLs. It then stages
+  only the frozen unchanged `00200`.
+  The legacy fence is always exact but changes shape at the intentional v2
+  boundary: before v2, all nine legacy signatures are fully revoked; after v2,
+  eight remain revoked and `decide_node_gate(uuid,boolean,text)` becomes an
+  authenticated-only, owner/admin-checked, `SECURITY DEFINER`, pinned-search-
+  path, evidence-bound RPC, with anonymous and `service_role` still refused. A
+  fresh or future-dated active/draining heartbeat blocks. Constraints, FORCE
+  RLS, exact raw ACLs, audit triggers, and stopped safety state are validated
+  inside the DDL/ledger transaction and repeated after commit.
+  Payloads and row identifiers are never logged.
+- Bounds: `00150` remains hosted exactly once and must never be replayed.
+  `00210` is irreversible containment of policy-violating payload bodies, so a
+  changed manifest or any identity/evidence blocker stops rather than guessing.
+  Unchanged `00200` remains absent and may be admitted only as a separate
+  protected action after exact hosted `00210` acceptance. Workers, provider
+  execution, autonomy, and all automatic actions stay OFF; the global kill
+  switch stays ON. This decision authorizes no reset, down-migration, legacy
+  grant restoration, status upgrade, or worker dispatch.
+
+## ADR-154 - Full Lifecycle closes only through atomic exact-release validation
+
+- Date: 2026-08-28
+- Status: accepted locally; publication and hosted migration pending
+- Context: the lifecycle could record a successful HTTP probe after deployment,
+  but that alone did not prove that the public alias served the exact accepted
+  merge, that Supabase was reachable, tenant APIs still refused anonymous
+  access, required security headers were present, exact-release CI stayed
+  green, or that all evidence closed atomically with the Phase 1C bridge.
+- Decision: `20260828000300_graph_postdeploy_validation.sql` (SHA-256
+  `0104f4b6514eb42fddb931b76a8026cea4834547f8dff011c2fff956d11579a5`)
+  admits enhanced post-deploy completion only for the canonical
+  `full_lifecycle` version-2 plan digest
+  (`0ec1e97b80dc8696872d88162c5271f9ea822e7dea79556c5470730a025d3b49`)
+  while preserving the launch function's signature, `SECURITY DEFINER`, pinned
+  search path, ACL, and structural guards. The service-role-only terminal RPC
+  accepts a completed version-2 run only when its single MONITOR anchor carries
+  five distinct passing stages: release identity, public availability,
+  Supabase/data integration, exact CI plus security/auth boundaries, and a
+  bounded consecutive observation window. In one transaction it closes the
+  run, writes the disabled production monitor and immutable observation,
+  writes the passing deployment validation, and advances the exact Phase 1C
+  bridge to `VALIDATED`; any identity, timing, evidence, or lineage mismatch
+  rolls back all of them. Pre-release version-2 graphs keep their stored strict
+  DEPLOY/MONITOR schemas and legacy completion path, so a forward migration
+  never strands a run that was already planned. Exact lost-response replay
+  writes no duplicates.
+- Consequence: a 200 response, an immutable provider deployment URL, or a
+  user-entered public alias cannot independently complete the lifecycle. The
+  stable public URL is probed while the immutable Vercel deployment URL stays
+  release identity, and `/api/health` binds the public surface back to the
+  exact Vercel project/deployment ID and URL, deployment SHA/ref, and an
+  independently configured exact Supabase project identity. The hosted gate
+  additionally requires GitHub's Vercel-bot Production URL to equal the URL
+  reported by the public alias, so two independent deployments serving the
+  same SHA cannot satisfy the release join.
+- Bounds: the monitor record remains disabled and this decision does not
+  create a deployment, merge a pull request, dispatch a provider, enable a
+  worker, enable autonomy or automatic action, or release the global kill
+  switch. Hosted application remains forward-only after exact-head release
+  acceptance.
+
+## ADR-155 - A one-shot worker wake claims only its immutable target
+
+- Date: 2026-08-28
+- Status: accepted locally; publication and hosted migration pending
+- Context: repository dispatch carried an opaque graph or Phase 1C command
+  UUID, but the worker used that UUID only for graph queue diagnosis. Both
+  database claims still selected the globally highest-priority eligible item.
+  In a shared production queue, a wake for one owner-reviewed lifecycle could
+  therefore execute an unrelated item, and an older item could indefinitely
+  prevent the requested canary from advancing.
+- Decision: forward migration `20260828000200_target_bound_worker_claims.sql`
+  (LF SHA-256
+  `f7d87242534e16bacd22c0244784a992bded3c335fcb0a38e85d8a6b9168eaa5`)
+  adds service-role-only target claim RPCs. Uniquely named target-aware private
+  selectors are now the
+  authoritative graph and Phase 1C selectors: the target UUID is applied in
+  stale cleanup, eligibility/admission, locking, and withheld-work diagnosis.
+  Existing four-argument internal APIs delegate with a null target, preserving
+  the disabled-by-default scheduled queue behavior, while dispatch/manual
+  workflows require a UUID and execute once. A defensive projection assertion
+  aborts if a future refactor returns a different identity. An ineligible
+  Phase 1C target returns no row after its target-scoped stale cleanup, so that
+  cleanup commits and the caller can report bounded persisted state without
+  claiming a neighbor. The graph claim separately
+  projects `project_production_url`; it never replaces the exact provider
+  `deployment_url` recorded in release lineage.
+- Consequence: a dispatch is a wake, not authority, but its identity is now a
+  database filter. Eligibility, repository binding, budgets, leases, circuit
+  breakers, exact audit writes, RLS, and existing public ACLs are unchanged.
+  Any future claim-policy change must update the target-aware selector; the
+  legacy scheduled wrapper inherits it automatically through the null-target
+  delegation.
+- Bounds: the migration and workflows do not enable either worker or its
+  schedule. Every graph-worker event and every application dispatch is behind
+  the same exact `SOFTWAREFACTORY_GRAPH_WORKER_ENABLED == true` fail-closed
+  switch. They do not enable provider execution, autonomy, approval, merge,
+  deployment, rollback, or automatic action, and do not release the global
+  kill switch. A target that fails policy remains unclaimed.
+- Production evidence (2026-08-28): exact cleanup release
+  `ce86d9c04ff91f237e680a5db4b0cda97feea2ce` passed CI `33169913723`, READY
+  deployment `dpl_4Zqh4q2yBfaagGtg7stSbV4NSphP`, and public health. Probe
+  `33170897689` confirmed pre-ledger `1|1|1|1|0|0`; first-attempt run
+  `33170953151` applied only the pinned migration and passed full postflight;
+  independent probe `33171025468` confirmed `1|1|1|1|1|0` with stopped
+  containment unchanged.
+
+## ADR-156 - The public production URL is explicit owner-managed evidence
+
+- Date: 2026-08-28
+- Status: accepted locally; publication and hosted migration pending
+- Context: Full Lifecycle Step 10 must probe the public address customers use,
+  which can differ from the exact provider deployment URL retained in release
+  lineage. `projects.production_url` was readable but had no supported writer,
+  and its original constraint checked only an `https://` prefix. A protected
+  provider URL cannot be silently substituted without changing the evidence's
+  meaning.
+- Decision: forward migration
+  `20260828000100_project_production_url_configuration.sql` (LF SHA-256
+  `0856ddee447280a1bb4418f25d6a6d4650687e168fffcd5e98e8ce15edd62b27`) preserves
+  `update_project_details(uuid,text,text)` and adds a separate authenticated
+  owner/admin `SECURITY DEFINER` setter with pinned search path. Request and
+  database boundaries both reject credentials and likely-secret-bearing path
+  material (the database calls the existing secret predicate directly), query/fragment material,
+  non-HTTPS, localhost/private/intranet, ambiguous numeric, IPv6-literal, and
+  non-standard-port targets. Real changes use the existing immutable
+  `project.updated` trigger; no-op replays do not fabricate events, archived
+  projects refuse edits, and projects FORCE RLS remains asserted. The project
+  detail UI is the human configuration surface.
+- Consequence: a lifecycle claim may carry a separately configured stable
+  public URL without overwriting exact deployment lineage. Lexical validation
+  is not treated as DNS proof: the monitor's guarded connection-bound lookup
+  still rejects a hostname whose actual socket address is private or reserved.
+  A missing URL remains **Not Connected**, never an inferred default.
+- Bounds: the migration and UI do not set a live value, initiate a probe,
+  enable a worker, expand autonomy, authorize deployment, or release the kill
+  switch. Hosted application and signed-in value/audit acceptance remain
+  separate release evidence.
+
+## ADR-157 - Production release authorization is non-replayable and identity-joined
+
+- Date: 2026-08-28
+- Status: accepted locally; publication and hosted acceptance pending
+- Context: an Actions rerun retains the original `GITHUB_ACTOR` while naming
+  the person who requested the rerun separately, and a manual workflow can be
+  dispatched against a selected branch. Separately checking a Git SHA in
+  GitHub, a generated Vercel hostname, and a public alias did not prove they
+  represented one Vercel project/deployment.
+- Decision: mutation scopes require the configured actor to equal both
+  `GITHUB_ACTOR` and `GITHUB_TRIGGERING_ACTOR` and require run attempt 1; a
+  failed mutation is retried only as a fresh dispatch with the same exact
+  `release_sha`. Manual graph execution is main-only in addition to its global
+  OFF-by-default switch. `/api/health` fails closed unless the request arrived
+  through the configured production host and Vercel's system project ID,
+  deployment ID/URL, target environment, Git SHA/ref, and Supabase project all
+  match configured identities. The release workflow compares the health
+  deployment URL with the exact Vercel-bot GitHub deployment status twice.
+- Consequence: an earlier owner's failed approval cannot be replayed by a
+  different actor; unreviewed manual graph refs cannot receive production
+  worker credentials through the reviewed workflow; and alias, deployment,
+  repository, and database evidence form one exact release identity.
+- Bounds: project/deployment IDs and hostnames are non-secret identity values.
+  No worker, provider, autonomy, automatic action, merge, deployment, reset,
+  or down-migration is enabled or initiated by this decision.
+
+## ADR-158 - The site sets up its own Stripe account contents
+
+- Date: 2026-08-28
+- Status: accepted
+- Context: the billing release (ADR-149) required six values to travel
+  by hand from two dashboards into Vercel. The owner tried; the
+  configuration report (shape diagnostic, shipped mid-saga) proved the
+  production runtime saw none of them across seven hours and four fresh
+  deployments — the failure mode was never the code, it was six manual
+  pastes with an invisible Production checkbox. The owner then asked,
+  verbatim, to "do everything for me", and offered a browser session an
+  isolated cloud container cannot reach; secrets must not transit the
+  agent's transcript in any case.
+- Decision: shrink the human part to the two values that are genuinely
+  secrets, and have the deployment create everything else itself.
+  (1) Prices become addressable by fixed lookup keys
+  (`factory_<plan>_<cadence>`): `resolvePriceId` reads the env var
+  first, then queries Stripe by lookup key with a 60-second per-instance
+  cache, so per-price environment variables are now optional. (2) A
+  super-administrator-only route, `POST /api/billing/bootstrap`,
+  idempotently ensures the Basic/Pro products, the four lookup-keyed
+  recurring prices at the advertised amounts, and the webhook endpoint
+  aimed at the deployment — find-first on lookup key and webhook URL, so
+  running it twice changes nothing. The webhook signing secret Stripe
+  returns only at creation travels once, in the response, to the super
+  administrator's screen; it is never logged or stored. Tenant
+  organization owners are refused: the Stripe account belongs to the
+  platform, and `isSuperAdmin` is the same authority the admin page
+  uses. (3) `billingConnected` now also requires the webhook signing
+  secret — a checkout that charges while the mirror is deaf would take
+  money without granting anything, so "connected" means the whole loop.
+- Bounds: the bootstrap needs `STRIPE_SECRET_KEY` and cannot install it;
+  the two secret pastes into Vercel remain the owner's, by design — the
+  transcript rule ("never place credentials in chat, logs") is why the
+  agent refuses to ferry them even when offered dashboard access. The
+  bootstrap writes only to the platform's own Stripe account, additively
+  and idempotently; it never deletes, and a webhook that exists without
+  a known secret is reported with instructions to reveal it in Stripe
+  rather than recreated behind the working one's back.
+## ADR-159 - Normalize the partially applied Phase 1C selector with one isolated forward migration
+
+- Date: 2026-08-28
+- Status: accepted locally; exact-head publication and protected hosted apply pending
+- Context: exact application release
+  `79ca52f5b92e7d95292210e05565d35d21b4a435` is live with all four CI jobs,
+  exact READY Vercel identity, and public release-health join green. Protected
+  read-only probe `33159805326` nevertheless stopped before the release-tail
+  migrations because production has the `20260815000300` body of
+  `claim_phase1c_run_budget_internal(text,text,text,integer)` (MD5
+  `ed5840b9d8d0efdb513a8576df128e9b`) while its breaker helpers and table
+  already have the later catalog shape. The required frozen `20260815000500`
+  selector body is `5933952d71f9da90a2a80a05ce6e0378`. Seventeen older
+  versions beginning at `20260815000200` are absent from the hosted ledger
+  despite partial effects, so replaying history or merely marking it applied
+  cannot establish truth.
+- Decision: add only forward migration
+  `20260828000050_normalize_breaker_aware_phase1c_selector.sql` (LF SHA-256
+  `8914034508451d1550ebf3f1bedd8f7b71592f1809306e78c57774c458952896`)
+  before the existing `00100`, `00200`, and `00300` release tail. Its
+  preflight accepts only the exact stale or already-normalized selector body;
+  verifies the unchanged ABI, postgres owner, `SECURITY DEFINER`, exact
+  `search_path=pg_catalog`, owner-only execute ACL, exact breaker-helper
+  identities, FORCE-RLS breaker table, browser/table ACL, constraints/policy,
+  and absence of target-bound selector objects; replaces only the Phase 1C
+  selector with the frozen breaker-aware body; then repeats the exact target
+  catalog and ACL assertions. A dedicated hash-pinned
+  `selector-normalization` workflow scope preserves exact-main, four-job CI,
+  READY Vercel/health, stopped-runtime, single-file staging, linked lint,
+  transaction/lock, ledger, schema reload, and postflight gates.
+- Consequence: a clean migration chain and the exact observed partially
+  applied hosted shape converge on the same function without changing its
+  signature or authority, replaying `20260815000300`/`20260815000500`, or
+  claiming their history was repaired. Local evidence is lint/typecheck
+  green, 5,150 tests passed / 7 skipped across 442 files, and a 171/171-page
+  production build. The remaining 17-version ledger drift stays explicit and
+  requires separate object-by-object catalog proof, forward compensation, and
+  only then protected reconciliation.
+- Bounds: no token/account is copied between tenants, and no provider OAuth is
+  inferred from catalog repair. Workers, provider execution, autonomy,
+  schedules, the auth broker, and automatic actions remain OFF; the global
+  kill switch remains ON. This decision authorizes no historical edit/replay,
+  blind ledger insertion, reset, down-migration, worker dispatch, or claim of
+  signed-in Steps 8-10 acceptance.
+
+## ADR-160 - Bootstrap one exact verified Auth identity through a disposable secret boundary
+
+- Date: 2026-08-28
+- Status: accepted; one-shot production dispatch completed and disposed
+- Context: the owner requested `blackstoneagencyllc@gmail.com` as a verified
+  Supabase Auth account with a supplied password. A real password must not be
+  committed, passed as a workflow input, copied into a database migration, or
+  printed in logs. Direct `auth.users` writes would bypass GoTrue's supported
+  password hashing and identity invariants.
+- Decision: publish a temporary `workflow_dispatch` path fixed to exact
+  repository `surgeservicesllc/SoftwareFactory`, `main`, Supabase project
+  `qpuofpmagrmyamahqwxw`, and the one normalized email. Require an exact
+  confirmation phrase, configured production actor equality for both actor
+  fields, and run attempt 1 with no GitHub token permissions. Supply the
+  password through a temporary encrypted repository secret and use the
+  existing service-role secret only inside the runner. The script uses the
+  GoTrue Admin API, refuses duplicates, idempotently creates or updates the
+  exact identity, and re-reads its UUID, exact email, and parseable
+  `email_confirmed_at`; it emits no credential or response payload.
+- Consequence: the requested Auth identity can be created through Supabase's
+  supported password boundary without persistent plaintext or an arbitrary
+  admin endpoint. After one accepted run, delete the temporary password secret
+  and remove the temporary workflow/test in a forward cleanup commit.
+- Evidence: exact first-attempt run `33164766560` on exact release
+  `298264b02fe5a29e3c139f8077e65d6270f19167` returned one bounded updated UUID
+  after exact confirmed readback. The temporary password secret was deleted
+  immediately, and the disposable workflow/test are removed by the next
+  forward cleanup release.
+- Bounds: an Auth identity is not organization membership or an application
+  role. This decision grants neither, connects no provider, enables no worker,
+  changes no autonomy/action setting, and does not release the global kill
+  switch.
+
+## ADR-161 - Accept the public project URL through a disposable signed-in boundary
+
+- Date: 2026-08-28
+- Status: accepted; first dispatch failed closed before mutation, forward transport correction pending
+- Context: protected first-attempt runs have installed the selector
+  normalization and owner/admin-only URL writer, leaving the release ledger at
+  `1|1|1|1|0|0`. The migration workflow proves catalog/ACL/runtime shape but
+  intentionally cannot prove that the production application establishes a
+  real user session, selects the intended tenant, persists a value, emits one
+  immutable audit event, and reloads it. Existing remote journey inputs are
+  plaintext and must never carry an owner's password.
+- Decision: publish a temporary manual workflow serialized with production
+  migrations. Read the owner email and project name only from temporary
+  encrypted repository secrets, require that already-confirmed identity to be
+  an exact owner/admin of one non-archived unset project, and use the existing
+  service credential only to mint an ephemeral magic-link token. Consume that
+  token through the production callback, select the exact organization, call
+  the same-origin production URL API, verify one owner-attributed
+  `project.updated` event, replay the identical write with zero new events, and
+  reload the value through the signed-in portfolio API. Check exact
+  main/four-job CI/READY deployment/public health, writer/predicate/constraint/
+  RLS/audit catalog, stopped workflows, every autonomy/action flag, worker
+  heartbeats/runs, and kill switches initially, immediately before mutation,
+  and after reload.
+- Consequence: application acceptance uses the production boundary without
+  exposing, resetting, or storing a password and cannot silently pass on a
+  skipped authorization job, preseeded URL, unconfirmed identity, broadened
+  ACL, moved release, active worker, or duplicate audit event. Delete the two
+  temporary selectors immediately after the accepted run and remove the
+  disposable workflow/test in the next forward commit.
+- Production evidence: release `540aceb173ec88e67cb982018a80134ece3ec474`
+  passed exact CI `33167232673`, READY Vercel deployment
+  `dpl_31W7nKgJd6ENoCfuvgP1zzHZM6eT`, and public health. First-attempt run
+  `33168092838` passed all pre-write gates and then stopped before target
+  resolution or mutation because `psql` variable substitution was embedded in
+  a `-c` command. Its temporary selectors were deleted immediately. Supply
+  protected variables only to a single-quoted stdin heredoc, enforce that
+  transport in the workflow regression test, publish a new exact release, and
+  use a fresh first-attempt dispatch rather than rerunning the failed attempt.
+- Acceptance evidence: corrected release
+  `53b84b7952a1e09725f53da5d65c4947b8cb914a` passed exact CI
+  `33168368270`, READY Vercel deployment
+  `dpl_tBF2s6AtLmqZ13YpYHKWzBRtwiKT`, and public health. Fresh first-attempt
+  run `33169297158` proved the production session, owner/admin tenant,
+  same-origin write, one owner-attributed immutable event, no-op replay,
+  signed-in reload, and unchanged stopped containment. Both temporary selectors
+  were deleted immediately; the workflow/test are removed in the next forward
+  cleanup release.
+- Outcome (2026-08-28): accepted and proven in production; the disposable
+  boundary was removed in the next forward cleanup.
+- Bounds: this changes only the one public URL and its existing immutable
+  audit trail. It grants no membership, connects no provider, enables no
+  worker/autonomy/automatic action, does not release the kill switch, and does
+  not authorize replay, reset, down-migration, or historical ledger repair.
+
+## ADR-162 - Agent Trail: agenttrail's live map, on the factory's own truth
+
+- Date: 2026-08-28
+- Status: accepted
+- Context: the owner directed, verbatim, that
+  github.com/sodiumsun/agenttrail (MIT, © 2026 Kelly Sun) be built into
+  theagoras.com. agenttrail is a local-first observability tool: a Node
+  daemon that watches one repository's filesystem and Claude/Codex/Cursor
+  session artifacts, serving a single-page live map — components as cards,
+  dependency arrows, honest done/working/blocked states, and a
+  declared-vs-observed split that lights a finished card back up when its
+  files change again. Its daemon and fs-watcher assume localhost and one
+  repo; a hosted multi-tenant console assumes neither.
+- Decision: ADAPT, per the factory's own USE/CONNECT/ADAPT/FORK/BUILD
+  frame — take the concept and visual language, re-implement natively on
+  the factory's recorded truth. `/solutions/trail` renders each graph run
+  as a live map: `layoutTrail` (pure, unit-tested Kahn layering with
+  longest-path columns and cycle tolerance) places nodes; a new
+  member-scoped `GET /api/graphs/edges` projects the recorded dependency
+  edges with their reasons (graph_edges already carried a member SELECT
+  policy, so this ships with zero migrations); states, gates, latencies,
+  errors, spend, and the closure note come from the existing
+  `list_graph_runs` projection on a 10-second poll. Declared vs observed
+  maps exactly: declared is the job/capability/stage the template gave a
+  node, observed is what the run recorded. Attribution in
+  THIRD_PARTY_NOTICES.md and on the page itself.
+- Bounds: no source files were copied — the implementation is original
+  React/SVG in this repository's idiom, so the MIT notice covers the
+  design adaptation. The daemon, fs watcher, hooks installer, PLAN.md
+  parser, and autostart are deliberately not ported: this console's truth
+  is the database under RLS, and a hosted page watching a customer's
+  filesystem would be a different product with different consent. The map
+  never animates hope — every color is a recorded state, and an empty
+  organization gets an empty state naming its next step, not a demo.
+
+## ADR-141 - A meter with no event log is a decoration, and the Job Discovery design gets measurements or nothing
+
+- Date: 2026-08-28
 - Status: Accepted
-- Decision: `/BudgetTracker` and the `budget_*` tables store every monetary
-  figure as `bigint` cents, scope every row by both `organization_id` and
-  `user_id` under RLS with FORCE, and are seeded with nothing. The owner's real
-  workbook is not committed to the repository in any form — no fixture, no seed
-  migration, no test data carrying real payees or balances. Data enters at
-  runtime through the import path, into rows the importing person owns.
-- Consequence: A household's finances are readable only by the person who
-  recorded them, including against an organization administrator, and the two
-  aggregate read functions (`budget_monthly_flow`, `budget_category_spend`) are
-  SECURITY INVOKER so that the aggregate cannot become the hole the row policy
-  closed. `tests/integration/budget-tracker.behavior.test.ts` proves both
-  directly against PostgreSQL, assuming the `authenticated` role rather than
-  running as a superuser that would bypass RLS entirely.
-- Rejected: a `numeric` or float money column. The source spreadsheet carries
-  running totals like `5402.860000000001` after eight thousand floating-point
-  additions; cents as an integer cannot drift, and the sign-follows-kind CHECK
-  makes an inverted debit a failed insert rather than a wrong total.
-
-## ADR-148 - Spreadsheet import reads .xlsx without a parsing dependency
-
-- Date: 2026-08-29
-- Status: Accepted
-- Decision: `lib/budget/spreadsheet.ts` reads `.xlsx` directly — a ZIP of XML
-  parts, inflated with `node:zlib` and read with bounded expressions — rather
-  than adding SheetJS or ExcelJS.
-- Consequence: No third-party code sits on the path of the most sensitive data
-  in the product, and the reader's own limits (entry count, per-part size,
-  total inflated size, row count) are ours to set. The uploaded file is parsed
-  in memory, written as rows, and dropped; it is never stored and never logged.
-- Consequence: Import is idempotent by construction. Every row carries a
-  sha256 content hash over account, date, kind, normalized description, amount
-  and an occurrence ordinal, unique per person — so a second import of the same
-  file conflicts row by row and is reported as skipped, while two genuinely
-  identical charges on one day differ by ordinal and both survive.
-- Rejected: CSV-only import. The owner's data is an `.xlsx` workbook, and
-  telling someone to convert their file first is asking them to do the work the
-  product exists to do.
+- Context: the owner's Job Discovery reference shows five headline figures, a
+  bookmark, Saved Searches and Alerts tabs, and a "Search Credits — 1,250 /
+  2,000 used this week" meter. The schema could answer the postings and their
+  scores; it could not answer saving, saved searches, alerts, or credits.
+- Decision: build the data, never the appearance. `saved_at` on
+  `job_seeker_jobs` (a timestamp, not a boolean, so the saved list can be
+  ordered by when), `job_seeker_saved_searches`, `job_seeker_search_alerts`
+  referencing the search it came from, `job_seeker_search_events` as an
+  append-only log, and `weekly_search_allowance` on preferences. Every table
+  repeats the foundation's boundary exactly: organization + row ownership, RLS
+  enabled and forced, anon revoked, four owner-scoped policies. A new
+  job-seeker table with its own access rule would be a hole in a boundary that
+  is otherwise uniform.
+- Why the event log: a credit meter over nothing can only be a decoration, and
+  a decorated meter is worse than none because it tells a person they have
+  spent something. The page counts rows in a window instead. The log is
+  append-only by trigger for the same reason: a rewritable log would let the
+  meter report whatever the last writer preferred.
+- Why the allowance is a column: a quota hard-coded in a component is a quota
+  nobody can change and no test can vary. 2000 matches the design; a workspace
+  needing another ceiling edits the row, not the bundle.
+- Decision, the omissions: the meter renders only when an allowance exists,
+  rather than drawing an empty bar. The Saved Searches and Alerts tabs are not
+  rendered at all — the tables exist but nothing writes them yet, and a tab
+  opening onto a permanently empty list is the scaffolding this repository
+  refuses to ship.
+- Decision, the "High Match (80%+)" card: the label is built from what the rows
+  say, not from the constant in the design. `qualification_threshold` is a
+  per-seeker preference defaulting to 80; a page hard-coding 80 would mislabel
+  every workspace that moved its bar. When postings disagree about the
+  threshold there is no single bar to name and the qualifier is dropped rather
+  than picked.
+- Also: an unscored posting is excluded from a minimum-score filter and sorts
+  last, never treated as zero. Zero is a measurement; "not measured" is not.

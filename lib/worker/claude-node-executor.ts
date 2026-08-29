@@ -1,5 +1,6 @@
 import type { CompiledNode } from "@/lib/graph/compiler";
 import { taskKindForNode } from "@/lib/graph/provider-bridge";
+import { storeZodSchema } from "@/lib/graph/stored-schema";
 import type { NodeExecutionResult } from "@/lib/graph/runner";
 import type { NodeInputs } from "@/lib/worker/graph-run";
 import type { ClaudeAuthResolution } from "@/lib/providers/claude-auth";
@@ -133,6 +134,21 @@ export function buildClaudeNodeExecutor(
   return async (node, attempt, inputs) => {
     const model = pickModel(node);
     const startedAt = Date.now();
+    let requiredOutputSchema: Readonly<Record<string, unknown>>;
+    try {
+      if (!node.outputSchema) {
+        throw new Error("the compiled node carries no output schema");
+      }
+      requiredOutputSchema = storeZodSchema(node.outputSchema);
+    } catch (error) {
+      return {
+        status: "FAILED",
+        retryable: false,
+        error: `Node ${node.nodeKey}'s output contract cannot be sent to the provider: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      };
+    }
     const request: ProviderRunRequest = {
       runId: `graph-node-${node.nodeKey}-${startedAt}`,
       taskKind: taskKindForNode(node),
@@ -156,7 +172,8 @@ export function buildClaudeNodeExecutor(
       `You are one node in an execution graph working toward: ${options.goal}`,
       `Your single bounded job: ${node.job}`,
       "Answer from what your tools actually return. If you cannot complete the job, say so plainly instead of guessing.",
-      "Respond with the requested structured output only.",
+      "Respond with one JSON value matching this exact JSON Schema and nothing else:",
+      JSON.stringify(requiredOutputSchema),
     ].join("\n");
 
     // An edge is a data dependency: what upstream nodes produced travels
@@ -183,6 +200,7 @@ export function buildClaudeNodeExecutor(
         {
           workingDirectory: options.workingDirectory,
           allowedTools: ["Read", "Glob", "Grep"],
+          outputSchema: requiredOutputSchema,
           // Turns bound the exploration; the deadline above bounds the wall
           // clock. The transport clamps this to its own ceiling, which is why
           // the capability budgets are pinned against that ceiling in tests

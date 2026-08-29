@@ -229,8 +229,9 @@ describe("CommandComposer", () => {
     await user.click(screen.getByRole("button", { name: /Medium/ }));
     await user.click(screen.getByRole("button", { name: "Queue command" }));
     expect(await screen.findByText("The response was lost")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Retry command" })).toBeEnabled();
 
-    await user.click(screen.getByRole("button", { name: "Queue command" }));
+    await user.click(screen.getByRole("button", { name: "Retry command" }));
     expect(await screen.findByText(/is queued for example\/application as YELLOW/)).toBeInTheDocument();
 
     const bodies = fetchMock.mock.calls
@@ -240,6 +241,72 @@ describe("CommandComposer", () => {
     expect(bodies[0]?.idempotencyKey).toBe("command:33333333-3333-4333-8333-333333333333");
     expect(bodies[1]?.idempotencyKey).toBe(bodies[0]?.idempotencyKey);
     expect(randomUUID).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a current error visible but clears it when the project context changes or the composer remounts", async () => {
+    const firstProject = {
+      id: "11111111-1111-4111-8111-111111111111",
+      name: "First application",
+    };
+    const secondProject = {
+      id: "22222222-2222-4222-8222-222222222222",
+      name: "Second application",
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === "/api/tasks?limit=100") return jsonResponse({ tasks: [] });
+      if (String(input) === "/api/project-pipelines") {
+        return jsonResponse({
+          pipelines: [
+            selectedPipeline(firstProject.id, "first_pipeline", "First pipeline"),
+            selectedPipeline(secondProject.id, "second_pipeline", "Second pipeline"),
+          ],
+        });
+      }
+      if (String(input) === "/api/commands" && init?.method === "POST") {
+        return jsonResponse({
+          error: { message: "invalid Phase 1C command plan" },
+        }, 500);
+      }
+      throw new Error(`Unexpected request: ${String(input)}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+
+    const view = render(<CommandComposer projectContext={firstProject} />);
+    await waitFor(() => {
+      expect(screen.getByRole("combobox", { name: "Pipeline" })).toHaveValue("first_pipeline");
+    });
+    await user.type(screen.getByLabelText("What do you want done?"), "Fix the current factory");
+    await user.click(screen.getByRole("button", { name: "Queue command" }));
+    const releaseSkewMessage =
+      "Factory command routing is out of sync with this page. Reload the latest release, then retry the command.";
+    expect(await screen.findByText(releaseSkewMessage)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Reload latest release" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Retry command" })).toBeEnabled();
+
+    // An ordinary parent render is not a new attempt and must not erase the
+    // failure before the person has read or retried it.
+    view.rerender(<CommandComposer projectContext={firstProject} />);
+    expect(screen.getByText(releaseSkewMessage)).toBeInTheDocument();
+
+    view.rerender(<CommandComposer projectContext={secondProject} />);
+    await waitFor(() => {
+      expect(screen.getByRole("combobox", { name: "Project" })).toHaveValue(secondProject.id);
+      expect(screen.getByRole("combobox", { name: "Pipeline" })).toHaveValue("second_pipeline");
+    });
+    expect(screen.queryByText(releaseSkewMessage)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Queue command" })).toBeEnabled();
+
+    await user.click(screen.getByRole("button", { name: "Queue command" }));
+    expect(await screen.findByText(releaseSkewMessage)).toBeInTheDocument();
+    view.unmount();
+
+    render(<CommandComposer projectContext={secondProject} />);
+    await waitFor(() => {
+      expect(screen.getByRole("combobox", { name: "Pipeline" })).toHaveValue("second_pipeline");
+    });
+    expect(screen.queryByText(releaseSkewMessage)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Queue command" })).toBeDisabled();
   });
 
   it("requires a project-selected pipeline and stays closed when none are selected", async () => {
@@ -343,8 +410,10 @@ describe("CommandComposer", () => {
     await user.type(screen.getByLabelText("What do you want done?"), "Audit then build");
     await user.click(screen.getByRole("button", { name: "Queue command" }));
     expect(await screen.findByText("The response was lost")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Retry command" })).toBeEnabled();
 
     await user.selectOptions(pipelinePicker, "feature_build");
+    expect(screen.queryByText("The response was lost")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Queue command" }));
     expect(await screen.findByText(/is queued for example\/application as GREEN/)).toBeInTheDocument();
 

@@ -34,8 +34,21 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const migrationsDirectory = resolve(import.meta.dirname, "../../supabase/migrations");
 
-/** The only tables `service_role` may hold direct table privileges on. */
-const GITHUB_INGRESS_TABLES = [
+/**
+ * The only tables `service_role` may hold direct table privileges on: the
+ * ingress tables of the two signature-verified webhooks. GitHub's deliveries
+ * have held this position since Phase 1; the Stripe billing mirror
+ * (20260825000400, ADR-149) is the second and equal case — an external
+ * system's verified events, written by a route that has no user session to
+ * write as. Its audit trail goes through record_billing_activity, a definer
+ * function, so activity_events stays out of this list. Everything else is
+ * reached through SECURITY DEFINER functions, and widening this list further
+ * stays RED.
+ */
+const VERIFIED_WEBHOOK_INGRESS_TABLES = [
+  "billing_customers",
+  "billing_events",
+  "billing_subscriptions",
   "github_change_requests",
   "github_installations",
   "github_repositories",
@@ -73,6 +86,17 @@ const INTENTIONALLY_POLICYLESS: Readonly<Record<string, string>> = Object.freeze
     "Ephemeral one-use capabilities for the nested factory command transaction. "
     + "Every table privilege is denied; only the SECURITY DEFINER factory/public "
     + "command pair may create and consume a row, and successful calls leave none.",
+  graph_artifact_payload_containments:
+    "Private immutable digest and classification evidence for forward-only legacy "
+    + "artifact containment. FORCE RLS is required and every non-owner table ACL is "
+    + "closed, including anon, authenticated, and service_role; the postgres-owned "
+    + "migration path is the only writer, so a policy would create an unintended "
+    + "second access path to the audit rows.",
+  graph_release_gate_approval_intents:
+    "Append-only, one-use owner intent evidence for TEST and DEPLOYMENT gates. "
+    + "Browsers request an intent and the server consumes it only through bounded "
+    + "SECURITY DEFINER RPCs; direct reads or writes would bypass the nonce, exact "
+    + "provider evidence, and immutable approval audit.",
   newsletter_subscribers:
     "Public-input table. Inserts happen only through public.subscribe_to_newsletter; "
     + "anon and authenticated hold no SELECT, INSERT, UPDATE, or DELETE privilege.",
@@ -171,7 +195,7 @@ describe("row level security", () => {
 });
 
 describe("the service_role ACL matrix", () => {
-  it("holds table privileges on exactly the four GitHub ingress tables", async () => {
+  it("holds table privileges on exactly the verified-webhook ingress tables", async () => {
     const result = await db.query<{ table_name: string }>(`
       select distinct table_name
       from information_schema.role_table_grants
@@ -183,7 +207,7 @@ describe("the service_role ACL matrix", () => {
 
     // service_role bypasses RLS, so each entry here is an unmediated path to
     // the data. Widening this set is RED under RISK_CLASSIFICATION.md.
-    expect(granted).toEqual([...GITHUB_INGRESS_TABLES].sort());
+    expect(granted).toEqual([...VERIFIED_WEBHOOK_INGRESS_TABLES].sort());
   });
 
   it("reaches everything else through SECURITY DEFINER functions instead", async () => {
@@ -251,22 +275,34 @@ describe("SECURITY DEFINER functions", () => {
     // by the worker's key. Pinned by name: the set should change only when a
     // phase deliberately gives the worker a new capability.
     expect(result.rows.map((row) => row.proname)).toEqual([
+      "abort_graph_run_as_worker",
       "agentos_record_trigger_delivery",
       "append_phase1c_run_event",
+      // Full Lifecycle v2 release gates are evidence-bound. These wrappers
+      // atomically validate and persist the exact merge/deployment evidence
+      // with the gate decision instead of exposing low-level record helpers.
+      "approve_graph_phase1c_deployment_gate_as_worker",
+      "approve_graph_phase1c_test_gate_as_worker",
+      "bind_graph_phase1c_run_by_command_as_worker",
       // The auth-broker worker's eight capabilities: drive a sign-in session
       // through the provider's real login. `read_ai_auth_relay_code` returns
       // a sealed envelope useless without SOFTWAREFACTORY_CREDENTIAL_KEY, and
       // `complete_` accepts only an already-sealed credential — plaintext
       // never crosses this boundary in either direction.
       "claim_ai_auth_session",
-      "claim_phase1c_run",
+      // A dispatch-bound Phase 1C wake may commit only the exact command UUID
+      // supplied by the trusted server. The established v2 claim remains for
+      // the disabled-by-default scheduled drain.
+      "claim_phase1c_run_by_command_v2",
+      "claim_phase1c_run_v2",
       // The graph executor's four capabilities, mirroring the Phase 1C
       // pattern: claim an unrun graph atomically (run + node_runs + the whole
       // projection in one call), transition nodes under the same
       // terminal-states-are-final rule the member path enforces, append
       // artifacts, and close the run — where incomplete input can never be
       // recorded as COMPLETED. No credential material crosses any of them.
-      "claim_planned_graph",
+      "claim_planned_graph_by_id_v2",
+      "claim_planned_graph_v2",
       // The provider sign-in path, added with the credential vault. `claim_`
       // and `resolve_` are reachable only by presenting a valid one-time code,
       // and `read_` returns ciphertext that is useless without
@@ -275,12 +311,21 @@ describe("SECURITY DEFINER functions", () => {
       "claim_provider_connect_session",
       "complete_ai_auth_session",
       "complete_github_change_request",
-      "complete_graph_run_as_worker",
-      "complete_phase1c_run",
+      // Release-lineage writes are exposed only through atomic worker
+      // wrappers. The legacy completion functions remain implementation
+      // details, so a terminal run can never strand its graph bridge.
+      "complete_graph_run_with_phase1c_bridge_as_worker",
+      "complete_graph_run_with_validated_release_as_worker",
+      "complete_phase1c_run_with_graph_bridge_as_worker",
+      "complete_reviewer_with_verifications_as_worker",
+      "create_graph_from_plan_with_release_identity_as_server",
       // The anchored-automatic-gate decider (20260824000100): approves only
       // AUTOMATIC gates holding anchors, after the run closes; refuses human
       // gates unconditionally. ADR-140.
       "decide_automatic_gate_as_worker",
+      // Bounded queue diagnosis replaces broad direct table reads and exposes
+      // only graph ids, execution states, timestamps, and executor names.
+      "diagnose_graph_queue_as_worker_v2",
       "disconnect_github_connection",
       "expire_ai_auth_sessions",
       "fail_ai_auth_session",
@@ -318,13 +363,18 @@ describe("SECURITY DEFINER functions", () => {
       // The lifecycle resume read (20260824000200): the most recently
       // completed recorded result per node from a lifecycle graph's own
       // earlier non-answering runs. Read-only; scoped to lifecycles in SQL.
-      "read_prior_node_results_as_worker",
+      "read_prior_node_results_as_worker_v2",
       "read_provider_credential",
       "reconcile_github_repository_grants",
       // The usage sweep's one write: append a provider-usage observation for
       // an account the worker just probed. Insert-only into an append-only
       // table; the definer function revalidates the account/organization pair.
       "record_ai_account_usage",
+      // The Stripe webhook's audit write: one activity event per subscription
+      // transition, validated and clamped inside the definer, so
+      // activity_events itself keeps zero service_role table privileges
+      // (20260825000400, ADR-149).
+      "record_billing_activity",
       // Server-only credential evaluation records a verdict only when the
       // exact bot identity/configuration/revision still matches under row lock.
       // Browser-authenticated managers cannot execute this RPC directly.
@@ -333,10 +383,6 @@ describe("SECURITY DEFINER functions", () => {
       "record_node_state_as_worker",
       "record_phase1c_run_artifact",
       "record_phase1c_validation",
-      // The reviewing half of the executor: a node whose job is judging other
-      // nodes' work writes its verdict, lens, and evidence where a person can
-      // audit it. Same self-verification refusal as the member function.
-      "record_verification_as_worker",
       "recover_github_change_request_with_provider_evidence",
       "register_phase1c_worker",
       // Moves a never-started run's planned base to the observed live head.

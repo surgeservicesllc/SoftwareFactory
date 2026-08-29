@@ -145,6 +145,7 @@ describe("the hosted bot mutator CONTRACT release path", () => {
       GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}",
     });
     expect(workflow.permissions).toEqual({
+      actions: "read",
       checks: "read",
       contents: "read",
       deployments: "read",

@@ -18,7 +18,13 @@ import { Card, EmptyState, Notice, SectionTitle } from "@/components/ui";
  * a real outcome and not an error.
  */
 
-type BoardView = { key: string; name: string; summary: string; coverage: string };
+type BoardView = {
+  key: string;
+  name: string;
+  summary: string;
+  coverage: string;
+  supportsLocation: boolean;
+};
 
 type Hit = {
   job: {
@@ -33,6 +39,7 @@ type Hit = {
   };
   publishedOn: string | null;
   closesOn: string | null;
+  saveToken: string;
 };
 
 type BoardResult = {
@@ -40,11 +47,12 @@ type BoardResult = {
   boardName: string;
   totalAvailable: number | null;
   hits: Hit[];
+  locationApplied: boolean;
 };
 
 type BoardFailure = { board: string; boardName: string; code: string; message: string };
 
-type SaveState = "idle" | "saving" | "saved" | "already" | "failed";
+type SaveState = "idle" | "saving" | "saved" | "already" | "failed" | "expired";
 
 function hitKey(board: string, hit: Hit): string {
   return `${board}:${hit.job.externalId ?? hit.job.url ?? `${hit.job.company}:${hit.job.title}`}`;
@@ -62,6 +70,7 @@ export function JobSearchPanel() {
   const [failures, setFailures] = useState<BoardFailure[]>([]);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [saves, setSaves] = useState<Record<string, SaveState>>({});
+  const [saveErrors, setSaveErrors] = useState<Record<string, string>>({});
 
   /** Guards against an earlier slow search overwriting a later one's results. */
   const requestRef = useRef(0);
@@ -97,7 +106,13 @@ export function JobSearchPanel() {
     requestRef.current = ticket;
     setRunning(true);
     setSearchError(null);
+    // A new request invalidates the visual authority of the old response.
+    // Clear it immediately so a network failure cannot leave expired tokens
+    // looking like results from the request that just failed.
+    setResults(null);
+    setFailures([]);
     setSaves({});
+    setSaveErrors({});
 
     try {
       const response = await fetch("/api/job-seeker/search", {
@@ -126,7 +141,11 @@ export function JobSearchPanel() {
       setResults(payload.results ?? []);
       setFailures(payload.failures ?? []);
     } catch {
-      if (requestRef.current === ticket) setSearchError("The search could not be run.");
+      if (requestRef.current === ticket) {
+        setSearchError("The search could not be run.");
+        setResults(null);
+        setFailures([]);
+      }
     } finally {
       if (requestRef.current === ticket) setRunning(false);
     }
@@ -135,29 +154,51 @@ export function JobSearchPanel() {
   const saveHit = useCallback(async (board: string, hit: Hit) => {
     const key = hitKey(board, hit);
     setSaves((current) => ({ ...current, [key]: "saving" }));
+    setSaveErrors((current) => {
+      const next = { ...current };
+      delete next[key];
+      return next;
+    });
     try {
       const response = await fetch("/api/job-seeker/search/save", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ board, job: hit.job }),
+        body: JSON.stringify({ board, job: hit.job, resultToken: hit.saveToken }),
       });
-      const payload = (await response.json()) as { saved?: boolean; reason?: string };
+      const payload = (await response.json()) as {
+        saved?: boolean;
+        reason?: string;
+        error?: { code?: string; message?: string };
+      };
+      const state: SaveState = !response.ok
+        ? payload.error?.code === "search_result_invalid" ? "expired" : "failed"
+        : payload.saved === true
+          ? "saved"
+          : payload.reason === "already_saved"
+            ? "already"
+            : "failed";
       setSaves((current) => ({
         ...current,
-        [key]: !response.ok
-          ? "failed"
-          : payload.saved === true
-            ? "saved"
-            : payload.reason === "already_saved"
-              ? "already"
-              : "failed",
+        [key]: state,
       }));
+      if (state === "failed" || state === "expired") {
+        setSaveErrors((current) => ({
+          ...current,
+          [key]: payload.error?.message ?? "The job could not be saved. Try again.",
+        }));
+      }
     } catch {
       setSaves((current) => ({ ...current, [key]: "failed" }));
+      setSaveErrors((current) => ({
+        ...current,
+        [key]: "The job could not be saved because the connection failed. Try again.",
+      }));
     }
   }, []);
 
   const totalHits = (results ?? []).reduce((sum, entry) => sum + entry.hits.length, 0);
+  const everyBoardFailed = results !== null && results.length === 0 && failures.length > 0;
+  const locationUnsupported = (boards ?? []).filter((board) => !board.supportsLocation);
 
   return (
     <div className="space-y-6">
@@ -214,6 +255,14 @@ export function JobSearchPanel() {
             {boards.map((board) => `${board.name} (${board.coverage})`).join(", ")}.
           </p>
         ) : null}
+
+        {location.trim().length > 0 && locationUnsupported.length > 0 ? (
+          <p className="mt-2 text-xs text-[var(--muted)]">
+            {locationUnsupported.map((board) => board.name).join(", ")} does not expose a
+            free-text place filter, so its results use the keyword only. The other boards apply
+            the place.
+          </p>
+        ) : null}
       </Card>
 
       {failures.length > 0 ? (
@@ -226,7 +275,12 @@ export function JobSearchPanel() {
         </Notice>
       ) : null}
 
-      {results === null ? null : totalHits === 0 ? (
+      {results === null ? null : everyBoardFailed ? (
+        <EmptyState
+          title="No board completed the search"
+          description="Every board reported a failure. Nothing here is an empty-result claim; try again shortly."
+        />
+      ) : totalHits === 0 ? (
         <EmptyState
           title="No postings matched"
           description="The boards answered and had nothing for this search. Try a broader term or a different place."
@@ -238,9 +292,9 @@ export function JobSearchPanel() {
             <SectionTitle
               title={result.boardName}
               description={
-                result.totalAvailable === null
+                `${result.locationApplied ? "" : "Place not applied on this board. "}${result.totalAvailable === null
                   ? `Showing ${result.hits.length}. This board does not report a total.`
-                  : `Showing ${result.hits.length} of ${result.totalAvailable} the board reports.`
+                  : `Showing ${result.hits.length} of ${result.totalAvailable} the board reports.`}`
               }
             />
             {result.hits.length === 0 ? (
@@ -250,6 +304,7 @@ export function JobSearchPanel() {
                 {result.hits.map((hit) => {
                   const key = hitKey(result.board, hit);
                   const state = saves[key] ?? "idle";
+                  const saveError = saveErrors[key] ?? null;
                   return (
                     <li key={key} className="rounded-md border border-[var(--border)] p-3">
                       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -278,7 +333,7 @@ export function JobSearchPanel() {
                         <button
                           type="button"
                           onClick={() => void saveHit(result.board, hit)}
-                          disabled={state === "saving" || state === "saved" || state === "already"}
+                          disabled={state === "saving" || state === "saved" || state === "already" || state === "expired"}
                           className="shrink-0 rounded-md border border-[var(--border)] px-3 py-1.5 text-sm disabled:opacity-70"
                         >
                           {state === "saving"
@@ -289,9 +344,16 @@ export function JobSearchPanel() {
                                 ? "Already in your jobs"
                                 : state === "failed"
                                   ? "Save failed — retry"
+                                  : state === "expired"
+                                    ? "Search again to save"
                                   : "Save"}
                         </button>
                       </div>
+                      {saveError !== null ? (
+                        <div className="mt-3">
+                          <Notice tone="warning">{saveError}</Notice>
+                        </div>
+                      ) : null}
                     </li>
                   );
                 })}

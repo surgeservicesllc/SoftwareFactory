@@ -8,27 +8,13 @@ import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 /**
- * The hosted apply workflow's surgical scopes, replayed against real PostgreSQL.
+ * The hosted apply workflow's retired surgical scopes, checked against real
+ * PostgreSQL after the versioned graph-worker cutover.
  *
- * `scope=broker-functions` and `scope=lifecycle` do not consult the ledger —
- * they run whole files with psql, on a database that has already had them. The
- * workflow's comments claim that is safe. This asks PostgreSQL instead, because
- * the claim has been wrong before: apply run 32272188607 died halfway through a
- * replay when `create or replace` met a widened return type, and left a
- * security migration unapplied behind it.
- *
- * Two properties matter, and they are different:
- *
- *   1. A replay must not DIE. Every file in a scope's list has to survive being
- *      run a second time against its own output.
- *   2. A replay must not resurrect a dropped overload. `claim_planned_graph`
- *      existed as `(text)` before 20260819001000 replaced it with
- *      `(text, text[])`. A second live overload has no symptom — PostgREST
- *      still resolves the named call — but a lifecycle graph claimed through
- *      the older body reports no gates and runs straight past every one of them.
- *
- * The file lists are parsed out of the workflow rather than copied, so a scope
- * that gains a migration is covered here without anyone remembering to add it.
+ * Once 20260827000150 is in the ledger, replaying either legacy scope could
+ * recreate worker-callable pre-protocol functions. The workflow must refuse
+ * before its first file, the legacy claim must remain private, and only the
+ * version-2 claim may remain service-callable.
  */
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
@@ -45,14 +31,10 @@ function scopeFiles(stepName: string): string[] {
   return [...step[0].matchAll(/supabase\/migrations\/(\S+\.sql)/g)].map((match) => match[1]);
 }
 
-async function replay(files: string[]): Promise<void> {
-  for (const file of files) {
-    try {
-      await db.exec(await readFile(resolve(migrationsRoot, file), "utf8"));
-    } catch (error) {
-      throw new Error(`${file} did not survive a replay: ${(error as Error).message}`);
-    }
-  }
+function scopeStep(stepName: string): string {
+  return new RegExp(`- name: ${stepName}[\\s\\S]*?\\n      - name: `).exec(workflow)?.[0]
+    ?? new RegExp(`- name: ${stepName}[\\s\\S]*$`).exec(workflow)?.[0]
+    ?? "";
 }
 
 async function overloadsOf(name: string): Promise<{ signature: string; body: string }[]> {
@@ -101,7 +83,24 @@ afterAll(async () => {
   await db?.close();
 });
 
-describe("the workflow's surgical scopes", () => {
+describe("the workflow's post-cutover surgical-scope fence", () => {
+  it("keeps the authority fence and v2 lineage in separate one-file scopes", () => {
+    expect(scopeFiles("Fence the legacy graph protocol \\(scope=graph-protocol-fence\\)")).toEqual([
+      "20260827000150_fence_legacy_graph_protocol.sql",
+    ]);
+    expect(scopeFiles("Install graph Phase 1C release lineage \\(scope=graph-phase1c-lineage\\)")).toEqual([
+      "20260827000200_graph_phase1c_release_lineage.sql",
+    ]);
+
+    const fence = scopeStep("Fence the legacy graph protocol \\(scope=graph-protocol-fence\\)");
+    const lineage = scopeStep("Install graph Phase 1C release lineage \\(scope=graph-phase1c-lineage\\)");
+    expect(fence).toContain('if [ "$LEDGER" != "1|0|0" ]');
+    expect(fence).not.toContain("20260827000200_graph_phase1c_release_lineage.sql");
+    expect(lineage).toContain('if [ "$LEDGER" != "1|1|0" ]');
+    expect(lineage).not.toContain("20260827000150_fence_legacy_graph_protocol.sql");
+    expect(lineage.indexOf("DRAINED=$(psql")).toBeLessThan(lineage.indexOf("--single-transaction"));
+  });
+
   it("names files that all exist", async () => {
     // Guards every assertion below against passing on an empty list.
     const known = new Set(await readdir(migrationsRoot));
@@ -115,13 +114,63 @@ describe("the workflow's surgical scopes", () => {
     expect([...broker, ...lifecycle].filter((file) => !known.has(file))).toEqual([]);
   });
 
-  it("leaves one claim_planned_graph, knowing about gates, once every migration has run", async () => {
-    const overloads = await overloadsOf("claim_planned_graph");
-    expect(
-      overloads.map((entry) => entry.signature),
-      "a second overload is a live claim that reports no gates",
-    ).toEqual(["p_worker_id text, p_supported_executors text[]"]);
-    expect(overloads[0].body).toContain("graph_gates");
+  it.each([
+    "Apply the broker function migrations surgically \\(scope=broker-functions\\)",
+    "Apply the Agentic SDLC lifecycle surgically \\(scope=lifecycle\\)",
+  ])("refuses %s before replay once the cutover ledger is present", (stepName) => {
+    const step = scopeStep(stepName);
+    expect(step).toContain("version >= '20260827000150'");
+    expect(step).toContain('if [ "$CUTOVER_APPLIED" = "t" ]');
+    expect(step).toMatch(/retired after the versioned graph protocol cutover/i);
+    expect(step.indexOf("CUTOVER_APPLIED=")).toBeGreaterThan(-1);
+    expect(step.indexOf("CUTOVER_APPLIED=")).toBeLessThan(step.indexOf("for FILE in"));
+    expect(step.indexOf("exit 1")).toBeLessThan(step.indexOf("for FILE in"));
+  });
+
+  it("keeps each claim name unambiguous and exposes only protocol v2 to the worker", async () => {
+    const legacy = await overloadsOf("claim_planned_graph");
+    expect(legacy.map((entry) => entry.signature)).toEqual([
+      "p_worker_id text, p_supported_executors text[]",
+    ]);
+    const internal = await overloadsOf("claim_planned_graph_internal");
+    expect(internal.map((entry) => entry.signature)).toEqual([
+      "p_worker_id text, p_supported_executors text[], p_repository_full_name text, p_required_check_names jsonb",
+    ]);
+    const v2 = await overloadsOf("claim_planned_graph_v2");
+    expect(v2.map((entry) => entry.signature)).toEqual([
+      "p_worker_id text, p_supported_executors text[], p_repository_full_name text, p_required_check_names jsonb, p_protocol_version integer",
+    ]);
+    expect(legacy[0].body).toContain("graph_gates");
+    expect(internal[0].body).toContain("p_repository_full_name");
+    expect(internal[0].body).toContain("p_required_check_names");
+    expect(v2[0].body).toContain("p_repository_full_name");
+    expect(v2[0].body).toContain("p_required_check_names");
+    expect(v2[0].body).toContain("protocol version 2 is required");
+
+    const privileges = await db.query<{
+      legacy_authenticated: boolean;
+      internal_authenticated: boolean;
+      internal_service: boolean;
+      legacy_service: boolean;
+      v2_authenticated: boolean;
+      v2_service: boolean;
+    }>(
+      `select
+         has_function_privilege('authenticated', 'public.claim_planned_graph(text,text[])', 'EXECUTE') as legacy_authenticated,
+         has_function_privilege('service_role', 'public.claim_planned_graph(text,text[])', 'EXECUTE') as legacy_service,
+         has_function_privilege('authenticated', 'public.claim_planned_graph_internal(text,text[],text,jsonb)', 'EXECUTE') as internal_authenticated,
+         has_function_privilege('service_role', 'public.claim_planned_graph_internal(text,text[],text,jsonb)', 'EXECUTE') as internal_service,
+         has_function_privilege('authenticated', 'public.claim_planned_graph_v2(text,text[],text,jsonb,integer)', 'EXECUTE') as v2_authenticated,
+         has_function_privilege('service_role', 'public.claim_planned_graph_v2(text,text[],text,jsonb,integer)', 'EXECUTE') as v2_service`,
+    );
+    expect(privileges.rows[0]).toEqual({
+      legacy_authenticated: false,
+      internal_authenticated: false,
+      internal_service: false,
+      legacy_service: false,
+      v2_authenticated: false,
+      v2_service: true,
+    });
   });
 
   it("asks its probe questions in SQL that actually runs, and gets t for every one", async () => {
@@ -138,6 +187,10 @@ describe("the workflow's surgical scopes", () => {
     const query = /psql "\$DB_URL" -v ON_ERROR_STOP=1 -q -c "\r?\n(\s*with lifecycle\(kind[\s\S]*?);"/
       .exec(workflow);
     expect(query, "the scope=probe step no longer carries the lifecycle query").not.toBeNull();
+    expect(query![1]).toContain(
+      "('body',     'claim_planned_graph_v2',      'protocol version 2 is required')",
+    );
+    expect(query![1]).not.toContain("('body',     'claim_planned_graph',");
 
     const rows = (await db.query<{ kind: string; object: string; present: boolean }>(
       query![1].replace(/^ {12}/gm, ""),
@@ -150,57 +203,4 @@ describe("the workflow's surgical scopes", () => {
     ).toEqual([]);
   });
 
-  it("survives a broker-functions replay without resurrecting the dropped overload", async () => {
-    await replay(scopeFiles("Apply the broker function migrations surgically \\(scope=broker-functions\\)"));
-    expect(
-      (await overloadsOf("claim_planned_graph")).map((entry) => entry.signature),
-      "20260819000100 recreates the one-argument overload; 20260819001000 runs after it in the "
-        + "list and drops both. If that order ever changes, two overloads survive and the live "
-        + "claim silently stops reporting gates.",
-    ).toEqual(["p_worker_id text, p_supported_executors text[]"]);
-  });
-
-  it("does revert the lifecycle bodies, which is why the runbook says to re-run the scope", async () => {
-    // Not a property worth having — a property worth knowing. The replay above
-    // has just overwritten create_graph_from_plan with the pre-lifecycle body.
-    // Asserting it here is what keeps the recovery test below from passing
-    // vacuously, and what keeps the runbook's warning honest if it ever stops
-    // being true.
-    const [planner] = await overloadsOf("create_graph_from_plan");
-    expect(planner.body).not.toContain("lifecycle_stage");
-  });
-
-  it("is fully restored by replaying the lifecycle scope afterwards", async () => {
-    await replay(scopeFiles("Apply the Agentic SDLC lifecycle surgically \\(scope=lifecycle\\)"));
-
-    const [planner] = await overloadsOf("create_graph_from_plan");
-    expect(planner.body).toContain("lifecycle_stage");
-    expect(planner.body).toContain("is_feedback");
-
-    const claims = await overloadsOf("claim_planned_graph");
-    expect(claims.map((entry) => entry.signature)).toEqual(["p_worker_id text, p_supported_executors text[]"]);
-    expect(claims[0].body).toContain("graph_gates");
-
-    // And the grants the drop-then-create discarded were put back. This is the
-    // half that is easy to miss: `create or replace` preserves a function's
-    // grants and `drop` does not, so adding a drop to a file that inherited its
-    // grants from an earlier migration silently un-grants it. The symptom is a
-    // bare 42501 from a function that plainly exists.
-    const grants = await db.query<{ name: string; worker: boolean; member: boolean }>(
-      `select routine.proname as name,
-              has_function_privilege('service_role', routine.oid, 'EXECUTE') as worker,
-              has_function_privilege('authenticated', routine.oid, 'EXECUTE') as member
-         from pg_proc routine
-         join pg_namespace space on space.oid = routine.pronamespace
-        where space.nspname = 'public'
-          and routine.proname in ('claim_planned_graph', 'create_graph_from_plan')
-        order by 1`,
-    );
-    expect(grants.rows).toEqual([
-      // The worker's claim: service_role only, never a signed-in member.
-      { name: "claim_planned_graph", worker: true, member: false },
-      // The console's launch: authenticated, through RLS and its own checks.
-      { name: "create_graph_from_plan", worker: false, member: true },
-    ]);
-  });
 });

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   Activity,
   ArrowLeft,
@@ -11,6 +11,7 @@ import {
   Layers,
   Loader2,
   Plus,
+  RefreshCw,
   ShieldCheck,
   Timer,
   UserCheck,
@@ -18,7 +19,8 @@ import {
 
 import { shortRunId } from "@/lib/graph/run-label";
 import { FactoryShell, type FactoryViewer, type StepMark } from "@/components/graph/factory-shell";
-import { GraphLaunchControl } from "@/components/graph-launch-control";
+import type { GateDecisionResult } from "@/components/graph/gate-decision";
+import { GraphLaunchControl, type LaunchedGraph } from "@/components/graph-launch-control";
 import { StageNodes } from "@/components/graph/lifecycle-console";
 import {
   ActivityLog,
@@ -37,34 +39,112 @@ import { FACTORY_STEPS, type FactoryStep } from "@/lib/sdlc/factory-steps";
 import { stageDefinition } from "@/lib/sdlc/lifecycle";
 
 /**
- * One of the owner's ten factory steps, over the newest lifecycle.
+ * One of the owner's ten factory steps, over one exact lifecycle selection.
  *
  * The navigation's "02. AI Factory" pages. Each one answers, for its step of
- * the process: what the newest full-lifecycle run recorded there, what it
+ * the process: what the selected full-lifecycle run recorded there, what it
  * was asked to do, what decision (if any) it is waiting on, and where it
  * goes next. Everything is the same stored data every other console reads —
  * `/api/graphs/runs` plus the run's recorded artifacts — rendered through
  * the same shared readers, so a step page cannot disagree with the lifecycle
  * pages about the same run.
  *
- * "Newest lifecycle" is the deliberate scope: these pages walk *the*
- * process, and the newest full-lifecycle run is where the process stands.
- * Older runs and analysis graphs keep their own surfaces (Pipelines, the
- * Lifecycle pages), and each step links straight into them.
+ * The graph/run identity is carried in the URL between every step. A newly
+ * recorded graph is selected before its first run exists, and an explicit run
+ * remains selected across navigation. With multiple lifecycle runs and no
+ * selection, the page asks instead of borrowing another project's newest run.
  */
+
+export type FactoryRunSelection = {
+  readonly graphId?: string;
+  readonly graphRunId?: string;
+  readonly projectId?: string;
+};
 
 type State =
   | { kind: "loading" }
   | { kind: "error" }
   | { kind: "none" }
-  | { kind: "ready"; run: RunView; artifacts: readonly ArtifactView[] };
+  | { kind: "choose"; runs: readonly RunView[] }
+  | { kind: "waiting"; runs: readonly RunView[]; graphId: string }
+  | { kind: "missing"; runs: readonly RunView[] }
+  | {
+      kind: "ready";
+      run: RunView;
+      runs: readonly RunView[];
+      artifacts: readonly ArtifactView[];
+      artifactsError: string | null;
+    };
+
+type FollowedGraphAttempt = {
+  readonly graphId: string;
+  readonly displayedRunId: string | null;
+  readonly knownRunIds: ReadonlySet<string>;
+  readonly workerWoken: boolean;
+  readonly note: string;
+};
+
+type WorkerDispatchNotice = GateDecisionResult & {
+  readonly source: "gate" | "launch";
+  readonly graphId: string;
+  readonly runId: string | null;
+  readonly approved?: boolean;
+};
+
+const FACTORY_SELECTION_KEYS = ["graphId", "graphRunId", "projectId"] as const;
+const CURRENT_FULL_LIFECYCLE = Object.freeze({ key: "full_lifecycle", version: 2 });
+const LIVE_REFRESH_INTERVAL_MS = 15_000;
+const LIVE_REFRESH_MAX_TICKS = 40;
+const LIVE_NODE_STATES = new Set(["PENDING", "READY", "RUNNING", "VERIFYING"]);
+
+/** Whether a loaded attempt can still change while this page is open. */
+export function factoryRunNeedsLiveRefresh(run: RunView): boolean {
+  if (run.state === "PLANNED" || run.state === "RUNNING") return true;
+  return (run.nodes ?? []).some((node) =>
+    LIVE_NODE_STATES.has(node.state) || node.gate_state === "OPEN",
+  );
+}
+
+function isCurrentFullLifecycle(run: RunView): boolean {
+  return run.templateKey === CURRENT_FULL_LIFECYCLE.key
+    && run.templateVersion === CURRENT_FULL_LIFECYCLE.version;
+}
+
+/** A stable query string that keeps one graph/run bound across all ten pages. */
+function selectionQuery(selection: FactoryRunSelection): string {
+  const params = new URLSearchParams();
+  for (const key of FACTORY_SELECTION_KEYS) {
+    const value = selection[key];
+    if (value) params.set(key, value);
+  }
+  const query = params.toString();
+  return query ? `?${query}` : "";
+}
+
+function replaceBrowserSelection(selection: FactoryRunSelection) {
+  const url = new URL(window.location.href);
+  for (const key of FACTORY_SELECTION_KEYS) url.searchParams.delete(key);
+  for (const key of FACTORY_SELECTION_KEYS) {
+    const value = selection[key];
+    if (value) url.searchParams.set(key, value);
+  }
+  window.history.pushState(null, "", `${url.pathname}${url.search}${url.hash}`);
+}
 
 /** The breadcrumb the boards put in the topbar, into the run when one exists. */
-function FactoryBreadcrumb({ step, runId }: { step: FactoryStep; runId?: string | null }) {
+function FactoryBreadcrumb({
+  step,
+  runId,
+  stepQuery = "",
+}: {
+  step: FactoryStep;
+  runId?: string | null;
+  stepQuery?: string;
+}) {
   return (
     <nav aria-label="Breadcrumb" className="text-sm text-muted">
       <ol className="flex flex-wrap items-center gap-1.5">
-        <li><Link href="/solutions/factory/requirement" className="hover:text-foreground">AI Factory</Link></li>
+        <li><Link href={`/solutions/factory/requirement${stepQuery}`} className="hover:text-foreground">AI Factory</Link></li>
         <li aria-hidden="true" className="text-faint">›</li>
         {/* Runs is /solutions/runs. This crumb pointed at Pipelines, which
             was defensible only while Runs could not show a lifecycle run at
@@ -94,56 +174,322 @@ function FactoryBreadcrumb({ step, runId }: { step: FactoryStep; runId?: string 
 export function FactoryStepConsole({
   step,
   viewer,
+  initialSelection = {},
 }: {
   step: FactoryStep;
   viewer?: FactoryViewer;
+  initialSelection?: FactoryRunSelection;
 }) {
   const [state, setState] = useState<State>({ kind: "loading" });
+  const [selection, setSelection] = useState<FactoryRunSelection>(initialSelection);
+  const [continuationRunId, setContinuationRunId] = useState<string | null>(null);
+  const [dispatchNotice, setDispatchNotice] = useState<WorkerDispatchNotice | null>(null);
+  const [pollExpiredFor, setPollExpiredFor] = useState<string | null>(null);
+  const loadGeneration = useRef(0);
+  const initialSelectionIdentity = useRef(selectionQuery(initialSelection));
+  const followedGraphAttempt = useRef<FollowedGraphAttempt | null>(null);
 
   const load = useCallback(async () => {
+    const generation = ++loadGeneration.current;
+    const update = (next: State) => {
+      if (loadGeneration.current === generation) setState(next);
+    };
     try {
       const runsResponse = await fetch("/api/graphs/runs?limit=100", { cache: "no-store" });
       if (!runsResponse.ok) {
-        setState({ kind: "error" });
+        update({ kind: "error" });
         return;
       }
       const runsBody = (await runsResponse.json()) as { runs?: RunView[] };
-      // Newest first from the endpoint; the first lifecycle run is the
-      // process's current standing.
-      const run = (runsBody.runs ?? []).find((candidate) =>
-        (candidate as { isLifecycle?: boolean }).isLifecycle === true,
+      const lifecycleRuns = (runsBody.runs ?? []).filter((candidate) =>
+        candidate.isLifecycle === true,
       );
+
+      let run: RunView | undefined;
+      if (selection.graphRunId) {
+        const exact = lifecycleRuns.find((candidate) =>
+          candidate.graphRunId === selection.graphRunId,
+        );
+        // Every supplied identity must agree. A valid run id paired with a
+        // different graph/project is an identity mismatch, never permission to
+        // fall back to whatever happens to be newest.
+        if (
+          !exact
+          || (selection.graphId && exact.graphId !== selection.graphId)
+          || (selection.projectId && exact.projectId !== selection.projectId)
+        ) {
+          update({ kind: "missing", runs: lifecycleRuns });
+          return;
+        }
+        run = exact;
+      } else if (selection.graphId) {
+        const graphRuns = lifecycleRuns.filter((candidate) =>
+          candidate.graphId === selection.graphId
+          && (!selection.projectId || candidate.projectId === selection.projectId),
+        );
+        if (graphRuns.length === 0) {
+          update({ kind: "waiting", runs: lifecycleRuns, graphId: selection.graphId });
+          return;
+        }
+        const followed = followedGraphAttempt.current?.graphId === selection.graphId
+          ? followedGraphAttempt.current
+          : null;
+        const continuation = followed
+          ? graphRuns.find((candidate) => !followed.knownRunIds.has(candidate.graphRunId))
+          : undefined;
+        if (continuation) {
+          // Gate-held lifecycles resume in a new immutable run. Follow only a
+          // run id that did not exist when the owner made the decision, and
+          // only inside this exact graph/project. Once found, pin it exactly.
+          run = continuation;
+          followedGraphAttempt.current = null;
+          setContinuationRunId(null);
+          setDispatchNotice(null);
+          const next: FactoryRunSelection = {
+            graphId: continuation.graphId,
+            graphRunId: continuation.graphRunId,
+            ...(continuation.projectId ? { projectId: continuation.projectId } : {}),
+          };
+          setSelection(next);
+          replaceBrowserSelection(next);
+        } else if (followed?.displayedRunId) {
+          // The worker has not recorded the continuation attempt yet. Keep
+          // showing the exact held attempt while polling this exact graph.
+          run = graphRuns.find((candidate) =>
+            candidate.graphRunId === followed.displayedRunId,
+          );
+          if (!run) {
+            update({ kind: "missing", runs: graphRuns });
+            return;
+          }
+        } else if (graphRuns.length > 1) {
+          update({ kind: "choose", runs: graphRuns });
+          return;
+        } else if (followed) {
+          // A newly launched graph had no run at binding time. Its first run
+          // is unambiguous and is pinned as soon as it becomes visible.
+          run = graphRuns[0];
+          followedGraphAttempt.current = null;
+          setDispatchNotice(null);
+          const next: FactoryRunSelection = {
+            graphId: run.graphId,
+            graphRunId: run.graphRunId,
+            ...(run.projectId ? { projectId: run.projectId } : {}),
+          };
+          setSelection(next);
+          replaceBrowserSelection(next);
+        } else {
+          run = graphRuns[0];
+        }
+      } else if (selection.projectId) {
+        const projectRuns = lifecycleRuns.filter((candidate) =>
+          candidate.projectId === selection.projectId,
+        );
+        if (projectRuns.length === 1) run = projectRuns[0];
+        else {
+          update({ kind: "choose", runs: projectRuns });
+          return;
+        }
+      } else if (lifecycleRuns.length === 1) {
+        // A sole lifecycle is unambiguous. Once rendered, all step links pin
+        // its exact identities so a concurrent launch cannot switch the page.
+        run = lifecycleRuns[0];
+      } else if (lifecycleRuns.length > 1) {
+        update({ kind: "choose", runs: lifecycleRuns });
+        return;
+      }
+
       if (!run) {
-        setState({ kind: "none" });
+        update({ kind: "none" });
         return;
       }
       const artifactsResponse = await fetch(`/api/graphs/runs/${run.graphRunId}/artifacts`, {
         cache: "no-store",
       });
-      // Artifacts failing must not blank the step: the page states the
-      // shortfall where the artifacts would have been.
-      const artifactsBody = artifactsResponse.ok
-        ? ((await artifactsResponse.json()) as { artifacts?: ArtifactView[] })
-        : { artifacts: undefined };
-      setState({ kind: "ready", run, artifacts: artifactsBody.artifacts ?? [] });
+      // Artifacts failing must not blank the step, but an unreadable evidence
+      // boundary is not the same thing as a run with zero artifacts. Keep the
+      // run visible and carry the read failure into the page beside it.
+      const artifactsBody = (await artifactsResponse.json().catch(() => ({}))) as {
+        artifacts?: ArtifactView[];
+        error?: { message?: string };
+      };
+      update({
+        kind: "ready",
+        run,
+        runs: lifecycleRuns,
+        artifacts: artifactsResponse.ok ? (artifactsBody.artifacts ?? []) : [],
+        artifactsError: artifactsResponse.ok
+          ? null
+          : artifactsBody.error?.message
+            ?? `The artifact read answered HTTP ${artifactsResponse.status}.`,
+      });
     } catch {
-      setState({ kind: "error" });
+      update({ kind: "error" });
     }
+  }, [selection.graphId, selection.graphRunId, selection.projectId]);
+
+  const chooseRun = useCallback((run: RunView) => {
+    const next: FactoryRunSelection = {
+      graphId: run.graphId,
+      graphRunId: run.graphRunId,
+      ...(run.projectId ? { projectId: run.projectId } : {}),
+    };
+    followedGraphAttempt.current = null;
+    setContinuationRunId(null);
+    setDispatchNotice(null);
+    setPollExpiredFor(null);
+    loadGeneration.current += 1;
+    setSelection(next);
+    replaceBrowserSelection(next);
+    setState({ kind: "loading" });
   }, []);
+
+  const bindLaunchedGraph = useCallback((graph: LaunchedGraph) => {
+    // A launch has no graph_run_id until a worker claims it. Bind the graph and
+    // project immediately so an older run can never remain on screen as if it
+    // were the newly recorded request.
+    const next: FactoryRunSelection = { graphId: graph.graphId, projectId: graph.projectId };
+    followedGraphAttempt.current = {
+      graphId: graph.graphId,
+      displayedRunId: null,
+      knownRunIds: new Set(),
+      workerWoken: graph.workerWoken,
+      note: graph.note,
+    };
+    setContinuationRunId(null);
+    setDispatchNotice({
+      source: "launch",
+      graphId: graph.graphId,
+      runId: null,
+      workerWoken: graph.workerWoken,
+      note: graph.note,
+    });
+    setPollExpiredFor(null);
+    loadGeneration.current += 1;
+    setSelection(next);
+    replaceBrowserSelection(next);
+    setState({ kind: "loading" });
+  }, []);
+
+  const afterGateDecision = useCallback((
+    approved: boolean,
+    result: GateDecisionResult,
+    run: RunView,
+    runs: readonly RunView[],
+  ) => {
+    setDispatchNotice({
+      source: "gate",
+      graphId: run.graphId,
+      runId: run.graphRunId,
+      approved,
+      workerWoken: result.workerWoken,
+      note: result.note,
+    });
+    setPollExpiredFor(null);
+    if (!approved || !result.workerWoken) {
+      followedGraphAttempt.current = null;
+      setContinuationRunId(null);
+      void load();
+      return;
+    }
+    const next: FactoryRunSelection = {
+      graphId: run.graphId,
+      ...(run.projectId ? { projectId: run.projectId } : {}),
+    };
+    followedGraphAttempt.current = {
+      graphId: run.graphId,
+      displayedRunId: run.graphRunId,
+      knownRunIds: new Set(
+        runs
+          .filter((candidate) => candidate.graphId === run.graphId)
+          .map((candidate) => candidate.graphRunId),
+      ),
+      workerWoken: result.workerWoken,
+      note: result.note,
+    };
+    setContinuationRunId(run.graphRunId);
+    loadGeneration.current += 1;
+    setSelection(next);
+    replaceBrowserSelection(next);
+    setState({ kind: "loading" });
+  }, [load]);
+
+  useEffect(() => {
+    const incoming: FactoryRunSelection = {
+      ...(initialSelection.graphId ? { graphId: initialSelection.graphId } : {}),
+      ...(initialSelection.graphRunId ? { graphRunId: initialSelection.graphRunId } : {}),
+      ...(initialSelection.projectId ? { projectId: initialSelection.projectId } : {}),
+    };
+    const identity = selectionQuery(incoming);
+    if (identity === initialSelectionIdentity.current) return;
+
+    // App Router may retain this Client Component while a URL with a different
+    // server-read selection streams in (including browser Back/Forward).
+    initialSelectionIdentity.current = identity;
+    loadGeneration.current += 1;
+    followedGraphAttempt.current = null;
+    setContinuationRunId(null);
+    setDispatchNotice(null);
+    setPollExpiredFor(null);
+    setSelection(incoming);
+    setState({ kind: "loading" });
+  }, [initialSelection.graphId, initialSelection.graphRunId, initialSelection.projectId]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), 0);
-    return () => window.clearTimeout(timer);
+    return () => {
+      window.clearTimeout(timer);
+      loadGeneration.current += 1;
+    };
   }, [load]);
 
+  const pollWanted = continuationRunId !== null
+    || state.kind === "waiting"
+    || (state.kind === "ready" && factoryRunNeedsLiveRefresh(state.run));
+  const pollIdentity = continuationRunId !== null
+    ? `continuation:${continuationRunId}`
+    : state.kind === "waiting"
+      ? `graph:${state.graphId}`
+      : state.kind === "ready"
+        ? `run:${state.run.graphRunId}`
+        : "";
+  const currentGraphId = state.kind === "waiting"
+    ? state.graphId
+    : state.kind === "ready"
+      ? state.run.graphId
+      : selection.graphId ?? null;
+  const visibleDispatchNotice = dispatchNotice?.graphId === currentGraphId
+    ? dispatchNotice
+    : null;
+  const dispatchPollingDisabled = visibleDispatchNotice?.workerWoken === false;
+  const pollEligible = pollWanted && !dispatchPollingDisabled && pollIdentity !== "";
+  const pollingExpired = pollEligible && pollExpiredFor === pollIdentity;
+  const shouldPoll = pollEligible && !pollingExpired;
+
+  useEffect(() => {
+    if (!shouldPoll) return;
+    let ticks = 0;
+    const interval = window.setInterval(() => {
+      ticks += 1;
+      void load();
+      if (ticks >= LIVE_REFRESH_MAX_TICKS) {
+        window.clearInterval(interval);
+        setPollExpiredFor(pollIdentity);
+      }
+    }, LIVE_REFRESH_INTERVAL_MS);
+    return () => window.clearInterval(interval);
+  }, [load, pollIdentity, shouldPoll]);
+
   if (state.kind !== "ready") {
+    const stepQuery = selectionQuery(selection);
     return (
       <FactoryShell
         step={step}
         marks={[]}
         run={null}
+        stepQuery={stepQuery}
         viewer={viewer}
-        breadcrumb={<FactoryBreadcrumb step={step} />}
+        breadcrumb={<FactoryBreadcrumb step={step} stepQuery={stepQuery} />}
       >
         {state.kind === "loading" ? (
           <Card className="grid min-h-64 place-items-center">
@@ -159,17 +505,97 @@ export function FactoryStepConsole({
               Try again
             </button>
           </Card>
+        ) : state.kind === "choose" ? (
+          <div className="space-y-6">
+            <PageHeader title={`${step.number}. ${step.title}`} description={step.summary} />
+            <Card className="p-6">
+              <h2 className="text-base font-semibold text-foreground">Choose the lifecycle run to inspect</h2>
+              <p className="mt-2 max-w-2xl text-sm text-muted">
+                More than one lifecycle is recorded. Select the exact run; this page will not
+                borrow the newest run from another project or graph.
+              </p>
+              <RunPicker runs={state.runs} value="" onSelect={chooseRun} />
+            </Card>
+            <GraphLaunchControl
+              templateKey="full_lifecycle"
+              templateName="Full Lifecycle"
+              onLaunched={bindLaunchedGraph}
+            />
+          </div>
+        ) : state.kind === "waiting" ? (
+          <div className="space-y-6">
+            <PageHeader title={`${step.number}. ${step.title}`} description={step.summary} />
+            <Card className="p-6">
+              <h2 className="text-base font-semibold text-foreground">
+                {visibleDispatchNotice?.source === "launch" && !visibleDispatchNotice.workerWoken
+                  ? visibleDispatchNotice.note.includes("Not Connected")
+                    ? "Graph recorded — executor Not Connected"
+                    : "Graph recorded — worker not woken"
+                  : "Selected graph has no visible run yet"}
+              </h2>
+              <p className="mt-2 max-w-2xl text-sm text-muted">
+                Graph <span className="font-mono text-foreground">{state.graphId}</span> is selected.
+                {dispatchPollingDisabled
+                  ? " No run for this exact graph is in the newest 100 lifecycle runs; no older run is substituted."
+                  : " No run for this exact graph is in the newest 100 lifecycle runs. It may still be waiting for a worker claim; no older run is substituted."}
+              </p>
+              {visibleDispatchNotice ? (
+                <p className="mt-2 max-w-2xl text-sm text-foreground">
+                  {visibleDispatchNotice.note}
+                </p>
+              ) : null}
+              {dispatchPollingDisabled ? (
+                <p className="mt-2 max-w-2xl text-sm text-muted">
+                  Automatic polling is off because this request did not wake a worker. Use Refresh selected
+                  graph after a separately authorized dispatch or worker connection.
+                </p>
+              ) : pollingExpired ? (
+                <p role="status" className="mt-2 max-w-2xl text-sm text-muted">
+                  Automatic checks paused after the bounded wait. Use Refresh selected graph for an
+                  immediate, exact read.
+                </p>
+              ) : (
+                <p className="mt-2 max-w-2xl text-sm text-muted">
+                  This page is checking this exact graph automatically for a bounded period.
+                </p>
+              )}
+              <button type="button" onClick={() => void load()} className="btn btn-secondary btn-sm mt-4">
+                Refresh selected graph
+              </button>
+              {state.runs.length > 0 ? (
+                <RunPicker runs={state.runs} value="" onSelect={chooseRun} />
+              ) : null}
+            </Card>
+          </div>
+        ) : state.kind === "missing" ? (
+          <div className="space-y-6">
+            <PageHeader title={`${step.number}. ${step.title}`} description={step.summary} />
+            <Card className="p-6">
+              <h2 className="text-base font-semibold text-foreground">Selected lifecycle run is unavailable</h2>
+              <p className="mt-2 max-w-2xl text-sm text-muted">
+                The selected run is not an exact lifecycle match in this organization&apos;s newest
+                100 runs. No other project or graph is shown in its place.
+              </p>
+              {state.runs.length > 0 ? (
+                <RunPicker runs={state.runs} value="" onSelect={chooseRun} />
+              ) : null}
+            </Card>
+          </div>
         ) : (
           <div className="space-y-6">
             <PageHeader title={`${step.number}. ${step.title}`} description={step.summary} />
             <Card className="p-6">
               <h2 className="text-base font-semibold text-foreground">No lifecycle has run yet</h2>
               <p className="mt-2 max-w-2xl text-sm text-muted">
-                These pages walk the newest full-lifecycle run through the ten steps, and none is
+                These pages walk one selected full-lifecycle run through the ten steps, and none is
                 recorded yet. Launch one below and every step fills in as the work moves.
               </p>
             </Card>
-            <GraphLaunchControl templateKey="full_lifecycle" templateName="Full Lifecycle" />
+            <GraphLaunchControl
+              templateKey="full_lifecycle"
+              templateName="Full Lifecycle"
+              onLaunched={bindLaunchedGraph}
+            />
           </div>
         )}
       </FactoryShell>
@@ -177,21 +603,52 @@ export function FactoryStepConsole({
   }
 
   return (
-    <StepView step={step} run={state.run} artifacts={state.artifacts} onReload={load} viewer={viewer} />
+    <StepView
+      step={step}
+      run={state.run}
+      runs={state.runs}
+      artifacts={state.artifacts}
+      artifactsError={state.artifactsError}
+      dispatchNotice={visibleDispatchNotice}
+      followingContinuation={continuationRunId === state.run.graphRunId}
+      pollingExpired={pollingExpired}
+      onReload={load}
+      onGateDecided={(approved, result) =>
+        afterGateDecision(approved, result, state.run, state.runs)}
+      onSelectRun={chooseRun}
+      onLaunched={bindLaunchedGraph}
+      viewer={viewer}
+    />
   );
 }
 
 function StepView({
   step,
   run,
+  runs,
   artifacts,
+  artifactsError,
+  dispatchNotice,
+  followingContinuation,
+  pollingExpired,
+  onGateDecided,
   onReload,
+  onSelectRun,
+  onLaunched,
   viewer,
 }: {
   step: FactoryStep;
   run: RunView;
+  runs: readonly RunView[];
   artifacts: readonly ArtifactView[];
+  artifactsError: string | null;
+  dispatchNotice: WorkerDispatchNotice | null;
+  followingContinuation: boolean;
+  pollingExpired: boolean;
+  onGateDecided: (approved: boolean, result: GateDecisionResult) => void;
   onReload: () => void;
+  onSelectRun: (run: RunView) => void;
+  onLaunched: (graph: LaunchedGraph) => void;
   viewer?: FactoryViewer;
 }) {
   /*
@@ -202,11 +659,46 @@ function StepView({
    * to know that Workflows carries the same control.
    */
   const [startingNew, setStartingNew] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const nodes = run.nodes ?? [];
   const { stages } = summariseRunStages(nodes);
   const previous = FACTORY_STEPS.find((candidate) => candidate.number === step.number - 1) ?? null;
   const next = FACTORY_STEPS.find((candidate) => candidate.number === step.number + 1) ?? null;
+  // Once a concrete run has been resolved, every link pins all of its known
+  // identities. A graph-only or project-only URL is merely a lookup input;
+  // propagating that partial selector would become ambiguous as soon as a
+  // retry or a second run appeared.
+  const exactSelection: FactoryRunSelection = {
+    graphId: run.graphId,
+    graphRunId: run.graphRunId,
+    ...(run.projectId ? { projectId: run.projectId } : {}),
+  };
+  const stepQuery = selectionQuery(exactSelection);
+  const stepHref = (slug: string) => `/solutions/factory/${slug}${stepQuery}`;
+  const currentFullLifecycle = isCurrentFullLifecycle(run);
+  const failedNodes = nodes.filter((node) => node.state === "FAILED" || node.state === "CANCELLED");
+
+  const openCurrentRequest = () => {
+    setStartingNew(true);
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        const launcher = document.getElementById("factory-new-request");
+        if (typeof launcher?.scrollIntoView === "function") {
+          launcher.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+      });
+    });
+  };
+
+  const refresh = async () => {
+    setRefreshing(true);
+    try {
+      await onReload();
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   /** A step's standing is its worst stage's standing, in lifecycle order. */
   const stepStanding = (candidate: FactoryStep) => {
@@ -217,7 +709,13 @@ function StepView({
     if (present.length === 0) return stageStanding(undefined);
     if (present.some((slice) => slice!.failed > 0)) return stageStanding(present.find((slice) => slice!.failed > 0));
     if (present.some((slice) => slice!.active > 0)) return stageStanding(present.find((slice) => slice!.active > 0));
-    if (present.every((slice) => slice!.completed === slice!.total)) return stageStanding(present[0]);
+    if (present.length !== candidate.stages.length) return stageStanding(undefined);
+    // A grouped step is complete only when every stage it owns is present.
+    // REQUIREMENT owns GOAL and PRD; a lone completed GOAL must not turn the
+    // whole requirement step green while its PRD is absent.
+    if (
+      present.every((slice) => slice!.completed === slice!.total)
+    ) return stageStanding(present[0]);
     return stageStanding(present.find((slice) => slice!.completed !== slice!.total) ?? present[0]);
   };
 
@@ -245,9 +743,14 @@ function StepView({
     return [node.executor, provider].filter((value): value is string => Boolean(value));
   }))];
   const completedInStep = stepNodes.filter((node) => node.state === "COMPLETED").length;
-  const gates = [...new Set(step.stages
-    .map((stage) => stageDefinition(stage).gate)
-    .filter((gate): gate is "HUMAN" | "AUTOMATIC" => gate !== null))];
+  // The run's stored nodes are the authority for gates. Lifecycle definitions
+  // describe the general stage vocabulary, but a concrete template may not
+  // place every default gate on a node; showing one anyway invents a decision
+  // the run can never open.
+  const gates = [...new Set(stepNodes
+    .map((node) => node.gate_kind)
+    .filter((gate): gate is "HUMAN" | "AUTOMATIC" =>
+      gate === "HUMAN" || gate === "AUTOMATIC"))];
 
   /**
    * The step's recommendations to its successor, from the recorded reports.
@@ -299,8 +802,9 @@ function StepView({
         costMicros: run.costMicros,
         budgetAction: run.budgetAction,
       }}
+      stepQuery={stepQuery}
       viewer={viewer}
-      breadcrumb={<FactoryBreadcrumb step={step} runId={run.graphRunId} />}
+      breadcrumb={<FactoryBreadcrumb step={step} runId={run.graphRunId} stepQuery={stepQuery} />}
     >
     <div className="space-y-5">
       {/* The title row: big numbered step, its live standing, the actions. */}
@@ -317,6 +821,15 @@ function StepView({
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
+            onClick={() => void refresh()}
+            disabled={refreshing}
+            className="btn btn-secondary btn-sm inline-flex items-center gap-1.5"
+          >
+            <RefreshCw className={cn("size-3.5", refreshing && "animate-spin")} aria-hidden="true" />
+            {refreshing ? "Refreshing…" : "Refresh run"}
+          </button>
+          <button
+            type="button"
             onClick={() => setStartingNew((open) => !open)}
             aria-expanded={startingNew}
             aria-controls="factory-new-request"
@@ -330,7 +843,7 @@ function StepView({
           </Link>
           {next ? (
             <Link
-              href={`/solutions/factory/${next.slug}`}
+              href={stepHref(next.slug)}
               className="btn btn-primary btn-sm inline-flex items-center gap-1.5"
             >
               Next Stage <ArrowRight className="size-3.5" aria-hidden="true" />
@@ -350,12 +863,130 @@ function StepView({
       {startingNew ? (
         <div id="factory-new-request" className="space-y-2">
           <p className="text-sm text-muted">
-            A request runs the whole ten-step lifecycle once against the project you choose. It
-            joins the run list when recorded; this page keeps showing the newest run.
+            A request runs the whole ten-step lifecycle once against the project you choose. The
+            exact graph is selected as soon as it is recorded, before its first run exists.
           </p>
-          <GraphLaunchControl templateKey="full_lifecycle" templateName="Full Lifecycle" />
+          <GraphLaunchControl
+            templateKey="full_lifecycle"
+            templateName="Full Lifecycle"
+            onLaunched={onLaunched}
+          />
         </div>
       ) : null}
+
+      <Card className="p-4">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className="label">Selected lifecycle run</h2>
+            <p className="mt-1 text-xs text-faint">
+              Graph {run.graphId}{run.projectId ? ` · project ${run.projectId}` : ""}
+            </p>
+          </div>
+          <RunPicker runs={runs} value={run.graphRunId} onSelect={onSelectRun} compact />
+        </div>
+      </Card>
+
+      {followingContinuation ? (
+        <div role="status">
+          <Card className="border-[var(--accent-border)] p-5">
+            <h2 className="text-base font-semibold text-foreground">
+              {pollingExpired
+                ? "Gate approved — continuation not recorded"
+                : "Gate approved — waiting for continuation"}
+            </h2>
+            {dispatchNotice ? (
+              <p className="mt-2 text-sm text-foreground">{dispatchNotice.note}</p>
+            ) : null}
+            <p className="mt-2 text-sm text-muted">
+              {pollingExpired
+                ? "Automatic checks paused after the bounded wait without finding a new immutable attempt. Use Refresh run for an immediate, exact read."
+                : "The decision is recorded. A worker continuation is a new immutable attempt of this exact graph, so this page is checking for that new run automatically for a bounded period. Use Refresh run for an immediate check."}
+            </p>
+          </Card>
+        </div>
+      ) : null}
+
+      {!followingContinuation && dispatchNotice?.source === "gate" ? (
+        <div role="status">
+          <Card className="border-[var(--accent-border)] p-5">
+            <h2 className="text-base font-semibold text-foreground">
+              {!dispatchNotice.approved
+                ? "Gate decision recorded"
+                : !dispatchNotice.workerWoken && dispatchNotice.note.includes("Not Connected")
+                  ? "Gate approved — executor Not Connected"
+                  : !dispatchNotice.workerWoken
+                    ? "Gate approved — worker not woken"
+                    : "Gate decision recorded"}
+            </h2>
+            <p className="mt-2 text-sm text-foreground">{dispatchNotice.note}</p>
+            {!dispatchNotice.approved ? (
+              <p className="mt-2 text-sm text-muted">
+                No continuation is expected from a rejected gate. Use Refresh run only to read the
+                exact recorded state again.
+              </p>
+            ) : !dispatchNotice.workerWoken ? (
+              <p className="mt-2 text-sm text-muted">
+                Automatic continuation polling is off because this decision did not wake a worker.
+                Use Refresh run after a separately authorized dispatch or worker connection.
+              </p>
+            ) : null}
+          </Card>
+        </div>
+      ) : null}
+
+      {!followingContinuation && !dispatchNotice && pollingExpired ? (
+        <div role="status">
+          <Card className="border-[var(--accent-border)] p-5">
+            <h2 className="text-base font-semibold text-foreground">Automatic refresh paused</h2>
+            <p className="mt-2 text-sm text-muted">
+              The bounded live-refresh period ended. Use Refresh run for an immediate, exact read;
+              this page is no longer checking automatically.
+            </p>
+          </Card>
+        </div>
+      ) : null}
+
+      {!currentFullLifecycle ? (
+        <Card className="border-[var(--warning-border,var(--border))] p-5">
+          <h2 className="text-base font-semibold text-foreground">Historical lifecycle definition</h2>
+          <p className="mt-2 text-sm text-muted">
+            {run.templateKey && typeof run.templateVersion === "number"
+              ? `This run used ${run.templateKey} v${run.templateVersion}; the current production lifecycle is ${CURRENT_FULL_LIFECYCLE.key} v${CURRENT_FULL_LIFECYCLE.version}.`
+              : `This run does not expose a verifiable template identity. The current production lifecycle is ${CURRENT_FULL_LIFECYCLE.key} v${CURRENT_FULL_LIFECYCLE.version}.`}
+            {" "}Its recorded result is immutable and must not be used to judge the current Deploy or Monitor wiring.
+          </p>
+          <button type="button" onClick={openCurrentRequest} className="btn btn-primary btn-sm mt-4">
+            Start the current Full Lifecycle
+          </button>
+        </Card>
+      ) : failedNodes.length > 0 ? (
+        <Card className="border-[var(--danger-border,var(--border))] p-5">
+          <h2 className="text-base font-semibold text-foreground">This attempt ended with failed work</h2>
+          <p className="mt-2 text-sm text-muted">
+            {failedNodes.map((node) => node.node_key).join(", ")} stopped this immutable attempt.
+            Review the recorded reason below, then start a fresh current lifecycle after the cause is corrected.
+          </p>
+          <button type="button" onClick={openCurrentRequest} className="btn btn-primary btn-sm mt-4">
+            Start a fresh Full Lifecycle
+          </button>
+        </Card>
+      ) : null}
+
+      {artifactsError ? (
+        <div role="alert">
+          <Card className="border-[var(--danger-border,var(--border))] p-5">
+            <h2 className="text-base font-semibold text-foreground">Run artifacts could not be read</h2>
+            <p className="mt-2 text-sm text-muted">
+              {artifactsError} The run standings remain visible, but artifact counts and contents are unavailable.
+            </p>
+            <button type="button" onClick={onReload} className="btn btn-secondary btn-sm mt-4">
+              Try again
+            </button>
+          </Card>
+        </div>
+      ) : null}
+
+      <ReleaseStepGuidance step={step} artifacts={artifacts} />
 
       {/* The ten steps as the boards draw them: a circle per step — a check
           once complete, the number otherwise — the name, and the standing
@@ -372,7 +1003,7 @@ function StepView({
                   <span aria-hidden="true" className="mx-0.5 h-px w-2 shrink-0 bg-[var(--border)]" />
                 ) : null}
                 <Link
-                  href={`/solutions/factory/${entry.slug}`}
+                  href={stepHref(entry.slug)}
                   aria-current={current ? "page" : undefined}
                   aria-label={`${entry.number}. ${entry.title} — ${standingWord(entryStanding)}`}
                   className={cn(
@@ -452,7 +1083,7 @@ function StepView({
             <h2 className="label">The request</h2>
             <p className="mt-2 text-sm text-foreground">{run.goal}</p>
             <p className="mt-3 text-xs text-faint">
-              Newest lifecycle run {run.graphRunId} · {run.state}
+              Selected lifecycle run {run.graphRunId} · {run.state}
               {run.startedAt ? ` · started ${clock(run.startedAt)}` : ""}
               {run.completedAt ? ` · closed ${clock(run.completedAt)}` : ""}
             </p>
@@ -467,6 +1098,12 @@ function StepView({
             const stageArtifacts = artifacts.filter(
               (artifact) => artifact.nodeKey !== null && stageNodeKeys.has(artifact.nodeKey),
             );
+            const evidenceArtifactIds = Object.fromEntries(stageNodes.flatMap((node) => {
+              const latest = stageArtifacts
+                .filter((artifact) => artifact.nodeKey === node.node_key)
+                .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0];
+              return latest ? [[node.node_key, latest.artifactId]] : [];
+            }));
             return (
               <section key={stage} aria-label={`${stage} in this run`} className="space-y-3">
                 <Card className="p-5">
@@ -495,7 +1132,16 @@ function StepView({
                       This run planned no node in this stage.
                     </p>
                   ) : (
-                    <StageNodes nodes={stageNodes} onDecided={onReload} />
+                    <StageNodes
+                      approvalRequiresEvidence={["ARCHITECTURE", "TEST", "DEPLOYMENT"].includes(stage)
+                        && stageNodes.some((node) => node.gate_kind === "HUMAN")}
+                      approvalUnavailableMessage={artifactsError
+                        ? "Approval is unavailable because the exact run artifacts could not be read. Retry the artifact read first."
+                        : "Approval is unavailable until this stage records its exact evidence artifact. Refresh the run after the node finishes."}
+                      evidenceArtifactIds={evidenceArtifactIds}
+                      nodes={stageNodes}
+                      onDecided={onGateDecided}
+                    />
                   )}
                 </Card>
 
@@ -625,7 +1271,7 @@ function StepView({
               {next ? (
                 <li>
                   <Link
-                    href={`/solutions/factory/${next.slug}`}
+                    href={stepHref(next.slug)}
                     className="text-muted underline decoration-dotted underline-offset-2 hover:text-foreground"
                   >
                     Continue to {next.number}. {next.title}
@@ -642,7 +1288,7 @@ function StepView({
         <div className="flex flex-wrap items-center justify-between gap-2">
           {previous ? (
             <Link
-              href={`/solutions/factory/${previous.slug}`}
+              href={stepHref(previous.slug)}
               className="btn btn-secondary btn-sm inline-flex items-center gap-1.5"
             >
               <ArrowLeft className="size-3.5" aria-hidden="true" />
@@ -657,7 +1303,7 @@ function StepView({
           </Link>
           {next ? (
             <Link
-              href={`/solutions/factory/${next.slug}`}
+              href={stepHref(next.slug)}
               className="btn btn-primary btn-sm inline-flex items-center gap-1.5"
             >
               Next Stage: {next.title}
@@ -668,6 +1314,197 @@ function StepView({
       </Card>
     </div>
     </FactoryShell>
+  );
+}
+
+function runOptionLabel(run: RunView): string {
+  const goal = run.goal.replace(/\s+/g, " ").trim();
+  const boundedGoal = goal.length > 72 ? `${goal.slice(0, 69)}…` : goal;
+  const project = run.projectId ? run.projectId.slice(0, 8) : "unknown";
+  return `${shortRunId(run.graphRunId)} · project ${project} · ${boundedGoal}`;
+}
+
+/**
+ * Selects one exact run identity. The option value is never a graph id or a
+ * project id, so two requests with the same goal cannot alias each other.
+ */
+function RunPicker({
+  runs,
+  value,
+  onSelect,
+  compact = false,
+}: {
+  runs: readonly RunView[];
+  value: string;
+  onSelect: (run: RunView) => void;
+  compact?: boolean;
+}) {
+  return (
+    <label className={cn("flex min-w-0 flex-col gap-1 text-sm", compact ? "w-full sm:w-auto" : "mt-4")}>
+      <span className="text-muted">Lifecycle run</span>
+      <select
+        aria-label="Lifecycle run"
+        value={value}
+        onChange={(event) => {
+          const selected = runs.find((run) => run.graphRunId === event.target.value);
+          if (selected) onSelect(selected);
+        }}
+        className="input min-w-0 sm:max-w-xl"
+      >
+        {value === "" ? <option value="">Select an exact run…</option> : null}
+        {runs.map((run) => (
+          <option key={run.graphRunId} value={run.graphRunId}>
+            {runOptionLabel(run)}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+type ReleaseHandoffEvidence = {
+  pullRequestUrl: string | null;
+  headSha: string | null;
+  deploymentSha: string | null;
+  deploymentId: string | null;
+  deploymentUrl: string | null;
+  deploymentState: string | null;
+};
+
+function recordPayload(payload: unknown): Record<string, unknown> | null {
+  return typeof payload === "object" && payload !== null && !Array.isArray(payload)
+    ? payload as Record<string, unknown>
+    : null;
+}
+
+function safeHttpsUrl(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:" || url.username || url.password) return null;
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
+function releaseHandoffEvidence(artifacts: readonly ArtifactView[]): ReleaseHandoffEvidence {
+  let pullRequestUrl: string | null = null;
+  let headSha: string | null = null;
+  let deploymentSha: string | null = null;
+  let deploymentId: string | null = null;
+  let deploymentUrl: string | null = null;
+  let deploymentState: string | null = null;
+
+  for (const artifact of artifacts) {
+    const payload = recordPayload(artifact.payload);
+    if (!payload) continue;
+    const observation = typeof payload.observation === "string" ? payload.observation : "";
+    const isPullRequestEvidence = observation === "phase1c_change_lineage"
+      || observation === "phase1c_pull_request_review"
+      || observation === "ci_check_runs";
+    const possiblePullRequestUrl = safeHttpsUrl(payload.pullRequestUrl ?? payload.pull_request_url);
+    if (isPullRequestEvidence && possiblePullRequestUrl && /^https:\/\/github\.com\/[^/]+\/[^/]+\/pull\/\d+\/?$/i.test(possiblePullRequestUrl)) {
+      pullRequestUrl ??= possiblePullRequestUrl;
+    }
+    const possibleSha = payload.headSha ?? payload.head_sha ?? payload.sha;
+    if (isPullRequestEvidence && typeof possibleSha === "string" && /^[0-9a-f]{40}$/i.test(possibleSha)) {
+      headSha = possibleSha.toLowerCase();
+    }
+    if (observation === "github_production_deployment") {
+      if (typeof payload.sha === "string" && /^[0-9a-f]{40}$/i.test(payload.sha)) {
+        deploymentSha = payload.sha.toLowerCase();
+      }
+      const rawId = payload.deploymentId ?? payload.deployment_id;
+      if ((typeof rawId === "number" && Number.isSafeInteger(rawId)) || typeof rawId === "string") {
+        deploymentId = String(rawId);
+      }
+      deploymentUrl = safeHttpsUrl(payload.environmentUrl ?? payload.environment_url);
+      deploymentState = typeof payload.state === "string" ? payload.state : null;
+    }
+  }
+
+  return { pullRequestUrl, headSha, deploymentSha, deploymentId, deploymentUrl, deploymentState };
+}
+
+function ReleaseStepGuidance({
+  step,
+  artifacts,
+}: {
+  step: FactoryStep;
+  artifacts: readonly ArtifactView[];
+}) {
+  if (step.slug !== "test" && step.slug !== "deploy") return null;
+  const evidence = releaseHandoffEvidence(artifacts);
+
+  if (step.slug === "test") {
+    return (
+      <Card className="border-[var(--accent-border)] p-5">
+        <h2 className="text-base font-semibold text-foreground">TEST handoff: review and merge in GitHub</h2>
+        <p className="mt-2 text-sm text-muted">
+          Required CI must be green for the exact head. Review and merge that pull request in GitHub,
+          then use <strong className="text-foreground">Accept merged pull request</strong> on the TEST node.
+          The acceptance control verifies an existing merge and records its exact commit; it never merges.
+        </p>
+        <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
+          {evidence.pullRequestUrl ? (
+            <a
+              href={evidence.pullRequestUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="btn btn-primary btn-sm"
+            >
+              Open exact pull request
+            </a>
+          ) : (
+            <span className="text-[var(--warning)]">The exact pull-request link is not recorded yet.</span>
+          )}
+          {evidence.headSha ? (
+            <span className="text-muted">head <code className="font-mono text-foreground">{evidence.headSha.slice(0, 8)}</code></span>
+          ) : null}
+        </div>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="border-[var(--accent-border)] p-5">
+      <h2 className="text-base font-semibold text-foreground">DEPLOY handoff: accept observed Production</h2>
+      <p className="mt-2 text-sm text-muted">
+        Vercel&apos;s Git integration performs the deployment outside this control plane. After the exact
+        merge commit reports a successful Production deployment, use
+        <strong className="text-foreground"> Accept production deployment</strong> on the DEPLOY node.
+        The control verifies and records provider evidence; it never deploys.
+      </p>
+      {evidence.deploymentId || evidence.deploymentUrl || evidence.deploymentState ? (
+        <dl className="mt-3 grid grid-cols-1 gap-2 text-sm sm:grid-cols-3">
+          <div>
+            <dt className="text-xs text-faint">Provider state</dt>
+            <dd className="text-foreground">{evidence.deploymentState ?? "—"}</dd>
+          </div>
+          <div>
+            <dt className="text-xs text-faint">Deployment ID</dt>
+            <dd className="break-all font-mono text-foreground">{evidence.deploymentId ?? "—"}</dd>
+          </div>
+          <div>
+            <dt className="text-xs text-faint">Exact commit</dt>
+            <dd className="font-mono text-foreground">{evidence.deploymentSha?.slice(0, 8) ?? "—"}</dd>
+          </div>
+        </dl>
+      ) : (
+        <p className="mt-3 text-sm text-[var(--warning)]">No exact Production deployment evidence is recorded yet.</p>
+      )}
+      {evidence.deploymentUrl ? (
+        <a
+          href={evidence.deploymentUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="btn btn-secondary btn-sm mt-3"
+        >
+          Open observed deployment
+        </a>
+      ) : null}
+    </Card>
   );
 }
 

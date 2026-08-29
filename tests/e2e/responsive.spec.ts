@@ -33,6 +33,7 @@ const ROUTES = [
   "/solutions/ai-factory",
   "/solutions/autonomy",
   "/solutions/backlog",
+  "/solutions/billing",
   "/solutions/bot-manager",
   "/solutions/bot-usage",
   "/solutions/connections",
@@ -49,6 +50,7 @@ const ROUTES = [
   "/solutions/resources",
   "/solutions/runs",
   "/solutions/settings",
+  "/solutions/trail",
   "/solutions/workflows",
   // The lifecycle index and one stage: the detail page is dynamic, and the
   // contract matches a dynamic route by its static prefix.
@@ -216,6 +218,16 @@ test("/Job-Search is gated server-side, and by its own call", async ({ page }) =
    */
   await page.goto("/Job-Search");
   await expect(page).toHaveURL(/\/auth\/sign-in\?next=%2FJob-Search/);
+});
+
+test("/JobSearch is gated server-side with its canonical return path", async ({ page }) => {
+  /*
+   * The product header points here, so the canonical spelling needs its own
+   * direct server-gate proof. The legacy hyphenated route above cannot catch a
+   * canonical page that accidentally stops calling the gate.
+   */
+  await page.goto("/JobSearch");
+  await expect(page).toHaveURL(/\/auth\/sign-in\?next=%2FJobSearch/);
 });
 
 test("a console page offers one menu button, not two", async ({ page }) => {

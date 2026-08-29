@@ -7,6 +7,10 @@ vi.mock("server-only", () => ({}));
 const harness = vi.hoisted(() => ({
   requireActiveOrganization: vi.fn(),
   rpc: vi.fn(),
+  from: vi.fn(),
+  select: vi.fn(),
+  eq: vi.fn(),
+  in: vi.fn(),
 }));
 
 vi.mock("@/lib/supabase/tenant", () => ({
@@ -17,15 +21,17 @@ vi.mock("@/lib/supabase/tenant", () => ({
 import { GET } from "@/app/api/graphs/runs/route";
 
 const organizationId = "11111111-1111-4111-8111-111111111111";
+const graphId = "22222222-2222-4222-8222-222222222222";
 const graphRunRow = {
   graph_run_id: "graph-run-1",
-  graph_id: "graph-1",
+  graph_id: graphId,
   goal: "Ship a reviewed change",
   topology: "review_loop",
   risk_level: "yellow",
   project_id: "project-1",
   state: "completed",
   had_partial_input: false,
+  closure_note: "Nine of eleven nodes reported. 2 halted at an open lifecycle gate.",
   started_at: "2026-08-21T12:00:00.000Z",
   completed_at: "2026-08-21T12:05:00.000Z",
   nodes: [{ id: "node-1", error: "Internal node detail" }],
@@ -55,9 +61,16 @@ function expectNoStore(response: Response) {
 beforeEach(() => {
   vi.clearAllMocks();
   harness.rpc.mockResolvedValue({ data: [graphRunRow], error: null });
+  harness.in.mockResolvedValue({
+    data: [{ id: graphId, template_key: "full_lifecycle", template_version: 2 }],
+    error: null,
+  });
+  harness.eq.mockReturnValue({ in: harness.in });
+  harness.select.mockReturnValue({ eq: harness.eq });
+  harness.from.mockReturnValue({ select: harness.select });
   harness.requireActiveOrganization.mockResolvedValue({
     activeOrganization: { id: organizationId },
-    client: { rpc: harness.rpc },
+    client: { from: harness.from, rpc: harness.rpc },
   });
 });
 
@@ -69,13 +82,14 @@ describe("graph runs route", () => {
       activeOrganizationId: organizationId,
       runs: [{
         graphRunId: "graph-run-1",
-        graphId: "graph-1",
+        graphId,
         goal: "Ship a reviewed change",
         topology: "review_loop",
         riskLevel: "yellow",
         projectId: "project-1",
         state: "completed",
         hadPartialInput: false,
+        closureNote: "Nine of eleven nodes reported. 2 halted at an open lifecycle gate.",
         startedAt: "2026-08-21T12:00:00.000Z",
         completedAt: "2026-08-21T12:05:00.000Z",
         // The row this case feeds carries no spend, and the projection says so
@@ -91,9 +105,49 @@ describe("graph runs route", () => {
           { malformed: true },
         ],
         isLifecycle: true,
+        templateKey: "full_lifecycle",
+        templateVersion: 2,
         iteration: 2,
         maxIterations: 5,
       }],
+    });
+    expect(harness.from).toHaveBeenCalledExactlyOnceWith("graphs");
+    expect(harness.select).toHaveBeenCalledExactlyOnceWith(
+      "id,template_key,template_version",
+    );
+    expect(harness.eq).toHaveBeenCalledExactlyOnceWith("organization_id", organizationId);
+    expect(harness.in).toHaveBeenCalledExactlyOnceWith("id", [graphId]);
+    expectNoStore(response);
+  });
+
+  it("reports legacy lifecycle identity as absent instead of inferring v2 from its stages", async () => {
+    harness.in.mockResolvedValue({
+      data: [{ id: graphId, template_key: null, template_version: null }],
+      error: null,
+    });
+
+    const response = await GET(new Request("https://factory.example/api/graphs/runs"));
+    const body = await response.json() as { runs: Array<Record<string, unknown>> };
+
+    expect(body.runs[0]).toMatchObject({
+      graphId,
+      isLifecycle: true,
+      templateKey: null,
+      templateVersion: null,
+    });
+  });
+
+  it("fails closed when an RLS-scoped graph identity is missing", async () => {
+    harness.in.mockResolvedValue({ data: [], error: null });
+
+    const response = await GET(new Request("https://factory.example/api/graphs/runs"));
+
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toEqual({
+      error: {
+        code: "graph_runs_unavailable",
+        message: "Graph runs could not be loaded.",
+      },
     });
     expectNoStore(response);
   });
@@ -142,6 +196,7 @@ describe("graph runs route", () => {
       p_organization_id: organizationId,
       p_limit: 100,
     });
+    expect(harness.from).not.toHaveBeenCalled();
     expectNoStore(response);
   });
 

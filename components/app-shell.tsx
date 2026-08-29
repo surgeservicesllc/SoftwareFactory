@@ -8,6 +8,7 @@ import {
   CircleGauge,
   ClipboardList,
   Cpu,
+  CreditCard,
   DraftingCompass,
   Eye,
   FileText,
@@ -24,6 +25,7 @@ import {
   Menu,
   PanelLeft,
   PlugZap,
+  Radar,
   Plus,
   Rocket,
   Scale,
@@ -42,7 +44,11 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import { SignOutButton } from "@/components/sign-out-button";
 import { cn } from "@/lib/cn";
 import { globalNavigation } from "@/lib/navigation";
-import { isJobSeekerPath, JOB_SEEKER_NAVIGATION } from "@/lib/job-seeker/navigation";
+import {
+  isJobSearchPath,
+  isJobSeekerPath,
+  JOB_SEEKER_NAVIGATION,
+} from "@/lib/job-seeker/navigation";
 import { JobSeekerSidebarProfile } from "@/components/job-seeker/sidebar-profile";
 
 /**
@@ -175,6 +181,7 @@ const navigationEntries: readonly NavigationEntry[] = [
    * be an untruth in the navigation.
    */
   { label: "Lifecycle", href: "/solutions/lifecycle", icon: Workflow },
+  { label: "Agent Trail", href: "/solutions/trail", icon: Radar },
   { label: "Runs", href: "/solutions/runs", icon: GitBranch },
   /*
    * Operations, promoted out of a group and placed above Reports by owner
@@ -205,9 +212,11 @@ const navigationEntries: readonly NavigationEntry[] = [
     subpages: [
       { label: "General", href: "/solutions/settings", icon: Settings },
       // Provider configuration lives on the settings page; the anchor lands
-      // there. Members/Teams/Permissions/Billing from the design have no
-      // backing surfaces yet and are deliberately absent.
+      // there. Members/Teams/Permissions from the design have no backing
+      // surfaces yet and are deliberately absent. Billing has one now: the
+      // plan, usage meters, and the Stripe checkout/portal actions.
       { label: "Bots & Integrations", href: "/solutions/settings#providers", icon: PlugZap },
+      { label: "Billing", href: "/solutions/billing", icon: CreditCard },
     ],
   },
   {
@@ -254,6 +263,7 @@ const SECTION_ROOTS = new Set(["/solutions", "/job-seeker"]);
 
 function isActiveHref(pathname: string, href: string) {
   if (href.includes("?") || href.includes("#")) return false;
+  if (href === "/job-seeker/search" && isJobSearchPath(pathname)) return true;
   return SECTION_ROOTS.has(href) ? pathname === href : pathname.startsWith(href);
 }
 

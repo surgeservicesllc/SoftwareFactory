@@ -10,6 +10,7 @@ import {
   SecondaryCta,
   SurfacePanel,
 } from "@/components/marketing/primitives";
+import { resolvePurchasablePlans } from "@/lib/billing/plans";
 import { getMarketingContent, getMarketingMetadata } from "@/lib/marketing/queries";
 import { featuresInGroup } from "@/lib/marketing/types";
 
@@ -19,6 +20,10 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default async function PricingPage() {
   const content = await getMarketingContent("pricing");
+  // Which cards can actually charge, decided server-side from the configured
+  // Stripe prices (environment variables or lookup keys). Nothing about the
+  // keys reaches the browser — only booleans.
+  const { purchasable } = await resolvePurchasablePlans();
   const pillars = featuresInGroup(content.features, "pillar");
   const security = featuresInGroup(content.features, "security");
   const testimonial = content.testimonials[0];
@@ -74,7 +79,7 @@ export default async function PricingPage() {
 
       <MarketingSection className="mt-10">
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,1fr)]">
-          <PricingPlans plans={content.plans} />
+          <PricingPlans plans={content.plans} purchasable={purchasable} />
 
           <aside className="space-y-4">
             {security.length ? (

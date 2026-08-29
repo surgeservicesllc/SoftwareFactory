@@ -420,7 +420,7 @@ describe("row level security is forced, not merely enabled", () => {
     expect(granted.rows[0].count).toBe(6);
 
     await db.exec(
-      await readFile(resolve(migrationsRoot, "20260826000200_budget_tracker_foundation.sql"), "utf8"),
+      await readFile(resolve(migrationsRoot, "20260829000200_budget_tracker_foundation.sql"), "utf8"),
     );
 
     const after = await db.query<{ table_name: string }>(

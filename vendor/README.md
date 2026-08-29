@@ -11,16 +11,17 @@ evidence, not a dependency.
 ## `ai-job-search`
 
 - Upstream: <https://github.com/MadsLorentzen/ai-job-search>
-- Commit: `d82df2fe5182c172070eeaa4259af6f21cfda64f` (2026-08-25)
+- Commit: `79cd383e58f0af7948c7c6462a3a289e9b67421e` (2026-08-27)
 - Licence: MIT, © 2026 Mads Lorentzen — see `ai-job-search/LICENSE`, kept intact
 - Copied: 214 files, byte-for-byte, no edits
 
 ### What it is, and what it is not
 
 A local-first Claude Code framework: markdown skills, slash commands, Python
-helpers, LaTeX cover-letter templates, and six Bun/TypeScript CLI scrapers for
-Danish job boards. **It contains no web application** — no React, no Next.js,
-no page. A web surface built from it is built, not copied.
+helpers, LaTeX cover-letter templates, and six Bun/TypeScript job-portal CLIs —
+four Danish demo portals plus LinkedIn public jobs and Freehire's multi-market
+API. **It contains no web application** — no React, no Next.js, no page. A web
+surface built from it is built, not copied.
 
 ### Why it sits under `vendor/` rather than at the repository root
 
@@ -44,10 +45,10 @@ Two were left out deliberately, and the reasons are recorded in
 - **LinkedIn** — its terms prohibit automated collection. The MIT licence
   settles whether the code may be copied, not whether the service may be read
   this way; those are different permissions from different parties.
-- **Jobbank** — the upstream helper says Cloudflare bot protection blocks it
-  and to skip the portal. A board that always fails teaches people to ignore
-  the failure notice, which is the notice that has to work when a board that
-  usually answers stops.
+- **Jobbank** — the upstream helper says Cloudflare bot protection may block
+  it and to use the WebSearch fallback when that happens. A board that cannot
+  be relied on without a fallback does not meet this hosted search's current
+  adapter contract.
 
 Both remain here in full under `ai-job-search/.agents/skills/`, so revisiting
 either decision starts from the real source rather than a memory of it.

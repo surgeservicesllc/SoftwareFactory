@@ -1,14 +1,13 @@
 import { evaluateJob, hasLeadershipEvidence } from "@/lib/job-seeker/evaluate";
 
 /**
- * Shared server-side recording for scored jobs: the same evaluate → insert
- * job → insert match → insert application chain the manual record route
- * runs, made callable per posting so the import route can fold a whole
- * board through it with duplicates counted instead of fatal.
+ * Shared server-side recording for scored jobs. Evaluation stays in this
+ * server-only module; persistence crosses one database RPC boundary so the
+ * job, match, application, and immutable audit event commit together.
  *
- * The client passed in is the caller's RLS-scoped Supabase client; nothing
- * here widens access, and every insert still carries organization_id and
- * user_id so the schema's ownership checks hold.
+ * The client passed in is the caller's RLS-scoped Supabase client. The RPC
+ * derives user ownership from auth.uid() and verifies organization membership
+ * instead of trusting the userId supplied by a route.
  */
 
 type QueryClient = Awaited<ReturnType<typeof import("@/lib/supabase/server").createSupabaseServerClient>>;
@@ -79,10 +78,19 @@ export type RecordOutcome =
   | Readonly<{ outcome: "recorded"; jobId: string; qualified: boolean; score: number }>
   | Readonly<{ outcome: "duplicate" }>;
 
+type RecordJobRpcRow = Readonly<{
+  outcome: "recorded" | "duplicate";
+  job_id: string | null;
+  qualified: boolean | null;
+  score: number | null;
+}>;
+
 /**
- * Insert one job with its match and pipeline entry. A unique-index conflict
- * (same person, company, title, external id) is a counted outcome, not an
- * error; any other database refusal is thrown for the route to translate.
+ * Atomically record one job with its match, pipeline entry, and audit event.
+ * A unique-index conflict (same person, company, title, external id) is a
+ * counted outcome, not an error; any other refusal is thrown for the route to
+ * translate. userId remains in the public API for existing callers, but the
+ * database intentionally ignores it and owns the row as auth.uid().
  */
 export async function insertScoredJob(
   client: QueryClient,
@@ -94,7 +102,7 @@ export async function insertScoredJob(
     inputs: EvaluationInputs;
   }>,
 ): Promise<RecordOutcome> {
-  const { organizationId, userId, source, job, inputs } = args;
+  const { organizationId, source, job, inputs } = args;
   const evaluation = evaluateJob(inputs.profile, inputs.preferences, {
     title: job.title,
     company: job.company,
@@ -104,49 +112,42 @@ export async function insertScoredJob(
     workModel: job.workModel,
   });
 
-  const { data: jobRow, error: jobError } = await client
-    .from("job_seeker_jobs")
-    .insert({
-      organization_id: organizationId,
-      user_id: userId,
-      source,
-      external_id: job.externalId,
-      url: job.url,
-      title: job.title,
-      company: job.company,
-      salary_text: job.salaryText,
-      location: job.location,
-      work_model: job.workModel,
-      description: job.description,
+  const { data, error } = await client
+    .rpc("record_job_seeker_job", {
+      p_organization_id: organizationId,
+      p_source: source,
+      p_external_id: job.externalId,
+      p_url: job.url,
+      p_title: job.title,
+      p_company: job.company,
+      p_salary_text: job.salaryText,
+      p_location: job.location,
+      p_work_model: job.workModel,
+      p_description: job.description,
+      p_score: evaluation.score,
+      p_breakdown: evaluation.breakdown,
+      p_reasons: evaluation.reasons,
+      p_gaps: evaluation.gaps,
+      p_threshold_used: evaluation.threshold,
+      p_qualified: evaluation.qualified,
     })
-    .select("id")
     .single();
-  if (jobError) {
-    if (jobError.code === "23505") return { outcome: "duplicate" };
-    throw jobError;
+
+  if (error) throw error;
+
+  const result = data as RecordJobRpcRow | null;
+  if (!result || (result.outcome !== "recorded" && result.outcome !== "duplicate")) {
+    throw new Error("The job recording function returned an invalid outcome.");
   }
-  const jobId = (jobRow as { id: string }).id;
+  if (result.outcome === "duplicate") return { outcome: "duplicate" };
+  if (result.job_id === null || result.score === null || result.qualified === null) {
+    throw new Error("The job recording function returned an incomplete recorded outcome.");
+  }
 
-  const { error: matchError } = await client.from("job_seeker_matches").insert({
-    organization_id: organizationId,
-    user_id: userId,
-    job_id: jobId,
-    score: evaluation.score,
-    breakdown: evaluation.breakdown,
-    reasons: evaluation.reasons,
-    gaps: evaluation.gaps,
-    threshold_used: evaluation.threshold,
-    qualified: evaluation.qualified,
-  });
-  if (matchError) throw matchError;
-
-  const { error: applicationError } = await client.from("job_seeker_applications").insert({
-    organization_id: organizationId,
-    user_id: userId,
-    job_id: jobId,
-    stage: evaluation.qualified ? "QUALIFIED" : "FOUND",
-  });
-  if (applicationError) throw applicationError;
-
-  return { outcome: "recorded", jobId, qualified: evaluation.qualified, score: evaluation.score };
+  return {
+    outcome: "recorded",
+    jobId: result.job_id,
+    qualified: result.qualified,
+    score: result.score,
+  };
 }

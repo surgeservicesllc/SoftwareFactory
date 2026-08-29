@@ -26,8 +26,11 @@ import { AgentOsConsole } from "@/components/agentos-console";
 import { AutonomyConsole } from "@/components/autonomy-console";
 import { BotFabricConsole } from "@/components/bot-fabric-console";
 import { BotManagerHome } from "@/components/bot-manager/home";
+import { AgentTrailConsole } from "@/components/agent-trail-console";
+import { BillingConsole } from "@/components/billing-console";
 import { BotUsageConsole } from "@/components/bot-usage-console";
 import { JobSeekerConsole } from "@/components/job-seeker/console";
+import { JobSearchPanel } from "@/components/job-seeker/search-panel";
 import { ResumeReviewPanel } from "@/components/job-seeker/resume-review-panel";
 import { GitHubFileManager } from "@/components/github-file-manager";
 import { MyProjectsConsole } from "@/components/my-projects-console";
@@ -81,6 +84,8 @@ import {
   JOB_SEEKER_OUTREACH,
   JOB_SEEKER_PREFERENCES,
   JOB_SEEKER_PROFILE,
+  JOB_SEARCH_BOARDS,
+  JOB_SEARCH_RESULTS,
   FACTORY_BRIEFING_AGENTS,
   FACTORY_BRIEFING_CONNECTIONS,
   FACTORY_BRIEFING_RUNS,
@@ -139,8 +144,11 @@ function serveFixtures() {
     } as unknown as Response);
   };
 
-  window.fetch = ((input: RequestInfo | URL) => {
+  window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
+    const method = (init?.method
+      ?? (typeof Request !== "undefined" && input instanceof Request ? input.method : "GET"))
+      .toUpperCase();
     if (url.includes("/bots") && url.includes("/projects/")) return json(PROJECT_BOTS_ROSTER);
     // Order matters: the more specific bot routes before the fabric snapshot.
     if (url.includes("/api/bots/providers")) return json({ providers: [] });
@@ -162,6 +170,12 @@ function serveFixtures() {
     }
     if (url.includes("/api/job-seeker/profile")) return json({ profile: JOB_SEEKER_PROFILE });
     if (url.includes("/api/job-seeker/preferences")) return json({ preferences: JOB_SEEKER_PREFERENCES });
+    if (url.includes("/api/job-seeker/search/save")) return json({ saved: true });
+    if (url.includes("/api/job-seeker/search")) {
+      return method === "POST"
+        ? json({ results: JOB_SEARCH_RESULTS, failures: [] })
+        : json({ boards: JOB_SEARCH_BOARDS });
+    }
     if (url.includes("/api/ai-accounts/usage")) return json({ usage: [] });
     /*
      * `canManage` matters: the Bot Manager renders read-only without it, so
@@ -184,6 +198,16 @@ function serveFixtures() {
     }
     if (url.includes("/api/pipeline-templates")) {
       return json({ templates: CUSTOM_PIPELINE_TEMPLATES, canManage: true });
+    }
+    if (url.includes("/api/graphs/edges")) {
+      // A believable chain through the staged run's own node keys, so the
+      // trail map draws arrows at every width.
+      return json({
+        edges: [
+          { from: "goal", to: "prd", reason: "DATA", detail: "The PRD consumes the goal." },
+          { from: "prd", to: "architecture", reason: "DATA", detail: "Design follows requirements." },
+        ],
+      });
     }
     // Before the runs branch: the artifacts URL contains "/api/graphs/runs"
     // too, and the longer match must win.
@@ -246,6 +270,28 @@ function serveFixtures() {
     if (url.includes("/api/autonomy/status")) return json({ status: AUTONOMY_STATUS });
     if (url.includes("/api/autonomy/decisions")) return json({ decisions: AUTONOMY_DECISIONS });
     if (url.includes("/api/worker/status")) return json({ worker: WORKER_STATUS });
+    if (url.includes("/api/billing/summary")) {
+      // A Pro organization mid-month: real numbers against real limits, so
+      // the meters render their bars and the manage action appears — the
+      // densest state the page has.
+      return json({
+        connected: true,
+        plan: {
+          key: "pro",
+          name: "Pro",
+          limits: { maxProjects: 100000, graphLaunchesPerMonth: 250, maxSeats: 25 },
+        },
+        subscription: {
+          planKey: "pro",
+          status: "active",
+          cadence: "yearly",
+          currentPeriodEnd: "2027-08-25T00:00:00.000Z",
+          cancelAtPeriodEnd: false,
+        },
+        usage: { projects: 7, graphLaunchesThisMonth: 41, seats: 9 },
+        role: "owner",
+      });
+    }
     if (url.includes("/api/commands")) return json({ commands: COMMANDS });
     return unserved(url);
   }) as typeof window.fetch;
@@ -276,7 +322,10 @@ const CASES: Record<string, () => React.ReactElement> = {
   agentos: () => <InShell><AgentOsConsole /></InShell>,
   autonomy: () => <InShell><AutonomyConsole /></InShell>,
   "bot-usage": () => <InShell><BotUsageConsole /></InShell>,
+  billing: () => <InShell><BillingConsole /></InShell>,
+  trail: () => <InShell><AgentTrailConsole /></InShell>,
   "job-seeker": () => <InShell><JobSeekerConsole /></InShell>,
+  "job-search": () => <InShell><JobSearchPanel /></InShell>,
   /*
    * The Budget Tracker's populated layout. The route itself redirects when
    * signed out, so the width sweep cannot measure it there — this case is

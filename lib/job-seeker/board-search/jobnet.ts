@@ -110,7 +110,7 @@ export async function searchJobnet(
   const params = new URLSearchParams({
     resultsPerPage: String(Math.min(Math.max(query.limit, 1), 100)),
     pageNumber: "1",
-    orderType: "10",
+    orderType: "PublicationDate",
   });
   if (query.text.length > 0) params.set("searchString", query.text);
   /*
@@ -129,7 +129,7 @@ export async function searchJobnet(
   }
 
   const payload = await fetchBoardJson<JobnetSearchResponse>(
-    `${BASE_URL}/jobsearch?${params.toString()}`,
+    `${BASE_URL}/FindJob/Search?${params.toString()}`,
     { board: BOARD, headers: { "x-csrf": "1" }, ...overrides },
   );
 
@@ -149,5 +149,6 @@ export const jobnetAdapter: BoardSearchAdapter = {
   name: "Jobnet",
   summary: "The Danish public employment service's national job bank.",
   coverage: "Denmark",
+  supportsLocation: true,
   search: searchJobnet,
 };

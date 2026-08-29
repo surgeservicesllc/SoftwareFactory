@@ -8,6 +8,7 @@ import {
 } from "@/lib/server/http";
 import { BOARD_SEARCH_ADAPTERS, boardSearchAdapter } from "@/lib/job-seeker/board-search/registry";
 import { BoardSearchError, type BoardSearchQuery } from "@/lib/job-seeker/board-search/types";
+import { sealSearchResult } from "@/lib/job-seeker/search-result-token";
 import { supabaseBoundaryErrorResponse } from "@/lib/supabase/http";
 import { assertSameOriginRequest } from "@/lib/supabase/request";
 import { requireActiveOrganization } from "@/lib/supabase/tenant";
@@ -66,6 +67,7 @@ export async function GET() {
         name: adapter.name,
         summary: adapter.summary,
         coverage: adapter.coverage,
+        supportsLocation: adapter.supportsLocation,
       })),
     });
   } catch (error) {
@@ -81,7 +83,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     assertSameOriginRequest(request);
-    await requireActiveOrganization();
+    const { activeOrganization, user } = await requireActiveOrganization();
 
     const body = await readBoundedJson(request);
     const parsed = searchSchema.safeParse(body);
@@ -119,7 +121,16 @@ export async function POST(request: Request) {
           board: adapter.key,
           boardName: adapter.name,
           totalAvailable: outcome.value.totalAvailable,
-          hits: outcome.value.hits,
+          hits: outcome.value.hits.map((hit) => ({
+            ...hit,
+            saveToken: sealSearchResult({
+              organizationId: activeOrganization.id,
+              userId: user.id,
+              board: adapter.key,
+              job: hit.job,
+            }),
+          })),
+          locationApplied: query.location === null || adapter.supportsLocation,
         });
         return;
       }

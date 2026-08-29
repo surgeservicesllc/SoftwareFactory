@@ -162,5 +162,6 @@ export const jobdanmarkAdapter: BoardSearchAdapter = {
   name: "Jobdanmark",
   summary: "A Danish commercial job board, searched by free text and place.",
   coverage: "Denmark",
+  supportsLocation: true,
   search: searchJobdanmark,
 };

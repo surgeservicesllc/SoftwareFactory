@@ -159,6 +159,14 @@ describe("the jobindex row mapper", () => {
     expect(hit?.publishedOn).toBe("2026-08-20");
   });
 
+  it("reads the nested company shape Jobindex serves today", () => {
+    const [hit] = toJobindexHits(
+      { results: [{ ...row, company: { name: "Kolding Software ApS" } }] },
+      10,
+    );
+    expect(hit?.job.company).toBe("Kolding Software ApS");
+  });
+
   it("skips a row it cannot identify rather than storing a partial job", () => {
     const hits = toJobindexHits({ results: [{ ...row, tid: null, id: null, url: null }, row] }, 10);
     expect(hits).toHaveLength(1);

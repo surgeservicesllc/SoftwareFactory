@@ -186,18 +186,31 @@ describe("Phase 1E production operations behavior", () => {
     // two AI-account auth-broker tables, the two Phase 2C reservation tables,
     // the lifecycle graph-gate table, the project pipeline selections, the
     // immutable factory-command routing evidence table, the job-seeker
-    // resume-extraction table, the denied transaction-local factory
-    // record-only submission guard table, and the six Budget Tracker tables.
+    // resume-extraction table, and the denied transaction-local factory
+    // record-only submission guard table, the graph/Phase 1C release bridge
+    // and its immutable gate-approval intent table, plus the private legacy
+    // graph-artifact containment audit table.
+    // ...and the six Budget Tracker tables.
     // The filter below is the real guarantee — this count exists so a new
-    // table cannot slip in unexamined.
-    expect(rlsRows).toHaveLength(136);
+    // table cannot slip in unexamined. 139 since the Job Discovery surface
+    // added job_seeker_saved_searches, job_seeker_search_alerts and
+    // job_seeker_search_events; each is RLS-enabled and forced, which the
+    // filter on the next line is what actually proves.
+    expect(rlsRows).toHaveLength(145);
     expect(rlsRows.filter((row) => !row.relrowsecurity || !row.relforcerowsecurity)).toEqual([]);
 
     const { rows: grantRows } = await db.query<{ table_name: string }>(
       `select distinct table_name from information_schema.role_table_grants
        where grantee = 'service_role' and table_schema = 'public' order by table_name`,
     );
+    // The verified-webhook ingress set: GitHub's four and the Stripe billing
+    // mirror's three (20260825000400, ADR-149); billing audit goes through
+    // the record_billing_activity definer. The same list
+    // schema-security-invariants pins.
     expect(grantRows.map((row) => row.table_name)).toEqual([
+      "billing_customers",
+      "billing_events",
+      "billing_subscriptions",
       "github_change_requests",
       "github_installations",
       "github_repositories",

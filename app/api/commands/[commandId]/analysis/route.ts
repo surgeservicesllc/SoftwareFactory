@@ -116,8 +116,8 @@ export async function POST(
     }
 
     // Best effort: wake the graph worker through the project's own verified
-    // GitHub binding. A wake that cannot happen leaves the graph planned for
-    // the scheduled or manual dispatch — reported, never hidden.
+    // GitHub binding. A wake that cannot happen leaves the graph planned until
+    // a separately enabled exact-target dispatch — reported, never hidden.
     let workerWoken = false;
     try {
       /*
@@ -137,7 +137,7 @@ export async function POST(
         .single();
       const targetRow = target.error ? null : (target.data as TargetRow | null);
       if (targetRow?.repository_full_name) {
-        await dispatchGraphWorker(
+        const dispatchResult = await dispatchGraphWorker(
           {
             appId: targetRow.app_id,
             externalInstallationId: targetRow.external_installation_id,
@@ -146,7 +146,7 @@ export async function POST(
           },
           outcome.graphId,
         );
-        workerWoken = true;
+        workerWoken = dispatchResult.dispatched;
       }
     } catch {
       workerWoken = false;

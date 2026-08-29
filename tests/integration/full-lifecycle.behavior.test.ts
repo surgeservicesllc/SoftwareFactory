@@ -16,8 +16,9 @@ import { SDLC_STAGES } from "@/lib/sdlc/lifecycle";
  * One request through all ten phases of the owner's process.
  *
  * The boards say it plainly: one request in, an execution graph whose nodes
- * are the ten steps, full automation out — with the two human gates this
- * repository's policies keep (ARCHITECTURE and DEPLOYMENT). The
+ * are the ten steps, with three human authority boundaries: ARCHITECTURE
+ * approves the handoff, TEST owns the merge decision after exact-head CI, and
+ * DEPLOYMENT owns release acceptance after exact deployment evidence. The
  * `full_lifecycle` template is that graph, stitched entirely from existing
  * machinery: the scout's look-before-you-build chain, the SDLC's build half,
  * the same capabilities, contracts, gates and budget rules every other
@@ -137,13 +138,12 @@ describe("the full lifecycle graph", () => {
     }
   });
 
-  it("keeps the two human gates where the policies put them, and automatic gates only where anchors exist", async () => {
-    // Autonomous by default, owner-gated where a wrong step is expensive or
-    // externally visible: ARCHITECTURE and DEPLOYMENT. The only automatic
-    // gate sits on the TEST anchor, because an automatic gate advances on
-    // anchored evidence and only an anchor node produces any — the first
-    // live run (graph 91959362) proved that an automatic gate on a MODEL
-    // node is a wall, not a gate: nothing can ever decide it.
+  it("keeps architecture, merge, and release acceptance behind human gates", async () => {
+    // Full Lifecycle v2 does not let the graph worker approve its own merge.
+    // TEST records exact-head CI, then a HUMAN gate owns the merge decision;
+    // DEPLOYMENT separately records the exact release, then a HUMAN gate owns
+    // release acceptance. ARCHITECTURE remains the owner boundary that starts
+    // the separately authorized Phase 1C build.
     await db.exec("reset role");
     const gates = await db.query<{ node_key: string; gate_kind: string | null; stage: string; executor: string }>(
       `select node_key, gate_kind::text, lifecycle_stage::text as stage, executor::text as executor
@@ -152,13 +152,9 @@ describe("the full lifecycle graph", () => {
       [graphId],
     );
     const human = gates.rows.filter((row) => row.gate_kind === "HUMAN");
-    expect(human.map((row) => row.stage).sort()).toEqual(["ARCHITECTURE", "DEPLOYMENT"]);
+    expect(human.map((row) => row.stage).sort()).toEqual(["ARCHITECTURE", "DEPLOYMENT", "TEST"]);
     const automatic = gates.rows.filter((row) => row.gate_kind === "AUTOMATIC");
-    expect(new Set(automatic.map((row) => row.stage))).toEqual(new Set(["TEST"]));
-    // The structural rule itself: every automatic gate sits on an anchor.
-    for (const gate of automatic) {
-      expect(gate.executor, `${gate.node_key} carries an automatic gate`).toBe("ANCHOR");
-    }
+    expect(automatic).toEqual([]);
   });
 
   it("records the feedback loop the board draws from MONITOR back to the goal", async () => {

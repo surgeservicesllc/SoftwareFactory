@@ -6,15 +6,18 @@ name: Graph executor worker
 # artifact to hosted Supabase. Read-only analysis nodes only; work that
 # writes files stays with the Phase 1C worker and its isolation discipline.
 #
-# Manual by default: it consumes real subscription turns and no per-token
-# API credit. The schedule stays off until the repository variable
-# SOFTWAREFACTORY_GRAPH_WORKER_SCHEDULED is set to "true". A
-# repository_dispatch fires when the application plans a graph for an
-# owner-issued command, so explicitly requested analysis starts without
-# the schedule — the same wake contract the Phase 1C worker uses.
+# Globally disabled by default: every event type stays inert unless the
+# repository variable SOFTWAREFACTORY_GRAPH_WORKER_ENABLED is exactly
+# "true". The separate SOFTWAREFACTORY_GRAPH_WORKER_SCHEDULED switch only
+# admits scheduled draining after that global gate is enabled.
 
 on:
   workflow_dispatch:
+    inputs:
+      graph_id:
+        description: Exact graph UUID to execute once
+        required: true
+        type: string
   repository_dispatch:
     types:
       - softwarefactory_graph_planned
@@ -23,9 +26,15 @@ on:
 
 permissions:
   contents: read
-  # The TEST anchor reads CI check-run verdicts for the checked-out commit;
-  # observation only, nothing on GitHub is written.
+  # The TEST anchor may read CI check-run verdicts when explicit produced-
+  # change lineage is supplied; observation only, nothing on GitHub is written.
   checks: read
+  # REVIEW verifies the exact Phase 1C PR head/base/state before accepting its
+  # stored validation evidence.
+  pull-requests: read
+  # DEPLOY observes an existing exact-SHA Production deployment and status.
+  # It never creates, updates, or approves a deployment.
+  deployments: read
 
 concurrency:
   group: graph-worker
@@ -34,7 +43,9 @@ concurrency:
 jobs:
   drain:
     name: Drain planned graphs
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch' || vars.SOFTWAREFACTORY_GRAPH_WORKER_SCHEDULED == 'true' }}
+    # Manual dispatch can select a ref in GitHub's UI. Never expose production
+    # credentials to a manually selected non-main checkout.
+    if: ${{ vars.SOFTWAREFACTORY_GRAPH_WORKER_ENABLED == 'true' && (github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main') && (github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch' || vars.SOFTWAREFACTORY_GRAPH_WORKER_SCHEDULED == 'true') }}
     runs-on: ubuntu-latest
     # Must exceed the graph duration budget, or the workflow kills a run the
     # budget still considers live — leaving it RUNNING until the two-hour
@@ -83,19 +94,22 @@ jobs:
         env:
           SOFTWAREFACTORY_GRAPH_WORKER_ENABLED: "true"
           SOFTWAREFACTORY_WORKER_ID: graph-worker-${{ github.run_id }}-${{ github.run_attempt }}
+          # Dispatch/manual wakes are exact-target and one-shot. The disabled-
+          # by-default schedule remains the only global drain path.
+          SOFTWAREFACTORY_TARGET_GRAPH_ID: ${{ github.event.client_payload.graph_id || inputs.graph_id || '' }}
+          SOFTWAREFACTORY_TARGET_CLAIM_REQUIRED: ${{ github.event_name != 'schedule' }}
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.SOFTWAREFACTORY_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SOFTWAREFACTORY_SUPABASE_SERVICE_ROLE_KEY }}
           # The subscription credential; no ANTHROPIC_API_KEY is supplied, so
           # this cannot quietly become a billed run.
           SOFTWAREFACTORY_CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.SOFTWAREFACTORY_CLAUDE_CODE_OAUTH_TOKEN }}
-          # Anchor instruments. The TEST anchor observes CI check runs for
-          # GITHUB_SHA with the workflow's own read-scoped token; the MONITOR
-          # anchor probes the deployed product the apply workflow already
-          # verifies against.
+          # Anchor instrument access only. Produced-change, merge, deployment,
+          # and monitor URL identities come exclusively from the graph-scoped
+          # Phase 1C bridge projection; GITHUB_SHA and workflow variables are
+          # never substituted for that lineage.
           SOFTWAREFACTORY_CHECKS_TOKEN: ${{ github.token }}
-          SOFTWAREFACTORY_PRODUCTION_URL: ${{ vars.SOFTWAREFACTORY_PRODUCTION_URL || 'https://www.theagoras.com' }}
           # The server-only marker protects Next.js client bundles; in a Node
           # worker it would simply throw. The shim maps that one specifier to
           # the empty module the package ships for server environments.
           NODE_OPTIONS: --import ./scripts/server-only-shim.mjs
-        run: npx tsx scripts/graph-worker.mts --drain
+        run: npx tsx scripts/graph-worker.mts ${{ github.event_name == 'schedule' && '--drain' || '--once' }}

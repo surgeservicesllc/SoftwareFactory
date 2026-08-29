@@ -47,7 +47,7 @@ type SubmissionState =
       requiresOwnerApproval: boolean;
       workerDispatch: "delayed" | "not_applicable" | "requested";
     }
-  | { kind: "error"; message: string };
+  | { kind: "error"; message: string; recovery?: "reload" };
 
 type ProjectOption = {
   connectionStatus?: "connected" | "not_connected";
@@ -81,6 +81,22 @@ const riskToneClass = {
   warning: "border-[var(--warning-border)] bg-[var(--warning-surface)] text-[var(--warning)]",
   danger: "border-[var(--danger-border)] bg-[var(--danger-surface)] text-[var(--danger)]",
 } as const;
+
+const legacyFactorySchemaErrors = new Set([
+  "invalid Phase 1C command plan",
+  "Phase 1C execution configuration is not supported",
+]);
+
+function normalizeSubmissionError(code: string | undefined, message: string | undefined) {
+  if (code === "factory_command_schema_out_of_date" || (message && legacyFactorySchemaErrors.has(message))) {
+    return {
+      message:
+        "Factory command routing is out of sync with this page. Reload the latest release, then retry the command.",
+      recovery: "reload" as const,
+    };
+  }
+  return { message: message || "The command could not be queued." };
+}
 
 function acceptanceCriteriaFromText(value: string) {
   return value
@@ -150,7 +166,11 @@ export function CommandComposer({
 
   function markEdited() {
     pendingIntent.current = null;
-    if (state.kind !== "idle") setState({ kind: "idle" });
+    // A result belongs to the exact project/pipeline/prompt intent that
+    // produced it. Clear it only when that intent changes; background renders
+    // must not erase a current-attempt error before the person can read or
+    // retry it.
+    setState((current) => current.kind === "idle" ? current : { kind: "idle" });
   }
 
   useEffect(() => {
@@ -354,7 +374,7 @@ export function CommandComposer({
       const body = (await response.json()) as {
         command?: { id?: string };
         commandId?: string;
-        error?: { message?: string } | string;
+        error?: { code?: string; message?: string } | string;
         message?: string;
         orchestration?: { effectiveRisk?: string; repository?: string };
         requiresOwnerApproval?: boolean;
@@ -366,13 +386,15 @@ export function CommandComposer({
 
       if (!response.ok) {
         const apiError = body.error;
+        const errorCode = apiError && typeof apiError === "object" ? apiError.code : undefined;
         const errorMessage =
           typeof apiError === "string"
             ? apiError
             : apiError && typeof apiError === "object"
               ? apiError.message
               : body.message;
-        throw new Error(errorMessage || "The command could not be queued.");
+        setState({ kind: "error", ...normalizeSubmissionError(errorCode, errorMessage) });
+        return;
       }
 
       const id = body.command?.id ?? body.commandId ?? "queued";
@@ -771,7 +793,11 @@ export function CommandComposer({
           ) : (
             <ArrowUp className="size-4" aria-hidden="true" />
           )}
-          {state.kind === "pending" ? "Queuing…" : "Queue command"}
+          {state.kind === "pending"
+            ? "Queuing…"
+            : state.kind === "error"
+              ? "Retry command"
+              : "Queue command"}
         </button>
       </div>
 
@@ -789,10 +815,21 @@ export function CommandComposer({
           </p>
         ) : null}
         {state.kind === "error" ? (
-          <p className="mt-4 flex items-start gap-2 rounded-lg border border-[var(--danger-border)] bg-[var(--danger-surface)] p-3 text-sm text-[var(--danger)]">
+          <div className="mt-4 flex items-start gap-2 rounded-lg border border-[var(--danger-border)] bg-[var(--danger-surface)] p-3 text-sm text-[var(--danger)]">
             <ShieldAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-            {state.message}
-          </p>
+            <div>
+              <p>{state.message}</p>
+              {state.recovery === "reload" ? (
+                <button
+                  type="button"
+                  className="mt-2 font-semibold underline underline-offset-2"
+                  onClick={() => window.location.reload()}
+                >
+                  Reload latest release
+                </button>
+              ) : null}
+            </div>
+          </div>
         ) : null}
       </div>
     </form>

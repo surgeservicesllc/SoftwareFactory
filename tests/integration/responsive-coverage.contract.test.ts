@@ -118,20 +118,16 @@ describe("every route is swept at every supported width", () => {
      */
     const REDIRECT_ONLY = new Set(["/sign-in"]);
     /*
-     * `/Job-Search` is a gated destination like the subtrees below it, but it
-     * is a single route rather than a root with children, so it is named
+     * `/JobSearch` and its legacy `/Job-Search` alias are gated destinations
+     * like the subtrees below them, but each is a single route rather than a
+     * root with children, so both are named
      * rather than prefix-matched. Signed out it only redirects, and measuring
      * a page that navigates away mid-measure destroyed the evaluation context
      * on runs 96276312872/96276312910. Its signed-in layout is the same
      * JobSearchPanel the harness already measures at all eight widths, and
      * responsive.spec.ts proves the redirect.
-     *
-     * `/BudgetTracker` is the same shape and is here for the same reason: one
-     * gated route rather than a subtree, its redirect asserted in
-     * responsive.spec.ts and its populated layout measured through the
-     * "budget-tracker" harness case at all eight widths.
      */
-    const GATED_SUBTREES = ["/job-seeker", "/decision", "/Job-Search", "/BudgetTracker"];
+    const GATED_SUBTREES = ["/job-seeker", "/decision", "/JobSearch", "/Job-Search", "/BudgetTracker"];
 
     const missing = routes.filter((route) => {
       if (REDIRECT_ONLY.has(route)) return false;

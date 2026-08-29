@@ -140,10 +140,12 @@ describe("Phase 1E route boundaries", () => {
 
   it("keeps the outbound probe restricted to validated public HTTPS targets", () => {
     const probe = source("lib/operations/probe.ts");
-    expect(probe).toMatch(/validateMonitorTarget\(options\.targetUrl\)/);
-    expect(probe).toMatch(/redirect:\s*"manual"/);
+    const probeCore = source("lib/operations/probe-core.ts");
+    expect(probe).toMatch(/^import "server-only"/);
+    expect(probeCore).toMatch(/validateMonitorTarget\(options\.targetUrl\)/);
+    expect(probeCore).toMatch(/redirect:\s*"manual"/);
     // The probe must never read or forward a production response body.
-    expect(probe).not.toMatch(/response\.(text|json|blob|arrayBuffer)\(/);
+    expect(probeCore).not.toMatch(/response\.(text|json|blob|arrayBuffer)\(/);
   });
 });
 

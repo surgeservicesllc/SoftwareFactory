@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Locator } from "@playwright/test";
 
 /**
  * The whole Job Seeker experience, driven in a real browser against a real
@@ -47,24 +47,56 @@ test.describe("job seeker live journey", () => {
     await page.getByLabel("Password").fill(password);
     await page.getByRole("button", { name: /^sign in$/i }).click();
 
-    // A first visit is redirected to workspace onboarding; a later run of the
-    // same journey already has the workspace and lands straight on the
-    // profile. Race the two destinations by element rather than by URL — the
+    // A first visit is redirected to workspace onboarding. A returning user
+    // lands on the overview, while an older deployment may still land on the
+    // profile. Race those rendered destinations rather than the URL — the
     // redirect passes through /job-seeker on its way to onboarding, so URL
     // matching here is a coin flip.
     const workspaceName = page.getByLabel(/workspace name/i);
     const saveProfile = page.getByRole("button", { name: /save profile/i });
-    await expect(workspaceName.or(saveProfile).first()).toBeVisible({ timeout: 30_000 });
+    const overviewHeading = page.getByRole("heading", {
+      name: "Job Seeker Overview",
+      level: 1,
+    });
+    await expect(
+      workspaceName.or(saveProfile).or(overviewHeading).first(),
+    ).toBeVisible({ timeout: 30_000 });
+
+    const isFreshAccount = await workspaceName.isVisible();
+    if (!isFreshAccount && await overviewHeading.isVisible()) {
+      // Production reuses a synthetic account so its durable rows survive
+      // between runs. Replaying the full mutating onboarding journey would
+      // collide with those deliberately immutable/unique records. The loaded
+      // overview proves the returning-account gate and Supabase reads, then
+      // the independent Search test below continues the production journey.
+      expect(new URL(page.url()).pathname).toBe("/job-seeker");
+      await expect(page.getByRole("region", { name: "Search totals" })).toBeVisible();
+      await expect(
+        page.getByRole("link", { name: "Career Profile", exact: true }).first(),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("link", { name: "Applications", exact: true }).first(),
+      ).toBeVisible();
+      return;
+    }
+
     if (await workspaceName.isVisible()) {
       await workspaceName.fill("Jordan Job Search");
       await page.getByRole("button", { name: /create workspace/i }).click();
-      // Onboarding honors ?next= and returns to the job-seeker console.
+      // Onboarding honors ?next= and returns to the overview. Enter Career
+      // Profile explicitly so a fresh local stack still exercises every field
+      // and every persisted workflow below.
+      await expect(overviewHeading).toBeVisible({ timeout: 30_000 });
+      await page
+        .getByRole("link", { name: "Career Profile", exact: true })
+        .first()
+        .click();
     }
 
     // ── Career Profile: every field ────────────────────────────────────────
     await expect(saveProfile).toBeVisible({ timeout: 30_000 });
     // The pathname itself, not the ?next= query of the onboarding URL.
-    expect(new URL(page.url()).pathname).toBe("/job-seeker");
+    expect(new URL(page.url()).pathname).toMatch(/^\/job-seeker(?:\/profile)?$/);
     await page.getByLabel("Full name").fill("Jordan Seeker");
     await page.getByLabel("Email").fill("jordan.seeker@example.com");
     await page.getByLabel("Phone").fill("+1 555 0100");
@@ -405,8 +437,15 @@ test.describe("job seeker live journey", () => {
      */
     test.setTimeout(180_000);
 
-    await page.goto("/job-seeker/search");
-    await expect(page.getByRole("heading", { name: "Search", level: 1 })).toBeVisible();
+    // Every Playwright test owns a fresh browser context. Exercise the exact
+    // canonical gate and return path instead of depending on the prior test's
+    // cookies or accepting only the compatibility route.
+    await page.goto("/JobSearch");
+    await expect(page).toHaveURL(/\/auth\/sign-in\?next=%2FJobSearch/);
+    await page.getByLabel("Email").fill(email);
+    await page.getByLabel("Password").fill(password);
+    await page.getByRole("button", { name: /^sign in$/i }).click();
+    await expect(page.getByRole("heading", { name: "Job Search", level: 1 })).toBeVisible();
 
     // The page names the boards it will contact before contacting any.
     await expect(page.getByText(/Searching \d+ boards?:/)).toBeVisible({ timeout: 20_000 });
@@ -429,10 +468,81 @@ test.describe("job seeker live journey", () => {
     const savable = await saveButtons.count();
     test.skip(savable === 0, "no board returned a posting to save on this run");
 
-    await saveButtons.first().click();
-    await expect(page.getByRole("button", { name: /saved to your jobs/i }).first()).toBeVisible({
+    type RecordedJob = {
+      application: { stage: string } | null;
+      discoveredAt: string;
+      id: string;
+      match: { qualified: boolean; score: number } | null;
+      source: string;
+      title: string;
+      url: string | null;
+    };
+    type ActivityEvent = {
+      entity: { id: string | null; type: string };
+      eventType: string;
+      id: string;
+    };
+    const [jobsBeforeResponse, activityBeforeResponse] = await Promise.all([
+      page.request.get("/api/job-seeker/jobs"),
+      page.request.get("/api/activity?limit=100"),
+    ]);
+    expect(jobsBeforeResponse.ok()).toBeTruthy();
+    expect(activityBeforeResponse.ok()).toBeTruthy();
+    const jobsBefore = await jobsBeforeResponse.json() as { jobs?: RecordedJob[] };
+    const activityBefore = await activityBeforeResponse.json() as { events?: ActivityEvent[] };
+    const existingUrls = new Set(
+      (jobsBefore.jobs ?? []).flatMap((job) => job.url === null ? [] : [job.url]),
+    );
+    const previousEventIds = new Set((activityBefore.events ?? []).map((event) => event.id));
+
+    // A stable board result can be the same on successive production runs.
+    // Select a URL this synthetic account has not saved before so this walk
+    // proves the recorded transaction instead of accepting a duplicate no-op.
+    const resultRows = page.locator("[data-testid='search-result-card'] li");
+    let candidateRow: Locator | null = null;
+    let candidateUrl: string | null = null;
+    for (let index = 0; index < await resultRows.count(); index += 1) {
+      const row = resultRows.nth(index);
+      const link = row.locator("a[href^='http']").first();
+      const url = await link.getAttribute("href");
+      if (url !== null && !existingUrls.has(url)) {
+        candidateRow = row;
+        candidateUrl = url;
+        break;
+      }
+    }
+    expect(candidateRow, "live boards returned no previously-unsaved linked posting").not.toBeNull();
+    expect(candidateUrl).not.toBeNull();
+
+    await candidateRow!.getByRole("button", { name: /^save$/i }).click();
+    await expect(candidateRow!.getByRole("button", { name: /saved to your jobs/i })).toBeVisible({
       timeout: 30_000,
     });
+
+    const [jobsAfterResponse, activityAfterResponse] = await Promise.all([
+      page.request.get("/api/job-seeker/jobs"),
+      page.request.get("/api/activity?limit=100"),
+    ]);
+    expect(jobsAfterResponse.ok()).toBeTruthy();
+    expect(activityAfterResponse.ok()).toBeTruthy();
+    const jobsAfter = await jobsAfterResponse.json() as { jobs?: RecordedJob[] };
+    const activityAfter = await activityAfterResponse.json() as { events?: ActivityEvent[] };
+    const savedJob = (jobsAfter.jobs ?? []).find((job) => job.url === candidateUrl);
+    expect(savedJob).toBeDefined();
+    expect(savedJob!.source).toMatch(/^(jobnet|jobindex|jobdanmark|freehire)$/);
+    expect(savedJob!.match).not.toBeNull();
+    expect(savedJob!.match!.score).toEqual(expect.any(Number));
+    expect(savedJob!.application).not.toBeNull();
+    expect(savedJob!.application!.stage).toBe(
+      savedJob!.match!.qualified ? "QUALIFIED" : "FOUND",
+    );
+    const newRecordingEvents = (activityAfter.events ?? []).filter((event) =>
+      !previousEventIds.has(event.id)
+      && event.eventType === "job_seeker.job_recorded"
+      && event.entity.type === "job_seeker_job"
+      && event.entity.id === savedJob!.id,
+    );
+    expect(newRecordingEvents).toHaveLength(1);
 
     // Persistence: the saved posting is in the job list, attributed to the
     // board rather than to manual entry, and survives a full reload.

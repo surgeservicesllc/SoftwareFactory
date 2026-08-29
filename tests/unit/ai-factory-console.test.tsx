@@ -147,6 +147,21 @@ describe("AiFactoryConsole", () => {
     expect(screen.getByLabelText("Loading the factory")).toBeInTheDocument();
   });
 
+  it("renders a server-verified signed-out gate without starting protected reads", () => {
+    const fetchMock = vi.fn(() => new Promise<Response>(() => undefined));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<AiFactoryConsole authenticated={false} builtIns={BUILT_INS} />);
+
+    expect(screen.getByRole("heading", { name: "Sign in to run your factory" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute(
+      "href",
+      "/auth/sign-in?next=/solutions/ai-factory",
+    );
+    expect(screen.queryByLabelText("Loading the factory")).not.toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("starts an empty workspace at Connect Repository, with nothing opening uninvited", async () => {
     stubFactory();
 

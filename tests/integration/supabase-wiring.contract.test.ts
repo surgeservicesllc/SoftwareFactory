@@ -41,7 +41,6 @@ const BOUNDARY = /@\/lib\/supabase\/(tenant|server|browser|anon|proxy|auth|env)|
  * tenant data to read, and it is the only way to pass this test without one.
  */
 const NO_TENANT_DATA: Record<string, string> = {
-  "app/api/health/route.ts": "liveness only; deliberately reads nothing",
   "app/api/csp-report/route.ts": "browser-posted violation report",
 };
 
@@ -119,7 +118,7 @@ describe("every API route resolves to Supabase or says why not", () => {
         + "to NO_TENANT_DATA with the reason they have nothing to read:\n"
         + unwired.join("\n"),
     ).toEqual([]);
-  });
+  }, 120_000);
 });
 
 describe("no surface invents the records it shows", () => {

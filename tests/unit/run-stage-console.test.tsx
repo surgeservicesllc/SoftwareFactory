@@ -168,6 +168,7 @@ describe("the per-run stage page", () => {
   });
 
   it("offers the open gate's decision through the shared control and route", async () => {
+    const evidenceArtifactId = "a0000000-0000-4000-8000-000000000019";
     stubFetch({
       runs: runPayload([
         node({
@@ -182,6 +183,12 @@ describe("the per-run stage page", () => {
           job: "Design the change.",
         }),
       ]),
+      artifacts: [artifact({
+        artifactId: evidenceArtifactId,
+        nodeRunId: "b0000000-0000-4000-8000-000000000019",
+        nodeKey: "architecture",
+        payload: { summary: "The exact architecture." },
+      })],
     });
     const user = userEvent.setup();
     render(<RunStageConsole graphRunId={RUN_ID} stage="ARCHITECTURE" />);
@@ -190,7 +197,7 @@ describe("the per-run stage page", () => {
 
     await waitFor(() => expect(gateCalls).toHaveLength(1));
     expect(gateCalls[0].url).toContain("a0000000-0000-4000-8000-000000000009");
-    expect(gateCalls[0].body).toEqual({ approved: true });
+    expect(gateCalls[0].body).toEqual({ approved: true, evidenceArtifactId });
   });
 
   it("lists only stored clocks in the activity log", async () => {
@@ -273,6 +280,12 @@ describe("the per-run stage page", () => {
           sha: "b1771b1b5a6c82b55f3d68f02b7e5a251380aca8",
           repository: "owner/repository",
           total: 4,
+          checks: [
+            { name: "CI 1", conclusion: "success", url: "https://github.com/owner/repository/actions/runs/1" },
+            { name: "CI 2", conclusion: "success", url: "https://github.com/owner/repository/actions/runs/2" },
+            { name: "CI 3", conclusion: "success", url: "https://github.com/owner/repository/actions/runs/3" },
+            { name: "CI 4", conclusion: "success", url: "https://github.com/owner/repository/actions/runs/4" },
+          ],
           failing: [],
           observedAt: "2026-08-24T12:05:00.000Z",
           latencyMs: 412,

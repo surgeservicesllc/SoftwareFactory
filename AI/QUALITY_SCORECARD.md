@@ -1,11 +1,199 @@
 # Quality scorecard
 
-Last reviewed: 2026-08-25
+Last reviewed: 2026-08-28
 
-**Addendum, 2026-08-25 — the ten-step factory: five engine defects found by
-driving it, and what is actually proven (ADR-144, ADR-145, ADR-146):** the
+**Addendum, 2026-08-28 — cleanup and target-bound claim production
+acceptance (ADR-155/161):** cleanup SHA
+`ce86d9c04ff91f237e680a5db4b0cda97feea2ce` passed all four jobs in CI
+`33169913723`, exact READY deployment `dpl_4Zqh4q2yBfaagGtg7stSbV4NSphP`, and
+the public health identity join. Local evidence was lint/typecheck green,
+**5,145 tests passed / 7 skipped across 441 files**, a 171/171-page production
+build, **50/50 focused URL tests**, clean secret review, and an independent
+cleanup-policy audit. Probe `33170897689` passed `1|1|1|1|0|0`; first-attempt
+run `33170953151` applied only hash-pinned `20260828000200`; independent probe
+`33171025468` passed `1|1|1|1|1|0`. Catalog, ACL, runtime, audit, linked lint,
+health, worker state, autonomy, and kill-switch checks stayed exact. Read-only
+browser acceptance found no errors and proved existing historical test data is
+rendered truthfully: run `884d6164` is 8/10, with Deploy refused by policy and
+Monitor skipped, and is explicitly not presented as current v2 evidence.
+Verdict: **TARGET-BOUND CLAIMS PRODUCTION PASS; POSTDEPLOY CORRECTLY GATED**.
+
+**Addendum, 2026-08-28 — hosted selector/URL checkpoint and signed acceptance
+gate (ADR-161):** exact cleanup SHA
+`994da2cec81c0cd83aa1e2d87ad848d2f2ff612a` passed all four CI jobs and exact
+READY Vercel/public-health identity. First-attempt protected runs
+`33165823042`, `33165886343`, `33165944760`, and `33165992529` passed; hosted
+ledger is exactly `1|1|1|1|0|0`, the selector is normalized, and the
+production-URL writer/catalog/ACL is live. The new disposable acceptance path
+is manual, exact-main/actor/first-attempt, serialized with migrations, and
+rechecks exact CI/deployment/health plus full stopped database/GitHub state
+three times. It uses no password and requires a confirmed owner/admin, an unset
+value, one immutable owner-attributed event, no-op replay, and signed-in reload.
+Focused evidence is **7/7 workflow guard tests**, **86/86 URL-focused tests**,
+clean focused ESLint, clean TypeScript, valid YAML, and every shell block passes
+`bash -n`. Exact disposable release
+`540aceb173ec88e67cb982018a80134ece3ec474` passed all four jobs in CI
+`33167232673`, READY deployment `dpl_31W7nKgJd6ENoCfuvgP1zzHZM6eT`, and the
+public health identity join. First-attempt run `33168092838` passed all
+pre-write release/safety/connection gates and then failed closed before target
+resolution or mutation because `psql -c` did not expand its protected variable
+tokens. Both temporary selectors were deleted. Corrected release
+`53b84b7952a1e09725f53da5d65c4947b8cb914a` then passed all four jobs in CI
+`33168368270`, READY deployment `dpl_tBF2s6AtLmqZ13YpYHKWzBRtwiKT`, and the
+public health identity join. Fresh first-attempt run `33169297158` passed the
+real owner/admin session, exact URL write, one immutable owner-attributed audit
+event, no-op replay without a duplicate, signed-in reload, and every pre/post
+stopped-containment check. Both temporary selectors were deleted immediately;
+this cleanup removes the disposable workflow/test. Verdict: **PRODUCTION URL
+ACCEPTANCE PASS; DISPOSABLE SESSION PATH REMOVED**. No worker or autonomous
+action was enabled.
+
+**Addendum, 2026-08-28 — exact Blackstone Auth bootstrap (ADR-160):** the
+temporary workflow is manual-only, permissions-empty, exact-main/project/email,
+first-attempt, and identity-gated to the configured production release actor as
+both actor fields. The password is sourced only from an encrypted temporary
+repository secret; output is limited to created/updated plus a UUID after an
+exact email-confirmed re-read. Focused workflow evidence is **5/5 tests** and
+focused ESLint green. Exact first-attempt run `33164766560` on production
+release `298264b02fe5a29e3c139f8077e65d6270f19167` returned one bounded updated
+UUID after verified readback; the temporary password secret was then deleted,
+and this forward cleanup removes the workflow/test. Verdict: **PRODUCTION
+PASS; DISPOSABLE CREDENTIAL PATH REMOVED**. No tenant role, provider
+connection, worker switch, autonomy setting, or kill switch changed.
+
+**Addendum, 2026-08-28 — live application release and selector-normalization
+containment (ADR-159):** exact `main`
+`79ca52f5b92e7d95292210e05565d35d21b4a435` passed the quality job and all
+three browser/accessibility shards in CI `33158801269`. GitHub deployment
+`6138739479` is READY Vercel deployment
+`dpl_57pM3ZEYNyK596VAeLPJMabJLZrH`; public health joined the exact SHA/ref,
+Vercel project `prj_pAsrhftaVWI4SyaqstgRVSWHJkdD`, immutable deployment, and
+Supabase project `qpuofpmagrmyamahqwxw` with the database reachable. Verdict:
+**APPLICATION PRODUCTION PASS**.
+
+Protected read-only probe `33159805326` stopped before mutation because the
+hosted `claim_phase1c_run_budget_internal(text,text,text,integer)` body is
+exact stale MD5 `ed5840b9d8d0efdb513a8576df128e9b`, not breaker-aware target
+`5933952d71f9da90a2a80a05ce6e0378`; its full ABI, postgres owner,
+`SECURITY DEFINER`, pinned search path, private ACL, breaker helpers/table,
+and stopped-safety state otherwise passed. The isolated forward migration
+`20260828000050_normalize_breaker_aware_phase1c_selector.sql` is pinned at LF
+SHA-256
+`8914034508451d1550ebf3f1bedd8f7b71592f1809306e78c57774c458952896`.
+Current containment evidence is lint and typecheck green, **5,150 tests
+passed / 7 skipped across 442 files**, and a **171/171-page production
+build**. Verdict: **SELECTOR CONTAINMENT LOCAL PASS; EXACT-HEAD PUBLICATION,
+PROTECTED APPLY, AND POSTFLIGHT PENDING**.
+
+Signed-in Factory acceptance is not upgraded: the active organization has no
+connected provider account, ready linked bot, or assignment, so no fresh Step
+8 POST or persisted Steps 9-10 correlation has been proven. Workers, provider
+execution, autonomy, schedules, the auth broker, and automatic actions remain
+OFF; the global kill switch remains ON. Seventeen older ledger-missing
+versions beginning at `20260815000200` remain a separate unresolved
+object-by-object forward-reconciliation track.
+
+**Addendum, 2026-08-28 — final ten-step Factory release candidate:** Step 8
+now accepts the assigned bot's provider/model for record-only work, persists
+one immutable command route, and reports disabled execution truthfully. Launch
+and gate UI retain `workerWoken` plus the exact server note, suppress automatic
+polling when the worker is OFF, and expose bounded/manual refresh. Application
+and workflow gates are exact-`true`, target-bound, and manual graph dispatch is
+main-only. Mutation scopes reject reruns and a different triggering actor.
+Public health joins the exact alias, Vercel project/deployment ID and URL,
+main SHA/ref, and Supabase project; the hosted workflow compares that URL to
+GitHub's exact Vercel Production status before and after database work.
+Production worker/auth-broker variables are explicitly OFF and no execution
+workflow is active. Verdict: **LOCAL PASS; EXACT-HEAD PUBLICATION, ORDERED
+HOSTED MIGRATIONS, AND SIGNED-IN RECORD/RELOAD ACCEPTANCE PENDING**. Workers,
+autonomy, and automatic actions remain OFF; the kill switch remains ON. Final
+local evidence: lint/typecheck green, **439 test files / 5,150 tests passed**
+(3 files / 7 tests skipped), and a **171/171-page production build**.
+
+**Addendum, 2026-08-28 — Step 10 public URL configuration (ADR-156):**
+the project detail page now supplies the missing owner/admin writer for the
+public production URL, without changing the existing three-argument detail
+RPC or provider deployment identity. The forward migration validates the
+durable column, uses a pinned `SECURITY DEFINER` boundary, refuses archived
+projects, retains projects FORCE RLS, and routes real changes through the
+existing immutable project audit trigger. URL safety rejects credentials and
+likely-secret path material at the database boundary, query/fragment material,
+non-HTTPS, private/localhost/intranet, ambiguous
+numeric, IPv6-literal, and non-standard-port targets; runtime monitoring still
+pins and checks the address actually connected. Vercel Production now carries
+an independent expected Supabase project ref, and `/api/health` fails closed
+with bounded status when the configured URL does not match it. Focused evidence is **89/89
+tests**, focused ESLint clean, and full typecheck green. Verdict: **LOCAL PASS;
+HOSTED MIGRATION AND SIGNED-IN VALUE/AUDIT ACCEPTANCE PENDING**. No live value
+or execution control changed. Migration LF SHA-256:
+`0856ddee447280a1bb4418f25d6a6d4650687e168fffcd5e98e8ce15edd62b27`.
+
+**Addendum, 2026-08-28 — exact-target one-shot claims (ADR-155):** local
+evidence passes 106/106 focused tests across target-claim behavior and
+contracts, graph/Phase 1C stores, environment validation, workflow contracts,
+full-chain schema-security invariants, and graph-worker execution. Focused
+ESLint and scoped diff checks pass. The database selector itself filters the
+requested UUID before lock/claim, preserves every existing scheduler, budget,
+lease, breaker, RLS, ACL, and audit boundary, and exposes public project URL
+without overwriting exact deployment lineage. Scheduled and one-shot graph
+workers share an exact global gate that remains OFF; provider execution,
+autonomy, and automatic actions remain OFF; the kill
+switch remains ON. Verdict: **LOCAL PASS; HOSTED MIGRATION AND TARGET CANARY
+PENDING**. This addendum does not upgrade production or end-to-end acceptance.
+
+**Addendum, 2026-08-28 — AI Factory loading gate and Factory v2 release:** the signed-out
+factory gate renders on the first server response and performs zero protected
+browser reads. The portal layout and leaf page share one request-scoped,
+verified viewer lookup with a five-second fail-closed presentation deadline;
+route authorization remains independent. Focused unit/contract tests pass
+56/56, the production build passes, and the real-page Playwright gate passes
+9/9 across desktop, tablet, and mobile. Exact main
+`bb68659a0ee84370f83dd647ae57f4ccb83ea06c` passed all four required jobs in
+CI `33149814278`; Vercel `dpl_2A2bhtevZeBY6422ZYjVGJE5SuTU` / deployment
+`6137077047` is READY behind `www.theagoras.com`. Hosted containment and
+lineage passed in runs `33150654596` and `33150707932` after exact four-row
+manifest probe `33150619218`. Signed-in Steps 8-9 remain pending provider OAuth
+and route setup, not code release or database lineage.
+
+**Addendum, 2026-08-27 — Job Search production acceptance (ADR-147):**
+
+| Evidence tier | Result | What it proves / does not prove |
+| --- | --- | --- |
+| Upstream identity | PASS | All 214 files match exact `MadsLorentzen/ai-job-search` head `79cd383e58f0af7948c7c6462a3a289e9b67421e`; the vendor tree is excluded from build, lint, typecheck, tests and runtime imports. This proves source identity, not runtime behavior. |
+| Product entry and navigation | PASS in production | `/JobSearch` is canonical, the signed-in global entry is **Job Search**, and `/Job-Search` plus `/job-seeker/search` share the same gated content. Exact release `aabd82b3a626da94a2478ef26f043a51d059cd15` is live; the stable alias returns `200`. Desktop and 390px mobile browser acceptance passed. |
+| Live board contracts | PASS in production | Direct probes returned Jobnet 2/4, Jobindex 2/736, Jobdanmark 0/0 and Freehire 2/6752. Signed-in production returned Jobnet 4/4, Jobindex 20 shown of 736, Jobdanmark 0/0 and Freehire 25 shown of 6,752, with the location limitation and empty state rendered honestly. Future third-party stability remains external. |
+| Save provenance | PASS locally and in production | Every result is sealed server-side for organization + user + board + exact normalized fields with a 30-minute lifetime. Missing, expired, cross-user, cross-tenant or altered evidence is refused before persistence. Production accepted an untouched Jobnet result and read it back with the same attribution. |
+| Supabase transaction and isolation | PASS in PostgreSQL tests and production | `record_job_seeker_job` atomically records job + match + initial application + immutable event, derives `auth.uid()`, checks membership, returns a no-write duplicate outcome, rolls back child failure, and uses composite owner FKs. Production read back the accepted row at score 35/100 and stage FOUND plus exactly one `job_seeker.job_recorded` event. |
+| Hosted database | PASS | Exact-head CI run `33110615299` passed all four required jobs before workflow run `33111692239` applied only `20260827000100_record_job_seeker_job_atomically.sql` (SHA-256 `2f51bf64ba3fd2bc711e6fbf9e660a2cc0dd5ef4b1f85d932ee574e79e9c7d13`) to project `qpuofpmagrmyamahqwxw`. Postflight accepted the one ledger row, exact routine identity/security/search path/ACL, three validated owner constraints, old-key removal, PostgREST reload and forced RLS. |
+| Application production acceptance | **PASS** | Exact-head CI `33114868741`, Vercel Production deployment `6130751384`, alias health, four-board signed-in search, sealed Jobnet save, Supabase readback and immutable activity evidence passed. Remote journey `33115019633` also passed the returning-account gate; its no-unsaved-result mutation was skipped honestly and the manual authenticated walk supplied that missing acceptance evidence. |
+
+Local evidence is full lint and typecheck green, 407 Vitest files / 4,721
+tests passed (3 files / 7 tests skipped), and a production build of 165 pages
+including `/JobSearch`. Focused evidence includes 16 atomic-persistence tests,
+64 migration-contract tests and the related Job Seeker regression suites.
+The rollout was database-first because the application calls the new RPC.
+Direct authenticated table INSERT remains intentionally available while the
+manual jobs POST route still uses it; a later forward contraction must first
+move and test that final writer. The verdict is **HOSTED DATABASE PASS;
+APPLICATION PRODUCTION ACCEPTANCE PASS**.
+
+**Addendum, 2026-08-25 — billing (ADR-149):** the revenue engine is tested at
+every seam it owns — 56 tests in six new files plus quota regressions in the
+launch and projects route suites: catalog invariants against the advertised
+matrix, price env resolution both directions, HMAC signature vectors
+(tamper, replay ±tolerance, key-roll), mirror idempotency and
+non-attribution refusals, checkout/portal/webhook routes including every
+Not Connected and forbidden path, and 402 enforcement at both creation
+boundaries proving the write RPC is never reached. What is deliberately NOT
+claimed: no test exercises Stripe's live API (the transport is the injected
+seam), and the end-to-end money path remains unproven until the owner runs
+the test-mode purchase in `docs/BILLING_GO_LIVE.md` step 7 — the scorecard
+will say so until a real test-mode webhook has landed on production.
+
+**Addendum, 2026-08-25 — the ten-step factory: six engine defects found by
+driving it, and what is actually proven (ADR-144 through ADR-146, plus ADR-148):** the
 owner's ten-step production-readiness goal was driven against live
-production, and the drive — not review — found five defects in the graph
+production, and the drive — not review — found six defects in the graph
 engine. Each was fixed with a regression that fails without it:
 
 - **Gate-halted re-pay (ADR-143, `20260824001100`).** A gate-approved node's
@@ -37,6 +225,15 @@ engine. Each was fixed with a regression that fails without it:
   and read by nothing, so every retry the engine ever performed fired into
   the instant that had just refused it. Both halves are fixed together;
   fixing either alone would have changed nothing.
+
+- **The run never said why it ended (ADR-148).** The engine composes a
+  run-level explanation on every close — including the correction that
+  gate-halted nodes did not fail — and threw it away: `completeRun`'s
+  parameter was named `_detail` because the RPC had no parameter and
+  `graph_runs` had no column. Ten CANCELLED runs in the live queue state no
+  reason. Migration `20260825000300` adds `closure_note` and carries it
+  through to `list_graph_runs`. **Not yet hosted**; apply before the code
+  ships, not after.
 
 **Ten-step flow, local: PASS.**
 `tests/integration/ten-step-consecutive-flow.behavior.test.ts` drives one
@@ -388,9 +585,11 @@ independently by signing in to production as the fake account and
 reading the production API back: 42 jobs in its RLS-isolated workspace
 (2 manual + 40 imported live from Greenhouse in production), all 42
 scored, analytics recomputed from the walked rows (1 application, 100%
-measured response rate, 1 interview-stage count, 1 offer). Every
-capability on /job-seeker has now been observed working in production,
-wired to hosted Supabase end to end.
+measured response rate, 1 interview-stage count, 1 offer). Every capability
+on the then-existing `/job-seeker` surface was observed working in production,
+wired to hosted Supabase end to end. That 2026-08-22 run predates the later
+Job Search integration and is not evidence for `/JobSearch`, live multi-board
+search, sealed-result saving, or the atomic recording RPC.
 
 **Release addendum, 2026-08-21 — Factory command routing (ADR-106):**
 implementation is locally complete but not live. Migration
@@ -876,3 +1075,44 @@ unapplied to hosted Supabase.
 - Any browser exposure of raw command/model/provider errors, service credentials, raw audit details, or broad worker tables is a failure.
 - Any default-branch write, non-draft PR, approval, merge, deploy, rollback, workflow/provider administration, or Autonomous Mode widening is a failure.
 - A code/schema/provider/deployment change invalidates affected evidence and requires rerunning it.
+
+## Step 8 current-production diagnosis (2026-08-28)
+
+| Check | Evidence | Status |
+| --- | --- | --- |
+| Stale client result lifecycle | Current error retained across ordinary rerenders; project/context change and remount clear it; retry reuses the original idempotency key | Pass locally and released |
+| Schema-skew response | Exact legacy `22023` command-plan/configuration refusals become bounded actionable `503`; no worker dispatch occurs | Pass locally and released |
+| Exact production traffic | Authenticated GETs reached exact `bb68659`; zero `POST /api/commands`; no command-route 4xx/5xx | Confirms screenshot was stale mounted state, not a current server refusal |
+| Current tenant route | Fresh Chrome as `daniel.hughen@gmail.com`: zero connected AI accounts, ready bots, or assignments; one unfinished Codex account; Claude OAuth incomplete | Provider OAuth and route setup pending |
+| Steps 8-9 acceptance | Fresh signed-in POST, immutable route evidence, reload-persisted Step 9 correlation | Not yet claimed |
+
+## Ten-step Factory v2 production scorecard (2026-08-28)
+
+| Gate | Evidence | Status |
+| --- | --- | --- |
+| Release identity | Exact `main` `bb68659a0ee84370f83dd647ae57f4ccb83ea06c` | Pass |
+| Requirements -> Monitor lifecycle | Exact repository/base/policy identity, explicit gates, durable command/PR/CI/deployment/monitor lineage, exact graph/run UI selection | Implemented and locally audited |
+| Focused verification | 18 files / 207 tests; lint, typecheck, production build, and diff-check green | Pass locally |
+| Protocol fence migration | `20260827000150`, LF-normalized SHA-256 `A4B505841D94CC89DFC82E24837DEDB78356B56C5F5698C0748F8B6735341A49`; run `33144600401` | Hosted once; ledger/fence/drain/safety postflight pass |
+| Containment probe | Run `33150619218`; 4 rows; manifest `784acaca2b0957ecb0eeea85e3d0dde2e64ba653c744e708ec8d4094f9175b99`; blockers `0|0|0|0` | Pass; payload/row IDs not logged |
+| Forward containment | Run `33150654596`; exact `20260827000210` only | Pass hosted with full postflight |
+| Phase 1C release-lineage migration | Run `33150707932`; unchanged `20260827000200`, LF-normalized SHA-256 `23197552DF3F442AE8264BF71BD28A7C479E09A64BF6E298C615B767A96572BE` | Pass hosted with full postflight |
+| Publication | Exact `main` `bb68659a0ee84370f83dd647ae57f4ccb83ea06c`; CI `33149814278` four jobs green; Vercel `dpl_2A2bhtevZeBY6422ZYjVGJE5SuTU` / deployment `6137077047` READY behind `www.theagoras.com` | Pass |
+| Current Step 8/9 production acceptance | Current bundle loads signed in; tenant has no connected account/ready bot/assignment and provider OAuth is incomplete | Pending route setup; not falsely claimed |
+| Safety envelope | Worker, provider execution, autonomy, and all automatic actions OFF; global kill switch ON | Preserved |
+
+## 2026-08-28 exact release, protocol fence, and artifact containment
+
+| Gate | Evidence | Status |
+| --- | --- | --- |
+| Exact production | `bb68659a0ee84370f83dd647ae57f4ccb83ea06c`; CI `33149814278` four required jobs green; Vercel `dpl_2A2bhtevZeBY6422ZYjVGJE5SuTU` / deployment `6137077047` READY behind `www.theagoras.com` | Pass |
+| Hosted apply attempt | `33143231202` queued with zero jobs/checks; 517,320-byte workflow exceeded 500 KB; no DDL ran | Safely not started |
+| Workflow recovery | 472,229-byte released workflow; executable lines unchanged; UTF-8 size contract `< 490,000` | Pass on exact release |
+| Legacy authority fence | Run `33144600401` applied only `00150`; exact ledger/function ACL/drain/safety postflight; graph/Phase 1C running rows `0|0` | Pass hosted; never replay |
+| Lineage apply | Run `33144659265`; exact `00200` stopped on `legacy graph artifact payload is sensitive or oversized` | Failed closed; single transaction rolled back all DDL and ledger insert |
+| Payload-free probe | Run `33150619218`: four rows; manifest `784acaca2b0957ecb0eeea85e3d0dde2e64ba653c744e708ec8d4094f9175b99`; blockers `0|0|0|0` | Pass |
+| Forward containment migration | Run `33150654596` applied only `20260827000210`, SHA-256 `c37a55efe74e9a9b4118924e1b2cbd0378a76f0d98c9747c6c66fffda9697de1` | Pass hosted; ledger/catalog/constraints/RLS/ACL/audit/safety green |
+| Release lineage completion | Run `33150707932` applied only unchanged hash-pinned `00200` after accepted `00210` | Pass hosted; ledger/catalog/RLS/ACL/audit/runtime/lint/health green |
+| State-dependent legacy fence | Post-v2: 8 legacy signatures fully revoked; replacement `decide_node_gate(uuid,boolean,text)` authenticated-only, owner/admin-checked, `SECURITY DEFINER`, pinned search path, and evidence-bound | Pass hosted |
+| Fresh Step 8 request | Exact deployment: authenticated GETs, zero `POST /api/commands`, no command-route 4xx/5xx; fresh signed-in tenant has no connected account/ready bot/assignment | Pending provider OAuth and route setup; not accepted |
+| Safety envelope | Workers/provider execution/autonomy/automatic actions OFF; global kill switch ON; no running graph or Phase 1C run | Pass hosted |

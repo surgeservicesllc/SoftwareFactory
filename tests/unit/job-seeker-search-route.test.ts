@@ -8,6 +8,7 @@ const harness = vi.hoisted(() => ({
   searchJobindex: vi.fn(),
   searchFreehire: vi.fn(),
   searchJobdanmark: vi.fn(),
+  sealSearchResult: vi.fn(),
 }));
 
 vi.mock("server-only", () => ({}));
@@ -33,6 +34,9 @@ vi.mock("@/lib/job-seeker/board-search/jobdanmark", async (importOriginal) => {
   const original = await importOriginal<typeof import("@/lib/job-seeker/board-search/jobdanmark")>();
   return { ...original, jobdanmarkAdapter: { ...original.jobdanmarkAdapter, search: harness.searchJobdanmark } };
 });
+vi.mock("@/lib/job-seeker/search-result-token", () => ({
+  sealSearchResult: harness.sealSearchResult,
+}));
 
 import { GET, POST } from "@/app/api/job-seeker/search/route";
 import { BoardSearchError } from "@/lib/job-seeker/board-search/types";
@@ -76,6 +80,7 @@ beforeEach(() => {
   harness.searchJobindex.mockResolvedValue({ board: "jobindex", hits: [hit("Backend Developer")], totalAvailable: 40 });
   harness.searchFreehire.mockResolvedValue({ board: "freehire", hits: [hit("Go Engineer")], totalAvailable: 7 });
   harness.searchJobdanmark.mockResolvedValue({ board: "jobdanmark", hits: [hit("Systemudvikler")], totalAvailable: 55 });
+  harness.sealSearchResult.mockReturnValue("sealed-result-token");
 });
 
 describe("the search boundary", () => {
@@ -144,7 +149,18 @@ describe("searching across boards", () => {
     expect(payload.results).toHaveLength(4);
     // Not hits.length: a person who sees 1 of 812 knows this is a sample.
     expect(payload.results.find((r) => r.board === "jobnet")?.totalAvailable).toBe(812);
+    expect(payload.results[0]?.hits[0]).toMatchObject({ saveToken: "sealed-result-token" });
     expect(payload.failures).toEqual([]);
+  });
+
+  it("binds each save token to the signed-in organization, person, board and job", async () => {
+    await POST(searchRequest({ text: "engineer", boards: ["jobnet"] }));
+    expect(harness.sealSearchResult).toHaveBeenCalledWith(expect.objectContaining({
+      organizationId: activeOrganizationId,
+      userId: "user-1",
+      board: "jobnet",
+      job: expect.objectContaining({ title: "Platform Engineer" }),
+    }));
   });
 
   it("keeps the boards that answered when one fails, and names the one that did not", async () => {

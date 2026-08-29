@@ -1,0 +1,1244 @@
+name: Apply Full Lifecycle v2 release migrations
+
+on:
+  workflow_dispatch:
+    inputs:
+      scope:
+        description: "Probe, apply one ordered migration, or verify the completed release."
+        required: true
+        default: probe
+        type: choice
+        options:
+          - probe
+          - selector-normalization
+          - configure-url
+          - target-claims
+          - postdeploy
+          - verify
+      confirm:
+        description: "Type apply for a mutation scope; probe and verify are read-only."
+        required: false
+        default: ""
+        type: string
+      release_sha:
+        description: "Exact lowercase 40-character main SHA already green and READY in Production."
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  checks: read
+  contents: read
+  deployments: read
+
+concurrency:
+  group: apply-hosted-migrations
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PROJECT_REF: qpuofpmagrmyamahqwxw
+      MIGRATION_00050: supabase/migrations/20260828000050_normalize_breaker_aware_phase1c_selector.sql
+      MIGRATION_00050_SHA256: 8914034508451d1550ebf3f1bedd8f7b71592f1809306e78c57774c458952896
+      MIGRATION_00100: supabase/migrations/20260828000100_project_production_url_configuration.sql
+      MIGRATION_00100_SHA256: 0856ddee447280a1bb4418f25d6a6d4650687e168fffcd5e98e8ce15edd62b27
+      MIGRATION_00200: supabase/migrations/20260828000200_target_bound_worker_claims.sql
+      MIGRATION_00200_SHA256: f7d87242534e16bacd22c0244784a992bded3c335fcb0a38e85d8a6b9168eaa5
+      MIGRATION_00300: supabase/migrations/20260828000300_graph_postdeploy_validation.sql
+      MIGRATION_00300_SHA256: 0104f4b6514eb42fddb931b76a8026cea4834547f8dff011c2fff956d11579a5
+      PRODUCTION_HEALTH_URL: https://www.theagoras.com/api/health
+      VERCEL_PROJECT_ID: prj_pAsrhftaVWI4SyaqstgRVSWHJkdD
+    steps:
+      - name: Authorize the exact mutation scope
+        env:
+          AUTHORIZED_ACTOR: ${{ vars.PRODUCTION_RELEASE_ACTOR }}
+          SCOPE: ${{ inputs.scope }}
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          case "$SCOPE" in
+            probe|verify) exit 0 ;;
+            selector-normalization|configure-url|target-claims|postdeploy) ;;
+            *) echo "::error::Unknown release scope."; exit 1 ;;
+          esac
+          if [ "$CONFIRM" != "apply" ]; then
+            echo "::error::A mutation scope requires confirm=apply."
+            exit 1
+          fi
+          if [ -z "$AUTHORIZED_ACTOR" ] \
+            || [ "$GITHUB_ACTOR" != "$AUTHORIZED_ACTOR" ] \
+            || [ "$GITHUB_TRIGGERING_ACTOR" != "$AUTHORIZED_ACTOR" ] \
+            || [ "$GITHUB_RUN_ATTEMPT" != "1" ]; then
+            echo "::error::Production mutation requires a first-attempt run by the exact configured actor; reruns are refused."
+            exit 1
+          fi
+
+      - name: Check out the exact release
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Verify exact green production and stopped execution workflows
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PHASE1C_WORKER_ENABLED: ${{ vars.SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED }}
+          GRAPH_WORKER_ENABLED: ${{ vars.SOFTWAREFACTORY_GRAPH_WORKER_ENABLED }}
+          GRAPH_WORKER_SCHEDULED: ${{ vars.SOFTWAREFACTORY_GRAPH_WORKER_SCHEDULED }}
+          AUTH_BROKER_DISABLED: ${{ vars.SOFTWAREFACTORY_AUTH_BROKER_DISABLED }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          SHA=$(git rev-parse HEAD)
+          if [[ ! "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]] \
+            || [ "$RELEASE_SHA" != "$SHA" ] \
+            || [ "$GITHUB_REPOSITORY" != "surgeservicesllc/SoftwareFactory" ] \
+            || [ "$GITHUB_REF" != "refs/heads/main" ] \
+            || [ "$GITHUB_SHA" != "$SHA" ]; then
+            echo "::error::Release migration requires the requested exact lowercase SHA on the SoftwareFactory main checkout."
+            exit 1
+          fi
+
+          CURRENT_MAIN_SHA=$(curl --fail --silent --show-error \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/git/ref/heads/main" \
+            | jq -r '.object.sha // empty')
+          if [ "$CURRENT_MAIN_SHA" != "$SHA" ]; then
+            echo "::error::Current repository main moved away from the requested release SHA."
+            exit 1
+          fi
+
+          CHECKS=$(curl --fail --silent --show-error \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/commits/${SHA}/check-runs?per_page=100")
+          for NAME in \
+            "Lint, typecheck, test, and build" \
+            "Browser and accessibility tests 1/3" \
+            "Browser and accessibility tests 2/3" \
+            "Browser and accessibility tests 3/3"; do
+            STATE=$(jq -r --arg name "$NAME" --arg sha "$SHA" '
+              [.check_runs[] | select(.name==$name and .head_sha==$sha and .app.slug=="github-actions")]
+              | sort_by(.completed_at // .started_at // "") | last
+              | if .==null then "missing|missing" else "\(.status)|\(.conclusion // "null")" end
+            ' <<<"$CHECKS")
+            if [ "$STATE" != "completed|success" ]; then
+              echo "::error::Exact-head check '$NAME' is not green ($STATE)."
+              exit 1
+            fi
+          done
+
+          DEPLOYMENT=$(curl --fail --silent --show-error \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/deployments?environment=Production&per_page=100" \
+            | jq -c '[.[] | select(.environment=="Production" and .task=="deploy" and .creator.login=="vercel[bot]")][0] // empty')
+          if [ -z "$DEPLOYMENT" ] \
+            || ! jq -e --arg sha "$SHA" '.sha==$sha and (.ref==$sha or .ref=="main")' <<<"$DEPLOYMENT" >/dev/null; then
+            echo "::error::Latest Vercel Production identity is not the exact checked-out SHA."
+            exit 1
+          fi
+          STATUS_URL=$(jq -r '.statuses_url' <<<"$DEPLOYMENT")
+          STATUS=$(curl --fail --silent --show-error \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${STATUS_URL}?per_page=1")
+          if ! jq -e 'length==1 and .[0].state=="success" and .[0].creator.login=="vercel[bot]" and (.[0].environment_url | test("^https://softwarefactory-[a-z0-9]+-surgeservices-projects\\.vercel\\.app/?$"))' <<<"$STATUS" >/dev/null; then
+            echo "::error::Exact-SHA Vercel Production is not READY."
+            exit 1
+          fi
+          VERCEL_DEPLOYMENT_URL=$(jq -r '.[0].environment_url | rtrimstr("/")' <<<"$STATUS")
+
+          HEALTH=$(curl --fail --silent --show-error --max-time 20 --retry 2 "$PRODUCTION_HEALTH_URL")
+          if ! jq -e \
+            --arg sha "$SHA" \
+            --arg project "$PROJECT_REF" \
+            --arg deployment_url "$VERCEL_DEPLOYMENT_URL" \
+            --arg vercel_project "$VERCEL_PROJECT_ID" '
+            .status=="ok"
+            and .service=="SoftwareFactory"
+            and .database=="reachable"
+            and .databaseProject=="matched"
+            and .databaseProjectRef==$project
+            and .deployment=="matched"
+            and .deploymentUrl==$deployment_url
+            and .vercelProjectId==$vercel_project
+            and (.vercelDeploymentId | type=="string" and test("^dpl_[A-Za-z0-9]+$"))
+            and .release=="matched"
+            and .releaseSha==$sha
+            and .releaseRef=="main"
+          ' <<<"$HEALTH" >/dev/null; then
+            echo "::error::The public production health identity is not the exact release SHA and Supabase project."
+            exit 1
+          fi
+
+          for WORKFLOW in graph-worker.yml codex-worker.yml claude-worker.yml auth-broker.yml graph-live-canary.yml handoff-canary.yml graph-artifact-containment.yml e2e-test-data.yml journey-prod-user.yml; do
+            ACTIVE=$(curl --fail --silent --show-error \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/workflows/${WORKFLOW}/runs?per_page=100" \
+              | jq '[.workflow_runs[] | select(.status != "completed")] | length')
+            if [ "$ACTIVE" != "0" ]; then
+              echo "::error::${WORKFLOW} has ${ACTIVE} active run(s)."
+              exit 1
+            fi
+          done
+          if [ "${PHASE1C_WORKER_ENABLED,,}" = "true" ] \
+            || [ "${GRAPH_WORKER_ENABLED,,}" = "true" ] \
+            || [ "${GRAPH_WORKER_SCHEDULED,,}" = "true" ] \
+            || [ "${AUTH_BROKER_DISABLED,,}" != "true" ]; then
+            echo "::error::A worker switch or the AI-account auth broker is outside stopped containment."
+            exit 1
+          fi
+          echo "::notice::Exact main SHA ${SHA} is green and READY with execution workflows stopped."
+
+      - name: Connect to the exact Supabase project
+        env:
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          if [ -z "$SUPABASE_DB_PASSWORD" ]; then
+            echo "::error::SUPABASE_DB_PASSWORD is required."
+            exit 1
+          fi
+          ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+          echo "::add-mask::$ENC"
+          for HOST in aws-0-us-west-2.pooler.supabase.com aws-1-us-west-2.pooler.supabase.com; do
+            URL="postgresql://postgres.${PROJECT_REF}:${ENC}@${HOST}:5432/postgres"
+            echo "::add-mask::$URL"
+            if psql "$URL" -X -Atqc "select current_database()" >/dev/null 2>&1; then
+              echo "DB_URL=$URL" >> "$GITHUB_ENV"
+              exit 0
+            fi
+          done
+          echo "::error::Could not connect to exact Supabase project ${PROJECT_REF}."
+          exit 1
+
+      - name: Verify the four exact forward files
+        run: |
+          verify_file() {
+            FILE=$1
+            EXPECTED=$2
+            if [ ! -f "$FILE" ] || [ "$(sha256sum "$FILE" | cut -d' ' -f1)" != "$EXPECTED" ]; then
+              echo "::error::Exact migration file identity mismatch: $FILE"
+              exit 1
+            fi
+          }
+          verify_file "$MIGRATION_00050" "$MIGRATION_00050_SHA256"
+          verify_file "$MIGRATION_00100" "$MIGRATION_00100_SHA256"
+          verify_file "$MIGRATION_00200" "$MIGRATION_00200_SHA256"
+          verify_file "$MIGRATION_00300" "$MIGRATION_00300_SHA256"
+
+      - name: Verify prerequisite ledger and stopped database state
+        env:
+          SCOPE: ${{ inputs.scope }}
+        run: |
+          LEDGER=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+            select
+              (select count(*) from supabase_migrations.schema_migrations where version='20260827000200')||'|'||
+              (select count(*) from supabase_migrations.schema_migrations where version='20260827000210')||'|'||
+              (select count(*) from supabase_migrations.schema_migrations where version='20260828000050')||'|'||
+              (select count(*) from supabase_migrations.schema_migrations where version='20260828000100')||'|'||
+              (select count(*) from supabase_migrations.schema_migrations where version='20260828000200')||'|'||
+              (select count(*) from supabase_migrations.schema_migrations where version='20260828000300');")
+          case "$SCOPE:$LEDGER" in
+            probe:1\|1\|0\|0\|0\|0|probe:1\|1\|1\|0\|0\|0|probe:1\|1\|1\|1\|0\|0|probe:1\|1\|1\|1\|1\|0|probe:1\|1\|1\|1\|1\|1) ;;
+            selector-normalization:1\|1\|0\|0\|0\|0) ;;
+            configure-url:1\|1\|1\|0\|0\|0) ;;
+            target-claims:1\|1\|1\|1\|0\|0) ;;
+            postdeploy:1\|1\|1\|1\|1\|0) ;;
+            verify:1\|1\|1\|1\|1\|1) ;;
+            *) echo "::error::Prerequisite ledger is not the exact ordered state for scope=${SCOPE} (${LEDGER})."; exit 1 ;;
+          esac
+
+          SAFE=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+            select
+              not exists (
+                select 1 from public.organizations
+                where coalesce(autonomous_mode,false)
+                   or autonomy_kill_switch_active is distinct from true
+                   or coalesce(auto_plan,false) or coalesce(auto_code,false)
+                   or coalesce(auto_test,false) or coalesce(auto_repair,false)
+                   or coalesce(auto_review,false) or coalesce(auto_approve,false)
+                   or coalesce(auto_merge,false) or coalesce(auto_deploy,false)
+                   or coalesce(auto_rollback,false)
+              )
+              and not exists (
+                select 1 from public.projects
+                where coalesce(autonomous_mode,false)
+                   or coalesce(auto_plan,false) or coalesce(auto_code,false)
+                   or coalesce(auto_test,false) or coalesce(auto_repair,false)
+                   or coalesce(auto_review,false) or coalesce(auto_approve,false)
+                   or coalesce(auto_merge,false) or coalesce(auto_deploy,false)
+                   or coalesce(auto_rollback,false)
+              )
+              and not exists (
+                select 1 from public.phase1c_workers
+                where last_heartbeat_at > now()-interval '10 minutes'
+              )
+              and not exists (select 1 from public.phase1c_workers where last_heartbeat_at > now()+interval '1 minute')
+              and not exists (select 1 from public.phase1c_workers where current_run_id is not null)
+              and not exists (select 1 from public.graph_runs where state='RUNNING'::public.graph_run_state)
+              and not exists (select 1 from public.agent_runs where status='running'::public.run_status);")
+          if [ "$SAFE" != "t" ]; then
+            echo "::error::Autonomy, automatic actions, kill switch, or worker/runtime state is outside stopped containment."
+            exit 1
+          fi
+          echo "::notice::Ledger=${LEDGER}; containment is stopped and exact."
+
+      - name: Apply exactly one ordered forward migration
+        if: ${{ inputs.scope == 'selector-normalization' || inputs.scope == 'configure-url' || inputs.scope == 'target-claims' || inputs.scope == 'postdeploy' }}
+        env:
+          SCOPE: ${{ inputs.scope }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          SHA=$(git rev-parse HEAD)
+          CURRENT_MAIN_SHA=$(curl --fail --silent --show-error \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/git/ref/heads/main" \
+            | jq -r '.object.sha // empty')
+          if [ "$RELEASE_SHA" != "$SHA" ] || [ "$CURRENT_MAIN_SHA" != "$SHA" ]; then
+            echo "::error::Current repository main changed before the protected database mutation."
+            exit 1
+          fi
+
+          case "$SCOPE" in
+            selector-normalization)
+              FILE=$MIGRATION_00050; EXPECTED=$MIGRATION_00050_SHA256; VERSION=20260828000050
+              E050=0; E100=0; E200=0; E300=0
+              CATALOG_GUARD="do \$guard\$ begin if exists (select 1 from pg_proc routine join pg_namespace space on space.oid=routine.pronamespace where space.nspname='public' and routine.proname in ('assert_phase1c_claim_target','claim_planned_graph_target_internal','claim_phase1c_run_target_budget_internal','claim_phase1c_run_target_internal','claim_planned_graph_by_id_v2','claim_phase1c_run_by_command_v2')) or to_regprocedure('public.claim_planned_graph_internal(text,text[],text,jsonb,uuid)') is not null or to_regprocedure('public.claim_phase1c_run_budget_internal(text,text,text,integer,uuid)') is not null or to_regprocedure('public.claim_phase1c_run_internal(text,text,text,integer,uuid)') is not null then raise exception 'selector-normalization target catalog is not pristine'; end if; if not exists (select 1 from pg_proc routine where routine.oid=to_regprocedure('public.claim_planned_graph_internal(text,text[],text,jsonb)') and pg_get_userbyid(routine.proowner)='postgres' and routine.prosecdef and routine.proconfig=array['search_path=pg_catalog']::text[] and md5(replace(replace(routine.prosrc,E'\\r\\n',E'\\n'),E'\\r',E'\\n'))='fdd3eee3e61c083789ffeb4808ed0a47' and routine.proacl is not null and (select count(*) from aclexplode(routine.proacl))=1 and not exists (select 1 from aclexplode(routine.proacl) acl where acl.grantor<>routine.proowner or acl.grantee<>routine.proowner or acl.privilege_type<>'EXECUTE' or acl.is_grantable) and not has_function_privilege('anon',routine.oid,'EXECUTE') and not has_function_privilege('authenticated',routine.oid,'EXECUTE') and not has_function_privilege('service_role',routine.oid,'EXECUTE')) or not exists (select 1 from pg_proc routine where routine.oid=to_regprocedure('public.claim_phase1c_run_budget_internal(text,text,text,integer)') and pg_get_userbyid(routine.proowner)='postgres' and routine.prosecdef and routine.proconfig=array['search_path=pg_catalog']::text[] and md5(replace(replace(routine.prosrc,E'\\r\\n',E'\\n'),E'\\r',E'\\n'))='ed5840b9d8d0efdb513a8576df128e9b' and routine.proacl is not null and (select count(*) from aclexplode(routine.proacl))=1 and not exists (select 1 from aclexplode(routine.proacl) acl where acl.grantor<>routine.proowner or acl.grantee<>routine.proowner or acl.privilege_type<>'EXECUTE' or acl.is_grantable) and not has_function_privilege('anon',routine.oid,'EXECUTE') and not has_function_privilege('authenticated',routine.oid,'EXECUTE') and not has_function_privilege('service_role',routine.oid,'EXECUTE')) then raise exception 'selector-normalization prerequisite catalog drifted'; end if; end \$guard\$;"
+              LINT_SIGNATURES="('public.claim_phase1c_run_budget_internal(text,text,text,integer)')"
+              CATALOG_GUARD="${CATALOG_GUARD} do \$overload_guard\$ begin if (select count(*) from pg_proc routine join pg_namespace space on space.oid=routine.pronamespace where space.nspname='public' and routine.proname in ('claim_planned_graph_internal','claim_phase1c_run_budget_internal'))<>2 then raise exception 'selector-normalization base selector overload count drifted'; end if; end \$overload_guard\$;"
+              CATALOG_GUARD="${CATALOG_GUARD} do \$breaker_acl_guard\$ declare breaker_relation oid := to_regclass('public.resource_breakers'); begin if breaker_relation is null or exists (select 1 from pg_attribute attribute where attribute.attrelid=breaker_relation and attribute.attnum>0 and not attribute.attisdropped and attribute.attacl is not null) or exists (with relation_row as (select relation.relowner,relation.relacl from pg_class relation where relation.oid=breaker_relation), actual as (select acl.* from relation_row cross join lateral aclexplode(relation_row.relacl) acl), owner_expected as (select acl.privilege_type from relation_row cross join lateral aclexplode(acldefault('r',relation_row.relowner)) acl), authenticated_expected(privilege_type) as (values ('SELECT')) select 1 from relation_row where relation_row.relacl is null or exists (select 1 from actual where actual.grantor<>relation_row.relowner or actual.is_grantable or actual.grantee not in (relation_row.relowner,to_regrole('authenticated')::oid,to_regrole('service_role')::oid)) or exists ((select privilege_type from actual where grantee=relation_row.relowner) except select privilege_type from owner_expected) or exists ((select privilege_type from owner_expected) except select privilege_type from actual where grantee=relation_row.relowner) or exists ((select privilege_type from actual where grantee=to_regrole('authenticated')::oid) except select privilege_type from authenticated_expected) or exists ((select privilege_type from authenticated_expected) except select privilege_type from actual where grantee=to_regrole('authenticated')::oid) or exists ((select privilege_type from actual where grantee=to_regrole('service_role')::oid) except select privilege_type from owner_expected) or exists ((select privilege_type from owner_expected) except select privilege_type from actual where grantee=to_regrole('service_role')::oid)) then raise exception 'selector-normalization hosted breaker ACL drifted'; end if; end \$breaker_acl_guard\$;"
+              ;;
+            configure-url)
+              FILE=$MIGRATION_00100; EXPECTED=$MIGRATION_00100_SHA256; VERSION=20260828000100
+              E050=1; E100=0; E200=0; E300=0
+              CATALOG_GUARD="do \$guard\$ begin if exists (select 1 from pg_proc routine join pg_namespace space on space.oid=routine.pronamespace where space.nspname='public' and routine.proname in ('project_production_url_is_safe','set_project_production_url')) or exists (select 1 from pg_constraint where conname='projects_production_url_public_https' and conrelid='public.projects'::regclass) then raise exception 'configure-url catalog is not pristine'; end if; end \$guard\$;"
+              LINT_SIGNATURES="('public.project_production_url_is_safe(text)'),('public.set_project_production_url(uuid,uuid,text)')"
+              ;;
+            target-claims)
+              FILE=$MIGRATION_00200; EXPECTED=$MIGRATION_00200_SHA256; VERSION=20260828000200
+              E050=1; E100=1; E200=0; E300=0
+              CATALOG_GUARD="do \$guard\$ begin if exists (select 1 from pg_proc routine join pg_namespace space on space.oid=routine.pronamespace where space.nspname='public' and routine.proname in ('assert_phase1c_claim_target','claim_planned_graph_target_internal','claim_phase1c_run_target_budget_internal','claim_phase1c_run_target_internal','claim_planned_graph_by_id_v2','claim_phase1c_run_by_command_v2')) or (select count(*) from pg_proc routine join pg_namespace space on space.oid=routine.pronamespace where space.nspname='public' and routine.proname in ('claim_planned_graph_internal','claim_phase1c_run_budget_internal'))<>2 or to_regprocedure('public.claim_planned_graph_internal(text,text[],text,jsonb,uuid)') is not null or to_regprocedure('public.claim_phase1c_run_budget_internal(text,text,text,integer,uuid)') is not null or to_regprocedure('public.claim_phase1c_run_internal(text,text,text,integer,uuid)') is not null then raise exception 'target-claims catalog is not pristine'; end if; if not exists (select 1 from pg_proc routine where routine.oid=to_regprocedure('public.claim_planned_graph_internal(text,text[],text,jsonb)') and pg_get_userbyid(routine.proowner)='postgres' and routine.prosecdef and routine.proconfig=array['search_path=pg_catalog']::text[] and md5(replace(replace(routine.prosrc,E'\\r\\n',E'\\n'),E'\\r',E'\\n'))='fdd3eee3e61c083789ffeb4808ed0a47' and routine.proacl is not null and (select count(*) from aclexplode(routine.proacl))=1 and not exists (select 1 from aclexplode(routine.proacl) acl where acl.grantor<>routine.proowner or acl.grantee<>routine.proowner or acl.privilege_type<>'EXECUTE' or acl.is_grantable) and not has_function_privilege('anon',routine.oid,'EXECUTE') and not has_function_privilege('authenticated',routine.oid,'EXECUTE') and not has_function_privilege('service_role',routine.oid,'EXECUTE')) or not exists (select 1 from pg_proc routine where routine.oid=to_regprocedure('public.claim_phase1c_run_budget_internal(text,text,text,integer)') and pg_get_userbyid(routine.proowner)='postgres' and routine.prosecdef and routine.proconfig=array['search_path=pg_catalog']::text[] and md5(replace(replace(routine.prosrc,E'\\r\\n',E'\\n'),E'\\r',E'\\n'))='5933952d71f9da90a2a80a05ce6e0378' and routine.proacl is not null and (select count(*) from aclexplode(routine.proacl))=1 and not exists (select 1 from aclexplode(routine.proacl) acl where acl.grantor<>routine.proowner or acl.grantee<>routine.proowner or acl.privilege_type<>'EXECUTE' or acl.is_grantable) and not has_function_privilege('anon',routine.oid,'EXECUTE') and not has_function_privilege('authenticated',routine.oid,'EXECUTE') and not has_function_privilege('service_role',routine.oid,'EXECUTE')) then raise exception 'target-claims prerequisite selector catalog drifted'; end if; end \$guard\$;"
+              LINT_SIGNATURES="('public.assert_phase1c_claim_target(uuid,uuid)'),('public.claim_planned_graph_target_internal(text,text[],text,jsonb,uuid)'),('public.claim_planned_graph_internal(text,text[],text,jsonb)'),('public.claim_phase1c_run_target_budget_internal(text,text,text,integer,uuid)'),('public.claim_phase1c_run_budget_internal(text,text,text,integer)'),('public.claim_phase1c_run_target_internal(text,text,text,integer,uuid)'),('public.claim_planned_graph_by_id_v2(text,text[],text,jsonb,uuid,integer)'),('public.claim_phase1c_run_by_command_v2(text,text,text,integer,uuid,integer)')"
+              ;;
+            postdeploy)
+              FILE=$MIGRATION_00300; EXPECTED=$MIGRATION_00300_SHA256; VERSION=20260828000300
+              E050=1; E100=1; E200=1; E300=0
+              CATALOG_GUARD="do \$guard\$ begin if exists (select 1 from pg_proc routine join pg_namespace space on space.oid=routine.pronamespace where space.nspname='public' and routine.proname='complete_graph_run_with_validated_release_as_worker') then raise exception 'postdeploy catalog is not pristine'; end if; if (select count(*) from pg_proc routine join pg_namespace space on space.oid=routine.pronamespace where space.nspname='public' and routine.proname='create_graph_from_plan_with_release_identity_as_server')<>1 then raise exception 'postdeploy prerequisite launch overload catalog drifted'; end if; if not exists (select 1 from pg_proc routine where routine.oid=to_regprocedure('public.create_graph_from_plan_with_release_identity_as_server(uuid,uuid,uuid,text,public.graph_topology,jsonb,public.risk_level,boolean,jsonb,jsonb,jsonb,text,integer,uuid,text,text,jsonb)') and pg_get_userbyid(routine.proowner)='postgres' and routine.prosecdef and routine.proconfig=array['search_path=pg_catalog']::text[] and md5(replace(replace(routine.prosrc,E'\\r\\n',E'\\n'),E'\\r',E'\\n'))='d6e614af6d985a9b6a9adaddc1c1d3ba' and routine.proacl is not null and (select count(*) from aclexplode(routine.proacl))=2 and not exists (select 1 from aclexplode(routine.proacl) acl where acl.grantor<>routine.proowner or acl.privilege_type<>'EXECUTE' or acl.is_grantable or acl.grantee not in (routine.proowner,to_regrole('service_role')::oid)) and has_function_privilege('service_role',routine.oid,'EXECUTE') and not has_function_privilege('authenticated',routine.oid,'EXECUTE') and not has_function_privilege('anon',routine.oid,'EXECUTE')) then raise exception 'postdeploy prerequisite launch catalog drifted'; end if; end \$guard\$;"
+              LINT_SIGNATURES="('public.create_graph_from_plan_with_release_identity_as_server(uuid,uuid,uuid,text,public.graph_topology,jsonb,public.risk_level,boolean,jsonb,jsonb,jsonb,text,integer,uuid,text,text,jsonb)'),('public.complete_graph_run_with_validated_release_as_worker(text,uuid,public.graph_run_state,boolean,bigint,bigint,text,text)')"
+              ;;
+          esac
+          STAGE_DIR=$(mktemp -d)
+          trap 'rm -rf -- "$STAGE_DIR"' EXIT
+          STAGED_FILE="$STAGE_DIR/$(basename "$FILE")"
+          cp -- "$FILE" "$STAGED_FILE"
+          if [ "$(sha256sum "$STAGED_FILE" | cut -d' ' -f1)" != "$EXPECTED" ] \
+            || [ "$(find "$STAGE_DIR" -maxdepth 1 -type f | wc -l | tr -d ' ')" != "1" ]; then
+            echo "::error::Exact one-file staging failed."
+            exit 1
+          fi
+
+          EXTENSION_BASELINE=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atq -F '|' -c "
+            select
+              count(*) filter (where extension_row.oid is not null),
+              count(*) filter (where routine.oid is not null)
+            from (values (1)) seed(value)
+            left join pg_extension extension_row on extension_row.extname='plpgsql_check'
+            left join pg_proc routine on routine.proname like 'plpgsql_check_function%';")
+          if [ "$EXTENSION_BASELINE" != "0|0" ]; then
+            echo "::error::plpgsql_check residue existed before the release rehearsal."
+            exit 1
+          fi
+
+          LINT_FINDINGS=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atq \
+            -c "begin; set local statement_timeout='10min';" \
+            -c "$CATALOG_GUARD" \
+            -f "$STAGED_FILE" \
+            -c "create extension if not exists plpgsql_check with schema extensions;" \
+            -c "with expected(signature) as (values ${LINT_SIGNATURES})
+                select 'LINTROW|' || expected.signature || '|' ||
+                       coalesce(finding.lineno::text,'') || '|' ||
+                       coalesce(finding.level,'') || '|' ||
+                       coalesce(finding.sqlstate,'') || '|' ||
+                       coalesce(finding.message,'')
+                from expected
+                cross join lateral extensions.plpgsql_check_function_tb(
+                  expected.signature::regprocedure, 0::regclass,
+                  false, true, true, false, false, false
+                ) finding
+                where finding.level in ('error','warning','extra')
+                order by expected.signature, finding.lineno, finding.position;" \
+            -c "rollback;")
+          if printf '%s\n' "$LINT_FINDINGS" | grep -q '^LINTROW|'; then
+            echo "::error::Transactional linked-database lint found release-function findings."
+            printf '%s\n' "$LINT_FINDINGS" | grep '^LINTROW|'
+            exit 1
+          fi
+          EXTENSION_RESIDUE=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atq -F '|' -c "
+            select
+              count(*) filter (where extension_row.oid is not null),
+              count(*) filter (where routine.oid is not null)
+            from (values (1)) seed(value)
+            left join pg_extension extension_row on extension_row.extname='plpgsql_check'
+            left join pg_proc routine on routine.proname like 'plpgsql_check_function%';")
+          if [ "$EXTENSION_RESIDUE" != "0|0" ]; then
+            echo "::error::Transactional linked-database lint left extension residue."
+            exit 1
+          fi
+
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -X --single-transaction -q \
+            -c "set local lock_timeout='15s';
+                set local statement_timeout='10min';
+                lock table supabase_migrations.schema_migrations in share row exclusive mode;
+                lock table public.organizations, public.projects, public.phase1c_workers,
+                  public.graph_runs, public.agent_runs in share mode;
+                do \$locked\$
+                begin
+                  if (select count(*) from supabase_migrations.schema_migrations where version='20260827000200') <> 1
+                    or (select count(*) from supabase_migrations.schema_migrations where version='20260827000210') <> 1
+                    or (select count(*) from supabase_migrations.schema_migrations where version='20260828000050') <> ${E050}
+                    or (select count(*) from supabase_migrations.schema_migrations where version='20260828000100') <> ${E100}
+                    or (select count(*) from supabase_migrations.schema_migrations where version='20260828000200') <> ${E200}
+                    or (select count(*) from supabase_migrations.schema_migrations where version='20260828000300') <> ${E300}
+                  then raise exception 'locked release ledger changed'; end if;
+                  if exists (select 1 from public.organizations where coalesce(autonomous_mode,false)
+                      or autonomy_kill_switch_active is distinct from true
+                      or coalesce(auto_plan,false) or coalesce(auto_code,false) or coalesce(auto_test,false)
+                      or coalesce(auto_repair,false) or coalesce(auto_review,false) or coalesce(auto_approve,false)
+                      or coalesce(auto_merge,false) or coalesce(auto_deploy,false) or coalesce(auto_rollback,false))
+                    or exists (select 1 from public.projects where coalesce(autonomous_mode,false)
+                      or coalesce(auto_plan,false) or coalesce(auto_code,false) or coalesce(auto_test,false)
+                      or coalesce(auto_repair,false) or coalesce(auto_review,false) or coalesce(auto_approve,false)
+                      or coalesce(auto_merge,false) or coalesce(auto_deploy,false) or coalesce(auto_rollback,false))
+                    or exists (select 1 from public.phase1c_workers
+                      where last_heartbeat_at > now()-interval '10 minutes')
+                    or exists (select 1 from public.phase1c_workers
+                      where last_heartbeat_at > now()+interval '1 minute')
+                    or exists (select 1 from public.phase1c_workers where current_run_id is not null)
+                    or exists (select 1 from public.graph_runs where state='RUNNING'::public.graph_run_state)
+                    or exists (select 1 from public.agent_runs where status='running'::public.run_status)
+                  then raise exception 'locked release safety state changed'; end if;
+                end
+                \$locked\$;" \
+            -c "$CATALOG_GUARD" \
+            -f "$STAGED_FILE" \
+            -c "insert into supabase_migrations.schema_migrations(version) values ('${VERSION}');"
+
+      - name: Reload the PostgREST schema cache
+        if: ${{ inputs.scope == 'selector-normalization' || inputs.scope == 'configure-url' || inputs.scope == 'target-claims' || inputs.scope == 'postdeploy' }}
+        run: psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q -c "NOTIFY pgrst, 'reload schema';"
+
+      - name: Verify ledger catalog ACL runtime and stopped safety
+        env:
+          SCOPE: ${{ inputs.scope }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          PHASE1C_WORKER_ENABLED: ${{ vars.SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED }}
+          GRAPH_WORKER_ENABLED: ${{ vars.SOFTWAREFACTORY_GRAPH_WORKER_ENABLED }}
+          GRAPH_WORKER_SCHEDULED: ${{ vars.SOFTWAREFACTORY_GRAPH_WORKER_SCHEDULED }}
+          AUTH_BROKER_DISABLED: ${{ vars.SOFTWAREFACTORY_AUTH_BROKER_DISABLED }}
+        run: |
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q <<'SQL'
+          do $release_postflight$
+          declare
+            c050 integer;
+            c100 integer;
+            c200 integer;
+            c300 integer;
+            expected_phase_selector_hash text;
+            routine oid;
+            launch_source text;
+            runtime_message text;
+            breaker_relation oid := to_regclass('public.resource_breakers');
+          begin
+            select count(*) into c050 from supabase_migrations.schema_migrations where version='20260828000050';
+            select count(*) into c100 from supabase_migrations.schema_migrations where version='20260828000100';
+            select count(*) into c200 from supabase_migrations.schema_migrations where version='20260828000200';
+            select count(*) into c300 from supabase_migrations.schema_migrations where version='20260828000300';
+            if c050 not in (0,1) or c100 not in (0,1)
+              or c200 not in (0,1) or c300 not in (0,1)
+              or c100 > c050 or c200 > c100 or c300 > c200 then
+              raise exception 'release ledger is duplicated or out of order';
+            end if;
+            expected_phase_selector_hash := case
+              when c050 = 0 then 'ed5840b9d8d0efdb513a8576df128e9b'
+              else '5933952d71f9da90a2a80a05ce6e0378'
+            end;
+
+            if c100 = 0 and (
+              exists (select 1 from pg_proc routine
+                join pg_namespace space on space.oid=routine.pronamespace
+                where space.nspname='public'
+                  and routine.proname in ('project_production_url_is_safe','set_project_production_url'))
+              or exists (select 1 from pg_constraint where conrelid='public.projects'::regclass
+                and conname='projects_production_url_public_https')
+            ) then raise exception 'unledgered production URL catalog exists'; end if;
+
+            if c200 = 0 then
+              if exists (select 1 from pg_proc routine
+                    join pg_namespace space on space.oid=routine.pronamespace
+                    where space.nspname='public' and routine.proname in (
+                      'assert_phase1c_claim_target','claim_planned_graph_target_internal',
+                      'claim_phase1c_run_target_budget_internal','claim_phase1c_run_target_internal',
+                      'claim_planned_graph_by_id_v2','claim_phase1c_run_by_command_v2'))
+                or (select count(*) from pg_proc routine
+                      join pg_namespace space on space.oid=routine.pronamespace
+                      where space.nspname='public'
+                        and routine.proname in ('claim_planned_graph_internal','claim_phase1c_run_budget_internal'))<>2
+                or to_regprocedure('public.claim_planned_graph_internal(text,text[],text,jsonb,uuid)') is not null
+                or to_regprocedure('public.claim_phase1c_run_budget_internal(text,text,text,integer,uuid)') is not null
+                or to_regprocedure('public.claim_phase1c_run_internal(text,text,text,integer,uuid)') is not null
+              then raise exception 'unledgered or retired target-claim catalog exists'; end if;
+              if not exists (select 1 from pg_proc routine
+                    where routine.oid=to_regprocedure('public.claim_planned_graph_internal(text,text[],text,jsonb)')
+                      and pg_get_userbyid(routine.proowner)='postgres' and routine.prosecdef
+                      and routine.proconfig=array['search_path=pg_catalog']::text[]
+                      and md5(replace(replace(routine.prosrc,E'\r\n',E'\n'),E'\r',E'\n'))='fdd3eee3e61c083789ffeb4808ed0a47'
+                      and routine.proacl is not null
+                      and (select count(*) from aclexplode(routine.proacl))=1
+                      and not exists (select 1 from aclexplode(routine.proacl) acl
+                        where acl.grantor<>routine.proowner or acl.grantee<>routine.proowner
+                          or acl.privilege_type<>'EXECUTE' or acl.is_grantable)
+                      and not has_function_privilege('anon',routine.oid,'EXECUTE')
+                      and not has_function_privilege('authenticated',routine.oid,'EXECUTE')
+                      and not has_function_privilege('service_role',routine.oid,'EXECUTE'))
+                or not exists (select 1 from pg_proc routine
+                    where routine.oid=to_regprocedure('public.claim_phase1c_run_budget_internal(text,text,text,integer)')
+                      and pg_get_userbyid(routine.proowner)='postgres' and routine.prosecdef
+                      and routine.proconfig=array['search_path=pg_catalog']::text[]
+                      and md5(replace(replace(routine.prosrc,E'\r\n',E'\n'),E'\r',E'\n'))=expected_phase_selector_hash
+                      and routine.proacl is not null
+                      and (select count(*) from aclexplode(routine.proacl))=1
+                      and not exists (select 1 from aclexplode(routine.proacl) acl
+                        where acl.grantor<>routine.proowner or acl.grantee<>routine.proowner
+                          or acl.privilege_type<>'EXECUTE' or acl.is_grantable)
+                      and not has_function_privilege('anon',routine.oid,'EXECUTE')
+                      and not has_function_privilege('authenticated',routine.oid,'EXECUTE')
+                      and not has_function_privilege('service_role',routine.oid,'EXECUTE'))
+              then raise exception 'pre-target selector catalog drifted'; end if;
+            end if;
+
+            if exists (
+              with expected(signature, source_md5, volatility, result_type) as (values
+                ('public.breaker_cooldown_seconds(text)',
+                  '9b46c6e078158e2f2ac1be0126e47e65', 'i', 'integer'),
+                ('public.breaker_suppression_reason(uuid,text,text,timestamptz)',
+                  'ce7c51ad47992174634c960b8a8faaaf', 's', 'text'),
+                ('public.consume_breaker_trial(uuid,text,text)',
+                  '41323ace6fed5d3e5ebc512464bd358d', 'v', 'void')
+              )
+              select 1
+              from expected
+              left join pg_proc helper on helper.oid=to_regprocedure(expected.signature)
+              left join pg_language language on language.oid=helper.prolang
+              where helper.oid is null
+                or language.lanname<>'sql'
+                or helper.prokind<>'f'
+                or helper.provolatile<>expected.volatility::"char"
+                or helper.proparallel<>'u'
+                or helper.proisstrict
+                or helper.proleakproof
+                or helper.proretset
+                or helper.pronargdefaults<>0
+                or helper.prorettype<>to_regtype(expected.result_type)
+                or helper.prosecdef
+                or helper.proconfig<>array['search_path=pg_catalog']::text[]
+                or pg_get_userbyid(helper.proowner)<>'postgres'
+                or md5(replace(replace(helper.prosrc,E'\r\n',E'\n'),E'\r',E'\n'))<>expected.source_md5
+                or helper.proacl is null
+                or (select count(*) from aclexplode(helper.proacl))<>1
+                or exists (select 1 from aclexplode(helper.proacl) acl
+                  where acl.grantor<>helper.proowner or acl.grantee<>helper.proowner
+                    or acl.privilege_type<>'EXECUTE' or acl.is_grantable)
+                or has_function_privilege('anon',helper.oid,'EXECUTE')
+                or has_function_privilege('authenticated',helper.oid,'EXECUTE')
+                or has_function_privilege('service_role',helper.oid,'EXECUTE')
+            ) then raise exception 'breaker-aware selector helper catalog drifted'; end if;
+
+            if breaker_relation is null
+              or not exists (
+                select 1 from pg_catalog.pg_class relation
+                where relation.oid = breaker_relation
+                  and relation.relkind = 'r'
+                  and relation.relrowsecurity
+                  and relation.relforcerowsecurity
+                  and pg_catalog.pg_get_userbyid(relation.relowner) = 'postgres'
+              )
+              or exists (
+                with expected(column_name, column_type, is_not_null, default_md5) as (values
+                  ('id', 'uuid', true, 'f3b72bb359a50b640590970a2ab8e514'),
+                  ('organization_id', 'uuid', true, 'd41d8cd98f00b204e9800998ecf8427e'),
+                  ('target', 'text', true, 'd41d8cd98f00b204e9800998ecf8427e'),
+                  ('state', 'text', true, '032cd0831e00bde5d89d95eeb9528422'),
+                  ('fault', 'text', false, 'd41d8cd98f00b204e9800998ecf8427e'),
+                  ('consecutive_faults', 'integer', true, 'cfcd208495d565ef66e7dff9f98764da'),
+                  ('opened_at', 'timestamp with time zone', false, 'd41d8cd98f00b204e9800998ecf8427e'),
+                  ('reason', 'text', false, 'd41d8cd98f00b204e9800998ecf8427e'),
+                  ('updated_at', 'timestamp with time zone', true, '75230039beb12ce952f24927f2bfa2f2')
+                )
+                select 1
+                from expected
+                left join pg_catalog.pg_attribute attribute
+                  on attribute.attrelid = breaker_relation
+                 and attribute.attname = expected.column_name
+                 and attribute.attnum > 0
+                 and not attribute.attisdropped
+                left join pg_catalog.pg_attrdef default_row
+                  on default_row.adrelid = attribute.attrelid
+                 and default_row.adnum = attribute.attnum
+                where attribute.attnum is null
+                  or pg_catalog.format_type(attribute.atttypid, attribute.atttypmod) <> expected.column_type
+                  or attribute.attnotnull is distinct from expected.is_not_null
+                  or attribute.attidentity <> ''
+                  or attribute.attgenerated <> ''
+                  or pg_catalog.md5(coalesce(
+                    pg_catalog.pg_get_expr(default_row.adbin, default_row.adrelid), ''
+                  )) <> expected.default_md5
+              )
+              or (
+                select pg_catalog.count(*)
+                from pg_catalog.pg_attribute attribute
+                where attribute.attrelid = breaker_relation
+                  and attribute.attnum > 0
+                  and not attribute.attisdropped
+              ) <> 9
+              or exists (
+                select 1 from pg_catalog.pg_attribute attribute
+                where attribute.attrelid = breaker_relation
+                  and attribute.attnum > 0
+                  and not attribute.attisdropped
+                  and attribute.attacl is not null
+              )
+              or not exists (
+                select 1 from pg_catalog.pg_class relation
+                where relation.oid = breaker_relation and relation.relacl is not null
+              )
+              or exists (
+                with relation_row as (
+                  select relation.relowner, relation.relacl
+                  from pg_catalog.pg_class relation
+                  where relation.oid = breaker_relation
+                ), actual as (
+                  select acl.*
+                  from relation_row
+                  cross join lateral pg_catalog.aclexplode(relation_row.relacl) acl
+                ), owner_expected as (
+                  select acl.privilege_type
+                  from relation_row
+                  cross join lateral pg_catalog.aclexplode(
+                    pg_catalog.acldefault('r', relation_row.relowner)
+                  ) acl
+                ), authenticated_expected(privilege_type) as (values ('SELECT'))
+                select 1
+                from relation_row
+                where exists (
+                  select 1 from actual
+                  where actual.grantor <> relation_row.relowner
+                    or actual.is_grantable
+                    or actual.grantee not in (
+                      relation_row.relowner,
+                      pg_catalog.to_regrole('authenticated')::oid,
+                      pg_catalog.to_regrole('service_role')::oid
+                    )
+                )
+                or exists (
+                  (select actual.privilege_type from actual
+                    where actual.grantee = relation_row.relowner)
+                  except select owner_expected.privilege_type from owner_expected
+                )
+                or exists (
+                  (select owner_expected.privilege_type from owner_expected)
+                  except select actual.privilege_type from actual
+                    where actual.grantee = relation_row.relowner
+                )
+                or exists (
+                  (select actual.privilege_type from actual
+                    where actual.grantee = pg_catalog.to_regrole('authenticated')::oid)
+                  except select authenticated_expected.privilege_type
+                    from authenticated_expected
+                )
+                or exists (
+                  (select authenticated_expected.privilege_type from authenticated_expected)
+                  except select actual.privilege_type from actual
+                    where actual.grantee = pg_catalog.to_regrole('authenticated')::oid
+                )
+                or exists (
+                  (select actual.privilege_type from actual
+                    where actual.grantee = pg_catalog.to_regrole('service_role')::oid)
+                  except select owner_expected.privilege_type from owner_expected
+                )
+                or exists (
+                  (select owner_expected.privilege_type from owner_expected)
+                  except select actual.privilege_type from actual
+                    where actual.grantee = pg_catalog.to_regrole('service_role')::oid
+                )
+              )
+              or exists (
+                with expected(constraint_name, constraint_type, definition_md5) as (values
+                  ('resource_breakers_closed_is_clean', 'c', '04012ad5d4aa2f1b2ad25b2451e653f0'),
+                  ('resource_breakers_consecutive_faults_check', 'c', 'c2fffa885f6f01170d2209708856b0e5'),
+                  ('resource_breakers_fault_check', 'c', '7ef8577e9c0f9f106b3bd472842c6b7d'),
+                  ('resource_breakers_open_is_explained', 'c', '05304b586d0396bce917f1936a987cc3'),
+                  ('resource_breakers_organization_id_fkey', 'f', '3c702b28ccc97a0ac52c0acefcdea477'),
+                  ('resource_breakers_pkey', 'p', '4c6419b3704337bbfe50f018842a9ad3'),
+                  ('resource_breakers_reason_check', 'c', 'a16938033d9fedba1bfb6f1fb3f9a695'),
+                  ('resource_breakers_state_check', 'c', '211da65e82943c44beb39b317af7c000'),
+                  ('resource_breakers_target_check', 'c', '3f2b58d9d0290fe4b4398322f617a246'),
+                  ('resource_breakers_target_unique', 'u', 'ac9e3f03dd3d27504b3cadcc477aa415')
+                )
+                select 1
+                from expected
+                left join pg_catalog.pg_constraint constraint_row
+                  on constraint_row.conrelid = breaker_relation
+                 and constraint_row.conname = expected.constraint_name
+                where constraint_row.oid is null
+                  or constraint_row.contype <> expected.constraint_type::"char"
+                  or not constraint_row.convalidated
+                  or pg_catalog.md5(pg_catalog.pg_get_constraintdef(
+                    constraint_row.oid, true
+                  )) <> expected.definition_md5
+              )
+              or (
+                select pg_catalog.count(*) from pg_catalog.pg_constraint constraint_row
+                where constraint_row.conrelid = breaker_relation
+                  and constraint_row.contype <> 'n'
+              ) <> 10
+              or exists (
+                with expected(index_name, definition_md5) as (values
+                  ('resource_breakers_open', '415d827b30b8846fb40447bd1d968b3e'),
+                  ('resource_breakers_pkey', 'aec60ef53c6e6e9f763eb3598f3f89c0'),
+                  ('resource_breakers_target_unique', '0591eee739b49876d13d08b49e55e67f')
+                )
+                select 1
+                from expected
+                left join pg_catalog.pg_class index_relation
+                  on index_relation.relname = expected.index_name
+                 and index_relation.relnamespace = 'public'::pg_catalog.regnamespace
+                left join pg_catalog.pg_index index_row
+                  on index_row.indexrelid = index_relation.oid
+                 and index_row.indrelid = breaker_relation
+                where index_row.indexrelid is null
+                  or not index_row.indisvalid
+                  or not index_row.indisready
+                  or not index_row.indislive
+                  or pg_catalog.md5(pg_catalog.pg_get_indexdef(index_row.indexrelid))
+                    <> expected.definition_md5
+              )
+              or (
+                select pg_catalog.count(*) from pg_catalog.pg_index index_row
+                where index_row.indrelid = breaker_relation
+              ) <> 3
+              or (
+                select pg_catalog.count(*) from pg_catalog.pg_policy policy
+                where policy.polrelid = breaker_relation
+              ) <> 1
+              or not exists (
+                select 1 from pg_catalog.pg_policy policy
+                where policy.polrelid = breaker_relation
+                  and policy.polname = 'resource_breakers_select_members'
+                  and policy.polcmd = 'r'
+                  and policy.polpermissive
+                  and policy.polroles = array[
+                    pg_catalog.to_regrole('authenticated')::oid
+                  ]
+                  and policy.polwithcheck is null
+                  and pg_catalog.md5(pg_catalog.pg_get_expr(
+                    policy.polqual, policy.polrelid
+                  )) = '2eea03a91826969e8abc25f7f80097f6'
+              )
+            then raise exception 'release resource_breakers catalog or ACL drifted'; end if;
+
+            if c300 = 0 then
+              if exists (select 1 from pg_proc routine
+                join pg_namespace space on space.oid=routine.pronamespace
+                where space.nspname='public'
+                  and routine.proname='complete_graph_run_with_validated_release_as_worker')
+              then raise exception 'unledgered validated completion catalog exists'; end if;
+              if (select count(*) from pg_proc routine join pg_namespace space on space.oid=routine.pronamespace
+                    where space.nspname='public'
+                      and routine.proname='create_graph_from_plan_with_release_identity_as_server')<>1
+                or not exists (select 1 from pg_proc routine
+                where routine.oid=to_regprocedure('public.create_graph_from_plan_with_release_identity_as_server(uuid,uuid,uuid,text,public.graph_topology,jsonb,public.risk_level,boolean,jsonb,jsonb,jsonb,text,integer,uuid,text,text,jsonb)')
+                  and pg_get_userbyid(routine.proowner)='postgres' and routine.prosecdef
+                  and routine.proconfig=array['search_path=pg_catalog']::text[]
+                  and md5(replace(replace(routine.prosrc,E'\r\n',E'\n'),E'\r',E'\n'))='d6e614af6d985a9b6a9adaddc1c1d3ba'
+                  and routine.proacl is not null
+                  and (select count(*) from aclexplode(routine.proacl))=2
+                  and not exists (select 1 from aclexplode(routine.proacl) acl
+                    where acl.grantor<>routine.proowner or acl.privilege_type<>'EXECUTE'
+                      or acl.is_grantable
+                      or acl.grantee not in (routine.proowner,to_regrole('service_role')::oid))
+                  and has_function_privilege('service_role',routine.oid,'EXECUTE')
+                  and not has_function_privilege('authenticated',routine.oid,'EXECUTE')
+                  and not has_function_privilege('anon',routine.oid,'EXECUTE'))
+              then raise exception 'pre-postdeploy launch catalog drifted'; end if;
+            end if;
+
+            if exists (select 1 from public.organizations where coalesce(autonomous_mode,false)
+                or autonomy_kill_switch_active is distinct from true
+                or coalesce(auto_plan,false) or coalesce(auto_code,false) or coalesce(auto_test,false)
+                or coalesce(auto_repair,false) or coalesce(auto_review,false) or coalesce(auto_approve,false)
+                or coalesce(auto_merge,false) or coalesce(auto_deploy,false) or coalesce(auto_rollback,false))
+              or exists (select 1 from public.projects where coalesce(autonomous_mode,false)
+                or coalesce(auto_plan,false) or coalesce(auto_code,false) or coalesce(auto_test,false)
+                or coalesce(auto_repair,false) or coalesce(auto_review,false) or coalesce(auto_approve,false)
+                or coalesce(auto_merge,false) or coalesce(auto_deploy,false) or coalesce(auto_rollback,false))
+              or exists (select 1 from public.phase1c_workers
+                where last_heartbeat_at > now()-interval '10 minutes')
+              or exists (select 1 from public.phase1c_workers
+                where last_heartbeat_at > now()+interval '1 minute')
+              or exists (select 1 from public.phase1c_workers where current_run_id is not null)
+              or exists (select 1 from public.graph_runs where state='RUNNING'::public.graph_run_state)
+              or exists (select 1 from public.agent_runs where status='running'::public.run_status)
+            then raise exception 'postflight stopped-safety state is not exact'; end if;
+
+            if c100 = 1 then
+              if not exists (select 1 from pg_class where oid='public.projects'::regclass and relrowsecurity and relforcerowsecurity)
+                or (select count(*) from pg_proc routine join pg_namespace space on space.oid=routine.pronamespace
+                      where space.nspname='public'
+                        and routine.proname in ('project_production_url_is_safe','set_project_production_url'))<>2
+                or not exists (select 1 from pg_constraint where conrelid='public.projects'::regclass
+                  and conname='projects_production_url_public_https' and convalidated
+                  and position('project_production_url_is_safe' in pg_get_constraintdef(oid)) > 0)
+                or not exists (select 1 from pg_trigger where tgrelid='public.projects'::regclass
+                  and tgname='projects_audit_change' and not tgisinternal and tgenabled='O'
+                  and tgfoid='public.audit_project_change()'::regprocedure and tgtype=21
+                  and tgnargs=0 and tgconstraint=0 and tgparentid=0 and tgqual is null
+                  and not tgdeferrable and not tginitdeferred)
+                or public.project_production_url_is_safe('https://www.theagoras.com') is distinct from true
+                or public.project_production_url_is_safe('http://www.theagoras.com') is distinct from false
+                or public.project_production_url_is_safe('https://user@example.com') is distinct from false
+                or public.project_production_url_is_safe('https://127.0.0.1') is distinct from false
+                or public.project_production_url_is_safe('https://www.theagoras.com/?secret=x') is distinct from false
+              then raise exception 'production URL catalog or runtime postflight failed'; end if;
+              routine := to_regprocedure('public.set_project_production_url(uuid,uuid,text)');
+              if routine is null
+                or not exists (select 1 from pg_proc where oid=routine and prosecdef
+                  and proconfig=array['search_path=pg_catalog']::text[] and pg_get_userbyid(proowner)='postgres'
+                  and md5(replace(replace(prosrc,E'\r\n',E'\n'),E'\r',E'\n'))='fc4caa46ffd956e981376579cc22eabe'
+                  and proacl is not null and (select count(*) from aclexplode(proacl))=2
+                  and not exists (select 1 from aclexplode(proacl) acl
+                    where acl.grantor<>proowner or acl.privilege_type<>'EXECUTE' or acl.is_grantable
+                      or acl.grantee not in (proowner,to_regrole('authenticated')::oid)))
+                or has_function_privilege('authenticated',routine,'EXECUTE') is distinct from true
+                or has_function_privilege('anon',routine,'EXECUTE') is distinct from false
+                or has_function_privilege('service_role',routine,'EXECUTE') is distinct from false
+              then raise exception 'production URL writer ACL/security postflight failed'; end if;
+              routine := to_regprocedure('public.project_production_url_is_safe(text)');
+              if routine is null
+                or not exists (select 1 from pg_proc where oid=routine and not prosecdef
+                  and provolatile='i' and proconfig=array['search_path=pg_catalog']::text[]
+                  and pg_get_userbyid(proowner)='postgres'
+                  and md5(replace(replace(prosrc,E'\r\n',E'\n'),E'\r',E'\n'))='8ce3a8b74159b3dd16c710a1e07b5191'
+                  and proacl is not null and (select count(*) from aclexplode(proacl))=1
+                  and not exists (select 1 from aclexplode(proacl) acl
+                    where acl.grantor<>proowner or acl.grantee<>proowner
+                      or acl.privilege_type<>'EXECUTE' or acl.is_grantable))
+                or has_function_privilege('authenticated',routine,'EXECUTE') is distinct from false
+                or has_function_privilege('anon',routine,'EXECUTE') is distinct from false
+                or has_function_privilege('service_role',routine,'EXECUTE') is distinct from false
+                or to_regprocedure('public.update_project_details(uuid,text,text)') is null
+              then raise exception 'production URL predicate catalog postflight failed'; end if;
+
+              if not exists (select 1 from pg_class relation
+                    where relation.oid='public.activity_events'::regclass
+                      and relation.relrowsecurity and relation.relforcerowsecurity
+                      and pg_get_userbyid(relation.relowner)='postgres'
+                      and not has_table_privilege('anon',relation.oid,'UPDATE,DELETE,TRUNCATE')
+                      and not has_table_privilege('authenticated',relation.oid,'UPDATE,DELETE,TRUNCATE')
+                      and not has_table_privilege('service_role',relation.oid,'UPDATE,DELETE,TRUNCATE'))
+                or not exists (select 1 from pg_proc guard
+                    join pg_language language on language.oid=guard.prolang
+                    where guard.oid='public.reject_activity_event_mutation()'::regprocedure
+                      and language.lanname='plpgsql' and guard.prokind='f'
+                      and guard.provolatile='v' and not guard.prosecdef
+                      and guard.prorettype='trigger'::regtype
+                      and guard.proconfig=array['search_path=pg_catalog']::text[]
+                      and pg_get_userbyid(guard.proowner)='postgres'
+                      and btrim(replace(replace(guard.prosrc,E'\r\n',E'\n'),E'\r',E'\n'),E' \n')=
+                        E'begin\n  raise exception using errcode = ''55000'', message = ''activity events are append-only'';\nend;'
+                      and guard.proacl is not null
+                      and (select count(*) from aclexplode(guard.proacl))=1
+                      and not exists (select 1 from aclexplode(guard.proacl) acl
+                        where acl.grantor<>guard.proowner or acl.grantee<>guard.proowner
+                          or acl.privilege_type<>'EXECUTE' or acl.is_grantable)
+                      and not has_function_privilege('anon',guard.oid,'EXECUTE')
+                      and not has_function_privilege('authenticated',guard.oid,'EXECUTE')
+                      and not has_function_privilege('service_role',guard.oid,'EXECUTE'))
+                or not exists (select 1 from pg_trigger trigger_row
+                    where trigger_row.tgrelid='public.activity_events'::regclass
+                      and trigger_row.tgname='activity_events_append_only'
+                      and not trigger_row.tgisinternal and trigger_row.tgenabled='O'
+                      and trigger_row.tgtype=27
+                      and trigger_row.tgfoid='public.reject_activity_event_mutation()'::regprocedure
+                      and trigger_row.tgnargs=0 and trigger_row.tgconstraint=0
+                      and trigger_row.tgparentid=0 and trigger_row.tgqual is null
+                      and not trigger_row.tgdeferrable and not trigger_row.tginitdeferred)
+              then raise exception 'immutable activity audit boundary postflight failed'; end if;
+            end if;
+
+            if c200 = 1 then
+              if public.assert_phase1c_claim_target(
+                '00000000-0000-4000-8000-000000000001'::uuid,
+                '00000000-0000-4000-8000-000000000001'::uuid
+              ) is distinct from true then
+                raise exception 'target assertion positive runtime failed';
+              end if;
+              begin
+                perform public.assert_phase1c_claim_target(
+                  '00000000-0000-4000-8000-000000000001'::uuid,
+                  '00000000-0000-4000-8000-000000000002'::uuid
+                );
+                raise exception 'target assertion negative runtime did not refuse';
+              exception when sqlstate '55000' then null;
+              end;
+              if exists (
+                with expected(signature, source_md5, security_definer, service_execute) as (values
+                  ('public.assert_phase1c_claim_target(uuid,uuid)', '9c8d9aa5154689fcf8238662d7a88429', false, false),
+                  ('public.claim_planned_graph_target_internal(text,text[],text,jsonb,uuid)', '7096b812aaddb1c025d9eaee49e3a98f', true, false),
+                  ('public.claim_planned_graph_internal(text,text[],text,jsonb)', '409fd510302421b070ebdc5bfc69fefb', true, false),
+                  ('public.claim_phase1c_run_target_budget_internal(text,text,text,integer,uuid)', 'c5344ba089c00fffcc263a1253087ab9', true, false),
+                  ('public.claim_phase1c_run_budget_internal(text,text,text,integer)', 'e21ec24c20f965c5102cb0fc5a60c2fb', true, false),
+                  ('public.claim_phase1c_run_target_internal(text,text,text,integer,uuid)', '1fa54813f6dea4021880ebd2caee1263', true, false),
+                  ('public.claim_planned_graph_by_id_v2(text,text[],text,jsonb,uuid,integer)', '5cecdf559c1a11871099a7e2bf4cd886', true, true),
+                  ('public.claim_phase1c_run_by_command_v2(text,text,text,integer,uuid,integer)', 'ce46fadd9962d960d8e885be0e2d7b4c', true, true)
+                )
+                select 1
+                from expected
+                left join pg_proc routine on routine.oid=to_regprocedure(expected.signature)
+                where routine.oid is null
+                  or pg_get_userbyid(routine.proowner)<>'postgres'
+                  or routine.prosecdef is distinct from expected.security_definer
+                  or routine.proconfig is distinct from array['search_path=pg_catalog']::text[]
+                  or md5(replace(replace(routine.prosrc,E'\r\n',E'\n'),E'\r',E'\n'))<>expected.source_md5
+                  or routine.proacl is null
+                  or (select count(*) from aclexplode(routine.proacl)) <>
+                    case when expected.service_execute then 2 else 1 end
+                  or exists (select 1 from aclexplode(routine.proacl) acl
+                    where acl.grantor<>routine.proowner or acl.privilege_type<>'EXECUTE'
+                      or acl.is_grantable
+                      or acl.grantee not in (
+                        routine.proowner,
+                        case when expected.service_execute then to_regrole('service_role')::oid
+                             else routine.proowner end
+                      ))
+                  or has_function_privilege('service_role',routine.oid,'EXECUTE') is distinct from expected.service_execute
+                  or has_function_privilege('authenticated',routine.oid,'EXECUTE')
+                  or has_function_privilege('anon',routine.oid,'EXECUTE')
+              )
+                or to_regprocedure('public.claim_planned_graph_internal(text,text[],text,jsonb,uuid)') is not null
+                or to_regprocedure('public.claim_phase1c_run_budget_internal(text,text,text,integer,uuid)') is not null
+                or to_regprocedure('public.claim_phase1c_run_internal(text,text,text,integer,uuid)') is not null
+                or (select count(*) from pg_proc routine join pg_namespace space on space.oid=routine.pronamespace
+                      where space.nspname='public' and routine.proname in (
+                        'assert_phase1c_claim_target','claim_planned_graph_target_internal',
+                        'claim_planned_graph_internal','claim_phase1c_run_target_budget_internal',
+                        'claim_phase1c_run_budget_internal','claim_phase1c_run_target_internal',
+                        'claim_planned_graph_by_id_v2','claim_phase1c_run_by_command_v2'))<>8
+                or (select routine.proargnames from pg_proc routine
+                      where routine.oid=to_regprocedure('public.claim_planned_graph_by_id_v2(text,text[],text,jsonb,uuid,integer)'))
+                     is distinct from array['p_worker_id','p_supported_executors','p_repository_full_name','p_required_check_names','p_target_graph_id','p_protocol_version']::text[]
+                or (select routine.proargnames[1:6] from pg_proc routine
+                      where routine.oid=to_regprocedure('public.claim_phase1c_run_by_command_v2(text,text,text,integer,uuid,integer)'))
+                     is distinct from array['p_worker_id','p_provider','p_model','p_lease_seconds','p_target_command_id','p_protocol_version']::text[]
+              then raise exception 'target claim source/catalog/ACL postflight failed'; end if;
+            end if;
+
+            if c300 = 1 then
+              routine := to_regprocedure('public.complete_graph_run_with_validated_release_as_worker(text,uuid,public.graph_run_state,boolean,bigint,bigint,text,text)');
+              if routine is null
+                or (select count(*) from pg_proc candidate join pg_namespace space on space.oid=candidate.pronamespace
+                      where space.nspname='public'
+                        and candidate.proname='complete_graph_run_with_validated_release_as_worker')<>1
+                or not exists (select 1 from pg_proc where oid=routine and prosecdef
+                  and proconfig=array['search_path=pg_catalog']::text[] and pg_get_userbyid(proowner)='postgres'
+                  and md5(replace(replace(prosrc,E'\r\n',E'\n'),E'\r',E'\n'))='8c127b52d5961d49cba980e276edf414'
+                  and proacl is not null and (select count(*) from aclexplode(proacl))=2
+                  and not exists (select 1 from aclexplode(proacl) acl
+                    where acl.grantor<>proowner or acl.privilege_type<>'EXECUTE' or acl.is_grantable
+                      or acl.grantee not in (proowner,to_regrole('service_role')::oid)))
+                or has_function_privilege('service_role',routine,'EXECUTE') is distinct from true
+                or has_function_privilege('authenticated',routine,'EXECUTE') is distinct from false
+                or has_function_privilege('anon',routine,'EXECUTE') is distinct from false
+              then raise exception 'validated completion source/catalog/ACL/security postflight failed'; end if;
+              routine := to_regprocedure('public.create_graph_from_plan_with_release_identity_as_server(uuid,uuid,uuid,text,public.graph_topology,jsonb,public.risk_level,boolean,jsonb,jsonb,jsonb,text,integer,uuid,text,text,jsonb)');
+              if routine is null
+                or (select count(*) from pg_proc candidate join pg_namespace space on space.oid=candidate.pronamespace
+                      where space.nspname='public'
+                        and candidate.proname='create_graph_from_plan_with_release_identity_as_server')<>1
+                or not exists (select 1 from pg_proc where oid=routine and prosecdef
+                  and proconfig=array['search_path=pg_catalog']::text[] and pg_get_userbyid(proowner)='postgres'
+                  and md5(replace(replace(prosrc,E'\r\n',E'\n'),E'\r',E'\n'))='878b6df53f450d723a4ef7da9dd677b2'
+                  and proacl is not null and (select count(*) from aclexplode(proacl))=2
+                  and not exists (select 1 from aclexplode(proacl) acl
+                    where acl.grantor<>proowner or acl.privilege_type<>'EXECUTE' or acl.is_grantable
+                      or acl.grantee not in (proowner,to_regrole('service_role')::oid)))
+                or has_function_privilege('service_role',routine,'EXECUTE') is distinct from true
+                or has_function_privilege('authenticated',routine,'EXECUTE') is distinct from false
+                or has_function_privilege('anon',routine,'EXECUTE') is distinct from false
+              then raise exception 'full lifecycle launch source/catalog/ACL/security postflight failed'; end if;
+              select prosrc into launch_source from pg_proc where oid=routine;
+              if position('0ec1e97b80dc8696872d88162c5271f9ea822e7dea79556c5470730a025d3b49' in launch_source)=0
+                or position('ac9bde8fc1cdd21e735f02b1fa7d940ab680c2bde8c1ec24d704d42c59045a09' in launch_source)>0
+              then raise exception 'full lifecycle launch digest postflight failed'; end if;
+              begin
+                perform public.complete_graph_run_with_validated_release_as_worker(
+                  'release-postflight', '00000000-0000-4000-8000-000000000000'::uuid,
+                  'COMPLETED'::public.graph_run_state, false, null, null, null, null
+                );
+                raise exception 'validated completion missing-run runtime did not refuse';
+              exception when sqlstate 'P0002' then
+                get stacked diagnostics runtime_message = message_text;
+                if runtime_message is distinct from 'graph_run_not_found' then
+                  raise exception 'validated completion runtime refusal identity changed';
+                end if;
+              end;
+            end if;
+          end;
+          $release_postflight$;
+          SQL
+
+          POST_LEDGER=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+            select
+              (select count(*) from supabase_migrations.schema_migrations where version='20260827000200')||'|'||
+              (select count(*) from supabase_migrations.schema_migrations where version='20260827000210')||'|'||
+              (select count(*) from supabase_migrations.schema_migrations where version='20260828000050')||'|'||
+              (select count(*) from supabase_migrations.schema_migrations where version='20260828000100')||'|'||
+              (select count(*) from supabase_migrations.schema_migrations where version='20260828000200')||'|'||
+              (select count(*) from supabase_migrations.schema_migrations where version='20260828000300');")
+          case "$SCOPE:$POST_LEDGER" in
+            probe:1\|1\|0\|0\|0\|0|probe:1\|1\|1\|0\|0\|0|probe:1\|1\|1\|1\|0\|0|probe:1\|1\|1\|1\|1\|0|probe:1\|1\|1\|1\|1\|1) ;;
+            selector-normalization:1\|1\|1\|0\|0\|0) ;;
+            configure-url:1\|1\|1\|1\|0\|0) ;;
+            target-claims:1\|1\|1\|1\|1\|0) ;;
+            postdeploy:1\|1\|1\|1\|1\|1|verify:1\|1\|1\|1\|1\|1) ;;
+            *) echo "::error::Postflight ledger is not scope-exact (${SCOPE}:${POST_LEDGER})."; exit 1 ;;
+          esac
+
+          STEP8_LEDGER=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+            select count(*) from supabase_migrations.schema_migrations
+            where version='20260822001000';")
+          if [ "$STEP8_LEDGER" != "1" ]; then
+            echo "::error::The current Step 8 any-model command contract is not exactly ledgered."
+            exit 1
+          fi
+
+          RECORD_ONLY_READY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+            set search_path = pg_catalog;
+            with expected(signature, source_md5, contract_md5, volatility, execute_role) as (values
+              ('public.list_factory_command_routing_candidates(uuid,uuid,text)',
+               '203f54d969fbc699304e780c1ad68a85', '17919dac57b41b75fe0793ad660063cc', 's', 'authenticated'),
+              ('public.list_factory_commands(uuid,integer,uuid)',
+               'ba62f4f5357cec647d3ff582107710a7', '162d47956f98e7b005c7abe1df680ee9', 's', 'authenticated'),
+              ('public.normalize_phase1c_command()',
+               'cd28d70a40e860660461700926e97830', '32b955c1d25380d6e075024ee98f8530', 'v', 'none'),
+              ('public.plan_phase1c_task_and_run()',
+               '2de7070bb9359ce7ad45516da2956a4b', '32b955c1d25380d6e075024ee98f8530', 'v', 'none'),
+              ('public.queue_phase1c_run_for_task()',
+               '4737eba3e8490632fdd89c6d06fece82', '32b955c1d25380d6e075024ee98f8530', 'v', 'none'),
+              ('public.submit_command_phase1c_normalized_internal(uuid,text,public.risk_level,jsonb,text)',
+               'adb50eb74e1721274f23d0d69b79e2e8', 'b725d8bc77d8d0b2f34a69c900c16d1f', 'v', 'none'),
+              ('public.submit_command(uuid,text,public.risk_level,jsonb,text)',
+               '024c3aa1f74d976fb7a8a6d7138cd9fb', 'b725d8bc77d8d0b2f34a69c900c16d1f', 'v', 'authenticated'),
+              ('public.submit_factory_command_routing_internal(uuid,uuid,uuid,uuid,text,public.risk_level,jsonb,text)',
+               '8418fd26e9b1783315a93ffbf4543838', 'b779f9c2f2c4d0cf086f6d67b85a457c', 'v', 'none'),
+              ('public.submit_factory_command(uuid,uuid,uuid,uuid,text,public.risk_level,jsonb,text)',
+               '6008476137a77db33d220be4b14a9c8d', 'b779f9c2f2c4d0cf086f6d67b85a457c', 'v', 'authenticated'),
+              ('public.record_provider_run_phase1c_compatibility_internal(uuid,uuid,uuid,uuid,text,public.risk_level,text,text,text,text,text,text,jsonb,jsonb,text,public.run_status,text,jsonb,jsonb,jsonb,integer,text,jsonb)',
+               'c450eac6987cdd603d2d2511a9fa8833', 'cf7f54b49fe3d5eb87b32fe782e7641c', 'v', 'none'),
+              ('public.record_provider_run(uuid,uuid,uuid,uuid,text,public.risk_level,text,text,text,text,text,text,jsonb,jsonb,text,public.run_status,text,jsonb,jsonb,jsonb,integer,text,jsonb)',
+               '9dfdfc57f4f8b0965a89fefd927beb26', 'cf7f54b49fe3d5eb87b32fe782e7641c', 'v', 'authenticated'),
+              ('public.record_provider_run_phase2a_internal(uuid,uuid,uuid,uuid,text,public.risk_level,text,text,text,text,text,text,jsonb,jsonb,text,public.run_status,text,jsonb,jsonb,jsonb,integer,text,jsonb)',
+               '46cee8bec5e12fd4f087ecbeea0c9844', 'cf7f54b49fe3d5eb87b32fe782e7641c', 'v', 'none')
+            ), state as (
+              select expected.*, routine.oid, routine.proowner, routine.proacl,
+                     routine.provolatile, routine.prosecdef, routine.proconfig,
+                     routine_schema.nspname, routine_language.lanname,
+                     md5(replace(replace(routine.prosrc, E'\\r\\n', E'\\n'), E'\\r', E'\\n')) as actual_source_md5,
+                     md5(jsonb_build_array(
+                       routine_schema.nspname, routine_language.lanname,
+                       pg_get_userbyid(routine.proowner), routine.prokind::text,
+                       format_type(routine.prorettype, null), routine.proretset,
+                       routine.pronargs, routine.pronargdefaults,
+                       coalesce(array_to_string(routine.proargnames, ','), ''),
+                       coalesce(array_to_string(routine.proargmodes, ','), ''),
+                       coalesce((select string_agg(format_type(arg.type_oid, null), ',' order by arg.ordinality)
+                                 from unnest(routine.proallargtypes) with ordinality arg(type_oid, ordinality)), ''),
+                       coalesce(pg_get_expr(routine.proargdefaults, 0), ''),
+                       routine.proisstrict, routine.proleakproof, routine.prosecdef,
+                       routine.proparallel::text, routine.provariadic = 0,
+                       routine.procost::text, routine.prorows::text,
+                       routine.prosupport = 0, routine.probin is null,
+                       routine.prosqlbody is null, routine.protrftypes is null,
+                       routine.proconfig, routine.proacl is null
+                     )::text) as actual_contract_md5
+              from expected
+              left join pg_proc routine on routine.oid = to_regprocedure(expected.signature)
+              left join pg_namespace routine_schema on routine_schema.oid = routine.pronamespace
+              left join pg_language routine_language on routine_language.oid = routine.prolang
+            )
+            select count(oid) = 12 and count(distinct oid) = 12
+               and bool_and(
+                 nspname = 'public' and lanname = 'plpgsql'
+                 and pg_get_userbyid(proowner) = 'postgres'
+                 and actual_source_md5 = source_md5
+                 and actual_contract_md5 = contract_md5
+                 and provolatile::text = volatility and prosecdef
+                 and proconfig = array['search_path=pg_catalog']::text[]
+                 and proacl is not null
+                 and (select count(*) from aclexplode(proacl)) =
+                       case when execute_role = 'authenticated' then 2 else 1 end
+                 and exists (select 1 from aclexplode(proacl) acl where acl.grantor = proowner and acl.grantee = proowner and acl.privilege_type = 'EXECUTE' and not acl.is_grantable)
+                 and (execute_role = 'none' or exists (select 1 from aclexplode(proacl) acl where acl.grantor = proowner and acl.grantee = to_regrole('authenticated')::oid and acl.privilege_type = 'EXECUTE' and not acl.is_grantable))
+                 and not exists (select 1 from aclexplode(proacl) acl where acl.grantor <> proowner or acl.privilege_type <> 'EXECUTE' or acl.is_grantable or acl.grantee not in (proowner, case when execute_role = 'authenticated' then to_regrole('authenticated')::oid else proowner end))
+                 and not has_function_privilege('anon', signature, 'EXECUTE')
+                 and not has_function_privilege('service_role', signature, 'EXECUTE')
+                 and has_function_privilege('authenticated', signature, 'EXECUTE') is not distinct from (execute_role = 'authenticated')
+               )
+               and (select count(*) = 12 from pg_proc routine join pg_namespace space on space.oid = routine.pronamespace where space.nspname = 'public' and routine.proname in (
+                 'list_factory_command_routing_candidates', 'list_factory_commands', 'normalize_phase1c_command',
+                 'plan_phase1c_task_and_run', 'queue_phase1c_run_for_task',
+                 'submit_command', 'submit_command_phase1c_normalized_internal',
+                 'submit_factory_command', 'submit_factory_command_routing_internal',
+                 'record_provider_run', 'record_provider_run_phase1c_compatibility_internal',
+                 'record_provider_run_phase2a_internal'))
+            from state;")
+          if [ "$RECORD_ONLY_READY" != "t" ]; then
+            echo "::error::The current Step 8 any-model function source, catalog, overload, or ACL contract is not exact."
+            exit 1
+          fi
+
+          RECORD_ONLY_BOUNDARY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+            set search_path = pg_catalog;
+            select exists (
+              select 1 from pg_class relation
+              where relation.oid = 'public.factory_record_only_submission_guards'::regclass
+                and relation.relkind = 'r' and relation.relrowsecurity and relation.relforcerowsecurity
+                and pg_get_userbyid(relation.relowner) = 'postgres'
+                and relation.relacl is not null
+                and not has_table_privilege('anon', relation.oid, 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+                and not has_table_privilege('authenticated', relation.oid, 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+                and not has_table_privilege('service_role', relation.oid, 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+            )
+            and (select count(*) = 7 and bool_and(attribute.attacl is null)
+                   from pg_attribute attribute
+                  where attribute.attrelid = 'public.factory_record_only_submission_guards'::regclass
+                    and attribute.attnum > 0 and not attribute.attisdropped)
+            and (select count(*) = 4 from pg_constraint constraint_row
+                  where constraint_row.conrelid = 'public.factory_record_only_submission_guards'::regclass
+                    and constraint_row.contype in ('p','c'))
+            and not exists (select 1 from pg_policy policy where policy.polrelid = 'public.factory_record_only_submission_guards'::regclass)
+            and not exists (select 1 from pg_trigger trigger_row where trigger_row.tgrelid = 'public.factory_record_only_submission_guards'::regclass and not trigger_row.tgisinternal)
+            and not exists (select 1 from pg_rewrite rule_row where rule_row.ev_class = 'public.factory_record_only_submission_guards'::regclass and rule_row.rulename <> '_RETURN')
+            and (select count(*) = 2 from pg_proc routine join pg_namespace space on space.oid = routine.pronamespace
+                  where space.nspname = 'public' and strpos(lower(routine.prosrc), 'insert into public.agent_runs') > 0
+                    and routine.oid in (
+                      'public.queue_phase1c_run_for_task()'::regprocedure,
+                      'public.record_provider_run_phase2a_internal(uuid,uuid,uuid,uuid,text,public.risk_level,text,text,text,text,text,text,jsonb,jsonb,text,public.run_status,text,jsonb,jsonb,jsonb,integer,text,jsonb)'::regprocedure))
+            and (select count(*) = 2 from pg_proc routine join pg_namespace space on space.oid = routine.pronamespace
+                  where space.nspname = 'public' and strpos(lower(routine.prosrc), 'insert into public.agent_runs') > 0)
+            and (select count(*) = 20 from pg_trigger trigger_row
+                  where trigger_row.tgrelid in ('public.commands'::regclass, 'public.tasks'::regclass, 'public.agent_runs'::regclass)
+                    and not trigger_row.tgisinternal)
+            and not exists (select 1 from pg_rewrite rule_row
+                  where rule_row.ev_class in ('public.commands'::regclass, 'public.tasks'::regclass, 'public.agent_runs'::regclass)
+                    and rule_row.rulename <> '_RETURN')
+            and not exists (
+              select 1 from public.agent_runs run
+              join public.tasks task on task.id = run.task_id
+              join public.commands command on command.id = task.command_id
+              where command.parameters ->> 'executionMode' = 'record_only'
+            );")
+          if [ "$RECORD_ONLY_BOUNDARY" != "t" ]; then
+            echo "::error::The current Step 8 record-only guard, producer, RLS/ACL, trigger/rule, or zero-agent-run boundary is not exact."
+            exit 1
+          fi
+
+          SHA=$(git rev-parse HEAD)
+          CURRENT_MAIN_SHA=$(curl --fail --silent --show-error \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/git/ref/heads/main" \
+            | jq -r '.object.sha // empty')
+          if [ "$RELEASE_SHA" != "$SHA" ] || [ "$CURRENT_MAIN_SHA" != "$SHA" ]; then
+            echo "::error::Current repository main changed during release verification."
+            exit 1
+          fi
+
+          DEPLOYMENT=$(curl --fail --silent --show-error \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/deployments?environment=Production&per_page=100" \
+            | jq -c '[.[] | select(.environment=="Production" and .task=="deploy" and .creator.login=="vercel[bot]")][0] // empty')
+          if [ -z "$DEPLOYMENT" ] \
+            || ! jq -e --arg sha "$SHA" '.sha==$sha and (.ref==$sha or .ref=="main")' <<<"$DEPLOYMENT" >/dev/null; then
+            echo "::error::Latest Vercel Production identity changed during release verification."
+            exit 1
+          fi
+          STATUS_URL=$(jq -r '.statuses_url' <<<"$DEPLOYMENT")
+          STATUS=$(curl --fail --silent --show-error \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${STATUS_URL}?per_page=1")
+          if ! jq -e 'length==1 and .[0].state=="success" and .[0].creator.login=="vercel[bot]" and (.[0].environment_url | test("^https://softwarefactory-[a-z0-9]+-surgeservices-projects\\.vercel\\.app/?$"))' <<<"$STATUS" >/dev/null; then
+            echo "::error::Exact-SHA Vercel Production changed during release verification."
+            exit 1
+          fi
+          VERCEL_DEPLOYMENT_URL=$(jq -r '.[0].environment_url | rtrimstr("/")' <<<"$STATUS")
+
+          HEALTH=$(curl --fail --silent --show-error --max-time 20 --retry 2 "$PRODUCTION_HEALTH_URL")
+          if ! jq -e \
+            --arg sha "$SHA" \
+            --arg project "$PROJECT_REF" \
+            --arg deployment_url "$VERCEL_DEPLOYMENT_URL" \
+            --arg vercel_project "$VERCEL_PROJECT_ID" '
+            .status=="ok"
+            and .service=="SoftwareFactory"
+            and .database=="reachable"
+            and .databaseProject=="matched"
+            and .databaseProjectRef==$project
+            and .deployment=="matched"
+            and .deploymentUrl==$deployment_url
+            and .vercelProjectId==$vercel_project
+            and (.vercelDeploymentId | type=="string" and test("^dpl_[A-Za-z0-9]+$"))
+            and .release=="matched"
+            and .releaseSha==$sha
+            and .releaseRef=="main"
+          ' <<<"$HEALTH" >/dev/null; then
+            echo "::error::Public production health identity changed during release verification."
+            exit 1
+          fi
+
+          for WORKFLOW in graph-worker.yml codex-worker.yml claude-worker.yml auth-broker.yml graph-live-canary.yml handoff-canary.yml graph-artifact-containment.yml e2e-test-data.yml journey-prod-user.yml; do
+            ACTIVE=$(curl --fail --silent --show-error \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/workflows/${WORKFLOW}/runs?per_page=100" \
+              | jq '[.workflow_runs[] | select(.status != "completed")] | length')
+            if [ "$ACTIVE" != "0" ]; then
+              echo "::error::${WORKFLOW} became active during release verification."
+              exit 1
+            fi
+          done
+          if [ "${PHASE1C_WORKER_ENABLED,,}" = "true" ] \
+            || [ "${GRAPH_WORKER_ENABLED,,}" = "true" ] \
+            || [ "${GRAPH_WORKER_SCHEDULED,,}" = "true" ] \
+            || [ "${AUTH_BROKER_DISABLED,,}" != "true" ]; then
+            echo "::error::A worker switch or the AI-account auth broker changed during release verification."
+            exit 1
+          fi
+          echo "::notice::Scope ${SCOPE} passed exact ledger, catalog, ACL, runtime, safety, and worker postflight."

@@ -96,7 +96,12 @@ describe("the graph-stage-backfill apply scope", () => {
   );
 
   it("pins the hash of the file it applies", () => {
-    const digest = createHash("sha256").update(migration).digest("hex");
+    // GitHub checks out the reviewed migration with LF. Normalize a Windows
+    // checkout before comparing so the release pin tests the bytes GitHub
+    // applies, not the developer machine's core.autocrlf setting.
+    const digest = createHash("sha256")
+      .update(migration.replace(/\r\n?/g, "\n"))
+      .digest("hex");
     expect(workflow, `the workflow pins a different digest than the file's ${digest}`)
       .toContain(digest);
   });

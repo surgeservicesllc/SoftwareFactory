@@ -13,8 +13,29 @@ per-file diff commands.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`freehire-search` fractional numeric flags no longer silently change the query** (#373) -
+  `parseIntFlag` used bare `parseInt`, so a fractional value was truncated instead of
+  rejected: `--jobage 0.5` became `0`, failed the `jobage > 0` guard, and the
+  `posted_within_days` freshness filter was silently omitted from the outbound request
+  while the CLI exited 0 - on a default-ON `/scrape` portal, exactly the
+  discarded-filter failure the CLI's own `UNKNOWN_FLAG` guard documents. Numeric flags
+  (`--jobage`/`--page`/`--limit`) now accept whole numbers >= 1 only, mirroring the
+  Danish CLIs' `z.coerce.number().int().min(1)` contract, and reject everything else
+  with the stderr-JSON `BAD_ARG` error. The sibling of #371 (`linkedin-search`), which
+  remains with its reporter. Pinned by five new cases in `cli-flag-validation.test.ts`,
+  each verified to fail on the unfixed code.
+
 ### Added
 
+- **pypdf ATS text-layer fallback** - `/apply` Step 5d and `tools/verify_pdf.py` extract the CV PDF text layer with **pypdf** first (BSD, `pip install pypdf`) so Windows machines without Poppler still get a mechanical parseability check. Poppler `pdftotext -layout -enc UTF-8` remains the fallback; if both are missing the check still degrades to a visual keyword review. No extra cache or installer. `05-cv-templates.md` `framework_version` 1.4.2 → 1.4.3.
+- **CI now tests the full documented Python range** (#370) - the Python tool tests job
+  runs a 3.10-3.14 version matrix instead of pinning 3.12, so both the documented 3.10
+  minimum and the newest Python are continuously verified. Grew out of an independent
+  cross-platform verification (Windows + Linux, Python 3.14) contributed by
+  @atiqur-rahman-pro, whose report also confirmed the suite's expected
+  PyYAML-dependent skips in a clean container. Thanks!
 - **Company-research cache for `/apply` and `/interview`** - `/apply` Step 3's reviewer
   agent and `/interview` Step 2 each independently execute the Company Research
   Checklist (`04-job-evaluation.md`) for the same company, so applying and later

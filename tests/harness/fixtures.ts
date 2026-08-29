@@ -558,6 +558,130 @@ export const JOB_SEEKER_JOBS = [
   { id: "js-6", title: "Chief Marketing Officer", company: "Northwind", match: null, application: null },
 ];
 
+/**
+ * The board list and one populated search response for the browser layout
+ * harness. These mirror the public search route rather than bypassing it with
+ * component props, so the harness also proves the client reads the route's
+ * current response contract.
+ */
+export const JOB_SEARCH_BOARDS = [
+  {
+    key: "jobnet",
+    name: "Jobnet",
+    summary: "Public Danish employment-service postings.",
+    coverage: "Denmark",
+    supportsLocation: true,
+  },
+  {
+    key: "jobindex",
+    name: "Jobindex",
+    summary: "Danish private-sector postings.",
+    coverage: "Denmark",
+    supportsLocation: false,
+  },
+  {
+    key: "jobdanmark",
+    name: "Jobdanmark",
+    summary: "Danish jobs across regions and industries.",
+    coverage: "Denmark",
+    supportsLocation: true,
+  },
+  {
+    key: "freehire",
+    name: "Freehire",
+    summary: "International postings from participating employers.",
+    coverage: "International",
+    supportsLocation: true,
+  },
+];
+
+export const JOB_SEARCH_RESULTS = [
+  {
+    board: "jobnet",
+    boardName: "Jobnet",
+    totalAvailable: 812,
+    locationApplied: true,
+    hits: [{
+      job: {
+        externalId: "jobnet-1",
+        url: "https://example.org/jobs/jobnet-1",
+        title: "Senior Platform Engineer — Developer Infrastructure and Reliability",
+        company: "Northwind Systems International",
+        salaryText: null,
+        location: "Copenhagen, Capital Region of Denmark",
+        workModel: "hybrid",
+        description: "Build shared deployment and observability systems.",
+      },
+      publishedOn: "2026-08-26",
+      closesOn: "2026-09-18",
+      saveToken: "harness-jobnet-token",
+    }],
+  },
+  {
+    board: "jobindex",
+    boardName: "Jobindex",
+    totalAvailable: 736,
+    locationApplied: false,
+    hits: [{
+      job: {
+        externalId: "jobindex-1",
+        url: "https://example.org/jobs/jobindex-1",
+        title: "Backend Developer",
+        company: "Contoso Cloud Services",
+        salaryText: null,
+        location: "Aarhus",
+        workModel: null,
+        description: "Build high-volume services in TypeScript and Go.",
+      },
+      publishedOn: "2026-08-25",
+      closesOn: null,
+      saveToken: "harness-jobindex-token",
+    }],
+  },
+  {
+    board: "jobdanmark",
+    boardName: "Jobdanmark",
+    totalAvailable: 55,
+    locationApplied: true,
+    hits: [{
+      job: {
+        externalId: "jobdanmark-1",
+        url: "https://example.org/jobs/jobdanmark-1",
+        title: "Systemudvikler",
+        company: "Fabrikam Digital",
+        salaryText: null,
+        location: "Odense",
+        workModel: "onsite",
+        description: "Develop customer-facing systems and integrations.",
+      },
+      publishedOn: "2026-08-24",
+      closesOn: "2026-09-12",
+      saveToken: "harness-jobdanmark-token",
+    }],
+  },
+  {
+    board: "freehire",
+    boardName: "Freehire",
+    totalAvailable: 6752,
+    locationApplied: true,
+    hits: [{
+      job: {
+        externalId: "freehire-1",
+        url: "https://example.org/jobs/freehire-1",
+        title: "Principal Software Engineer",
+        company: "Adventure Works",
+        salaryText: "$190,000–$230,000",
+        location: "London, United Kingdom",
+        workModel: "remote",
+        description: "Lead architecture for a distributed product platform.",
+      },
+      publishedOn: "2026-08-23",
+      closesOn: null,
+      saveToken: "harness-freehire-token",
+    }],
+  },
+];
+
 export const JOB_SEEKER_DOCUMENTS = [
   {
     id: "jd-1", applicationId: "ja-1", kind: "resume", version: 3,

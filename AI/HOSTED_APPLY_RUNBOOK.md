@@ -3,6 +3,206 @@
 Written 2026-08-14, after verifying the whole chain on a real PostgreSQL 16 cluster.
 Rebased 2026-08-16 on an owner-measured hosted position (see the section directly below).
 
+## Full Lifecycle v2 release tail (2026-08-28)
+
+Use only `.github/workflows/factory-lifecycle-release-migrations.yml` for this
+four-file release. Do not add these files to the broad hosted-migration
+workflow. The protected LF byte identities are:
+
+- `20260828000050_normalize_breaker_aware_phase1c_selector.sql` — SHA-256
+  `8914034508451d1550ebf3f1bedd8f7b71592f1809306e78c57774c458952896`;
+- `20260828000100_project_production_url_configuration.sql` — SHA-256
+  `0856ddee447280a1bb4418f25d6a6d4650687e168fffcd5e98e8ce15edd62b27`;
+- `20260828000200_target_bound_worker_claims.sql` — SHA-256
+  `f7d87242534e16bacd22c0244784a992bded3c335fcb0a38e85d8a6b9168eaa5`;
+- `20260828000300_graph_postdeploy_validation.sql` — SHA-256
+  `0104f4b6514eb42fddb931b76a8026cea4834547f8dff011c2fff956d11579a5`.
+
+The workflow is manual and shares the global `apply-hosted-migrations`
+concurrency lock. Every scope binds exact repository `main`, the four named
+exact-head CI checks, the latest successful Vercel Production deployment, and
+Supabase project `qpuofpmagrmyamahqwxw`. Public health must join the exact
+GitHub deployment URL to Vercel project
+`prj_pAsrhftaVWI4SyaqstgRVSWHJkdD`, its immutable deployment ID/URL, main
+SHA/ref, and `www.theagoras.com`. Mutation scopes additionally require
+`confirm=apply`, the configured exact production-release actor as both the
+original and triggering actor, and run attempt 1. **Never rerun a mutation
+workflow attempt**; create a fresh dispatch after diagnosing a failure. Before
+and after every operation it refuses an active execution/auth workflow, a
+running graph or agent run, Autonomous Mode, any of the nine automatic
+actions, a worker switch outside OFF, an enabled auth broker, or an
+organization whose global kill switch is not ON.
+
+Choose the reviewed 40-character `main` commit once and pass that same exact
+value as `release_sha` to every dispatch below. The workflow requires it to
+equal both the dispatch snapshot and the live `main` ref at preflight, then
+rechecks live `main` immediately before any database mutation. Never replace
+the value between scopes; publish a new release and restart at `probe` if main
+advances.
+
+Run the scopes separately and in this exact order:
+
+1. `scope=probe` — read-only. Require prerequisite ledger rows `20260827000200`
+   and `20260827000210` exactly once and one of the five canonical six-field
+   release-tail prefixes (`0000`, `1000`, `1100`, `1110`, or `1111`) for
+   `00050|00100|00200|00300`. Record no secrets or row payloads.
+2. `scope=selector-normalization`, `confirm=apply` — stages only the
+   hash-pinned `00050` file. It requires exact hosted selector hash
+   `ed5840b9d8d0efdb513a8576df128e9b`, exact graph selector and breaker
+   dependencies, private selector ACLs, absent target-claim objects, and the
+   exact `1|1|0|0|0|0` ledger. It commits only the selector replacement and
+   `00050` row in one PostgreSQL transaction. Require the phase selector to
+   become `5933952d71f9da90a2a80a05ce6e0378` with every ABI/ACL/dependency
+   invariant unchanged.
+3. Dispatch a fresh `scope=probe` — read-only — and require
+   `1|1|1|0|0|0` plus the normalized selector identity. Never rerun the first
+   probe or the mutation attempt.
+4. `scope=configure-url`, `confirm=apply` — stages only the hash-pinned `00100`
+   file. Under the ledger and stopped-state locks, it requires `00050=1` and
+   all three later rows/catalog objects absent, then commits DDL and the
+   `00100` ledger row in one PostgreSQL transaction.
+5. Accept the application and safe owner/admin production-URL writer before
+   continuing. Then dispatch `scope=target-claims`, `confirm=apply`. It requires
+   `00050/00100=1/1` and `00200/00300=0/0`, stages only `00200`, and
+   atomically records only `00200`.
+6. Accept the exact target-bound claim behavior and the signed-in production
+   lifecycle UI before dispatching `scope=postdeploy`, `confirm=apply`. It
+   requires `00050/00100/00200/00300=1/1/1/0`, stages only `00300`, and
+   atomically records only `00300`.
+7. Dispatch `scope=verify` — read-only. It requires all four rows exactly
+   once, rechecks the public-URL constraint/RLS/audit boundary and safe/unsafe
+   runtime values, the service-only exact-target wrappers and target assertion,
+   the canonical Full Lifecycle v2 plan digest, the service-only validated
+   completion boundary and its fail-closed runtime, PostgREST reload, stopped
+   database state, and stopped GitHub worker workflows.
+
+Every mutation stages exactly one file in an isolated temporary directory and
+uses `psql --single-transaction` for its locked catalog guard, migration DDL,
+and ledger insert. It reloads PostgREST only after commit. On any identity,
+ledger, catalog, ACL, runtime, safety, worker, CI, or deployment mismatch, stop.
+Never reset, rerun an already recorded version, down-migrate, or broaden the
+scope. Contain a defect with a newly reviewed forward migration.
+
+## Atomic job recording release (2026-08-27)
+
+Migration `20260827000100_record_job_seeker_job_atomically.sql` is a protected,
+one-file hosted change. Its frozen SHA-256 is
+`2f51bf64ba3fd2bc711e6fbf9e660a2cc0dd5ef4b1f85d932ee574e79e9c7d13`.
+It has not been applied merely because it exists in this worktree.
+
+Apply it only by manually dispatching `apply-hosted-migrations.yml` from the
+exact deployed `main` SHA with `scope=job-seeker-atomic-record`. The scope binds
+the repository and Supabase project identities, requires the target ledger row
+and new catalog objects to be absent, verifies the prerequisite job-seeker
+tables/enums/function/foreign keys and forced RLS, stages exactly this one file,
+then commits its DDL and ledger row in one PostgreSQL transaction. It reloads
+PostgREST and reads back the exact function signature, authenticated-only ACL,
+validated owner-consistent constraints, retired legacy foreign keys, ledger,
+and forced-RLS state. Any mismatch stops the run; containment is forward-only.
+The broad `scope=all` path is blocked until this version is recorded exactly
+once under its frozen file hash.
+
+## Graph/Phase 1C atomic-wrapper cutover (2026-08-27)
+
+This is an ordered database protocol cutover, never a bundled apply. The
+protected file identities are:
+
+- `20260827000150_fence_legacy_graph_protocol.sql` — SHA-256
+  `a4b505841d94cc89dfc82e24837dedb78356b56c5f5698c0748f8b6735341a49`;
+- `20260827000200_graph_phase1c_release_lineage.sql` — SHA-256
+  `23197552df3f442ae8264bf71bd28a7c479e09a64bf6e298c615b767a96572be`;
+- forward containment `20260827000210_contain_legacy_graph_artifact_payloads.sql`
+  — SHA-256 `c37a55efe74e9a9b4118924e1b2cbd0378a76f0d98c9747c6c66fffda9697de1`.
+
+The mandatory release order is exact:
+
+1. Publish the matching application, worker, workflow, and migration files to
+   exact `surgeservicesllc/SoftwareFactory` `main`. Require the four exact-head
+   CI jobs green and the exact SHA READY in Vercel Production. Keep graph and
+   Phase 1C worker dispatch paused; keep every organization and project at
+   autonomous mode OFF, every automatic action OFF, and every organization
+   kill switch ON. The hosted workflow verifies that neither worker workflow
+   has an active run, but that check does not pause dispatch on the owner's
+   behalf.
+2. Dispatch `apply-hosted-migrations.yml` with
+   `scope=graph-protocol-fence`. This scope stages only `20260827000150`, pins
+   its hash and exact repository/project/ledger/catalog/safety identities, and
+   commits its revocations plus its ledger row in one PostgreSQL transaction.
+   It installs no v2 authority. Verify 00150 exactly once, 00200 absent, and
+   every listed legacy graph/Phase 1C entry point non-executable by `anon`,
+   `authenticated`, and `service_role`.
+3. Keep dispatch paused and drain. Do not start 00200 until `graph_runs` has
+   zero `RUNNING` rows, `agent_runs` has zero `running` rows, there is no fresh
+   or future-dated active/draining worker heartbeat, and no legacy graph call
+   or lock remains. A future-skewed heartbeat is ambiguous active evidence and
+   fails closed; it is never treated as stale or ignored.
+   Recheck autonomy OFF, all nine automatic actions OFF, and kill switches ON.
+   An old call that entered before 00150 may finish; never reset or rerun 00150
+   to hurry it.
+4. If `00200` stops at `legacy graph artifact payload is sensitive or
+   oversized`, do not rerun it against the same catalog. Its protected
+   `--single-transaction` invocation rolls back both DDL and ledger. Publish
+   forward migration
+   `20260827000210_contain_legacy_graph_artifact_payloads.sql` (SHA-256
+   `c37a55efe74e9a9b4118924e1b2cbd0378a76f0d98c9747c6c66fffda9697de1`)
+   plus `.github/workflows/graph-artifact-containment.yml`. From the exact
+   green/READY `main` release, dispatch `operation=probe`; it may report only
+   the positive candidate count, payload-free manifest SHA-256, aggregate
+   classification, and four zero downstream blocker counts. Never log a
+   payload or row identifier.
+5. Dispatch `operation=contain` only with that exact count and manifest. The
+   workflow rechecks them while holding the graph state locks, stages only the
+   hash-pinned `00210` file, removes the unsafe bodies, preserves private
+   immutable digest/classification evidence, validates both payload guards,
+   and records only `00210`. Before v2 exists, the migration and wrapper must
+   require all nine legacy signatures to remain non-executable by `anon`,
+   `authenticated`, and `service_role`; freeze `node_runs` with the artifact
+   tables; reject fresh or future-skewed active/draining heartbeats; and
+   validate payload constraints, FORCE RLS, zero app-role table ACLs, and both
+   immutable triggers inside the same transaction before its ledger insert can
+   commit. Repeat those checks after commit, including worker-stopped state.
+   Require `00150/00200/00210=1/0/1` and zero remaining violations. A changed
+   manifest or nonzero downstream blocker requires another reviewed forward
+   repair.
+6. Only after that exact acceptance, dispatch the same dedicated
+   `graph-artifact-containment.yml` with `operation=lineage`. All three
+   operations share the `apply-hosted-migrations` concurrency group, so no
+   other production DDL scope can overlap them. `lineage` requires the same
+   positive candidate count and manifest SHA-256 recorded from `probe`, then
+   reconstitutes that exact manifest from the private containment-audit rows
+   before locking, under the exclusive lock, and after commit. It also requires
+   `00150/00200/00210=1/0/1`, all nine legacy signatures fully revoked in the
+   pre-v2 state, the stopped/future-heartbeat safety state, exact
+   evidence-linked tombstones, owner-only raw table/function ACLs for the
+   private audit boundary, and the frozen unchanged `00200` SHA-256. It stages
+   only `00200` and atomically validates its new ACL/RLS/audit catalog before
+   committing its DDL and ledger row.
+7. Require the postflight to read back all three ledger rows exactly once;
+   eight private legacy claims/writes/recorders; and the intentionally replaced
+   `decide_node_gate(uuid,boolean,text)` as authenticated-execute only (anonymous
+   and service-role refused), `SECURITY DEFINER`, exact
+   `search_path=pg_catalog`, owner/admin-gated, and evidence-bound for full
+   lifecycle and automatic approvals. Also require service-only v2
+   claim, repository/policy-scoped diagnosis, atomic abort and release-lineage
+   writers; hardened `SECURITY DEFINER`/`search_path=pg_catalog`; exact table
+   and function ACLs (including raw ACL entries); exact manifest and tombstone
+   identity; enabled and forced RLS; and the still-drained, autonomy-OFF,
+   automatic-actions-OFF, kill-switch-ON state. Reload PostgREST only after the
+   transaction succeeds. Keep dispatch paused until this evidence is saved.
+
+Current recovery state on 2026-08-28: `00150` is hosted exactly once; protected
+run `33144659265` rolled `00200` back at the payload preflight; `00210` and the
+unchanged `00200` remain pending separate `contain` and `lineage` acceptance
+runs. The final reviewed `00210` identity is pinned above and must match before
+publication or dispatch.
+
+`scope=all` refuses to run unless both 00150 and 00200 are already recorded
+exactly once and their frozen repository hashes plus the v2 catalog/safety
+postflight still match. Never bundle the files, use `db push` to introduce
+either one, repair their ledger rows, reset, down-migrate, rerun 00150, or add a
+direct grant. A mismatch stops the release; containment is a new reviewed
+forward migration.
+
 ## Any-model safe Step 8 -> Step 9 release (2026-08-22, ADR-115)
 
 This section is the current release procedure and supersedes older command-model
@@ -78,7 +278,7 @@ the measured list, not today's total outstanding migration count. Later exact ev
 forward candidates.
 Do not add any of them to the 19-row measurement or
 infer a new overall missing count without another complete ledger probe. As of this release,
-the repository total is 166 migration files. Those two numbers do not stand in a prefix relationship, and the reason
+the repository total is 177 migration files after integration with current `origin/main`. Those two numbers do not stand in a prefix relationship, and the reason
 matters: the
 hosted ledger is **not a contiguous prefix** of the local files. It has gaps in the middle and
 rows well past them. Any sentence of the form "everything after `X` is outstanding" is therefore
@@ -782,9 +982,35 @@ test passed, because the failure lives in the ledger rather than the schema. It 
 first time during the one operation that is hardest to reverse.
 
 `tests/integration/migration-version-uniqueness.test.ts` now asserts uniqueness, that every
-filename parses, and that filename order matches version order. It has happened twice, both times
-from separate agents picking the same timestamp in parallel, so it is checked rather than
+filename parses, and that filename order matches version order. It has happened three times, every
+time from separate agents picking the same timestamp in parallel, so it is checked rather than
 remembered.
+
+The third was 2026-08-25: `20260825000200_run_cost_and_budget_in_graph_runs` (#416) landed on main
+while `20260825000200_runs_state_their_closure_reason` was in flight on another branch. The second
+renumbered to `20260825000300`. Worth knowing beyond the version itself: both files rebuild
+`list_graph_runs`, and the in-flight one had been written against the older `20260823001000` body,
+so merging it unchanged would have silently reverted the cost columns #416 had just added. When two
+branches touch one `create or replace` function, the later file has to be rebuilt from whatever
+actually reached main, not from whatever it was originally derived from — the version collision is
+the loud half of that problem and the reverted body is the quiet half.
+
+## Pending apply: `runs-closure-note` (20260825000300)
+
+Not yet hosted. `graph_runs` gains `closure_note`; `complete_graph_run_as_worker` gains a defaulted
+`p_closure_note`; `list_graph_runs` projects the column.
+
+**Apply before the code that sends the note reaches production, not after.** The new function's
+extra parameter is defaulted, so the currently deployed worker's seven-argument call still resolves
+against it — but code that sends eight arguments to the old seven-parameter function fails, and it
+fails on every run close. One direction is safe and the other bricks the worker.
+
+```
+scope=runs-closure-note
+```
+
+The step verifies all three halves read back — the column, the writer's parameter, and the
+projection — and refuses if the ledger already records the version or if the file's hash has moved.
 
 ## Not covered here
 

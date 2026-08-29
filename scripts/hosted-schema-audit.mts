@@ -80,12 +80,12 @@ const CONTROL_TABLE = "projects";
  * probe works. Without it, an empty or privilege-filtered description would
  * read as "every function is missing".
  *
- * `claim_planned_graph` is the strongest control available: the graph worker
- * called it successfully against this database on 2026-08-19 22:54Z, and it is
- * granted to `service_role` — the very role whose privileges filter the
- * description being read.
+ * The protocol-v2 claim is the strongest control available: it is the exact
+ * service-role-only entrypoint used by current workers. The legacy unversioned
+ * claim is intentionally private after the cutover and must not be used as a
+ * health probe (doing so would make a correct hardening look broken).
  */
-const CONTROL_FUNCTION = "claim_planned_graph";
+const CONTROL_FUNCTION = "claim_planned_graph_v2";
 
 function requireEnvironment(name: string): string {
   const value = process.env[name]?.trim();

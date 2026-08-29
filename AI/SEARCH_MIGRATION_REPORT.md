@@ -1,147 +1,237 @@
-# Search integration — migration report
+# Job Search integration — migration and acceptance report
+
+Last reviewed: 2026-08-27
 
 Source: [MadsLorentzen/ai-job-search](https://github.com/MadsLorentzen/ai-job-search)
-at `e2c311a5b40512daf79a04b22c96d7e049afc745`. Licence: **MIT**, © 2026 Mads
-Lorentzen. Attribution in `THIRD_PARTY_NOTICES.md`.
+at exact head `79cd383e58f0af7948c7c6462a3a289e9b67421e` (2026-08-27).
+Licence: **MIT**, © 2026 Mads Lorentzen. Attribution is preserved in
+`THIRD_PARTY_NOTICES.md` and the upstream `LICENSE` is kept verbatim.
 
-## 1. Source files reviewed
+Status: **hosted database pass; application production acceptance pass**.
+Search first reached `main` through #416 (`5cfd839`). Database-first commits
+`1168e94958e9f24a927d087571384d63b12f303b` and
+`f023024a90f2d37094276084df62bec135a3282e` are on `main`; exact-head CI run
+`33110615299` passed all four required jobs and matching Vercel Production
+deployment `6129989143` succeeded. The completed application behavior is exact
+`main` `aabd82b3a626da94a2478ef26f043a51d059cd15`, with exact-head CI
+`33114868741` and Vercel Production deployment `6130751384`; the stable alias
+serves `/JobSearch` as `200`.
 
-214 files. The census: 75 TypeScript, 53 Markdown, 35 Python, 13 JSON, 19 font
-binaries, 3 YAML, 2 LaTeX.
+## 1. Exact source and capability census
 
-All TypeScript lives under `.agents/skills/<board>-search/cli/` — six
-standalone Bun CLIs, ~4,271 source LOC excluding tests:
+`vendor/ai-job-search/` contains all **214 upstream files**, byte-for-byte at
+the head above: 75 TypeScript, 53 Markdown, 35 Python, 13 JSON, 19 font files,
+3 YAML, 2 LaTeX and the remaining licence/config/assets/placeholders. The
+vendor tree is an audit reference, not a dependency: TypeScript, ESLint and
+Vitest exclude it, and application code has no runtime import from it.
 
-| Skill | Board | Src LOC | Retrieval |
+The source is a local-first Claude Code framework, not a web application. It
+contains six board CLIs plus commands, skills, Python helpers, document
+workflows, templates and fonts. Full-source integration here means every
+upstream capability was captured and dispositioned; it does **not** mean
+running third-party agent instructions, importing its CI, or silently granting
+its local automation authority inside this multi-tenant product.
+
+## 2. Runtime disposition
+
+**Adapted into `lib/job-seeker/board-search/`:**
+
+| Upstream skill | Runtime adapter | Retrieval | Location contract |
 | --- | --- | --- | --- |
-| `jobdanmark-search` | jobdanmark.dk | 903 | JSON search (POST) |
-| `jobindex-search` | jobindex.dk | 815 | HTML (`var Stash` blob) |
-| `freehire-search` | freehire.me | 696 | Public REST API |
-| `jobnet-search` | jobnet.dk | 652 | JSON BFF |
-| `jobbank-search` | jobbank | 585 | RSS + JSON-LD |
-| `linkedin-search` | LinkedIn | 620 | Scrape |
+| `jobnet-search` | Jobnet | Public JSON BFF | Free-text location applied |
+| `jobindex-search` | Jobindex | HTML `var Stash` payload | No free-text location; stated in the UI |
+| `jobdanmark-search` | Jobdanmark | Public JSON POST search | Free-text location applied |
+| `freehire-search` | Freehire | Public REST API | `cities` filter applied |
 
-Everything else — `salary_lookup.py`, `tools/` (PDF verification, robots
-checking, security guards, skill linting), `cv/` and `cover_letters/` LaTeX
-templates with bundled Lato/Raleway fonts, `documents/`, `templates/` — is not
-Search.
+The six duplicated upstream fetch/retry helpers are one bounded server helper
+with typed `BoardSearchError` outcomes. `types.ts` and `registry.ts` provide the
+product contract and have no source counterpart. Search uses the existing
+fact-only evaluator and Job Seeker pipeline rather than importing the
+upstream's local files or inventing a parallel storage model.
 
-## 2. Disposition
+**Captured but not activated:**
 
-**ADAPTED** — `lib/job-seeker/board-search/`
-
-- `http.ts` ← the six near-identical `helpers.ts` fetch/retry copies, merged
-  into one. `htmlToText` is *not* here: it delegates to the existing
-  `import-adapters.ts` implementation, which already handled more block tags
-  and double-encoded entities.
-- `jobnet.ts` ← `jobnet-search` search command and helpers.
-- `jobindex.ts` ← `jobindex-search`, including the `var Stash` brace-counting
-  extractor and the tree walk for `searchResponse`.
-- `freehire.ts` ← `freehire-search` envelope handling, `toResult`,
-  `formatSalary`.
-- `jobdanmark.ts` ← `jobdanmark-search` POST search, `toContractDate`,
-  `extractCity` (with its four-digit-street-number edge case).
-- `types.ts`, `registry.ts` — new; no source counterpart.
-
-**SKIPPED** — two boards, both refusals with reasons, plus the non-Search parts
-
-| What | Why |
+| Capability | Disposition |
 | --- | --- |
-| `@bunli/core` / `@bunli/utils` CLI layer | Argument parsing for a terminal. A Next.js route is the caller. |
-| `linkedin-search` | LinkedIn's terms prohibit automated collection — a separate permission from the MIT licence. This repo had already decided it: `import-adapters.ts` carries a LinkedIn adapter with no fetch at all. |
-| `jobbank-search` | The source's own helper says Jobbank is Cloudflare-blocked and advises skipping it. A permanently failing board teaches people to ignore the failure notice. |
-| Python tooling, LaTeX templates, fonts | Not Search. |
+| LinkedIn search | Excluded. LinkedIn's service terms prohibit this automated collection. The MIT licence governs copying source; it does not grant service access. |
+| Jobbank search | Deferred. Upstream documents intermittent Cloudflare blocking and a WebSearch fallback. This product has no reliable, reviewed fallback instrument at this boundary today. That is an open integration condition, not a permanent impossibility claim. |
+| Bun CLI layer | Not used. A bounded authenticated Next.js route is the caller. |
+| Claude commands/skills and Gmail/Notion workflows | Not executed or imported. They assume a local personal workspace and ambient account authority that this multi-tenant control plane does not grant. |
+| Python, LaTeX, fonts and local document directories | Retained as source evidence; not runtime Search dependencies. Existing Job Seeker documents use their reviewed server-side implementation. |
 
-**MERGED** — Search does not own a recording path. Saving calls the existing
-`insertScoredJob`, so a saved posting is scored, deduplicated and enters the
-pipeline exactly as a manually recorded one does.
+## 3. Product surface and navigation
 
-## 3. What changed from the source, and why
+`/JobSearch` is the canonical owner-named page. The signed-in global header
+links **Job Search** directly to it. `/Job-Search` (the previously published
+entry) and `/job-seeker/search` (the section entry) remain compatibility paths
+and render the same `JobSearchPageContent`, the same `JobSearchPanel`, the same
+server auth/workspace gate and the same APIs. The shell recognizes all three
+as the Job Seeker product, and the global Job Search link reads active across
+the compatibility paths and the wider `/job-seeker` workspace.
 
-- **Retry budget.** Six retries at a 15s attempt timeout can exceed a minute.
-  Replaced with a 12s wall-clock deadline for the whole operation.
-- **Typed failures.** Bare `Error` → `BoardSearchError` carrying a code and the
-  board that failed, so one board failing does not fail the search.
-- **Dropped rather than defaulted.** A posting with no title/employer/id is
-  skipped. Freehire's `"(untitled)"` default is not carried across.
-- **No `FREEHIRE_API_URL`.** An env var redirecting where the server sends
-  queries is a redirection of trust.
-- **URL scheme enforced.** `.url()` accepts `javascript:`; both the parsers and
-  the save route now require `http(s)`.
+The canonical path is registered in component layout, width/responsive, auth
+return-path and global-navigation contracts. Loading, failure, all-boards-
+failed, valid empty and populated results are distinct states. A board that
+cannot apply the entered location says so beside its results instead of
+pretending the filter was honored.
 
-## 4. Files changed
+## 4. Current live-board contract corrections
 
-New: 5 adapter modules, 2 API routes, 1 page, 1 component, 5 test files,
-`THIRD_PARTY_NOTICES.md`, this report.
-Modified: `lib/job-seeker/navigation.ts` (Search entry),
-`tests/unit/job-seeker-navigation.test.ts` (nav contract),
-`tests/e2e/responsive.spec.ts` (server-side gate assertion),
-`app/api/job-seeker/jobs/route.ts` (pre-existing URL-scheme hardening).
+Review against the exact source plus direct board responses found four
+load-bearing runtime contracts:
 
-## 5. Database changes
+- **Jobnet:** the working endpoint is `/FindJob/Search`, with
+  `orderType=PublicationDate`; the older `/jobsearch` + numeric order pair is
+  not the current BFF contract.
+- **Jobindex:** company is now commonly nested at `company.name` (with the
+  older scalar variants retained as fallbacks). `supid` is an internal area
+  identifier, not a free-text city, so this adapter does not send a place name
+  there. If the embedded response contains postings but normalization yields
+  none, the adapter throws `board_response_unreadable` rather than reporting a
+  false empty search.
+- **Freehire:** its place filter is `cities`, not `location`.
+- **Jobdanmark:** the POST contract accepts location and a valid zero-result
+  response remains an empty result, not a parser failure.
 
-**None.** No migration was needed. Saved postings go into the existing
-`job_seeker_jobs` with its existing RLS, ownership checks, bounds and dedupe
-index; `source` already accepts a board key under its `^[a-z][a-z0-9_]{0,62}$`
-CHECK. Reusing a table that already enforces what is needed is preferable to
-adding one that would have to re-enforce it.
+All adapters still use the common 12-second wall-clock budget, enforce HTTP(S)
+result URLs, drop rows lacking the facts needed to identify a job, and report a
+failure per board without discarding successful peers.
 
-## 6. Dependencies
+## 5. Direct probe evidence
 
-**None added.** The source used `node-html-parser` (absent here) and `zod` v3
-(this repo has v4). The ported parsers work on JSON and string scanning, so no
-HTML parser was required.
+The real adapters were called directly and non-persistently after the contract
+repairs:
 
-**No new environment variables.** All three boards are keyless public
-endpoints.
+| Board | Returned | Board-reported total | Observation |
+| --- | ---: | ---: | --- |
+| Jobnet | 2 | 4 | Current BFF request and response parsed |
+| Jobindex | 2 | 736 | Embedded payload and nested company shape parsed; location intentionally not applied |
+| Jobdanmark | 0 | 0 | London query completed with a valid empty response |
+| Freehire | 2 | 6,752 | REST response parsed with current query contract |
 
-## 7. Functionality added
+These probes replace the stale claim that no live board was contacted. The
+signed-in production walk then returned Jobnet 4/4, Jobindex 20 shown of 736,
+Jobdanmark 0/0 and Freehire 25 shown of 6,752. That adds authentication and
+deployed-browser evidence; third-party contracts may still change later.
 
-Authenticated `Search` at `/job-seeker/search`: query four live boards by text
-and place, see each board's results with the board's own total, and save any
-result into the job list with honest board attribution. Failures are reported
-per board beside the results that arrived.
+## 6. Server-issued save provenance
 
-## 8. Tests
+A browser may carry a result back to the save route, but it is no longer the
+authority for what the board returned. Each search hit receives a server-sealed
+token containing a SHA-256 digest of the board and every normalized job field.
+The seal's scope binds organization and user; the token expires after 30
+minutes (with one minute of clock-skew tolerance). Save verifies it before
+loading scoring inputs or writing anything.
 
-70 new tests across 7 files, all passing; full suite **4,617 tests / 401 files**
-green, with lint, typecheck and a production build.
+Missing, expired, cross-user, cross-organization, board-swapped or field-
+altered evidence returns the stable `search_result_invalid` refusal. The token
+contains no board credential and introduces no new environment variable; it
+uses the existing server secret-box boundary.
 
-**Unit** — parser normalization, malformed-payload handling (throwing rather
-than returning empty), the retry deadline under a fake clock, network-failure
-message hygiene.
+## 7. Atomic, audited Supabase persistence
 
-**Route** — the auth-before-fetch boundary, cross-origin refusal, partial board
-failure, re-validation of client-supplied postings, credential-shaped content,
-duplicate saves reported as a state rather than an error.
+The original Search recording path called three independent PostgREST inserts:
+job, match, application. A match/application refusal could leave an orphaned
+job, and the unique index then made a retry look like an ordinary duplicate.
+Also, the child tables' original foreign keys named only `job_id`; child RLS
+checked child ownership but did not prove the referenced parent carried that
+same owner.
 
-**Behaviour, real PostgreSQL** (`job-seeker-search-persistence.behavior`) — the
-full migration chain in PGlite: every registry board key satisfies the `source`
-CHECK, a repeat save is refused by the unique index rather than by the route, a
-saved job is invisible to a colleague in the same tenant, `anon` is refused the
-table outright rather than filtered by RLS, and a saved posting survives a
-later read.
+Forward migration
+`20260827000100_record_job_seeker_job_atomically.sql` adds:
 
-**Browser** — the signed-out redirect for `/job-seeker/search` runs in CI. The
-signed-in workflow (search → save → reload → verify attribution) is written in
-`tests/e2e/job-seeker-journey.spec.ts` behind `JOB_SEEKER_E2E`; it really
-contacts the boards, and has **not been executed** — this environment has no
-Docker daemon, so no local Supabase stack.
+1. composite parent identity and child foreign keys over
+   `(job_id, organization_id, user_id)`, validated before the old single-id
+   keys are dropped;
+2. authenticated-only `public.record_job_seeker_job(...)`, a
+   `SECURITY DEFINER` function with exact `search_path=pg_catalog`;
+3. caller derivation through `auth.uid()` plus explicit organization-membership
+   validation — no caller-supplied user id enters the function;
+4. one transaction for the job, deterministic match, initial FOUND/QUALIFIED
+   application and immutable `job_seeker.job_recorded` activity event;
+5. a concurrency-safe `duplicate` outcome that writes no child or extra event;
+6. explicit RLS enabled+forced reassertion on all three exposed tables.
 
-## 9. Remaining external configuration
+`insertScoredJob` keeps its existing TypeScript API so search/save and import
+callers benefit without a parallel code path, but it performs exactly one RPC
+and validates the returned outcome. A child constraint error rolls the whole
+statement back.
 
-None to run Search. Two limits worth stating plainly:
+Authenticated direct INSERT is intentionally **not revoked in this
+migration**: the existing manual `POST /api/job-seeker/jobs` route still writes
+job/match/application directly. That remaining writer must move to the RPC and
+gain regression coverage before a later forward ACL contraction. Revoking
+first would make the manual product path fail.
 
-- **No live board has been contacted.** Every test that runs uses fixtures,
-  deliberately — a suite that calls jobindex.dk fails when someone else ships a
-  marketing change. The gated journey does contact them and has not been run
-  here. So the parsers are proven against recorded shapes, not against today's
-  live HTML. Jobindex in particular reads a page's embedded payload and will
-  break when that page changes; it is built to fail loudly when it does.
-- **Therefore this is not SEARCH INTEGRATION: PASS.** That verdict was reserved
-  for a real end-to-end run, and the end-to-end run is the one thing that has
-  not happened. Running `JOB_SEEKER_E2E=1 npx playwright test
-  tests/e2e/job-seeker-journey.spec.ts --project=desktop-chromium` against a
-  local stack is what would settle it.
-- **Coverage is Denmark-heavy.** Jobnet, Jobindex and Jobdanmark are Danish;
-  only Freehire is international. That is what the source repository was.
+## 8. Verification completed
+
+- Focused RPC/unit and migrated-PostgreSQL persistence suite: **16/16** green.
+  It proves one-RPC client wiring, recorded state/event identity, duplicate
+  no-op, child-failure rollback, non-member refusal, cross-user child refusal,
+  exact ACL/search path and forced RLS.
+- Migration version/object/schema contracts: **64/64** green.
+- Related Job Seeker route/import/foundation/journey regressions: **43/43**
+  green.
+- Full ESLint and TypeScript typecheck: green on the shared candidate.
+- Canonical navigation, auth and responsive tests are present in the candidate.
+- Full candidate Vitest: **407 files / 4,721 tests passed**, with 3 files / 7
+  tests skipped; production build: **165 pages**, including `/JobSearch`.
+- Save failure regression: a replacement search removes prior results/tokens;
+  the exact safe server message is displayed; an expired result disables the
+  futile retry and directs the person to search again.
+- Database-first exact-head CI run `33110615299`: all four required quality and
+  browser/accessibility jobs green.
+- Hosted apply workflow `33111692239`: exact project
+  `qpuofpmagrmyamahqwxw`, exact one-file SHA-256
+  `2f51bf64ba3fd2bc711e6fbf9e660a2cc0dd5ef4b1f85d932ee574e79e9c7d13`,
+  one ledger row, routine identity/owner/`SECURITY DEFINER`/exact search path/
+  authenticated-only ACL, all three validated owner constraints, old-key
+  removal, PostgREST reload and enabled+forced RLS accepted.
+- Application behavior release
+  `aabd82b3a626da94a2478ef26f043a51d059cd15`: exact-head CI `33114868741`,
+  Vercel Production deployment `6130751384`, stable-alias `/JobSearch` health,
+  desktop and 390px mobile acceptance.
+- Remote production journey `33115019633` passed the returning-account gate.
+  Its board sample exposed no unsaved row and skipped the mutation honestly.
+- Authenticated production browser acceptance closed that sample gap: a sealed
+  Jobnet result was saved and read back from the Supabase-backed Discovery UI
+  at score 35/100 and initial stage FOUND. Activity rendered one immutable
+  `job_seeker.job_recorded` event for entity
+  `7637e796-b172-40d6-833f-408407b6f5b2`.
+
+Together these are the exact database, application, deployment and signed-in
+hosted acceptance chain.
+
+## 9. Dependencies and configuration
+
+No package was added. No board API key or endpoint override was added. The four
+runtime boards are public/keyless. The source used `node-html-parser` and Bun
+CLI packages; the product adapters use the repository's existing server
+runtime and string/JSON parsing instead.
+
+The migration was the only new external rollout requirement and is now applied
+and verified on the exact production project. No new configuration is needed.
+
+## 10. Required database-first rollout
+
+1. **Complete:** freeze and publish the migration bytes/hash.
+2. **Complete:** apply only `20260827000100_record_job_seeker_job_atomically.sql`
+   forward to exact Supabase project `qpuofpmagrmyamahqwxw` before the
+   application that calls its RPC.
+3. **Complete for the hosted catalog boundary:** verify project identity,
+   ledger, constraint definitions, function signature/owner/security/search
+   path/ACL, forced RLS and PostgREST reload. Migrated-PostgreSQL tests cover
+   audit, duplicate, rollback and ownership/tenant refusals; the signed-in
+   hosted path is step 5.
+4. **Complete:** after database acceptance, deploy exact application behavior
+   revision `aabd82b3a626da94a2478ef26f043a51d059cd15`; verify CI
+   `33114868741`, Vercel Production `6130751384`, alias and health.
+5. **Complete:** signed-in production `/JobSearch` rendered every board,
+   accepted a sealed Jobnet result, read it back with attribution/score/stage,
+   and showed exactly one immutable activity event at desktop and mobile
+   widths.
+6. On any mismatch, stop. Contain database defects only with a new forward
+   migration; do not reset, replay history or down-migrate.
+
+The accurate verdict is **HOSTED DATABASE: PASS; APPLICATION PRODUCTION
+ACCEPTANCE: PASS**.

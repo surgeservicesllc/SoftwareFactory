@@ -134,9 +134,11 @@ describe.skipIf(!canRun)("Phase 1E concurrency on real PostgreSQL", () => {
     const migrationFiles = (await readdir(migrationsDirectory)).filter((file) => file.endsWith(".sql")).sort();
     for (const file of migrationFiles) {
       const sql = readFileSync(resolve(migrationsDirectory, file), "utf8");
+      // Supabase applies each migration atomically. Keep the real-PostgreSQL
+      // harness on that boundary so transaction-scoped locks are exercised.
       const result = spawnSync(
         "psql",
-        ["-h", socketDirectory, "-p", port, "-U", "postgres", "-d", database, "-q", "-v", "ON_ERROR_STOP=1", "-f", "-"],
+        ["-h", socketDirectory, "-p", port, "-U", "postgres", "-d", database, "-q", "-1", "-v", "ON_ERROR_STOP=1", "-f", "-"],
         { encoding: "utf8", input: sql },
       );
       if (result.status !== 0) {

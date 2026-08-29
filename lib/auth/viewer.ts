@@ -1,5 +1,7 @@
 import "server-only";
 
+import { cache } from "react";
+
 import { isSuperAdmin } from "@/lib/auth/super-admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -30,6 +32,22 @@ export type Viewer =
     };
 
 export const SIGNED_OUT: Viewer = { signedIn: false };
+const VIEWER_LOOKUP_TIMEOUT_MS = 5_000;
+
+async function readBeforeDeadline<T>(operation: Promise<T>): Promise<T | null> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  try {
+    return await Promise.race([
+      operation,
+      new Promise<null>((resolve) => {
+        timer = setTimeout(() => resolve(null), VIEWER_LOOKUP_TIMEOUT_MS);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
 
 function readDisplayName(metadata: Record<string, unknown> | undefined): string | null {
   const candidate = metadata?.full_name ?? metadata?.name;
@@ -38,10 +56,16 @@ function readDisplayName(metadata: Record<string, unknown> | undefined): string 
     : null;
 }
 
-export async function readViewer(): Promise<Viewer> {
+export const readViewer = cache(async (): Promise<Viewer> => {
   try {
     const supabase = await createSupabaseServerClient();
-    const { data, error } = await supabase.auth.getUser();
+    // Presentation must fail closed instead of leaving the entire portal in a
+    // loading shell when Supabase is slow or unavailable. Route handlers still
+    // perform their own authorization and never rely on this bounded hint.
+    const response = await readBeforeDeadline(supabase.auth.getUser());
+    if (!response) return SIGNED_OUT;
+
+    const { data, error } = response;
     if (error || !data.user) return SIGNED_OUT;
 
     const email = data.user.email ?? null;
@@ -58,4 +82,4 @@ export async function readViewer(): Promise<Viewer> {
     // Supabase not configured, or unreachable. The public site must still work.
     return SIGNED_OUT;
   }
-}
+});

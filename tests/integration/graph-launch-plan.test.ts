@@ -180,6 +180,37 @@ describe("the graph launch payload", () => {
     }
   }, 120_000);
 
+  it("persists the exact JSON output contract instead of an empty placeholder", async () => {
+    await asMember(db);
+    const graphId = await launch("open_source_scout");
+
+    await asCatalogue(db);
+    const { rows } = await db.query<{ input_schema: unknown; output_schema: unknown }>(
+      `select input_schema, output_schema
+         from public.node_contracts
+        where node_id = (
+          select id from public.graph_nodes where graph_id = $1 and node_key = 'scan_internal'
+        )`,
+      [graphId],
+    );
+    expect(rows).toHaveLength(1);
+
+    const built = buildLaunchPlan(findTemplate("open_source_scout")!, DEFAULT_GRAPH_BUDGET);
+    if (!built.ok) throw new Error("open_source_scout did not compile");
+    const planned = built.plan.nodes.find((node) => node.node_key === "scan_internal");
+    expect(planned).toBeDefined();
+    expect(rows[0].input_schema).toEqual(planned!.input_schema);
+    expect(rows[0].output_schema).toEqual(planned!.output_schema);
+    expect(rows[0].output_schema).toMatchObject({
+      type: "object",
+      required: expect.arrayContaining(["schemaVersion", "candidates"]),
+      properties: expect.objectContaining({
+        schemaVersion: expect.objectContaining({ const: 1 }),
+        candidates: expect.objectContaining({ type: "array" }),
+      }),
+    });
+  }, 120_000);
+
   it("produces a payload every registered template can be launched with", async () => {
     await asMember(db);
     // A template that compiles but cannot be written is a template nobody can
