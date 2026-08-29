@@ -2869,3 +2869,9 @@ Use this append-only log for decisions that constrain future implementation. Cha
   decision; its catalogue entry is a link a person opens themselves.
   Saved searches, alerts, and email are later increments and nothing in
   this one pretends otherwise.
+- Addendum (same day): three more open surfaces probed live and joined the
+  registry — The Muse (public JSON API; no free-text search exists, so the
+  adapter samples pages and says so), Working Nomads (open exposed_jobs
+  feed), and Jobspresso (official WordPress job feed; the dc:creator
+  "Company<br>⚲ Place" convention split honestly). Thirteen live boards;
+  the catalogue grew to 52 with the goal's 25+25 floor intact.

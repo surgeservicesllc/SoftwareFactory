@@ -5,13 +5,13 @@ Last updated: 2026-08-29
 ## Newest (2026-08-29): Job Search increment 1 — ten live boards, unified view, honest catalogue (ADR-163)
 
 The active owner goal (50-source `/JobSearch`) landed its first increment.
-Six new adapters, each live-probed before its parser existed and pinned by
-fixture tests (Remotive, Remote OK, Jobicy, Himalayas, Arbeitnow, WWR);
-the registry holds ten boards. `board-search/unify.ts` is the single
+Nine new adapters, each live-probed before its parser existed and pinned
+by fixture tests (Remotive, Remote OK, Jobicy, Himalayas, Arbeitnow, WWR,
+The Muse, Working Nomads, Jobspresso); the registry holds thirteen boards. `board-search/unify.ts` is the single
 definition of cross-board identity and result filters, imported by both
 the route (a `unified` response block with dedupedFrom/beforeFilters
 counts) and the panel (instant client-side filtering, no refetch). The
-50-source catalogue carries one honest status per source; every non-live
+52-source catalogue carries one honest status per source; every non-live
 link was probed 2026-08-29 (four dead domains found in research were
 replaced — verify before listing, always). The panel's unified view is
 default: source badges, NEW ≤3d, sort, filter chips with Clear All,

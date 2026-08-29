@@ -65,7 +65,7 @@ const searchSchema = z
     location: z.string().trim().min(1).max(120).nullish(),
     /** Per board, not in total; the page shows each board's results separately. */
     limit: z.number().int().min(1).max(50).default(25),
-    boards: z.array(z.string().trim().min(1).max(64)).min(1).max(12).optional(),
+    boards: z.array(z.string().trim().min(1).max(64)).min(1).max(16).optional(),
     /**
      * Result-level filters, applied to the unified set after boards answer.
      * They refine what came back; the boards are still queried by `text`,

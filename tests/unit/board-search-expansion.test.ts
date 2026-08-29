@@ -5,9 +5,12 @@ import { describe, expect, it } from "vitest";
 import { toArbeitnowHits } from "@/lib/job-seeker/board-search/arbeitnow";
 import { toHimalayasHits } from "@/lib/job-seeker/board-search/himalayas";
 import { toJobicyHits } from "@/lib/job-seeker/board-search/jobicy";
+import { parseJobspressoFeed, toJobspressoHits } from "@/lib/job-seeker/board-search/jobspresso";
 import { toRemoteOkHits } from "@/lib/job-seeker/board-search/remoteok";
 import { toRemotiveHits } from "@/lib/job-seeker/board-search/remotive";
+import { toMuseHits } from "@/lib/job-seeker/board-search/themuse";
 import { parseWwrFeed, toWwrHits } from "@/lib/job-seeker/board-search/weworkremotely";
+import { toWorkingNomadsHits } from "@/lib/job-seeker/board-search/workingnomads";
 
 /**
  * Each fixture below is a trimmed copy of a real response captured from the
@@ -315,5 +318,117 @@ describe("the we work remotely feed parser", () => {
     expect(toWwrHits(items, "doist", 10)).toHaveLength(1);
     expect(toWwrHits(items, "programming", 10)).toHaveLength(1);
     expect(toWwrHits(items, "welding", 10)).toHaveLength(0);
+  });
+});
+
+describe("the muse mapper", () => {
+  const rows = [
+    {
+      id: 17_780_767,
+      name: "Growth Marketing Manager",
+      company: { id: 1, name: "Hartford HealthCare" },
+      locations: [{ name: "Ledyard, CT" }, { name: "Hartford, CT" }],
+      levels: [{ name: "Senior Level", short_name: "senior" }],
+      categories: [{ name: "Marketing" }],
+      contents: "<p>Own the growth funnel.</p>",
+      publication_date: "2026-08-25T10:29:29Z",
+      refs: { landing_page: "https://www.themuse.com/jobs/hartford/growth-marketing-manager" },
+    },
+    { id: 1, name: "Untethered role", company: null },
+  ];
+
+  it("reads name, nested company, joined locations, and the landing page", () => {
+    const hits = toMuseHits(rows, "", 10);
+    expect(hits).toHaveLength(1);
+    const [hit] = hits;
+    expect(hit.job.title).toBe("Growth Marketing Manager");
+    expect(hit.job.company).toBe("Hartford HealthCare");
+    expect(hit.job.location).toBe("Ledyard, CT, Hartford, CT");
+    expect(hit.job.url).toBe("https://www.themuse.com/jobs/hartford/growth-marketing-manager");
+    expect(hit.publishedOn).toBe("2026-08-25");
+    // The public listing states no salary and no work arrangement, so
+    // neither is claimed.
+    expect(hit.job.salaryText).toBeNull();
+    expect(hit.job.workModel).toBeNull();
+  });
+
+  it("matches the term across name, company, categories, levels, and places", () => {
+    expect(toMuseHits(rows, "marketing senior", 10)).toHaveLength(1);
+    expect(toMuseHits(rows, "hartford", 10)).toHaveLength(1);
+    expect(toMuseHits(rows, "plumbing", 10)).toHaveLength(0);
+  });
+});
+
+describe("the working nomads mapper", () => {
+  const rows = [
+    {
+      url: "https://www.workingnomads.com/job/go/1775475/",
+      title: "Content Creator (100% remote)",
+      description: "<p>Short-form video for B2B brands.</p>",
+      company_name: "Marker Video",
+      category_name: "Marketing",
+      tags: "content,video,marketing",
+      location: "USA or Canada only",
+      pub_date: "2026-08-06T00:58:54-04:00",
+    },
+    { title: "No company row", url: "https://www.workingnomads.com/job/x/" },
+  ];
+
+  it("uses the board's job URL as the identity, since the feed has no id", () => {
+    const [hit] = toWorkingNomadsHits(rows, "marketing", 10);
+    expect(hit.job.externalId).toBe("https://www.workingnomads.com/job/go/1775475/");
+    expect(hit.job.company).toBe("Marker Video");
+    expect(hit.job.workModel).toBe("remote");
+    expect(hit.publishedOn).toBe("2026-08-06");
+  });
+
+  it("drops a row without a company and matches over title, company, category, tags", () => {
+    expect(toWorkingNomadsHits(rows, "", 10)).toHaveLength(1);
+    expect(toWorkingNomadsHits(rows, "video content", 10)).toHaveLength(1);
+    expect(toWorkingNomadsHits(rows, "welding", 10)).toHaveLength(0);
+  });
+});
+
+describe("the jobspresso feed parser", () => {
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/"><channel>
+  <item>
+    <title>Principal Product Manager, Conversational AI</title>
+    <link>https://jobspresso.co/job/principal-product-manager-conversational-ai/</link>
+    <dc:creator><![CDATA[Hopper<br>⚲&nbsp;Various US States]]></dc:creator>
+    <pubDate>Sat, 29 Aug 2026 02:12:12 +0000</pubDate>
+    <guid isPermaLink="false">https://jobspresso.co/?post_type=job_listing&#038;p=163413</guid>
+    <description><![CDATA[HTS Assist is Hopper&#8217;s agentic AI assistant.]]></description>
+  </item>
+  <item>
+    <title>Orphan listing with no creator</title>
+    <link>https://jobspresso.co/job/orphan/</link>
+  </item>
+</channel></rss>`;
+
+  it("splits the creator field into company and place, dropping the map marker", () => {
+    const items = parseJobspressoFeed(xml);
+    expect(items).toHaveLength(2);
+    expect(items[0].company).toBe("Hopper");
+    expect(items[0].location).toBe("Various US States");
+  });
+
+  it("maps a full item and drops the company-less one from storable hits", () => {
+    const hits = toJobspressoHits(parseJobspressoFeed(xml), "", 10);
+    expect(hits).toHaveLength(1);
+    const [hit] = hits;
+    expect(hit.job.title).toBe("Principal Product Manager, Conversational AI");
+    expect(hit.job.url).toBe("https://jobspresso.co/job/principal-product-manager-conversational-ai/");
+    expect(hit.job.workModel).toBe("remote");
+    expect(hit.publishedOn).toBe("2026-08-29");
+    // The WordPress apostrophe entity decodes to the curly quote it names,
+    // not stored as markup.
+    expect(hit.job.description).toContain("Hopper’s agentic AI assistant");
+  });
+
+  it("matches the term over title, company, and place", () => {
+    const items = parseJobspressoFeed(xml);
+    expect(toJobspressoHits(items, "hopper product", 10)).toHaveLength(1);
+    expect(toJobspressoHits(items, "welding", 10)).toHaveLength(0);
   });
 });

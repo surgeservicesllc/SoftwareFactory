@@ -2,9 +2,12 @@ import { arbeitnowAdapter } from "@/lib/job-seeker/board-search/arbeitnow";
 import { freehireAdapter } from "@/lib/job-seeker/board-search/freehire";
 import { himalayasAdapter } from "@/lib/job-seeker/board-search/himalayas";
 import { jobicyAdapter } from "@/lib/job-seeker/board-search/jobicy";
+import { jobspressoAdapter } from "@/lib/job-seeker/board-search/jobspresso";
 import { remoteokAdapter } from "@/lib/job-seeker/board-search/remoteok";
 import { remotiveAdapter } from "@/lib/job-seeker/board-search/remotive";
+import { themuseAdapter } from "@/lib/job-seeker/board-search/themuse";
 import { weworkremotelyAdapter } from "@/lib/job-seeker/board-search/weworkremotely";
+import { workingnomadsAdapter } from "@/lib/job-seeker/board-search/workingnomads";
 import { jobdanmarkAdapter } from "@/lib/job-seeker/board-search/jobdanmark";
 import { jobindexAdapter } from "@/lib/job-seeker/board-search/jobindex";
 import { jobnetAdapter } from "@/lib/job-seeker/board-search/jobnet";
@@ -66,6 +69,9 @@ export const BOARD_SEARCH_ADAPTERS: readonly BoardSearchAdapter[] = Object.freez
   himalayasAdapter,
   arbeitnowAdapter,
   weworkremotelyAdapter,
+  themuseAdapter,
+  workingnomadsAdapter,
+  jobspressoAdapter,
 ]);
 
 export function boardSearchAdapter(key: string): BoardSearchAdapter | null {

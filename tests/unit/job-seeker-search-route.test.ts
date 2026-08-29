@@ -14,6 +14,9 @@ const harness = vi.hoisted(() => ({
   searchHimalayas: vi.fn(),
   searchArbeitnow: vi.fn(),
   searchWeworkremotely: vi.fn(),
+  searchThemuse: vi.fn(),
+  searchWorkingnomads: vi.fn(),
+  searchJobspresso: vi.fn(),
   sealSearchResult: vi.fn(),
 }));
 
@@ -72,6 +75,21 @@ vi.mock("@/lib/job-seeker/board-search/weworkremotely", async (importOriginal) =
     weworkremotelyAdapter: { ...original.weworkremotelyAdapter, search: harness.searchWeworkremotely },
   };
 });
+vi.mock("@/lib/job-seeker/board-search/themuse", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@/lib/job-seeker/board-search/themuse")>();
+  return { ...original, themuseAdapter: { ...original.themuseAdapter, search: harness.searchThemuse } };
+});
+vi.mock("@/lib/job-seeker/board-search/workingnomads", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@/lib/job-seeker/board-search/workingnomads")>();
+  return {
+    ...original,
+    workingnomadsAdapter: { ...original.workingnomadsAdapter, search: harness.searchWorkingnomads },
+  };
+});
+vi.mock("@/lib/job-seeker/board-search/jobspresso", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@/lib/job-seeker/board-search/jobspresso")>();
+  return { ...original, jobspressoAdapter: { ...original.jobspressoAdapter, search: harness.searchJobspresso } };
+});
 vi.mock("@/lib/job-seeker/search-result-token", () => ({
   sealSearchResult: harness.sealSearchResult,
 }));
@@ -124,6 +142,9 @@ beforeEach(() => {
   harness.searchHimalayas.mockResolvedValue({ board: "himalayas", hits: [hit("Brand Designer")], totalAvailable: null });
   harness.searchArbeitnow.mockResolvedValue({ board: "arbeitnow", hits: [hit("Werkstudent Marketing")], totalAvailable: 10 });
   harness.searchWeworkremotely.mockResolvedValue({ board: "weworkremotely", hits: [hit("Content Lead")], totalAvailable: 2 });
+  harness.searchThemuse.mockResolvedValue({ board: "themuse", hits: [hit("Care Manager")], totalAvailable: null });
+  harness.searchWorkingnomads.mockResolvedValue({ board: "workingnomads", hits: [hit("Video Producer")], totalAvailable: 1 });
+  harness.searchJobspresso.mockResolvedValue({ board: "jobspresso", hits: [hit("Product Designer")], totalAvailable: 3 });
   harness.sealSearchResult.mockReturnValue("sealed-result-token");
 });
 
@@ -190,7 +211,7 @@ describe("searching across boards", () => {
     };
 
     expect(response.status).toBe(200);
-    expect(payload.results).toHaveLength(10);
+    expect(payload.results).toHaveLength(13);
     // Not hits.length: a person who sees 1 of 812 knows this is a sample.
     expect(payload.results.find((r) => r.board === "jobnet")?.totalAvailable).toBe(812);
     expect(payload.results[0]?.hits[0]).toMatchObject({ saveToken: "sealed-result-token" });
@@ -226,9 +247,12 @@ describe("searching across boards", () => {
       "jobdanmark",
       "jobicy",
       "jobnet",
+      "jobspresso",
       "remoteok",
       "remotive",
+      "themuse",
       "weworkremotely",
+      "workingnomads",
     ]);
     expect(payload.failures).toHaveLength(1);
     expect(payload.failures[0]).toMatchObject({ board: "jobindex", code: "board_unreachable" });
@@ -324,17 +348,18 @@ describe("the unified view", () => {
     );
     const payload = (await response.json()) as UnifiedPayload;
 
-    // Ten boards each returned one distinct posting; two carry "marketing"
-    // in their titles ("Growth Marketer" does not — it says Marketer).
-    expect(payload.unified.dedupedFrom).toBe(10);
-    expect(payload.unified.beforeFilters).toBe(10);
+    // Thirteen boards each returned one distinct posting; two carry
+    // "marketing" in their titles ("Growth Marketer" does not — it says
+    // Marketer).
+    expect(payload.unified.dedupedFrom).toBe(13);
+    expect(payload.unified.beforeFilters).toBe(13);
     expect(
       payload.unified.hits.every((h) =>
         `${h.job.title}`.toLowerCase().includes("marketing"),
       ),
     ).toBe(true);
     expect(payload.unified.hits.length).toBeGreaterThan(0);
-    expect(payload.unified.hits.length).toBeLessThan(10);
+    expect(payload.unified.hits.length).toBeLessThan(13);
   });
 
   it("drops unknown-salary hits only when the filter demands a stated salary", async () => {
@@ -342,7 +367,7 @@ describe("the unified view", () => {
       await POST(searchRequest({ text: "engineer", filters: { salaryMinimum: 50_000 } }))
     ).json()) as UnifiedPayload;
     // Every fixture hit has salaryText null: unknown is kept, not guessed at.
-    expect(lax.unified.hits).toHaveLength(10);
+    expect(lax.unified.hits).toHaveLength(13);
 
     const strict = (await (
       await POST(searchRequest({ text: "engineer", filters: { salaryMinimum: 50_000, requireSalary: true } }))

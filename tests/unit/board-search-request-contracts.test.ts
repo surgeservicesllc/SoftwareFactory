@@ -90,6 +90,9 @@ describe("live board request contracts", () => {
       himalayas: false,
       arbeitnow: false,
       weworkremotely: false,
+      themuse: false,
+      workingnomads: false,
+      jobspresso: false,
     });
   });
 });

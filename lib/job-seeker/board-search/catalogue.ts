@@ -3,7 +3,8 @@ import { boardSearchAdapter } from "@/lib/job-seeker/board-search/registry";
 /**
  * The researched source catalogue behind the unified job search: the most
  * popular general job sources and the leading marketing-focused ones, each
- * carrying an honest account of what this product does with it today.
+ * carrying an honest account of what this product does with it today. The
+ * goal's floor is 25 of each; the general list grows as sources become live.
  *
  * Statuses mean exactly one thing each:
  *
@@ -254,9 +255,25 @@ export const SOURCE_CATALOGUE: readonly CatalogueSource[] = Object.freeze([
     key: "themuse",
     name: "The Muse",
     focus: "general",
-    status: "external_link",
-    searchUrl: "https://www.themuse.com/search?keyword={query}",
-    note: "The Muse publishes a public JSON API and is the strongest candidate for the next live adapter; until that adapter exists the link opens its own search in your browser.",
+    status: "live",
+    adapterKey: "themuse",
+    note: "A sample of listings read from the public JSON API and filtered locally; the API exposes no free-text search, so a term samples the board rather than searching all of it.",
+  },
+  {
+    key: "workingnomads",
+    name: "Working Nomads",
+    focus: "general",
+    status: "live",
+    adapterKey: "workingnomads",
+    note: "The board's open JSON feed of curated remote listings, filtered locally.",
+  },
+  {
+    key: "jobspresso",
+    name: "Jobspresso",
+    focus: "general",
+    status: "live",
+    adapterKey: "jobspresso",
+    note: "Read over the board's official job feed — its published integration surface — and filtered locally.",
   },
 
   // ── Marketing: link-out boards ──────────────────────────────────────────

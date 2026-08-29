@@ -270,8 +270,10 @@ it:
   feed, local filtering, HTML-entity decode, legal-notice row skipped),
   Jobicy (`tag` free-text search), Himalayas (epoch dates, salary period kept
   as text), Arbeitnow (`remote:false` maps to null, not "onsite"), and
-  We Work Remotely (official RSS; "Company : Role" split). The registry now
-  holds ten live boards; the request-contract test pins the exact
+  We Work Remotely (official RSS; "Company : Role" split), and — same-day
+  addendum — The Muse (public JSON API, sampled pages, no upstream text
+  search), Working Nomads (open JSON feed), and Jobspresso (official job
+  feed). The registry now holds thirteen live boards; the request-contract test pins the exact
   `supportsLocation` map.
 - **`board-search/unify.ts`**: one shared pure definition of cross-board
   identity (normalized company+title), richer-record-wins card selection
@@ -282,7 +284,7 @@ it:
   returns a `unified` block (hits + dedupedFrom + beforeFilters) beside the
   untouched per-board `results`, and the panel applies the same module
   client-side for instant filtering without refetching.
-- **50-source catalogue** (`board-search/catalogue.ts`): 25 general + 25
+- **52-source catalogue** (`board-search/catalogue.ts`): 27 general + 25
   marketing sources, each `live` (integrity-tested equal to the registry) |
   `needs_credentials` (official API named — USAJOBS, Adzuna, Jooble,
   Careerjet, Reed, ZipRecruiter — shown **Not Connected**) |

@@ -17,9 +17,12 @@ import { BOARD_SEARCH_ADAPTERS, boardSearchAdapter } from "@/lib/job-seeker/boar
  */
 
 describe("the source catalogue", () => {
-  it("carries fifty sources: twenty-five general, twenty-five marketing", () => {
-    expect(SOURCE_CATALOGUE).toHaveLength(50);
-    expect(SOURCE_CATALOGUE.filter((s) => s.focus === "general")).toHaveLength(25);
+  it("carries at least the researched fifty: 25+ general and 25 marketing", () => {
+    // The goal's floor is 25 general + 25 marketing; live additions may grow
+    // the general list past it (2026-08-29: The Muse, Working Nomads and
+    // Jobspresso joined as live, taking general to 27 of 52).
+    expect(SOURCE_CATALOGUE).toHaveLength(52);
+    expect(SOURCE_CATALOGUE.filter((s) => s.focus === "general")).toHaveLength(27);
     expect(SOURCE_CATALOGUE.filter((s) => s.focus === "marketing")).toHaveLength(25);
   });
 
