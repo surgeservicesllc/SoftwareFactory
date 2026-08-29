@@ -38,11 +38,16 @@ Last triaged: 2026-08-29
   **success**, the lane's first green since 08-22 (unblocked by
   ADR-165). CI browser/accessibility shards green on every merged head;
   layout suites 1,387 passed locally.
-- [ ] E2E acceptance, email leg: unverifiable until the owner sets
-  RESEND_API_KEY, JOB_ALERT_EMAIL_FROM, CRON_SECRET in Vercel — the
-  alert path's honest production state is **Not Connected**, verified
-  live (503 fail-closed probe). Verify one real delivery + the
-  never-repeat ledger after the env vars exist before any unqualified
+- [ ] E2E acceptance, email leg: everything below the send is now
+  verified against real SQL — `job-seeker-alert-engine.behavior.test.ts`
+  (11 tests: cadence windows, recipient-through-the-row, never-repeat at
+  the constraint, append-only ledger, service_role-only execution) plus
+  a service_role drive on the real Docker stack (due → record → zero
+  rows on the identical re-scan → one sent ledger row). The send itself
+  stays unverifiable until the owner sets RESEND_API_KEY,
+  JOB_ALERT_EMAIL_FROM, CRON_SECRET in Vercel — the alert path's honest
+  production state is **Not Connected** (503 fail-closed probe). Verify
+  one real delivery after the env vars exist before any unqualified
   "production ready" claim for alerts.
 - [ ] Owner-supplied credentials would light up: USAJOBS, Adzuna, Jooble,
   Careerjet, Reed, ZipRecruiter (see catalogue notes). All keyless
