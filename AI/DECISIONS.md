@@ -2796,7 +2796,46 @@ Use this append-only log for decisions that constrain future implementation. Cha
   never animates hope — every color is a recorded state, and an empty
   organization gets an empty state naming its next step, not a demo.
 
-## ADR-150 - A role is not a capability, and only two specialists earned capabilities
+## ADR-141 - A meter with no event log is a decoration, and the Job Discovery design gets measurements or nothing
+
+- Date: 2026-08-28
+- Status: Accepted
+- Context: the owner's Job Discovery reference shows five headline figures, a
+  bookmark, Saved Searches and Alerts tabs, and a "Search Credits — 1,250 /
+  2,000 used this week" meter. The schema could answer the postings and their
+  scores; it could not answer saving, saved searches, alerts, or credits.
+- Decision: build the data, never the appearance. `saved_at` on
+  `job_seeker_jobs` (a timestamp, not a boolean, so the saved list can be
+  ordered by when), `job_seeker_saved_searches`, `job_seeker_search_alerts`
+  referencing the search it came from, `job_seeker_search_events` as an
+  append-only log, and `weekly_search_allowance` on preferences. Every table
+  repeats the foundation's boundary exactly: organization + row ownership, RLS
+  enabled and forced, anon revoked, four owner-scoped policies. A new
+  job-seeker table with its own access rule would be a hole in a boundary that
+  is otherwise uniform.
+- Why the event log: a credit meter over nothing can only be a decoration, and
+  a decorated meter is worse than none because it tells a person they have
+  spent something. The page counts rows in a window instead. The log is
+  append-only by trigger for the same reason: a rewritable log would let the
+  meter report whatever the last writer preferred.
+- Why the allowance is a column: a quota hard-coded in a component is a quota
+  nobody can change and no test can vary. 2000 matches the design; a workspace
+  needing another ceiling edits the row, not the bundle.
+- Decision, the omissions: the meter renders only when an allowance exists,
+  rather than drawing an empty bar. The Saved Searches and Alerts tabs are not
+  rendered at all — the tables exist but nothing writes them yet, and a tab
+  opening onto a permanently empty list is the scaffolding this repository
+  refuses to ship.
+- Decision, the "High Match (80%+)" card: the label is built from what the rows
+  say, not from the constant in the design. `qualification_threshold` is a
+  per-seeker preference defaulting to 80; a page hard-coding 80 would mislabel
+  every workspace that moved its bar. When postings disagree about the
+  threshold there is no single bar to name and the qualifier is dropped rather
+  than picked.
+- Also: an unscored posting is excluded from a minimum-score filter and sorts
+  last, never treated as zero. Zero is a measurement; "not measured" is not.
+
+## ADR-163 - A role is not a capability, and only two specialists earned capabilities
 
 - Date: 2026-08-29
 - Status: Accepted
@@ -2841,3 +2880,52 @@ Use this append-only log for decisions that constrain future implementation. Cha
   capabilities are new and every node the launch plan writes carries its stage
   explicitly. **Not yet applied to hosted.** Gates: lint, typecheck, 5214
   tests, production build.
+
+## ADR-164 - Autonomy is three named modes over the existing controls, and no mode may release
+
+- Date: 2026-08-29
+- Status: Accepted
+- Context: the owner's goal names three autonomy modes — Ask Me, Balanced,
+  Autonomous — and adds "never bypass destructive/security/deployment
+  approvals unless explicitly configured". The Phase 1D control model was
+  already correct and already enforced: nine per-action flags, a risk ceiling,
+  two scopes that intersect, and an envelope (kill switch, emergency stop,
+  release freeze, executor presence) applied last and unconditionally. What it
+  lacked was a way to *choose*. An operator wanting "build it but ask me before
+  anything risky" had to derive that from nine booleans, and an incoherent set
+  was easy to assemble.
+- Decision: a mode is a **preset** producing an `AutonomyControls` value that
+  then goes through `resolveEffectiveControls` like any other, exactly as a
+  role preset sits over an assignment config. `lib/autonomy/modes.ts` defines
+  the three with plain-English `summary` and `asksAbout` copy. The expansion
+  happens server-side in `POST /api/autonomy/controls` under a new `mode`
+  control, so a client sends one word rather than eleven booleans and cannot
+  store a combination no preset produces under a preset's name; it lands in
+  the same owner-only, reason-carrying RPC and the same audit row.
+- Bounds: **no mode enables merge, deploy or rollback**, Autonomous included.
+  AGENTS.md forbids introducing an auto-merge or production deployment
+  workflow in this phase, and a preset is a default rather than the explicit
+  configuration the goal's exception requires. `NEVER_PRESET_ENABLED` states
+  the three as data so one test holds every mode to the rule instead of three
+  omissions drifting apart. Balanced deliberately leaves `approve` off — a run
+  that writes the code and approves it has no independent check, and "agent
+  says done ≠ done" is the goal's own rule. Autonomous adds `approve` and
+  raises the ceiling to YELLOW; that is the entire difference in this phase.
+  A mode is not a second path around the envelope, and a test asserts a kill
+  switch still forces every action off in Autonomous.
+- Evidence: `modeForControls` returns null for any configuration outside every
+  preset, and the panel renders that as Custom rather than naming a mode —
+  telling an operator who hand-enabled `deploy` that they are in "Autonomous"
+  would claim a safety story they deliberately stepped outside of. Gates: lint,
+  typecheck, 5243 tests, production build.
+
+### Numbering note
+
+`AI/DECISIONS.md` currently carries duplicate headings at **ADR-140** and
+**ADR-141**. The second ADR-141 arrived with the Job Discovery work on `main`
+and was kept verbatim through this merge rather than renumbered, because
+rewriting a record that was already reviewed and merged is worse than an
+ambiguous reference. Both duplicates are worth resolving in a change of their
+own. An earlier draft of the roster decision was numbered ADR-150, which
+collided the same way; it is ADR-163 above, and the commit that introduced it
+still names 150.

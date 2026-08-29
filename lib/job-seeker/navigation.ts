@@ -54,31 +54,40 @@ export const JOB_SEEKER_NAVIGATION: readonly JobSeekerNavEntry[] = [
     href: "/job-seeker",
     icon: LayoutDashboard,
     subpages: [
-      { label: "Career Profile", href: "/job-seeker/profile", icon: Users },
-      { label: "Job Preferences", href: "/job-seeker/preferences", icon: Settings },
+      /*
+       * Search and Follow-Up live here rather than in the top-level list.
+       * The owner's design shows twelve destinations and neither is among
+       * them, but both are working pages — dropping them from the navigation
+       * would orphan them, so the group that is already a table of contents
+       * keeps them reachable. Everything else in this group is also a
+       * top-level entry, which is what makes it a contents list rather than a
+       * second menu.
+       */
       { label: "Search", href: "/job-seeker/search", icon: Search },
       { label: "Job Discovery", href: "/job-seeker/discovery", icon: Compass },
       { label: "Applications", href: "/job-seeker/applications", icon: FileText },
       { label: "Follow-Up", href: "/job-seeker/follow-up", icon: CalendarCheck },
+      { label: "Career Profile", href: "/job-seeker/profile", icon: Users },
+      { label: "Job Preferences", href: "/job-seeker/preferences", icon: Settings },
     ],
   },
   /*
-   * Search and Job Discovery are two different acts and both are kept.
-   * Search queries live job boards by text and place and returns postings
-   * nothing has recorded yet; Discovery reads one named company's board and
-   * imports it. Collapsing them would put "which employer?" in front of a
-   * person who wants "who is hiring for this?", which is the question they
-   * came with.
+   * The order below is the design's, top to bottom, and is asserted by
+   * `app-shell.test.tsx`. Career Profile and Job Preferences are top-level
+   * destinations here, not only children of Overview: the design puts them in
+   * the main list, and a person configuring their search should not have to
+   * know they live under a heading.
    */
-  { label: "Search", href: "/job-seeker/search", icon: Search },
   { label: "Job Discovery", href: "/job-seeker/discovery", icon: Compass },
   { label: "Applications", href: "/job-seeker/applications", icon: FileText },
   { label: "Resume Library", href: "/job-seeker/resumes", icon: FileText },
   { label: "Cover Letters", href: "/job-seeker/cover-letters", icon: Mail },
-  { label: "Contacts & Outreach", href: "/job-seeker/contacts", icon: Users },
   { label: "Interview Tracker", href: "/job-seeker/interviews", icon: CalendarCheck },
+  { label: "Contacts & Outreach", href: "/job-seeker/contacts", icon: Users },
   { label: "Notes & Documents", href: "/job-seeker/documents", icon: NotebookPen },
   { label: "Analytics", href: "/job-seeker/analytics", icon: BarChart3 },
+  { label: "Career Profile", href: "/job-seeker/profile", icon: Users },
+  { label: "Job Preferences", href: "/job-seeker/preferences", icon: Settings },
   { label: "Settings", href: "/job-seeker/settings", icon: Settings },
 ] as const;
 
