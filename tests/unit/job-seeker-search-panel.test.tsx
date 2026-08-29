@@ -667,6 +667,89 @@ describe("the search panel", () => {
     expect(within(strip).getByRole("link", { name: /LinkedIn Jobs/ })).toBeInTheDocument();
   });
 
+  it("wires LinkedIn and Indeed deeply: their links carry the filters and sort first", async () => {
+    const boardsWithSources = {
+      ...BOARDS,
+      sources: [
+        {
+          key: "glassdoor", name: "Glassdoor", focus: "general", status: "external_link",
+          searchUrl: "https://www.glassdoor.com/Job/jobs.htm?sc.keyword={query}&locKeyword={location}",
+          note: "Opens Glassdoor's own search.",
+        },
+        {
+          key: "linkedin_jobs", name: "LinkedIn Jobs", focus: "general", status: "external_link",
+          searchUrl: "https://www.linkedin.com/jobs/search/?keywords={query}&location={location}",
+          note: "Opens LinkedIn's own job search.",
+        },
+        {
+          key: "indeed", name: "Indeed", focus: "general", status: "external_link",
+          searchUrl: "https://www.indeed.com/jobs?q={query}&l={location}",
+          note: "Opens Indeed's own search.",
+        },
+      ],
+    };
+    fetchMock.mockImplementation((_url: string, init?: RequestInit) => {
+      if (init?.method === "POST") {
+        return Promise.resolve(json({
+          results: [{ board: "jobnet", boardName: "Jobnet", totalAvailable: 0, hits: [], locationApplied: true }],
+          failures: [],
+        }));
+      }
+      return Promise.resolve(json(boardsWithSources));
+    });
+    const user = userEvent.setup();
+    render(<JobSearchPanel />);
+    await screen.findByText(/Searching 2 boards:/);
+
+    await user.type(screen.getByPlaceholderText("Job title, skill or keyword"), "engineer");
+    await user.type(screen.getByPlaceholderText("Place or postcode"), "Copenhagen");
+    await user.selectOptions(screen.getByRole("combobox", { name: "Within distance" }), "50");
+    await user.selectOptions(screen.getByRole("combobox", { name: /Work model/ }), "remote");
+    await user.selectOptions(screen.getByRole("combobox", { name: /Posted within/ }), "7");
+    await user.type(screen.getByRole("spinbutton", { name: /Salary at least/ }), "90000");
+    await user.click(screen.getByRole("button", { name: /^search$/i }));
+
+    const strip = await screen.findByTestId("linkout-strip");
+
+    // The two deeply wired sites sort ahead of template-only Glassdoor and
+    // say visibly that the filters travel with them.
+    const chips = within(strip).getAllByRole("link");
+    expect(chips.map((chip) => chip.textContent)).toEqual([
+      expect.stringContaining("LinkedIn Jobs"),
+      expect.stringContaining("Indeed"),
+      expect.stringContaining("Glassdoor"),
+    ]);
+    expect(within(strip).getAllByText("· your filters")).toHaveLength(2);
+
+    // LinkedIn's link speaks LinkedIn's own parameters.
+    const linkedin = new URL(
+      within(strip).getByRole("link", { name: /LinkedIn Jobs/ }).getAttribute("href")!,
+    );
+    expect(linkedin.searchParams.get("keywords")).toBe("engineer");
+    expect(linkedin.searchParams.get("location")).toBe("Copenhagen");
+    expect(linkedin.searchParams.get("distance")).toBe("31");
+    expect(linkedin.searchParams.get("f_TPR")).toBe("r604800");
+    expect(linkedin.searchParams.get("f_WT")).toBe("2");
+    expect(linkedin.searchParams.get("f_SB2")).toBe("3");
+
+    // Indeed's link speaks Indeed's: radius/fromage as parameters, salary
+    // and remote in the query text per Indeed's own search tips.
+    const indeed = new URL(
+      within(strip).getByRole("link", { name: /Indeed/ }).getAttribute("href")!,
+    );
+    expect(indeed.searchParams.get("q")).toBe("engineer $90,000 remote");
+    expect(indeed.searchParams.get("l")).toBe("Copenhagen");
+    expect(indeed.searchParams.get("radius")).toBe("35");
+    expect(indeed.searchParams.get("fromage")).toBe("7");
+
+    // Glassdoor has no verified parameter mapping, so its link stays the
+    // plain query+location template — no invented filters.
+    const glassdoor = within(strip).getByRole("link", { name: /Glassdoor/ }).getAttribute("href")!;
+    expect(glassdoor).toBe(
+      "https://www.glassdoor.com/Job/jobs.htm?sc.keyword=engineer&locKeyword=Copenhagen",
+    );
+  });
+
   it("filters by the seniority the title states, chips it, and saves it with the search", async () => {
     respond({
       results: [{

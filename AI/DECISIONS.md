@@ -3112,3 +3112,32 @@ does not exist here. Both label themselves as derived in the UI, keep
 unstated postings under "Any", and reach the saved-search schema as
 `nullish` so stored queries parse. Nothing anywhere invents a fact about
 a job.
+
+## ADR-169 - LinkedIn and Indeed wired as deep link-outs, in their own URL parameters
+
+Date: 2026-08-29
+
+The owner asked for LinkedIn and Indeed wired to the job search. Neither
+site permits the wiring a live adapter needs: LinkedIn's job-search API is
+partner-only, Indeed closed its publisher search API to new partners, and
+both prohibit automated collection — which this repository has twice
+declined to do and still declines. What their terms permit is what a person
+does by hand: open the site's own search. So the wiring goes outward, as
+deep as their URLs allow. `lib/job-seeker/board-search/linkout.ts`
+translates the current search into the exact parameters each site's own UI
+reads — LinkedIn: `keywords`, `location`, `distance` (km converted to
+miles), `f_TPR` (posted-within as seconds), `f_WT` (work model), `f_E`
+(seniority, only faithful equivalents — "lead" and "manager" have no
+LinkedIn level and stay off the URL), `f_SB2` (salary floor bucket, the
+highest bucket not exceeding the request); Indeed: `q`, `l`, `radius`
+(snapped upward through Indeed's own choices so the link never quietly
+narrows), `fromage`, with the salary floor and "remote" appended to the
+query text per Indeed's own search tips, visibly.
+
+The two deep links sort first in the "Also search on" strip, are accented,
+and say "· your filters" — and every other link-out keeps its plain
+query+location template, because a parameter mapping that has not been
+verified against the target site would be an invented integration. If the
+owner ever obtains LinkedIn partner or Indeed publisher credentials, a real
+adapter goes behind env vars like the six keyed boards; until then this is
+the whole of what those sites allow, and the catalogue notes say so.

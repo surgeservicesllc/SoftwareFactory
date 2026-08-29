@@ -15,6 +15,15 @@ clean. Increment 4's marks migration applied to hosted (run 33273330183,
 postflight green); production probes on #448's deploy verified (marks
 401 anonymous, /JobSearch 200, alerts 503 fail-closed).
 
+**Addendum, 2026-08-29 late night — LinkedIn/Indeed deep link-outs
+(ADR-169):** the two sites' chips now carry the whole current search in
+their own URL parameters, verified by 7 builder unit tests (exact URLs,
+km→mile conversion, upward radius snapping, salary bucketing,
+unmappable-filter omission) and a panel test (deep chips sort first, both
+labeled, LinkedIn/Indeed hrefs asserted parameter by parameter, Glassdoor
+stays template-only). Gates: lint zero warnings, production build,
+`tsc --noEmit` clean, panel suite 33 tests green.
+
 **Addendum, 2026-08-29 night — Job Search increment 4: marks + seniority
 (ADR-167):** favorites/hide/viewed are persisted per person in
 `job_seeker_result_marks` (forced RLS, own-row policies, service_role

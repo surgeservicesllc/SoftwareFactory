@@ -68,6 +68,14 @@ Last triaged: 2026-08-29
   specialty (12 disciplines) and posting-text-derived industry (11
   industries), both labeled as derived, wired through route, panel,
   saved-search schema and alerts.
+- [x] Owner request (2026-08-29 night, ADR-169): LinkedIn and Indeed
+  wired as deep link-outs — the current search, place, radius, posted
+  date, work model, seniority and salary floor translated into each
+  site's own URL parameters; the two chips sort first and say "· your
+  filters". A live adapter stays impossible without violating their
+  terms (LinkedIn API partner-only; Indeed publisher API closed), which
+  the goal forbids; partner credentials would enable one behind env
+  vars like the keyed boards.
 - [ ] Production email delivery: owner-gated on RESEND_API_KEY,
   JOB_ALERT_EMAIL_FROM, CRON_SECRET in Vercel — the alert path's honest
   production state is **Not Connected** (503 fail-closed probe). Verify

@@ -14,6 +14,11 @@ import {
   type UnifiedFilters,
   type UnifiedHit,
 } from "@/lib/job-seeker/board-search/unify";
+import {
+  buildLinkoutUrl,
+  linkoutCarriesFilters,
+  type LinkoutQuery,
+} from "@/lib/job-seeker/board-search/linkout";
 
 /**
  * Search: query live job boards and save what is worth keeping.
@@ -214,12 +219,6 @@ function hitKey(board: string, hit: Hit): string {
 function unifiedKey(card: UnifiedHit): string {
   const primary = card.sources[card.primarySourceIndex]!;
   return `${primary.board}:${primary.externalId ?? primary.url ?? `${card.job.company}:${card.job.title}`}`;
-}
-
-function fillLinkTemplate(template: string, text: string, location: string): string {
-  return template
-    .replace("{query}", encodeURIComponent(text.trim()))
-    .replace("{location}", encodeURIComponent(location.trim()));
 }
 
 function isNew(publishedOn: string | null): boolean {
@@ -854,12 +853,24 @@ export function JobSearchPanel() {
   const marketingSources = sources.filter((s) => s.focus === "marketing" && s.status !== "live");
   // The sites that permit only an ordinary web link — LinkedIn, Indeed and
   // company — belong beside the results, not buried in the catalogue: each
-  // chip opens the site's own search pre-filled with this query, in the
-  // person's own browser, which is the path those sites permit. Deselecting
-  // a site in the catalogue removes its chip.
-  const linkoutStrip = sources.filter(
-    (source) => source.searchUrl !== undefined && !deselected.has(source.key),
-  );
+  // chip opens the site's own search pre-filled in the person's own
+  // browser, which is the path those sites permit. LinkedIn and Indeed
+  // carry the whole current search — place, radius, posted-within, work
+  // model, seniority, salary floor — translated into their own URL
+  // parameters, so they sort first. Deselecting a site in the catalogue
+  // removes its chip.
+  const linkoutQuery: LinkoutQuery = {
+    text,
+    location,
+    radiusKm: radiusKm === "" || location.trim() === "" ? null : Number(radiusKm),
+    postedWithinDays: postedWithinDays === "" ? null : Number(postedWithinDays),
+    workModel: workModel === "" ? null : workModel,
+    seniority: seniority === "" ? null : seniority,
+    salaryMinimum: filters.salaryMinimum,
+  };
+  const linkoutStrip = sources
+    .filter((source) => source.searchUrl !== undefined && !deselected.has(source.key))
+    .sort((a, b) => Number(linkoutCarriesFilters(b.key)) - Number(linkoutCarriesFilters(a.key)));
 
   const addChip = (raw: string, list: readonly string[], set: (next: readonly string[]) => void) => {
     const value = raw.trim();
@@ -1289,7 +1300,7 @@ export function JobSearchPanel() {
                             ) : null}
                             {source.searchUrl !== undefined ? (
                               <a
-                                href={fillLinkTemplate(source.searchUrl, text, location)}
+                                href={buildLinkoutUrl(source.key, source.searchUrl, linkoutQuery)}
                                 target="_blank"
                                 rel="noreferrer noopener"
                                 className="ml-2 text-xs underline underline-offset-2"
@@ -1782,21 +1793,31 @@ export function JobSearchPanel() {
           <div data-testid="linkout-strip">
             <SectionTitle
               title="Also search on"
-              description="These sites permit an ordinary web link but not automated collection, so each opens the site's own search for this query in a new tab. Untick a site under Sources to remove it here."
+              description="These sites permit an ordinary web link but not automated collection, so each opens the site's own search in a new tab. LinkedIn and Indeed open with your search AND your filters applied — place, radius, posted date, work model, seniority and salary floor, in the parameters their own URLs support. Untick a site under Sources to remove it here."
             />
             <ul className="mt-3 flex flex-wrap gap-2">
-              {linkoutStrip.map((source) => (
-                <li key={source.key}>
-                  <a
-                    href={fillLinkTemplate(source.searchUrl!, text, location)}
-                    target="_blank"
-                    rel="noreferrer noopener"
-                    className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] px-3 py-1 text-sm hover:bg-[var(--surface-2)]"
-                  >
-                    {source.name} ↗
-                  </a>
-                </li>
-              ))}
+              {linkoutStrip.map((source) => {
+                const deep = linkoutCarriesFilters(source.key);
+                return (
+                  <li key={source.key}>
+                    <a
+                      href={buildLinkoutUrl(source.key, source.searchUrl!, linkoutQuery)}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      title={deep
+                        ? `Opens ${source.name}'s own search with your filters applied where its URL supports them.`
+                        : `Opens ${source.name}'s own search for this query.`}
+                      className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-sm hover:bg-[var(--surface-2)] ${deep ? "border-[var(--accent)] font-medium" : "border-[var(--border)]"}`}
+                    >
+                      {source.name}
+                      {deep ? (
+                        <span className="text-xs font-normal text-[var(--muted)]">· your filters</span>
+                      ) : null}
+                      {" ↗"}
+                    </a>
+                  </li>
+                );
+              })}
             </ul>
           </div>
         </Card>
