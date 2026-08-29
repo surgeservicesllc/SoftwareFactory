@@ -935,6 +935,30 @@ These are recorded for deliberate owner review and are not evidence that Phase 1
 - [ ] Live drain of a full_lifecycle launch (owner-initiated) — the graph
   halts at the ARCHITECTURE human gate by design; deciding it is the owner's.
 
+## No learning edge from accepted results (found 2026-08-29, design gap)
+
+`AI/LOOPS_AND_GRAPHS.md` records the split between a correction edge (a gate
+returns one unit to the node that produced it, fixing the run in flight) and a
+learning edge (an accepted result returns to the splitter as a constraint,
+fixing every run after). This repository has the first and not the second.
+
+Nothing derives a reusable constraint from an accepted node output, and nothing
+feeds one into the planning brief, so every graph is planned with the same
+blind spots as the last one and a failure fixed today is available to recur.
+The engine is fast and does not get smarter.
+
+Building it needs an ADR and owner direction before code, because the failure
+mode is severe in the other direction: a derived constraint is an instruction
+the planner cannot see the provenance of, and a wrong one narrows every later
+plan silently. At minimum a constraint would need an owning run, the evidence
+it was derived from, an expiry or review path, and a frozen-policy check so it
+can never widen risk, budget, isolation or approval.
+
+- [ ] ADR: what a derived constraint is, who may create one, how it expires.
+- [ ] Constraint store with provenance back to the accepting verification.
+- [ ] Planner brief reads constraints; `frozen.ts` proves none can relax a policy.
+- [ ] Behaviour test: an accepted result changes how the *next* graph is cut.
+
 ## Resumable lifecycle runs (found 2026-08-24, owner-visible cost)
 
 Gates are keyed to graph nodes so approvals outlive runs — correct — but a
