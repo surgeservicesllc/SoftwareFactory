@@ -268,15 +268,29 @@ for (const width of WIDTHS) {
     await page.getByRole("textbox", { name: "Where" }).fill("Copenhagen");
     await page.getByRole("button", { name: "Search", exact: true }).click();
 
-    const cards = page.getByTestId("search-result-card");
-    await expect(cards).toHaveCount(4);
+    // The unified view is the default: the harness's four distinct postings
+    // are four cards, each saveable and badged with its board.
+    await expect(page.getByTestId("unified-results")).toBeVisible();
+    await expect(page.getByText(/4 unique postings/)).toBeVisible();
     await expect(page.getByText(/does not expose a free-text place filter/)).toBeVisible();
     await expect(page.getByRole("button", { name: "Save", exact: true })).toHaveCount(4);
+    await expect(page.getByRole("link", { name: "via Jobnet" })).toBeVisible();
 
-    expect(await overflowing(page), `job-search results @ ${width}px overflowed`).toEqual([]);
+    expect(await overflowing(page), `job-search unified @ ${width}px overflowed`).toEqual([]);
     expect(
       await unreachable(page, "body"),
-      `job-search results @ ${width}px put a control out of reach`,
+      `job-search unified @ ${width}px put a control out of reach`,
+    ).toEqual([]);
+
+    // The by-board view keeps each board's answer untouched.
+    await page.getByRole("button", { name: "By board" }).click();
+    await expect(page.getByTestId("search-result-card")).toHaveCount(4);
+    await expect(page.getByRole("button", { name: "Save", exact: true })).toHaveCount(4);
+
+    expect(await overflowing(page), `job-search by-board @ ${width}px overflowed`).toEqual([]);
+    expect(
+      await unreachable(page, "body"),
+      `job-search by-board @ ${width}px put a control out of reach`,
     ).toEqual([]);
   });
 }

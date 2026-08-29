@@ -1,6 +1,24 @@
 # Quality scorecard
 
-Last reviewed: 2026-08-28
+Last reviewed: 2026-08-29
+
+**Addendum, 2026-08-29 — Job Search increments 1–2: thirteen live boards,
+unified dedupe, honest 52-source catalogue (ADR-163):** on the branch merged
+with main `ed1fc34` (which brought the parallel Job Discovery surface): lint
+zero-warning, typecheck clean, **5,251 tests passed / 2 skipped across 446
+files** on the merged tree plus the 140-test targeted delta for the three
+same-day board additions (The Muse, Working Nomads, Jobspresso — all
+registry-dependent suites re-run green), and a **174/174-page production
+build**. Every one of the thirteen live adapters was probed against its real
+API before its parser was written; the 52-source catalogue's non-live links
+were probed the day they were listed, and four dead domains found during
+research were replaced rather than shipped. Production incident closed the
+same hour: Job Discovery had 500'd because deployment ran ahead of migration
+`20260828000400`; the degradation fix (`ed1fc34`) deployed and the
+`job-seeker-discovery-surface` scope applied and postflight-verified (runs
+`33254397295`, `33254518297` — saved_at, allowance column, three tables with
+forced RLS, schema cache reloaded). Verdict: **INCREMENT GATES PASS; E2E
+ACCEPTANCE STILL AHEAD OF ANY "PRODUCTION READY" CLAIM FOR ALERTS/EMAIL.**
 
 **Addendum, 2026-08-28 — cleanup and target-bound claim production
 acceptance (ADR-155/161):** cleanup SHA

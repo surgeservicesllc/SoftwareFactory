@@ -1,6 +1,31 @@
 # Backlog
 
-Last triaged: 2026-08-28
+Last triaged: 2026-08-29
+
+## Job Search 50-source engine (active owner goal, ADR-163)
+
+- [x] Increment 1: six probed adapters (Remotive, Remote OK, Jobicy,
+  Himalayas, Arbeitnow, We Work Remotely) with fixture-pinned parsers; the
+  shared `unify` dedupe/filter module used by route and panel alike; the
+  50-source catalogue (25 general + 25 marketing) with probed links and
+  honest statuses; route `unified` block + filter params; panel rework
+  (unified cards with source badges, filter chips + Clear All + AND/OR,
+  grouped source picker, sort, NEW badge).
+- [ ] Increment 2: `job_seeker_saved_searches` (+ alert preferences,
+  seen-jobs ledger, delivery ledger) migration with forced RLS and audit
+  events; CRUD routes; Save/Edit/Duplicate/Delete/Run Now/Pause UI; AI
+  match score display on result cards from the verified Career Profile via
+  the existing scoring chain.
+- [ ] Increment 3: alerts engine on supported scheduled infrastructure
+  (dedupe → filter → score → save → email), env-gated email adapter that
+  shows **Not Connected** without credentials, delivery tracking, and the
+  never-repeat-per-user/job/search guarantee enforced by the ledger.
+- [ ] E2E acceptance: real end-to-end pass over auth/RLS, search, filters,
+  saved searches, dedup, alerts, email, mobile UX before any
+  "production ready" claim.
+- [ ] Owner-supplied credentials would light up: USAJOBS, Adzuna, Jooble,
+  Careerjet, Reed, ZipRecruiter (see catalogue notes). The Muse is the
+  strongest next live-adapter candidate (public API, no key needed).
 
 ## Exact Blackstone Supabase Auth bootstrap (2026-08-28, ADR-160)
 

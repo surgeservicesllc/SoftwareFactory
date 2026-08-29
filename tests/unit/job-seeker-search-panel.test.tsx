@@ -279,4 +279,160 @@ describe("the search panel", () => {
     expect(link).toHaveAttribute("href", "https://jobnet.dk/find-job/1");
     expect(link).toHaveAttribute("rel", expect.stringContaining("noopener"));
   });
+
+  it("collapses the same posting from two boards into one card badged with both", async () => {
+    const shared = hit("Platform Engineer");
+    respond({
+      results: [
+        { board: "jobnet", boardName: "Jobnet", totalAvailable: 1, hits: [shared], locationApplied: true },
+        {
+          board: "freehire",
+          boardName: "Freehire",
+          totalAvailable: 1,
+          hits: [{ ...shared, job: { ...shared.job, salaryText: "DKK 700000–900000" }, saveToken: "token-freehire" }],
+          locationApplied: true,
+        },
+      ],
+      failures: [],
+    });
+    const user = userEvent.setup();
+    render(<JobSearchPanel />);
+    await screen.findByText(/Searching 2 boards:/);
+
+    await search(user);
+
+    // One card, not two; both boards' badges attached.
+    expect(await screen.findByText(/1 unique posting/)).toBeInTheDocument();
+    expect(screen.getByText("via Jobnet")).toBeInTheDocument();
+    expect(screen.getByText("via Freehire")).toBeInTheDocument();
+    // The richer copy (the one stating a salary) is the card.
+    expect(screen.getByText(/DKK 700000–900000/)).toBeInTheDocument();
+
+    // Saving goes through the primary source: the board whose exact copy the
+    // card shows, because that board's token is the one sealed over it.
+    await user.click(screen.getByRole("button", { name: /^save$/i }));
+    await screen.findByRole("button", { name: /saved to your jobs/i });
+    const saveCall = fetchMock.mock.calls.find(
+      ([url]) => typeof url === "string" && (url as string).includes("/search/save"),
+    );
+    const saveBody = JSON.parse((saveCall?.[1] as RequestInit).body as string) as {
+      board: string;
+      resultToken: string;
+      job: { salaryText: string | null };
+    };
+    expect(saveBody.board).toBe("freehire");
+    expect(saveBody.resultToken).toBe("token-freehire");
+    expect(saveBody.job.salaryText).toBe("DKK 700000–900000");
+  });
+
+  it("filters instantly in the browser and says how many cards are hidden", async () => {
+    respond({
+      results: [
+        {
+          board: "jobnet",
+          boardName: "Jobnet",
+          totalAvailable: 2,
+          hits: [hit("Platform Engineer"), hit("Marketing Manager")],
+          locationApplied: true,
+        },
+      ],
+      failures: [],
+    });
+    const user = userEvent.setup();
+    render(<JobSearchPanel />);
+    await screen.findByText(/Searching 2 boards:/);
+    await search(user);
+    await screen.findByText("Marketing Manager");
+
+    await user.type(screen.getByPlaceholderText("Add word to exclude, press Enter"), "marketing{Enter}");
+
+    // No refetch: the same response, narrowed, with the removal counted.
+    expect(screen.queryByText("Marketing Manager")).not.toBeInTheDocument();
+    expect(screen.getByText("Platform Engineer")).toBeInTheDocument();
+    expect(screen.getByText(/1 posting is hidden by\s+your filters/)).toBeInTheDocument();
+
+    await user.click(screen.getAllByRole("button", { name: /clear all filters/i })[0]!);
+    expect(await screen.findByText("Marketing Manager")).toBeInTheDocument();
+  });
+
+  it("shows every result as hidden rather than pretending an empty search", async () => {
+    respond({
+      results: [
+        { board: "jobnet", boardName: "Jobnet", totalAvailable: 1, hits: [hit("Platform Engineer")], locationApplied: true },
+      ],
+      failures: [],
+    });
+    const user = userEvent.setup();
+    render(<JobSearchPanel />);
+    await screen.findByText(/Searching 2 boards:/);
+    await search(user);
+    await screen.findByText("Platform Engineer");
+
+    await user.type(screen.getByPlaceholderText("Add word to exclude, press Enter"), "engineer{Enter}");
+
+    // "Filters hid everything" and "the boards had nothing" are different
+    // claims, and the first must not wear the second's words.
+    expect(screen.getByText(/Every result is hidden by the filters above/)).toBeInTheDocument();
+    expect(screen.queryByText(/No postings matched/)).not.toBeInTheDocument();
+  });
+
+  it("renders the catalogue honestly: Not Connected badges and outward links", async () => {
+    fetchMock.mockImplementation((_url: string, init?: RequestInit) => {
+      if (init?.method === "POST") return Promise.resolve(json({ results: [], failures: [] }));
+      return Promise.resolve(json({
+        ...BOARDS,
+        sources: [
+          {
+            key: "adzuna",
+            name: "Adzuna",
+            focus: "general",
+            status: "needs_credentials",
+            searchUrl: "https://www.adzuna.com/search?q={query}",
+            note: "Official API awaiting an app key.",
+          },
+          {
+            key: "heymarketers",
+            name: "Hey Marketers",
+            focus: "marketing",
+            status: "external_link",
+            searchUrl: "https://www.heymarketers.com/",
+            note: "Marketing-only job board without an open API.",
+          },
+        ],
+      }));
+    });
+    const user = userEvent.setup();
+    render(<JobSearchPanel />);
+    await screen.findByText(/Searching 2 boards:/);
+
+    await user.type(screen.getByPlaceholderText("Job title, skill or keyword"), "growth marketer");
+    await user.click(screen.getByText(/Sources \(2 searched live/));
+
+    // A credential-gated source is labeled, never rendered as searchable.
+    expect(screen.getByText("Adzuna")).toBeInTheDocument();
+    expect(screen.getByText("Not Connected")).toBeInTheDocument();
+    // A link-out source opens its own site, with the query interpolated.
+    const links = screen.getAllByRole("link", { name: /open site/i });
+    expect(links.some((link) => link.getAttribute("href") === "https://www.adzuna.com/search?q=growth%20marketer")).toBe(true);
+    expect(links.every((link) => (link.getAttribute("rel") ?? "").includes("noopener"))).toBe(true);
+  });
+
+  it("searches only the boards left ticked", async () => {
+    respond({ results: [], failures: [] });
+    const user = userEvent.setup();
+    render(<JobSearchPanel />);
+    await screen.findByText(/Searching 2 boards:/);
+
+    await user.click(screen.getByText(/Sources \(2 searched live/));
+    await user.click(screen.getByRole("checkbox", { name: /Freehire/ }));
+    expect(screen.getByText(/Searching 1 board:/)).toBeInTheDocument();
+
+    await search(user);
+
+    const searchCall = fetchMock.mock.calls.find(
+      ([, init]) => (init as RequestInit | undefined)?.method === "POST",
+    );
+    const body = JSON.parse((searchCall?.[1] as RequestInit).body as string) as { boards?: string[] };
+    expect(body.boards).toEqual(["jobnet"]);
+  });
 });

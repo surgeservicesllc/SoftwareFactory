@@ -460,7 +460,7 @@ test.describe("job seeker live journey", () => {
      * postings behind it.
      */
     const anyOutcome = page
-      .locator("[data-testid='search-result-card'], [role='alert']")
+      .locator("[data-testid='unified-results'], [data-testid='search-result-card'], [role='alert']")
       .first();
     await expect(anyOutcome).toBeVisible({ timeout: 90_000 });
 
@@ -498,7 +498,9 @@ test.describe("job seeker live journey", () => {
     // A stable board result can be the same on successive production runs.
     // Select a URL this synthetic account has not saved before so this walk
     // proves the recorded transaction instead of accepting a duplicate no-op.
-    const resultRows = page.locator("[data-testid='search-result-card'] li");
+    // The unified view is the default; each li is one deduplicated posting
+    // whose first link is the posting itself (source badges follow it).
+    const resultRows = page.locator("[data-testid='unified-results'] li");
     let candidateRow: Locator | null = null;
     let candidateUrl: string | null = null;
     for (let index = 0; index < await resultRows.count(); index += 1) {
@@ -529,7 +531,9 @@ test.describe("job seeker live journey", () => {
     const activityAfter = await activityAfterResponse.json() as { events?: ActivityEvent[] };
     const savedJob = (jobsAfter.jobs ?? []).find((job) => job.url === candidateUrl);
     expect(savedJob).toBeDefined();
-    expect(savedJob!.source).toMatch(/^(jobnet|jobindex|jobdanmark|freehire)$/);
+    expect(savedJob!.source).toMatch(
+      /^(jobnet|jobindex|jobdanmark|freehire|remotive|remoteok|jobicy|himalayas|arbeitnow|weworkremotely|themuse|workingnomads|jobspresso)$/,
+    );
     expect(savedJob!.match).not.toBeNull();
     expect(savedJob!.match!.score).toEqual(expect.any(Number));
     expect(savedJob!.application).not.toBeNull();

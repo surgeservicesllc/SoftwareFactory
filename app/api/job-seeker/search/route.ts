@@ -6,8 +6,14 @@ import {
   readBoundedJson,
   requestErrorResponse,
 } from "@/lib/server/http";
+import { SOURCE_CATALOGUE } from "@/lib/job-seeker/board-search/catalogue";
 import { BOARD_SEARCH_ADAPTERS, boardSearchAdapter } from "@/lib/job-seeker/board-search/registry";
 import { BoardSearchError, type BoardSearchQuery } from "@/lib/job-seeker/board-search/types";
+import {
+  applyUnifiedFilters,
+  dedupeAcrossBoards,
+  type UnifiedFilters,
+} from "@/lib/job-seeker/board-search/unify";
 import { sealSearchResult } from "@/lib/job-seeker/search-result-token";
 import { supabaseBoundaryErrorResponse } from "@/lib/supabase/http";
 import { assertSameOriginRequest } from "@/lib/supabase/request";
@@ -40,13 +46,32 @@ export const runtime = "nodejs";
  * would tell a person they had searched everywhere when they had not.
  */
 
+const filtersSchema = z
+  .object({
+    keywordMode: z.enum(["and", "or"]).default("and"),
+    keywords: z.array(z.string().trim().min(1).max(80)).max(16).default([]),
+    excludeKeywords: z.array(z.string().trim().min(1).max(80)).max(16).default([]),
+    excludeCompanies: z.array(z.string().trim().min(1).max(120)).max(16).default([]),
+    workModel: z.enum(["remote", "hybrid", "onsite"]).nullish(),
+    salaryMinimum: z.number().int().min(0).max(10_000_000).nullish(),
+    requireSalary: z.boolean().default(false),
+    postedWithinDays: z.number().int().min(1).max(365).nullish(),
+  })
+  .strict();
+
 const searchSchema = z
   .object({
     text: z.string().trim().max(200).default(""),
     location: z.string().trim().min(1).max(120).nullish(),
     /** Per board, not in total; the page shows each board's results separately. */
     limit: z.number().int().min(1).max(50).default(25),
-    boards: z.array(z.string().trim().min(1).max(64)).min(1).max(10).optional(),
+    boards: z.array(z.string().trim().min(1).max(64)).min(1).max(16).optional(),
+    /**
+     * Result-level filters, applied to the unified set after boards answer.
+     * They refine what came back; the boards are still queried by `text`,
+     * because most cannot express these conditions upstream.
+     */
+    filters: filtersSchema.optional(),
   })
   .strict()
   .refine((value) => value.text.length > 0 || (value.location ?? "").length > 0, {
@@ -69,6 +94,13 @@ export async function GET() {
         coverage: adapter.coverage,
         supportsLocation: adapter.supportsLocation,
       })),
+      /*
+       * The full researched catalogue: connected boards plus every source
+       * that is credential-gated, link-out only, or refused — each with the
+       * honest reason. The picker renders this so nobody has to wonder why
+       * a famous board is not a checkbox.
+       */
+      sources: SOURCE_CATALOGUE,
     });
   } catch (error) {
     const boundary = supabaseBoundaryErrorResponse(error);
@@ -114,24 +146,34 @@ export async function POST(request: Request) {
 
     const results: unknown[] = [];
     const failures: unknown[] = [];
+    const taggedForUnify: Parameters<typeof dedupeAcrossBoards>[0][number][] = [];
     settled.forEach((outcome, index) => {
       const adapter = adapters[index]!;
       if (outcome.status === "fulfilled") {
+        const withTokens = outcome.value.hits.map((hit) => ({
+          ...hit,
+          saveToken: sealSearchResult({
+            organizationId: activeOrganization.id,
+            userId: user.id,
+            board: adapter.key,
+            job: hit.job,
+          }),
+        }));
         results.push({
           board: adapter.key,
           boardName: adapter.name,
           totalAvailable: outcome.value.totalAvailable,
-          hits: outcome.value.hits.map((hit) => ({
-            ...hit,
-            saveToken: sealSearchResult({
-              organizationId: activeOrganization.id,
-              userId: user.id,
-              board: adapter.key,
-              job: hit.job,
-            }),
-          })),
+          hits: withTokens,
           locationApplied: query.location === null || adapter.supportsLocation,
         });
+        for (const hit of withTokens) {
+          taggedForUnify.push({
+            board: adapter.key,
+            boardName: adapter.name,
+            hit: { job: hit.job, publishedOn: hit.publishedOn, closesOn: hit.closesOn },
+            saveToken: hit.saveToken,
+          });
+        }
         return;
       }
       /*
@@ -151,6 +193,29 @@ export async function POST(request: Request) {
       });
     });
 
+    /*
+     * The unified view: the same hits collapsed across boards (same company
+     * and title is one card carrying every source's link and save token),
+     * then narrowed by the request's result-level filters. The per-board
+     * `results` stay in the response untouched — the raw material is never
+     * hidden behind the refinement, and the counts let the UI say honestly
+     * how many cards the filters removed.
+     */
+    const filters: UnifiedFilters | null = parsed.data.filters
+      ? {
+          keywordMode: parsed.data.filters.keywordMode,
+          keywords: parsed.data.filters.keywords,
+          excludeKeywords: parsed.data.filters.excludeKeywords,
+          excludeCompanies: parsed.data.filters.excludeCompanies,
+          workModel: parsed.data.filters.workModel ?? null,
+          salaryMinimum: parsed.data.filters.salaryMinimum ?? null,
+          requireSalary: parsed.data.filters.requireSalary,
+          postedWithinDays: parsed.data.filters.postedWithinDays ?? null,
+        }
+      : null;
+    const deduped = dedupeAcrossBoards(taggedForUnify);
+    const unifiedHits = filters === null ? deduped : applyUnifiedFilters(deduped, filters);
+
     return jsonNoStore({
       query: { text: query.text, location: query.location, limit: query.limit },
       results,
@@ -160,6 +225,11 @@ export async function POST(request: Request) {
        * changed will eventually guess wrong and hide a failure.
        */
       failures,
+      unified: {
+        hits: unifiedHits,
+        dedupedFrom: taggedForUnify.length,
+        beforeFilters: deduped.length,
+      },
     });
   } catch (error) {
     if (error instanceof ApiRequestError) return requestErrorResponse(error);
