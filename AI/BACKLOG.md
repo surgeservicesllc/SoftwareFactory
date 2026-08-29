@@ -20,10 +20,15 @@ Last triaged: 2026-08-29
 - [ ] Increment 2 remainder: alert cadence UI stays unexposed until the
   delivery engine exists (ADR-141's rule); seen-jobs/delivery ledger
   arrives with the alerts engine.
-- [ ] Increment 3: alerts engine on supported scheduled infrastructure
-  (dedupe → filter → score → save → email), env-gated email adapter that
-  shows **Not Connected** without credentials, delivery tracking, and the
-  never-repeat-per-user/job/search guarantee enforced by the ledger.
+- [x] Increment 3 (built; hosted apply + owner env still ahead): alert
+  engine as a Vercel Cron route over two service_role-only definer
+  functions; pure dedupe → saved filters → score → never-repeat →
+  email-composition core; env-gated Resend adapter; delivery ledger with
+  the never-repeat UNIQUE constraint, append-only by trigger; ASAP/Daily/
+  Weekly cadence controls that render **Not Connected** and refuse writes
+  until RESEND_API_KEY, JOB_ALERT_EMAIL_FROM and CRON_SECRET exist
+  (ADR-164). To light it up: apply scope job-seeker-alert-engine, set the
+  three env vars, redeploy.
 - [ ] E2E acceptance: real end-to-end pass over auth/RLS, search, filters,
   saved searches, dedup, alerts, email, mobile UX before any
   "production ready" claim.

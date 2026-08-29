@@ -537,6 +537,42 @@ describe("the search panel", () => {
     await waitFor(() => expect(screen.queryByText("Remote marketing")).not.toBeInTheDocument());
   });
 
+  it("offers alert cadences only when the pipeline can deliver, else says Not Connected", async () => {
+    const savedRow = {
+      id: "11111111-2222-4333-8444-555555555555",
+      name: "Remote marketing",
+      query: { text: "marketing" },
+      lastRunAt: null,
+      alert: null,
+    };
+    const renderWith = (channel: { emailConnected: boolean; schedulerConfigured: boolean }) => {
+      fetchMock.mockImplementation((url: string, init?: RequestInit) => {
+        if (url.includes("/api/job-seeker/saved-searches")) {
+          if ((init?.method ?? "GET") === "PATCH") {
+            return Promise.resolve(json({
+              savedSearch: { ...savedRow, alert: { cadence: "daily", lastScannedAt: null } },
+            }));
+          }
+          return Promise.resolve(json({ savedSearches: [savedRow], alertsChannel: channel }));
+        }
+        if (init?.method === "POST") return Promise.resolve(json({ results: [], failures: [] }));
+        return Promise.resolve(json(BOARDS));
+      });
+      return render(<JobSearchPanel />);
+    };
+
+    const user = userEvent.setup();
+    const { unmount } = renderWith({ emailConnected: false, schedulerConfigured: false });
+    expect(await screen.findByText("Alerts: Not Connected")).toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: /Email alert/ })).not.toBeInTheDocument();
+    unmount();
+
+    renderWith({ emailConnected: true, schedulerConfigured: true });
+    const select = await screen.findByRole("combobox", { name: /Email alert for Remote marketing/ });
+    await user.selectOptions(select, "daily");
+    expect(await screen.findByText(/alert daily/)).toBeInTheDocument();
+  });
+
   it("searches only the boards left ticked", async () => {
     respond({ results: [], failures: [] });
     const user = userEvent.setup();

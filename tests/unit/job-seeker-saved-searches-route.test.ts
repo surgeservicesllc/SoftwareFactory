@@ -35,7 +35,7 @@ const row = {
 function stubTable(result: { data?: unknown; error?: { code?: string } | null }) {
   const calls: Array<[string, ...unknown[]]> = [];
   const chain: Record<string, unknown> = {};
-  for (const method of ["select", "insert", "update", "delete", "eq", "order", "limit"]) {
+  for (const method of ["select", "insert", "update", "delete", "upsert", "eq", "order", "limit"]) {
     chain[method] = vi.fn((...args: unknown[]) => {
       calls.push([method, ...args]);
       return chain;
@@ -161,6 +161,45 @@ describe("saved searches", () => {
     const eqs = calls.filter(([method]) => method === "eq").map(([, column, value]) => [column, value]);
     expect(eqs).toContainEqual(["organization_id", organizationId]);
     expect(eqs).toContainEqual(["user_id", "user-1"]);
+  });
+
+  it("refuses to store an alert cadence while the pipeline is Not Connected", async () => {
+    signIn({ data: row });
+    const response = await PATCH(request("PATCH", { id: searchId, alert: { cadence: "daily" } }));
+    expect(response.status).toBe(409);
+    const payload = (await response.json()) as { error?: { code?: string; message?: string } };
+    expect(payload.error?.code).toBe("alerts_not_connected");
+    expect(payload.error?.message).toMatch(/Not Connected/);
+  });
+
+  it("stores a cadence when email and scheduler are both configured", async () => {
+    vi.stubEnv("RESEND_API_KEY", "resendkeyfortests");
+    vi.stubEnv("JOB_ALERT_EMAIL_FROM", "alerts@example.org");
+    vi.stubEnv("CRON_SECRET", "cronsecretfortests");
+    try {
+      const calls = signIn({ data: { ...row, cadence: "daily", last_scanned_at: null } });
+      const response = await PATCH(request("PATCH", { id: searchId, alert: { cadence: "daily" } }));
+      expect(response.status).toBe(200);
+      const upserted = calls.find(([method]) => method === "upsert")?.[1] as Record<string, unknown>;
+      expect(upserted).toMatchObject({
+        organization_id: organizationId,
+        user_id: "user-1",
+        saved_search_id: searchId,
+        cadence: "daily",
+        active: true,
+      });
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("turns an alert off without needing the pipeline connected", async () => {
+    const calls = signIn({ data: row });
+    const response = await PATCH(request("PATCH", { id: searchId, alert: { off: true } }));
+    expect(response.status).toBe(200);
+    expect(calls.some(([method]) => method === "delete")).toBe(true);
+    const payload = (await response.json()) as { savedSearch: { alert: unknown } };
+    expect(payload.savedSearch.alert).toBeNull();
   });
 
   it("refuses a cross-origin mutation", async () => {

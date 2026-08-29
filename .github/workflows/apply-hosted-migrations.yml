@@ -1661,6 +1661,73 @@ jobs:
             \$\$;"
           echo "Job discovery surface applied and recorded; RLS verified on all three tables; the API schema cache was reloaded."
 
+      - name: Apply the job seeker alert engine (scope=job-seeker-alert-engine)
+        if: ${{ inputs.scope == 'job-seeker-alert-engine' }}
+        run: |
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+          FILE=supabase/migrations/20260829000100_job_seeker_alert_engine.sql
+          # Preflight: refuse a file that is not the reviewed one. The apply is
+          # forward-only and additive, but "additive" is a property of this
+          # exact text, not of the scope's name.
+          EXPECTED=$(sha256sum "$FILE" | cut -d" " -f1)
+          echo "Applying ${FILE} (sha256 ${EXPECTED})"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied 20260829000100
+          else
+            npx supabase migration repair --status applied 20260829000100 --db-url "$DB_URL"
+          fi
+          psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
+          # Postflight: the engine's whole boundary must exist — the ledger
+          # with RLS forced, the widened cadence, and both definer functions
+          # executable by service_role and nobody else.
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
+            do \$\$
+            begin
+              if not exists (
+                select 1 from pg_class c
+                 join pg_namespace n on n.oid = c.relnamespace
+                 where n.nspname = 'public' and c.relname = 'job_seeker_alert_deliveries'
+                   and c.relrowsecurity and c.relforcerowsecurity
+              ) then
+                raise exception 'job_seeker_alert_deliveries is missing or does not force RLS';
+              end if;
+              if not exists (
+                select 1 from information_schema.columns
+                 where table_schema = 'public' and table_name = 'job_seeker_search_alerts'
+                   and column_name = 'last_scanned_at'
+              ) then
+                raise exception 'job_seeker_search_alerts.last_scanned_at is missing after apply';
+              end if;
+              if (
+                select count(*) from pg_proc p
+                 join pg_namespace n on n.oid = p.pronamespace
+                 where n.nspname = 'public'
+                   and p.proname in ('list_due_job_seeker_alerts', 'record_job_seeker_alert_scan')
+                   and p.prosecdef
+              ) <> 2 then
+                raise exception 'the two definer alert functions are not both present as security definer';
+              end if;
+              if exists (
+                select 1
+                  from pg_proc p
+                  join pg_namespace n on n.oid = p.pronamespace
+                 where n.nspname = 'public'
+                   and p.proname in ('list_due_job_seeker_alerts', 'record_job_seeker_alert_scan')
+                   and (has_function_privilege('anon', p.oid, 'execute')
+                     or has_function_privilege('authenticated', p.oid, 'execute'))
+              ) then
+                raise exception 'an alert definer function is executable by anon or authenticated';
+              end if;
+            end
+            \$\$;"
+          echo "Alert engine applied and recorded; ledger RLS forced; definer boundary verified service_role-only."
+
       - name: Normalize exact legacy bot ACLs (scope=bot-legacy-acl-normalization)
         if: ${{ inputs.scope == 'bot-legacy-acl-normalization' }}
         run: |

@@ -7,6 +7,8 @@ import {
   readBoundedJson,
   requestErrorResponse,
 } from "@/lib/server/http";
+import { alertEmailConnected } from "@/lib/job-seeker/alert-email";
+import { savedSearchQuerySchema } from "@/lib/job-seeker/saved-search-query";
 import { findSensitiveData } from "@/lib/server/sensitive-data";
 import { supabaseBoundaryErrorResponse } from "@/lib/supabase/http";
 import { assertSameOriginRequest } from "@/lib/supabase/request";
@@ -34,28 +36,7 @@ export const runtime = "nodejs";
  * is the kind of dead control this repository refuses to ship.
  */
 
-const querySchema = z
-  .object({
-    text: z.string().trim().max(200).default(""),
-    location: z.string().trim().max(120).nullish(),
-    boards: z.array(z.string().trim().min(1).max(64)).max(16).optional(),
-    sort: z.enum(["returned", "newest", "salary", "match"]).optional(),
-    filters: z
-      .object({
-        keywordMode: z.enum(["and", "or"]).optional(),
-        keywords: z.array(z.string().trim().min(1).max(80)).max(16).optional(),
-        excludeKeywords: z.array(z.string().trim().min(1).max(80)).max(16).optional(),
-        excludeCompanies: z.array(z.string().trim().min(1).max(120)).max(16).optional(),
-        workModel: z.enum(["remote", "hybrid", "onsite"]).nullish(),
-        salaryMinimum: z.number().int().min(0).max(10_000_000).nullish(),
-        requireSalary: z.boolean().optional(),
-        postedWithinDays: z.number().int().min(1).max(365).nullish(),
-        minimumScore: z.number().int().min(0).max(100).nullish(),
-      })
-      .strict()
-      .optional(),
-  })
-  .strict();
+const querySchema = savedSearchQuerySchema;
 
 const createSchema = z
   .object({
@@ -64,6 +45,11 @@ const createSchema = z
   })
   .strict();
 
+const alertSchema = z.union([
+  z.object({ cadence: z.enum(["asap", "daily", "weekly"]) }).strict(),
+  z.object({ off: z.literal(true) }).strict(),
+]);
+
 const patchSchema = z
   .object({
     id: z.string().uuid(),
@@ -71,11 +57,31 @@ const patchSchema = z
     query: querySchema.optional(),
     /** Record that the search was just re-run. */
     markRun: z.boolean().optional(),
+    /** Turn the search's email alert on at a cadence, or off. */
+    alert: alertSchema.optional(),
   })
   .strict()
-  .refine((value) => value.name !== undefined || value.query !== undefined || value.markRun === true, {
-    message: "Nothing to change.",
-  });
+  .refine(
+    (value) =>
+      value.name !== undefined ||
+      value.query !== undefined ||
+      value.markRun === true ||
+      value.alert !== undefined,
+    { message: "Nothing to change." },
+  );
+
+/**
+ * Whether the alert pipeline can actually deliver: the mailer has its
+ * credentials and the scheduler has its secret. The UI renders anything
+ * less as **Not Connected**, and cadence changes are refused rather than
+ * stored as a promise nothing will keep.
+ */
+function alertsChannel() {
+  return {
+    emailConnected: alertEmailConnected(),
+    schedulerConfigured: Boolean(process.env.CRON_SECRET),
+  };
+}
 
 const deleteSchema = z.object({ id: z.string().uuid() }).strict();
 
@@ -120,15 +126,48 @@ function isUniqueViolation(error: { code?: string } | null): boolean {
 export async function GET() {
   try {
     const { activeOrganization, user, client } = await requireActiveOrganization();
-    const { data, error } = await client
-      .from("job_seeker_saved_searches")
-      .select(COLUMNS)
-      .eq("organization_id", activeOrganization.id)
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false })
-      .limit(200);
-    if (error) return databaseErrorResponse(error);
-    return jsonNoStore({ savedSearches: ((data ?? []) as SavedSearchRow[]).map(toView) });
+    const [searches, alerts] = await Promise.all([
+      client
+        .from("job_seeker_saved_searches")
+        .select(COLUMNS)
+        .eq("organization_id", activeOrganization.id)
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(200),
+      client
+        .from("job_seeker_search_alerts")
+        .select("saved_search_id, cadence, active, last_scanned_at")
+        .eq("organization_id", activeOrganization.id)
+        .eq("user_id", user.id)
+        .limit(200),
+    ]);
+    if (searches.error) return databaseErrorResponse(searches.error);
+    /*
+     * The alerts read degrades alone: a database still ahead of the alert
+     * migration (no last_scanned_at yet) must not take saved searches down
+     * with it. In that state every search reports no alert, which is true.
+     */
+    const alertRows = alerts.error
+      ? []
+      : ((alerts.data ?? []) as Array<{
+          saved_search_id: string;
+          cadence: string;
+          active: boolean;
+          last_scanned_at: string | null;
+        }>);
+    const bySearch = new Map(alertRows.map((row) => [row.saved_search_id, row]));
+    return jsonNoStore({
+      savedSearches: ((searches.data ?? []) as SavedSearchRow[]).map((row) => {
+        const alert = bySearch.get(row.id);
+        return {
+          ...toView(row),
+          alert: alert === undefined || !alert.active
+            ? null
+            : { cadence: alert.cadence, lastScannedAt: alert.last_scanned_at },
+        };
+      }),
+      alertsChannel: alertsChannel(),
+    });
   } catch (error) {
     const boundary = supabaseBoundaryErrorResponse(error);
     if (boundary) return boundary;
@@ -221,7 +260,59 @@ export async function PATCH(request: Request) {
         { status: 404 },
       );
     }
-    return jsonNoStore({ savedSearch: toView(data) });
+
+    let alertView: { cadence: string; lastScannedAt: string | null } | null | undefined;
+    if (payload.alert !== undefined) {
+      if ("off" in payload.alert) {
+        const removed = await client
+          .from("job_seeker_search_alerts")
+          .delete()
+          .eq("saved_search_id", payload.id)
+          .eq("organization_id", activeOrganization.id)
+          .eq("user_id", user.id);
+        if (removed.error) return databaseErrorResponse(removed.error);
+        alertView = null;
+      } else {
+        const channel = alertsChannel();
+        if (!channel.emailConnected || !channel.schedulerConfigured) {
+          // Storing a cadence the pipeline cannot honor would be a switch
+          // wired to nothing; the refusal names what the owner must supply.
+          return jsonNoStore(
+            {
+              error: {
+                code: "alerts_not_connected",
+                message: channel.emailConnected
+                  ? "The alert scheduler is Not Connected (CRON_SECRET is unset)."
+                  : "Alert email is Not Connected (RESEND_API_KEY, JOB_ALERT_EMAIL_FROM).",
+              },
+            },
+            { status: 409 },
+          );
+        }
+        const upserted = await client
+          .from("job_seeker_search_alerts")
+          .upsert(
+            {
+              organization_id: activeOrganization.id,
+              user_id: user.id,
+              saved_search_id: payload.id,
+              cadence: payload.alert.cadence,
+              active: true,
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: "organization_id,user_id,saved_search_id" },
+          )
+          .select("cadence, last_scanned_at")
+          .single<{ cadence: string; last_scanned_at: string | null }>();
+        if (upserted.error) return databaseErrorResponse(upserted.error);
+        alertView = { cadence: upserted.data.cadence, lastScannedAt: upserted.data.last_scanned_at };
+      }
+    }
+
+    return jsonNoStore({
+      savedSearch:
+        alertView === undefined ? toView(data) : { ...toView(data), alert: alertView },
+    });
   } catch (error) {
     if (error instanceof z.ZodError) {
       return jsonNoStore(

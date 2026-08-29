@@ -125,7 +125,11 @@ type SavedSearchView = {
   name: string;
   query: SavedSearchQuery;
   lastRunAt: string | null;
+  /** The search's email alert, when one is active. */
+  alert?: { cadence: "asap" | "daily" | "weekly"; lastScannedAt: string | null } | null;
 };
+
+type AlertsChannel = { emailConnected: boolean; schedulerConfigured: boolean };
 
 function hitKey(board: string, hit: Hit): string {
   return `${board}:${hit.job.externalId ?? hit.job.url ?? `${hit.job.company}:${hit.job.title}`}`;
@@ -206,6 +210,7 @@ export function JobSearchPanel() {
 
   // Saved searches, persisted per person under RLS.
   const [savedSearches, setSavedSearches] = useState<SavedSearchView[]>([]);
+  const [alertsChannel, setAlertsChannel] = useState<AlertsChannel | null>(null);
   const [savedError, setSavedError] = useState<string | null>(null);
   const [saveSearchName, setSaveSearchName] = useState("");
   const [savedBusy, setSavedBusy] = useState<string | null>(null);
@@ -239,8 +244,14 @@ export function JobSearchPanel() {
         const response = await fetch("/api/job-seeker/saved-searches", { headers: { accept: "application/json" } });
         if (!active) return;
         if (!response.ok) return;
-        const payload = (await response.json()) as { savedSearches?: SavedSearchView[] };
-        if (active) setSavedSearches(payload.savedSearches ?? []);
+        const payload = (await response.json()) as {
+          savedSearches?: SavedSearchView[];
+          alertsChannel?: AlertsChannel;
+        };
+        if (active) {
+          setSavedSearches(payload.savedSearches ?? []);
+          setAlertsChannel(payload.alertsChannel ?? null);
+        }
       } catch {
         // The list stays empty; saving later will surface any real problem.
       }
@@ -587,6 +598,27 @@ export function JobSearchPanel() {
   const duplicateSavedSearch = useCallback(async (saved: SavedSearchView) => {
     await createSavedSearch(`${saved.name} (copy)`.slice(0, 120), saved.query);
   }, [createSavedSearch]);
+
+  const setAlert = useCallback(async (saved: SavedSearchView, value: string) => {
+    setSavedError(null);
+    setSavedBusy(saved.id);
+    try {
+      const body = value === "off"
+        ? { id: saved.id, alert: { off: true as const } }
+        : { id: saved.id, alert: { cadence: value as "asap" | "daily" | "weekly" } };
+      const { ok, payload } = await savedSearchRequest("PATCH", body);
+      if (!ok || payload.savedSearch === undefined) {
+        setSavedError(payload.error?.message ?? "The alert could not be changed.");
+        return;
+      }
+      setSavedSearches((current) =>
+        current.map((entry) => (entry.id === saved.id ? payload.savedSearch! : entry)));
+    } catch {
+      setSavedError("The alert could not be changed because the connection failed.");
+    } finally {
+      setSavedBusy(null);
+    }
+  }, [savedSearchRequest]);
 
   const updateSavedSearchQuery = useCallback(async (saved: SavedSearchView) => {
     setSavedError(null);
@@ -1027,9 +1059,39 @@ export function JobSearchPanel() {
                     {saved.lastRunAt === null
                       ? "Never run"
                       : `Last run ${saved.lastRunAt.slice(0, 10)}`}
+                    {saved.alert != null
+                      ? ` · alert ${saved.alert.cadence === "asap" ? "as soon as possible" : saved.alert.cadence}`
+                      : ""}
                   </span>
                 </span>
-                <span className="flex shrink-0 flex-wrap gap-1.5">
+                <span className="flex shrink-0 flex-wrap items-center gap-1.5">
+                  {alertsChannel !== null &&
+                  alertsChannel.emailConnected &&
+                  alertsChannel.schedulerConfigured ? (
+                    <label className="text-xs text-[var(--muted)]">
+                      <span className="sr-only">Email alert for {saved.name}</span>
+                      <select
+                        value={saved.alert?.cadence ?? "off"}
+                        onChange={(event) => void setAlert(saved, event.target.value)}
+                        disabled={savedBusy !== null}
+                        className="rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-xs disabled:opacity-60"
+                      >
+                        <option value="off">Alerts off</option>
+                        <option value="asap">Email ASAP</option>
+                        <option value="daily">Email daily</option>
+                        <option value="weekly">Email weekly</option>
+                      </select>
+                    </label>
+                  ) : alertsChannel !== null ? (
+                    <span
+                      className="rounded-full border border-[var(--border)] px-2 py-0.5 text-xs text-[var(--muted)]"
+                      title={alertsChannel.emailConnected
+                        ? "The alert scheduler needs CRON_SECRET set in Vercel."
+                        : "Email alerts need RESEND_API_KEY and JOB_ALERT_EMAIL_FROM set in Vercel."}
+                    >
+                      Alerts: Not Connected
+                    </span>
+                  ) : null}
                   <button
                     type="button"
                     onClick={() => void applySavedSearch(saved)}
