@@ -52,6 +52,7 @@ on:
           - ledger-repair-node-detail
           - job-seeker-discovery-surface
           - budget-tracker
+          - job-seeker-alert-engine
           - probe
 permissions:
   actions: read
