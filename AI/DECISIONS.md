@@ -2796,6 +2796,45 @@ Use this append-only log for decisions that constrain future implementation. Cha
   never animates hope — every color is a recorded state, and an empty
   organization gets an empty state naming its next step, not a demo.
 
+## ADR-141 - A meter with no event log is a decoration, and the Job Discovery design gets measurements or nothing
+
+- Date: 2026-08-28
+- Status: Accepted
+- Context: the owner's Job Discovery reference shows five headline figures, a
+  bookmark, Saved Searches and Alerts tabs, and a "Search Credits — 1,250 /
+  2,000 used this week" meter. The schema could answer the postings and their
+  scores; it could not answer saving, saved searches, alerts, or credits.
+- Decision: build the data, never the appearance. `saved_at` on
+  `job_seeker_jobs` (a timestamp, not a boolean, so the saved list can be
+  ordered by when), `job_seeker_saved_searches`, `job_seeker_search_alerts`
+  referencing the search it came from, `job_seeker_search_events` as an
+  append-only log, and `weekly_search_allowance` on preferences. Every table
+  repeats the foundation's boundary exactly: organization + row ownership, RLS
+  enabled and forced, anon revoked, four owner-scoped policies. A new
+  job-seeker table with its own access rule would be a hole in a boundary that
+  is otherwise uniform.
+- Why the event log: a credit meter over nothing can only be a decoration, and
+  a decorated meter is worse than none because it tells a person they have
+  spent something. The page counts rows in a window instead. The log is
+  append-only by trigger for the same reason: a rewritable log would let the
+  meter report whatever the last writer preferred.
+- Why the allowance is a column: a quota hard-coded in a component is a quota
+  nobody can change and no test can vary. 2000 matches the design; a workspace
+  needing another ceiling edits the row, not the bundle.
+- Decision, the omissions: the meter renders only when an allowance exists,
+  rather than drawing an empty bar. The Saved Searches and Alerts tabs are not
+  rendered at all — the tables exist but nothing writes them yet, and a tab
+  opening onto a permanently empty list is the scaffolding this repository
+  refuses to ship.
+- Decision, the "High Match (80%+)" card: the label is built from what the rows
+  say, not from the constant in the design. `qualification_threshold` is a
+  per-seeker preference defaulting to 80; a page hard-coding 80 would mislabel
+  every workspace that moved its bar. When postings disagree about the
+  threshold there is no single bar to name and the qualifier is dropped rather
+  than picked.
+- Also: an unscored posting is excluded from a minimum-score filter and sorts
+  last, never treated as zero. Zero is a measurement; "not measured" is not.
+
 ## ADR-163 - Unified job search: probed adapters, one dedupe definition, an honest 50-source catalogue
 
 - Context: the active owner goal turns `/JobSearch` into a job search

@@ -1,5 +1,53 @@
 # SoftwareFactory — shared working status
 
+## JOB SEEKER — JOB DISCOVERY MATCHES THE DESIGN, AND FOUR FIGURES GOT REAL DATA (2026-08-28 — PICK UP HERE)
+
+The owner's Job Discovery reference was built against the existing surface
+rather than beside it. `JobView.match` already carried `score`, `reasons`,
+`gaps` and `breakdown`, which are exactly the design's ring, "Why you're a
+strong match", "Potential Gaps" and "Top Matching Skills" — so the most
+valuable half of the page is reused scored data, not new code.
+
+**Four visible features had nothing behind them** and got tables, not
+appearances (`20260828000400`, ADR-141):
+
+| Feature | Now backed by |
+|---|---|
+| Bookmark / Saved Jobs | `job_seeker_jobs.saved_at` (timestamp + partial index) |
+| Saved Searches | `job_seeker_saved_searches` |
+| Alerts | `job_seeker_search_alerts` (FK-cascaded from the search) |
+| Search Credits | `job_seeker_search_events`, append-only, + `weekly_search_allowance` |
+
+**Two things deliberately NOT rendered, and why — do not "finish" these
+without writing the data first:**
+
+1. **Saved Searches and Alerts tabs.** The tables exist; nothing writes them.
+   A tab onto a permanently empty list is scaffolding. Writing them is the
+   next item: `POST /api/job-seeker/search/save` currently saves a *job* from
+   a result, not the *query* — that name collision is worth resolving when you
+   build the saved-search route.
+2. **The credit meter when no allowance exists.** It is omitted, not drawn
+   empty.
+
+**Traps in this area:**
+
+- **`qualification_threshold` is per-seeker and defaults to 80.** The design's
+  card says "High Match (80%+)"; the code reads each job's own recorded
+  threshold and drops the qualifier when postings disagree. Do not hard-code
+  80 — a mutation test fails if you do.
+- **An unscored posting is not a zero-scored one.** It is excluded from a
+  minimum-score filter and sorts last. A test asserts this at a bar of **0**,
+  because at any higher bar the honest check and the `?? 0` shortcut agree and
+  the case proves nothing.
+- **Search and Follow-Up are not in the design's twelve nav items** but are
+  working pages. They stay reachable under Overview's contents group rather
+  than being orphaned.
+
+**Still open here:** the design's own "Estimated Next Steps" (Customize Resume
+→ Generate Cover Letter → Review Application → Apply) is not built; the
+application stage exists but the four-step ladder does not map onto it yet.
+Company Insights shows only what the posting carried and says so.
+
 ## FACTORY RELEASE CHECKPOINT (2026-08-28 08:26 EDT — CURRENT)
 
 - Validated cleanup/application release is
