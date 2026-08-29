@@ -15,6 +15,13 @@ type QueryClient = Awaited<ReturnType<typeof import("@/lib/supabase/server").cre
 export type EvaluationInputs = Readonly<{
   profile: Parameters<typeof evaluateJob>[0];
   preferences: Parameters<typeof evaluateJob>[1];
+  /**
+   * Whether a profile row actually exists. The facts above default to empty
+   * when it does not, which scores honestly (all gaps) — but a caller that
+   * would present scores computed over nothing can use this to say
+   * "no profile recorded" instead.
+   */
+  profileRecorded: boolean;
 }>;
 
 /** One load per request; every posting is evaluated against the same facts. */
@@ -40,6 +47,7 @@ export async function loadEvaluationInputs(
   const history = (profile.employment_history ?? []) as Array<{ title: string; summary?: string; highlights?: string[] }>;
 
   return {
+    profileRecorded: profileRow !== null,
     profile: {
       skills: (profile.skills ?? []) as string[],
       technologies: (profile.technologies ?? []) as string[],

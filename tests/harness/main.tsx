@@ -169,6 +169,7 @@ function serveFixtures() {
     }
     if (url.includes("/api/job-seeker/profile")) return json({ profile: JOB_SEEKER_PROFILE });
     if (url.includes("/api/job-seeker/preferences")) return json({ preferences: JOB_SEEKER_PREFERENCES });
+    if (url.includes("/api/job-seeker/saved-searches")) return json({ savedSearches: [] });
     if (url.includes("/api/job-seeker/search/save")) return json({ saved: true });
     if (url.includes("/api/job-seeker/search")) {
       return method === "POST"

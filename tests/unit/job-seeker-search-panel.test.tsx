@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -415,6 +415,126 @@ describe("the search panel", () => {
     const links = screen.getAllByRole("link", { name: /open site/i });
     expect(links.some((link) => link.getAttribute("href") === "https://www.adzuna.com/search?q=growth%20marketer")).toBe(true);
     expect(links.every((link) => (link.getAttribute("rel") ?? "").includes("noopener"))).toBe(true);
+  });
+
+  it("renders the server's match score with its evidence, and offers match sort", async () => {
+    const card = {
+      job: hit("Platform Engineer").job,
+      publishedOn: "2026-08-27",
+      closesOn: null,
+      sources: [{ board: "jobnet", boardName: "Jobnet", url: "https://example.org/jobs/jobnet-1", externalId: "id-1", saveToken: "t-1" }],
+      primarySourceIndex: 0,
+      match: {
+        score: 84,
+        reasons: ["The role's title aligns with your recorded \"Platform Engineer\"."],
+        gaps: ["The posting names none of your recorded industries."],
+        threshold: 80,
+        qualified: true,
+        excluded: null,
+      },
+    };
+    respond({
+      results: [{ board: "jobnet", boardName: "Jobnet", totalAvailable: 1, hits: [hit("Platform Engineer")], locationApplied: true }],
+      failures: [],
+      unified: {
+        hits: [card],
+        dedupedFrom: 1,
+        beforeFilters: 1,
+        matchBasis: { computed: true, method: "Rule-based match computed from your recorded profile and preferences." },
+      },
+    });
+    const user = userEvent.setup();
+    render(<JobSearchPanel />);
+    await screen.findByText(/Searching 2 boards:/);
+
+    await search(user);
+
+    expect(await screen.findByText("Match 84")).toBeInTheDocument();
+    expect(screen.getByText(/Rule-based match computed from your recorded profile/)).toBeInTheDocument();
+    await user.click(screen.getByText("Why this match score"));
+    expect(screen.getByText(/aligns with your recorded/)).toBeInTheDocument();
+    expect(screen.getByText(/Gap: The posting names none of your recorded industries/)).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Best match" })).toBeInTheDocument();
+  });
+
+  it("says why scores are absent rather than inventing them", async () => {
+    const card = {
+      job: hit("Platform Engineer").job,
+      publishedOn: null,
+      closesOn: null,
+      sources: [{ board: "jobnet", boardName: "Jobnet", url: null, externalId: "id-1", saveToken: "t-1" }],
+      primarySourceIndex: 0,
+      match: null,
+    };
+    respond({
+      results: [{ board: "jobnet", boardName: "Jobnet", totalAvailable: 1, hits: [hit("Platform Engineer")], locationApplied: true }],
+      failures: [],
+      unified: {
+        hits: [card],
+        dedupedFrom: 1,
+        beforeFilters: 1,
+        matchBasis: { computed: false, reason: "No Career Profile is recorded yet." },
+      },
+    });
+    const user = userEvent.setup();
+    render(<JobSearchPanel />);
+    await screen.findByText(/Searching 2 boards:/);
+
+    await search(user);
+
+    expect(await screen.findByText(/No Career Profile is recorded yet/)).toBeInTheDocument();
+    expect(screen.queryByText(/^Match \d+$/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "Best match" })).not.toBeInTheDocument();
+    // The min-score filter cannot act without scores, so it says why.
+    expect(screen.getByLabelText(/Match score at least/)).toBeDisabled();
+  });
+
+  it("saves the current search, runs it back, and deletes it", async () => {
+    const savedRow = {
+      id: "11111111-2222-4333-8444-555555555555",
+      name: "Remote marketing",
+      query: { text: "marketing manager", location: null, sort: "newest", filters: { keywords: ["remote"] } },
+      lastRunAt: null,
+      createdAt: "2026-08-29T14:00:00Z",
+      updatedAt: "2026-08-29T14:00:00Z",
+    };
+    const calls: Array<{ method: string; url: string; body: unknown }> = [];
+    fetchMock.mockImplementation((url: string, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      calls.push({ method, url, body: init?.body ? JSON.parse(init.body as string) : null });
+      if (url.includes("/api/job-seeker/saved-searches")) {
+        if (method === "GET") return Promise.resolve(json({ savedSearches: [] }));
+        if (method === "POST") return Promise.resolve(json({ savedSearch: savedRow }, 201));
+        if (method === "PATCH") {
+          return Promise.resolve(json({ savedSearch: { ...savedRow, lastRunAt: "2026-08-29T14:05:00Z" } }));
+        }
+        return Promise.resolve(json({ deleted: savedRow.id }));
+      }
+      if (method === "POST") return Promise.resolve(json({ results: [], failures: [] }));
+      return Promise.resolve(json(BOARDS));
+    });
+    const user = userEvent.setup();
+    render(<JobSearchPanel />);
+    await screen.findByText(/Searching 2 boards:/);
+
+    await user.type(screen.getByPlaceholderText("Job title, skill or keyword"), "marketing manager");
+    await user.type(screen.getByPlaceholderText(/Name this search/), "Remote marketing");
+    await user.click(screen.getByRole("button", { name: "Save this search" }));
+
+    expect(await screen.findByText("Remote marketing")).toBeInTheDocument();
+    const createCall = calls.find((c) => c.method === "POST" && c.url.includes("saved-searches"));
+    expect((createCall?.body as { query: { text: string } }).query.text).toBe("marketing manager");
+
+    // Run: records the run and executes the stored query as a real search.
+    await user.click(screen.getByRole("button", { name: "Run" }));
+    expect(await screen.findByText(/Never run|Last run/)).toBeInTheDocument();
+    const patchCall = calls.find((c) => c.method === "PATCH");
+    expect((patchCall?.body as { markRun?: boolean }).markRun).toBe(true);
+    const searchCall = calls.filter((c) => c.method === "POST" && !c.url.includes("saved-searches")).at(-1);
+    expect((searchCall?.body as { text: string }).text).toBe("marketing manager");
+
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+    await waitFor(() => expect(screen.queryByText("Remote marketing")).not.toBeInTheDocument());
   });
 
   it("searches only the boards left ticked", async () => {

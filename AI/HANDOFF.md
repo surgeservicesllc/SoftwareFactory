@@ -2,7 +2,24 @@
 
 Last updated: 2026-08-29
 
-## Newest (2026-08-29): Job Search increment 1 — ten live boards, unified view, honest catalogue (ADR-163)
+## Newest (2026-08-29 later): Job Search increment 2 — match scores live on results, saved searches real (ADR-163 addendum)
+
+Merged main's Job Discovery surface (ADR-141) and built on it: the search
+route scores every unified card via `loadEvaluationInputs` +
+`evaluateJob` (match null + stated basis when no profile row exists; the
+minimum-score filter 422s in that state), logs one metering event per
+board into `job_seeker_search_events`, and the panel gained match badges
+with a "Why this match score" expansion, best-match sort, a min-score
+filter, and a full Saved Searches card over the new CRUD route
+(`/api/job-seeker/saved-searches` — double ownership filters above
+forced RLS, 409 on duplicate names, sensitive-content refusal). Alert
+switches remain deliberately unrendered until a delivery engine exists.
+Route tests mock `loadEvaluationInputs` — a new search-route test that
+forgets this will try a real client call. Increment 3 next: the alerts
+engine + env-gated email adapter + delivery ledger with the
+never-repeat guarantee, then real E2E acceptance.
+
+## Older (2026-08-29): Job Search increment 1 — ten live boards, unified view, honest catalogue (ADR-163)
 
 The active owner goal (50-source `/JobSearch`) landed its first increment.
 Nine new adapters, each live-probed before its parser existed and pinned

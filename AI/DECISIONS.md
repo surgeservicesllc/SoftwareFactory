@@ -2875,3 +2875,17 @@ Use this append-only log for decisions that constrain future implementation. Cha
   feed), and Jobspresso (official WordPress job feed; the dc:creator
   "Company<br>⚲ Place" convention split honestly). Thirteen live boards;
   the catalogue grew to 52 with the goal's 25+25 floor intact.
+- Addendum (same day, increment 2): every unified card is now scored
+  server-side by the existing recorded-facts evaluator — one profile load
+  per search, reasons and gaps attached to every number, `match: null`
+  with a stated basis when no Career Profile exists, and a minimum-score
+  filter that is refused (422) rather than silently ignored in that state.
+  Saved searches became real on ADR-141's table: bounded-jsonb CRUD under
+  double ownership filtering plus forced RLS, run-now recording
+  `last_run_at` as an observation, duplicate names answered 409, and
+  credential-shaped values refused before persistence. The search route
+  now writes one metering event per board queried into
+  `job_seeker_search_events` — the write that makes ADR-141's credit
+  meter a measurement — and its "results are never stored" doctrine
+  paragraph was rewritten to say exactly that. Alert cadence stays
+  deliberately unexposed until a delivery engine exists.

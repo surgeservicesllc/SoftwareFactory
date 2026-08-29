@@ -14,6 +14,8 @@ import {
   dedupeAcrossBoards,
   type UnifiedFilters,
 } from "@/lib/job-seeker/board-search/unify";
+import { evaluateJob, EVALUATION_METHOD_LABEL } from "@/lib/job-seeker/evaluate";
+import { loadEvaluationInputs } from "@/lib/job-seeker/record";
 import { sealSearchResult } from "@/lib/job-seeker/search-result-token";
 import { supabaseBoundaryErrorResponse } from "@/lib/supabase/http";
 import { assertSameOriginRequest } from "@/lib/supabase/request";
@@ -30,12 +32,15 @@ export const runtime = "nodejs";
  * the alternative lets an anonymous caller use this endpoint to make the
  * server fetch arbitrary job boards on their behalf.
  *
- * ## Nothing is written here
+ * ## Results are never stored here
  *
  * A search reads. Results are returned and not stored, because storing every
  * result of every search would fill a person's job list with postings they
  * glanced at and rejected. Saving is a separate, deliberate act against
- * `POST /api/job-seeker/search/save`.
+ * `POST /api/job-seeker/search/save`. The one write this route makes is a
+ * metering event per board queried (`job_seeker_search_events`) — an
+ * immutable audit of the asking that the discovery page's credit meter
+ * counts, never a copy of what came back.
  *
  * ## One board failing is not the search failing
  *
@@ -56,6 +61,12 @@ const filtersSchema = z
     salaryMinimum: z.number().int().min(0).max(10_000_000).nullish(),
     requireSalary: z.boolean().default(false),
     postedWithinDays: z.number().int().min(1).max(365).nullish(),
+    /**
+     * Keep only unified hits whose computed match score reaches this. Scores
+     * come from the recorded Career Profile; asking for this filter without a
+     * recorded profile is refused rather than silently ignored.
+     */
+    minimumScore: z.number().int().min(0).max(100).nullish(),
   })
   .strict();
 
@@ -115,7 +126,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     assertSameOriginRequest(request);
-    const { activeOrganization, user } = await requireActiveOrganization();
+    const { activeOrganization, user, client } = await requireActiveOrganization();
 
     const body = await readBoundedJson(request);
     const parsed = searchSchema.safeParse(body);
@@ -214,7 +225,62 @@ export async function POST(request: Request) {
         }
       : null;
     const deduped = dedupeAcrossBoards(taggedForUnify);
-    const unifiedHits = filters === null ? deduped : applyUnifiedFilters(deduped, filters);
+    const filtered = filters === null ? deduped : applyUnifiedFilters(deduped, filters);
+
+    /*
+     * AI matching: every unified card is scored against the recorded Career
+     * Profile and preferences — one load, deterministic arithmetic, reasons
+     * and gaps attached to every number. A workspace without a profile row
+     * gets `match: null` and a basis saying so; scores computed over nothing
+     * would be numbers wearing authority they do not have.
+     */
+    const evaluation = await loadEvaluationInputs(client, activeOrganization.id);
+    const minimumScore = parsed.data.filters?.minimumScore ?? null;
+    if (minimumScore !== null && !evaluation.profileRecorded) {
+      throw new ApiRequestError(
+        422,
+        "match_score_needs_profile",
+        "Record your Career Profile before filtering by match score — scores are computed from it.",
+      );
+    }
+    const scored = filtered.map((hit) => ({
+      ...hit,
+      match: evaluation.profileRecorded
+        ? evaluateJob(evaluation.profile, evaluation.preferences, {
+            title: hit.job.title,
+            company: hit.job.company,
+            description: hit.job.description,
+            salaryText: hit.job.salaryText,
+            location: hit.job.location,
+            workModel: hit.job.workModel,
+          })
+        : null,
+    }));
+    const unifiedHits = minimumScore === null
+      ? scored
+      : scored.filter((hit) => hit.match !== null && hit.match.score >= minimumScore);
+
+    /*
+     * Metering: one immutable event per board actually queried, so the
+     * discovery page's credit meter counts something real. This is the one
+     * write in the search path — an audit of the asking, never a copy of the
+     * results. Logging failure must not fail a search that already answered.
+     */
+    const eventRows = adapters.map((adapter, index) => ({
+      organization_id: activeOrganization.id,
+      user_id: user.id,
+      board: adapter.key,
+      query: { text: query.text, location: query.location, limit: query.limit },
+      results_returned:
+        settled[index]?.status === "fulfilled"
+          ? (settled[index] as PromiseFulfilledResult<{ hits: readonly unknown[] }>).value.hits.length
+          : null,
+    }));
+    try {
+      await client.from("job_seeker_search_events").insert(eventRows);
+    } catch {
+      // The searches answered; a meter that missed a tick stays a meter.
+    }
 
     return jsonNoStore({
       query: { text: query.text, location: query.location, limit: query.limit },
@@ -229,6 +295,10 @@ export async function POST(request: Request) {
         hits: unifiedHits,
         dedupedFrom: taggedForUnify.length,
         beforeFilters: deduped.length,
+        /** How scores were produced, or that none could be. */
+        matchBasis: evaluation.profileRecorded
+          ? { computed: true as const, method: EVALUATION_METHOD_LABEL }
+          : { computed: false as const, reason: "No Career Profile is recorded yet." },
       },
     });
   } catch (error) {
