@@ -20,6 +20,9 @@ api_url = "http://127.0.0.1"
 [local_smtp]
 enabled = true
 port = 54324
+# SMTP published to the host so the journey lane's alert-email leg can hand
+# a message to the local Mailpit sink and read it back over the API above.
+smtp_port = 54325
 
 [auth]
 enabled = true
