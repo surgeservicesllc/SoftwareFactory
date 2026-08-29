@@ -358,6 +358,48 @@ assignments; one Codex connection is unfinished and Claude OAuth is not
 complete. Provider OAuth and route setup must finish before a fresh command
 and persisted Step 9 correlation can be measured.
 
+## 2026-08-29 (later): Job Search increments 2–3 — match scores, saved searches, alert engine (ADR-163 addendum, ADR-164)
+
+Merged to `main` as #437 (squash `2319970`), Vercel deploy verified, and the
+alert-engine schema applied to hosted the same hour (workflow run
+`33263020948`, scope `job-seeker-alert-engine`, postflight green: forced RLS
+on the deliveries ledger, `last_scanned_at` present, both definer functions
+SECURITY DEFINER and executable by service_role only). #440 added the
+dispatch option the apply step guarded on.
+
+- **AI match scores on results**: the search route scores every unified card
+  server-side from the recorded Career Profile facts (one profile load per
+  request, deterministic evaluator, reasons + gaps carried). No profile row →
+  `match: null` with a stated basis, and `filters.minimumScore` refuses with
+  422 rather than silently ignoring. Panel: score badge, "Why this match
+  score" evidence expansion, best-match sort offered only when scores exist,
+  minimum-score filter + chip.
+- **Saved searches**: `/api/job-seeker/saved-searches` CRUD over the ADR-141
+  table (strict bounded jsonb query documents, double ownership filtering
+  above forced RLS, 409 on duplicate names, credential-shaped values
+  refused). Panel card: Save / Run / Update-to-current / Duplicate / Delete;
+  running one restores the full builder state and executes.
+- **Search metering**: one immutable `job_seeker_search_events` row per board
+  queried (failure-tolerant — a missed tick never fails a search that
+  answered), making the discovery credit meter a measurement.
+- **Alert engine (ADR-164)**: migration `20260829000300` — cadence check +
+  `last_scanned_at` on `job_seeker_search_alerts`; append-only
+  `job_seeker_alert_deliveries` ledger with the never-repeat UNIQUE
+  constraint; `list_due_job_seeker_alerts` / `record_job_seeker_alert_scan`
+  as service_role-only SECURITY DEFINER functions (zero service_role table
+  grants — the billing-boundary pattern). Runner `/api/job-seeker/alerts/run`
+  on Vercel Cron hourly: fail-closed 503 while `CRON_SECRET` is unset
+  (verified live in production), timing-safe bearer, honest "Email is Not
+  Connected" short-circuit, per-alert search → dedupe → saved filters →
+  score → drop-delivered → email → record. Cadence controls render **Not
+  Connected** and writes 409 until `RESEND_API_KEY`, `JOB_ALERT_EMAIL_FROM`
+  and `CRON_SECRET` exist; the owner setting those three in Vercel and
+  redeploying is the only remaining step to live email alerts.
+
+Full suite at merge: 455 files / 5,412 tests green, lint zero-warning,
+typecheck clean, production build green, four real CI checks on the exact
+merged head.
+
 ## 2026-08-29: Job Search increment 1 — ten live boards, unified dedupe, 50-source catalogue (ADR-163)
 
 The active owner goal (world-class `/JobSearch` over 50 sources) landed its
