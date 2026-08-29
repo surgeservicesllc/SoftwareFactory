@@ -51,6 +51,16 @@ const publicTables = [
   "bot_assignments",
   "bot_roles",
   "bots",
+  // The Budget Tracker's six. Like the rest of this list they carry RLS and
+  // FORCE RLS; unlike most of it they also revoke service_role explicitly,
+  // because that role is BYPASSRLS and the hosted default privileges would
+  // otherwise hand it every household balance in the product.
+  "budget_accounts",
+  "budget_categories",
+  "budget_import_batches",
+  "budget_month_plans",
+  "budget_obligations",
+  "budget_transactions",
   "claim_acceptable_anchors",
   "claim_anchors",
   "command_analysis_graphs",

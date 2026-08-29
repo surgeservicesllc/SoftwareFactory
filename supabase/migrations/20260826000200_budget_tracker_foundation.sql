@@ -343,6 +343,18 @@ begin
     execute format('alter table public.%I enable row level security', v_table);
     execute format('alter table public.%I force row level security', v_table);
     execute format('revoke all on table public.%I from anon', v_table);
+    /*
+     * service_role is BYPASSRLS. A grant to it is not a narrower kind of
+     * access to these tables — it is every policy above, switched off. The
+     * hosted database's default privileges re-grant it on each new table, and
+     * 20260812002600 narrowed only the tables that existed when it ran, so
+     * the revoke has to be stated here or these six arrive wide open to it.
+     *
+     * Nothing in the application needs it: every Budget Tracker read and
+     * write goes through the signed-in person's own session client, which is
+     * exactly what makes the row policies the real boundary.
+     */
+    execute format('revoke all on table public.%I from service_role', v_table);
     execute format('grant select, insert, update, delete on table public.%I to authenticated', v_table);
 
     execute format('drop policy if exists %I on public.%I', v_table || '_select_own', v_table);

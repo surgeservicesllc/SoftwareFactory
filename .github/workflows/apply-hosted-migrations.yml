@@ -6190,7 +6190,7 @@ jobs:
             echo "::error::Migration hash mismatch on ${TYPES_FILE}; refusing production DDL."
             exit 1
           fi
-          if [ "$(sha256sum "$SCHEMA_FILE" | cut -d' ' -f1)" != "5278ca1ea94ff9218cfa2ba8a64341002aa0265ae9e9fb4d8521f8eb2e00bcac" ]; then
+          if [ "$(sha256sum "$SCHEMA_FILE" | cut -d' ' -f1)" != "3cb70f73e786592530b6a27fec46c4569c8a178897831b09900b1803348b7790" ]; then
             echo "::error::Migration hash mismatch on ${SCHEMA_FILE}; refusing production DDL."
             exit 1
           fi
@@ -6240,6 +6240,18 @@ jobs:
             exit 1
           fi
 
+          # service_role is BYPASSRLS, so a grant to it is every policy above
+          # switched off. The hosted default privileges re-grant it on each new
+          # table, which is why the migration revokes it explicitly and why
+          # this reads it back.
+          SERVICE=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
+            select count(*) from information_schema.role_table_grants
+             where grantee = 'service_role' and table_name like 'budget\\_%';")
+          if [ "$SERVICE" != "0" ]; then
+            echo "::error::service_role holds ${SERVICE} grant(s) on the budget tables; expected none."
+            exit 1
+          fi
+
           # The two aggregate reads must be INVOKER. As DEFINER either one
           # would hand every member of an organization every other member's
           # monthly totals, straight past the row policies above.
@@ -6253,7 +6265,7 @@ jobs:
             exit 1
           fi
 
-          echo "Applied and verified: 6 tables RLS-forced, anon holds nothing, both reads are INVOKER."
+          echo "Applied and verified: 6 tables RLS-forced, neither anon nor service_role holds a grant, both reads are INVOKER."
 
       - name: Record the node-detail read a later migration superseded (scope=ledger-repair-node-detail)
         # No DDL. 20260823001000 never ran here, and must never run now:

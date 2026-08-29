@@ -397,6 +397,40 @@ describe("row level security is forced, not merely enabled", () => {
     }
   });
 
+  it("takes service_role's grants away even when something hands them over", async () => {
+    /*
+     * The one grant that would undo every policy above rather than widen one:
+     * service_role is BYPASSRLS. The hosted database's default privileges hand
+     * it each new table automatically, and the one-time narrowing migration
+     * covered only the tables that existed when it ran.
+     *
+     * PGlite has no such default privileges, so simply checking the catalogue
+     * here would pass against a migration that never revoked anything. This
+     * grants them the way hosted would, re-applies the migration, and checks
+     * they are gone — which fails if the revoke is removed.
+     */
+    await db.exec("reset role");
+    await db.exec("grant all privileges on all tables in schema public to service_role");
+
+    const granted = await db.query<{ count: number }>(
+      `select count(distinct table_name)::int as count
+         from information_schema.role_table_grants
+        where grantee = 'service_role' and table_name like 'budget\\_%'`,
+    );
+    expect(granted.rows[0].count).toBe(6);
+
+    await db.exec(
+      await readFile(resolve(migrationsRoot, "20260826000200_budget_tracker_foundation.sql"), "utf8"),
+    );
+
+    const after = await db.query<{ table_name: string }>(
+      `select distinct table_name
+         from information_schema.role_table_grants
+        where grantee = 'service_role' and table_name like 'budget\\_%'`,
+    );
+    expect(after.rows).toEqual([]);
+  });
+
   it("grants anon nothing at all", async () => {
     await db.exec("reset role");
     const result = await db.query<{ count: number }>(
