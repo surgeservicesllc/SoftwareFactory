@@ -2,6 +2,45 @@
 
 Last reviewed: 2026-08-29
 
+## 2026-08-29: Budget Tracker — own navigation, dated import, and a plan/history fix
+
+Three changes after the first release, all from loading the owner's real
+workbook and looking at what came out.
+
+**The forward plan was being imported as history.** A household ledger is kept
+with posted rows on top and a forward plan underneath — payee, amount, no date,
+because it has not happened. The importer carried the previous row's date down
+into all of it: 914 rows became one day, inventing $1.07M of activity in
+September 2026 that then dominated every chart. Now a date is carried forward
+only for a row *between* dated rows, where it means "same day as the line
+above"; everything after the last dated row is counted and reported as planned,
+not posted. With that fixed the last twelve months read sanely — September 2026
+is 20 transactions and -$5,235.96 — and reconcile against their own stated
+running totals with **zero breaks**. The 36 discontinuities are all in older
+history.
+
+**Its own left navigation.** `/BudgetTracker` moved from `(portal)` to a new
+`(budget)` route group. It had been inheriting `AppShell`, so the rail beside a
+household's finances was the control plane's own navigation. It now has five
+routes (Overview, Accounts, Transactions, Bills & Debt, Import), one gate in
+`(budget)/BudgetTracker/layout.tsx`, and a self-contained shell that imports
+nothing from `lib/navigation`, `AppShell` or the Job Seeker's navigation —
+asserted in `tests/unit/budget-navigation.test.tsx` against the import lines.
+
+**Import takes a date window,** with a "Last 12 months" preset. The window is
+applied after each row's date is resolved, so a continuation row is judged on
+the date it inherits rather than on its blank cell.
+
+Also hardened: the overview route derives its `YYYY-MM` key from whatever shape
+the driver returns for a `date`. PostgREST returns an ISO string, so slicing
+seven characters was right; a driver returning a `Date` turned the same slice
+into "Mon Sep", which would have labelled every bar on the cash-flow chart with
+a weekday. Found by running the real pipeline against PGlite.
+
+Verified end to end against real PostgreSQL with the owner's workbook: 866 rows
+for the twelve-month window, a second import of the same window adding zero,
+and thirteen months of cash flow read back through `budget_monthly_flow`.
+
 ## 2026-08-29: Budget Tracker
 
 `/BudgetTracker`, reached from a third global navigation tab for signed-in

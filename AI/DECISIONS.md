@@ -2875,6 +2875,39 @@ Use this append-only log for decisions that constrain future implementation. Cha
   feed), and Jobspresso (official WordPress job feed; the dc:creator
   "Company<br>⚲ Place" convention split honestly). Thirteen live boards;
   the catalogue grew to 52 with the goal's 25+25 floor intact.
+
+## ADR-149 - An undated trailing block is a plan, not history
+
+- Date: 2026-08-29
+- Status: Accepted
+- Decision: The spreadsheet importer carries a date forward only for a row
+  that sits *between* dated rows. Every row after the last dated row is
+  counted, reported and left out.
+- Consequence: A household ledger kept as posted-history-then-forward-plan
+  imports as history only. In the workbook this was built against, the previous
+  behaviour dated 914 planned rows to one day and invented $1.07M of activity in
+  a single month, which then dominated every chart drawn from it — while every
+  individual row looked plausible.
+- Consequence: "No date" is reported rather than guessed, consistent with the
+  rest of the importer: a row it cannot read is a counted skip, never a $0.00
+  row that looks like data.
+
+## ADR-150 - The Budget Tracker owns its navigation, in its own route group
+
+- Date: 2026-08-29
+- Status: Accepted
+- Decision: `/BudgetTracker` lives in a `(budget)` route group with its own
+  layout and shell. It does not reuse `AppShell`, `lib/navigation` or the Job
+  Seeker's navigation, and a test asserts that against the import lines.
+- Consequence: The route group changes no URL — `/BudgetTracker` is unchanged —
+  but the section no longer inherits `(portal)`'s chrome, whose sidebar lists
+  control-plane destinations. Before this, the rail beside a household's
+  finances was wayfinding for a different product.
+- Consequence: The global header stays above the shell. It moves a person
+  *between* products; the left rail moves them inside one. Dropping it would
+  strand anyone who arrived here and wanted the factory next.
+
+
 - Addendum (same day, increment 2): every unified card is now scored
   server-side by the existing recorded-facts evaluator — one profile load
   per search, reasons and gaps attached to every number, `match: null`

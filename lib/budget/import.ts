@@ -231,11 +231,30 @@ export function contentHash(
  * occurrence of that exact row, hash differently, and both survive — while a
  * second import of the same file reproduces the same ordinals and conflicts
  * on every row, as it should.
+ *
+ * **The trailing block is not imported.** A household ledger is usually kept
+ * with the posted history at the top and a forward plan underneath it: rows
+ * with a payee and an amount and deliberately no date, because they have not
+ * happened. Carrying the previous row's date down into those turns a plan
+ * into history — in the workbook this was built against, 914 such rows all
+ * became one day and invented over a million dollars of activity in a single
+ * month, which then dominated every chart drawn from it.
+ *
+ * So a date is carried forward only for a row that sits *between* dated rows,
+ * where it means "same day as the line above". Everything after the last
+ * dated row is reported and left out, because the honest thing to say about
+ * an undated row is that it has no date.
  */
 export function readTransactions(
   sheet: Sheet,
   accountId: string,
-  options: { readonly columns?: ColumnMap; readonly headerRow?: number } = {},
+  options: {
+    readonly columns?: ColumnMap;
+    readonly headerRow?: number;
+    /** Inclusive `YYYY-MM-DD` bounds. Rows outside them are not imported. */
+    readonly from?: string | null;
+    readonly to?: string | null;
+  } = {},
 ): ImportResult {
   let columns = options.columns;
   let headerRow = options.headerRow ?? -1;
@@ -255,7 +274,32 @@ export function readTransactions(
   let rowsSkipped = 0;
   let undated = 0;
   let unreadableAmounts = 0;
+  let planned = 0;
+  let outsideRange = 0;
   let carriedDate: string | null = null;
+
+  /*
+   * A window is applied after the date is resolved, never before: a row's date
+   * can come from the row above it, so filtering on the raw cell would drop
+   * continuation rows that belong inside the window and keep ones that do not.
+   */
+  const from = options.from ?? null;
+  const to = options.to ?? null;
+
+  /*
+   * Where the posted history ends. Everything past this is undated to the end
+   * of the sheet — a forward plan, not transactions — and is counted rather
+   * than dated. See the note above the function for what happens without this.
+   */
+  let lastDatedRow = headerRow;
+  if (columns.date >= 0) {
+    for (let index = sheet.rows.length - 1; index > headerRow; index -= 1) {
+      if (readCellDate(sheet.rows[index][columns.date]) !== null) {
+        lastDatedRow = index;
+        break;
+      }
+    }
+  }
 
   for (let index = headerRow + 1; index < sheet.rows.length; index += 1) {
     const row: SheetRow = sheet.rows[index];
@@ -288,6 +332,11 @@ export function readTransactions(
     const cellDate = columns.date >= 0 ? readCellDate(row[columns.date]) : null;
     if (cellDate) {
       carriedDate = cellDate;
+    } else if (index > lastDatedRow) {
+      // Past the last dated row: a planned line, not a posted one.
+      rowsSkipped += 1;
+      planned += 1;
+      continue;
     } else {
       undated += 1;
     }
@@ -296,6 +345,11 @@ export function readTransactions(
       continue;
     }
     const postedOn = cellDate ?? carriedDate;
+    if ((from !== null && postedOn < from) || (to !== null && postedOn > to)) {
+      rowsSkipped += 1;
+      outsideRange += 1;
+      continue;
+    }
 
     const kind = classifyKind(
       columns.kind >= 0 ? row[columns.kind] : null,
@@ -318,6 +372,17 @@ export function readTransactions(
     });
   }
 
+  if (outsideRange > 0) {
+    const window = from && to ? `${from} to ${to}` : from ? `on or after ${from}` : `on or before ${to}`;
+    notices.push(
+      `${outsideRange} row${outsideRange === 1 ? "" : "s"} fell outside the chosen dates (${window}) and were not imported.`,
+    );
+  }
+  if (planned > 0) {
+    notices.push(
+      `${planned} row${planned === 1 ? "" : "s"} after the last dated row carried no date and were left out as planned, not posted.`,
+    );
+  }
   if (undated > 0) {
     notices.push(
       `${undated} row${undated === 1 ? "" : "s"} carried no date and took the date of the row above.`,
