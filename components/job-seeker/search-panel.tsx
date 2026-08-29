@@ -653,6 +653,14 @@ export function JobSearchPanel() {
 
   const generalSources = sources.filter((s) => s.focus === "general" && s.status !== "live");
   const marketingSources = sources.filter((s) => s.focus === "marketing" && s.status !== "live");
+  // The sites that permit only an ordinary web link — LinkedIn, Indeed and
+  // company — belong beside the results, not buried in the catalogue: each
+  // chip opens the site's own search pre-filled with this query, in the
+  // person's own browser, which is the path those sites permit. Deselecting
+  // a site in the catalogue removes its chip.
+  const linkoutStrip = sources.filter(
+    (source) => source.searchUrl !== undefined && !deselected.has(source.key),
+  );
 
   const addChip = (raw: string, list: readonly string[], set: (next: readonly string[]) => void) => {
     const value = raw.trim();
@@ -978,10 +986,28 @@ export function JobSearchPanel() {
                     <ul className="mt-2 grid gap-1 sm:grid-cols-2">
                       {group.entries.map((source) => (
                         <li key={source.key} className="flex items-start justify-between gap-2 text-sm">
-                          <span className="min-w-0">
-                            {source.name}
-                            <span className="block text-xs text-[var(--muted)]">{source.note}</span>
-                          </span>
+                          <label className="flex min-w-0 items-start gap-2">
+                            {source.searchUrl !== undefined ? (
+                              <input
+                                type="checkbox"
+                                checked={!deselected.has(source.key)}
+                                onChange={(event) => {
+                                  setDeselected((current) => {
+                                    const next = new Set(current);
+                                    if (event.target.checked) next.delete(source.key);
+                                    else next.add(source.key);
+                                    return next;
+                                  });
+                                }}
+                                className="mt-0.5"
+                                aria-label={`Include ${source.name} in the link-out row`}
+                              />
+                            ) : null}
+                            <span className="min-w-0">
+                              {source.name}
+                              <span className="block text-xs text-[var(--muted)]">{source.note}</span>
+                            </span>
+                          </label>
                           <span className="shrink-0 text-right">
                             {source.status === "needs_credentials" ? (
                               <span className="rounded-full border border-[var(--border)] px-2 py-0.5 text-xs text-[var(--muted)]">
@@ -1398,6 +1424,31 @@ export function JobSearchPanel() {
           )}
         </>
       )}
+
+      {results !== null && linkoutStrip.length > 0 ? (
+        <Card>
+          <div data-testid="linkout-strip">
+            <SectionTitle
+              title="Also search on"
+              description="These sites permit an ordinary web link but not automated collection, so each opens the site's own search for this query in a new tab. Untick a site under Sources to remove it here."
+            />
+            <ul className="mt-3 flex flex-wrap gap-2">
+              {linkoutStrip.map((source) => (
+                <li key={source.key}>
+                  <a
+                    href={fillLinkTemplate(source.searchUrl!, text, location)}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] px-3 py-1 text-sm hover:bg-[var(--surface-2)]"
+                  >
+                    {source.name} ↗
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </Card>
+      ) : null}
     </div>
   );
 }

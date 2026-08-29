@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -615,5 +615,55 @@ describe("the search panel", () => {
 
     expect(screen.getAllByRole("button", { name: "Save" })).toHaveLength(30);
     expect(screen.queryByTestId("unified-show-more")).not.toBeInTheDocument();
+  });
+
+  it("offers LinkedIn, Indeed and company as pre-filled link-outs a person can deselect", async () => {
+    const boardsWithSources = {
+      ...BOARDS,
+      sources: [
+        {
+          key: "linkedin", name: "LinkedIn Jobs", focus: "general", status: "external_link",
+          searchUrl: "https://www.linkedin.com/jobs/search/?keywords={query}&location={location}",
+          note: "Opens LinkedIn's own job search.",
+        },
+        {
+          key: "indeed", name: "Indeed", focus: "general", status: "external_link",
+          searchUrl: "https://www.indeed.com/jobs?q={query}&l={location}",
+          note: "Opens Indeed's own search.",
+        },
+      ],
+    };
+    fetchMock.mockImplementation((_url: string, init?: RequestInit) => {
+      if (init?.method === "POST") {
+        return Promise.resolve(json({
+          results: [{ board: "jobnet", boardName: "Jobnet", totalAvailable: 0, hits: [], locationApplied: true }],
+          failures: [],
+        }));
+      }
+      return Promise.resolve(json(boardsWithSources));
+    });
+    const user = userEvent.setup();
+    render(<JobSearchPanel />);
+    await screen.findByText(/Searching 2 boards:/);
+
+    // Not part of the results claim before a search has run.
+    expect(screen.queryByTestId("linkout-strip")).not.toBeInTheDocument();
+
+    await search(user);
+
+    // The strip appears even when the connected boards found nothing — that
+    // is exactly when the person most wants the big boards one click away —
+    // and each chip carries the query into the site's own search.
+    const strip = await screen.findByTestId("linkout-strip");
+    const linkedin = within(strip).getByRole("link", { name: /LinkedIn Jobs/ });
+    expect(linkedin).toHaveAttribute(
+      "href",
+      "https://www.linkedin.com/jobs/search/?keywords=engineer&location=",
+    );
+    expect(within(strip).getByRole("link", { name: /Indeed/ })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("checkbox", { name: "Include Indeed in the link-out row" }));
+    expect(within(strip).queryByRole("link", { name: /Indeed/ })).not.toBeInTheDocument();
+    expect(within(strip).getByRole("link", { name: /LinkedIn Jobs/ })).toBeInTheDocument();
   });
 });
