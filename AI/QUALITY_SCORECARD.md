@@ -2,6 +2,21 @@
 
 Last reviewed: 2026-08-29
 
+**Addendum, 2026-08-29 final — the goal's full acceptance, email included
+(ADR-166):** journey workflow run `33269486606` on main `71060d0` passed all
+three serial tests on a fresh stack: the complete fake-data journey, the
+live board search-save-persist walk, and the new alert-email leg — a saved
+search created in the browser, its cadence set through the panel's own
+control, the engine run exactly as Vercel Cron runs it, a **real SMTP
+delivery** read back from the local Mailpit sink (direct links and the
+never-repeat promise in the body), and exactly one message still in the
+sink after a second engine run. Local pre-verification of the same leg:
+`{"ran":true,"due":1,"scanned":1,"emailed":1,"failures":[]}`. Production
+delivery remains Resend-gated on the owner's env vars and honestly **Not
+Connected** until then. Verdict: **EVERY STEP OF THE GOAL'S TEST LIST NOW
+PASSES IN THE AUTOMATED LANE; PRODUCTION EMAIL AWAITS ONLY THE OWNER'S
+CREDENTIALS.**
+
 **Addendum, 2026-08-29 late — Job Search E2E acceptance + journey lane
 recovered (ADR-165):** journey workflow run `33266060493` on main
 `3cd6150` passed end to end: the full 178-migration chain applied on a
