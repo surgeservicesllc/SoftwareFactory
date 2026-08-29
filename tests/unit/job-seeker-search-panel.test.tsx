@@ -591,4 +591,29 @@ describe("the search panel", () => {
     const body = JSON.parse((searchCall?.[1] as RequestInit).body as string) as { boards?: string[] };
     expect(body.boards).toEqual(["jobnet"]);
   });
+
+  it("renders a long unified list incrementally, with the counts staying the whole truth", async () => {
+    const many = Array.from({ length: 30 }, (_, index) =>
+      hit(`Engineer ${String(index + 1).padStart(2, "0")}`));
+    respond({
+      results: [{ board: "jobnet", boardName: "Jobnet", totalAvailable: 30, hits: many, locationApplied: true }],
+      failures: [],
+    });
+    const user = userEvent.setup();
+    render(<JobSearchPanel />);
+    await screen.findByText(/Searching 2 boards:/);
+
+    await search(user);
+
+    // The headline counts every unique posting; the list renders a page of
+    // them, and the remainder waits behind an honest "Showing X of Y".
+    expect(await screen.findByText("30 unique postings")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Save" })).toHaveLength(25);
+    expect(screen.getByText("Showing 25 of 30")).toBeInTheDocument();
+
+    await user.click(screen.getByTestId("unified-show-more"));
+
+    expect(screen.getAllByRole("button", { name: "Save" })).toHaveLength(30);
+    expect(screen.queryByTestId("unified-show-more")).not.toBeInTheDocument();
+  });
 });

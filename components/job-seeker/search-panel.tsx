@@ -86,6 +86,8 @@ type SaveState = "idle" | "saving" | "saved" | "already" | "failed" | "expired";
 
 type SortOrder = "returned" | "newest" | "salary" | "match";
 
+const UNIFIED_PAGE_SIZE = 25;
+
 /** The server-computed AI match, verbatim from the recorded-facts evaluator. */
 type MatchView = {
   score: number;
@@ -192,6 +194,10 @@ export function JobSearchPanel() {
 
   const [view, setView] = useState<"unified" | "byBoard">("unified");
   const [sort, setSort] = useState<SortOrder>("returned");
+  // Cards rendered at once in the unified view. Thirteen boards can answer
+  // with hundreds of unique postings; rendering them incrementally keeps the
+  // page responsive while the counts above stay the whole truth.
+  const [shownCount, setShownCount] = useState(UNIFIED_PAGE_SIZE);
 
   // Result-level filters: chips over the unified set, applied instantly in
   // the browser through the shared unify module.
@@ -293,6 +299,7 @@ export function JobSearchPanel() {
     setMatchBasis(null);
     setSaves({});
     setSaveErrors({});
+    setShownCount(UNIFIED_PAGE_SIZE);
 
     try {
       const response = await fetch("/api/job-seeker/search", {
@@ -1224,7 +1231,7 @@ export function JobSearchPanel() {
                   </p>
                 ) : (
                   <ul className="mt-4 space-y-3">
-                    {visibleUnified.map((card) => {
+                    {visibleUnified.slice(0, shownCount).map((card) => {
                       const key = unifiedKey(card);
                       const primary = card.sources[card.primarySourceIndex]!;
                       const saveError = saveErrors[key] ?? null;
@@ -1316,6 +1323,21 @@ export function JobSearchPanel() {
                     })}
                   </ul>
                 )}
+                {visibleUnified.length > shownCount ? (
+                  <div className="mt-4 flex flex-wrap items-center gap-3">
+                    <button
+                      type="button"
+                      data-testid="unified-show-more"
+                      onClick={() => setShownCount((count) => count + UNIFIED_PAGE_SIZE)}
+                      className="rounded-md border border-[var(--border)] px-3 py-1.5 text-sm hover:bg-[var(--surface-2)]"
+                    >
+                      Show {Math.min(UNIFIED_PAGE_SIZE, visibleUnified.length - shownCount)} more
+                    </button>
+                    <span className="text-xs text-[var(--muted)]">
+                      Showing {Math.min(shownCount, visibleUnified.length)} of {visibleUnified.length}
+                    </span>
+                  </div>
+                ) : null}
               </Card>
             </div>
           ) : (
