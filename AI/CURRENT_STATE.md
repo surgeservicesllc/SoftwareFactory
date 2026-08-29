@@ -2,7 +2,102 @@
 
 Last reviewed: 2026-08-28
 
-## 2026-08-28: ten-step Factory release candidate is fail-closed end to end
+## 2026-08-28: target-bound claims are hosted; final postdeploy remains gated
+
+Forward cleanup release `ce86d9c04ff91f237e680a5db4b0cda97feea2ce`
+removed the disposable production-URL acceptance boundary. All four exact-head
+jobs passed in CI `33169913723`; GitHub deployment `6140863004` resolved to
+READY Vercel deployment `dpl_4Zqh4q2yBfaagGtg7stSbV4NSphP`, and public health
+joined the exact release, deployment, Vercel project, and Supabase project
+`qpuofpmagrmyamahqwxw`.
+
+Read-only probe `33170897689` confirmed ledger `1|1|1|1|0|0`. First-attempt
+mutation run `33170953151` then applied only hash-pinned
+`20260828000200_target_bound_worker_claims.sql`; its exact ledger, catalog, ACL,
+runtime, audit, lint, health, and stopped-safety postflight passed. Independent
+probe `33171025468` confirmed ledger `1|1|1|1|1|0` with containment unchanged.
+Never rerun selector normalization, URL schema, or target claims. Do not apply
+`20260828000300` until a legitimate provider/bot assignment route produces the
+required signed-in Step 8 record/reload and truthful Step 9 persistence while
+workers remain OFF. After `00300` and read-only `verify`, current Full Lifecycle
+v2 execution acceptance remains a separate authorization gate.
+
+Production browser acceptance over existing test data found no page or console
+errors. Historical run `884d6164-0ecd-4f93-878a-0a7ecda239e5` renders Steps
+1-8 complete, then truthfully records Deploy refused by the Phase 1 authority
+boundary and Monitor skipped. It has no verifiable current-template identity,
+so it is not evidence that current `full_lifecycle` v2 completed. Workers,
+schedules, the auth broker, autonomy, and automatic actions remain OFF; the
+global kill switch remains ON.
+
+### Earlier production-URL acceptance evidence
+
+Exact cleanup release `994da2cec81c0cd83aa1e2d87ad848d2f2ff612a` passed all
+four required jobs in CI `33164903094`. GitHub deployment `6139882660`
+resolved to READY Vercel deployment `dpl_7u7h6GaP2LLNawDtB9wYGAuMTARB`, and
+public health joined that exact SHA/ref, deployment URL, Vercel project, and
+Supabase project `qpuofpmagrmyamahqwxw`.
+
+Protected read-only probe `33165823042`, selector-normalization mutation
+`33165886343`, post-selector probe `33165944760`, and configure-URL mutation
+`33165992529` all passed on their first attempts. Hosted ledger state at that
+checkpoint was
+exactly `1|1|1|1|0|0` for
+`27000200|27000210|28000050|28000100|28000200|28000300`. The stale Phase 1C
+selector is normalized and the owner/admin-only production-URL writer is live;
+neither scope may be rerun.
+
+Disposable acceptance release `540aceb173ec88e67cb982018a80134ece3ec474`
+passed all four required jobs in CI `33167232673`. GitHub deployment
+`6140332126` resolved to READY Vercel deployment
+`dpl_31W7nKgJd6ENoCfuvgP1zzHZM6eT`, and public health joined that exact
+SHA/ref, deployment URL, Vercel project, and Supabase project.
+
+The disposable acceptance workflow uses protected
+owner/project selectors and one ephemeral GoTrue magic-link session—never an
+owner password—to call the real production application route. It requires an
+unset target value, writes `https://www.theagoras.com`, proves exactly one
+owner-attributed immutable `project.updated` event, repeats the same write as a
+no-op with no duplicate event, reloads through the signed-in portfolio API,
+and rechecks exact main/CI/Vercel/health/catalog plus fully stopped containment
+immediately before and after. First-attempt run `33168092838` passed immutable
+invocation, exact green/READY release, stopped-workflow, and Supabase connection
+gates, then stopped before target resolution or mutation: `psql -c` sent the
+literal protected-variable tokens to PostgreSQL instead of expanding them.
+Both temporary selectors were deleted immediately. The forward fix moved only
+that read-only target query to a quoted stdin heredoc, where `psql` variable
+quoting is supported, and added a regression guard.
+
+Corrected release `53b84b7952a1e09725f53da5d65c4947b8cb914a` passed all
+four required jobs in CI `33168368270`. GitHub deployment `6140556549`
+resolved to READY Vercel deployment `dpl_tBF2s6AtLmqZ13YpYHKWzBRtwiKT`, and
+public health joined the exact release/deployment/Vercel/Supabase identities.
+Fresh first-attempt acceptance run `33169297158` passed the real owner/admin
+session, exact production URL write, exactly one owner-attributed immutable
+`project.updated` event, no-op replay without a duplicate event, signed-in
+portfolio reload, and pre/post stopped containment. The two temporary selector
+secrets were deleted immediately. The subsequent cleanup, probe, and
+target-claim evidence is recorded above.
+
+## 2026-08-28: exact verified Blackstone Auth bootstrap completed and disposed
+
+The owner requested one email-confirmed Supabase Auth identity for
+`blackstoneagencyllc@gmail.com`. A temporary dispatch-only workflow is fixed to
+that exact email, project `qpuofpmagrmyamahqwxw`, `main`, the configured
+production release actor as both original and triggering actor, and first
+attempt. It receives the requested password only through a temporary encrypted
+repository secret and the existing service-role credential, never through a
+workflow input or log. It idempotently creates or updates the one normalized
+identity through the GoTrue Admin API and re-reads a unique UUID plus
+`email_confirmed_at` before bounded output. Exact first-attempt production run
+`33164766560` on release `298264b02fe5a29e3c139f8077e65d6270f19167`
+completed successfully as the configured release actor and returned one
+bounded updated UUID after exact confirmed readback. The temporary password
+secret was deleted immediately. This forward cleanup removes the disposable
+workflow and its test. The operation granted no organization membership,
+application role, worker authority, or autonomous action.
+
+## 2026-08-28: ten-step Factory application release is live; selector containment is local/pass
 
 The remaining Step 8 `invalid Phase 1C command plan` path is corrected in the
 application and the protected database release. A record-only command accepts
@@ -28,16 +123,56 @@ Vercel project ID, immutable Vercel deployment ID/URL, and exact Supabase
 project ref before one bounded anonymous database read. The hosted workflow
 requires the GitHub Vercel deployment URL to equal the deployment URL reported
 by the public alias, closing the independent-evidence gap. Vercel Production
-has all five non-secret identity/containment values configured for the next
-deployment.
+has all five non-secret identity/containment values configured, with both
+worker gates explicitly `false`.
 
-The release remains **local/pass, publication pending** until the reviewed
-commit reaches `main`, all four exact-head CI jobs and the exact Vercel
-deployment are green, and only migrations `20260828000100`, `20260828000200`,
-then `20260828000300` pass their ordered forward-only hosted scopes. No hosted
-ledger claim is made in this section. Final local evidence is lint and
-typecheck green, 434 Vitest files / 5,121 tests passed (3 files / 7 tests
-skipped), and a 170/170-page production build.
+Exact `main` `79ca52f5b92e7d95292210e05565d35d21b4a435` is live. CI run
+`33158801269` passed the quality job and all three browser/accessibility
+shards. GitHub deployment `6138739479` resolves to READY Vercel deployment
+`dpl_57pM3ZEYNyK596VAeLPJMabJLZrH`, and the public health join reported the
+same SHA/ref, exact Vercel project `prj_pAsrhftaVWI4SyaqstgRVSWHJkdD`, and
+exact Supabase project `qpuofpmagrmyamahqwxw` with the database reachable.
+
+The newer exact Factory release
+`298264b02fe5a29e3c139f8077e65d6270f19167` passed all four jobs in CI
+`33163838800`. GitHub deployment `6139678648` resolves to READY Vercel
+deployment `dpl_ChxG5EdgPzh3vybRZgBRz9EA9gg1`; public health joined that exact
+SHA/ref and deployment URL to the same Vercel and Supabase project identities.
+
+The protected read-only lifecycle probe `33159805326` then found one exact
+hosted catalog mismatch before it could admit the release-tail migrations:
+`claim_phase1c_run_budget_internal(text,text,text,integer)` has the stale
+`20260815000300` body MD5 `ed5840b9d8d0efdb513a8576df128e9b`, while the
+required breaker-aware `20260815000500` body is
+`5933952d71f9da90a2a80a05ce6e0378`. Its ABI, postgres ownership,
+`SECURITY DEFINER`, pinned `search_path=pg_catalog`, owner-only execute ACL,
+three breaker helpers, and FORCE-RLS `resource_breakers` dependency otherwise
+match exactly. No hosted mutation ran in that failed probe.
+
+Forward migration
+`20260828000050_normalize_breaker_aware_phase1c_selector.sql` (LF SHA-256
+`8914034508451d1550ebf3f1bedd8f7b71592f1809306e78c57774c458952896`)
+accepts only that exact stale body or the exact clean-chain target, verifies
+the full surrounding catalog and ACL shape, replaces only the selector with
+the frozen breaker-aware body, and re-verifies it. The protected release order
+is now `00050`, `00100`, `00200`, then `00300`; this does not replay or mark
+either historical migration. Current local evidence is lint and typecheck
+green, 5,150 tests passed / 7 skipped across 442 files, and a 171/171-page
+production build.
+
+Signed-in Steps 8-10 are still not accepted for the active organization:
+`daniel.hughen@gmail.com` currently has zero connected AI accounts, ready
+linked bots, or assignments there. Provider OAuth must be completed through
+the supported flow before a fresh Step 8 POST and persisted Step 9/10 evidence
+can be measured; no token or account may be copied from another tenant.
+Workers, provider execution, autonomy, schedules, the auth broker, and all
+automatic actions remain OFF, while the global kill switch remains ON.
+
+Hosted migration history also still has 17 older missing ledger versions,
+beginning at `20260815000200`, despite partial catalog effects. Each needs
+complete catalog proof, surgical forward compensation where necessary, and
+only then protected ledger reconciliation. Historical files must not be
+edited or replayed, and the database must not be reset or down-migrated.
 
 ## 2026-08-28: public production URL configuration is locally complete
 

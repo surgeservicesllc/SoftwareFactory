@@ -2,6 +2,97 @@
 
 Last reviewed: 2026-08-28
 
+**Addendum, 2026-08-28 — cleanup and target-bound claim production
+acceptance (ADR-155/161):** cleanup SHA
+`ce86d9c04ff91f237e680a5db4b0cda97feea2ce` passed all four jobs in CI
+`33169913723`, exact READY deployment `dpl_4Zqh4q2yBfaagGtg7stSbV4NSphP`, and
+the public health identity join. Local evidence was lint/typecheck green,
+**5,145 tests passed / 7 skipped across 441 files**, a 171/171-page production
+build, **50/50 focused URL tests**, clean secret review, and an independent
+cleanup-policy audit. Probe `33170897689` passed `1|1|1|1|0|0`; first-attempt
+run `33170953151` applied only hash-pinned `20260828000200`; independent probe
+`33171025468` passed `1|1|1|1|1|0`. Catalog, ACL, runtime, audit, linked lint,
+health, worker state, autonomy, and kill-switch checks stayed exact. Read-only
+browser acceptance found no errors and proved existing historical test data is
+rendered truthfully: run `884d6164` is 8/10, with Deploy refused by policy and
+Monitor skipped, and is explicitly not presented as current v2 evidence.
+Verdict: **TARGET-BOUND CLAIMS PRODUCTION PASS; POSTDEPLOY CORRECTLY GATED**.
+
+**Addendum, 2026-08-28 — hosted selector/URL checkpoint and signed acceptance
+gate (ADR-161):** exact cleanup SHA
+`994da2cec81c0cd83aa1e2d87ad848d2f2ff612a` passed all four CI jobs and exact
+READY Vercel/public-health identity. First-attempt protected runs
+`33165823042`, `33165886343`, `33165944760`, and `33165992529` passed; hosted
+ledger is exactly `1|1|1|1|0|0`, the selector is normalized, and the
+production-URL writer/catalog/ACL is live. The new disposable acceptance path
+is manual, exact-main/actor/first-attempt, serialized with migrations, and
+rechecks exact CI/deployment/health plus full stopped database/GitHub state
+three times. It uses no password and requires a confirmed owner/admin, an unset
+value, one immutable owner-attributed event, no-op replay, and signed-in reload.
+Focused evidence is **7/7 workflow guard tests**, **86/86 URL-focused tests**,
+clean focused ESLint, clean TypeScript, valid YAML, and every shell block passes
+`bash -n`. Exact disposable release
+`540aceb173ec88e67cb982018a80134ece3ec474` passed all four jobs in CI
+`33167232673`, READY deployment `dpl_31W7nKgJd6ENoCfuvgP1zzHZM6eT`, and the
+public health identity join. First-attempt run `33168092838` passed all
+pre-write release/safety/connection gates and then failed closed before target
+resolution or mutation because `psql -c` did not expand its protected variable
+tokens. Both temporary selectors were deleted. Corrected release
+`53b84b7952a1e09725f53da5d65c4947b8cb914a` then passed all four jobs in CI
+`33168368270`, READY deployment `dpl_tBF2s6AtLmqZ13YpYHKWzBRtwiKT`, and the
+public health identity join. Fresh first-attempt run `33169297158` passed the
+real owner/admin session, exact URL write, one immutable owner-attributed audit
+event, no-op replay without a duplicate, signed-in reload, and every pre/post
+stopped-containment check. Both temporary selectors were deleted immediately;
+this cleanup removes the disposable workflow/test. Verdict: **PRODUCTION URL
+ACCEPTANCE PASS; DISPOSABLE SESSION PATH REMOVED**. No worker or autonomous
+action was enabled.
+
+**Addendum, 2026-08-28 — exact Blackstone Auth bootstrap (ADR-160):** the
+temporary workflow is manual-only, permissions-empty, exact-main/project/email,
+first-attempt, and identity-gated to the configured production release actor as
+both actor fields. The password is sourced only from an encrypted temporary
+repository secret; output is limited to created/updated plus a UUID after an
+exact email-confirmed re-read. Focused workflow evidence is **5/5 tests** and
+focused ESLint green. Exact first-attempt run `33164766560` on production
+release `298264b02fe5a29e3c139f8077e65d6270f19167` returned one bounded updated
+UUID after verified readback; the temporary password secret was then deleted,
+and this forward cleanup removes the workflow/test. Verdict: **PRODUCTION
+PASS; DISPOSABLE CREDENTIAL PATH REMOVED**. No tenant role, provider
+connection, worker switch, autonomy setting, or kill switch changed.
+
+**Addendum, 2026-08-28 — live application release and selector-normalization
+containment (ADR-159):** exact `main`
+`79ca52f5b92e7d95292210e05565d35d21b4a435` passed the quality job and all
+three browser/accessibility shards in CI `33158801269`. GitHub deployment
+`6138739479` is READY Vercel deployment
+`dpl_57pM3ZEYNyK596VAeLPJMabJLZrH`; public health joined the exact SHA/ref,
+Vercel project `prj_pAsrhftaVWI4SyaqstgRVSWHJkdD`, immutable deployment, and
+Supabase project `qpuofpmagrmyamahqwxw` with the database reachable. Verdict:
+**APPLICATION PRODUCTION PASS**.
+
+Protected read-only probe `33159805326` stopped before mutation because the
+hosted `claim_phase1c_run_budget_internal(text,text,text,integer)` body is
+exact stale MD5 `ed5840b9d8d0efdb513a8576df128e9b`, not breaker-aware target
+`5933952d71f9da90a2a80a05ce6e0378`; its full ABI, postgres owner,
+`SECURITY DEFINER`, pinned search path, private ACL, breaker helpers/table,
+and stopped-safety state otherwise passed. The isolated forward migration
+`20260828000050_normalize_breaker_aware_phase1c_selector.sql` is pinned at LF
+SHA-256
+`8914034508451d1550ebf3f1bedd8f7b71592f1809306e78c57774c458952896`.
+Current containment evidence is lint and typecheck green, **5,150 tests
+passed / 7 skipped across 442 files**, and a **171/171-page production
+build**. Verdict: **SELECTOR CONTAINMENT LOCAL PASS; EXACT-HEAD PUBLICATION,
+PROTECTED APPLY, AND POSTFLIGHT PENDING**.
+
+Signed-in Factory acceptance is not upgraded: the active organization has no
+connected provider account, ready linked bot, or assignment, so no fresh Step
+8 POST or persisted Steps 9-10 correlation has been proven. Workers, provider
+execution, autonomy, schedules, the auth broker, and automatic actions remain
+OFF; the global kill switch remains ON. Seventeen older ledger-missing
+versions beginning at `20260815000200` remain a separate unresolved
+object-by-object forward-reconciliation track.
+
 **Addendum, 2026-08-28 — final ten-step Factory release candidate:** Step 8
 now accepts the assigned bot's provider/model for record-only work, persists
 one immutable command route, and reports disabled execution truthfully. Launch
@@ -16,8 +107,8 @@ Production worker/auth-broker variables are explicitly OFF and no execution
 workflow is active. Verdict: **LOCAL PASS; EXACT-HEAD PUBLICATION, ORDERED
 HOSTED MIGRATIONS, AND SIGNED-IN RECORD/RELOAD ACCEPTANCE PENDING**. Workers,
 autonomy, and automatic actions remain OFF; the kill switch remains ON. Final
-local evidence: lint/typecheck green, **434 test files / 5,121 tests passed**
-(3 files / 7 tests skipped), and a **170/170-page production build**.
+local evidence: lint/typecheck green, **439 test files / 5,150 tests passed**
+(3 files / 7 tests skipped), and a **171/171-page production build**.
 
 **Addendum, 2026-08-28 — Step 10 public URL configuration (ADR-156):**
 the project detail page now supplies the missing owner/admin writer for the

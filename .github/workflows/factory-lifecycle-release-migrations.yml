@@ -10,6 +10,7 @@ on:
         type: choice
         options:
           - probe
+          - selector-normalization
           - configure-url
           - target-claims
           - postdeploy
@@ -40,6 +41,8 @@ jobs:
     timeout-minutes: 20
     env:
       PROJECT_REF: qpuofpmagrmyamahqwxw
+      MIGRATION_00050: supabase/migrations/20260828000050_normalize_breaker_aware_phase1c_selector.sql
+      MIGRATION_00050_SHA256: 8914034508451d1550ebf3f1bedd8f7b71592f1809306e78c57774c458952896
       MIGRATION_00100: supabase/migrations/20260828000100_project_production_url_configuration.sql
       MIGRATION_00100_SHA256: 0856ddee447280a1bb4418f25d6a6d4650687e168fffcd5e98e8ce15edd62b27
       MIGRATION_00200: supabase/migrations/20260828000200_target_bound_worker_claims.sql
@@ -57,7 +60,7 @@ jobs:
         run: |
           case "$SCOPE" in
             probe|verify) exit 0 ;;
-            configure-url|target-claims|postdeploy) ;;
+            selector-normalization|configure-url|target-claims|postdeploy) ;;
             *) echo "::error::Unknown release scope."; exit 1 ;;
           esac
           if [ "$CONFIRM" != "apply" ]; then
@@ -216,7 +219,7 @@ jobs:
           echo "::error::Could not connect to exact Supabase project ${PROJECT_REF}."
           exit 1
 
-      - name: Verify the three exact forward files
+      - name: Verify the four exact forward files
         run: |
           verify_file() {
             FILE=$1
@@ -226,6 +229,7 @@ jobs:
               exit 1
             fi
           }
+          verify_file "$MIGRATION_00050" "$MIGRATION_00050_SHA256"
           verify_file "$MIGRATION_00100" "$MIGRATION_00100_SHA256"
           verify_file "$MIGRATION_00200" "$MIGRATION_00200_SHA256"
           verify_file "$MIGRATION_00300" "$MIGRATION_00300_SHA256"
@@ -238,15 +242,17 @@ jobs:
             select
               (select count(*) from supabase_migrations.schema_migrations where version='20260827000200')||'|'||
               (select count(*) from supabase_migrations.schema_migrations where version='20260827000210')||'|'||
+              (select count(*) from supabase_migrations.schema_migrations where version='20260828000050')||'|'||
               (select count(*) from supabase_migrations.schema_migrations where version='20260828000100')||'|'||
               (select count(*) from supabase_migrations.schema_migrations where version='20260828000200')||'|'||
               (select count(*) from supabase_migrations.schema_migrations where version='20260828000300');")
           case "$SCOPE:$LEDGER" in
-            probe:1\|1\|0\|0\|0|probe:1\|1\|1\|0\|0|probe:1\|1\|1\|1\|0|probe:1\|1\|1\|1\|1) ;;
-            configure-url:1\|1\|0\|0\|0) ;;
-            target-claims:1\|1\|1\|0\|0) ;;
-            postdeploy:1\|1\|1\|1\|0) ;;
-            verify:1\|1\|1\|1\|1) ;;
+            probe:1\|1\|0\|0\|0\|0|probe:1\|1\|1\|0\|0\|0|probe:1\|1\|1\|1\|0\|0|probe:1\|1\|1\|1\|1\|0|probe:1\|1\|1\|1\|1\|1) ;;
+            selector-normalization:1\|1\|0\|0\|0\|0) ;;
+            configure-url:1\|1\|1\|0\|0\|0) ;;
+            target-claims:1\|1\|1\|1\|0\|0) ;;
+            postdeploy:1\|1\|1\|1\|1\|0) ;;
+            verify:1\|1\|1\|1\|1\|1) ;;
             *) echo "::error::Prerequisite ledger is not the exact ordered state for scope=${SCOPE} (${LEDGER})."; exit 1 ;;
           esac
 
@@ -286,7 +292,7 @@ jobs:
           echo "::notice::Ledger=${LEDGER}; containment is stopped and exact."
 
       - name: Apply exactly one ordered forward migration
-        if: ${{ inputs.scope == 'configure-url' || inputs.scope == 'target-claims' || inputs.scope == 'postdeploy' }}
+        if: ${{ inputs.scope == 'selector-normalization' || inputs.scope == 'configure-url' || inputs.scope == 'target-claims' || inputs.scope == 'postdeploy' }}
         env:
           SCOPE: ${{ inputs.scope }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -305,21 +311,29 @@ jobs:
           fi
 
           case "$SCOPE" in
+            selector-normalization)
+              FILE=$MIGRATION_00050; EXPECTED=$MIGRATION_00050_SHA256; VERSION=20260828000050
+              E050=0; E100=0; E200=0; E300=0
+              CATALOG_GUARD="do \$guard\$ begin if exists (select 1 from pg_proc routine join pg_namespace space on space.oid=routine.pronamespace where space.nspname='public' and routine.proname in ('assert_phase1c_claim_target','claim_planned_graph_target_internal','claim_phase1c_run_target_budget_internal','claim_phase1c_run_target_internal','claim_planned_graph_by_id_v2','claim_phase1c_run_by_command_v2')) or to_regprocedure('public.claim_planned_graph_internal(text,text[],text,jsonb,uuid)') is not null or to_regprocedure('public.claim_phase1c_run_budget_internal(text,text,text,integer,uuid)') is not null or to_regprocedure('public.claim_phase1c_run_internal(text,text,text,integer,uuid)') is not null then raise exception 'selector-normalization target catalog is not pristine'; end if; if not exists (select 1 from pg_proc routine where routine.oid=to_regprocedure('public.claim_planned_graph_internal(text,text[],text,jsonb)') and pg_get_userbyid(routine.proowner)='postgres' and routine.prosecdef and routine.proconfig=array['search_path=pg_catalog']::text[] and md5(replace(replace(routine.prosrc,E'\\r\\n',E'\\n'),E'\\r',E'\\n'))='fdd3eee3e61c083789ffeb4808ed0a47' and routine.proacl is not null and (select count(*) from aclexplode(routine.proacl))=1 and not exists (select 1 from aclexplode(routine.proacl) acl where acl.grantor<>routine.proowner or acl.grantee<>routine.proowner or acl.privilege_type<>'EXECUTE' or acl.is_grantable) and not has_function_privilege('anon',routine.oid,'EXECUTE') and not has_function_privilege('authenticated',routine.oid,'EXECUTE') and not has_function_privilege('service_role',routine.oid,'EXECUTE')) or not exists (select 1 from pg_proc routine where routine.oid=to_regprocedure('public.claim_phase1c_run_budget_internal(text,text,text,integer)') and pg_get_userbyid(routine.proowner)='postgres' and routine.prosecdef and routine.proconfig=array['search_path=pg_catalog']::text[] and md5(replace(replace(routine.prosrc,E'\\r\\n',E'\\n'),E'\\r',E'\\n'))='ed5840b9d8d0efdb513a8576df128e9b' and routine.proacl is not null and (select count(*) from aclexplode(routine.proacl))=1 and not exists (select 1 from aclexplode(routine.proacl) acl where acl.grantor<>routine.proowner or acl.grantee<>routine.proowner or acl.privilege_type<>'EXECUTE' or acl.is_grantable) and not has_function_privilege('anon',routine.oid,'EXECUTE') and not has_function_privilege('authenticated',routine.oid,'EXECUTE') and not has_function_privilege('service_role',routine.oid,'EXECUTE')) then raise exception 'selector-normalization prerequisite catalog drifted'; end if; end \$guard\$;"
+              LINT_SIGNATURES="('public.claim_phase1c_run_budget_internal(text,text,text,integer)')"
+              CATALOG_GUARD="${CATALOG_GUARD} do \$overload_guard\$ begin if (select count(*) from pg_proc routine join pg_namespace space on space.oid=routine.pronamespace where space.nspname='public' and routine.proname in ('claim_planned_graph_internal','claim_phase1c_run_budget_internal'))<>2 then raise exception 'selector-normalization base selector overload count drifted'; end if; end \$overload_guard\$;"
+              CATALOG_GUARD="${CATALOG_GUARD} do \$breaker_acl_guard\$ declare breaker_relation oid := to_regclass('public.resource_breakers'); begin if breaker_relation is null or exists (select 1 from pg_attribute attribute where attribute.attrelid=breaker_relation and attribute.attnum>0 and not attribute.attisdropped and attribute.attacl is not null) or exists (with relation_row as (select relation.relowner,relation.relacl from pg_class relation where relation.oid=breaker_relation), actual as (select acl.* from relation_row cross join lateral aclexplode(relation_row.relacl) acl), owner_expected as (select acl.privilege_type from relation_row cross join lateral aclexplode(acldefault('r',relation_row.relowner)) acl), authenticated_expected(privilege_type) as (values ('SELECT')) select 1 from relation_row where relation_row.relacl is null or exists (select 1 from actual where actual.grantor<>relation_row.relowner or actual.is_grantable or actual.grantee not in (relation_row.relowner,to_regrole('authenticated')::oid,to_regrole('service_role')::oid)) or exists ((select privilege_type from actual where grantee=relation_row.relowner) except select privilege_type from owner_expected) or exists ((select privilege_type from owner_expected) except select privilege_type from actual where grantee=relation_row.relowner) or exists ((select privilege_type from actual where grantee=to_regrole('authenticated')::oid) except select privilege_type from authenticated_expected) or exists ((select privilege_type from authenticated_expected) except select privilege_type from actual where grantee=to_regrole('authenticated')::oid) or exists ((select privilege_type from actual where grantee=to_regrole('service_role')::oid) except select privilege_type from owner_expected) or exists ((select privilege_type from owner_expected) except select privilege_type from actual where grantee=to_regrole('service_role')::oid)) then raise exception 'selector-normalization hosted breaker ACL drifted'; end if; end \$breaker_acl_guard\$;"
+              ;;
             configure-url)
               FILE=$MIGRATION_00100; EXPECTED=$MIGRATION_00100_SHA256; VERSION=20260828000100
-              E100=0; E200=0; E300=0
+              E050=1; E100=0; E200=0; E300=0
               CATALOG_GUARD="do \$guard\$ begin if exists (select 1 from pg_proc routine join pg_namespace space on space.oid=routine.pronamespace where space.nspname='public' and routine.proname in ('project_production_url_is_safe','set_project_production_url')) or exists (select 1 from pg_constraint where conname='projects_production_url_public_https' and conrelid='public.projects'::regclass) then raise exception 'configure-url catalog is not pristine'; end if; end \$guard\$;"
               LINT_SIGNATURES="('public.project_production_url_is_safe(text)'),('public.set_project_production_url(uuid,uuid,text)')"
               ;;
             target-claims)
               FILE=$MIGRATION_00200; EXPECTED=$MIGRATION_00200_SHA256; VERSION=20260828000200
-              E100=1; E200=0; E300=0
+              E050=1; E100=1; E200=0; E300=0
               CATALOG_GUARD="do \$guard\$ begin if exists (select 1 from pg_proc routine join pg_namespace space on space.oid=routine.pronamespace where space.nspname='public' and routine.proname in ('assert_phase1c_claim_target','claim_planned_graph_target_internal','claim_phase1c_run_target_budget_internal','claim_phase1c_run_target_internal','claim_planned_graph_by_id_v2','claim_phase1c_run_by_command_v2')) or (select count(*) from pg_proc routine join pg_namespace space on space.oid=routine.pronamespace where space.nspname='public' and routine.proname in ('claim_planned_graph_internal','claim_phase1c_run_budget_internal'))<>2 or to_regprocedure('public.claim_planned_graph_internal(text,text[],text,jsonb,uuid)') is not null or to_regprocedure('public.claim_phase1c_run_budget_internal(text,text,text,integer,uuid)') is not null or to_regprocedure('public.claim_phase1c_run_internal(text,text,text,integer,uuid)') is not null then raise exception 'target-claims catalog is not pristine'; end if; if not exists (select 1 from pg_proc routine where routine.oid=to_regprocedure('public.claim_planned_graph_internal(text,text[],text,jsonb)') and pg_get_userbyid(routine.proowner)='postgres' and routine.prosecdef and routine.proconfig=array['search_path=pg_catalog']::text[] and md5(replace(replace(routine.prosrc,E'\\r\\n',E'\\n'),E'\\r',E'\\n'))='fdd3eee3e61c083789ffeb4808ed0a47' and routine.proacl is not null and (select count(*) from aclexplode(routine.proacl))=1 and not exists (select 1 from aclexplode(routine.proacl) acl where acl.grantor<>routine.proowner or acl.grantee<>routine.proowner or acl.privilege_type<>'EXECUTE' or acl.is_grantable) and not has_function_privilege('anon',routine.oid,'EXECUTE') and not has_function_privilege('authenticated',routine.oid,'EXECUTE') and not has_function_privilege('service_role',routine.oid,'EXECUTE')) or not exists (select 1 from pg_proc routine where routine.oid=to_regprocedure('public.claim_phase1c_run_budget_internal(text,text,text,integer)') and pg_get_userbyid(routine.proowner)='postgres' and routine.prosecdef and routine.proconfig=array['search_path=pg_catalog']::text[] and md5(replace(replace(routine.prosrc,E'\\r\\n',E'\\n'),E'\\r',E'\\n'))='5933952d71f9da90a2a80a05ce6e0378' and routine.proacl is not null and (select count(*) from aclexplode(routine.proacl))=1 and not exists (select 1 from aclexplode(routine.proacl) acl where acl.grantor<>routine.proowner or acl.grantee<>routine.proowner or acl.privilege_type<>'EXECUTE' or acl.is_grantable) and not has_function_privilege('anon',routine.oid,'EXECUTE') and not has_function_privilege('authenticated',routine.oid,'EXECUTE') and not has_function_privilege('service_role',routine.oid,'EXECUTE')) then raise exception 'target-claims prerequisite selector catalog drifted'; end if; end \$guard\$;"
               LINT_SIGNATURES="('public.assert_phase1c_claim_target(uuid,uuid)'),('public.claim_planned_graph_target_internal(text,text[],text,jsonb,uuid)'),('public.claim_planned_graph_internal(text,text[],text,jsonb)'),('public.claim_phase1c_run_target_budget_internal(text,text,text,integer,uuid)'),('public.claim_phase1c_run_budget_internal(text,text,text,integer)'),('public.claim_phase1c_run_target_internal(text,text,text,integer,uuid)'),('public.claim_planned_graph_by_id_v2(text,text[],text,jsonb,uuid,integer)'),('public.claim_phase1c_run_by_command_v2(text,text,text,integer,uuid,integer)')"
               ;;
             postdeploy)
               FILE=$MIGRATION_00300; EXPECTED=$MIGRATION_00300_SHA256; VERSION=20260828000300
-              E100=1; E200=1; E300=0
+              E050=1; E100=1; E200=1; E300=0
               CATALOG_GUARD="do \$guard\$ begin if exists (select 1 from pg_proc routine join pg_namespace space on space.oid=routine.pronamespace where space.nspname='public' and routine.proname='complete_graph_run_with_validated_release_as_worker') then raise exception 'postdeploy catalog is not pristine'; end if; if (select count(*) from pg_proc routine join pg_namespace space on space.oid=routine.pronamespace where space.nspname='public' and routine.proname='create_graph_from_plan_with_release_identity_as_server')<>1 then raise exception 'postdeploy prerequisite launch overload catalog drifted'; end if; if not exists (select 1 from pg_proc routine where routine.oid=to_regprocedure('public.create_graph_from_plan_with_release_identity_as_server(uuid,uuid,uuid,text,public.graph_topology,jsonb,public.risk_level,boolean,jsonb,jsonb,jsonb,text,integer,uuid,text,text,jsonb)') and pg_get_userbyid(routine.proowner)='postgres' and routine.prosecdef and routine.proconfig=array['search_path=pg_catalog']::text[] and md5(replace(replace(routine.prosrc,E'\\r\\n',E'\\n'),E'\\r',E'\\n'))='d6e614af6d985a9b6a9adaddc1c1d3ba' and routine.proacl is not null and (select count(*) from aclexplode(routine.proacl))=2 and not exists (select 1 from aclexplode(routine.proacl) acl where acl.grantor<>routine.proowner or acl.privilege_type<>'EXECUTE' or acl.is_grantable or acl.grantee not in (routine.proowner,to_regrole('service_role')::oid)) and has_function_privilege('service_role',routine.oid,'EXECUTE') and not has_function_privilege('authenticated',routine.oid,'EXECUTE') and not has_function_privilege('anon',routine.oid,'EXECUTE')) then raise exception 'postdeploy prerequisite launch catalog drifted'; end if; end \$guard\$;"
               LINT_SIGNATURES="('public.create_graph_from_plan_with_release_identity_as_server(uuid,uuid,uuid,text,public.graph_topology,jsonb,public.risk_level,boolean,jsonb,jsonb,jsonb,text,integer,uuid,text,text,jsonb)'),('public.complete_graph_run_with_validated_release_as_worker(text,uuid,public.graph_run_state,boolean,bigint,bigint,text,text)')"
               ;;
@@ -392,6 +406,7 @@ jobs:
                 begin
                   if (select count(*) from supabase_migrations.schema_migrations where version='20260827000200') <> 1
                     or (select count(*) from supabase_migrations.schema_migrations where version='20260827000210') <> 1
+                    or (select count(*) from supabase_migrations.schema_migrations where version='20260828000050') <> ${E050}
                     or (select count(*) from supabase_migrations.schema_migrations where version='20260828000100') <> ${E100}
                     or (select count(*) from supabase_migrations.schema_migrations where version='20260828000200') <> ${E200}
                     or (select count(*) from supabase_migrations.schema_migrations where version='20260828000300') <> ${E300}
@@ -420,7 +435,7 @@ jobs:
             -c "insert into supabase_migrations.schema_migrations(version) values ('${VERSION}');"
 
       - name: Reload the PostgREST schema cache
-        if: ${{ inputs.scope == 'configure-url' || inputs.scope == 'target-claims' || inputs.scope == 'postdeploy' }}
+        if: ${{ inputs.scope == 'selector-normalization' || inputs.scope == 'configure-url' || inputs.scope == 'target-claims' || inputs.scope == 'postdeploy' }}
         run: psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q -c "NOTIFY pgrst, 'reload schema';"
 
       - name: Verify ledger catalog ACL runtime and stopped safety
@@ -436,20 +451,29 @@ jobs:
           psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q <<'SQL'
           do $release_postflight$
           declare
+            c050 integer;
             c100 integer;
             c200 integer;
             c300 integer;
+            expected_phase_selector_hash text;
             routine oid;
             launch_source text;
             runtime_message text;
+            breaker_relation oid := to_regclass('public.resource_breakers');
           begin
+            select count(*) into c050 from supabase_migrations.schema_migrations where version='20260828000050';
             select count(*) into c100 from supabase_migrations.schema_migrations where version='20260828000100';
             select count(*) into c200 from supabase_migrations.schema_migrations where version='20260828000200';
             select count(*) into c300 from supabase_migrations.schema_migrations where version='20260828000300';
-            if c100 not in (0,1) or c200 not in (0,1) or c300 not in (0,1)
-              or c200 > c100 or c300 > c200 then
+            if c050 not in (0,1) or c100 not in (0,1)
+              or c200 not in (0,1) or c300 not in (0,1)
+              or c100 > c050 or c200 > c100 or c300 > c200 then
               raise exception 'release ledger is duplicated or out of order';
             end if;
+            expected_phase_selector_hash := case
+              when c050 = 0 then 'ed5840b9d8d0efdb513a8576df128e9b'
+              else '5933952d71f9da90a2a80a05ce6e0378'
+            end;
 
             if c100 = 0 and (
               exists (select 1 from pg_proc routine
@@ -492,7 +516,7 @@ jobs:
                     where routine.oid=to_regprocedure('public.claim_phase1c_run_budget_internal(text,text,text,integer)')
                       and pg_get_userbyid(routine.proowner)='postgres' and routine.prosecdef
                       and routine.proconfig=array['search_path=pg_catalog']::text[]
-                      and md5(replace(replace(routine.prosrc,E'\r\n',E'\n'),E'\r',E'\n'))='5933952d71f9da90a2a80a05ce6e0378'
+                      and md5(replace(replace(routine.prosrc,E'\r\n',E'\n'),E'\r',E'\n'))=expected_phase_selector_hash
                       and routine.proacl is not null
                       and (select count(*) from aclexplode(routine.proacl))=1
                       and not exists (select 1 from aclexplode(routine.proacl) acl
@@ -503,6 +527,236 @@ jobs:
                       and not has_function_privilege('service_role',routine.oid,'EXECUTE'))
               then raise exception 'pre-target selector catalog drifted'; end if;
             end if;
+
+            if exists (
+              with expected(signature, source_md5, volatility, result_type) as (values
+                ('public.breaker_cooldown_seconds(text)',
+                  '9b46c6e078158e2f2ac1be0126e47e65', 'i', 'integer'),
+                ('public.breaker_suppression_reason(uuid,text,text,timestamptz)',
+                  'ce7c51ad47992174634c960b8a8faaaf', 's', 'text'),
+                ('public.consume_breaker_trial(uuid,text,text)',
+                  '41323ace6fed5d3e5ebc512464bd358d', 'v', 'void')
+              )
+              select 1
+              from expected
+              left join pg_proc helper on helper.oid=to_regprocedure(expected.signature)
+              left join pg_language language on language.oid=helper.prolang
+              where helper.oid is null
+                or language.lanname<>'sql'
+                or helper.prokind<>'f'
+                or helper.provolatile<>expected.volatility::"char"
+                or helper.proparallel<>'u'
+                or helper.proisstrict
+                or helper.proleakproof
+                or helper.proretset
+                or helper.pronargdefaults<>0
+                or helper.prorettype<>to_regtype(expected.result_type)
+                or helper.prosecdef
+                or helper.proconfig<>array['search_path=pg_catalog']::text[]
+                or pg_get_userbyid(helper.proowner)<>'postgres'
+                or md5(replace(replace(helper.prosrc,E'\r\n',E'\n'),E'\r',E'\n'))<>expected.source_md5
+                or helper.proacl is null
+                or (select count(*) from aclexplode(helper.proacl))<>1
+                or exists (select 1 from aclexplode(helper.proacl) acl
+                  where acl.grantor<>helper.proowner or acl.grantee<>helper.proowner
+                    or acl.privilege_type<>'EXECUTE' or acl.is_grantable)
+                or has_function_privilege('anon',helper.oid,'EXECUTE')
+                or has_function_privilege('authenticated',helper.oid,'EXECUTE')
+                or has_function_privilege('service_role',helper.oid,'EXECUTE')
+            ) then raise exception 'breaker-aware selector helper catalog drifted'; end if;
+
+            if breaker_relation is null
+              or not exists (
+                select 1 from pg_catalog.pg_class relation
+                where relation.oid = breaker_relation
+                  and relation.relkind = 'r'
+                  and relation.relrowsecurity
+                  and relation.relforcerowsecurity
+                  and pg_catalog.pg_get_userbyid(relation.relowner) = 'postgres'
+              )
+              or exists (
+                with expected(column_name, column_type, is_not_null, default_md5) as (values
+                  ('id', 'uuid', true, 'f3b72bb359a50b640590970a2ab8e514'),
+                  ('organization_id', 'uuid', true, 'd41d8cd98f00b204e9800998ecf8427e'),
+                  ('target', 'text', true, 'd41d8cd98f00b204e9800998ecf8427e'),
+                  ('state', 'text', true, '032cd0831e00bde5d89d95eeb9528422'),
+                  ('fault', 'text', false, 'd41d8cd98f00b204e9800998ecf8427e'),
+                  ('consecutive_faults', 'integer', true, 'cfcd208495d565ef66e7dff9f98764da'),
+                  ('opened_at', 'timestamp with time zone', false, 'd41d8cd98f00b204e9800998ecf8427e'),
+                  ('reason', 'text', false, 'd41d8cd98f00b204e9800998ecf8427e'),
+                  ('updated_at', 'timestamp with time zone', true, '75230039beb12ce952f24927f2bfa2f2')
+                )
+                select 1
+                from expected
+                left join pg_catalog.pg_attribute attribute
+                  on attribute.attrelid = breaker_relation
+                 and attribute.attname = expected.column_name
+                 and attribute.attnum > 0
+                 and not attribute.attisdropped
+                left join pg_catalog.pg_attrdef default_row
+                  on default_row.adrelid = attribute.attrelid
+                 and default_row.adnum = attribute.attnum
+                where attribute.attnum is null
+                  or pg_catalog.format_type(attribute.atttypid, attribute.atttypmod) <> expected.column_type
+                  or attribute.attnotnull is distinct from expected.is_not_null
+                  or attribute.attidentity <> ''
+                  or attribute.attgenerated <> ''
+                  or pg_catalog.md5(coalesce(
+                    pg_catalog.pg_get_expr(default_row.adbin, default_row.adrelid), ''
+                  )) <> expected.default_md5
+              )
+              or (
+                select pg_catalog.count(*)
+                from pg_catalog.pg_attribute attribute
+                where attribute.attrelid = breaker_relation
+                  and attribute.attnum > 0
+                  and not attribute.attisdropped
+              ) <> 9
+              or exists (
+                select 1 from pg_catalog.pg_attribute attribute
+                where attribute.attrelid = breaker_relation
+                  and attribute.attnum > 0
+                  and not attribute.attisdropped
+                  and attribute.attacl is not null
+              )
+              or not exists (
+                select 1 from pg_catalog.pg_class relation
+                where relation.oid = breaker_relation and relation.relacl is not null
+              )
+              or exists (
+                with relation_row as (
+                  select relation.relowner, relation.relacl
+                  from pg_catalog.pg_class relation
+                  where relation.oid = breaker_relation
+                ), actual as (
+                  select acl.*
+                  from relation_row
+                  cross join lateral pg_catalog.aclexplode(relation_row.relacl) acl
+                ), owner_expected as (
+                  select acl.privilege_type
+                  from relation_row
+                  cross join lateral pg_catalog.aclexplode(
+                    pg_catalog.acldefault('r', relation_row.relowner)
+                  ) acl
+                ), authenticated_expected(privilege_type) as (values ('SELECT'))
+                select 1
+                from relation_row
+                where exists (
+                  select 1 from actual
+                  where actual.grantor <> relation_row.relowner
+                    or actual.is_grantable
+                    or actual.grantee not in (
+                      relation_row.relowner,
+                      pg_catalog.to_regrole('authenticated')::oid,
+                      pg_catalog.to_regrole('service_role')::oid
+                    )
+                )
+                or exists (
+                  (select actual.privilege_type from actual
+                    where actual.grantee = relation_row.relowner)
+                  except select owner_expected.privilege_type from owner_expected
+                )
+                or exists (
+                  (select owner_expected.privilege_type from owner_expected)
+                  except select actual.privilege_type from actual
+                    where actual.grantee = relation_row.relowner
+                )
+                or exists (
+                  (select actual.privilege_type from actual
+                    where actual.grantee = pg_catalog.to_regrole('authenticated')::oid)
+                  except select authenticated_expected.privilege_type
+                    from authenticated_expected
+                )
+                or exists (
+                  (select authenticated_expected.privilege_type from authenticated_expected)
+                  except select actual.privilege_type from actual
+                    where actual.grantee = pg_catalog.to_regrole('authenticated')::oid
+                )
+                or exists (
+                  (select actual.privilege_type from actual
+                    where actual.grantee = pg_catalog.to_regrole('service_role')::oid)
+                  except select owner_expected.privilege_type from owner_expected
+                )
+                or exists (
+                  (select owner_expected.privilege_type from owner_expected)
+                  except select actual.privilege_type from actual
+                    where actual.grantee = pg_catalog.to_regrole('service_role')::oid
+                )
+              )
+              or exists (
+                with expected(constraint_name, constraint_type, definition_md5) as (values
+                  ('resource_breakers_closed_is_clean', 'c', '04012ad5d4aa2f1b2ad25b2451e653f0'),
+                  ('resource_breakers_consecutive_faults_check', 'c', 'c2fffa885f6f01170d2209708856b0e5'),
+                  ('resource_breakers_fault_check', 'c', '7ef8577e9c0f9f106b3bd472842c6b7d'),
+                  ('resource_breakers_open_is_explained', 'c', '05304b586d0396bce917f1936a987cc3'),
+                  ('resource_breakers_organization_id_fkey', 'f', '3c702b28ccc97a0ac52c0acefcdea477'),
+                  ('resource_breakers_pkey', 'p', '4c6419b3704337bbfe50f018842a9ad3'),
+                  ('resource_breakers_reason_check', 'c', 'a16938033d9fedba1bfb6f1fb3f9a695'),
+                  ('resource_breakers_state_check', 'c', '211da65e82943c44beb39b317af7c000'),
+                  ('resource_breakers_target_check', 'c', '3f2b58d9d0290fe4b4398322f617a246'),
+                  ('resource_breakers_target_unique', 'u', 'ac9e3f03dd3d27504b3cadcc477aa415')
+                )
+                select 1
+                from expected
+                left join pg_catalog.pg_constraint constraint_row
+                  on constraint_row.conrelid = breaker_relation
+                 and constraint_row.conname = expected.constraint_name
+                where constraint_row.oid is null
+                  or constraint_row.contype <> expected.constraint_type::"char"
+                  or not constraint_row.convalidated
+                  or pg_catalog.md5(pg_catalog.pg_get_constraintdef(
+                    constraint_row.oid, true
+                  )) <> expected.definition_md5
+              )
+              or (
+                select pg_catalog.count(*) from pg_catalog.pg_constraint constraint_row
+                where constraint_row.conrelid = breaker_relation
+                  and constraint_row.contype <> 'n'
+              ) <> 10
+              or exists (
+                with expected(index_name, definition_md5) as (values
+                  ('resource_breakers_open', '415d827b30b8846fb40447bd1d968b3e'),
+                  ('resource_breakers_pkey', 'aec60ef53c6e6e9f763eb3598f3f89c0'),
+                  ('resource_breakers_target_unique', '0591eee739b49876d13d08b49e55e67f')
+                )
+                select 1
+                from expected
+                left join pg_catalog.pg_class index_relation
+                  on index_relation.relname = expected.index_name
+                 and index_relation.relnamespace = 'public'::pg_catalog.regnamespace
+                left join pg_catalog.pg_index index_row
+                  on index_row.indexrelid = index_relation.oid
+                 and index_row.indrelid = breaker_relation
+                where index_row.indexrelid is null
+                  or not index_row.indisvalid
+                  or not index_row.indisready
+                  or not index_row.indislive
+                  or pg_catalog.md5(pg_catalog.pg_get_indexdef(index_row.indexrelid))
+                    <> expected.definition_md5
+              )
+              or (
+                select pg_catalog.count(*) from pg_catalog.pg_index index_row
+                where index_row.indrelid = breaker_relation
+              ) <> 3
+              or (
+                select pg_catalog.count(*) from pg_catalog.pg_policy policy
+                where policy.polrelid = breaker_relation
+              ) <> 1
+              or not exists (
+                select 1 from pg_catalog.pg_policy policy
+                where policy.polrelid = breaker_relation
+                  and policy.polname = 'resource_breakers_select_members'
+                  and policy.polcmd = 'r'
+                  and policy.polpermissive
+                  and policy.polroles = array[
+                    pg_catalog.to_regrole('authenticated')::oid
+                  ]
+                  and policy.polwithcheck is null
+                  and pg_catalog.md5(pg_catalog.pg_get_expr(
+                    policy.polqual, policy.polrelid
+                  )) = '2eea03a91826969e8abc25f7f80097f6'
+              )
+            then raise exception 'release resource_breakers catalog or ACL drifted'; end if;
 
             if c300 = 0 then
               if exists (select 1 from pg_proc routine
@@ -758,14 +1012,16 @@ jobs:
             select
               (select count(*) from supabase_migrations.schema_migrations where version='20260827000200')||'|'||
               (select count(*) from supabase_migrations.schema_migrations where version='20260827000210')||'|'||
+              (select count(*) from supabase_migrations.schema_migrations where version='20260828000050')||'|'||
               (select count(*) from supabase_migrations.schema_migrations where version='20260828000100')||'|'||
               (select count(*) from supabase_migrations.schema_migrations where version='20260828000200')||'|'||
               (select count(*) from supabase_migrations.schema_migrations where version='20260828000300');")
           case "$SCOPE:$POST_LEDGER" in
-            probe:1\|1\|0\|0\|0|probe:1\|1\|1\|0\|0|probe:1\|1\|1\|1\|0|probe:1\|1\|1\|1\|1) ;;
-            configure-url:1\|1\|1\|0\|0) ;;
-            target-claims:1\|1\|1\|1\|0) ;;
-            postdeploy:1\|1\|1\|1\|1|verify:1\|1\|1\|1\|1) ;;
+            probe:1\|1\|0\|0\|0\|0|probe:1\|1\|1\|0\|0\|0|probe:1\|1\|1\|1\|0\|0|probe:1\|1\|1\|1\|1\|0|probe:1\|1\|1\|1\|1\|1) ;;
+            selector-normalization:1\|1\|1\|0\|0\|0) ;;
+            configure-url:1\|1\|1\|1\|0\|0) ;;
+            target-claims:1\|1\|1\|1\|1\|0) ;;
+            postdeploy:1\|1\|1\|1\|1\|1|verify:1\|1\|1\|1\|1\|1) ;;
             *) echo "::error::Postflight ledger is not scope-exact (${SCOPE}:${POST_LEDGER})."; exit 1 ;;
           esac
 

@@ -2,6 +2,21 @@
 
 Last triaged: 2026-08-28
 
+## Exact Blackstone Supabase Auth bootstrap (2026-08-28, ADR-160)
+
+- [x] Add an exact-email/project/actor/first-attempt workflow that receives the
+  password only through an encrypted temporary repository secret, creates or
+  updates through the GoTrue Admin API, and re-verifies unique UUID plus
+  `email_confirmed_at` without logging credentials or response payloads.
+- [x] Publish and run the workflow once with confirmation phrase
+  `CONFIRM BLACKSTONE SUPABASE AUTH BOOTSTRAP`; exact first-attempt run
+  `33164766560` on release `298264b02fe5a29e3c139f8077e65d6270f19167`
+  returned one bounded updated UUID after confirmed readback.
+- [x] Delete `BLACKSTONE_SUPABASE_BOOTSTRAP_PASSWORD` immediately after the
+  accepted run and remove the temporary workflow and its test in this forward
+  cleanup. No organization membership or application role was inferred from
+  the Auth identity.
+
 ## Ten-step Factory final release (2026-08-28)
 
 - [x] Correct Step 8 any-provider/model record-only routing and preserve one
@@ -17,13 +32,77 @@ Last triaged: 2026-08-28
 - [x] Make mutation authorization first-attempt/non-replayable and validate
   active workflows, exact CI/deployment/health, database containment, ledger,
   catalog, ACL, runtime, lint, and Step 8 any-model contracts.
-- [ ] Publish the reviewed head; require all four exact-head jobs and exact
-  Vercel READY identity.
-- [ ] Apply only `20260828000100`, `20260828000200`, then `20260828000300`
-  through their ordered forward-only scopes and accept every postflight.
+- [x] Publish exact `79ca52f5b92e7d95292210e05565d35d21b4a435`; all four jobs
+  passed in CI `33158801269`, and GitHub deployment `6138739479` resolved to
+  exact READY Vercel deployment `dpl_57pM3ZEYNyK596VAeLPJMabJLZrH` with the
+  public release-identity health join green.
+- [x] Publish exact `298264b02fe5a29e3c139f8077e65d6270f19167`; all four jobs
+  passed in CI `33163838800`, and GitHub deployment `6139678648` resolved to
+  exact READY Vercel deployment `dpl_ChxG5EdgPzh3vybRZgBRz9EA9gg1` with the
+  public release-identity health join green.
+- [x] Diagnose the protected probe's only mismatch: the live Phase 1C
+  selector is exact stale body `ed5840b9d8d0efdb513a8576df128e9b`, not the
+  required breaker-aware body `5933952d71f9da90a2a80a05ce6e0378`; all ABI,
+  ownership, security, search-path, ACL, helper, breaker-table, and safety
+  guards otherwise match.
+- [x] Add isolated forward migration
+  `20260828000050_normalize_breaker_aware_phase1c_selector.sql` (LF SHA-256
+  `8914034508451d1550ebf3f1bedd8f7b71592f1809306e78c57774c458952896`)
+  plus a dedicated protected `selector-normalization` scope. Local gates pass:
+  lint, typecheck, 5,150 tests / 7 skipped across 442 files, and 171/171-page
+  production build.
+- [x] Publish exact cleanup release
+  `994da2cec81c0cd83aa1e2d87ad848d2f2ff612a`, pass all four exact-head jobs
+  plus exact READY Vercel/health identity, and complete fresh probe
+  `33165823042`.
+- [x] Apply only `20260828000050` in first-attempt run `33165886343`, pass
+  fresh probe `33165944760`, then apply only `20260828000100` in first-attempt
+  run `33165992529`. Exact ledger is `1|1|1|1|0|0`; never rerun either scope.
+- [x] Publish disposable acceptance release
+  `540aceb173ec88e67cb982018a80134ece3ec474`; pass all four exact-head jobs in
+  CI `33167232673`, exact READY deployment
+  `dpl_31W7nKgJd6ENoCfuvgP1zzHZM6eT`, and public health identity.
+- [x] Dispatch first-attempt acceptance run `33168092838`; it passed release,
+  safety, and connection gates, then failed closed before target resolution or
+  mutation because protected `psql` variables were placed in a `-c` command.
+  Delete both temporary selector secrets immediately and do not rerun it.
+- [x] Publish quoted-stdin correction release
+  `53b84b7952a1e09725f53da5d65c4947b8cb914a`; pass all four exact-head jobs
+  in CI `33168368270`, READY deployment
+  `dpl_tBF2s6AtLmqZ13YpYHKWzBRtwiKT`, and public health identity.
+- [x] Complete fresh first-attempt acceptance run `33169297158`: real
+  owner/admin session, exact URL write, exactly one owner-attributed immutable
+  audit event, no-op replay, signed-in reload, and pre/post stopped
+  containment all passed. Delete both temporary protected selectors, then
+  remove the disposable workflow/test in this forward cleanup.
+- [x] Publish cleanup `ce86d9c04ff91f237e680a5db4b0cda97feea2ce`, pass all
+  four jobs in CI `33169913723`, exact READY deployment
+  `dpl_4Zqh4q2yBfaagGtg7stSbV4NSphP`, and public health. Probe `33170897689`
+  confirmed `1|1|1|1|0|0`; first-attempt run `33170953151` applied only
+  `20260828000200`; independent probe `33171025468` confirmed
+  `1|1|1|1|1|0` with exact stopped containment. Never rerun target claims.
+- [ ] Accept legitimate signed-in Step 8 record/reload and truthful Step 9
+  persistence with workers OFF before applying `20260828000300`; then run
+  read-only `verify`.
+- [ ] Only after `00300` and `verify`, separately authorize and accept current
+  Full Lifecycle v2 execution through TEST, DEPLOY, and MONITOR.
 - [ ] Complete signed-in production Step 8 record/reload and Step 9 persisted
-  observation with an already-connected bot. Do not initiate provider OAuth or
-  enable a worker merely to satisfy this acceptance item.
+  observation with a legitimately connected bot. The current organization has
+  zero connected accounts, ready linked bots, or assignments. Do not copy a
+  provider token/account across tenants or enable a worker merely to satisfy
+  this acceptance item.
+
+## Hosted migration ledger reconciliation (2026-08-28)
+
+- [ ] Reconcile 17 older missing ledger versions beginning at
+  `20260815000200`; Supabase Preview currently reaches the already-present
+  `organizations.maximum_concurrent_runs` column and stops.
+- [ ] For each version, inventory every declared catalog/ACL/RLS/audit effect,
+  add only surgical forward compensation for anything missing, and record the
+  historical ledger row only after the complete effect is proven present.
+- [ ] Never edit/replay historical migrations, reset or down-migrate the
+  hosted database, disable the preview check, or blindly mark a version
+  applied. The isolated `00050` selector repair is not ledger reconciliation.
 
 ## Step 10 public production URL configuration (2026-08-28, ADR-156)
 
@@ -38,12 +117,12 @@ Last triaged: 2026-08-28
   API/unit/contract/native-SQL behavior coverage, focused lint and typecheck.
 - [x] Configure Vercel Production with an independent non-secret expected
   Supabase project ref; make `/api/health` fail closed on mismatch.
-- [ ] Publish and apply only
+- [x] Publish and apply only
   `20260828000100_project_production_url_configuration.sql` (LF SHA-256
   `0856ddee447280a1bb4418f25d6a6d4650687e168fffcd5e98e8ce15edd62b27`) through the
-  protected hosted path, then configure the intended project through its
-  signed-in owner/admin UI and verify one immutable audit event. No live value
-  was set by the local implementation.
+  protected hosted path in first-attempt run `33165992529`.
+- [ ] Configure the intended project through the signed-in owner/admin
+  application boundary and verify one immutable audit event plus no-op replay.
 
 ## Exact-target one-shot worker claims (2026-08-28, ADR-155)
 

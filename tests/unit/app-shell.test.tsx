@@ -48,7 +48,7 @@ describe("AppShell navigation", () => {
       // be an untruth in the navigation, so they sit side by side.
       "Lifecycle",
       // The runs as a live map — agenttrail's concept on the factory's own
-      // recorded truth (ADR-159).
+      // recorded truth (ADR-162).
       "Agent Trail",
       "Runs",
       "Operations",

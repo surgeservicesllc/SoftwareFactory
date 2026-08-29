@@ -6,9 +6,11 @@ Rebased 2026-08-16 on an owner-measured hosted position (see the section directl
 ## Full Lifecycle v2 release tail (2026-08-28)
 
 Use only `.github/workflows/factory-lifecycle-release-migrations.yml` for this
-three-file release. Do not add these files to the broad hosted-migration
+four-file release. Do not add these files to the broad hosted-migration
 workflow. The protected LF byte identities are:
 
+- `20260828000050_normalize_breaker_aware_phase1c_selector.sql` — SHA-256
+  `8914034508451d1550ebf3f1bedd8f7b71592f1809306e78c57774c458952896`;
 - `20260828000100_project_production_url_configuration.sql` — SHA-256
   `0856ddee447280a1bb4418f25d6a6d4650687e168fffcd5e98e8ce15edd62b27`;
 - `20260828000200_target_bound_worker_claims.sql` — SHA-256
@@ -41,21 +43,33 @@ advances.
 Run the scopes separately and in this exact order:
 
 1. `scope=probe` — read-only. Require prerequisite ledger rows `20260827000200`
-   and `20260827000210` exactly once and one of the four canonical release-tail
-   prefixes (`000`, `100`, `110`, or `111`). Record no secrets or row payloads.
-2. `scope=configure-url`, `confirm=apply` — stages only the hash-pinned `00100`
-   file. Under the ledger and stopped-state locks, it requires all three new
-   rows and catalog objects absent, then commits DDL and the `00100` ledger row
-   in one PostgreSQL transaction.
-3. Accept the application and safe owner/admin production-URL writer before
+   and `20260827000210` exactly once and one of the five canonical six-field
+   release-tail prefixes (`0000`, `1000`, `1100`, `1110`, or `1111`) for
+   `00050|00100|00200|00300`. Record no secrets or row payloads.
+2. `scope=selector-normalization`, `confirm=apply` — stages only the
+   hash-pinned `00050` file. It requires exact hosted selector hash
+   `ed5840b9d8d0efdb513a8576df128e9b`, exact graph selector and breaker
+   dependencies, private selector ACLs, absent target-claim objects, and the
+   exact `1|1|0|0|0|0` ledger. It commits only the selector replacement and
+   `00050` row in one PostgreSQL transaction. Require the phase selector to
+   become `5933952d71f9da90a2a80a05ce6e0378` with every ABI/ACL/dependency
+   invariant unchanged.
+3. Dispatch a fresh `scope=probe` — read-only — and require
+   `1|1|1|0|0|0` plus the normalized selector identity. Never rerun the first
+   probe or the mutation attempt.
+4. `scope=configure-url`, `confirm=apply` — stages only the hash-pinned `00100`
+   file. Under the ledger and stopped-state locks, it requires `00050=1` and
+   all three later rows/catalog objects absent, then commits DDL and the
+   `00100` ledger row in one PostgreSQL transaction.
+5. Accept the application and safe owner/admin production-URL writer before
    continuing. Then dispatch `scope=target-claims`, `confirm=apply`. It requires
-   `00100=1` and `00200/00300=0`, stages only `00200`, and atomically records
-   only `00200`.
-4. Accept the exact target-bound claim behavior and the signed-in production
+   `00050/00100=1/1` and `00200/00300=0/0`, stages only `00200`, and
+   atomically records only `00200`.
+6. Accept the exact target-bound claim behavior and the signed-in production
    lifecycle UI before dispatching `scope=postdeploy`, `confirm=apply`. It
-   requires `00100/00200/00300=1/1/0`, stages only `00300`, and atomically
-   records only `00300`.
-5. Dispatch `scope=verify` — read-only. It requires all three rows exactly
+   requires `00050/00100/00200/00300=1/1/1/0`, stages only `00300`, and
+   atomically records only `00300`.
+7. Dispatch `scope=verify` — read-only. It requires all four rows exactly
    once, rechecks the public-URL constraint/RLS/audit boundary and safe/unsafe
    runtime values, the service-only exact-target wrappers and target assertion,
    the canonical Full Lifecycle v2 plan digest, the service-only validated
@@ -264,7 +278,7 @@ the measured list, not today's total outstanding migration count. Later exact ev
 forward candidates.
 Do not add any of them to the 19-row measurement or
 infer a new overall missing count without another complete ledger probe. As of this release,
-the repository total is 173 migration files after integration with current `origin/main`. Those two numbers do not stand in a prefix relationship, and the reason
+the repository total is 174 migration files after integration with current `origin/main`. Those two numbers do not stand in a prefix relationship, and the reason
 matters: the
 hosted ledger is **not a contiguous prefix** of the local files. It has gaps in the middle and
 rows well past them. Any sentence of the form "everything after `X` is outstanding" is therefore

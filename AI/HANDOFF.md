@@ -2,7 +2,7 @@
 
 Last updated: 2026-08-28
 
-## Newest (2026-08-28 ~11:30Z): Agent Trail — a live map of the factory's runs (ADR-159)
+## Newest (2026-08-28 ~11:30Z): Agent Trail — a live map of the factory's runs (ADR-162)
 
 The owner directed sodiumsun/agenttrail (MIT) be built into the site.
 Adapted, not vendored: `/solutions/trail` renders each graph run as a
@@ -12,7 +12,7 @@ graph_edges already had a member SELECT policy), states/gates/errors/
 closure notes from the existing runs projection on a 10s poll, and a
 declared-vs-observed panel per node. Attribution in
 THIRD_PARTY_NOTICES.md and on the page. The daemon/fs-watcher half of
-agenttrail is deliberately not ported (ADR-159 records why).
+agenttrail is deliberately not ported (ADR-162 records why).
 
 Billing, same hour: the owner's one-click bootstrap ran in production —
 all four lookup-keyed prices and the webhook created, both secrets read
@@ -20,6 +20,35 @@ ok, `connected: true`, and a real LIVE-mode checkout session was created
 through the API. The owner reports buying Basic with a real card;
 verification of the plan flip is theirs to read (RLS keeps their org's
 subscription invisible to the test account — working as designed).
+
+## Newest (2026-08-28): target claims hosted; stop before postdeploy
+
+Cleanup release `ce86d9c04ff91f237e680a5db4b0cda97feea2ce` removed the
+used production-URL acceptance workflow/test. All four exact-head jobs passed
+in CI `33169913723`; GitHub deployment `6140863004` resolved to READY Vercel
+deployment `dpl_4Zqh4q2yBfaagGtg7stSbV4NSphP`, and public health joined the
+exact Git, deployment, Vercel-project, and Supabase identities.
+
+Probe `33170897689` passed ledger `1|1|1|1|0|0`. First-attempt mutation run
+`33170953151` applied only SHA-pinned
+`20260828000200_target_bound_worker_claims.sql` and passed exact ledger,
+catalog, ACL, runtime, audit, lint, health, and stopped-safety postflight.
+Independent probe `33171025468` confirmed `1|1|1|1|1|0`. Never rerun selector
+normalization, URL schema, target claims, or either URL-acceptance attempt.
+
+Do not dispatch `postdeploy`: signed-in production still has no legitimate
+connected Ready bot route for the required record/reload acceptance. Current
+Full Lifecycle v2 also has not executed while workers remain OFF. Read-only
+production browser acceptance found no page or
+console errors. Existing test-data run
+`884d6164-0ecd-4f93-878a-0a7ecda239e5` renders Steps 1-8 complete, then
+truthfully shows Deploy refused by policy and Monitor skipped; it explicitly
+lacks a verifiable current-template identity and cannot prove v2. The next
+legitimate action is a connected Ready bot assignment, then signed-in Step 8/9
+record/reload acceptance with workers still OFF. Only afterward apply `00300`
+and read-only `verify`; current v2 execution is a separate later authorization
+window. Until then, keep workers, schedules, the auth broker, autonomy, and
+automatic actions OFF and the global kill switch ON.
 
 ## Newest (2026-08-28 ~09:45Z): the site sets up its own Stripe account (ADR-158)
 
@@ -44,7 +73,19 @@ owner's remaining part is exactly two pastes into Vercel (secret key,
 then the signing secret the card hands them), each followed by a
 redeploy — docs/BILLING_GO_LIVE.md leads with this short path.
 
-## Newest (2026-08-28): final ten-step release candidate awaits publication
+## Newest (2026-08-28): one exact Supabase Auth account is verified; secret and bootstrap removed
+
+Exact first-attempt workflow run `33164766560` on release
+`298264b02fe5a29e3c139f8077e65d6270f19167` created or updated the requested
+normalized identity in Supabase Auth project `qpuofpmagrmyamahqwxw`, then
+re-read one exact UUID with a parseable `email_confirmed_at`. Its only output
+was the bounded updated UUID. The temporary encrypted password secret was
+deleted immediately. This forward cleanup removes the disposable workflow and
+test. The result is an email-confirmed Auth identity only; it does not grant
+tenant membership, owner/admin role, provider connection, or execution
+authority.
+
+## Newest (2026-08-28): application is live; apply selector normalization before the release tail
 
 Step 8 no longer treats a provider/model mismatch or a disabled worker as an
 invalid command plan. The durable record-only route accepts the assigned bot's
@@ -63,16 +104,44 @@ autonomy/kill-switch/runtime state.
 immutable deployment ID/URL, main SHA/ref, and Supabase project ref. The
 workflow compares that runtime deployment URL to GitHub's exact Vercel-bot
 Production status twice. Vercel's non-secret expected Supabase/Vercel/host and
-both worker-gate variables are configured for the next deployment.
+both worker-gate variables are configured, with the worker gates explicitly
+`false`. Exact `main`
+`79ca52f5b92e7d95292210e05565d35d21b4a435` passed all four jobs in CI
+`33158801269`; GitHub deployment `6138739479` is exact READY Vercel deployment
+`dpl_57pM3ZEYNyK596VAeLPJMabJLZrH`, and public health joined it to Vercel
+project `prj_pAsrhftaVWI4SyaqstgRVSWHJkdD` and Supabase project
+`qpuofpmagrmyamahqwxw`.
 
-Do not call the three 20260828 migrations hosted until the exact new `main`
-head is green and READY. Apply only `00100`, then `00200`, then `00300` through
-`factory-lifecycle-release-migrations.yml`, using the same exact `release_sha`
-and a first-attempt owner dispatch for each mutation. Steps 9-10 execution is
-not claimed while workers remain OFF; only recorded/planned and observed
-release behavior can be accepted under the current safety constraint. Final
-local gates: lint/typecheck green, 434 test files / 5,121 tests passed (3 / 7
-skipped), and production build 170/170 pages.
+Read-only release probe `33159805326` performed no mutation and stopped on one
+exact catalog drift: the hosted Phase 1C selector body is stale MD5
+`ed5840b9d8d0efdb513a8576df128e9b`; the frozen breaker-aware target is
+`5933952d71f9da90a2a80a05ce6e0378`. ABI, owner, definer/search-path/private
+ACL, three helper identities, and the FORCE-RLS breaker table are exact.
+Migration `20260828000050_normalize_breaker_aware_phase1c_selector.sql`
+(LF SHA-256
+`8914034508451d1550ebf3f1bedd8f7b71592f1809306e78c57774c458952896`)
+is the isolated forward-only containment. It accepts only the exact stale or
+target body, verifies the surrounding catalog, replaces only that function,
+and records no historical ledger repair.
+
+Next: publish the containment, require the four exact-head jobs and exact
+READY Vercel/health identity, dispatch a fresh `probe`, then apply only
+`00050`. After its ledger/catalog/ACL/runtime/safety postflight passes, proceed
+in order with `00100`, `00200`, and `00300`; never rerun `33159805326` or a
+mutation attempt. Current gates are lint/typecheck green, 5,150 tests passed / 7
+skipped across 442 files, and a 171/171-page production build.
+
+Signed-in acceptance remains externally incomplete: the active organization
+for `daniel.hughen@gmail.com` has zero connected AI accounts, ready bots, or
+assignments. Finish a supported provider connection before a fresh Step 8 POST
+and persisted Steps 9-10 evidence; never copy a token or account across
+tenants. Workers, provider execution, autonomy, schedules, the auth broker,
+and automatic actions stay OFF and the global kill switch stays ON.
+
+Seventeen older hosted versions beginning at `20260815000200` remain missing
+from the ledger while partial catalog effects exist. Reconcile each only after
+complete object-by-object proof and any surgical forward compensation. Never
+edit/replay history, blindly mark applied, reset, or down-migrate.
 
 ## Newest (2026-08-28): Step 10 public URL writer is locally complete
 

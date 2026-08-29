@@ -2523,6 +2523,13 @@ Use this append-only log for decisions that constrain future implementation. Cha
   switch. They do not enable provider execution, autonomy, approval, merge,
   deployment, rollback, or automatic action, and do not release the global
   kill switch. A target that fails policy remains unclaimed.
+- Production evidence (2026-08-28): exact cleanup release
+  `ce86d9c04ff91f237e680a5db4b0cda97feea2ce` passed CI `33169913723`, READY
+  deployment `dpl_4Zqh4q2yBfaagGtg7stSbV4NSphP`, and public health. Probe
+  `33170897689` confirmed pre-ledger `1|1|1|1|0|0`; first-attempt run
+  `33170953151` applied only the pinned migration and passed full postflight;
+  independent probe `33171025468` confirmed `1|1|1|1|1|0` with stopped
+  containment unchanged.
 
 ## ADR-156 - The public production URL is explicit owner-managed evidence
 
@@ -2621,8 +2628,140 @@ Use this append-only log for decisions that constrain future implementation. Cha
   and idempotently; it never deletes, and a webhook that exists without
   a known secret is reported with instructions to reveal it in Stripe
   rather than recreated behind the working one's back.
+## ADR-159 - Normalize the partially applied Phase 1C selector with one isolated forward migration
 
-## ADR-159 - Agent Trail: agenttrail's live map, on the factory's own truth
+- Date: 2026-08-28
+- Status: accepted locally; exact-head publication and protected hosted apply pending
+- Context: exact application release
+  `79ca52f5b92e7d95292210e05565d35d21b4a435` is live with all four CI jobs,
+  exact READY Vercel identity, and public release-health join green. Protected
+  read-only probe `33159805326` nevertheless stopped before the release-tail
+  migrations because production has the `20260815000300` body of
+  `claim_phase1c_run_budget_internal(text,text,text,integer)` (MD5
+  `ed5840b9d8d0efdb513a8576df128e9b`) while its breaker helpers and table
+  already have the later catalog shape. The required frozen `20260815000500`
+  selector body is `5933952d71f9da90a2a80a05ce6e0378`. Seventeen older
+  versions beginning at `20260815000200` are absent from the hosted ledger
+  despite partial effects, so replaying history or merely marking it applied
+  cannot establish truth.
+- Decision: add only forward migration
+  `20260828000050_normalize_breaker_aware_phase1c_selector.sql` (LF SHA-256
+  `8914034508451d1550ebf3f1bedd8f7b71592f1809306e78c57774c458952896`)
+  before the existing `00100`, `00200`, and `00300` release tail. Its
+  preflight accepts only the exact stale or already-normalized selector body;
+  verifies the unchanged ABI, postgres owner, `SECURITY DEFINER`, exact
+  `search_path=pg_catalog`, owner-only execute ACL, exact breaker-helper
+  identities, FORCE-RLS breaker table, browser/table ACL, constraints/policy,
+  and absence of target-bound selector objects; replaces only the Phase 1C
+  selector with the frozen breaker-aware body; then repeats the exact target
+  catalog and ACL assertions. A dedicated hash-pinned
+  `selector-normalization` workflow scope preserves exact-main, four-job CI,
+  READY Vercel/health, stopped-runtime, single-file staging, linked lint,
+  transaction/lock, ledger, schema reload, and postflight gates.
+- Consequence: a clean migration chain and the exact observed partially
+  applied hosted shape converge on the same function without changing its
+  signature or authority, replaying `20260815000300`/`20260815000500`, or
+  claiming their history was repaired. Local evidence is lint/typecheck
+  green, 5,150 tests passed / 7 skipped across 442 files, and a 171/171-page
+  production build. The remaining 17-version ledger drift stays explicit and
+  requires separate object-by-object catalog proof, forward compensation, and
+  only then protected reconciliation.
+- Bounds: no token/account is copied between tenants, and no provider OAuth is
+  inferred from catalog repair. Workers, provider execution, autonomy,
+  schedules, the auth broker, and automatic actions remain OFF; the global
+  kill switch remains ON. This decision authorizes no historical edit/replay,
+  blind ledger insertion, reset, down-migration, worker dispatch, or claim of
+  signed-in Steps 8-10 acceptance.
+
+## ADR-160 - Bootstrap one exact verified Auth identity through a disposable secret boundary
+
+- Date: 2026-08-28
+- Status: accepted; one-shot production dispatch completed and disposed
+- Context: the owner requested `blackstoneagencyllc@gmail.com` as a verified
+  Supabase Auth account with a supplied password. A real password must not be
+  committed, passed as a workflow input, copied into a database migration, or
+  printed in logs. Direct `auth.users` writes would bypass GoTrue's supported
+  password hashing and identity invariants.
+- Decision: publish a temporary `workflow_dispatch` path fixed to exact
+  repository `surgeservicesllc/SoftwareFactory`, `main`, Supabase project
+  `qpuofpmagrmyamahqwxw`, and the one normalized email. Require an exact
+  confirmation phrase, configured production actor equality for both actor
+  fields, and run attempt 1 with no GitHub token permissions. Supply the
+  password through a temporary encrypted repository secret and use the
+  existing service-role secret only inside the runner. The script uses the
+  GoTrue Admin API, refuses duplicates, idempotently creates or updates the
+  exact identity, and re-reads its UUID, exact email, and parseable
+  `email_confirmed_at`; it emits no credential or response payload.
+- Consequence: the requested Auth identity can be created through Supabase's
+  supported password boundary without persistent plaintext or an arbitrary
+  admin endpoint. After one accepted run, delete the temporary password secret
+  and remove the temporary workflow/test in a forward cleanup commit.
+- Evidence: exact first-attempt run `33164766560` on exact release
+  `298264b02fe5a29e3c139f8077e65d6270f19167` returned one bounded updated UUID
+  after exact confirmed readback. The temporary password secret was deleted
+  immediately, and the disposable workflow/test are removed by the next
+  forward cleanup release.
+- Bounds: an Auth identity is not organization membership or an application
+  role. This decision grants neither, connects no provider, enables no worker,
+  changes no autonomy/action setting, and does not release the global kill
+  switch.
+
+## ADR-161 - Accept the public project URL through a disposable signed-in boundary
+
+- Date: 2026-08-28
+- Status: accepted; first dispatch failed closed before mutation, forward transport correction pending
+- Context: protected first-attempt runs have installed the selector
+  normalization and owner/admin-only URL writer, leaving the release ledger at
+  `1|1|1|1|0|0`. The migration workflow proves catalog/ACL/runtime shape but
+  intentionally cannot prove that the production application establishes a
+  real user session, selects the intended tenant, persists a value, emits one
+  immutable audit event, and reloads it. Existing remote journey inputs are
+  plaintext and must never carry an owner's password.
+- Decision: publish a temporary manual workflow serialized with production
+  migrations. Read the owner email and project name only from temporary
+  encrypted repository secrets, require that already-confirmed identity to be
+  an exact owner/admin of one non-archived unset project, and use the existing
+  service credential only to mint an ephemeral magic-link token. Consume that
+  token through the production callback, select the exact organization, call
+  the same-origin production URL API, verify one owner-attributed
+  `project.updated` event, replay the identical write with zero new events, and
+  reload the value through the signed-in portfolio API. Check exact
+  main/four-job CI/READY deployment/public health, writer/predicate/constraint/
+  RLS/audit catalog, stopped workflows, every autonomy/action flag, worker
+  heartbeats/runs, and kill switches initially, immediately before mutation,
+  and after reload.
+- Consequence: application acceptance uses the production boundary without
+  exposing, resetting, or storing a password and cannot silently pass on a
+  skipped authorization job, preseeded URL, unconfirmed identity, broadened
+  ACL, moved release, active worker, or duplicate audit event. Delete the two
+  temporary selectors immediately after the accepted run and remove the
+  disposable workflow/test in the next forward commit.
+- Production evidence: release `540aceb173ec88e67cb982018a80134ece3ec474`
+  passed exact CI `33167232673`, READY Vercel deployment
+  `dpl_31W7nKgJd6ENoCfuvgP1zzHZM6eT`, and public health. First-attempt run
+  `33168092838` passed all pre-write gates and then stopped before target
+  resolution or mutation because `psql` variable substitution was embedded in
+  a `-c` command. Its temporary selectors were deleted immediately. Supply
+  protected variables only to a single-quoted stdin heredoc, enforce that
+  transport in the workflow regression test, publish a new exact release, and
+  use a fresh first-attempt dispatch rather than rerunning the failed attempt.
+- Acceptance evidence: corrected release
+  `53b84b7952a1e09725f53da5d65c4947b8cb914a` passed exact CI
+  `33168368270`, READY Vercel deployment
+  `dpl_tBF2s6AtLmqZ13YpYHKWzBRtwiKT`, and public health. Fresh first-attempt
+  run `33169297158` proved the production session, owner/admin tenant,
+  same-origin write, one owner-attributed immutable event, no-op replay,
+  signed-in reload, and unchanged stopped containment. Both temporary selectors
+  were deleted immediately; the workflow/test are removed in the next forward
+  cleanup release.
+- Outcome (2026-08-28): accepted and proven in production; the disposable
+  boundary was removed in the next forward cleanup.
+- Bounds: this changes only the one public URL and its existing immutable
+  audit trail. It grants no membership, connects no provider, enables no
+  worker/autonomy/automatic action, does not release the kill switch, and does
+  not authorize replay, reset, down-migration, or historical ledger repair.
+
+## ADR-162 - Agent Trail: agenttrail's live map, on the factory's own truth
 
 - Date: 2026-08-28
 - Status: accepted
