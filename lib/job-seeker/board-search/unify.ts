@@ -1,0 +1,189 @@
+import type { BoardSearchHit } from "@/lib/job-seeker/board-search/types";
+
+/**
+ * Cross-board deduplication and result-level filters for the unified search.
+ *
+ * The same posting frequently exists on several boards. Identity here is the
+ * conjunction a person would use: same company and same title, normalized
+ * hard (case, punctuation, whitespace) — location deliberately excluded from
+ * the key because boards state the same job's place differently ("Remote",
+ * "Anywhere in the World", "EU only") far more often than two different jobs
+ * share a company and an exact title. A collapsed group keeps every source
+ * reference: nothing a board said is discarded, one card is shown.
+ *
+ * Filters run after normalization, on the unified set, because a board that
+ * cannot express "salary at least X" upstream can still answer it here from
+ * what its postings said. A filter never invents: a posting with no salary
+ * text fails a salary-minimum filter only when `requireSalary` asked for
+ * that; otherwise unknown is kept and labeled unknown by the UI.
+ */
+
+export type UnifiedSource = Readonly<{
+  board: string;
+  boardName: string;
+  url: string | null;
+  externalId: string | null;
+  saveToken: string;
+}>;
+
+export type UnifiedHit = Readonly<{
+  job: BoardSearchHit["job"];
+  publishedOn: string | null;
+  closesOn: string | null;
+  sources: readonly UnifiedSource[];
+  /**
+   * Which entry of `sources` the card's `job` is the verbatim copy of. Save
+   * tokens are sealed over one board's exact fields, so saving this card must
+   * go through this source — a sibling source's token seals its own copy.
+   */
+  primarySourceIndex: number;
+}>;
+
+export function normalizeIdentity(company: string, title: string): string {
+  const fold = (value: string) =>
+    value
+      .toLowerCase()
+      .normalize("NFKD")
+      .replace(/[̀-ͯ]/g, "")
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim()
+      .replace(/\s+/g, " ");
+  return `${fold(company)}::${fold(title)}`;
+}
+
+type TaggedHit = Readonly<{
+  board: string;
+  boardName: string;
+  hit: BoardSearchHit;
+  saveToken: string;
+}>;
+
+export function dedupeAcrossBoards(tagged: readonly TaggedHit[]): UnifiedHit[] {
+  const groups = new Map<
+    string,
+    { primary: TaggedHit; primaryIndex: number; sources: UnifiedSource[] }
+  >();
+  for (const entry of tagged) {
+    const key = normalizeIdentity(entry.hit.job.company, entry.hit.job.title);
+    const source: UnifiedSource = {
+      board: entry.board,
+      boardName: entry.boardName,
+      url: entry.hit.job.url,
+      externalId: entry.hit.job.externalId ?? null,
+      saveToken: entry.saveToken,
+    };
+    const existing = groups.get(key);
+    if (!existing) {
+      groups.set(key, { primary: entry, primaryIndex: 0, sources: [source] });
+      continue;
+    }
+    existing.sources.push(source);
+    // The richer record wins the card: prefer the copy that carries a salary,
+    // then the one that carries a description. Sources accumulate either way.
+    const current = existing.primary.hit.job;
+    const candidate = entry.hit.job;
+    const richer =
+      (candidate.salaryText !== null && current.salaryText === null) ||
+      (candidate.salaryText === current.salaryText &&
+        candidate.description !== null &&
+        current.description === null);
+    if (richer) {
+      existing.primary = entry;
+      existing.primaryIndex = existing.sources.length - 1;
+    }
+  }
+  return [...groups.values()].map(({ primary, primaryIndex, sources }) => ({
+    job: primary.hit.job,
+    publishedOn: primary.hit.publishedOn,
+    closesOn: primary.hit.closesOn,
+    sources,
+    primarySourceIndex: primaryIndex,
+  }));
+}
+
+export type UnifiedFilters = Readonly<{
+  /** Every word must appear (AND) or any word may appear (OR). */
+  keywordMode: "and" | "or";
+  /** Applied to title+company+description; [] means no keyword filter. */
+  keywords: readonly string[];
+  /** A hit containing any of these anywhere is dropped. */
+  excludeKeywords: readonly string[];
+  /** Company names to drop, matched case-insensitively as substrings. */
+  excludeCompanies: readonly string[];
+  workModel: "remote" | "hybrid" | "onsite" | null;
+  /** Keep only hits whose salary text contains a number ≥ this (thousands tolerated). */
+  salaryMinimum: number | null;
+  /** Drop hits with no salary text at all. */
+  requireSalary: boolean;
+  /** Keep only hits published within this many days; null keeps undated hits. */
+  postedWithinDays: number | null;
+}>;
+
+export const EMPTY_FILTERS: UnifiedFilters = Object.freeze({
+  keywordMode: "and",
+  keywords: [],
+  excludeKeywords: [],
+  excludeCompanies: [],
+  workModel: null,
+  salaryMinimum: null,
+  requireSalary: false,
+  postedWithinDays: null,
+});
+
+/**
+ * The largest money-like number in a salary text, normalized for "120k".
+ * "USD 90,000–120,000" → 120000; "60–70 hourly" → 70 (a person filtering by
+ * annual salary will still see hourly rows as unknown unless requireSalary
+ * is set, because 70 < any annual minimum — the honest failure direction).
+ */
+export function salaryCeiling(salaryText: string | null): number | null {
+  if (salaryText === null) return null;
+  const matches = [...salaryText.matchAll(/(\d[\d,.]*)\s*(k)?/gi)];
+  let best: number | null = null;
+  for (const match of matches) {
+    const raw = Number(match[1].replace(/[,.](?=\d{3}\b)/g, "").replace(/,/g, "."));
+    if (!Number.isFinite(raw)) continue;
+    const value = match[2] ? raw * 1000 : raw;
+    if (best === null || value > best) best = value;
+  }
+  return best;
+}
+
+export function applyUnifiedFilters(
+  hits: readonly UnifiedHit[],
+  filters: UnifiedFilters,
+  now: Date = new Date(),
+): UnifiedHit[] {
+  const contains = (haystack: string, needle: string) =>
+    haystack.includes(needle.toLowerCase());
+  return hits.filter((hit) => {
+    const haystack = [hit.job.title, hit.job.company, hit.job.description ?? "", hit.job.location ?? ""]
+      .join(" ")
+      .toLowerCase();
+
+    if (filters.keywords.length > 0) {
+      const check = (word: string) => contains(haystack, word);
+      const passes = filters.keywordMode === "and"
+        ? filters.keywords.every(check)
+        : filters.keywords.some(check);
+      if (!passes) return false;
+    }
+    if (filters.excludeKeywords.some((word) => contains(haystack, word))) return false;
+    if (filters.excludeCompanies.some((name) => contains(hit.job.company.toLowerCase(), name))) {
+      return false;
+    }
+    if (filters.workModel !== null && hit.job.workModel !== filters.workModel) return false;
+
+    const ceiling = salaryCeiling(hit.job.salaryText);
+    if (filters.requireSalary && ceiling === null) return false;
+    if (filters.salaryMinimum !== null && ceiling !== null && ceiling < filters.salaryMinimum) {
+      return false;
+    }
+
+    if (filters.postedWithinDays !== null && hit.publishedOn !== null) {
+      const age = (now.getTime() - new Date(hit.publishedOn).getTime()) / 86_400_000;
+      if (age > filters.postedWithinDays) return false;
+    }
+    return true;
+  });
+}

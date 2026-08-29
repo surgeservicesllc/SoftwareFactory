@@ -2834,3 +2834,44 @@ Use this append-only log for decisions that constrain future implementation. Cha
   than picked.
 - Also: an unscored posting is excluded from a minimum-score filter and sorts
   last, never treated as zero. Zero is a measurement; "not measured" is not.
+
+## ADR-163 - Unified job search: probed adapters, one dedupe definition, an honest 50-source catalogue
+
+- Context: the active owner goal turns `/JobSearch` into a job search
+  engine over the 25 most popular general and 25 leading marketing-focused
+  sources, with the standing prohibition on faked integrations. Most famous
+  boards prohibit automated collection or gate their APIs behind
+  partnership, so "50 searchable boards" cannot be built honestly — but
+  "50 sources, each doing exactly what its status says" can.
+- Decision: three layers. (1) Six new registry adapters — Remotive,
+  Remote OK, Jobicy, Himalayas, Arbeitnow, We Work Remotely — each built
+  probe-first: the public API or official RSS feed was fetched live and a
+  captured sample pinned by fixture tests before the adapter joined the
+  registry. API terms are honored by construction (Remotive's call budget
+  via a 6-hour per-term cache, Remote OK's attribution and link-back,
+  WWR read only over its published RSS). (2) One shared pure module,
+  `board-search/unify.ts`, defines cross-board identity
+  (normalized company+title; location excluded because boards phrase the
+  same job's place differently more often than distinct jobs share both),
+  richer-record-wins card selection with a `primarySourceIndex` so saving
+  goes through the board whose sealed token matches the card's exact
+  fields, and result-level filters. The API route and the browser both
+  import it, so server and client cannot disagree about what "the same
+  job" means; the panel filters instantly without refetching. (3) A
+  50-entry catalogue where every entry carries one of four statuses —
+  `live` (integrity-tested equal to the registry), `needs_credentials`
+  (official API named, **Not Connected** until the owner supplies keys),
+  `external_link` (the person's own browser opens the site; every URL
+  probed the day it was listed, and four reputationally "known" boards
+  found dead were replaced with probed live ones), `not_supported`
+  (refusal documented in place).
+- Bounds: LinkedIn remains unscraped per the registry's standing
+  decision; its catalogue entry is a link a person opens themselves.
+  Saved searches, alerts, and email are later increments and nothing in
+  this one pretends otherwise.
+- Addendum (same day): three more open surfaces probed live and joined the
+  registry — The Muse (public JSON API; no free-text search exists, so the
+  adapter samples pages and says so), Working Nomads (open exposed_jobs
+  feed), and Jobspresso (official WordPress job feed; the dc:creator
+  "Company<br>⚲ Place" convention split honestly). Thirteen live boards;
+  the catalogue grew to 52 with the goal's 25+25 floor intact.
