@@ -2621,3 +2621,38 @@ Use this append-only log for decisions that constrain future implementation. Cha
   and idempotently; it never deletes, and a webhook that exists without
   a known secret is reported with instructions to reveal it in Stripe
   rather than recreated behind the working one's back.
+
+## ADR-159 - Agent Trail: agenttrail's live map, on the factory's own truth
+
+- Date: 2026-08-28
+- Status: accepted
+- Context: the owner directed, verbatim, that
+  github.com/sodiumsun/agenttrail (MIT, © 2026 Kelly Sun) be built into
+  theagoras.com. agenttrail is a local-first observability tool: a Node
+  daemon that watches one repository's filesystem and Claude/Codex/Cursor
+  session artifacts, serving a single-page live map — components as cards,
+  dependency arrows, honest done/working/blocked states, and a
+  declared-vs-observed split that lights a finished card back up when its
+  files change again. Its daemon and fs-watcher assume localhost and one
+  repo; a hosted multi-tenant console assumes neither.
+- Decision: ADAPT, per the factory's own USE/CONNECT/ADAPT/FORK/BUILD
+  frame — take the concept and visual language, re-implement natively on
+  the factory's recorded truth. `/solutions/trail` renders each graph run
+  as a live map: `layoutTrail` (pure, unit-tested Kahn layering with
+  longest-path columns and cycle tolerance) places nodes; a new
+  member-scoped `GET /api/graphs/edges` projects the recorded dependency
+  edges with their reasons (graph_edges already carried a member SELECT
+  policy, so this ships with zero migrations); states, gates, latencies,
+  errors, spend, and the closure note come from the existing
+  `list_graph_runs` projection on a 10-second poll. Declared vs observed
+  maps exactly: declared is the job/capability/stage the template gave a
+  node, observed is what the run recorded. Attribution in
+  THIRD_PARTY_NOTICES.md and on the page itself.
+- Bounds: no source files were copied — the implementation is original
+  React/SVG in this repository's idiom, so the MIT notice covers the
+  design adaptation. The daemon, fs watcher, hooks installer, PLAN.md
+  parser, and autostart are deliberately not ported: this console's truth
+  is the database under RLS, and a hosted page watching a customer's
+  filesystem would be a different product with different consent. The map
+  never animates hope — every color is a recorded state, and an empty
+  organization gets an empty state naming its next step, not a demo.

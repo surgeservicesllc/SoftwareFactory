@@ -25,6 +25,7 @@ const routes = [
   { path: "/solutions/bot-manager", heading: "Bot Manager" },
   { path: "/solutions/bot-usage", heading: "Bot Usage" },
   { path: "/solutions/billing", heading: "Billing" },
+  { path: "/solutions/trail", heading: "Agent Trail" },
   { path: "/solutions/connections", heading: "Connections" },
   { path: "/solutions/activity", heading: "Activity" },
   { path: "/solutions/settings", heading: "Safety" },
