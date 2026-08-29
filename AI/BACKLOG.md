@@ -11,15 +11,24 @@ Last triaged: 2026-08-29
   honest statuses; route `unified` block + filter params; panel rework
   (unified cards with source badges, filter chips + Clear All + AND/OR,
   grouped source picker, sort, NEW badge).
-- [ ] Increment 2: `job_seeker_saved_searches` (+ alert preferences,
-  seen-jobs ledger, delivery ledger) migration with forced RLS and audit
-  events; CRUD routes; Save/Edit/Duplicate/Delete/Run Now/Pause UI; AI
-  match score display on result cards from the verified Career Profile via
-  the existing scoring chain.
-- [ ] Increment 3: alerts engine on supported scheduled infrastructure
-  (dedupe → filter → score → save → email), env-gated email adapter that
-  shows **Not Connected** without credentials, delivery tracking, and the
-  never-repeat-per-user/job/search guarantee enforced by the ledger.
+- [x] Increment 2 (schema landed via ADR-141's 20260828000400, applied to
+  hosted 2026-08-29): saved-search CRUD route + panel section
+  (Save/Update-to-current/Duplicate/Delete/Run Now); AI match scores on
+  every unified card from the recorded-facts evaluator with reasons, gaps,
+  qualified accent, best-match sort, and a minimum-score filter; per-board
+  search metering events feeding the discovery credit meter.
+- [ ] Increment 2 remainder: alert cadence UI stays unexposed until the
+  delivery engine exists (ADR-141's rule); seen-jobs/delivery ledger
+  arrives with the alerts engine.
+- [x] Increment 3 (built; hosted apply + owner env still ahead): alert
+  engine as a Vercel Cron route over two service_role-only definer
+  functions; pure dedupe → saved filters → score → never-repeat →
+  email-composition core; env-gated Resend adapter; delivery ledger with
+  the never-repeat UNIQUE constraint, append-only by trigger; ASAP/Daily/
+  Weekly cadence controls that render **Not Connected** and refuse writes
+  until RESEND_API_KEY, JOB_ALERT_EMAIL_FROM and CRON_SECRET exist
+  (ADR-164). To light it up: apply scope job-seeker-alert-engine, set the
+  three env vars, redeploy.
 - [ ] E2E acceptance: real end-to-end pass over auth/RLS, search, filters,
   saved searches, dedup, alerts, email, mobile UX before any
   "production ready" claim.

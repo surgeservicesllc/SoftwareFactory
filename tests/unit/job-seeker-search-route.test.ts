@@ -18,6 +18,7 @@ const harness = vi.hoisted(() => ({
   searchWorkingnomads: vi.fn(),
   searchJobspresso: vi.fn(),
   sealSearchResult: vi.fn(),
+  loadEvaluationInputs: vi.fn(),
 }));
 
 vi.mock("server-only", () => ({}));
@@ -93,6 +94,10 @@ vi.mock("@/lib/job-seeker/board-search/jobspresso", async (importOriginal) => {
 vi.mock("@/lib/job-seeker/search-result-token", () => ({
   sealSearchResult: harness.sealSearchResult,
 }));
+vi.mock("@/lib/job-seeker/record", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/job-seeker/record")>()),
+  loadEvaluationInputs: harness.loadEvaluationInputs,
+}));
 
 import { GET, POST } from "@/app/api/job-seeker/search/route";
 import { BoardSearchError } from "@/lib/job-seeker/board-search/types";
@@ -125,13 +130,44 @@ function hit(title: string) {
   };
 }
 
+function stubClient() {
+  const insert = vi.fn(async (_rows: unknown) => ({ error: null }));
+  const from = vi.fn((_table: string) => ({ insert }));
+  return { from, insert, rpc: vi.fn() };
+}
+
+const RECORDED_PROFILE = {
+  profileRecorded: true,
+  profile: {
+    skills: ["TypeScript"],
+    technologies: ["PostgreSQL"],
+    industries: ["Software"],
+    employmentTitles: ["Platform Engineer"],
+    hasLeadershipEvidence: true,
+    salaryTarget: null,
+    location: "Copenhagen",
+    workArrangement: "any",
+    openToRelocation: false,
+  },
+  preferences: {
+    targetTitles: ["Marketing Manager"],
+    compensationMinimum: null,
+    locations: ["Copenhagen"],
+    workArrangements: [],
+    industries: [],
+    exclusions: [],
+    qualificationThreshold: 80,
+  },
+} as const;
+
 beforeEach(() => {
   vi.clearAllMocks();
   harness.requireActiveOrganization.mockResolvedValue({
     activeOrganization: { id: activeOrganizationId },
     user: { id: "user-1" },
-    client: {},
+    client: stubClient(),
   });
+  harness.loadEvaluationInputs.mockResolvedValue(RECORDED_PROFILE);
   harness.searchJobnet.mockResolvedValue({ board: "jobnet", hits: [hit("Platform Engineer")], totalAvailable: 812 });
   harness.searchJobindex.mockResolvedValue({ board: "jobindex", hits: [hit("Backend Developer")], totalAvailable: 40 });
   harness.searchFreehire.mockResolvedValue({ board: "freehire", hits: [hit("Go Engineer")], totalAvailable: 7 });
@@ -275,10 +311,11 @@ describe("searching across boards", () => {
     expect(Array.isArray(payload.failures)).toBe(true);
   });
 
-  it("stores nothing: a search is a read", async () => {
-    // The client is handed over with no table access used. If searching ever
-    // starts writing, every glanced-at posting lands in someone's job list.
-    const client = { from: vi.fn(), rpc: vi.fn() };
+  it("stores no results: the only write is the per-board metering event", async () => {
+    // If searching ever starts writing anything else, every glanced-at
+    // posting could land in someone's job list. The one legitimate write is
+    // the search-events audit the credit meter counts.
+    const client = stubClient();
     harness.requireActiveOrganization.mockResolvedValue({
       activeOrganization: { id: activeOrganizationId },
       user: { id: "user-1" },
@@ -287,8 +324,24 @@ describe("searching across boards", () => {
 
     await POST(searchRequest({ text: "engineer" }));
 
-    expect(client.from).not.toHaveBeenCalled();
     expect(client.rpc).not.toHaveBeenCalled();
+    expect(client.from.mock.calls.map(([table]) => table)).toEqual(["job_seeker_search_events"]);
+    const rows = client.insert.mock.calls[0]?.[0] as Array<{ board: string; results_returned: number | null }>;
+    expect(rows).toHaveLength(13);
+    expect(rows.every((row) => row.results_returned === 1)).toBe(true);
+  });
+
+  it("keeps answering when the metering insert fails", async () => {
+    const client = stubClient();
+    client.insert.mockRejectedValue(new Error("events table missing"));
+    harness.requireActiveOrganization.mockResolvedValue({
+      activeOrganization: { id: activeOrganizationId },
+      user: { id: "user-1" },
+      client,
+    });
+
+    const response = await POST(searchRequest({ text: "engineer" }));
+    expect(response.status).toBe(200);
   });
 
   it("passes a location through to the boards", async () => {
@@ -373,6 +426,54 @@ describe("the unified view", () => {
       await POST(searchRequest({ text: "engineer", filters: { salaryMinimum: 50_000, requireSalary: true } }))
     ).json()) as UnifiedPayload;
     expect(strict.unified.hits).toHaveLength(0);
+  });
+
+  it("scores every unified card from the recorded profile, evidence attached", async () => {
+    const response = await POST(searchRequest({ text: "engineer" }));
+    const payload = (await response.json()) as {
+      unified: {
+        hits: Array<{ job: { title: string }; match: { score: number; reasons: string[]; gaps: string[]; qualified: boolean } | null }>;
+        matchBasis: { computed: boolean };
+      };
+    };
+
+    expect(payload.unified.matchBasis.computed).toBe(true);
+    expect(payload.unified.hits.every((h) => h.match !== null)).toBe(true);
+    // "Platform Engineer" matches the recorded employment title exactly, so
+    // its experience component and reason must say so.
+    const platform = payload.unified.hits.find((h) => h.job.title === "Platform Engineer");
+    expect(platform?.match?.score).toBeGreaterThan(0);
+    expect(platform?.match?.reasons.join(" ")).toMatch(/Platform Engineer/);
+  });
+
+  it("says no scores exist when no profile is recorded, and never invents them", async () => {
+    harness.loadEvaluationInputs.mockResolvedValue({ ...RECORDED_PROFILE, profileRecorded: false });
+
+    const response = await POST(searchRequest({ text: "engineer" }));
+    const payload = (await response.json()) as {
+      unified: { hits: Array<{ match: unknown }>; matchBasis: { computed: boolean; reason?: string } };
+    };
+
+    expect(payload.unified.matchBasis.computed).toBe(false);
+    expect(payload.unified.hits.every((h) => h.match === null)).toBe(true);
+  });
+
+  it("filters by minimum match score, and refuses that filter without a profile", async () => {
+    const all = (await (
+      await POST(searchRequest({ text: "engineer", filters: { minimumScore: 0 } }))
+    ).json()) as { unified: { hits: unknown[] } };
+    expect(all.unified.hits.length).toBeGreaterThan(0);
+
+    const impossible = (await (
+      await POST(searchRequest({ text: "engineer", filters: { minimumScore: 100 } }))
+    ).json()) as { unified: { hits: unknown[] } };
+    expect(impossible.unified.hits).toHaveLength(0);
+
+    harness.loadEvaluationInputs.mockResolvedValue({ ...RECORDED_PROFILE, profileRecorded: false });
+    const refused = await POST(searchRequest({ text: "engineer", filters: { minimumScore: 50 } }));
+    expect(refused.status).toBe(422);
+    const body = (await refused.json()) as { error?: { code?: string } };
+    expect(body.error?.code).toBe("match_score_needs_profile");
   });
 
   it("refuses a filter it does not recognise instead of silently ignoring it", async () => {

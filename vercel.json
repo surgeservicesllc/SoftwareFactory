@@ -6,5 +6,11 @@
       "claude/universal-bot-interface-0caeda": false
     }
   },
-  "ignoreCommand": "bash -c 'test \"$VERCEL_GIT_COMMIT_REF\" != \"main\" '"
+  "ignoreCommand": "bash -c 'test \"$VERCEL_GIT_COMMIT_REF\" != \"main\" '",
+  "crons": [
+    {
+      "path": "/api/job-seeker/alerts/run",
+      "schedule": "0 * * * *"
+    }
+  ]
 }

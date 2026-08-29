@@ -2907,3 +2907,54 @@ Use this append-only log for decisions that constrain future implementation. Cha
   *between* products; the left rail moves them inside one. Dropping it would
   strand anyone who arrived here and wanted the factory next.
 
+
+- Addendum (same day, increment 2): every unified card is now scored
+  server-side by the existing recorded-facts evaluator — one profile load
+  per search, reasons and gaps attached to every number, `match: null`
+  with a stated basis when no Career Profile exists, and a minimum-score
+  filter that is refused (422) rather than silently ignored in that state.
+  Saved searches became real on ADR-141's table: bounded-jsonb CRUD under
+  double ownership filtering plus forced RLS, run-now recording
+  `last_run_at` as an observation, duplicate names answered 409, and
+  credential-shaped values refused before persistence. The search route
+  now writes one metering event per board queried into
+  `job_seeker_search_events` — the write that makes ADR-141's credit
+  meter a measurement — and its "results are never stored" doctrine
+  paragraph was rewritten to say exactly that. Alert cadence stays
+  deliberately unexposed until a delivery engine exists.
+
+## ADR-164 - The alert engine crosses one definer boundary and fails closed everywhere else
+
+- Context: saved-search alerts need a system actor — something no signed-in
+  request drives — that reads every active alert, runs its search, scores
+  against the owner's recorded profile, emails what is new, and never emails
+  the same person the same job for the same search twice. The pinned
+  service-role grants contract forbids handing that actor table access, and
+  the repository forbids controls wired to nothing.
+- Decision: the engine's data path is two SECURITY DEFINER functions
+  (20260829000300), executable by service_role and revoked from anon and
+  authenticated: `list_due_job_seeker_alerts` returns due alerts with the
+  stored query, the recipient, exactly the evaluator's profile/preference
+  facts (never whole rows), and the search's already-delivered URLs;
+  `record_job_seeker_alert_scan` bumps `last_scanned_at` and inserts ledger
+  rows with ON CONFLICT DO NOTHING against the UNIQUE
+  (organization, person, search, job URL) constraint — the never-repeat rule
+  as schema, enforced even against engine bugs. The ledger is append-only by
+  trigger and readable by its owner under forced RLS. Due-ness lives in SQL
+  (asap ~ hourly, daily ~ 23h, weekly ~ 6d18h from last_scanned_at), so an
+  empty scan still spends the window and cadence cannot drift from data.
+  The runner is a Vercel Cron route guarded by the platform's own
+  CRON_SECRET bearer (timing-safe compare, 503 while unset), its decisions
+  are the pure `lib/job-seeker/alerts.ts` core (dedupe → saved filters →
+  score → minimum-score → delivered-set exclusion → email composition),
+  and mail goes through a raw-REST Resend adapter gated on RESEND_API_KEY +
+  JOB_ALERT_EMAIL_FROM. Until email AND scheduler are configured, the UI
+  shows **Not Connected**, cadence writes answer 409 naming the missing
+  pieces, and the runner declines to scan rather than burn cadence windows
+  on mail that cannot exist. A saved minimum score with no recorded profile
+  sends nothing — no scores exist, so nothing can clear the bar.
+- Bounds: the engine emails only people who turned an alert on, only about
+  their own saved search, only jobs it can link directly, and processes a
+  bounded batch per invocation. The migration ships behind the scope-gated
+  hosted-apply workflow (`job-seeker-alert-engine`) with a postflight that
+  proves the ledger forces RLS and the definer pair is service_role-only.

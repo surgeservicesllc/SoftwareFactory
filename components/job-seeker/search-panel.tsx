@@ -84,7 +84,52 @@ type BoardFailure = { board: string; boardName: string; code: string; message: s
 
 type SaveState = "idle" | "saving" | "saved" | "already" | "failed" | "expired";
 
-type SortOrder = "returned" | "newest" | "salary";
+type SortOrder = "returned" | "newest" | "salary" | "match";
+
+/** The server-computed AI match, verbatim from the recorded-facts evaluator. */
+type MatchView = {
+  score: number;
+  reasons: string[];
+  gaps: string[];
+  threshold: number;
+  qualified: boolean;
+  excluded: string | null;
+};
+
+type UnifiedCard = UnifiedHit & { match?: MatchView | null };
+
+type MatchBasis =
+  | { computed: true; method: string }
+  | { computed: false; reason: string };
+
+type SavedSearchQuery = {
+  text?: string;
+  location?: string | null;
+  boards?: string[];
+  sort?: SortOrder;
+  filters?: {
+    keywordMode?: "and" | "or";
+    keywords?: string[];
+    excludeKeywords?: string[];
+    excludeCompanies?: string[];
+    workModel?: "remote" | "hybrid" | "onsite" | null;
+    salaryMinimum?: number | null;
+    requireSalary?: boolean;
+    postedWithinDays?: number | null;
+    minimumScore?: number | null;
+  };
+};
+
+type SavedSearchView = {
+  id: string;
+  name: string;
+  query: SavedSearchQuery;
+  lastRunAt: string | null;
+  /** The search's email alert, when one is active. */
+  alert?: { cadence: "asap" | "daily" | "weekly"; lastScannedAt: string | null } | null;
+};
+
+type AlertsChannel = { emailConnected: boolean; schedulerConfigured: boolean };
 
 function hitKey(board: string, hit: Hit): string {
   return `${board}:${hit.job.externalId ?? hit.job.url ?? `${hit.job.company}:${hit.job.title}`}`;
@@ -138,6 +183,9 @@ export function JobSearchPanel() {
   /** null until a search has run: "no results" and "not searched yet" differ. */
   const [results, setResults] = useState<BoardResult[] | null>(null);
   const [failures, setFailures] = useState<BoardFailure[]>([]);
+  /** The server's unified view, carrying per-card match scores. */
+  const [serverUnified, setServerUnified] = useState<UnifiedCard[] | null>(null);
+  const [matchBasis, setMatchBasis] = useState<MatchBasis | null>(null);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [saves, setSaves] = useState<Record<string, SaveState>>({});
   const [saveErrors, setSaveErrors] = useState<Record<string, string>>({});
@@ -158,6 +206,14 @@ export function JobSearchPanel() {
   const [salaryMinimumInput, setSalaryMinimumInput] = useState("");
   const [requireSalary, setRequireSalary] = useState(false);
   const [postedWithinDays, setPostedWithinDays] = useState<"" | "1" | "3" | "7" | "14" | "30">("");
+  const [minimumScoreInput, setMinimumScoreInput] = useState("");
+
+  // Saved searches, persisted per person under RLS.
+  const [savedSearches, setSavedSearches] = useState<SavedSearchView[]>([]);
+  const [alertsChannel, setAlertsChannel] = useState<AlertsChannel | null>(null);
+  const [savedError, setSavedError] = useState<string | null>(null);
+  const [saveSearchName, setSaveSearchName] = useState("");
+  const [savedBusy, setSavedBusy] = useState<string | null>(null);
 
   /** Guards against an earlier slow search overwriting a later one's results. */
   const requestRef = useRef(0);
@@ -183,6 +239,23 @@ export function JobSearchPanel() {
         if (active) setBoardsError("The board list could not be read.");
       }
     })();
+    void (async () => {
+      try {
+        const response = await fetch("/api/job-seeker/saved-searches", { headers: { accept: "application/json" } });
+        if (!active) return;
+        if (!response.ok) return;
+        const payload = (await response.json()) as {
+          savedSearches?: SavedSearchView[];
+          alertsChannel?: AlertsChannel;
+        };
+        if (active) {
+          setSavedSearches(payload.savedSearches ?? []);
+          setAlertsChannel(payload.alertsChannel ?? null);
+        }
+      } catch {
+        // The list stays empty; saving later will surface any real problem.
+      }
+    })();
     return () => { active = false; };
   }, []);
 
@@ -191,14 +264,18 @@ export function JobSearchPanel() {
     [boards, deselected],
   );
 
-  const runSearch = useCallback(async () => {
-    const term = text.trim();
-    const place = location.trim();
+  const executeSearch = useCallback(async (
+    rawTerm: string,
+    rawPlace: string,
+    boardKeys: readonly string[] | null,
+  ) => {
+    const term = rawTerm.trim();
+    const place = rawPlace.trim();
     if (term.length === 0 && place.length === 0) {
       setSearchError("Give a search term or a location.");
       return;
     }
-    if (boards !== null && selectedBoards.length === 0) {
+    if (boardKeys !== null && boardKeys.length === 0) {
       setSearchError("Pick at least one board to search.");
       return;
     }
@@ -212,6 +289,8 @@ export function JobSearchPanel() {
     // looking like results from the request that just failed.
     setResults(null);
     setFailures([]);
+    setServerUnified(null);
+    setMatchBasis(null);
     setSaves({});
     setSaveErrors({});
 
@@ -223,14 +302,15 @@ export function JobSearchPanel() {
           text: term,
           location: place.length === 0 ? null : place,
           limit: 25,
-          ...(boards !== null && selectedBoards.length < boards.length
-            ? { boards: selectedBoards.map((board) => board.key) }
+          ...(boardKeys !== null && boards !== null && boardKeys.length < boards.length
+            ? { boards: [...boardKeys] }
             : {}),
         }),
       });
       const payload = (await response.json()) as {
         results?: BoardResult[];
         failures?: BoardFailure[];
+        unified?: { hits?: UnifiedCard[]; matchBasis?: MatchBasis };
         error?: { message?: string };
       };
       // A superseded search must not paint over the current one.
@@ -244,6 +324,8 @@ export function JobSearchPanel() {
       }
       setResults(payload.results ?? []);
       setFailures(payload.failures ?? []);
+      setServerUnified(payload.unified?.hits ?? null);
+      setMatchBasis(payload.unified?.matchBasis ?? null);
     } catch {
       if (requestRef.current === ticket) {
         setSearchError("The search could not be run.");
@@ -253,7 +335,12 @@ export function JobSearchPanel() {
     } finally {
       if (requestRef.current === ticket) setRunning(false);
     }
-  }, [text, location, boards, selectedBoards]);
+  }, [boards]);
+
+  const runSearch = useCallback(
+    () => executeSearch(text, location, boards === null ? null : selectedBoards.map((b) => b.key)),
+    [executeSearch, text, location, boards, selectedBoards],
+  );
 
   const saveHit = useCallback(async (board: string, job: Hit["job"], saveToken: string, key: string) => {
     setSaves((current) => ({ ...current, [key]: "saving" }));
@@ -324,7 +411,8 @@ export function JobSearchPanel() {
     workModel !== "" ||
     filters.salaryMinimum !== null ||
     requireSalary ||
-    postedWithinDays !== "";
+    postedWithinDays !== "" ||
+    minimumScoreInput.trim() !== "";
 
   const clearFilters = useCallback(() => {
     setKeywords([]);
@@ -337,10 +425,15 @@ export function JobSearchPanel() {
     setSalaryMinimumInput("");
     setRequireSalary(false);
     setPostedWithinDays("");
+    setMinimumScoreInput("");
   }, []);
 
-  const unified = useMemo(() => {
+  const unified = useMemo<UnifiedCard[] | null>(() => {
     if (results === null) return null;
+    // The server's unified view carries the match scores; the local dedupe is
+    // the fallback for a response without one, and computes the same grouping
+    // because both sides run the same shared module.
+    if (serverUnified !== null) return serverUnified;
     return dedupeAcrossBoards(
       results.flatMap((result) =>
         result.hits.map((hit) => ({
@@ -351,12 +444,26 @@ export function JobSearchPanel() {
         })),
       ),
     );
-  }, [results]);
+  }, [results, serverUnified]);
+
+  const minimumScore = useMemo(() => {
+    const value = Number(minimumScoreInput);
+    return minimumScoreInput.trim() === "" || Number.isNaN(value)
+      ? null
+      : Math.min(100, Math.max(0, Math.floor(value)));
+  }, [minimumScoreInput]);
 
   const visibleUnified = useMemo(() => {
     if (unified === null) return null;
-    const filtered = filtersActive ? applyUnifiedFilters(unified, filters) : [...unified];
-    if (sort === "newest") {
+    let filtered = filtersActive ? applyUnifiedFilters(unified, filters) : [...unified];
+    if (minimumScore !== null) {
+      // No profile means no scores; the input is disabled in that state, so
+      // this branch only runs over scored cards.
+      filtered = filtered.filter((card) => (card.match?.score ?? -1) >= minimumScore);
+    }
+    if (sort === "match") {
+      filtered.sort((a, b) => (b.match?.score ?? -1) - (a.match?.score ?? -1));
+    } else if (sort === "newest") {
       filtered.sort((a, b) => {
         if (a.publishedOn === b.publishedOn) return 0;
         if (a.publishedOn === null) return 1;
@@ -374,7 +481,162 @@ export function JobSearchPanel() {
       });
     }
     return filtered;
-  }, [unified, filters, filtersActive, sort]);
+  }, [unified, filters, filtersActive, sort, minimumScore]);
+
+  // ── Saved searches ────────────────────────────────────────────────────
+  const currentQuery = useCallback((): SavedSearchQuery => ({
+    text: text.trim(),
+    location: location.trim() === "" ? null : location.trim(),
+    ...(boards !== null && selectedBoards.length < boards.length
+      ? { boards: selectedBoards.map((board) => board.key) }
+      : {}),
+    sort,
+    filters: {
+      keywordMode,
+      keywords: [...keywords],
+      excludeKeywords: [...excludeKeywords],
+      excludeCompanies: [...excludeCompanies],
+      workModel: workModel === "" ? null : workModel,
+      salaryMinimum: filters.salaryMinimum,
+      requireSalary,
+      postedWithinDays: postedWithinDays === "" ? null : Number(postedWithinDays),
+      minimumScore,
+    },
+  }), [text, location, boards, selectedBoards, sort, keywordMode, keywords, excludeKeywords, excludeCompanies, workModel, filters.salaryMinimum, requireSalary, postedWithinDays, minimumScore]);
+
+  const savedSearchRequest = useCallback(async (
+    method: "POST" | "PATCH" | "DELETE",
+    body: unknown,
+  ): Promise<{ ok: boolean; payload: { savedSearch?: SavedSearchView; deleted?: string; error?: { message?: string } } }> => {
+    const response = await fetch("/api/job-seeker/saved-searches", {
+      method,
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    return { ok: response.ok, payload: await response.json() };
+  }, []);
+
+  const createSavedSearch = useCallback(async (name: string, query: SavedSearchQuery) => {
+    setSavedError(null);
+    setSavedBusy("create");
+    try {
+      const { ok, payload } = await savedSearchRequest("POST", { name, query });
+      if (!ok || payload.savedSearch === undefined) {
+        setSavedError(payload.error?.message ?? "The search could not be saved.");
+        return;
+      }
+      setSavedSearches((current) => [payload.savedSearch!, ...current]);
+      setSaveSearchName("");
+    } catch {
+      setSavedError("The search could not be saved because the connection failed.");
+    } finally {
+      setSavedBusy(null);
+    }
+  }, [savedSearchRequest]);
+
+  const applySavedSearch = useCallback(async (saved: SavedSearchView) => {
+    const query = saved.query ?? {};
+    const savedFilters = query.filters ?? {};
+    setText(query.text ?? "");
+    setLocation(query.location ?? "");
+    setSort(query.sort ?? "returned");
+    setKeywordMode(savedFilters.keywordMode ?? "and");
+    setKeywords(savedFilters.keywords ?? []);
+    setExcludeKeywords(savedFilters.excludeKeywords ?? []);
+    setExcludeCompanies(savedFilters.excludeCompanies ?? []);
+    setWorkModel(savedFilters.workModel ?? "");
+    setSalaryMinimumInput(savedFilters.salaryMinimum == null ? "" : String(savedFilters.salaryMinimum));
+    setRequireSalary(savedFilters.requireSalary ?? false);
+    setPostedWithinDays(
+      savedFilters.postedWithinDays == null
+        ? ""
+        : (String(savedFilters.postedWithinDays) as "" | "1" | "3" | "7" | "14" | "30"),
+    );
+    setMinimumScoreInput(savedFilters.minimumScore == null ? "" : String(savedFilters.minimumScore));
+    if (boards !== null && query.boards !== undefined) {
+      const wanted = new Set(query.boards);
+      setDeselected(new Set(boards.filter((board) => !wanted.has(board.key)).map((board) => board.key)));
+    } else {
+      setDeselected(new Set());
+    }
+    setSavedBusy(saved.id);
+    try {
+      // Record the run, then run: last_run_at is an observation of this.
+      void savedSearchRequest("PATCH", { id: saved.id, markRun: true }).then(({ ok, payload }) => {
+        if (ok && payload.savedSearch !== undefined) {
+          setSavedSearches((current) =>
+            current.map((entry) => (entry.id === saved.id ? payload.savedSearch! : entry)));
+        }
+      }).catch(() => {});
+      await executeSearch(
+        query.text ?? "",
+        query.location ?? "",
+        boards === null ? null : query.boards ?? boards.map((board) => board.key),
+      );
+    } finally {
+      setSavedBusy(null);
+    }
+  }, [boards, executeSearch, savedSearchRequest]);
+
+  const deleteSavedSearch = useCallback(async (id: string) => {
+    setSavedError(null);
+    setSavedBusy(id);
+    try {
+      const { ok, payload } = await savedSearchRequest("DELETE", { id });
+      if (!ok) {
+        setSavedError(payload.error?.message ?? "The saved search could not be deleted.");
+        return;
+      }
+      setSavedSearches((current) => current.filter((entry) => entry.id !== id));
+    } catch {
+      setSavedError("The saved search could not be deleted because the connection failed.");
+    } finally {
+      setSavedBusy(null);
+    }
+  }, [savedSearchRequest]);
+
+  const duplicateSavedSearch = useCallback(async (saved: SavedSearchView) => {
+    await createSavedSearch(`${saved.name} (copy)`.slice(0, 120), saved.query);
+  }, [createSavedSearch]);
+
+  const setAlert = useCallback(async (saved: SavedSearchView, value: string) => {
+    setSavedError(null);
+    setSavedBusy(saved.id);
+    try {
+      const body = value === "off"
+        ? { id: saved.id, alert: { off: true as const } }
+        : { id: saved.id, alert: { cadence: value as "asap" | "daily" | "weekly" } };
+      const { ok, payload } = await savedSearchRequest("PATCH", body);
+      if (!ok || payload.savedSearch === undefined) {
+        setSavedError(payload.error?.message ?? "The alert could not be changed.");
+        return;
+      }
+      setSavedSearches((current) =>
+        current.map((entry) => (entry.id === saved.id ? payload.savedSearch! : entry)));
+    } catch {
+      setSavedError("The alert could not be changed because the connection failed.");
+    } finally {
+      setSavedBusy(null);
+    }
+  }, [savedSearchRequest]);
+
+  const updateSavedSearchQuery = useCallback(async (saved: SavedSearchView) => {
+    setSavedError(null);
+    setSavedBusy(saved.id);
+    try {
+      const { ok, payload } = await savedSearchRequest("PATCH", { id: saved.id, query: currentQuery() });
+      if (!ok || payload.savedSearch === undefined) {
+        setSavedError(payload.error?.message ?? "The saved search could not be updated.");
+        return;
+      }
+      setSavedSearches((current) =>
+        current.map((entry) => (entry.id === saved.id ? payload.savedSearch! : entry)));
+    } catch {
+      setSavedError("The saved search could not be updated because the connection failed.");
+    } finally {
+      setSavedBusy(null);
+    }
+  }, [savedSearchRequest, currentQuery]);
 
   const totalHits = (results ?? []).reduce((sum, entry) => sum + entry.hits.length, 0);
   const everyBoardFailed = results !== null && results.length === 0 && failures.length > 0;
@@ -576,6 +838,22 @@ export function JobSearchPanel() {
               />
             </label>
             <label className="block text-xs">
+              <span className="text-[var(--muted)]">Match score at least</span>
+              <input
+                type="number"
+                min={0}
+                max={100}
+                value={minimumScoreInput}
+                onChange={(event) => setMinimumScoreInput(event.target.value)}
+                placeholder="e.g. 70"
+                disabled={matchBasis !== null && !matchBasis.computed}
+                title={matchBasis !== null && !matchBasis.computed
+                  ? "Record your Career Profile to score results."
+                  : "Computed from your recorded Career Profile."}
+                className="mt-1 w-full rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5 text-sm disabled:opacity-60"
+              />
+            </label>
+            <label className="block text-xs">
               <span className="text-[var(--muted)]">Posted within</span>
               <select
                 value={postedWithinDays}
@@ -630,6 +908,9 @@ export function JobSearchPanel() {
               {requireSalary ? <Chip label="salary stated" onRemove={() => setRequireSalary(false)} /> : null}
               {postedWithinDays !== "" ? (
                 <Chip label={`≤ ${postedWithinDays}d old`} onRemove={() => setPostedWithinDays("")} />
+              ) : null}
+              {minimumScore !== null ? (
+                <Chip label={`match ≥ ${minimumScore}`} onRemove={() => setMinimumScoreInput("")} />
               ) : null}
               <button
                 type="button"
@@ -722,6 +1003,135 @@ export function JobSearchPanel() {
         ) : null}
       </Card>
 
+      <Card>
+        <SectionTitle
+          title="Saved searches"
+          description="Keep a search — term, place, boards, filters and sort — and run it again in one click. Stored to your workspace under row-level security."
+        />
+        <form
+          className="mt-3 flex flex-wrap gap-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const name = saveSearchName.trim();
+            if (name.length === 0) {
+              setSavedError("Give the saved search a name.");
+              return;
+            }
+            void createSavedSearch(name, currentQuery());
+          }}
+        >
+          <label className="min-w-0 grow">
+            <span className="sr-only">Name for this search</span>
+            <input
+              type="text"
+              value={saveSearchName}
+              onChange={(event) => setSaveSearchName(event.target.value)}
+              placeholder="Name this search, e.g. Senior marketing, remote, 90k+"
+              maxLength={120}
+              className="w-full rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm"
+            />
+          </label>
+          <button
+            type="submit"
+            disabled={savedBusy === "create"}
+            className="rounded-md border border-[var(--border)] px-3 py-2 text-sm disabled:opacity-60"
+          >
+            {savedBusy === "create" ? "Saving…" : "Save this search"}
+          </button>
+        </form>
+        {savedError !== null ? (
+          <div className="mt-3"><Notice tone="warning">{savedError}</Notice></div>
+        ) : null}
+        {savedSearches.length === 0 ? (
+          <p className="mt-3 text-sm text-[var(--muted)]">
+            Nothing saved yet. Build a search above and give it a name.
+          </p>
+        ) : (
+          <ul className="mt-3 space-y-2">
+            {savedSearches.map((saved) => (
+              <li
+                key={saved.id}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-[var(--border)] p-2"
+              >
+                <span className="min-w-0">
+                  <span className="text-sm font-medium">{saved.name}</span>
+                  <span className="block text-xs text-[var(--muted)]">
+                    {saved.lastRunAt === null
+                      ? "Never run"
+                      : `Last run ${saved.lastRunAt.slice(0, 10)}`}
+                    {saved.alert != null
+                      ? ` · alert ${saved.alert.cadence === "asap" ? "as soon as possible" : saved.alert.cadence}`
+                      : ""}
+                  </span>
+                </span>
+                <span className="flex shrink-0 flex-wrap items-center gap-1.5">
+                  {alertsChannel !== null &&
+                  alertsChannel.emailConnected &&
+                  alertsChannel.schedulerConfigured ? (
+                    <label className="text-xs text-[var(--muted)]">
+                      <span className="sr-only">Email alert for {saved.name}</span>
+                      <select
+                        value={saved.alert?.cadence ?? "off"}
+                        onChange={(event) => void setAlert(saved, event.target.value)}
+                        disabled={savedBusy !== null}
+                        className="rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-xs disabled:opacity-60"
+                      >
+                        <option value="off">Alerts off</option>
+                        <option value="asap">Email ASAP</option>
+                        <option value="daily">Email daily</option>
+                        <option value="weekly">Email weekly</option>
+                      </select>
+                    </label>
+                  ) : alertsChannel !== null ? (
+                    <span
+                      className="rounded-full border border-[var(--border)] px-2 py-0.5 text-xs text-[var(--muted)]"
+                      title={alertsChannel.emailConnected
+                        ? "The alert scheduler needs CRON_SECRET set in Vercel."
+                        : "Email alerts need RESEND_API_KEY and JOB_ALERT_EMAIL_FROM set in Vercel."}
+                    >
+                      Alerts: Not Connected
+                    </span>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => void applySavedSearch(saved)}
+                    disabled={savedBusy !== null}
+                    className="rounded-md border border-[var(--border)] px-2 py-1 text-xs disabled:opacity-60"
+                  >
+                    {savedBusy === saved.id ? "Working…" : "Run"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void updateSavedSearchQuery(saved)}
+                    disabled={savedBusy !== null}
+                    title="Overwrite this saved search with the search currently built above."
+                    className="rounded-md border border-[var(--border)] px-2 py-1 text-xs disabled:opacity-60"
+                  >
+                    Update to current
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void duplicateSavedSearch(saved)}
+                    disabled={savedBusy !== null}
+                    className="rounded-md border border-[var(--border)] px-2 py-1 text-xs disabled:opacity-60"
+                  >
+                    Duplicate
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void deleteSavedSearch(saved.id)}
+                    disabled={savedBusy !== null}
+                    className="rounded-md border border-[var(--border)] px-2 py-1 text-xs text-[var(--danger)] disabled:opacity-60"
+                  >
+                    Delete
+                  </button>
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+
       {failures.length > 0 ? (
         <Notice tone="warning">
           <span className="font-medium">
@@ -774,6 +1184,9 @@ export function JobSearchPanel() {
                   <option value="returned">As returned</option>
                   <option value="newest">Newest first</option>
                   <option value="salary">Highest stated salary</option>
+                  {matchBasis?.computed === true ? (
+                    <option value="match">Best match</option>
+                  ) : null}
                 </select>
               </label>
             ) : null}
@@ -788,6 +1201,13 @@ export function JobSearchPanel() {
                     .map((result) => `${result.boardName}: ${boardTotalsLine(result)}`)
                     .join(" ")}`}
                 />
+                {matchBasis !== null ? (
+                  <p className="mt-2 text-xs text-[var(--muted)]">
+                    {matchBasis.computed
+                      ? matchBasis.method
+                      : `${matchBasis.reason} Match scores appear once your Career Profile is recorded.`}
+                  </p>
+                ) : null}
                 {hiddenByFilters > 0 ? (
                   <p className="mt-2 text-xs text-[var(--muted)]">
                     {hiddenByFilters} {hiddenByFilters === 1 ? "posting is" : "postings are"} hidden by
@@ -840,6 +1260,14 @@ export function JobSearchPanel() {
                                 {card.closesOn === null ? "" : ` · closes ${card.closesOn}`}
                               </p>
                               <p className="mt-1 flex flex-wrap gap-1.5">
+                                {card.match != null ? (
+                                  <span
+                                    className={`rounded-full border px-2 py-0.5 text-xs font-medium ${card.match.qualified ? "border-[var(--accent)] text-[var(--accent)]" : "border-[var(--border)] text-[var(--muted)]"}`}
+                                    title={`Threshold ${card.match.threshold}. Computed from your recorded Career Profile.`}
+                                  >
+                                    Match {card.match.score}
+                                  </span>
+                                ) : null}
                                 {card.sources.map((source, index) => (
                                   <a
                                     key={`${source.board}-${index}`}
@@ -852,6 +1280,29 @@ export function JobSearchPanel() {
                                   </a>
                                 ))}
                               </p>
+                              {card.match != null &&
+                              (card.match.reasons.length > 0 || card.match.gaps.length > 0) ? (
+                                <details className="mt-1 text-xs text-[var(--muted)]">
+                                  <summary className="cursor-pointer">Why this match score</summary>
+                                  {card.match.excluded !== null ? (
+                                    <p className="mt-1">Excluded: matches your exclusion “{card.match.excluded}”.</p>
+                                  ) : null}
+                                  {card.match.reasons.length > 0 ? (
+                                    <ul className="mt-1 list-disc pl-4">
+                                      {card.match.reasons.slice(0, 4).map((reason) => (
+                                        <li key={reason}>{reason}</li>
+                                      ))}
+                                    </ul>
+                                  ) : null}
+                                  {card.match.gaps.length > 0 ? (
+                                    <ul className="mt-1 list-disc pl-4">
+                                      {card.match.gaps.slice(0, 3).map((gap) => (
+                                        <li key={gap}>Gap: {gap}</li>
+                                      ))}
+                                    </ul>
+                                  ) : null}
+                                </details>
+                              ) : null}
                             </div>
                             {renderSaveButton(key, primary.board, card.job, primary.saveToken)}
                           </div>

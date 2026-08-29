@@ -149,11 +149,11 @@ export function salaryCeiling(salaryText: string | null): number | null {
   return best;
 }
 
-export function applyUnifiedFilters(
-  hits: readonly UnifiedHit[],
+export function applyUnifiedFilters<T extends UnifiedHit>(
+  hits: readonly T[],
   filters: UnifiedFilters,
   now: Date = new Date(),
-): UnifiedHit[] {
+): T[] {
   const contains = (haystack: string, needle: string) =>
     haystack.includes(needle.toLowerCase());
   return hits.filter((hit) => {

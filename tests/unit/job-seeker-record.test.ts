@@ -10,6 +10,7 @@ import {
 } from "@/lib/job-seeker/record";
 
 const inputs: EvaluationInputs = {
+  profileRecorded: true,
   profile: {
     skills: ["TypeScript", "PostgreSQL"],
     technologies: ["Next.js"],

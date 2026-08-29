@@ -592,13 +592,20 @@ for (const layoutCase of CASES) {
  * the absence of an Admin entry worth asserting: the owner removed it on
  * 2026-08-23, and the badge beside it still says who is looking.
  */
-test("the signed-in header names the two products and nothing else", async ({ page }) => {
+test("the signed-in header names the three products and nothing else", async ({ page }) => {
   await open(page, "site-header", 1440);
 
   const primary = page.getByRole("navigation", { name: "Primary" });
   await expect(primary).toBeVisible();
 
-  await expect(primary.getByRole("link")).toHaveText(["Software Factory", "Job Search"]);
+  // Budget Tracker joined the header as the third product on 2026-08-29;
+  // its addition shipped without this expectation moving, which made the
+  // base branch red. The claim stays exact: these products, nothing else.
+  await expect(primary.getByRole("link")).toHaveText([
+    "Software Factory",
+    "Job Search",
+    "Budget Tracker",
+  ]);
   await expect(primary.getByRole("link", { name: "Admin" })).toHaveCount(0);
   await expect(primary.getByRole("link", { name: "Software Factory" })).toHaveAttribute(
     "href",
@@ -607,6 +614,10 @@ test("the signed-in header names the two products and nothing else", async ({ pa
   await expect(primary.getByRole("link", { name: "Job Search" })).toHaveAttribute(
     "href",
     "/JobSearch",
+  );
+  await expect(primary.getByRole("link", { name: "Budget Tracker" })).toHaveAttribute(
+    "href",
+    "/BudgetTracker",
   );
 
   // The account side of the same row, which the owner's image also shows.

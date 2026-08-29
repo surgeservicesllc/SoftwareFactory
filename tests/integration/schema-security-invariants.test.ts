@@ -345,6 +345,13 @@ describe("SECURITY DEFINER functions", () => {
       // Purpose names only — the unbounded-accounts overlay has to discover
       // which slots exist before reading them; ciphertext still comes one
       // purpose at a time through read_provider_credential.
+      // The alert engine's boundary pair (20260829000300, ADR-164): the
+      // scheduled runner lists due alerts (with exactly the evaluator's
+      // profile facts and the delivered-URL set) and — see its sibling
+      // record_job_seeker_alert_scan below — records each scan's deliveries
+      // against the never-repeat UNIQUE constraint. service_role executes
+      // these two and holds no job-seeker table grant.
+      "list_due_job_seeker_alerts",
       "list_provider_credential_purposes",
       "mark_ai_account_needs_reauth",
       "mark_ai_account_verified",
@@ -380,6 +387,7 @@ describe("SECURITY DEFINER functions", () => {
       // Browser-authenticated managers cannot execute this RPC directly.
       "record_bot_readiness_preserving_disabled",
       "record_graph_artifact_as_worker",
+      "record_job_seeker_alert_scan",
       "record_node_state_as_worker",
       "record_phase1c_run_artifact",
       "record_phase1c_validation",
