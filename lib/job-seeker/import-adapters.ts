@@ -26,6 +26,7 @@ import {
 } from "@/lib/job-seeker/boards/company-boards";
 import {
   fetchArbeitnowJobs,
+  fetchHimalayasJobs,
   fetchJobicyJobs,
   fetchRemoteOkJobs,
   fetchRemotiveJobs,
@@ -315,6 +316,17 @@ export function listImportAdapters(env: NodeJS.ProcessEnv = process.env): readon
       requiredConfiguration: [],
       configured: true,
       fetchPostings: fetchArbeitnowJobs,
+    },
+    {
+      key: "himalayas",
+      name: "Himalayas",
+      summary: "Searches Himalayas' remote job board across every employer on it.",
+      mode: "public",
+      identifierLabel: "Search term",
+      identifierHint: "A job title, company or country — e.g. \"engineer\".",
+      requiredConfiguration: [],
+      configured: true,
+      fetchPostings: fetchHimalayasJobs,
     },
     {
       key: "linkedin",

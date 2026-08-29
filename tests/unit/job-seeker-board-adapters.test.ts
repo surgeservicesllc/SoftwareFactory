@@ -11,6 +11,8 @@ import {
 import {
   assertSearchTerm,
   fetchArbeitnowJobs,
+  fetchHimalayasJobs,
+  himalayasSalary,
   fetchJobicyJobs,
   fetchRemoteOkJobs,
   fetchRemotiveJobs,
@@ -52,7 +54,7 @@ describe("the registry", () => {
     const adapters = listImportAdapters({} as NodeJS.ProcessEnv);
     const working = adapters.filter((adapter) => adapter.mode === "public");
 
-    expect(working).toHaveLength(10);
+    expect(working).toHaveLength(11);
     for (const adapter of working) {
       // A board a person can see is a board that will actually be called.
       expect(typeof adapter.fetchPostings, `${adapter.key} has no fetch`).toBe("function");
@@ -253,5 +255,51 @@ describe("an empty board", () => {
     const result = await fetchRemotiveJobs("nothing");
     expect(result.postings).toEqual([]);
     expect(result.totalAvailable).toBe(0);
+  });
+});
+
+describe("Himalayas", () => {
+  const job = {
+    id: null,
+    guid: "https://himalayas.app/companies/mercor/jobs/ai-safety-8397173048",
+    title: "AI Safety Specialist",
+    companyName: "mercor",
+    locationRestrictions: ["Czechia", "Poland"],
+    applicationLink: "https://himalayas.app/companies/mercor/jobs/ai-safety-8397173048",
+    excerpt: "About the job. Mercor connects talent with AI labs.",
+    minSalary: 60,
+    maxSalary: 70,
+    salaryCurrency: null,
+  };
+
+  it("keys on guid, because every posting arrives with a null id", async () => {
+    /*
+     * The live feed sends `id: null` on every job. Keying on it would drop the
+     * whole import silently — the same failure Remotive's numeric ids caused,
+     * reached by a different route, which is why this has its own case.
+     */
+    stub({ jobs: [job] });
+    const result = await fetchHimalayasJobs("safety");
+
+    expect(result.postings).toHaveLength(1);
+    expect(result.postings[0]?.externalId).toBe(job.guid);
+  });
+
+  it("keeps every permitted country, not just the first", async () => {
+    stub({ jobs: [job] });
+    const result = await fetchHimalayasJobs("safety");
+    // "Czechia" alone would misstate a role open across two countries.
+    expect(result.postings[0]?.location).toBe("Czechia, Poland");
+  });
+
+  it("reports the salary as given, inventing neither currency nor period", () => {
+    /*
+     * The live feed carries minSalary 60 beside a null currency — an hourly
+     * rate, not an annual one. "USD 60,000–70,000/yr" would be three invented
+     * facts stacked on one real number.
+     */
+    expect(himalayasSalary(job)).toBe("60–70");
+    expect(himalayasSalary({ ...job, salaryCurrency: "USD" })).toBe("USD 60–70");
+    expect(himalayasSalary({ ...job, minSalary: null, maxSalary: null })).toBeNull();
   });
 });

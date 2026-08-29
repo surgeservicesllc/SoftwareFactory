@@ -177,7 +177,7 @@ describe("JobSeekerConsole", () => {
 
     expect(await screen.findByText("No jobs recorded yet")).toBeInTheDocument();
     expect(screen.getByText(/Rule-based match computed from your recorded profile/)).toBeInTheDocument();
-    expect(screen.getByText(/Record a posting yourself, or import from one of ten public job boards/)).toBeInTheDocument();
+    expect(screen.getByText(/Record a posting yourself, or import from one of eleven public job boards/)).toBeInTheDocument();
     // The two kinds of input are named, because "identifier" and "search term"
     // are different questions and the cards ask both.
     expect(screen.getByText(/ask for a search term instead/)).toBeInTheDocument();

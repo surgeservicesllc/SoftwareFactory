@@ -334,3 +334,94 @@ export async function fetchRemoteOkJobs(identifier: string): Promise<FetchedPost
 
   return { company: "Remote OK", totalAvailable: matched.length, postings };
 }
+
+/* ── Himalayas ──────────────────────────────────────────────────────────── */
+
+type HimalayasJob = {
+  guid?: unknown;
+  title?: unknown;
+  companyName?: unknown;
+  locationRestrictions?: unknown;
+  applicationLink?: unknown;
+  excerpt?: unknown;
+  minSalary?: unknown;
+  maxSalary?: unknown;
+  salaryCurrency?: unknown;
+};
+
+/**
+ * Himalayas states a salary range without always stating its currency, and
+ * without stating its period — the live feed carries `minSalary: 60` beside a
+ * null currency, which is an hourly rate rather than an annual one.
+ *
+ * So the number is reported exactly as given and never dressed up: no invented
+ * currency symbol, no assumed period. "60–70" is what the board said; "USD
+ * 60,000–70,000/yr" would be this code inventing three facts.
+ */
+export function himalayasSalary(job: HimalayasJob): string | null {
+  const min = typeof job.minSalary === "number" && job.minSalary > 0 ? job.minSalary : null;
+  const max = typeof job.maxSalary === "number" && job.maxSalary > 0 ? job.maxSalary : null;
+  if (min === null && max === null) return null;
+  const currency = typeof job.salaryCurrency === "string" && job.salaryCurrency.trim().length > 0
+    ? `${job.salaryCurrency.trim()} `
+    : "";
+  const range = min !== null && max !== null ? `${min}–${max}` : `${min ?? max}`;
+  return bounded(`${currency}${range}`, 200);
+}
+
+export async function fetchHimalayasJobs(identifier: string): Promise<FetchedPostings> {
+  const term = assertSearchTerm(identifier).toLowerCase();
+  const body = await aggregatorJson<{ jobs?: unknown }>(
+    `https://himalayas.app/jobs/api?limit=100`,
+    "Himalayas",
+  );
+  const all = Array.isArray(body.jobs) ? body.jobs : [];
+  const matched = all.filter((entry) => {
+    const job = entry as HimalayasJob;
+    const locations = Array.isArray(job.locationRestrictions)
+      ? job.locationRestrictions.filter((l): l is string => typeof l === "string")
+      : [];
+    return [job.title, job.companyName, ...locations]
+      .filter((part): part is string => typeof part === "string")
+      .join(" ")
+      .toLowerCase()
+      .includes(term);
+  });
+  if (matched.length === 0) return emptyResult("Himalayas");
+
+  const postings = matched.slice(0, MAX_IMPORT_POSTINGS).flatMap((entry): ImportedJob[] => {
+    const job = entry as HimalayasJob;
+    const title = boundedOrNull(job.title, TITLE_MAX);
+    const company = boundedOrNull(job.companyName, COMPANY_MAX);
+    /*
+     * `guid`, not `id`. Himalayas sends `id: null` on every posting in the
+     * live feed, so keying on it would drop the entire import silently — the
+     * same failure Remotive and Jobicy's numeric ids caused, arriving by a
+     * different route. The guid is the posting's canonical URL and is stable.
+     */
+    const id = boundedOrNull(job.guid, EXTERNAL_ID_MAX);
+    if (title === null || company === null || id === null) return [];
+
+    const locations = Array.isArray(job.locationRestrictions)
+      ? job.locationRestrictions.filter((l): l is string => typeof l === "string")
+      : [];
+    return [{
+      externalId: id,
+      url: httpsUrlOrNull(job.applicationLink) ?? httpsUrlOrNull(job.guid),
+      title,
+      company,
+      salaryText: himalayasSalary(job),
+      // An array of permitted countries, not one place. Joined rather than
+      // truncated to the first, because "Czechia" alone would misstate a role
+      // open across six countries.
+      location: locations.length === 0 ? null : bounded(locations.join(", "), LOCATION_MAX),
+      workModel: "remote",
+      description: boundedOrNull(
+        typeof job.excerpt === "string" ? htmlToText(job.excerpt) : null,
+        DESCRIPTION_MAX,
+      ),
+    }];
+  });
+
+  return { company: "Himalayas", totalAvailable: matched.length, postings };
+}
