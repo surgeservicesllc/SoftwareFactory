@@ -51,6 +51,7 @@ on:
           - ledger-repair-command-routing
           - ledger-repair-node-detail
           - job-seeker-discovery-surface
+          - budget-tracker
           - probe
 permissions:
   actions: read
@@ -5924,6 +5925,107 @@ jobs:
             exit 1
           fi
           echo "Applied and verified: a voided run no longer consumes a gate approval."
+
+      - name: Apply the Budget Tracker schema (scope=budget-tracker)
+        # Two files, in order. 20260829000100 adds four activity enum values
+        # and nothing else; 20260829000200 creates the six budget_* tables,
+        # their RLS, indexes and two read functions. They are separate
+        # migrations, applied as separate transactions, because Postgres
+        # refuses to use an enum value added in the same transaction — the
+        # same reason the job-seeker vocabulary has its own file.
+        #
+        # Purely additive: no existing table, column, function, policy or row
+        # is touched, so there is nothing to roll back but dropping what it
+        # created.
+        #
+        # This data is a household's finances, so the postflight is not
+        # optional. RLS enabled AND forced on all six, neither anon nor
+        # service_role holding a grant, and both aggregate reads INVOKER — all
+        # read back from the catalogue rather than assumed from a clean apply.
+        if: ${{ inputs.scope == 'budget-tracker' }}
+        run: |
+          if [ -z "$SUPABASE_DB_PASSWORD" ]; then
+            echo "::error::This scope requires SUPABASE_DB_PASSWORD for live verification."
+            exit 1
+          fi
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+
+          TYPES_FILE=supabase/migrations/20260829000100_budget_tracker_activity_types.sql
+          SCHEMA_FILE=supabase/migrations/20260829000200_budget_tracker_foundation.sql
+          if [ "$(sha256sum "$TYPES_FILE" | cut -d' ' -f1)" != "3404458b6bc99c776659897baf89933acfc6b75bce9282d3f21bb9bb963b18a4" ]; then
+            echo "::error::Migration hash mismatch on ${TYPES_FILE}; refusing production DDL."
+            exit 1
+          fi
+          if [ "$(sha256sum "$SCHEMA_FILE" | cut -d' ' -f1)" != "3cb70f73e786592530b6a27fec46c4569c8a178897831b09900b1803348b7790" ]; then
+            echo "::error::Migration hash mismatch on ${SCHEMA_FILE}; refusing production DDL."
+            exit 1
+          fi
+
+          for VERSION in 20260829000100 20260829000200; do
+            ROW=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
+              "select count(*) from supabase_migrations.schema_migrations where version = '${VERSION}';")
+            if [ "$ROW" != "0" ]; then
+              echo "::error::Ledger already records ${VERSION} (want 0)."
+              exit 1
+            fi
+          done
+
+          echo "Applying ${TYPES_FILE}"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -1 -q -f "$TYPES_FILE"
+          echo "Applying ${SCHEMA_FILE}"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -1 -q -f "$SCHEMA_FILE"
+
+          for VERSION in 20260829000100 20260829000200; do
+            if [ "$MODE" = "token" ]; then
+              npx supabase migration repair --status applied "$VERSION"
+            else
+              npx supabase migration repair --status applied "$VERSION" --db-url "$DB_URL"
+            fi
+          done
+
+          SECURED=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
+            select count(*) from pg_class
+             where relnamespace = 'public'::regnamespace
+               and relkind = 'r'
+               and relname like 'budget\\_%'
+               and relrowsecurity
+               and relforcerowsecurity;")
+          if [ "$SECURED" != "6" ]; then
+            echo "::error::Expected 6 budget tables with RLS enabled and forced, found ${SECURED}."
+            exit 1
+          fi
+
+          # service_role is BYPASSRLS, so a grant to it is every policy above
+          # switched off. Hosted default privileges re-grant it on each new
+          # table, which is why the migration revokes it and this reads it back.
+          for ROLE in anon service_role; do
+            HELD=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
+              select count(*) from information_schema.role_table_grants
+               where grantee = '${ROLE}' and table_name like 'budget\\_%';")
+            if [ "$HELD" != "0" ]; then
+              echo "::error::${ROLE} holds ${HELD} grant(s) on the budget tables; expected none."
+              exit 1
+            fi
+          done
+
+          # As DEFINER either read would hand every member of an organization
+          # every other member's monthly totals, past the row policies above.
+          INVOKER=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
+            select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+             where n.nspname = 'public'
+               and p.proname in ('budget_monthly_flow','budget_category_spend')
+               and p.prosecdef = false;")
+          if [ "$INVOKER" != "2" ]; then
+            echo "::error::Expected 2 SECURITY INVOKER budget read functions, found ${INVOKER}."
+            exit 1
+          fi
+
+          echo "Applied and verified: 6 tables RLS-forced, neither anon nor service_role holds a grant, both reads are INVOKER."
 
       - name: Record the node-detail read a later migration superseded (scope=ledger-repair-node-detail)
         if: ${{ inputs.scope == 'ledger-repair-node-detail' }}

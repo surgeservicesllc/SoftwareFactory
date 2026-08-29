@@ -214,6 +214,7 @@ const CASES = [
   "billing",
   "trail",
   "job-seeker",
+  "budget-tracker",
   "job-search",
   "resume-review",
   "bot-fabric",

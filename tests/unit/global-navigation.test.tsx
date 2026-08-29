@@ -71,7 +71,12 @@ describe("globalNavigation", () => {
 
   it("names the factory the way the product names itself", () => {
     // Owner request, 2026-08-23: the header entry reads "Software Factory".
-    expect(SIGNED_IN_NAV.map((item) => item.label)).toEqual(["Software Factory", "Job Search"]);
+    expect(SIGNED_IN_NAV.map((item) => item.label)).toEqual([
+      "Software Factory",
+      "Job Search",
+      // Owner request, 2026-08-29.
+      "Budget Tracker",
+    ]);
   });
 });
 
@@ -134,6 +139,7 @@ describe("SiteHeader", () => {
     expect(primaryNav().getAllByRole("link").map((link) => link.textContent)).toEqual([
       "Software Factory",
       "Job Search",
+      "Budget Tracker",
     ]);
   });
 
@@ -152,6 +158,13 @@ describe("SiteHeader", () => {
 
     expect(primaryNav().getByRole("link", { name: "Software Factory" }))
       .toHaveAttribute("href", "/solutions");
+    /*
+     * The capitalised path is the instruction too. Next.js routes are
+     * case-sensitive, so `/budgettracker` would 404 while looking correct in
+     * a diff — this asserts the spelling the page actually answers to.
+     */
+    expect(primaryNav().getByRole("link", { name: "Budget Tracker" }))
+      .toHaveAttribute("href", "/BudgetTracker");
     expect(primaryNav().getByRole("link", { name: "Job Search" }))
       .toHaveAttribute("href", "/JobSearch");
   });

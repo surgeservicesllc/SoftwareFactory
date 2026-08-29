@@ -127,7 +127,7 @@ describe("every route is swept at every supported width", () => {
      * JobSearchPanel the harness already measures at all eight widths, and
      * responsive.spec.ts proves the redirect.
      */
-    const GATED_SUBTREES = ["/job-seeker", "/decision", "/JobSearch", "/Job-Search"];
+    const GATED_SUBTREES = ["/job-seeker", "/decision", "/JobSearch", "/Job-Search", "/BudgetTracker"];
 
     const missing = routes.filter((route) => {
       if (REDIRECT_ONLY.has(route)) return false;
