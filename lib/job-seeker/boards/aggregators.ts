@@ -280,6 +280,22 @@ function remoteOkSalary(job: RemoteOkJob): string | null {
   return bounded(`USD ${min !== null && max !== null ? `${min}–${max}` : `${min ?? max}`}`, 200);
 }
 
+/**
+ * Remote OK, filtered locally over a fixed window.
+ *
+ * `/api` takes no query parameter: it answers with the latest ~100 postings
+ * and nothing else, so the search term is applied here rather than by the
+ * provider. `totalAvailable` therefore counts matches *within that window*,
+ * not Remote OK's whole catalogue — which this adapter cannot see and does not
+ * claim to. The same caveat as Arbeitnow, for the same reason.
+ *
+ * The practical consequence is worth stating because it looks like a defect:
+ * a perfectly working call can return zero. Probing on 2026-08-29, the window
+ * held 16 postings matching "engineer" and 24 matching "sales", but **none**
+ * matching "developer" — that term is simply absent from the most recent
+ * hundred. An empty result here means "not in the latest hundred", not
+ * "Remote OK has nothing".
+ */
 export async function fetchRemoteOkJobs(identifier: string): Promise<FetchedPostings> {
   const term = assertSearchTerm(identifier).toLowerCase();
   const body = await aggregatorJson<unknown>("https://remoteok.com/api", "Remote OK");

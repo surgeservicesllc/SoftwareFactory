@@ -582,7 +582,7 @@ for (const layoutCase of CASES) {
  * The global header, signed in.
  *
  * The rest of the browser suite browses signed out, so the owner's specified
- * header — the two products, then the account controls — had no coverage in a
+ * header — the three products, then the account controls — had no coverage in a
  * real browser at all. This reads the rendered entries rather than the module
  * that supplies them, which is the point: the wiring is the instruction, and a
  * unit test importing the same constant cannot catch a header that stops
@@ -592,13 +592,17 @@ for (const layoutCase of CASES) {
  * the absence of an Admin entry worth asserting: the owner removed it on
  * 2026-08-23, and the badge beside it still says who is looking.
  */
-test("the signed-in header names the two products and nothing else", async ({ page }) => {
+test("the signed-in header names the three products and nothing else", async ({ page }) => {
   await open(page, "site-header", 1440);
 
   const primary = page.getByRole("navigation", { name: "Primary" });
   await expect(primary).toBeVisible();
 
-  await expect(primary.getByRole("link")).toHaveText(["Software Factory", "Job Search"]);
+  await expect(primary.getByRole("link")).toHaveText([
+    "Software Factory",
+    "Job Search",
+    "Budget Tracker",
+  ]);
   await expect(primary.getByRole("link", { name: "Admin" })).toHaveCount(0);
   await expect(primary.getByRole("link", { name: "Software Factory" })).toHaveAttribute(
     "href",
@@ -607,6 +611,15 @@ test("the signed-in header names the two products and nothing else", async ({ pa
   await expect(primary.getByRole("link", { name: "Job Search" })).toHaveAttribute(
     "href",
     "/JobSearch",
+  );
+  /*
+   * The capitalised path is the assertion, not a detail. Next routes are
+   * case-sensitive, so `/budgettracker` is a 404 — a header link spelled the
+   * lowercase way would look right and go nowhere.
+   */
+  await expect(primary.getByRole("link", { name: "Budget Tracker" })).toHaveAttribute(
+    "href",
+    "/BudgetTracker",
   );
 
   // The account side of the same row, which the owner's image also shows.
