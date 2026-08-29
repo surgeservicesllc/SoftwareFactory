@@ -224,7 +224,7 @@ jobs:
             exit 1
           fi
           FILE=supabase/migrations/20260827000210_contain_legacy_graph_artifact_payloads.sql
-          EXPECTED_FILE_SHA256=c37a55efe74e9a9b4118924e1b2cbd0378a76f0d98c9747c6c66fffda9697de1
+          EXPECTED_FILE_SHA256=7697eda24fef53b89ee3c3dbc9b7f7bc0c60ec2f8f0d23c73a7cf607652a1bfc
           if [ "$(sha256sum "$FILE" | cut -d' ' -f1)" != "$EXPECTED_FILE_SHA256" ]; then
             echo "::error::Forward containment migration hash mismatch."
             exit 1

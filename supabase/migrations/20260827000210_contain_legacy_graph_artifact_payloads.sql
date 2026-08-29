@@ -6,6 +6,13 @@
 -- The committed 00150 fence makes every legacy graph mutator unreachable. Lock
 -- the remaining state while this one transaction classifies and contains the
 -- exact rows selected by the protected release workflow.
+--
+-- The transaction is opened explicitly: the hosted apply ran under psql's
+-- single-transaction wrap, but the Supabase CLI executes a migration
+-- statement by statement, where a bare LOCK TABLE is refused (25P01). An
+-- explicit begin/commit locks correctly in both, and a runner that already
+-- holds a transaction only reports the begin as redundant.
+begin;
 lock table public.organizations, public.projects, public.phase1c_workers,
   public.graph_runs, public.agent_runs, public.node_runs in share mode;
 lock table public.graph_artifacts, public.graph_verifications
@@ -567,3 +574,5 @@ begin
   end if;
 end;
 $graph_artifact_payload_containment_postflight$;
+
+commit;
