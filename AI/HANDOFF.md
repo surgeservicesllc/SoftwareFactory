@@ -2,7 +2,32 @@
 
 Last updated: 2026-08-29
 
-## Newest (2026-08-29 evening): Job Search increments 2–3 shipped end to end — alert engine live in schema, waiting only on owner env (ADR-164)
+## Newest (2026-08-29 night): Job Search increment 4 — personal marks (favorite/hide/viewed) + title-derived seniority facet (ADR-167)
+
+`job_seeker_result_marks` (20260829000400) keys a person's favorite /
+hidden / viewed marks on the posting URL under forced RLS — own-row
+policies, service_role revoked, deliberately no UPDATE path (mark is row
+identity; unmark = delete; both directions idempotent). Route:
+`/api/job-seeker/search/marks` (GET grouped, POST upsert-ignore, DELETE
+count-honest). Panel: star + Hide + Viewed badge render only after the
+real marks load; "hidden by you" and "hidden by your filters" are two
+separate counts; Favorites-only toggle; viewed recorded on opening the
+posting, quietly. Seniority: `deriveSeniority` in `unify.ts` — title
+text only, seven levels, most-senior-wins, "lead gen" excluded; wired
+through the search route, panel select/chip, saved-search schema
+(`nullish` so old stored queries parse) and the alert engine's
+`toUnifiedFilters`. Location radius and industry facets remain honestly
+unoffered — the boards expose no such data (`AI/JOB_SEARCH_SOURCES.md`).
+
+Chain integration for the new migration: 22 sentinel sites swept to
+`20260829000400…` (budget's semantic site untouched), grants-test seat
+added, phase1e RLS count 146→147, runbook total 179, and the
+apply-hosted-migrations workflow gained BOTH the scope step
+(`job-seeker-result-marks`, sha-logged apply + boundary postflight) and
+its `options:` entry — the #440 lesson. Hosted apply for this scope
+still needs dispatching after merge.
+
+## Older (2026-08-29 evening): Job Search increments 2–3 shipped end to end — alert engine live in schema, waiting only on owner env (ADR-164)
 
 PR #437 (increments 2+3 together) squash-merged to main as `2319970` after
 four real CI checks on the exact head and a fully green local suite

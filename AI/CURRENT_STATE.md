@@ -358,6 +358,24 @@ assignments; one Codex connection is unfinished and Claude OAuth is not
 complete. Provider OAuth and route setup must finish before a fresh command
 and persisted Step 9 correlation can be measured.
 
+## 2026-08-29 (night): Job Search increment 4 — personal marks + title-derived seniority (ADR-167)
+
+Favorites, hide-job and viewed/unviewed are real: `job_seeker_result_marks`
+(20260829000400) keys them on the posting URL under forced RLS with own-row
+policies, service_role revoked, and no update path (mark = row identity;
+both directions idempotent), served by `/api/job-seeker/search/marks` and
+rendered as star/Hide/Viewed controls that appear only after the person's
+actual marks load. "Hidden by you" and "hidden by your filters" are two
+separate honest counts; Show hidden and Favorites-only exist. The seniority
+facet is derived from the job title alone (`deriveSeniority`: seven levels,
+most-senior-wins, "lead generation" excluded by name, unstated = null) and
+flows through the search route, the panel select + chip, the saved-search
+schema (`nullish`, so stored queries parse) and the alert engine. Location
+radius and industry facets remain unoffered because no connected board
+exposes that data — recorded, not faked. The migration is chain-integrated
+(22 sentinels swept, grants seat, RLS count 147, runbook 179, workflow scope
+step + options entry both added).
+
 ## 2026-08-29 (later): Job Search increments 2–3 — match scores, saved searches, alert engine (ADR-163 addendum, ADR-164)
 
 Merged to `main` as #437 (squash `2319970`), Vercel deploy verified, and the

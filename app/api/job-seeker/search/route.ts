@@ -12,6 +12,7 @@ import { BoardSearchError, type BoardSearchQuery } from "@/lib/job-seeker/board-
 import {
   applyUnifiedFilters,
   dedupeAcrossBoards,
+  SENIORITY_LEVELS,
   type UnifiedFilters,
 } from "@/lib/job-seeker/board-search/unify";
 import { evaluateJob, EVALUATION_METHOD_LABEL } from "@/lib/job-seeker/evaluate";
@@ -58,6 +59,11 @@ const filtersSchema = z
     excludeKeywords: z.array(z.string().trim().min(1).max(80)).max(16).default([]),
     excludeCompanies: z.array(z.string().trim().min(1).max(120)).max(16).default([]),
     workModel: z.enum(["remote", "hybrid", "onsite"]).nullish(),
+    /**
+     * Seniority stated by the job title (deriveSeniority). Titles that state
+     * no level are dropped while this is set, and the UI says so.
+     */
+    seniority: z.enum(SENIORITY_LEVELS).nullish(),
     salaryMinimum: z.number().int().min(0).max(10_000_000).nullish(),
     requireSalary: z.boolean().default(false),
     postedWithinDays: z.number().int().min(1).max(365).nullish(),
@@ -219,6 +225,7 @@ export async function POST(request: Request) {
           excludeKeywords: parsed.data.filters.excludeKeywords,
           excludeCompanies: parsed.data.filters.excludeCompanies,
           workModel: parsed.data.filters.workModel ?? null,
+          seniority: parsed.data.filters.seniority ?? null,
           salaryMinimum: parsed.data.filters.salaryMinimum ?? null,
           requireSalary: parsed.data.filters.requireSalary,
           postedWithinDays: parsed.data.filters.postedWithinDays ?? null,

@@ -8,6 +8,7 @@ import {
   dedupeAcrossBoards,
   EMPTY_FILTERS,
   salaryCeiling,
+  type DerivedSeniority,
   type UnifiedFilters,
   type UnifiedHit,
 } from "@/lib/job-seeker/board-search/unify";
@@ -36,6 +37,13 @@ import {
  * boards genuinely searched are checkboxes, sources that need credentials say
  * **Not Connected**, and sources that only permit an ordinary web link open
  * in a new tab. No entry pretends.
+ *
+ * Personal marks — favorite, hide, viewed — key on the posting's URL (the
+ * only identity a result on someone else's website has) and persist per
+ * person under RLS. They are applied after the filters and counted
+ * separately, so "hidden by your filters" and "hidden by you" stay two
+ * distinct, honest numbers. The seniority filter is derived from the job
+ * title alone and is labeled that way; no level is ever invented.
  */
 
 type BoardView = {
@@ -115,12 +123,27 @@ type SavedSearchQuery = {
     excludeKeywords?: string[];
     excludeCompanies?: string[];
     workModel?: "remote" | "hybrid" | "onsite" | null;
+    seniority?: DerivedSeniority | null;
     salaryMinimum?: number | null;
     requireSalary?: boolean;
     postedWithinDays?: number | null;
     minimumScore?: number | null;
   };
 };
+
+/** A person's own marks on result URLs, loaded once and kept in step locally. */
+type Mark = "favorite" | "hidden" | "viewed";
+type MarkSets = Record<Mark, ReadonlySet<string>>;
+
+const SENIORITY_OPTIONS: readonly { value: DerivedSeniority; label: string }[] = [
+  { value: "intern", label: "Intern" },
+  { value: "entry", label: "Entry level / junior" },
+  { value: "senior", label: "Senior" },
+  { value: "lead", label: "Lead / staff / principal" },
+  { value: "manager", label: "Manager" },
+  { value: "director", label: "Director / head of" },
+  { value: "executive", label: "VP / executive" },
+];
 
 type SavedSearchView = {
   id: string;
@@ -209,12 +232,21 @@ export function JobSearchPanel() {
   const [excludeCompanyInput, setExcludeCompanyInput] = useState("");
   const [excludeCompanies, setExcludeCompanies] = useState<readonly string[]>([]);
   const [workModel, setWorkModel] = useState<"" | "remote" | "hybrid" | "onsite">("");
+  const [seniority, setSeniority] = useState<"" | DerivedSeniority>("");
   const [salaryMinimumInput, setSalaryMinimumInput] = useState("");
   const [requireSalary, setRequireSalary] = useState(false);
   const [postedWithinDays, setPostedWithinDays] = useState<"" | "1" | "3" | "7" | "14" | "30">("");
   const [minimumScoreInput, setMinimumScoreInput] = useState("");
 
   // Saved searches, persisted per person under RLS.
+  // Personal marks. null until the load answers: the controls that read or
+  // write marks render only once the person's real marks are known, because
+  // a star that silently forgot yesterday's favorites would be a lie.
+  const [marks, setMarks] = useState<MarkSets | null>(null);
+  const [marksError, setMarksError] = useState<string | null>(null);
+  const [showHidden, setShowHidden] = useState(false);
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
+
   const [savedSearches, setSavedSearches] = useState<SavedSearchView[]>([]);
   const [alertsChannel, setAlertsChannel] = useState<AlertsChannel | null>(null);
   const [savedError, setSavedError] = useState<string | null>(null);
@@ -243,6 +275,23 @@ export function JobSearchPanel() {
         setSources(payload.sources ?? []);
       } catch {
         if (active) setBoardsError("The board list could not be read.");
+      }
+    })();
+    void (async () => {
+      try {
+        const response = await fetch("/api/job-seeker/search/marks", { headers: { accept: "application/json" } });
+        if (!active || !response.ok) return;
+        const payload = (await response.json()) as { marks?: Record<Mark, string[]> };
+        if (active && payload.marks !== undefined) {
+          setMarks({
+            favorite: new Set(payload.marks.favorite ?? []),
+            hidden: new Set(payload.marks.hidden ?? []),
+            viewed: new Set(payload.marks.viewed ?? []),
+          });
+        }
+      } catch {
+        // marks stay null; the star/hide/viewed controls stay unrendered
+        // rather than render as switches that would forget what they said.
       }
     })();
     void (async () => {
@@ -393,6 +442,46 @@ export function JobSearchPanel() {
     }
   }, []);
 
+  /**
+   * Optimistic mark toggle: the set changes now, the row follows; a failed
+   * write reverts the set and says so. `viewed` fails silently because the
+   * click's real action — opening the posting — already succeeded.
+   */
+  const toggleMark = useCallback(async (jobUrl: string, mark: Mark, on: boolean) => {
+    const apply = (current: MarkSets | null, value: boolean): MarkSets | null => {
+      if (current === null) return current;
+      const next = new Set(current[mark]);
+      if (value) next.add(jobUrl);
+      else next.delete(jobUrl);
+      return { ...current, [mark]: next };
+    };
+    setMarksError(null);
+    setMarks((current) => apply(current, on));
+    try {
+      const response = await fetch("/api/job-seeker/search/marks", {
+        method: on ? "POST" : "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ jobUrl, mark }),
+      });
+      if (!response.ok) throw new Error(String(response.status));
+    } catch {
+      setMarks((current) => apply(current, !on));
+      if (mark !== "viewed") {
+        setMarksError(
+          mark === "favorite"
+            ? "The favorite could not be saved. Try again."
+            : "The posting could not be hidden. Try again.",
+        );
+      }
+    }
+  }, []);
+
+  /** Called when a posting is opened; records `viewed` once, quietly. */
+  const recordViewed = useCallback((jobUrl: string | null) => {
+    if (jobUrl === null || marks === null || marks.viewed.has(jobUrl)) return;
+    void toggleMark(jobUrl, "viewed", true);
+  }, [marks, toggleMark]);
+
   const filters: UnifiedFilters = useMemo(
     () => ({
       ...EMPTY_FILTERS,
@@ -401,6 +490,7 @@ export function JobSearchPanel() {
       excludeKeywords,
       excludeCompanies,
       workModel: workModel === "" ? null : workModel,
+      seniority: seniority === "" ? null : seniority,
       salaryMinimum:
         salaryMinimumInput.trim() === "" || Number.isNaN(Number(salaryMinimumInput))
           ? null
@@ -408,7 +498,7 @@ export function JobSearchPanel() {
       requireSalary,
       postedWithinDays: postedWithinDays === "" ? null : Number(postedWithinDays),
     }),
-    [keywordMode, keywords, excludeKeywords, excludeCompanies, workModel, salaryMinimumInput, requireSalary, postedWithinDays],
+    [keywordMode, keywords, excludeKeywords, excludeCompanies, workModel, seniority, salaryMinimumInput, requireSalary, postedWithinDays],
   );
 
   const filtersActive =
@@ -416,6 +506,7 @@ export function JobSearchPanel() {
     excludeKeywords.length > 0 ||
     excludeCompanies.length > 0 ||
     workModel !== "" ||
+    seniority !== "" ||
     filters.salaryMinimum !== null ||
     requireSalary ||
     postedWithinDays !== "" ||
@@ -429,6 +520,7 @@ export function JobSearchPanel() {
     setExcludeCompanies([]);
     setExcludeCompanyInput("");
     setWorkModel("");
+    setSeniority("");
     setSalaryMinimumInput("");
     setRequireSalary(false);
     setPostedWithinDays("");
@@ -490,6 +582,31 @@ export function JobSearchPanel() {
     return filtered;
   }, [unified, filters, filtersActive, sort, minimumScore]);
 
+  /**
+   * Marks applied last, and counted separately from the filters above: "12
+   * hidden by your filters" and "3 hidden by you" are different facts and the
+   * header states both. A card with no URL cannot carry a mark, so it is
+   * never hidden here.
+   */
+  const hiddenByMe = useMemo(() => {
+    if (visibleUnified === null || marks === null) return 0;
+    return visibleUnified.filter(
+      (card) => card.job.url !== null && marks.hidden.has(card.job.url),
+    ).length;
+  }, [visibleUnified, marks]);
+
+  const displayedUnified = useMemo(() => {
+    if (visibleUnified === null) return null;
+    let list = visibleUnified;
+    if (marks !== null && !showHidden) {
+      list = list.filter((card) => card.job.url === null || !marks.hidden.has(card.job.url));
+    }
+    if (marks !== null && favoritesOnly) {
+      list = list.filter((card) => card.job.url !== null && marks.favorite.has(card.job.url));
+    }
+    return list;
+  }, [visibleUnified, marks, showHidden, favoritesOnly]);
+
   // ── Saved searches ────────────────────────────────────────────────────
   const currentQuery = useCallback((): SavedSearchQuery => ({
     text: text.trim(),
@@ -504,12 +621,13 @@ export function JobSearchPanel() {
       excludeKeywords: [...excludeKeywords],
       excludeCompanies: [...excludeCompanies],
       workModel: workModel === "" ? null : workModel,
+      seniority: seniority === "" ? null : seniority,
       salaryMinimum: filters.salaryMinimum,
       requireSalary,
       postedWithinDays: postedWithinDays === "" ? null : Number(postedWithinDays),
       minimumScore,
     },
-  }), [text, location, boards, selectedBoards, sort, keywordMode, keywords, excludeKeywords, excludeCompanies, workModel, filters.salaryMinimum, requireSalary, postedWithinDays, minimumScore]);
+  }), [text, location, boards, selectedBoards, sort, keywordMode, keywords, excludeKeywords, excludeCompanies, workModel, seniority, filters.salaryMinimum, requireSalary, postedWithinDays, minimumScore]);
 
   const savedSearchRequest = useCallback(async (
     method: "POST" | "PATCH" | "DELETE",
@@ -552,6 +670,7 @@ export function JobSearchPanel() {
     setExcludeKeywords(savedFilters.excludeKeywords ?? []);
     setExcludeCompanies(savedFilters.excludeCompanies ?? []);
     setWorkModel(savedFilters.workModel ?? "");
+    setSeniority(savedFilters.seniority ?? "");
     setSalaryMinimumInput(savedFilters.salaryMinimum == null ? "" : String(savedFilters.salaryMinimum));
     setRequireSalary(savedFilters.requireSalary ?? false);
     setPostedWithinDays(
@@ -842,6 +961,20 @@ export function JobSearchPanel() {
               </select>
             </label>
             <label className="block text-xs">
+              <span className="text-[var(--muted)]">Seniority (from the job title)</span>
+              <select
+                value={seniority}
+                onChange={(event) => setSeniority(event.target.value as typeof seniority)}
+                title="Derived from what the title says — e.g. Senior, Lead, Director. Titles that state no level are hidden while this is set."
+                className="mt-1 w-full rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5 text-sm"
+              >
+                <option value="">Any (unstated kept)</option>
+                {SENIORITY_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </label>
+            <label className="block text-xs">
               <span className="text-[var(--muted)]">Salary at least</span>
               <input
                 type="number"
@@ -917,6 +1050,9 @@ export function JobSearchPanel() {
                 />
               ))}
               {workModel !== "" ? <Chip label={workModel} onRemove={() => setWorkModel("")} /> : null}
+              {seniority !== "" ? (
+                <Chip label={`title: ${seniority}`} onRemove={() => setSeniority("")} />
+              ) : null}
               {filters.salaryMinimum !== null ? (
                 <Chip label={`salary ≥ ${filters.salaryMinimum}`} onRemove={() => setSalaryMinimumInput("")} />
               ) : null}
@@ -1206,6 +1342,16 @@ export function JobSearchPanel() {
                 By board
               </button>
             </div>
+            {view === "unified" && marks !== null ? (
+              <label className="flex items-center gap-1.5 text-xs">
+                <input
+                  type="checkbox"
+                  checked={favoritesOnly}
+                  onChange={(event) => setFavoritesOnly(event.target.checked)}
+                />
+                Favorites only
+              </label>
+            ) : null}
             {view === "unified" ? (
               <label className="text-sm">
                 <span className="mr-2 text-xs text-[var(--muted)]">Sort</span>
@@ -1225,15 +1371,18 @@ export function JobSearchPanel() {
             ) : null}
           </div>
 
-          {view === "unified" && visibleUnified !== null ? (
+          {view === "unified" && visibleUnified !== null && displayedUnified !== null ? (
             <div data-testid="unified-results">
               <Card>
                 <SectionTitle
-                  title={`${visibleUnified.length} unique ${visibleUnified.length === 1 ? "posting" : "postings"}`}
+                  title={`${displayedUnified.length} unique ${displayedUnified.length === 1 ? "posting" : "postings"}`}
                   description={`Deduplicated from ${totalHits} board ${totalHits === 1 ? "result" : "results"}. ${(results ?? [])
                     .map((result) => `${result.boardName}: ${boardTotalsLine(result)}`)
                     .join(" ")}`}
                 />
+                {marksError !== null ? (
+                  <div className="mt-2"><Notice tone="warning">{marksError}</Notice></div>
+                ) : null}
                 {matchBasis !== null ? (
                   <p className="mt-2 text-xs text-[var(--muted)]">
                     {matchBasis.computed
@@ -1250,14 +1399,29 @@ export function JobSearchPanel() {
                     </button>
                   </p>
                 ) : null}
-                {visibleUnified.length === 0 ? (
+                {hiddenByMe > 0 ? (
+                  <p className="mt-2 text-xs text-[var(--muted)]">
+                    {hiddenByMe} {hiddenByMe === 1 ? "posting" : "postings"} hidden by you.{" "}
+                    <button
+                      type="button"
+                      onClick={() => setShowHidden((value) => !value)}
+                      className="underline underline-offset-2"
+                    >
+                      {showHidden ? "Hide them again" : "Show hidden"}
+                    </button>
+                  </p>
+                ) : null}
+                {displayedUnified.length === 0 ? (
                   <p className="mt-3 text-sm text-[var(--muted)]">
-                    Every result is hidden by the filters above — the boards did return{" "}
-                    {totalHits} {totalHits === 1 ? "posting" : "postings"}.
+                    {visibleUnified.length === 0
+                      ? `Every result is hidden by the filters above — the boards did return ${totalHits} ${totalHits === 1 ? "posting" : "postings"}.`
+                      : favoritesOnly
+                        ? "None of these results is in your favorites. Untick “Favorites only” to see all of them."
+                        : "Every remaining result is one you hid. Use “Show hidden” above to see them."}
                   </p>
                 ) : (
                   <ul className="mt-4 space-y-3">
-                    {visibleUnified.slice(0, shownCount).map((card) => {
+                    {displayedUnified.slice(0, shownCount).map((card) => {
                       const key = unifiedKey(card);
                       const primary = card.sources[card.primarySourceIndex]!;
                       const saveError = saveErrors[key] ?? null;
@@ -1273,6 +1437,7 @@ export function JobSearchPanel() {
                                     href={card.job.url}
                                     target="_blank"
                                     rel="noreferrer noopener"
+                                    onClick={() => recordViewed(card.job.url)}
                                     className="underline underline-offset-2"
                                   >
                                     {card.job.title}
@@ -1281,6 +1446,11 @@ export function JobSearchPanel() {
                                 {isNew(card.publishedOn) ? (
                                   <span className="ml-2 rounded-full border border-[var(--border)] px-1.5 py-0.5 align-middle text-[10px] font-semibold uppercase tracking-wide text-[var(--accent)]">
                                     New
+                                  </span>
+                                ) : null}
+                                {marks !== null && card.job.url !== null && marks.viewed.has(card.job.url) ? (
+                                  <span className="ml-2 rounded-full border border-[var(--border)] px-1.5 py-0.5 align-middle text-[10px] font-semibold uppercase tracking-wide text-[var(--muted)]">
+                                    Viewed
                                   </span>
                                 ) : null}
                               </p>
@@ -1337,7 +1507,40 @@ export function JobSearchPanel() {
                                 </details>
                               ) : null}
                             </div>
-                            {renderSaveButton(key, primary.board, card.job, primary.saveToken)}
+                            <div className="flex shrink-0 flex-col items-end gap-1.5">
+                              {renderSaveButton(key, primary.board, card.job, primary.saveToken)}
+                              {marks !== null && card.job.url !== null ? (
+                                <div className="flex items-center gap-1.5">
+                                  <button
+                                    type="button"
+                                    aria-pressed={marks.favorite.has(card.job.url)}
+                                    aria-label={
+                                      marks.favorite.has(card.job.url)
+                                        ? `Unfavorite ${card.job.title}`
+                                        : `Favorite ${card.job.title}`
+                                    }
+                                    onClick={() =>
+                                      void toggleMark(card.job.url!, "favorite", !marks.favorite.has(card.job.url!))}
+                                    className={`rounded-md border border-[var(--border)] px-2 py-1 text-xs ${marks.favorite.has(card.job.url) ? "text-[var(--accent)]" : "text-[var(--muted)]"}`}
+                                  >
+                                    {marks.favorite.has(card.job.url) ? "★ Favorited" : "☆ Favorite"}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    aria-label={
+                                      marks.hidden.has(card.job.url)
+                                        ? `Unhide ${card.job.title}`
+                                        : `Hide ${card.job.title}`
+                                    }
+                                    onClick={() =>
+                                      void toggleMark(card.job.url!, "hidden", !marks.hidden.has(card.job.url!))}
+                                    className="rounded-md border border-[var(--border)] px-2 py-1 text-xs text-[var(--muted)]"
+                                  >
+                                    {marks.hidden.has(card.job.url) ? "Unhide" : "Hide"}
+                                  </button>
+                                </div>
+                              ) : null}
+                            </div>
                           </div>
                           {saveError !== null ? (
                             <div className="mt-3">
@@ -1349,7 +1552,7 @@ export function JobSearchPanel() {
                     })}
                   </ul>
                 )}
-                {visibleUnified.length > shownCount ? (
+                {displayedUnified.length > shownCount ? (
                   <div className="mt-4 flex flex-wrap items-center gap-3">
                     <button
                       type="button"
@@ -1357,10 +1560,10 @@ export function JobSearchPanel() {
                       onClick={() => setShownCount((count) => count + UNIFIED_PAGE_SIZE)}
                       className="rounded-md border border-[var(--border)] px-3 py-1.5 text-sm hover:bg-[var(--surface-2)]"
                     >
-                      Show {Math.min(UNIFIED_PAGE_SIZE, visibleUnified.length - shownCount)} more
+                      Show {Math.min(UNIFIED_PAGE_SIZE, displayedUnified.length - shownCount)} more
                     </button>
                     <span className="text-xs text-[var(--muted)]">
-                      Showing {Math.min(shownCount, visibleUnified.length)} of {visibleUnified.length}
+                      Showing {Math.min(shownCount, displayedUnified.length)} of {displayedUnified.length}
                     </span>
                   </div>
                 ) : null}

@@ -101,6 +101,51 @@ export function dedupeAcrossBoards(tagged: readonly TaggedHit[]): UnifiedHit[] {
   }));
 }
 
+/**
+ * Seniority derived from the job title, and only from the job title.
+ *
+ * The connected boards do not expose seniority as structured data, so the
+ * only honest source is what the employer wrote in the title: "Senior
+ * Marketing Manager" states manager, "Junior Designer" states entry. A title
+ * that states nothing derives null — the derivation never guesses a level
+ * from salary, description length, or anything else, and the UI labels the
+ * filter as title-derived so nobody mistakes it for employer-declared data.
+ *
+ * When several levels appear in one title the most senior one wins, because
+ * that is how titles compose: a "Senior Engineering Manager" is a manager,
+ * a "Lead Senior Engineer" is a lead. "Lead generation" is the marketing
+ * discipline, not a level, and is excluded by name.
+ */
+export const SENIORITY_LEVELS = [
+  "intern",
+  "entry",
+  "senior",
+  "lead",
+  "manager",
+  "director",
+  "executive",
+] as const;
+
+export type DerivedSeniority = (typeof SENIORITY_LEVELS)[number];
+
+const SENIORITY_PATTERNS: readonly (readonly [DerivedSeniority, RegExp])[] = [
+  ["executive", /\b(?:vp|svp|evp|avp|vice president|chief|ceo|cto|cmo|coo|cfo|cpo|cro|cdo|president)\b/],
+  ["director", /\b(?:director|head of)\b/],
+  ["manager", /\b(?:manager|mgr)\b/],
+  ["lead", /\b(?:lead(?!\s*gen)|staff|principal)\b/],
+  ["senior", /\b(?:senior|sr)\b/],
+  ["entry", /\b(?:junior|jr|entry[\s-]?level|graduate|trainee|apprentice)\b/],
+  ["intern", /\b(?:intern|internship)\b/],
+];
+
+export function deriveSeniority(title: string): DerivedSeniority | null {
+  const folded = title.toLowerCase().replace(/[._/|]+/g, " ");
+  for (const [level, pattern] of SENIORITY_PATTERNS) {
+    if (pattern.test(folded)) return level;
+  }
+  return null;
+}
+
 export type UnifiedFilters = Readonly<{
   /** Every word must appear (AND) or any word may appear (OR). */
   keywordMode: "and" | "or";
@@ -111,6 +156,13 @@ export type UnifiedFilters = Readonly<{
   /** Company names to drop, matched case-insensitively as substrings. */
   excludeCompanies: readonly string[];
   workModel: "remote" | "hybrid" | "onsite" | null;
+  /**
+   * Keep only hits whose title states this seniority (see deriveSeniority).
+   * Titles that state no level are dropped when this is set: the filter means
+   * "the title says senior", and a silent maybe kept in the list would make
+   * the filter mean nothing.
+   */
+  seniority: DerivedSeniority | null;
   /** Keep only hits whose salary text contains a number ≥ this (thousands tolerated). */
   salaryMinimum: number | null;
   /** Drop hits with no salary text at all. */
@@ -125,6 +177,7 @@ export const EMPTY_FILTERS: UnifiedFilters = Object.freeze({
   excludeKeywords: [],
   excludeCompanies: [],
   workModel: null,
+  seniority: null,
   salaryMinimum: null,
   requireSalary: false,
   postedWithinDays: null,
@@ -173,6 +226,9 @@ export function applyUnifiedFilters<T extends UnifiedHit>(
       return false;
     }
     if (filters.workModel !== null && hit.job.workModel !== filters.workModel) return false;
+    if (filters.seniority !== null && deriveSeniority(hit.job.title) !== filters.seniority) {
+      return false;
+    }
 
     const ceiling = salaryCeiling(hit.job.salaryText);
     if (filters.requireSalary && ceiling === null) return false;

@@ -2,6 +2,19 @@
 
 Last reviewed: 2026-08-29
 
+**Addendum, 2026-08-29 night — Job Search increment 4: marks + seniority
+(ADR-167):** favorites/hide/viewed are persisted per person in
+`job_seeker_result_marks` (forced RLS, own-row policies, service_role
+revoked, no update path) behind `/api/job-seeker/search/marks`, with panel
+controls that render only after the real marks load and separate "hidden by
+you" / "hidden by your filters" counts; the seniority facet is derived from
+the job title alone and labeled that way, shared by route, panel,
+saved-search schema and alert engine. Gates on the tree: unit 316 files /
+4,017 tests, integration 142 files / 1,431 tests (marks migration replayed
+through the full chain; RLS count 147), lint zero warnings, production
+build, `tsc --noEmit` clean. Marks route tests 6; panel tests 29 including
+optimistic-revert-on-failure and controls-stay-unrendered-when-unknown.
+
 **Addendum, 2026-08-29 final — the goal's full acceptance, email included
 (ADR-166):** journey workflow run `33269486606` on main `71060d0` passed all
 three serial tests on a fresh stack: the complete fake-data journey, the

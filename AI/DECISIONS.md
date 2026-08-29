@@ -3042,3 +3042,38 @@ body), run the engine again, and count exactly one message still in the
 sink. The lane's wiring (service key, cron bearer, SMTP URL) is all local
 development material; production email remains Resend-gated and honestly
 **Not Connected** until the owner's key exists.
+
+## ADR-167 - Personal result marks and a title-derived seniority filter
+
+Date: 2026-08-29
+
+Search results live on other people's websites, so the only durable identity
+a personal mark can attach to is the posting's URL — the same URL the result
+card links to. `job_seeker_result_marks` (20260829000400) stores one row per
+(workspace, person, URL, mark) for `favorite`, `hidden` and `viewed`, with
+the mark inside the row's identity: marking is an idempotent
+insert-or-ignore, unmarking is a plain delete, and no UPDATE path exists or
+is granted. Unlike the alert delivery ledger these rows are reversible
+personal state, not evidence, so the person may delete their own; like the
+Budget Tracker and the ledger, service_role is explicitly revoked because
+hosted default privileges would otherwise hand it the table. Access is
+forced-RLS own-row only (`is_organization_member` + `auth.uid()`), and the
+route (`/api/job-seeker/search/marks`) filters on both tenant and person
+above that. The panel renders the star/Hide/Viewed controls only after the
+person's real marks have loaded — a star that would silently forget
+yesterday's favorites is worse than no star — and counts "hidden by you"
+separately from "hidden by your filters" so both numbers stay true.
+
+The seniority filter is derived from the job title and only the job title
+(`deriveSeniority` in `unify.ts`), because none of the connected boards
+exposes seniority as structured data and inventing a level from salary or
+description length is exactly the kind of fabrication this repository
+refuses. Seven levels, most-senior-wins in composed titles ("Senior
+Engineering Manager" is a manager), "lead generation" excluded by name as
+the marketing discipline it is, and titles that state nothing derive null —
+which the filter drops while set, with the UI labeling the facet "from the
+job title" and "Any (unstated kept)". The filter lives in the shared
+`UnifiedFilters` so the route, the panel and the alert engine agree; the
+saved-search schema takes it as `nullish`, so queries stored before it
+existed still parse. Location radius and industry facets remain unoffered
+for the same honesty reason: the upstream boards expose neither.

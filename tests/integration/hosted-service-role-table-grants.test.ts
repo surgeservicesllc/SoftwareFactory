@@ -12,7 +12,7 @@ const migrationsDirectory = resolve(repositoryRoot, "supabase/migrations");
 const grantsMigration =
   "20260812002600_narrow_hosted_service_role_table_grants.sql";
 const latestMigration =
-  "20260829000300_job_seeker_alert_engine.sql";
+  "20260829000400_job_seeker_result_marks.sql";
 
 const publicTables = [
   // Sorted alphabetically to match the catalogue query. Keep it sorted when
@@ -111,6 +111,9 @@ const publicTables = [
   "job_seeker_outreach",
   "job_seeker_preferences",
   "job_seeker_profiles",
+  // Personal favorite/hidden/viewed marks (20260829000400): forced RLS,
+  // own-row policies only, service_role explicitly revoked in the migration.
+  "job_seeker_result_marks",
   "job_seeker_resume_extractions",
   "job_seeker_saved_searches",
   "job_seeker_search_alerts",
