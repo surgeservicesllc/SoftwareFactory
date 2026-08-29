@@ -358,6 +358,22 @@ assignments; one Codex connection is unfinished and Claude OAuth is not
 complete. Provider OAuth and route setup must finish before a fresh command
 and persisted Step 9 correlation can be measured.
 
+## 2026-08-29 (late night): Job Search increment 5 — radius, specialty and industry facets (ADR-168)
+
+The filter vocabulary is complete. Location + radius runs against a real
+offline place index (`board-search/data/cities.json`, from GeoNames
+cities15000, CC BY 4.0): server-side resolution and haversine, native
+names and exonyms both resolving, the most populous claimant of an
+ambiguous name winning visibly, remote and unresolvable-place postings
+kept and counted, an unknown centre reported as "distance not applied"
+with the reason — never a failure or a silent narrowing. The saved
+radius reaches the alert engine through an injected refinement so the
+planner stays pure. Marketing specialty (12 disciplines, from the job
+title) and industry (11 industries, from the posting text) are derived
+facets labeled as derived, with unstated postings kept under "Any".
+Increment 4's marks migration was applied to hosted (run 33273330183)
+and production probes verified the deploy of #448.
+
 ## 2026-08-29 (night): Job Search increment 4 — personal marks + title-derived seniority (ADR-167)
 
 Favorites, hide-job and viewed/unviewed are real: `job_seeker_result_marks`

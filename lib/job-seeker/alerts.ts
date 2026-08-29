@@ -3,6 +3,7 @@ import {
   dedupeAcrossBoards,
   EMPTY_FILTERS,
   type UnifiedFilters,
+  type UnifiedHit,
 } from "@/lib/job-seeker/board-search/unify";
 import { evaluateJob, type Evaluation } from "@/lib/job-seeker/evaluate";
 import type { EvaluationInputs } from "@/lib/job-seeker/record";
@@ -46,6 +47,8 @@ export function toUnifiedFilters(query: SavedSearchQuery): UnifiedFilters {
     excludeCompanies: filters.excludeCompanies ?? [],
     workModel: filters.workModel ?? null,
     seniority: filters.seniority ?? null,
+    specialty: filters.specialty ?? null,
+    industry: filters.industry ?? null,
     salaryMinimum: filters.salaryMinimum ?? null,
     requireSalary: filters.requireSalary ?? false,
     postedWithinDays: filters.postedWithinDays ?? null,
@@ -62,14 +65,21 @@ export function planAlertCandidates(args: Readonly<{
   evaluation: EvaluationInputs | null;
   now?: Date;
   limit?: number;
+  /**
+   * Server-supplied refinement over the filtered unified set — the saved
+   * radius, applied by the caller through the server-only geo module so
+   * this planner stays pure and importable anywhere. Absent means none.
+   */
+  refineUnified?: (hits: UnifiedHit[]) => UnifiedHit[];
 }>): AlertCandidate[] {
   const filters = toUnifiedFilters(args.query);
   const minimumScore = args.query.filters?.minimumScore ?? null;
-  const unified = applyUnifiedFilters(
+  let unified = applyUnifiedFilters(
     dedupeAcrossBoards(args.tagged),
     filters,
     args.now ?? new Date(),
   );
+  if (args.refineUnified !== undefined) unified = args.refineUnified(unified);
 
   const candidates: AlertCandidate[] = [];
   for (const hit of unified) {

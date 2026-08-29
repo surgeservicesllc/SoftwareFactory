@@ -9,9 +9,12 @@ import {
 import { SOURCE_CATALOGUE } from "@/lib/job-seeker/board-search/catalogue";
 import { BOARD_SEARCH_ADAPTERS, boardSearchAdapter } from "@/lib/job-seeker/board-search/registry";
 import { BoardSearchError, type BoardSearchQuery } from "@/lib/job-seeker/board-search/types";
+import { applyRadius, resolvePlace } from "@/lib/job-seeker/board-search/geo";
 import {
   applyUnifiedFilters,
   dedupeAcrossBoards,
+  INDUSTRIES,
+  MARKETING_SPECIALTIES,
   SENIORITY_LEVELS,
   type UnifiedFilters,
 } from "@/lib/job-seeker/board-search/unify";
@@ -64,6 +67,10 @@ const filtersSchema = z
      * no level are dropped while this is set, and the UI says so.
      */
     seniority: z.enum(SENIORITY_LEVELS).nullish(),
+    /** Marketing specialty the job title names (deriveSpecialty). */
+    specialty: z.enum(MARKETING_SPECIALTIES).nullish(),
+    /** Industry the posting's own text evidences (deriveIndustry). */
+    industry: z.enum(INDUSTRIES).nullish(),
     salaryMinimum: z.number().int().min(0).max(10_000_000).nullish(),
     requireSalary: z.boolean().default(false),
     postedWithinDays: z.number().int().min(1).max(365).nullish(),
@@ -80,6 +87,12 @@ const searchSchema = z
   .object({
     text: z.string().trim().max(200).default(""),
     location: z.string().trim().min(1).max(120).nullish(),
+    /**
+     * Keep only unified hits within this many kilometres of `location`,
+     * resolved against the GeoNames place index (see geo.ts). Remote and
+     * unresolvable-place postings are kept and counted, never guessed at.
+     */
+    radiusKm: z.number().int().min(5).max(500).nullish(),
     /** Per board, not in total; the page shows each board's results separately. */
     limit: z.number().int().min(1).max(50).default(25),
     boards: z.array(z.string().trim().min(1).max(64)).min(1).max(16).optional(),
@@ -94,6 +107,10 @@ const searchSchema = z
   .refine((value) => value.text.length > 0 || (value.location ?? "").length > 0, {
     message: "Give a search term or a location.",
     path: ["text"],
+  })
+  .refine((value) => value.radiusKm == null || (value.location ?? "").length > 0, {
+    message: "A distance needs a place to measure from.",
+    path: ["radiusKm"],
   });
 
 export async function GET() {
@@ -226,13 +243,54 @@ export async function POST(request: Request) {
           excludeCompanies: parsed.data.filters.excludeCompanies,
           workModel: parsed.data.filters.workModel ?? null,
           seniority: parsed.data.filters.seniority ?? null,
+          specialty: parsed.data.filters.specialty ?? null,
+          industry: parsed.data.filters.industry ?? null,
           salaryMinimum: parsed.data.filters.salaryMinimum ?? null,
           requireSalary: parsed.data.filters.requireSalary,
           postedWithinDays: parsed.data.filters.postedWithinDays ?? null,
         }
       : null;
     const deduped = dedupeAcrossBoards(taggedForUnify);
-    const filtered = filters === null ? deduped : applyUnifiedFilters(deduped, filters);
+    let filtered = filters === null ? deduped : applyUnifiedFilters(deduped, filters);
+
+    /*
+     * Location + radius, after the result-level filters and before scoring.
+     * A centre the place index does not know never fails or silently
+     * narrows the search: the radius is reported as not applied with the
+     * reason, and the person sees exactly which honesty rule kept which
+     * posting (remote, or unresolvable place text).
+     */
+    type RadiusReport =
+      | {
+          applied: true;
+          radiusKm: number;
+          center: { name: string; country: string };
+          excluded: number;
+          unresolvedKept: number;
+          remoteKept: number;
+        }
+      | { applied: false; reason: string };
+    let radius: RadiusReport | null = null;
+    if (parsed.data.radiusKm != null && query.location !== null) {
+      const center = resolvePlace(query.location);
+      if (center === null) {
+        radius = {
+          applied: false,
+          reason: `"${query.location}" is not in the place index (cities of 15,000+ people), so distance was not applied.`,
+        };
+      } else {
+        const outcome = applyRadius(filtered, center, parsed.data.radiusKm);
+        filtered = outcome.hits;
+        radius = {
+          applied: true,
+          radiusKm: parsed.data.radiusKm,
+          center: { name: center.name, country: center.country },
+          excluded: outcome.excluded,
+          unresolvedKept: outcome.unresolvedKept,
+          remoteKept: outcome.remoteKept,
+        };
+      }
+    }
 
     /*
      * AI matching: every unified card is scored against the recorded Career
@@ -302,6 +360,8 @@ export async function POST(request: Request) {
         hits: unifiedHits,
         dedupedFrom: taggedForUnify.length,
         beforeFilters: deduped.length,
+        /** Present when a radius was requested; says what it actually did. */
+        radius,
         /** How scores were produced, or that none could be. */
         matchBasis: evaluation.profileRecorded
           ? { computed: true as const, method: EVALUATION_METHOD_LABEL }

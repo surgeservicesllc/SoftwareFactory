@@ -8,7 +8,9 @@ import {
   dedupeAcrossBoards,
   EMPTY_FILTERS,
   salaryCeiling,
+  type DerivedIndustry,
   type DerivedSeniority,
+  type DerivedSpecialty,
   type UnifiedFilters,
   type UnifiedHit,
 } from "@/lib/job-seeker/board-search/unify";
@@ -115,6 +117,7 @@ type MatchBasis =
 type SavedSearchQuery = {
   text?: string;
   location?: string | null;
+  radiusKm?: number | null;
   boards?: string[];
   sort?: SortOrder;
   filters?: {
@@ -124,6 +127,8 @@ type SavedSearchQuery = {
     excludeCompanies?: string[];
     workModel?: "remote" | "hybrid" | "onsite" | null;
     seniority?: DerivedSeniority | null;
+    specialty?: DerivedSpecialty | null;
+    industry?: DerivedIndustry | null;
     salaryMinimum?: number | null;
     requireSalary?: boolean;
     postedWithinDays?: number | null;
@@ -131,9 +136,53 @@ type SavedSearchQuery = {
   };
 };
 
+/** The server's account of what the requested radius actually did. */
+type RadiusView =
+  | {
+      applied: true;
+      radiusKm: number;
+      center: { name: string; country: string };
+      excluded: number;
+      unresolvedKept: number;
+      remoteKept: number;
+    }
+  | { applied: false; reason: string };
+
 /** A person's own marks on result URLs, loaded once and kept in step locally. */
 type Mark = "favorite" | "hidden" | "viewed";
 type MarkSets = Record<Mark, ReadonlySet<string>>;
+
+const RADIUS_OPTIONS = ["10", "25", "50", "100", "250"] as const;
+type RadiusChoice = "" | (typeof RADIUS_OPTIONS)[number];
+
+const SPECIALTY_OPTIONS: readonly { value: DerivedSpecialty; label: string }[] = [
+  { value: "seo", label: "SEO" },
+  { value: "content", label: "Content / copy" },
+  { value: "paid_media", label: "Paid media / PPC" },
+  { value: "social", label: "Social media" },
+  { value: "email", label: "Email / lifecycle" },
+  { value: "brand", label: "Brand" },
+  { value: "product_marketing", label: "Product marketing" },
+  { value: "growth", label: "Growth / demand gen" },
+  { value: "pr_comms", label: "PR / communications" },
+  { value: "events", label: "Events / field" },
+  { value: "analytics_ops", label: "Analytics / marketing ops" },
+  { value: "influencer_affiliate", label: "Influencer / affiliate" },
+];
+
+const INDUSTRY_OPTIONS: readonly { value: DerivedIndustry; label: string }[] = [
+  { value: "technology", label: "Technology / SaaS" },
+  { value: "healthcare", label: "Healthcare / life sciences" },
+  { value: "finance", label: "Finance / fintech" },
+  { value: "retail_ecommerce", label: "Retail / e-commerce" },
+  { value: "media_entertainment", label: "Media / entertainment" },
+  { value: "education", label: "Education" },
+  { value: "travel_hospitality", label: "Travel / hospitality" },
+  { value: "manufacturing_industrial", label: "Manufacturing / industrial" },
+  { value: "energy", label: "Energy" },
+  { value: "government_nonprofit", label: "Government / nonprofit" },
+  { value: "agency_consulting", label: "Agency / consulting" },
+];
 
 const SENIORITY_OPTIONS: readonly { value: DerivedSeniority; label: string }[] = [
   { value: "intern", label: "Intern" },
@@ -202,6 +251,9 @@ export function JobSearchPanel() {
 
   const [text, setText] = useState("");
   const [location, setLocation] = useState("");
+  /** Kilometres around the place; applied server-side against the place index. */
+  const [radiusKm, setRadiusKm] = useState<RadiusChoice>("");
+  const [radiusReport, setRadiusReport] = useState<RadiusView | null>(null);
   /** null means "every board" until the person deselects one. */
   const [deselected, setDeselected] = useState<ReadonlySet<string>>(new Set());
   const [running, setRunning] = useState(false);
@@ -233,6 +285,8 @@ export function JobSearchPanel() {
   const [excludeCompanies, setExcludeCompanies] = useState<readonly string[]>([]);
   const [workModel, setWorkModel] = useState<"" | "remote" | "hybrid" | "onsite">("");
   const [seniority, setSeniority] = useState<"" | DerivedSeniority>("");
+  const [specialty, setSpecialty] = useState<"" | DerivedSpecialty>("");
+  const [industry, setIndustry] = useState<"" | DerivedIndustry>("");
   const [salaryMinimumInput, setSalaryMinimumInput] = useState("");
   const [requireSalary, setRequireSalary] = useState(false);
   const [postedWithinDays, setPostedWithinDays] = useState<"" | "1" | "3" | "7" | "14" | "30">("");
@@ -323,6 +377,7 @@ export function JobSearchPanel() {
     rawTerm: string,
     rawPlace: string,
     boardKeys: readonly string[] | null,
+    radius: number | null = null,
   ) => {
     const term = rawTerm.trim();
     const place = rawPlace.trim();
@@ -346,6 +401,7 @@ export function JobSearchPanel() {
     setFailures([]);
     setServerUnified(null);
     setMatchBasis(null);
+    setRadiusReport(null);
     setSaves({});
     setSaveErrors({});
     setShownCount(UNIFIED_PAGE_SIZE);
@@ -357,6 +413,7 @@ export function JobSearchPanel() {
         body: JSON.stringify({
           text: term,
           location: place.length === 0 ? null : place,
+          ...(radius !== null && place.length > 0 ? { radiusKm: radius } : {}),
           limit: 25,
           ...(boardKeys !== null && boards !== null && boardKeys.length < boards.length
             ? { boards: [...boardKeys] }
@@ -366,7 +423,7 @@ export function JobSearchPanel() {
       const payload = (await response.json()) as {
         results?: BoardResult[];
         failures?: BoardFailure[];
-        unified?: { hits?: UnifiedCard[]; matchBasis?: MatchBasis };
+        unified?: { hits?: UnifiedCard[]; matchBasis?: MatchBasis; radius?: RadiusView | null };
         error?: { message?: string };
       };
       // A superseded search must not paint over the current one.
@@ -382,6 +439,7 @@ export function JobSearchPanel() {
       setFailures(payload.failures ?? []);
       setServerUnified(payload.unified?.hits ?? null);
       setMatchBasis(payload.unified?.matchBasis ?? null);
+      setRadiusReport(payload.unified?.radius ?? null);
     } catch {
       if (requestRef.current === ticket) {
         setSearchError("The search could not be run.");
@@ -394,8 +452,13 @@ export function JobSearchPanel() {
   }, [boards]);
 
   const runSearch = useCallback(
-    () => executeSearch(text, location, boards === null ? null : selectedBoards.map((b) => b.key)),
-    [executeSearch, text, location, boards, selectedBoards],
+    () => executeSearch(
+      text,
+      location,
+      boards === null ? null : selectedBoards.map((b) => b.key),
+      radiusKm === "" ? null : Number(radiusKm),
+    ),
+    [executeSearch, text, location, boards, selectedBoards, radiusKm],
   );
 
   const saveHit = useCallback(async (board: string, job: Hit["job"], saveToken: string, key: string) => {
@@ -491,6 +554,8 @@ export function JobSearchPanel() {
       excludeCompanies,
       workModel: workModel === "" ? null : workModel,
       seniority: seniority === "" ? null : seniority,
+      specialty: specialty === "" ? null : specialty,
+      industry: industry === "" ? null : industry,
       salaryMinimum:
         salaryMinimumInput.trim() === "" || Number.isNaN(Number(salaryMinimumInput))
           ? null
@@ -498,7 +563,7 @@ export function JobSearchPanel() {
       requireSalary,
       postedWithinDays: postedWithinDays === "" ? null : Number(postedWithinDays),
     }),
-    [keywordMode, keywords, excludeKeywords, excludeCompanies, workModel, seniority, salaryMinimumInput, requireSalary, postedWithinDays],
+    [keywordMode, keywords, excludeKeywords, excludeCompanies, workModel, seniority, specialty, industry, salaryMinimumInput, requireSalary, postedWithinDays],
   );
 
   const filtersActive =
@@ -507,6 +572,8 @@ export function JobSearchPanel() {
     excludeCompanies.length > 0 ||
     workModel !== "" ||
     seniority !== "" ||
+    specialty !== "" ||
+    industry !== "" ||
     filters.salaryMinimum !== null ||
     requireSalary ||
     postedWithinDays !== "" ||
@@ -521,6 +588,8 @@ export function JobSearchPanel() {
     setExcludeCompanyInput("");
     setWorkModel("");
     setSeniority("");
+    setSpecialty("");
+    setIndustry("");
     setSalaryMinimumInput("");
     setRequireSalary(false);
     setPostedWithinDays("");
@@ -611,6 +680,7 @@ export function JobSearchPanel() {
   const currentQuery = useCallback((): SavedSearchQuery => ({
     text: text.trim(),
     location: location.trim() === "" ? null : location.trim(),
+    radiusKm: radiusKm === "" || location.trim() === "" ? null : Number(radiusKm),
     ...(boards !== null && selectedBoards.length < boards.length
       ? { boards: selectedBoards.map((board) => board.key) }
       : {}),
@@ -622,12 +692,14 @@ export function JobSearchPanel() {
       excludeCompanies: [...excludeCompanies],
       workModel: workModel === "" ? null : workModel,
       seniority: seniority === "" ? null : seniority,
+      specialty: specialty === "" ? null : specialty,
+      industry: industry === "" ? null : industry,
       salaryMinimum: filters.salaryMinimum,
       requireSalary,
       postedWithinDays: postedWithinDays === "" ? null : Number(postedWithinDays),
       minimumScore,
     },
-  }), [text, location, boards, selectedBoards, sort, keywordMode, keywords, excludeKeywords, excludeCompanies, workModel, seniority, filters.salaryMinimum, requireSalary, postedWithinDays, minimumScore]);
+  }), [text, location, radiusKm, boards, selectedBoards, sort, keywordMode, keywords, excludeKeywords, excludeCompanies, workModel, seniority, specialty, industry, filters.salaryMinimum, requireSalary, postedWithinDays, minimumScore]);
 
   const savedSearchRequest = useCallback(async (
     method: "POST" | "PATCH" | "DELETE",
@@ -671,6 +743,13 @@ export function JobSearchPanel() {
     setExcludeCompanies(savedFilters.excludeCompanies ?? []);
     setWorkModel(savedFilters.workModel ?? "");
     setSeniority(savedFilters.seniority ?? "");
+    setSpecialty(savedFilters.specialty ?? "");
+    setIndustry(savedFilters.industry ?? "");
+    const savedRadius = query.radiusKm != null &&
+      (RADIUS_OPTIONS as readonly string[]).includes(String(query.radiusKm))
+      ? (String(query.radiusKm) as RadiusChoice)
+      : "";
+    setRadiusKm(savedRadius);
     setSalaryMinimumInput(savedFilters.salaryMinimum == null ? "" : String(savedFilters.salaryMinimum));
     setRequireSalary(savedFilters.requireSalary ?? false);
     setPostedWithinDays(
@@ -698,6 +777,7 @@ export function JobSearchPanel() {
         query.text ?? "",
         query.location ?? "",
         boards === null ? null : query.boards ?? boards.map((board) => board.key),
+        query.radiusKm ?? null,
       );
     } finally {
       setSavedBusy(null);
@@ -827,7 +907,7 @@ export function JobSearchPanel() {
         />
 
         <form
-          className="mt-4 grid gap-3 sm:grid-cols-[2fr_1fr_auto]"
+          className="mt-4 grid gap-3 sm:grid-cols-[2fr_1fr_auto_auto]"
           onSubmit={(event) => { event.preventDefault(); void runSearch(); }}
         >
           <label className="block">
@@ -851,6 +931,23 @@ export function JobSearchPanel() {
               maxLength={120}
               className="w-full rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm"
             />
+          </label>
+          <label className="block">
+            <span className="sr-only">Within distance</span>
+            <select
+              value={radiusKm}
+              onChange={(event) => setRadiusKm(event.target.value as RadiusChoice)}
+              disabled={location.trim() === ""}
+              title={location.trim() === ""
+                ? "Give a place first; a distance needs somewhere to measure from."
+                : "Distance around the place, measured against a real city index. Remote postings and places the index does not know are kept and said so."}
+              className="w-full rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-2 text-sm disabled:opacity-60"
+            >
+              <option value="">Any distance</option>
+              {RADIUS_OPTIONS.map((km) => (
+                <option key={km} value={km}>Within {km} km</option>
+              ))}
+            </select>
           </label>
           <button
             type="submit"
@@ -975,6 +1072,34 @@ export function JobSearchPanel() {
               </select>
             </label>
             <label className="block text-xs">
+              <span className="text-[var(--muted)]">Marketing specialty (from the job title)</span>
+              <select
+                value={specialty}
+                onChange={(event) => setSpecialty(event.target.value as typeof specialty)}
+                title="Read from what the title names — SEO, paid media, content. Titles naming no specialty are hidden while this is set."
+                className="mt-1 w-full rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5 text-sm"
+              >
+                <option value="">Any (unstated kept)</option>
+                {SPECIALTY_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </label>
+            <label className="block text-xs">
+              <span className="text-[var(--muted)]">Industry (from the posting text)</span>
+              <select
+                value={industry}
+                onChange={(event) => setIndustry(event.target.value as typeof industry)}
+                title="Read from what the posting itself says about the employer. Postings evidencing no industry are hidden while this is set."
+                className="mt-1 w-full rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5 text-sm"
+              >
+                <option value="">Any (unstated kept)</option>
+                {INDUSTRY_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </label>
+            <label className="block text-xs">
               <span className="text-[var(--muted)]">Salary at least</span>
               <input
                 type="number"
@@ -1052,6 +1177,18 @@ export function JobSearchPanel() {
               {workModel !== "" ? <Chip label={workModel} onRemove={() => setWorkModel("")} /> : null}
               {seniority !== "" ? (
                 <Chip label={`title: ${seniority}`} onRemove={() => setSeniority("")} />
+              ) : null}
+              {specialty !== "" ? (
+                <Chip
+                  label={`specialty: ${SPECIALTY_OPTIONS.find((o) => o.value === specialty)?.label ?? specialty}`}
+                  onRemove={() => setSpecialty("")}
+                />
+              ) : null}
+              {industry !== "" ? (
+                <Chip
+                  label={`industry: ${INDUSTRY_OPTIONS.find((o) => o.value === industry)?.label ?? industry}`}
+                  onRemove={() => setIndustry("")}
+                />
               ) : null}
               {filters.salaryMinimum !== null ? (
                 <Chip label={`salary ≥ ${filters.salaryMinimum}`} onRemove={() => setSalaryMinimumInput("")} />
@@ -1382,6 +1519,18 @@ export function JobSearchPanel() {
                 />
                 {marksError !== null ? (
                   <div className="mt-2"><Notice tone="warning">{marksError}</Notice></div>
+                ) : null}
+                {radiusReport !== null ? (
+                  <p className="mt-2 text-xs text-[var(--muted)]" data-testid="radius-report">
+                    {radiusReport.applied
+                      ? `Within ${radiusReport.radiusKm} km of ${radiusReport.center.name} (${radiusReport.center.country}): ` +
+                        `${radiusReport.excluded} excluded by distance` +
+                        (radiusReport.remoteKept > 0 ? `; ${radiusReport.remoteKept} remote kept` : "") +
+                        (radiusReport.unresolvedKept > 0
+                          ? `; ${radiusReport.unresolvedKept} kept whose stated place is not in the city index`
+                          : "") + "."
+                      : `Distance not applied: ${radiusReport.reason}`}
+                  </p>
                 ) : null}
                 {matchBasis !== null ? (
                   <p className="mt-2 text-xs text-[var(--muted)]">

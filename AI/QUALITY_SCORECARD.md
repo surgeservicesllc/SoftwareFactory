@@ -2,6 +2,19 @@
 
 Last reviewed: 2026-08-29
 
+**Addendum, 2026-08-29 late night — Job Search increment 5: the filter
+vocabulary complete (ADR-168):** location + radius over a real offline
+GeoNames-derived city index (server-side, honest not-applied reporting,
+remote/unresolvable kept and counted, saved radius honored by the alert
+engine), plus title-derived marketing specialty and posting-text-derived
+industry facets labeled as derived. Gates on the tree: unit 317 files /
+4,037 tests before the increment's last additions (geo 6, unify 26 total,
+route radius 3, panel 32, alerts pass-through), eslint zero warnings,
+production build with the index in the server bundle only, `tsc --noEmit`
+clean. Increment 4's marks migration applied to hosted (run 33273330183,
+postflight green); production probes on #448's deploy verified (marks
+401 anonymous, /JobSearch 200, alerts 503 fail-closed).
+
 **Addendum, 2026-08-29 night — Job Search increment 4: marks + seniority
 (ADR-167):** favorites/hide/viewed are persisted per person in
 `job_seeker_result_marks` (forced RLS, own-row policies, service_role
