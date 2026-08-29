@@ -132,7 +132,10 @@ export function BudgetOverviewPanel({
       </Card>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <Card>
+        {/* min-w-0: a grid item's automatic minimum is its min-content, so a
+            long unbreakable account name would size the track past a phone
+            viewport before truncation ever gets a say. */}
+        <Card className="min-w-0">
           <SectionTitle
             title="Due next"
             description="The next occurrence of each recurring obligation, within 45 days."
@@ -166,7 +169,7 @@ export function BudgetOverviewPanel({
           )}
         </Card>
 
-        <Card>
+        <Card className="min-w-0">
           <SectionTitle
             title="Credit used"
             description="Balance against limit, per card."
@@ -178,7 +181,10 @@ export function BudgetOverviewPanel({
               {cards.map((card) => (
                 <li key={card.id}>
                   <div className="flex items-baseline justify-between gap-3">
-                    <span className="truncate text-sm font-medium text-foreground">
+                    {/* min-w-0 lets the flex item shrink so truncate can act;
+                        without it a long card name sets the grid's min-content
+                        and pushes the whole overview past a phone viewport. */}
+                    <span className="min-w-0 truncate text-sm font-medium text-foreground">
                       {card.name}
                       {card.last4 ? (
                         <span className="ml-1.5 text-xs text-faint">••{card.last4}</span>

@@ -78,15 +78,18 @@ export function BudgetTransactionsPanel({ accounts }: { accounts: readonly Accou
           setApplied(search.trim());
         }}
       >
-        <label className="text-sm">
+        <label className="min-w-0 max-w-full text-sm">
           <span className="mb-1.5 block font-medium text-foreground">Account</span>
+          {/* max-w-full: a select's intrinsic width is its longest option, so
+              one long account name would push the filter row past a phone
+              viewport; the browser ellipsizes the value instead. */}
           <select
             value={accountId}
             onChange={(event) => {
               setOffset(0);
               setAccountId(event.target.value);
             }}
-            className="rounded-md border border-line-strong bg-surface-raised px-3 py-2 text-foreground"
+            className="w-full max-w-full rounded-md border border-line-strong bg-surface-raised px-3 py-2 text-foreground"
           >
             <option value="">All accounts</option>
             {accounts.map((account) => (
