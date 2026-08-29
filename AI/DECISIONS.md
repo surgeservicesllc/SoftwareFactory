@@ -3077,3 +3077,38 @@ job title" and "Any (unstated kept)". The filter lives in the shared
 saved-search schema takes it as `nullish`, so queries stored before it
 existed still parse. Location radius and industry facets remain unoffered
 for the same honesty reason: the upstream boards expose neither.
+
+## ADR-168 - Radius from a real place index; specialty and industry derived from the posting
+
+Date: 2026-08-29
+
+The three remaining filter gaps closed without a fake. Location + radius
+uses an offline gazetteer: `board-search/data/cities.json`, derived from
+GeoNames' cities15000 dataset (every city of 15,000+ people; CC BY 4.0,
+geonames.org) — folded key, English name, country, coordinates,
+population; larger cities also carry their latin alternate names, so
+"København", "München" and "NYC" resolve. The fold in `geo.ts` mirrors
+the dataset build's exactly. Resolution is deterministic: one folded key,
+the most populous claimant wins, and the resolved city + country are
+always displayed so the choice is visible. The module is server-only —
+the index belongs in the server bundle, never the browser — so the panel
+sends `radiusKm` with the search request and renders the server's
+account: a centre the index does not know reports "distance not applied"
+with the reason (never a failure, never a silent narrowing); a remote
+posting is kept because it has no distance; a posting whose place text
+cannot be resolved is kept and counted, because "we could not locate it"
+is not "it is far away". The alert engine honors a saved radius through
+a caller-injected refinement hook so the planner stays pure.
+
+Marketing specialty derives from the job title alone (`deriveSpecialty`,
+twelve disciplines — SEO, paid media, content, social, email, brand,
+product marketing, growth/demand gen, PR/comms, events, analytics/ops,
+influencer/affiliate): titles announce disciplines; a description's
+"familiarity with SEO" is a skill wish, not the role. Industry derives
+from the posting's own text (`deriveIndustry`, eleven industries,
+keyword families counted, most evidence wins, declaration order breaks
+ties), because boards expose no industry field and a company directory
+does not exist here. Both label themselves as derived in the UI, keep
+unstated postings under "Any", and reach the saved-search schema as
+`nullish` so stored queries parse. Nothing anywhere invents a fact about
+a job.

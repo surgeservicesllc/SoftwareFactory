@@ -69,6 +69,22 @@ const evaluation: EvaluationInputs = {
 };
 
 describe("planAlertCandidates", () => {
+  it("applies a caller-supplied refinement (the saved radius) after the filters", () => {
+    const near = "https://remotive.com/remote-jobs/near";
+    const far = "https://remotive.com/remote-jobs/far";
+    const candidates = planAlertCandidates({
+      query: { text: "marketing" },
+      tagged: [tagged(near), tagged(far)],
+      boardNames,
+      deliveredUrls: new Set(),
+      evaluation,
+      // Stands in for geo.applyRadius, which the server route injects; the
+      // planner itself must stay pure and importable anywhere.
+      refineUnified: (hits) => hits.filter((hit) => hit.job.url !== far),
+    });
+    expect(candidates.map((candidate) => candidate.jobUrl)).toEqual([near]);
+  });
+
   it("never re-offers a job already delivered for this search", () => {
     const url = "https://remotive.com/remote-jobs/1";
     const candidates = planAlertCandidates({
@@ -236,5 +252,18 @@ describe("toDeliveryRows and toUnifiedFilters", () => {
   it("carries a stored seniority filter into the alert scan unchanged", () => {
     const filters = toUnifiedFilters({ text: "x", filters: { seniority: "manager" } });
     expect(filters.seniority).toBe("manager");
+  });
+
+  it("carries stored specialty and industry filters into the alert scan unchanged", () => {
+    const filters = toUnifiedFilters({
+      text: "x",
+      filters: { specialty: "seo", industry: "healthcare" },
+    });
+    expect(filters.specialty).toBe("seo");
+    expect(filters.industry).toBe("healthcare");
+    // And their absence parses to "any", so older stored queries still run.
+    const bare = toUnifiedFilters({ text: "x" });
+    expect(bare.specialty).toBeNull();
+    expect(bare.industry).toBeNull();
   });
 });

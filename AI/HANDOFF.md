@@ -2,7 +2,29 @@
 
 Last updated: 2026-08-29
 
-## Newest (2026-08-29 night): Job Search increment 4 — personal marks (favorite/hide/viewed) + title-derived seniority facet (ADR-167)
+## Newest (2026-08-29 late night): Job Search increment 5 — radius, specialty, industry (ADR-168)
+
+Location + radius: `lib/job-seeker/board-search/geo.ts` (server-only)
+over `data/cities.json`, generated from GeoNames cities15000 (CC BY 4.0
+— keep the attribution). The fold in `foldPlaceName` MUST stay identical
+to the dataset build's fold or lookups miss; the build script logic is
+recorded in ADR-168 and the file regenerates from
+`download.geonames.org/export/dump/cities15000.zip`. Radius is a
+request-level, server-applied refinement (`radiusKm` beside `location`),
+NOT part of the client-side instant filters — the index never ships to
+the browser. The response's `unified.radius` block is the honesty
+surface: applied (with excluded/unresolvedKept/remoteKept counts) or
+not-applied with the reason. Alert engine: `planAlertCandidates` takes
+an optional `refineUnified` hook; the run route injects
+`applyRadius`-based refinement when the stored query carries radiusKm.
+Specialty (`deriveSpecialty`, title-only) and industry
+(`deriveIndustry`, title+company+description, keyword families, most
+evidence wins) live in `unify.ts` beside seniority, flow through the
+same schema/filters/chips plumbing, and drop unstated postings only
+while set. Trap: the increment 4 marks migration is hosted-applied
+(33273330183); nothing in increment 5 touches the database.
+
+## Older (2026-08-29 night): Job Search increment 4 — personal marks (favorite/hide/viewed) + title-derived seniority facet (ADR-167)
 
 `job_seeker_result_marks` (20260829000400) keys a person's favorite /
 hidden / viewed marks on the posting URL under forced RLS — own-row

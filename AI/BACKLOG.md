@@ -57,7 +57,17 @@ Last triaged: 2026-08-29
   seven levels, most-senior-wins, labeled "from the job title") wired
   through route, panel, saved-search schema and the alert engine.
   Hosted apply scope `job-seeker-result-marks` added to the workflow
-  (step + options entry) — dispatch after merge.
+  (step + options entry) — applied to hosted (run 33273330183, postflight
+  green) after #448 merged.
+- [x] Increment 5 (ADR-168): the last three filter gaps closed without a
+  fake — location + radius over an offline GeoNames-derived city index
+  (`geo.ts` + `data/cities.json`, CC BY 4.0 attribution; server-side
+  haversine; remote/unresolvable kept and counted; unknown centre =
+  "distance not applied" with the reason; saved radius honored by the
+  alert engine via an injected refinement); title-derived marketing
+  specialty (12 disciplines) and posting-text-derived industry (11
+  industries), both labeled as derived, wired through route, panel,
+  saved-search schema and alerts.
 - [ ] Production email delivery: owner-gated on RESEND_API_KEY,
   JOB_ALERT_EMAIL_FROM, CRON_SECRET in Vercel — the alert path's honest
   production state is **Not Connected** (503 fail-closed probe). Verify

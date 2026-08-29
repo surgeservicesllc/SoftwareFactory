@@ -8,6 +8,7 @@ import {
   planAlertCandidates,
   toDeliveryRows,
 } from "@/lib/job-seeker/alerts";
+import { applyRadius, resolvePlace } from "@/lib/job-seeker/board-search/geo";
 import { BOARD_SEARCH_ADAPTERS, boardSearchAdapter } from "@/lib/job-seeker/board-search/registry";
 import { toEvaluationInputs } from "@/lib/job-seeker/record";
 import { savedSearchQuerySchema } from "@/lib/job-seeker/saved-search-query";
@@ -139,6 +140,15 @@ async function runAlerts(request: Request) {
             }))
           : []);
 
+      /*
+       * The saved radius, honored the same way the search page honors it:
+       * an unresolvable centre means the radius is skipped, never that the
+       * scan silently narrows or fails. Remote and unresolvable-place
+       * postings pass through applyRadius untouched.
+       */
+      const center = query.radiusKm != null && (query.location ?? "") !== ""
+        ? resolvePlace(query.location!)
+        : null;
       const candidates = planAlertCandidates({
         query,
         tagged,
@@ -147,6 +157,9 @@ async function runAlerts(request: Request) {
         evaluation: alert.profile_recorded
           ? toEvaluationInputs(alert.profile ?? {}, alert.preferences ?? {})
           : null,
+        refineUnified: center === null
+          ? undefined
+          : (hits) => applyRadius(hits, center, query.radiusKm!).hits,
       });
 
       let deliveries: ReturnType<typeof toDeliveryRows> = [];

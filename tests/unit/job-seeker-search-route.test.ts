@@ -415,6 +415,64 @@ describe("the unified view", () => {
     expect(payload.unified.hits.length).toBeLessThan(13);
   });
 
+  type RadiusPayload = UnifiedPayload & {
+    unified: {
+      radius:
+        | { applied: true; radiusKm: number; center: { name: string; country: string }; excluded: number; unresolvedKept: number; remoteKept: number }
+        | { applied: false; reason: string }
+        | null;
+    };
+  };
+
+  it("applies a radius honestly: near kept, provably far dropped, unknown kept and counted", async () => {
+    const placed = (title: string, location: string) => ({
+      ...hit(title),
+      job: { ...hit(title).job, externalId: `id-${title}`, location },
+    });
+    harness.searchRemotive.mockResolvedValue({ board: "remotive", hits: [placed("Nearby Role", "Malmö")], totalAvailable: 1 });
+    harness.searchRemoteok.mockResolvedValue({ board: "remoteok", hits: [placed("Far Role", "Berlin")], totalAvailable: 1 });
+    harness.searchJobicy.mockResolvedValue({ board: "jobicy", hits: [placed("Somewhere Role", "Multiple offices")], totalAvailable: 1 });
+
+    const response = await POST(searchRequest({
+      text: "role",
+      location: "Copenhagen",
+      radiusKm: 50,
+      boards: ["remotive", "remoteok", "jobicy"],
+    }));
+    const payload = (await response.json()) as RadiusPayload;
+
+    expect(payload.unified.hits.map((h) => h.job.title).sort()).toEqual(["Nearby Role", "Somewhere Role"]);
+    expect(payload.unified.radius).toEqual({
+      applied: true,
+      radiusKm: 50,
+      center: { name: "Copenhagen", country: "DK" },
+      excluded: 1,
+      unresolvedKept: 1,
+      remoteKept: 0,
+    });
+  });
+
+  it("reports an unknown centre as not applied rather than failing or silently narrowing", async () => {
+    const response = await POST(searchRequest({
+      text: "role",
+      location: "Anywhere in the EU",
+      radiusKm: 50,
+      boards: ["remotive"],
+    }));
+    const payload = (await response.json()) as RadiusPayload;
+
+    expect(payload.unified.hits).toHaveLength(1);
+    expect(payload.unified.radius).toMatchObject({ applied: false });
+    expect((payload.unified.radius as { reason: string }).reason).toContain("Anywhere in the EU");
+  });
+
+  it("refuses a radius with no place to measure from", async () => {
+    const response = await POST(searchRequest({ text: "role", radiusKm: 50 }));
+    expect(response.status).toBe(400);
+    const payload = (await response.json()) as { error: { message: string } };
+    expect(payload.error.message).toBe("A distance needs a place to measure from.");
+  });
+
   it("drops unknown-salary hits only when the filter demands a stated salary", async () => {
     const lax = (await (
       await POST(searchRequest({ text: "engineer", filters: { salaryMinimum: 50_000 } }))

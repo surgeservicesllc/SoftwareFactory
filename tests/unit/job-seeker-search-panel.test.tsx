@@ -708,6 +708,113 @@ describe("the search panel", () => {
     expect(body.query.filters?.seniority).toBe("senior");
   });
 
+  it("filters by title-named specialty and posting-text industry, chipped and honest", async () => {
+    const seoHit = { ...hit("SEO Manager"), job: { ...hit("SEO Manager").job, description: "Own organic search." } };
+    const genericHit = {
+      ...hit("Marketing Manager"),
+      job: { ...hit("Marketing Manager").job, description: "Join our fast-growing SaaS platform." },
+    };
+    respond({
+      results: [{ board: "jobnet", boardName: "Jobnet", totalAvailable: 2, hits: [seoHit, genericHit], locationApplied: true }],
+      failures: [],
+    });
+    const user = userEvent.setup();
+    render(<JobSearchPanel />);
+    await screen.findByText(/Searching 2 boards:/);
+
+    await search(user);
+    expect(await screen.findByText("2 unique postings")).toBeInTheDocument();
+
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: /Marketing specialty \(from the job title\)/ }),
+      "seo",
+    );
+    expect(screen.getByText("1 unique posting")).toBeInTheDocument();
+    expect(screen.getByText("specialty: SEO")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Remove filter specialty: SEO" }));
+
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: /Industry \(from the posting text\)/ }),
+      "technology",
+    );
+    // Only the posting whose own text evidences SaaS/technology stays.
+    expect(screen.getByText("1 unique posting")).toBeInTheDocument();
+    expect(screen.getByText("Marketing Manager")).toBeInTheDocument();
+    expect(screen.getByText("industry: Technology / SaaS")).toBeInTheDocument();
+  });
+
+  it("sends the radius only alongside a place, and renders the server's honest account", async () => {
+    fetchMock.mockImplementation((_url: string, init?: RequestInit) => {
+      if (init?.method === "POST") {
+        return Promise.resolve(json({
+          results: [{ board: "jobnet", boardName: "Jobnet", totalAvailable: 1, hits: [hit("Close Role")], locationApplied: true }],
+          failures: [],
+          unified: {
+            radius: {
+              applied: true,
+              radiusKm: 50,
+              center: { name: "Copenhagen", country: "DK" },
+              excluded: 3,
+              unresolvedKept: 2,
+              remoteKept: 1,
+            },
+          },
+        }));
+      }
+      return Promise.resolve(json(BOARDS));
+    });
+    const user = userEvent.setup();
+    render(<JobSearchPanel />);
+    await screen.findByText(/Searching 2 boards:/);
+
+    // No place, no distance: the select waits rather than pretending.
+    const radiusSelect = screen.getByRole("combobox", { name: "Within distance" });
+    expect(radiusSelect).toBeDisabled();
+
+    await user.type(screen.getByPlaceholderText("Place or postcode"), "Copenhagen");
+    expect(radiusSelect).toBeEnabled();
+    await user.selectOptions(radiusSelect, "50");
+    await search(user);
+
+    const searchCall = fetchMock.mock.calls.find(
+      ([, init]) => (init as RequestInit | undefined)?.method === "POST",
+    );
+    const body = JSON.parse((searchCall?.[1] as RequestInit).body as string) as { radiusKm?: number };
+    expect(body.radiusKm).toBe(50);
+
+    const report = await screen.findByTestId("radius-report");
+    expect(report.textContent).toContain("Within 50 km of Copenhagen (DK)");
+    expect(report.textContent).toContain("3 excluded by distance");
+    expect(report.textContent).toContain("1 remote kept");
+    expect(report.textContent).toContain("2 kept whose stated place is not in the city index");
+  });
+
+  it("shows why a distance was not applied instead of quietly ignoring it", async () => {
+    fetchMock.mockImplementation((_url: string, init?: RequestInit) => {
+      if (init?.method === "POST") {
+        return Promise.resolve(json({
+          results: [{ board: "jobnet", boardName: "Jobnet", totalAvailable: 1, hits: [hit("Some Role")], locationApplied: true }],
+          failures: [],
+          unified: {
+            radius: { applied: false, reason: '"Anywhere" is not in the place index (cities of 15,000+ people), so distance was not applied.' },
+          },
+        }));
+      }
+      return Promise.resolve(json(BOARDS));
+    });
+    const user = userEvent.setup();
+    render(<JobSearchPanel />);
+    await screen.findByText(/Searching 2 boards:/);
+
+    await user.type(screen.getByPlaceholderText("Place or postcode"), "Anywhere");
+    await user.selectOptions(screen.getByRole("combobox", { name: "Within distance" }), "25");
+    await search(user);
+
+    const report = await screen.findByTestId("radius-report");
+    expect(report.textContent).toContain("Distance not applied:");
+    expect(report.textContent).toContain("not in the place index");
+  });
+
   /** Board list + marks on mount, search results on POST, marks writes OK. */
   function respondWithMarks(
     searchBody: unknown,
