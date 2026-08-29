@@ -125,8 +125,13 @@ describe("every route is swept at every supported width", () => {
      * on runs 96276312872/96276312910. Its signed-in layout is the same
      * JobSearchPanel the harness already measures at all eight widths, and
      * responsive.spec.ts proves the redirect.
+     *
+     * `/BudgetTracker` is the same shape and is here for the same reason: one
+     * gated route rather than a subtree, its redirect asserted in
+     * responsive.spec.ts and its populated layout measured through the
+     * "budget-tracker" harness case at all eight widths.
      */
-    const GATED_SUBTREES = ["/job-seeker", "/decision", "/Job-Search"];
+    const GATED_SUBTREES = ["/job-seeker", "/decision", "/Job-Search", "/BudgetTracker"];
 
     const missing = routes.filter((route) => {
       if (REDIRECT_ONLY.has(route)) return false;

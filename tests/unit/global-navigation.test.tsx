@@ -71,7 +71,12 @@ describe("globalNavigation", () => {
 
   it("names the factory the way the product names itself", () => {
     // Owner request, 2026-08-23: the header entry reads "Software Factory".
-    expect(SIGNED_IN_NAV.map((item) => item.label)).toEqual(["Software Factory", "Job Seeker"]);
+    // Budget Tracker joined on 2026-08-29, also by owner request.
+    expect(SIGNED_IN_NAV.map((item) => item.label)).toEqual([
+      "Software Factory",
+      "Job Seeker",
+      "Budget Tracker",
+    ]);
   });
 });
 
@@ -123,10 +128,10 @@ describe("SiteHeader", () => {
   });
 
   it("orders the signed-in navigation the way the owner's design does", () => {
-    // The two products, and nothing else — not the marketing pages that used
-    // to trail this list, and not Admin, which the owner removed on
-    // 2026-08-23. A super administrator is rendered here precisely because
-    // their header must now look the same as everyone else's.
+    // The products, and nothing else — not the marketing pages that used to
+    // trail this list, and not Admin, which the owner removed on 2026-08-23.
+    // A super administrator is rendered here precisely because their header
+    // must look the same as everyone else's.
     render(
       <SiteHeader viewer={{ signedIn: true, email: "boss@example.org", isSuperAdmin: true }} />,
     );
@@ -134,10 +139,11 @@ describe("SiteHeader", () => {
     expect(primaryNav().getAllByRole("link").map((link) => link.textContent)).toEqual([
       "Software Factory",
       "Job Seeker",
+      "Budget Tracker",
     ]);
   });
 
-  it("wires the two products at the exact addresses the owner named", () => {
+  it("wires the products at the exact addresses the owner named", () => {
     /*
      * The hrefs are the instruction, not an implementation detail, so they are
      * asserted literally rather than through the module that supplies them.
@@ -154,6 +160,13 @@ describe("SiteHeader", () => {
       .toHaveAttribute("href", "/solutions");
     expect(primaryNav().getByRole("link", { name: "Job Seeker" }))
       .toHaveAttribute("href", "/job-seeker");
+    /*
+     * The capitalised path is the instruction too. Next.js routes are
+     * case-sensitive, so `/budgettracker` would 404 while looking correct in
+     * a diff — this asserts the spelling the page actually answers to.
+     */
+    expect(primaryNav().getByRole("link", { name: "Budget Tracker" }))
+      .toHaveAttribute("href", "/BudgetTracker");
   });
 
   it("drops the console's inner pages from the header", () => {

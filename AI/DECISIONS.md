@@ -2187,3 +2187,45 @@ Use this append-only log for decisions that constrain future implementation. Cha
   the retried 529, the per-round wait, and the wait not multiplying by
   graph width - plus guards that an exhausted overload stops retrying
   and a clean round waits for nothing.
+
+## ADR-147 - The Budget Tracker holds money as integer cents, and holds nobody else's
+
+- Date: 2026-08-29
+- Status: Accepted
+- Decision: `/BudgetTracker` and the `budget_*` tables store every monetary
+  figure as `bigint` cents, scope every row by both `organization_id` and
+  `user_id` under RLS with FORCE, and are seeded with nothing. The owner's real
+  workbook is not committed to the repository in any form — no fixture, no seed
+  migration, no test data carrying real payees or balances. Data enters at
+  runtime through the import path, into rows the importing person owns.
+- Consequence: A household's finances are readable only by the person who
+  recorded them, including against an organization administrator, and the two
+  aggregate read functions (`budget_monthly_flow`, `budget_category_spend`) are
+  SECURITY INVOKER so that the aggregate cannot become the hole the row policy
+  closed. `tests/integration/budget-tracker.behavior.test.ts` proves both
+  directly against PostgreSQL, assuming the `authenticated` role rather than
+  running as a superuser that would bypass RLS entirely.
+- Rejected: a `numeric` or float money column. The source spreadsheet carries
+  running totals like `5402.860000000001` after eight thousand floating-point
+  additions; cents as an integer cannot drift, and the sign-follows-kind CHECK
+  makes an inverted debit a failed insert rather than a wrong total.
+
+## ADR-148 - Spreadsheet import reads .xlsx without a parsing dependency
+
+- Date: 2026-08-29
+- Status: Accepted
+- Decision: `lib/budget/spreadsheet.ts` reads `.xlsx` directly — a ZIP of XML
+  parts, inflated with `node:zlib` and read with bounded expressions — rather
+  than adding SheetJS or ExcelJS.
+- Consequence: No third-party code sits on the path of the most sensitive data
+  in the product, and the reader's own limits (entry count, per-part size,
+  total inflated size, row count) are ours to set. The uploaded file is parsed
+  in memory, written as rows, and dropped; it is never stored and never logged.
+- Consequence: Import is idempotent by construction. Every row carries a
+  sha256 content hash over account, date, kind, normalized description, amount
+  and an occurrence ordinal, unique per person — so a second import of the same
+  file conflicts row by row and is reported as skipped, while two genuinely
+  identical charges on one day differ by ordinal and both survive.
+- Rejected: CSV-only import. The owner's data is an `.xlsx` workbook, and
+  telling someone to convert their file first is asking them to do the work the
+  product exists to do.

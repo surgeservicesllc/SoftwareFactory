@@ -118,6 +118,14 @@ on:
           a capacity-voided (CANCELLED) run no longer consumes an approval —
           the sequence that stranded live lifecycle d7241cf4; replaces one
           definer function in place, same grants, no table or row changes;
+          "budget-tracker" applies exactly two files — 20260826000100 (four
+          activity enum values) and 20260826000200 (six budget_* tables, their
+          RLS, indexes and two SECURITY INVOKER read functions) — in that order,
+          because a transactional apply must not use an enum value the same
+          transaction added. Purely additive: no existing table, column,
+          function or row is touched. Every table is created with RLS enabled
+          AND forced, anon granted nothing, and the scope verifies that from
+          pg_class afterwards rather than trusting the apply;
           "ledger-repair-node-detail" writes NO DDL. 20260823001000 never ran on
           hosted, but its effect is present: 20260825000200 replaced
           list_graph_runs with the current body, node detail included. Leaving
@@ -196,6 +204,7 @@ on:
           - clear-autonomy-projects
           - run-cost-and-budget
           - ledger-repair-command-routing
+          - budget-tracker
           - ledger-repair-node-detail
           - probe
 permissions:
@@ -6144,6 +6153,107 @@ jobs:
             exit 1
           fi
           echo "Applied and verified: a voided run no longer consumes a gate approval."
+
+      - name: Apply the Budget Tracker schema (scope=budget-tracker)
+        # Two files, in order. 20260826000100 adds four activity enum values
+        # and nothing else; 20260826000200 creates the six budget_* tables.
+        # They are separate migrations, and applied as separate transactions,
+        # because Postgres refuses to use an enum value added in the same
+        # transaction — the same reason the job-seeker vocabulary has its own
+        # file.
+        #
+        # Purely additive. No existing table, column, function, policy or row
+        # is touched, so there is nothing here to roll back except dropping
+        # what it created.
+        #
+        # This data is a household's finances, so the postflight is not
+        # optional: RLS enabled AND forced on all six tables, and anon holding
+        # no grant on any of them, read back from the catalog. A table that
+        # arrived without FORCE would be readable by its owner past every
+        # policy on it.
+        if: ${{ inputs.scope == 'budget-tracker' }}
+        run: |
+          if [ -z "$SUPABASE_DB_PASSWORD" ]; then
+            echo "::error::This scope requires SUPABASE_DB_PASSWORD for live verification."
+            exit 1
+          fi
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+
+          TYPES_FILE=supabase/migrations/20260826000100_budget_tracker_activity_types.sql
+          SCHEMA_FILE=supabase/migrations/20260826000200_budget_tracker_foundation.sql
+          if [ "$(sha256sum "$TYPES_FILE" | cut -d' ' -f1)" != "3404458b6bc99c776659897baf89933acfc6b75bce9282d3f21bb9bb963b18a4" ]; then
+            echo "::error::Migration hash mismatch on ${TYPES_FILE}; refusing production DDL."
+            exit 1
+          fi
+          if [ "$(sha256sum "$SCHEMA_FILE" | cut -d' ' -f1)" != "5278ca1ea94ff9218cfa2ba8a64341002aa0265ae9e9fb4d8521f8eb2e00bcac" ]; then
+            echo "::error::Migration hash mismatch on ${SCHEMA_FILE}; refusing production DDL."
+            exit 1
+          fi
+
+          for VERSION in 20260826000100 20260826000200; do
+            ROW=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
+              "select count(*) from supabase_migrations.schema_migrations where version = '${VERSION}';")
+            if [ "$ROW" != "0" ]; then
+              echo "::error::Ledger already records ${VERSION} (want 0)."
+              exit 1
+            fi
+          done
+
+          echo "Applying ${TYPES_FILE}"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -1 -q -f "$TYPES_FILE"
+          echo "Applying ${SCHEMA_FILE}"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -1 -q -f "$SCHEMA_FILE"
+
+          for VERSION in 20260826000100 20260826000200; do
+            if [ "$MODE" = "token" ]; then
+              npx supabase migration repair --status applied "$VERSION"
+            else
+              npx supabase migration repair --status applied "$VERSION" --db-url "$DB_URL"
+            fi
+          done
+
+          # Postflight, read from the catalog rather than assumed from a clean
+          # apply. Six tables, all with RLS enabled and forced.
+          SECURED=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
+            select count(*) from pg_class
+             where relnamespace = 'public'::regnamespace
+               and relkind = 'r'
+               and relname like 'budget\\_%'
+               and relrowsecurity
+               and relforcerowsecurity;")
+          if [ "$SECURED" != "6" ]; then
+            echo "::error::Expected 6 budget tables with RLS enabled and forced, found ${SECURED}."
+            exit 1
+          fi
+
+          # And anon holding nothing on any of them.
+          ANON=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
+            select count(*) from information_schema.role_table_grants
+             where grantee = 'anon' and table_name like 'budget\\_%';")
+          if [ "$ANON" != "0" ]; then
+            echo "::error::anon holds ${ANON} grant(s) on the budget tables; expected none."
+            exit 1
+          fi
+
+          # The two aggregate reads must be INVOKER. As DEFINER either one
+          # would hand every member of an organization every other member's
+          # monthly totals, straight past the row policies above.
+          INVOKER=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "
+            select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+             where n.nspname = 'public'
+               and p.proname in ('budget_monthly_flow','budget_category_spend')
+               and p.prosecdef = false;")
+          if [ "$INVOKER" != "2" ]; then
+            echo "::error::Expected 2 SECURITY INVOKER budget read functions, found ${INVOKER}."
+            exit 1
+          fi
+
+          echo "Applied and verified: 6 tables RLS-forced, anon holds nothing, both reads are INVOKER."
 
       - name: Record the node-detail read a later migration superseded (scope=ledger-repair-node-detail)
         # No DDL. 20260823001000 never ran here, and must never run now:

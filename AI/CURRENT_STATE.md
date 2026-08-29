@@ -1,6 +1,58 @@
 # Current state
 
-Last reviewed: 2026-08-25
+Last reviewed: 2026-08-29
+
+## 2026-08-29: Budget Tracker
+
+`/BudgetTracker`, reached from a third global navigation tab for signed-in
+people. Accounts, recurring obligations, a paged ledger, cash flow by month,
+credit utilization, two payoff orders, and spreadsheet import. Owner request,
+2026-08-29; ADR-147 and ADR-148.
+
+Two migrations: `20260826000100_budget_tracker_activity_types` (enum values,
+separate so no transaction uses a value it added) and
+`20260826000200_budget_tracker_foundation` (six tables, two aggregate read
+functions). **Not applied to hosted** — the ledger and the schema audit will
+both report them absent until an owner-directed apply runs.
+
+Every row is scoped by `organization_id` **and** `user_id`, RLS enabled and
+FORCEd, `anon` granted nothing. An organization administrator cannot read
+another member's finances, and neither can the two aggregate functions, which
+are SECURITY INVOKER precisely so the aggregate is not the hole the row policy
+closed. Proven in `tests/integration/budget-tracker.behavior.test.ts` against
+real PostgreSQL, assuming the `authenticated` role — a superuser bypasses RLS
+outright, so a test that skipped that step would pass against no policies at all.
+
+Money is `bigint` cents everywhere. A CHECK ties sign to kind, so a debit
+recorded as positive is a failed insert rather than a silently inverted total.
+A credit limit is refused on anything that is not a credit card, because
+utilization computed against a mortgage is a meaningless number that looks
+like a real one.
+
+**No seeded data, and none from the owner's own workbook.** The tables ship
+empty. The uploaded spreadsheet was used to develop and verify the reader and
+was deliberately not committed in any form — no fixture, no seed migration, no
+test data carrying real payees or balances. Data enters at runtime through the
+import path.
+
+Import reads `.xlsx` with no parsing dependency: `lib/budget/spreadsheet.ts`
+inflates the ZIP with `node:zlib` and reads the XML parts, under caps on entry
+count, part size, total inflated size and rows. Verified against the owner's
+real 5.8 MB workbook: 8 sheets, 8,043 rows read from the checking sheet, 8,040
+imported, 3 skipped and reported. Re-importing the same file is a no-op through
+a per-person sha256 content hash.
+
+**Not Connected**: there is no bank connection and no provider integration.
+Balances are what the person last recorded, and the page says so rather than
+implying a refresh that does not happen.
+
+Two findings worth keeping. The source workbook stores running counters in the
+same column as dates — read as Excel serials, 184 and 1721 become 1900-07-01
+and 1904-09-16, dates that sort and chart perfectly well and are not dates; the
+importer bounds serials to the same range the `posted_on` column accepts. And
+the workbook does not fully reconcile: 38 of 8,040 rows disagree with their own
+stated running total, from twenty years of hand edits. `reconcile()` in
+`lib/budget/analytics.ts` finds those rather than hiding them.
 
 ## 2026-08-25: Search, ported from ai-job-search into Job Seeker
 

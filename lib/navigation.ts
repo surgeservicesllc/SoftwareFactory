@@ -43,7 +43,7 @@ export const PUBLIC_NAV: readonly NavItem[] = [
  * Added once there is a verified session (owner design, 2026-08-19; renamed
  * 2026-08-23).
  *
- * Two destinations, because the global header names the two products a signed-in
+ * Three destinations, because the global header names the products a signed-in
  * person moves between — the factory and the job search — and not the pages
  * inside either. Projects, Runs and Activity used to sit here as well; they are
  * console destinations, the console's own column already lists them beside
@@ -57,20 +57,23 @@ export const PUBLIC_NAV: readonly NavItem[] = [
  * matches the product's own name on the decision page and in the page title,
  * so one thing has one name everywhere.
  *
- * `Job Seeker` points outside `/solutions` on purpose: it is the one
- * person-scoped surface, gated on its own and private to the person even inside
- * their organization.
+ * `Job Seeker` and `Budget Tracker` point outside `/solutions` on purpose:
+ * they are the person-scoped surfaces, each gated on its own and private to
+ * the person even inside their organization. `Budget Tracker`'s capitalised
+ * path is load-bearing — Next.js routes are case-sensitive, and this is the
+ * spelling the page answers to.
  */
 export const SIGNED_IN_NAV: readonly NavItem[] = [
   { label: "Software Factory", href: "/solutions" },
   { label: "Job Seeker", href: "/job-seeker" },
+  { label: "Budget Tracker", href: "/BudgetTracker" },
 ];
 
 /**
  * The global navigation for a viewer.
  *
  * Signed out: the public pages, and nothing else.
- * Signed in: the two products, and nothing else.
+ * Signed in: the products themselves, and nothing else.
  *
  * The signed-in set is deliberately not "console entries plus whatever public
  * pages are left over". That produced a header carrying two unrelated

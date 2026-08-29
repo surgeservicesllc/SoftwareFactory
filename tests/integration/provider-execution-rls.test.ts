@@ -120,7 +120,7 @@ describe("Phase 2A provider execution layer", () => {
     const migrationFiles = (await readdir(migrationsRoot))
       .filter((file) => /^\d+.*\.sql$/.test(file))
       .sort();
-    expect(migrationFiles.at(-1)).toBe("20260825000200_run_cost_and_budget_in_graph_runs.sql");
+    expect(migrationFiles.at(-1)).toBe("20260826000200_budget_tracker_foundation.sql");
     for (const migrationFile of migrationFiles) {
       await db.exec(await source(`supabase/migrations/${migrationFile}`));
     }

@@ -935,6 +935,28 @@ These are recorded for deliberate owner review and are not evidence that Phase 1
 - [ ] Live drain of a full_lifecycle launch (owner-initiated) — the graph
   halts at the ARCHITECTURE human gate by design; deciding it is the owner's.
 
+## Budget Tracker: hosted apply and the parts not built (2026-08-29, ADR-147/148)
+
+The page, its schema and its tests are complete and green locally. What is
+outstanding:
+
+- [ ] **Hosted apply, owner-directed.** `20260826000100_budget_tracker_activity_types`
+  and `20260826000200_budget_tracker_foundation` are not on hosted. Until they
+  are, `/BudgetTracker` loads and every read fails — the page renders its own
+  error state rather than pretending otherwise. Needs a scope in
+  `.github/workflows/apply-hosted-migrations.yml` and an owner instruction.
+- [ ] Categories are written and read but have no editing surface; the monthly
+  plan table (`budget_month_plans`) has a schema and analytics
+  (`compareToPlan`) with no panel on top of it yet.
+- [ ] Transfers get a `transfer_group_id` column and nothing populates it. Both
+  sides of a move between the person's own accounts are typed correctly and
+  excluded from spend, but they are not yet linked to each other.
+- [ ] `reconcile()` finds where a statement's running total stops agreeing with
+  its own amounts — 38 breaks in the owner's 8,040 rows — and nothing surfaces
+  it on the page yet.
+- [ ] Editing and deleting a transaction. The ledger is currently append-only
+  through the UI; the RLS policies already allow update and delete.
+
 ## No learning edge from accepted results (found 2026-08-29, design gap)
 
 `AI/LOOPS_AND_GRAPHS.md` records the split between a correction edge (a gate

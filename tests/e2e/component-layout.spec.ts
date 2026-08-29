@@ -212,6 +212,7 @@ const CASES = [
   "autonomy",
   "bot-usage",
   "job-seeker",
+  "budget-tracker",
   "resume-review",
   "bot-fabric",
   "bot-manager",

@@ -1,6 +1,28 @@
 # Handoff
 
-Last updated: 2026-08-25
+## 2026-08-29: Budget Tracker
+
+Built on `claude/github-connection-confirm-qe3tqm`. Detail in
+`AI/CURRENT_STATE.md`; decisions in ADR-147 and ADR-148.
+
+Two things the next agent must not undo:
+
+- **The owner's real financial workbook is not in this repository, and must not
+  be put there.** It was used to develop and verify the spreadsheet reader
+  against real shapes, and deliberately left out of every fixture, seed and
+  test. If a test needs data, construct it — `tests/unit/budget-import.test.ts`
+  builds a minimal `.xlsx` in memory rather than checking one in.
+- **`budget_monthly_flow` and `budget_category_spend` are SECURITY INVOKER.**
+  Making either a definer would hand every member of an organization every
+  other member's monthly totals, past a row policy that is otherwise correct.
+  A test asserts the current behaviour; it is not a formality.
+
+Not yet applied to hosted. Both migrations are outstanding, and the page cannot
+load its data until they are — an owner-directed apply is the next step, and
+`.github/workflows/apply-hosted-migrations.yml` has no scope for them yet.
+
+
+Last updated: 2026-08-29
 
 ## Newest (2026-08-25 ~19:15Z): the retry that never happened (ADR-146)
 
