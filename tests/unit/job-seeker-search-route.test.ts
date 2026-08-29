@@ -131,8 +131,8 @@ function hit(title: string) {
 }
 
 function stubClient() {
-  const insert = vi.fn(async () => ({ error: null }));
-  const from = vi.fn(() => ({ insert }));
+  const insert = vi.fn(async (_rows: unknown) => ({ error: null }));
+  const from = vi.fn((_table: string) => ({ insert }));
   return { from, insert, rpc: vi.fn() };
 }
 
