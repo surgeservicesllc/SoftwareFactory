@@ -17,8 +17,27 @@ export const runtime = "nodejs";
  * aggregate functions, which are SECURITY INVOKER for exactly that reason.
  */
 
+/**
+ * A `YYYY-MM` key from whatever the driver hands back for a `date` column.
+ *
+ * PostgREST returns dates as ISO strings, so slicing the first seven
+ * characters is right there. It is not right in general: a driver that
+ * returns a `Date` — PGlite does — turns the same slice into "Mon Sep",
+ * because that is the first seven characters of a JavaScript date's default
+ * string form. Weekday names would then label every bar on the cash-flow
+ * chart, and the failure looks like a formatting quirk rather than a type
+ * confusion, which is what makes it worth ruling out here.
+ */
+function monthKey(value: unknown): string {
+  if (value instanceof Date) return value.toISOString().slice(0, 7);
+  const text = String(value ?? "");
+  if (/^\d{4}-\d{2}/.test(text)) return text.slice(0, 7);
+  const parsed = new Date(text);
+  return Number.isNaN(parsed.getTime()) ? "" : parsed.toISOString().slice(0, 7);
+}
+
 type FlowRow = {
-  month: string;
+  month: string | Date;
   income_cents: number;
   expense_cents: number;
   net_cents: number;
@@ -101,7 +120,7 @@ export async function GET() {
       // Oldest first, which is the order every chart reads them in.
       flows: ((flow.data ?? []) as FlowRow[])
         .map((row) => ({
-          month: String(row.month).slice(0, 7),
+          month: monthKey(row.month),
           incomeCents: Number(row.income_cents),
           expenseCents: Number(row.expense_cents),
           netCents: Number(row.net_cents),

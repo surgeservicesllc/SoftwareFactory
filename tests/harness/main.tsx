@@ -333,7 +333,7 @@ const CASES: Record<string, () => React.ReactElement> = {
    * all eight widths. Its widest content (the payoff table and the ledger) is
    * what the horizontal-overflow assertion is really aimed at.
    */
-  "budget-tracker": () => <InShell><BudgetTrackerConsole /></InShell>,
+  "budget-tracker": () => <InShell><BudgetTrackerConsole section="overview" /></InShell>,
   /*
    * The resume review panel only exists after an upload, so the job-seeker
    * case above never renders it and it had no width coverage at all. Its

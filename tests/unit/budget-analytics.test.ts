@@ -351,3 +351,37 @@ describe("reconcile", () => {
     expect(result.breaks).toEqual([]);
   });
 });
+
+describe("the month key the overview builds", () => {
+  /*
+   * Guarding a bug found by running the real pipeline: PostgREST returns a
+   * `date` column as an ISO string, so taking the first seven characters is
+   * right there — and wrong for a driver that returns a Date, where the same
+   * slice yields "Mon Sep". Weekday names would then label every bar on the
+   * cash-flow chart.
+   *
+   * The route keeps the helper private, so this exercises the same rule
+   * against both shapes to pin the behaviour it has to have.
+   */
+  const monthKey = (value: unknown): string => {
+    if (value instanceof Date) return value.toISOString().slice(0, 7);
+    const text = String(value ?? "");
+    if (/^\d{4}-\d{2}/.test(text)) return text.slice(0, 7);
+    const parsed = new Date(text);
+    return Number.isNaN(parsed.getTime()) ? "" : parsed.toISOString().slice(0, 7);
+  };
+
+  it("reads an ISO string", () => {
+    expect(monthKey("2026-09-01")).toBe("2026-09");
+  });
+
+  it("reads a Date without turning it into a weekday", () => {
+    expect(monthKey(new Date("2026-09-01T00:00:00Z"))).toBe("2026-09");
+    expect(monthKey(new Date("2026-09-01T00:00:00Z"))).not.toMatch(/Mon|Tue|Wed|Thu|Fri|Sat|Sun/);
+  });
+
+  it("returns empty rather than a nonsense label", () => {
+    expect(monthKey(null)).toBe("");
+    expect(monthKey("not a date")).toBe("");
+  });
+});

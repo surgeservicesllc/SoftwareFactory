@@ -54,6 +54,14 @@ export async function POST(request: Request) {
     const file = form.get("file");
     const accountId = String(form.get("accountId") ?? "");
     const requestedSheet = form.get("sheet") ? String(form.get("sheet")) : null;
+    const dateBound = (field: string): string | null => {
+      const raw = form.get(field);
+      if (!raw) return null;
+      const value = String(raw).trim();
+      return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null;
+    };
+    const from = dateBound("from");
+    const to = dateBound("to");
 
     if (!(file instanceof File)) {
       throw new ApiRequestError(400, "no_file", "Attach a .xlsx or .csv export to import.");
@@ -90,7 +98,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const parsed = readTransactions(sheet, accountId);
+    const parsed = readTransactions(sheet, accountId, { from, to });
     if (parsed.transactions.length === 0) {
       return jsonNoStore(
         {

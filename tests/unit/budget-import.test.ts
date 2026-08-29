@@ -117,26 +117,97 @@ describe("classifyKind", () => {
 });
 
 describe("readTransactions", () => {
-  it("carries a missing date down from the row above, and says how often", () => {
+  it("leaves the trailing undated block out, because a plan is not history", () => {
+    /*
+     * A household ledger is usually kept with posted history at the top and a
+     * forward plan underneath: payee and amount, deliberately no date, because
+     * it has not happened. Carrying the date down into those turns a plan into
+     * history — in the workbook this was built against, 914 such rows all
+     * became one day and invented over a million dollars of activity in a
+     * single month, which then dominated every chart drawn from it.
+     */
     const result = readTransactions(
       sheet([
         HEADER,
-        [45900, "Deposit", "PAYROLL", 512300, 512300],
-        [null, "Debit", "MORTGAGE", -123456, 413942],
-        [null, "Debit", "PHONE BILL", -9900, 395442],
+        [45900, "Deposit", "PAYROLL", 512300, null],
+        [45901, "Debit", "MORTGAGE", -123456, null],
+        // Everything below is the forward plan: no date, to the end.
+        [null, "Debit", "PLANNED CARD PAYMENT", -20000, null],
+        [null, "Debit", "PLANNED UTILITIES", -9900, null],
+        [null, "Deposit", "PLANNED PAYCHECK", 512300, null],
       ]),
       "account-1",
     );
 
-    // Serial 45900 is 2025-08-31; the two undated rows take it too.
-    expect(result.transactions.map((t) => t.postedOn)).toEqual([
-      "2025-08-31",
-      "2025-08-31",
-      "2025-08-31",
+    expect(result.transactions.map((t) => t.description)).toEqual(["PAYROLL", "MORTGAGE"]);
+    expect(result.rowsSkipped).toBe(3);
+    expect(result.notices).toContain(
+      "3 rows after the last dated row carried no date and were left out as planned, not posted.",
+    );
+  });
+
+  it("still carries a date down for a continuation row between dated rows", () => {
+    // The other half of the rule: an undated row *inside* the posted history
+    // means "same day as the line above", and that reading is still right.
+    const result = readTransactions(
+      sheet([
+        HEADER,
+        [45900, "Deposit", "PAYROLL", 512300, null],
+        [null, "Debit", "SAME DAY CHARGE", -1000, null],
+        [45901, "Debit", "NEXT DAY", -2000, null],
+      ]),
+      "account-1",
+    );
+
+    expect(result.transactions.map((t) => [t.description, t.postedOn])).toEqual([
+      ["PAYROLL", "2025-08-31"],
+      ["SAME DAY CHARGE", "2025-08-31"],
+      ["NEXT DAY", "2025-09-01"],
     ]);
     expect(result.notices).toContain(
-      "2 rows carried no date and took the date of the row above.",
+      "1 row carried no date and took the date of the row above.",
     );
+  });
+
+  it("imports only the chosen window, and says what it left out", () => {
+    const rows = [
+      HEADER,
+      [45900, "Deposit", "OLD PAYROLL", 512300, null],
+      [46000, "Debit", "IN WINDOW", -9900, null],
+      [46100, "Debit", "TOO NEW", -1000, null],
+    ];
+    const result = readTransactions(sheet(rows), "account-1", {
+      from: "2025-11-01",
+      to: "2026-02-28",
+    });
+
+    expect(result.transactions.map((t) => t.description)).toEqual(["IN WINDOW"]);
+    expect(result.notices).toContain(
+      "2 rows fell outside the chosen dates (2025-11-01 to 2026-02-28) and were not imported.",
+    );
+  });
+
+  it("judges a continuation row on the date it inherits, not the blank cell", () => {
+    /*
+     * The window is applied after the date is resolved. Filtering on the raw
+     * cell would drop a row that belongs inside the window purely because its
+     * own date cell is empty.
+     */
+    const result = readTransactions(
+      sheet([
+        HEADER,
+        [46000, "Deposit", "DATED", 512300, null],
+        [null, "Debit", "SAME DAY, NO DATE CELL", -9900, null],
+        [46100, "Debit", "LATER", -1000, null],
+      ]),
+      "account-1",
+      { from: "2025-12-01", to: "2025-12-31" },
+    );
+
+    expect(result.transactions.map((t) => t.description)).toEqual([
+      "DATED",
+      "SAME DAY, NO DATE CELL",
+    ]);
   });
 
   it("counts a row it cannot read rather than importing it as zero", () => {
