@@ -55,7 +55,17 @@ async function createDatabase(): Promise<PGlite> {
 }
 
 async function applyMigration(db: PGlite, name: string): Promise<void> {
-  await db.exec(await readFile(resolve(migrationsRoot, name), "utf8"));
+  try {
+    await db.exec(await readFile(resolve(migrationsRoot, name), "utf8"));
+  } catch (error) {
+    // 20260827000210 opens its transaction explicitly (ADR-165). A refusal
+    // raised inside it leaves this session's transaction aborted — a state a
+    // per-file psql or CLI session would simply discard, but this shared
+    // session keeps. Clear it so the scenario can keep interrogating the
+    // database after the expected refusal.
+    await db.exec("rollback;").catch(() => undefined);
+    throw error;
+  }
 }
 
 async function applyThroughFence(db: PGlite): Promise<void> {
