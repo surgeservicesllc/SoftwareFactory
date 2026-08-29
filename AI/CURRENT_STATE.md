@@ -12,7 +12,15 @@ credit utilization, two payoff orders, and spreadsheet import. Owner request,
 Two migrations, `20260829000100_budget_tracker_activity_types` (enum values,
 separate so no transaction uses a value it added) and
 `20260829000200_budget_tracker_foundation` (six tables, two aggregate read
-functions). **Not applied to hosted** at the time of writing.
+functions). **Applied to hosted** on 2026-08-29 through the `budget-tracker`
+scope (run 33257354301, from `d22107ba`); both versions are in the ledger and
+the scope's own postflights passed against the live catalogue: six tables with
+RLS enabled and forced, neither `anon` nor `service_role` holding a grant on
+any of them, and both aggregate reads SECURITY INVOKER.
+
+`/BudgetTracker` is live and gated: signed out it redirects to
+`sign-in?next=%2FBudgetTracker`, and `/budgettracker` is a 404 — the
+capitalised path is the one that answers.
 
 Every row is scoped by `organization_id` **and** `user_id`, RLS enabled and
 FORCEd, with neither `anon` nor `service_role` holding a grant. The

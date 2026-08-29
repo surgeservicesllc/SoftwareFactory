@@ -1170,11 +1170,9 @@ These are recorded for deliberate owner review and are not evidence that Phase 1
 The page, its schema and its tests are complete and green locally. What is
 outstanding:
 
-- [ ] **Hosted apply, owner-directed.** `20260829000100_budget_tracker_activity_types`
-  and `20260829000200_budget_tracker_foundation` are not on hosted. Until they
-  are, `/BudgetTracker` loads and every read fails — the page renders its own
-  error state rather than pretending otherwise. Needs a scope in
-  `.github/workflows/apply-hosted-migrations.yml` and an owner instruction.
+- [x] **Hosted apply, owner-directed.** Both migrations applied 2026-08-29 via
+  the `budget-tracker` scope (run 33257354301); postflights verified RLS
+  forced, no `anon` or `service_role` grants, and both reads INVOKER.
 - [ ] Categories are written and read but have no editing surface; the monthly
   plan table (`budget_month_plans`) has a schema and analytics
   (`compareToPlan`) with no panel on top of it yet.
