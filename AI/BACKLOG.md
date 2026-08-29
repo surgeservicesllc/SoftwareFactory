@@ -1169,6 +1169,50 @@ These are recorded for deliberate owner review and are not evidence that Phase 1
 - [ ] Live drain of a full_lifecycle launch (owner-initiated) — the graph
   halts at the ARCHITECTURE human gate by design; deciding it is the owner's.
 
+## Budget Tracker: hosted apply and the parts not built (2026-08-29, ADR-147/148)
+
+The page, its schema and its tests are complete and green locally. What is
+outstanding:
+
+- [x] **Hosted apply, owner-directed.** Both migrations applied 2026-08-29 via
+  the `budget-tracker` scope (run 33257354301); postflights verified RLS
+  forced, no `anon` or `service_role` grants, and both reads INVOKER.
+- [ ] Categories are written and read but have no editing surface; the monthly
+  plan table (`budget_month_plans`) has a schema and analytics
+  (`compareToPlan`) with no panel on top of it yet.
+- [ ] Transfers get a `transfer_group_id` column and nothing populates it. Both
+  sides of a move between the person's own accounts are typed correctly and
+  excluded from spend, but they are not yet linked to each other.
+- [ ] `reconcile()` finds where a statement's running total stops agreeing with
+  its own amounts — 38 breaks in the owner's 8,040 rows — and nothing surfaces
+  it on the page yet.
+- [ ] Editing and deleting a transaction. The ledger is currently append-only
+  through the UI; the RLS policies already allow update and delete.
+
+## No learning edge from accepted results (found 2026-08-29, design gap)
+
+`AI/LOOPS_AND_GRAPHS.md` records the split between a correction edge (a gate
+returns one unit to the node that produced it, fixing the run in flight) and a
+learning edge (an accepted result returns to the splitter as a constraint,
+fixing every run after). This repository has the first and not the second.
+
+Nothing derives a reusable constraint from an accepted node output, and nothing
+feeds one into the planning brief, so every graph is planned with the same
+blind spots as the last one and a failure fixed today is available to recur.
+The engine is fast and does not get smarter.
+
+Building it needs an ADR and owner direction before code, because the failure
+mode is severe in the other direction: a derived constraint is an instruction
+the planner cannot see the provenance of, and a wrong one narrows every later
+plan silently. At minimum a constraint would need an owning run, the evidence
+it was derived from, an expiry or review path, and a frozen-policy check so it
+can never widen risk, budget, isolation or approval.
+
+- [ ] ADR: what a derived constraint is, who may create one, how it expires.
+- [ ] Constraint store with provenance back to the accepting verification.
+- [ ] Planner brief reads constraints; `frozen.ts` proves none can relax a policy.
+- [ ] Behaviour test: an accepted result changes how the *next* graph is cut.
+
 ## Resumable lifecycle runs (found 2026-08-24, owner-visible cost)
 
 Gates are keyed to graph nodes so approvals outlive runs — correct — but a

@@ -1,6 +1,67 @@
 # Current state
 
-Last reviewed: 2026-08-28
+Last reviewed: 2026-08-29
+
+## 2026-08-29: Budget Tracker
+
+`/BudgetTracker`, reached from a third global navigation tab for signed-in
+people. Accounts, recurring obligations, a paged ledger, cash flow by month,
+credit utilization, two payoff orders, and spreadsheet import. Owner request,
+2026-08-29; ADR-147 and ADR-148.
+
+Two migrations, `20260829000100_budget_tracker_activity_types` (enum values,
+separate so no transaction uses a value it added) and
+`20260829000200_budget_tracker_foundation` (six tables, two aggregate read
+functions). **Applied to hosted** on 2026-08-29 through the `budget-tracker`
+scope (run 33257354301, from `d22107ba`); both versions are in the ledger and
+the scope's own postflights passed against the live catalogue: six tables with
+RLS enabled and forced, neither `anon` nor `service_role` holding a grant on
+any of them, and both aggregate reads SECURITY INVOKER.
+
+`/BudgetTracker` is live and gated: signed out it redirects to
+`sign-in?next=%2FBudgetTracker`, and `/budgettracker` is a 404 — the
+capitalised path is the one that answers.
+
+Every row is scoped by `organization_id` **and** `user_id`, RLS enabled and
+FORCEd, with neither `anon` nor `service_role` holding a grant. The
+`service_role` revoke is explicit and load-bearing: that role is BYPASSRLS and
+the hosted default privileges hand it each new table, so without it the six
+would have arrived wide open past every policy. The two aggregate reads are
+SECURITY INVOKER for the same class of reason — as definers either would hand
+every member of an organization every other member's monthly totals.
+`tests/integration/budget-tracker.behavior.test.ts` proves all of it against
+real PostgreSQL while assuming the `authenticated` role; a superuser bypasses
+RLS outright, so a test skipping that step would pass against no policies.
+
+Money is `bigint` cents everywhere. A CHECK ties sign to kind, so a debit
+recorded as positive is a failed insert rather than a silently inverted total.
+A credit limit is refused on anything that is not a credit card, because
+utilization computed against a mortgage is a meaningless number that looks
+like a real one.
+
+**No seeded data, and none from the owner's own workbook.** The tables ship
+empty. The uploaded spreadsheet was used to develop and verify the reader and
+was deliberately not committed in any form — no fixture, no seed migration, no
+test data carrying real payees or balances.
+
+Import reads `.xlsx` with no parsing dependency: `lib/budget/spreadsheet.ts`
+inflates the ZIP with `node:zlib` and reads the XML parts, under caps on entry
+count, part size, total inflated size and rows. Verified against the owner's
+real 5.8 MB workbook: 8 sheets, 8,043 rows read from the checking sheet, 8,040
+imported, 3 skipped and reported. Re-importing is a no-op through a per-person
+sha256 content hash.
+
+**Not Connected**: there is no bank connection and no provider integration.
+Balances are what the person last recorded, and the page says so rather than
+implying a refresh that does not happen.
+
+Two findings worth keeping. The source workbook stores running counters in the
+same column as dates — read as Excel serials, 184 and 1721 become 1900-07-01
+and 1904-09-16, dates that sort and chart perfectly well and are not dates; the
+importer bounds serials to the range `posted_on` accepts. And the workbook does
+not fully reconcile: 38 of 8,040 rows disagree with their own stated running
+total, from twenty years of hand edits. `reconcile()` in
+`lib/budget/analytics.ts` finds those rather than hiding them.
 
 ## 2026-08-28: target-bound claims are hosted; final postdeploy remains gated
 

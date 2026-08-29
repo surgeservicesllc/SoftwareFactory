@@ -47,6 +47,28 @@ from the Career Profile chain, then the alerts engine + env-gated email
 adapter with a delivery ledger and the never-repeat guarantee, then real
 E2E before any production-ready claim.
 
+## 2026-08-29: Budget Tracker
+
+Detail in `AI/CURRENT_STATE.md`; decisions in ADR-147 and ADR-148.
+
+Three things the next agent must not undo:
+
+- **The owner's real financial workbook is not in this repository, and must not
+  be put there.** It was used to develop and verify the spreadsheet reader
+  against real shapes, and left out of every fixture, seed and test. If a test
+  needs data, construct it — `tests/unit/budget-import.test.ts` builds a
+  minimal `.xlsx` in memory rather than checking one in.
+- **`budget_monthly_flow` and `budget_category_spend` are SECURITY INVOKER.**
+  Making either a definer hands every member of an organization every other
+  member's monthly totals, past a row policy that is otherwise correct.
+Both migrations are applied to hosted (run 33257354301) and the page is live.
+
+- **The `service_role` revoke in `20260829000200` is load-bearing.** That role
+  is BYPASSRLS and the hosted default privileges re-grant it on every new
+  table; without the revoke the six budget tables are readable past every
+  policy on them. The behaviour test grants those privileges the way hosted
+  would and checks they are taken away, so it fails if the revoke is removed.
+
 ## Newest (2026-08-28 ~11:30Z): Agent Trail — a live map of the factory's runs (ADR-162)
 
 The owner directed sodiumsun/agenttrail (MIT) be built into the site.

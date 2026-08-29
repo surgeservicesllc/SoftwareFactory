@@ -64,6 +64,12 @@ export const PUBLIC_NAV: readonly NavItem[] = [
 export const SIGNED_IN_NAV: readonly NavItem[] = [
   { label: "Software Factory", href: "/solutions" },
   { label: "Job Search", href: "/JobSearch" },
+  /*
+   * `Budget Tracker`'s capitalised path is load-bearing, the same way
+   * `/JobSearch` is: Next.js routes are case-sensitive, so this is the exact
+   * spelling the page answers to and `/budgettracker` is a 404.
+   */
+  { label: "Budget Tracker", href: "/BudgetTracker" },
 ];
 
 /**
