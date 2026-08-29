@@ -72,6 +72,10 @@ alter table public.job_seeker_alert_deliveries enable row level security;
 alter table public.job_seeker_alert_deliveries force row level security;
 revoke all on table public.job_seeker_alert_deliveries from anon;
 revoke all on table public.job_seeker_alert_deliveries from authenticated;
+-- Explicit, like the Budget Tracker's six: service_role is BYPASSRLS and the
+-- hosted default privileges would otherwise hand it the ledger wholesale.
+-- Its only path in is the record_job_seeker_alert_scan definer below.
+revoke all on table public.job_seeker_alert_deliveries from service_role;
 grant select on table public.job_seeker_alert_deliveries to authenticated;
 
 drop policy if exists job_seeker_alert_deliveries_select_own on public.job_seeker_alert_deliveries;

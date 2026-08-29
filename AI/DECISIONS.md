@@ -2899,7 +2899,7 @@ Use this append-only log for decisions that constrain future implementation. Cha
   service-role grants contract forbids handing that actor table access, and
   the repository forbids controls wired to nothing.
 - Decision: the engine's data path is two SECURITY DEFINER functions
-  (20260829000100), executable by service_role and revoked from anon and
+  (20260829000300), executable by service_role and revoked from anon and
   authenticated: `list_due_job_seeker_alerts` returns due alerts with the
   stored query, the recipient, exactly the evaluator's profile/preference
   facts (never whole rows), and the search's already-delivered URLs;

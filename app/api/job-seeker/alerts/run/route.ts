@@ -27,7 +27,7 @@ export const maxDuration = 300;
  * that mutates or emails.
  *
  * The database is reached exclusively through the two definer functions of
- * 20260829000100. The service-role key signs those RPCs and nothing else:
+ * 20260829000300. The service-role key signs those RPCs and nothing else:
  * the role holds no job-seeker table grant, so a bug here cannot widen into
  * a table scan the schema never granted.
  *
