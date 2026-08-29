@@ -76,6 +76,20 @@ describe("live board request contracts", () => {
   it("declares exactly which adapter cannot honor free-text location", () => {
     expect(
       Object.fromEntries(BOARD_SEARCH_ADAPTERS.map((adapter) => [adapter.key, adapter.supportsLocation])),
-    ).toEqual({ jobnet: true, jobindex: false, jobdanmark: true, freehire: true });
+    ).toEqual({
+      jobnet: true,
+      jobindex: false,
+      jobdanmark: true,
+      freehire: true,
+      // The 2026-08-29 expansion: remote-first boards whose APIs have no
+      // location parameter — the candidate-location facts they do state land
+      // in each hit's `location` field instead of being pretended upstream.
+      remotive: false,
+      remoteok: false,
+      jobicy: false,
+      himalayas: false,
+      arbeitnow: false,
+      weworkremotely: false,
+    });
   });
 });

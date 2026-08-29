@@ -258,6 +258,50 @@ assignments; one Codex connection is unfinished and Claude OAuth is not
 complete. Provider OAuth and route setup must finish before a fresh command
 and persisted Step 9 correlation can be measured.
 
+## 2026-08-29: Job Search increment 1 — ten live boards, unified dedupe, 50-source catalogue (ADR-163)
+
+The active owner goal (world-class `/JobSearch` over 50 sources) landed its
+first increment on the existing search stack, extending rather than replacing
+it:
+
+- **Six new board adapters**, each probed live before its parser was written
+  and pinned by fixture tests: Remotive (6h per-term cache honoring its API
+  call budget, link-back + attribution by construction), Remote OK (corpus
+  feed, local filtering, HTML-entity decode, legal-notice row skipped),
+  Jobicy (`tag` free-text search), Himalayas (epoch dates, salary period kept
+  as text), Arbeitnow (`remote:false` maps to null, not "onsite"), and
+  We Work Remotely (official RSS; "Company : Role" split). The registry now
+  holds ten live boards; the request-contract test pins the exact
+  `supportsLocation` map.
+- **`board-search/unify.ts`**: one shared pure definition of cross-board
+  identity (normalized company+title), richer-record-wins card selection
+  with `primarySourceIndex` (saving goes through the board whose sealed
+  token matches the card's exact fields), and result-level filters
+  (AND/OR keywords, exclusions, work model, salary minimum with
+  unknown-kept semantics, require-salary, posted-within). The search route
+  returns a `unified` block (hits + dedupedFrom + beforeFilters) beside the
+  untouched per-board `results`, and the panel applies the same module
+  client-side for instant filtering without refetching.
+- **50-source catalogue** (`board-search/catalogue.ts`): 25 general + 25
+  marketing sources, each `live` (integrity-tested equal to the registry) |
+  `needs_credentials` (official API named — USAJOBS, Adzuna, Jooble,
+  Careerjet, Reed, ZipRecruiter — shown **Not Connected**) |
+  `external_link` (probed URL the person's own browser opens) |
+  `not_supported`. Every non-live URL was probed 2026-08-29; four dead
+  domains found during research were replaced with probed live ones.
+  `GET /api/job-seeker/search` now serves the catalogue to the picker.
+- **Panel rework**: unified view default (source badges per card, NEW badge
+  ≤3 days, sort by recency/stated salary), by-board view preserved, filter
+  chips with Clear All, grouped source picker with live checkboxes and
+  honest statuses. 17 panel tests, 12 route tests, 33 parser/unify tests,
+  6 catalogue integrity tests all green; the route test now mocks every
+  registry adapter so no unit test can egress.
+
+Remaining increments of the goal (tracked in BACKLOG): saved searches +
+alert preferences + seen-jobs ledger (migration + RLS), AI match display
+from the Career Profile, the alerts engine + email adapter with delivery
+ledger, and E2E acceptance before any production-ready claim.
+
 ## 2026-08-27: canonical Job Search is live and production accepted
 ## 2026-08-25: Revenue — Stripe subscription billing behind the existing storefront (ADR-149)
 
