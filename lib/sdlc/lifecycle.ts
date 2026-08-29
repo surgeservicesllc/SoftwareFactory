@@ -137,7 +137,10 @@ export const SDLC_LIFECYCLE: readonly StageDefinition[] = Object.freeze([
   {
     stage: "DEPLOYMENT",
     produces: "The deployment decision and its outcome.",
-    capability: "implementation",
+    // Its own capability since 2026-08-29. This borrowed `implementation`,
+    // which meant the one stage that changes what users are running was
+    // tiered and prompted as though it were writing a feature.
+    capability: "deployment",
     gate: "HUMAN",
     requiresAnchor: true,
   },

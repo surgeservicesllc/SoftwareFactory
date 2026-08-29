@@ -2795,3 +2795,49 @@ Use this append-only log for decisions that constrain future implementation. Cha
   filesystem would be a different product with different consent. The map
   never animates hope — every color is a recorded state, and an empty
   organization gets an empty state naming its next step, not a demo.
+
+## ADR-150 - A role is not a capability, and only two specialists earned capabilities
+
+- Date: 2026-08-29
+- Status: Accepted
+- Context: the owner's goal names eleven agents — Research,
+  Product/Requirements, Architecture, Frontend, Backend, Database, Security,
+  Integration, Testing/QA, Code Review, Deployment — each receiving "bounded
+  context and structured inputs/outputs" and able to run in parallel. The
+  engine had twelve `NodeCapability` values covering roughly seven of those
+  eleven. Four (Frontend, Backend, Database, Integration) collapsed into a
+  single `implementation`, and Deployment had no value at all: the DEPLOYMENT
+  stage borrowed `implementation`, so the one stage that changes what users
+  are running was tiered, prompted and risk-scored as if it were writing a
+  feature.
+- Decision: separate the two ideas that had been conflated. A **capability**
+  is the kind of thinking a node needs, and it exists to pick a model tier and
+  a provider task kind. A **role** is a job on a team: a name, a bounded slice
+  of context, and a privilege posture. `lib/sdlc/agent-roster.ts` names all
+  eleven roles with explicit `reads`/`writes` resource kinds, a default risk,
+  and an approval flag. Only `database` and `deployment` became capabilities,
+  because only they behave differently — schema work runs STRONG rather than
+  STANDARD, and a release asks a provider for a verdict (`qa_assessment`)
+  rather than a proposal.
+- Bounds: Frontend, Backend and Integration deliberately share the
+  `implementation` capability. Writing a React component, a route handler and
+  a third-party client are the same reasoning at the same tier against the
+  same task kind; a capability each would have been a label that changed no
+  behaviour, and the roster's own tests assert those three values are absent
+  from `NODE_CAPABILITIES` so the next specialist has to clear the same bar.
+  What actually separates them is reach, and that is enforced as data:
+  `roleMayWrite` refuses a migration to every role but Database, and only
+  Deployment may write a `deployment_environment`. `database` and `deployment`
+  are the two approval-bound roles, at YELLOW and RED — an autonomy mode does
+  not get to waive either, per AGENTS.md.
+- Evidence: the capability→stage rule is written twice, once in TypeScript and
+  once in SQL, and `tests/unit/graph-stage-mapping-agreement.test.ts` holds
+  them to each other over the union of the replayable chain. That test caught
+  this change: the two new capabilities had no SQL branch. Migration
+  `20260829000100_specialist_capability_stage_map.sql` adds them in a new file
+  rather than editing either applied predecessor. It needs no companion enum
+  migration — IMPLEMENTATION and DEPLOYMENT have been in `public.sdlc_stage`
+  since 20260821000200 — and it changes zero rows today, since both
+  capabilities are new and every node the launch plan writes carries its stage
+  explicitly. **Not yet applied to hosted.** Gates: lint, typecheck, 5214
+  tests, production build.

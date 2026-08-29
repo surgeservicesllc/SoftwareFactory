@@ -56,6 +56,26 @@ export const NODE_CAPABILITIES = [
   "discovery",
   "evaluation",
   "decision",
+  /*
+   * Two build-side specialists (2026-08-29), and the bar for being here is
+   * behaving differently rather than being differently named. `database` work
+   * touches migrations and RLS, so it runs on a stronger tier than a component
+   * edit. `deployment` changes what is running in front of users, and asks a
+   * provider for a verdict rather than a proposal.
+   *
+   * `deployment` closes a real defect rather than adding a label. The
+   * DEPLOYMENT stage had no capability of its own, so it borrowed
+   * `implementation` — a release step was tiered, prompted and risk-scored as
+   * if it were writing a feature.
+   *
+   * Frontend, backend and integration work deliberately did *not* get values
+   * here. All three are the same reasoning at the same tier against the same
+   * task kind, so a capability each would be a label that changes nothing.
+   * What actually differs between them is which files they may touch, and
+   * that is a role — see lib/sdlc/agent-roster.ts.
+   */
+  "database",
+  "deployment",
 ] as const;
 export type NodeCapability = (typeof NODE_CAPABILITIES)[number];
 
@@ -92,6 +112,12 @@ export const CAPABILITY_MODEL_TIER: Readonly<Record<NodeCapability, ModelTier>> 
     discovery: "STANDARD",
     evaluation: "STRONG",
     decision: "STRONG",
+    // Schema work is judgement: a migration that drops a grant or loosens RLS
+    // is not recoverable by a retry, so it does not run cheap.
+    database: "STRONG",
+    // A deploy step reasons about whether release preconditions actually hold.
+    // Getting that wrong ships a regression to users.
+    deployment: "STRONG",
   });
 
 export type NodeContract = {

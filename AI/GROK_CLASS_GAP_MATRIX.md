@@ -80,15 +80,34 @@ Two concrete consequences, both verified against the file rather than assumed:
 **This is the Chief of Staff, and it does not exist.** Every other gap below is
 smaller.
 
-### 3.2 Agent roster is narrower than the goal's
+### 3.2 Agent roster is narrower than the goal's — CLOSED 2026-08-29
 
-`NODE_CAPABILITIES` holds nine: planning, architecture, implementation,
-extraction, review, security_review, qa, synthesis, reporting.
+*Corrected: an earlier draft of this section said `NODE_CAPABILITIES` held
+nine and listed only the originals. It held twelve — the discovery trio
+(`discovery`, `evaluation`, `decision`) was added under ADR-136, and
+`discovery` is what the goal's Research role maps to. The undercount made the
+gap look wider than it was.*
 
-The goal names eleven roles. Research, Product/Requirements, Frontend, Backend,
-Database, Integration and Deployment have no distinct capability — Frontend and
-Backend both collapse into `implementation`, which means routing cannot tell
-them apart and neither can a model-tier decision.
+The twelve at audit time: planning, architecture, implementation, extraction,
+review, security_review, qa, synthesis, reporting, discovery, evaluation,
+decision. Those covered seven of the eleven named roles. Frontend, Backend,
+Database and Integration all collapsed into `implementation`, and Deployment
+had no value at all — the DEPLOYMENT stage borrowed `implementation`, so a
+release step was tiered and prompted as though it were writing a feature.
+
+Closed by `lib/sdlc/agent-roster.ts` (ADR-150), which separates two ideas the
+audit had itself conflated. A capability is the kind of thinking a node needs;
+a role is a job with a bounded slice of context and a privilege posture. All
+eleven roles are now named, each with explicit `reads`/`writes` resource
+kinds, a default risk and an approval flag.
+
+Only `database` and `deployment` became capabilities, because only they behave
+differently — schema work runs STRONG, and a release asks for a verdict rather
+than a proposal. Frontend, Backend and Integration deliberately share
+`implementation`: same reasoning, same tier, same task kind, so a capability
+each would have been a label. What separates them is reach, enforced as data —
+no role but Database may write a migration, and no role but Deployment may
+write a deployment environment.
 
 ### 3.3 No worktree isolation
 
@@ -126,8 +145,8 @@ begins, and no amount of code moves it.
 
 1. **Chief of Staff: intent → plan.** The one gap that makes the headline
    promise false today.
-2. **Widen the agent roster** so routing can tell a frontend task from a
-   backend one.
+2. ~~**Widen the agent roster** so routing can tell a frontend task from a
+   backend one.~~ Done 2026-08-29 — ADR-150.
 3. **Command centre** as one surface over the run that already exists.
 4. **Autonomy modes** bound to the existing risk policy.
 5. **Worktree isolation** for parallel agents.
