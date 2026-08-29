@@ -30,13 +30,20 @@ Last triaged: 2026-08-29
   JOB_ALERT_EMAIL_FROM and CRON_SECRET exist (ADR-164). Remaining to
   light it up: the owner sets those three env vars in Vercel and
   redeploys — nothing else.
-- [ ] E2E acceptance: CI's browser/accessibility shards passed on the
-  exact merged head; a dedicated harness re-run of the job-seeker
-  journey + layout suites on merged main is in flight (result to be
-  recorded here). The live email leg stays unverifiable until the owner
-  env vars exist, so no unqualified "production ready" claim yet — the
-  alert path's honest state in production is **Not Connected**, verified
-  live (503 fail-closed probe).
+- [x] E2E acceptance (everything automatable): journey workflow run
+  `33266060493` on main `3cd6150` — full 178-migration chain on a real
+  local Supabase stack (real Postgres/PostgREST/GoTrue), production Next
+  build, real-browser fake-data journey (sign-in → onboarding → every
+  section → live board search → save → found again after reload) —
+  **success**, the lane's first green since 08-22 (unblocked by
+  ADR-165). CI browser/accessibility shards green on every merged head;
+  layout suites 1,387 passed locally.
+- [ ] E2E acceptance, email leg: unverifiable until the owner sets
+  RESEND_API_KEY, JOB_ALERT_EMAIL_FROM, CRON_SECRET in Vercel — the
+  alert path's honest production state is **Not Connected**, verified
+  live (503 fail-closed probe). Verify one real delivery + the
+  never-repeat ledger after the env vars exist before any unqualified
+  "production ready" claim for alerts.
 - [ ] Owner-supplied credentials would light up: USAJOBS, Adzuna, Jooble,
   Careerjet, Reed, ZipRecruiter (see catalogue notes). All keyless
   general boards worth adapting are live (13); the rest are honest
