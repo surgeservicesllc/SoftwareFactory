@@ -1,6 +1,67 @@
 # Current state
 
-Last reviewed: 2026-08-28
+Last reviewed: 2026-08-29
+
+## 2026-08-29: Budget Tracker
+
+`/BudgetTracker`, reached from a third global navigation tab for signed-in
+people. Accounts, recurring obligations, a paged ledger, cash flow by month,
+credit utilization, two payoff orders, and spreadsheet import. Owner request,
+2026-08-29; ADR-147 and ADR-148.
+
+Two migrations, `20260829000100_budget_tracker_activity_types` (enum values,
+separate so no transaction uses a value it added) and
+`20260829000200_budget_tracker_foundation` (six tables, two aggregate read
+functions). **Applied to hosted** on 2026-08-29 through the `budget-tracker`
+scope (run 33257354301, from `d22107ba`); both versions are in the ledger and
+the scope's own postflights passed against the live catalogue: six tables with
+RLS enabled and forced, neither `anon` nor `service_role` holding a grant on
+any of them, and both aggregate reads SECURITY INVOKER.
+
+`/BudgetTracker` is live and gated: signed out it redirects to
+`sign-in?next=%2FBudgetTracker`, and `/budgettracker` is a 404 — the
+capitalised path is the one that answers.
+
+Every row is scoped by `organization_id` **and** `user_id`, RLS enabled and
+FORCEd, with neither `anon` nor `service_role` holding a grant. The
+`service_role` revoke is explicit and load-bearing: that role is BYPASSRLS and
+the hosted default privileges hand it each new table, so without it the six
+would have arrived wide open past every policy. The two aggregate reads are
+SECURITY INVOKER for the same class of reason — as definers either would hand
+every member of an organization every other member's monthly totals.
+`tests/integration/budget-tracker.behavior.test.ts` proves all of it against
+real PostgreSQL while assuming the `authenticated` role; a superuser bypasses
+RLS outright, so a test skipping that step would pass against no policies.
+
+Money is `bigint` cents everywhere. A CHECK ties sign to kind, so a debit
+recorded as positive is a failed insert rather than a silently inverted total.
+A credit limit is refused on anything that is not a credit card, because
+utilization computed against a mortgage is a meaningless number that looks
+like a real one.
+
+**No seeded data, and none from the owner's own workbook.** The tables ship
+empty. The uploaded spreadsheet was used to develop and verify the reader and
+was deliberately not committed in any form — no fixture, no seed migration, no
+test data carrying real payees or balances.
+
+Import reads `.xlsx` with no parsing dependency: `lib/budget/spreadsheet.ts`
+inflates the ZIP with `node:zlib` and reads the XML parts, under caps on entry
+count, part size, total inflated size and rows. Verified against the owner's
+real 5.8 MB workbook: 8 sheets, 8,043 rows read from the checking sheet, 8,040
+imported, 3 skipped and reported. Re-importing is a no-op through a per-person
+sha256 content hash.
+
+**Not Connected**: there is no bank connection and no provider integration.
+Balances are what the person last recorded, and the page says so rather than
+implying a refresh that does not happen.
+
+Two findings worth keeping. The source workbook stores running counters in the
+same column as dates — read as Excel serials, 184 and 1721 become 1900-07-01
+and 1904-09-16, dates that sort and chart perfectly well and are not dates; the
+importer bounds serials to the range `posted_on` accepts. And the workbook does
+not fully reconcile: 38 of 8,040 rows disagree with their own stated running
+total, from twenty years of hand edits. `reconcile()` in
+`lib/budget/analytics.ts` finds those rather than hiding them.
 
 ## 2026-08-28: target-bound claims are hosted; final postdeploy remains gated
 
@@ -257,6 +318,52 @@ production, but the tenant has zero connected AI accounts, ready bots, or
 assignments; one Codex connection is unfinished and Claude OAuth is not
 complete. Provider OAuth and route setup must finish before a fresh command
 and persisted Step 9 correlation can be measured.
+
+## 2026-08-29: Job Search increment 1 — ten live boards, unified dedupe, 50-source catalogue (ADR-163)
+
+The active owner goal (world-class `/JobSearch` over 50 sources) landed its
+first increment on the existing search stack, extending rather than replacing
+it:
+
+- **Six new board adapters**, each probed live before its parser was written
+  and pinned by fixture tests: Remotive (6h per-term cache honoring its API
+  call budget, link-back + attribution by construction), Remote OK (corpus
+  feed, local filtering, HTML-entity decode, legal-notice row skipped),
+  Jobicy (`tag` free-text search), Himalayas (epoch dates, salary period kept
+  as text), Arbeitnow (`remote:false` maps to null, not "onsite"), and
+  We Work Remotely (official RSS; "Company : Role" split), and — same-day
+  addendum — The Muse (public JSON API, sampled pages, no upstream text
+  search), Working Nomads (open JSON feed), and Jobspresso (official job
+  feed). The registry now holds thirteen live boards; the request-contract test pins the exact
+  `supportsLocation` map.
+- **`board-search/unify.ts`**: one shared pure definition of cross-board
+  identity (normalized company+title), richer-record-wins card selection
+  with `primarySourceIndex` (saving goes through the board whose sealed
+  token matches the card's exact fields), and result-level filters
+  (AND/OR keywords, exclusions, work model, salary minimum with
+  unknown-kept semantics, require-salary, posted-within). The search route
+  returns a `unified` block (hits + dedupedFrom + beforeFilters) beside the
+  untouched per-board `results`, and the panel applies the same module
+  client-side for instant filtering without refetching.
+- **52-source catalogue** (`board-search/catalogue.ts`): 27 general + 25
+  marketing sources, each `live` (integrity-tested equal to the registry) |
+  `needs_credentials` (official API named — USAJOBS, Adzuna, Jooble,
+  Careerjet, Reed, ZipRecruiter — shown **Not Connected**) |
+  `external_link` (probed URL the person's own browser opens) |
+  `not_supported`. Every non-live URL was probed 2026-08-29; four dead
+  domains found during research were replaced with probed live ones.
+  `GET /api/job-seeker/search` now serves the catalogue to the picker.
+- **Panel rework**: unified view default (source badges per card, NEW badge
+  ≤3 days, sort by recency/stated salary), by-board view preserved, filter
+  chips with Clear All, grouped source picker with live checkboxes and
+  honest statuses. 17 panel tests, 12 route tests, 33 parser/unify tests,
+  6 catalogue integrity tests all green; the route test now mocks every
+  registry adapter so no unit test can egress.
+
+Remaining increments of the goal (tracked in BACKLOG): saved searches +
+alert preferences + seen-jobs ledger (migration + RLS), AI match display
+from the Career Profile, the alerts engine + email adapter with delivery
+ledger, and E2E acceptance before any production-ready claim.
 
 ## 2026-08-27: canonical Job Search is live and production accepted
 ## 2026-08-25: Revenue — Stripe subscription billing behind the existing storefront (ADR-149)

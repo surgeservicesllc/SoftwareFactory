@@ -1,3 +1,4 @@
+import { BudgetTrackerConsole } from "@/components/budget/console";
 import { FactoryStepConsole } from "@/components/graph/factory-step-console";
 import { factoryStep } from "@/lib/sdlc/factory-steps";
 import { LifecycleConsole } from "@/components/graph/lifecycle-console";
@@ -325,6 +326,14 @@ const CASES: Record<string, () => React.ReactElement> = {
   trail: () => <InShell><AgentTrailConsole /></InShell>,
   "job-seeker": () => <InShell><JobSeekerConsole /></InShell>,
   "job-search": () => <InShell><JobSearchPanel /></InShell>,
+  /*
+   * The Budget Tracker's populated layout. The route itself redirects when
+   * signed out, so the width sweep cannot measure it there — this case is
+   * where its tables, metric grid and cash-flow chart are actually laid out at
+   * all eight widths. Its widest content (the payoff table and the ledger) is
+   * what the horizontal-overflow assertion is really aimed at.
+   */
+  "budget-tracker": () => <InShell><BudgetTrackerConsole /></InShell>,
   /*
    * The resume review panel only exists after an upload, so the job-seeker
    * case above never renders it and it had no width coverage at all. Its

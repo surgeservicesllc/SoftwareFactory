@@ -9,9 +9,11 @@ nothing unless there is genuinely independent work to overlap. The engine
 therefore defaults to a single agent and makes every richer topology earn its
 place with evidence from the node set.
 
-Stage 1 — the engine core — is implemented and tested. Stages 2–5 (durability,
-execution, surfaces, demonstrations) are not. `AI/PHASE_2B_IMPLEMENTATION_PLAN.md`
-tracks the rest.
+The reasoning core described here is implemented and tested, and is now
+persisted and executed as well — see **State of the engine** at the end for
+what changed. `AI/PHASE_2B_IMPLEMENTATION_PLAN.md` tracks the staging.
+`AI/LOOPS_AND_GRAPHS.md` sets the engine against the loop/graph split it is an
+instance of, and names the one return path it does not have.
 
 ## The modules
 
@@ -179,9 +181,27 @@ Only *verified* items count as progress. Without that, a discovery loop
 sustains itself indefinitely on plausible candidates that never survive
 checking — mistaking activity for progress.
 
-## What is not built yet
+## Return paths
 
-No graph, node, edge, lock, verification, budget, or template is **persisted**.
-There is no scheduler loop driving real provider calls, no isolated-workspace
-fan-out, no integration nodes, no anchors modelled as evidence, no templates,
-and no UI. Stage 1 is the reasoning core those stages will use.
+Correction edges exist: a gate rejects a node, and the verdict and evidence
+travel back with it. The **learning edge** — an accepted result returning to
+the splitter as a constraint that shapes how later work is cut — does not.
+`AI/LOOPS_AND_GRAPHS.md` sets out the distinction and why the missing half is
+the one that makes a system improve rather than merely run fast;
+`AI/BACKLOG.md` tracks what building it would require.
+
+## State of the engine
+
+Stage 1 (the pure reasoning core above) was the original scope. Since then the
+graph is persisted and executed: `graphs`, `graph_runs` and node state live in
+Postgres from `20260814000100_graph_engineering.sql` onward, `runner.ts` drives
+real provider calls, and `lib/graph/` has grown locks, anchors, templates,
+integration nodes, fan-out, observability and node/stage reporting. Runs are
+read through `list_graph_runs`, which since `20260825000200` also reports
+`tokens_used`, `cost_micros`, `budget_action` and `discovery_rounds`.
+
+An earlier version of this section claimed none of that was persisted or
+executed. That was true when written and is not now.
+
+Still open: the learning edge above, and the reclaim cost recorded under
+"Resumable lifecycle runs" in `AI/BACKLOG.md`.

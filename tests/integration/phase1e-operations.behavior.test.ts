@@ -190,12 +190,13 @@ describe("Phase 1E production operations behavior", () => {
     // record-only submission guard table, the graph/Phase 1C release bridge
     // and its immutable gate-approval intent table, plus the private legacy
     // graph-artifact containment audit table.
+    // ...and the six Budget Tracker tables.
     // The filter below is the real guarantee — this count exists so a new
     // table cannot slip in unexamined. 139 since the Job Discovery surface
     // added job_seeker_saved_searches, job_seeker_search_alerts and
     // job_seeker_search_events; each is RLS-enabled and forced, which the
     // filter on the next line is what actually proves.
-    expect(rlsRows).toHaveLength(139);
+    expect(rlsRows).toHaveLength(145);
     expect(rlsRows.filter((row) => !row.relrowsecurity || !row.relforcerowsecurity)).toEqual([]);
 
     const { rows: grantRows } = await db.query<{ table_name: string }>(

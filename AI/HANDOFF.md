@@ -1,6 +1,56 @@
 # Handoff
 
-Last updated: 2026-08-28
+Last updated: 2026-08-29
+
+## Newest (2026-08-29): Job Search increment 1 — ten live boards, unified view, honest catalogue (ADR-163)
+
+The active owner goal (50-source `/JobSearch`) landed its first increment.
+Nine new adapters, each live-probed before its parser existed and pinned
+by fixture tests (Remotive, Remote OK, Jobicy, Himalayas, Arbeitnow, WWR,
+The Muse, Working Nomads, Jobspresso); the registry holds thirteen boards. `board-search/unify.ts` is the single
+definition of cross-board identity and result filters, imported by both
+the route (a `unified` response block with dedupedFrom/beforeFilters
+counts) and the panel (instant client-side filtering, no refetch). The
+52-source catalogue carries one honest status per source; every non-live
+link was probed 2026-08-29 (four dead domains found in research were
+replaced — verify before listing, always). The panel's unified view is
+default: source badges, NEW ≤3d, sort, filter chips with Clear All,
+grouped picker with **Not Connected** and outward links.
+
+Working rules discovered/confirmed this stretch: the route test now mocks
+every registry adapter — when a board joins the registry, add its mock
+there or unit tests will attempt real egress; a unified card must be saved
+through `sources[primarySourceIndex]` because the seal binds board + exact
+job fields; catalogue and registry are held equal by an integrity test, so
+neither can drift alone.
+
+Next increments (BACKLOG "Job Search 50-source engine"): saved searches +
+alerts prefs + seen-jobs migration under forced RLS, match-score display
+from the Career Profile chain, then the alerts engine + env-gated email
+adapter with a delivery ledger and the never-repeat guarantee, then real
+E2E before any production-ready claim.
+
+## 2026-08-29: Budget Tracker
+
+Detail in `AI/CURRENT_STATE.md`; decisions in ADR-147 and ADR-148.
+
+Three things the next agent must not undo:
+
+- **The owner's real financial workbook is not in this repository, and must not
+  be put there.** It was used to develop and verify the spreadsheet reader
+  against real shapes, and left out of every fixture, seed and test. If a test
+  needs data, construct it — `tests/unit/budget-import.test.ts` builds a
+  minimal `.xlsx` in memory rather than checking one in.
+- **`budget_monthly_flow` and `budget_category_spend` are SECURITY INVOKER.**
+  Making either a definer hands every member of an organization every other
+  member's monthly totals, past a row policy that is otherwise correct.
+Both migrations are applied to hosted (run 33257354301) and the page is live.
+
+- **The `service_role` revoke in `20260829000200` is load-bearing.** That role
+  is BYPASSRLS and the hosted default privileges re-grant it on every new
+  table; without the revoke the six budget tables are readable past every
+  policy on them. The behaviour test grants those privileges the way hosted
+  would and checks they are taken away, so it fails if the revoke is removed.
 
 ## Newest (2026-08-28 ~11:30Z): Agent Trail — a live map of the factory's runs (ADR-162)
 

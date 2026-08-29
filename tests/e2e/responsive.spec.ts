@@ -187,6 +187,24 @@ test("search is gated server-side, not merely hidden from the navigation", async
   await expect(page).toHaveURL(/\/auth\/sign-in\?next=%2Fjob-seeker/);
 });
 
+test("/BudgetTracker is gated server-side, and by its own call", async ({ page }) => {
+  /*
+   * The most sensitive page in the product: a household's accounts, income
+   * and debts. It sits directly under the portal route group with no section
+   * layout above it, so the gate is called by the page itself.
+   *
+   * Asking for the URL directly while signed out is the only way to tell a
+   * real server gate from a link merely left out of the navigation, and a
+   * hidden link is still a reachable URL.
+   *
+   * The capitalised path is asserted as written because Next.js routes are
+   * case-sensitive: this is the spelling that answers, and the one the header
+   * links to.
+   */
+  await page.goto("/BudgetTracker");
+  await expect(page).toHaveURL(/\/auth\/sign-in\?next=%2FBudgetTracker/);
+});
+
 test("/Job-Search is gated server-side, and by its own call", async ({ page }) => {
   /*
    * The named entry point to the board search. Unlike /job-seeker/search it

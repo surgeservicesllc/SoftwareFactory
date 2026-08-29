@@ -95,7 +95,7 @@ Database and Integration all collapsed into `implementation`, and Deployment
 had no value at all — the DEPLOYMENT stage borrowed `implementation`, so a
 release step was tiered and prompted as though it were writing a feature.
 
-Closed by `lib/sdlc/agent-roster.ts` (ADR-163), which separates two ideas the
+Closed by `lib/sdlc/agent-roster.ts` (ADR-165), which separates two ideas the
 audit had itself conflated. A capability is the kind of thinking a node needs;
 a role is a job with a bounded slice of context and a privilege posture. All
 eleven roles are now named, each with explicit `reads`/`writes` resource
@@ -146,7 +146,7 @@ begins, and no amount of code moves it.
 1. **Chief of Staff: intent → plan.** The one gap that makes the headline
    promise false today.
 2. ~~**Widen the agent roster** so routing can tell a frontend task from a
-   backend one.~~ Done 2026-08-29 — ADR-163.
+   backend one.~~ Done 2026-08-29 — ADR-165.
 3. **Command centre** as one surface over the run that already exists.
 4. **Autonomy modes** bound to the existing risk policy.
 5. **Worktree isolation** for parallel agents.

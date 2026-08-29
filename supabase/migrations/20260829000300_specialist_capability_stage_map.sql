@@ -49,7 +49,7 @@ begin
        )
   ) then
     raise exception using errcode = '55000',
-      message = '20260829000100 postflight: a node with a known capability has no lifecycle stage';
+      message = '20260829000300 postflight: a node with a known capability has no lifecycle stage';
   end if;
 end;
 $postflight$;
