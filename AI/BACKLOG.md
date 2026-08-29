@@ -42,6 +42,18 @@ Last triaged: 2026-08-29
   general boards worth adapting are live (13); the rest are honest
   link-outs.
 
+## Migration chain under Supabase CLI ≥ 2.116 (2026-08-29, ADR-165)
+
+- [x] Root cause of the journey lanes failing since 08-23: CLI 2.116.0's
+  local stack (postgres 17.6.1.165) seeds hosted-style default function
+  privileges, and no CLI wraps a migration file in one transaction.
+  Fixed in the chain itself: `supabase/roles.sql` collapses the default
+  ACLs before migrations (no-op on older CLIs), 20260822000850 accepts
+  the hosted-defaults clean-replay input (sha pins moved with it), and
+  20260827000210 opens its transaction explicitly. Full 178-migration
+  chain replayed end to end in Docker on 17.6.1.165. Lanes stay on
+  floating `supabase@2` so the daily run doubles as drift detection.
+
 ## Exact Blackstone Supabase Auth bootstrap (2026-08-28, ADR-160)
 
 - [x] Add an exact-email/project/actor/first-attempt workflow that receives the

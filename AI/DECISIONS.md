@@ -2958,3 +2958,60 @@ Use this append-only log for decisions that constrain future implementation. Cha
   bounded batch per invocation. The migration ships behind the scope-gated
   hosted-apply workflow (`job-seeker-alert-engine`) with a postflight that
   proves the ledger forces RLS and the definer pair is service_role-only.
+
+
+## ADR-165 - The migration chain replays under both Supabase CLI generations
+
+Date: 2026-08-29
+
+Context: every scheduled local-stack run of the job-seeker journey lane had
+failed since 2026-08-23 at `20260822000850`'s preflight ("hosted function
+identity, catalog, ACL cohort, or overload drifted"). Reproduction in a
+local Docker stack isolated the variable: supabase CLI 2.115.0 pins
+supabase/postgres 17.6.1.159 and initializes a local database with no
+`postgres` default ACLs in `public` (objects carry exactly the grants
+migrations state); CLI 2.116.0 — released between the last green run
+(08-22, 2.115.0 in its log) and the first failure — pins 17.6.1.165, whose
+bootstrap seeds hosted-style default privileges (functions created by
+`postgres` in `public` default-grant EXECUTE to anon, authenticated, and
+service_role). Separately, neither CLI wraps a migration file in one
+transaction, so `20260827000210`'s top-of-file `LOCK TABLE` (from 08-27,
+never yet replayed by any journey-lane CLI) failed with 25P01 under both.
+Hosted is unaffected throughout: it was never rebuilt, its own state
+matched 000850's hosted branch when the migration ran there, and 000210
+was applied through psql's single-transaction wrap.
+
+Decision — make the chain itself robust rather than pinning the lane:
+
+1. **`supabase/roles.sql`** (new; the CLI seeds it before migrations, local
+   stacks only) collapses the new image's default ACLs back to
+   PostgreSQL's implicit default, so objects created by the chain carry
+   exactly the grants the migrations state — the environment the chain
+   contract was written and verified against. Under the older CLI every
+   statement is a no-op. With it, the unedited 20260822000900 applies on
+   both CLI generations.
+2. **`20260822000850` accepts a third input state** — the hosted-defaults
+   clean replay (canonical claim contract plus the extra default
+   service_role entries) — normalized by the same revokes as the hosted
+   input to the same postflight target. This keeps the migration correct
+   even where roles.sql has not run. The frozen sha pins in
+   `apply-hosted-migrations.yml` and the lint-repair scope test moved with
+   the file, the same procedure ADR-126 used for 000900. Hosted semantics
+   are unchanged: the hosted branch and the already-normalized branch are
+   byte-for-byte the checks they were.
+3. **`20260827000210` opens its transaction explicitly** (begin/commit
+   around the whole containment), which locks correctly under the CLI's
+   statement-by-statement execution, psql's wrap, and PGlite alike.
+
+The journey lanes stay on floating `supabase@2` deliberately: the daily
+scheduled run is now also the early-warning signal for the next CLI or
+image drift, and this ADR is the diagnostic playbook (reproduce in Docker,
+introspect at the failing migration's own search_path, compare against the
+expected md5/ACL values in the file).
+
+Evidence: full 178-migration chain replayed end to end in Docker on
+supabase/postgres 17.6.1.165 via CLI 2.116.0 with all three parts in
+place (alert-engine functions present, ledger count 178); 000850 verified
+taking the fresh-defaults branch on .165 and the already-normalized branch
+in the PGlite harness (19 harness tests across the 000850 suites, plus the
+full-chain behavior tests, all green).
