@@ -103,3 +103,38 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
+
+## Job board API terms — Remote OK and Jobicy
+
+`lib/job-seeker/boards/aggregators.ts` reads two public APIs that attach
+conditions to their use. Neither is a software licence; both are terms the
+provider can enforce by withdrawing access, and both are met by how the
+adapters store what they fetch rather than by intention.
+
+**Remote OK** (`https://remoteok.com/api`) states in the payload itself:
+
+> API Terms of Service: Please link back (with follow, and without nofollow!)
+> to the URL on Remote OK and mention Remote OK as a source, so we get traffic
+> back from your site. If you do not we'll have to suspend API access.
+>
+> Please don't use the Remote OK logo without written permission as it's a
+> registered trademark, please DO use our name Remote OK though.
+
+Every imported posting stores Remote OK's own `url` unrewritten, and the jobs
+panel renders it as an ordinary anchor — this repository adds `nofollow`
+nowhere. `job_seeker_jobs.source` records `remoteok`, which is the credit. The
+name is used; the logo is not.
+
+**Jobicy** (`https://jobicy.com/api/v2/remote-jobs`) states:
+
+> Please ensure Jobicy is clearly credited with a direct link to the source,
+> and all application buttons redirect to the original job URL provided in
+> this feed.
+
+Same mechanism: the stored `url` is Jobicy's own posting URL, never a
+rewritten or proxied one.
+
+**What would break these.** Rewriting `ImportedJob.url` to an internal
+redirect, adding `rel="nofollow"` to job links, or dropping the `source`
+attribution. If any of those is ever wanted, these terms are the reason to
+think twice first.

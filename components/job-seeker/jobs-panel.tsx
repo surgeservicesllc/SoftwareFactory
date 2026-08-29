@@ -249,7 +249,7 @@ export function JobSeekerJobsPanel() {
         <div className="flex flex-wrap items-start justify-between gap-3">
           <SectionTitle
             title="Job Discovery"
-            description="Record a posting and it is scored immediately against your profile and preferences."
+            description="Record a posting or import from ten public job boards — every one is scored immediately against your profile and preferences."
           />
           <button type="button" className="btn btn-primary" onClick={() => setShowForm((v) => !v)}>
             {showForm ? "Cancel" : "Record a job"}
@@ -257,9 +257,11 @@ export function JobSeekerJobsPanel() {
         </div>
         <p className="mt-2 text-xs text-[var(--text-faint)]">{EVALUATION_METHOD_LABEL}</p>
         <p className="mt-1 text-xs text-[var(--text-faint)]">
-          Record a posting yourself, or import from a company&apos;s public Greenhouse or Lever
-          board by its identifier. A source that needs credentials activates only when its
-          named configuration actually exists — never before.
+          Record a posting yourself, or import from one of ten public job boards. The first
+          six read a single employer&apos;s board and ask for that company&apos;s identifier
+          from its public URL; the last four search across every employer on them and ask
+          for a search term instead. All ten are keyless. A source that needs credentials
+          activates only when its named configuration actually exists — never before.
         </p>
 
         {sources.length > 0 ? (

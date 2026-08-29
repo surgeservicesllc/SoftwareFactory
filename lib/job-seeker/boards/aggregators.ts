@@ -1,0 +1,336 @@
+import {
+  COMPANY_MAX,
+  DESCRIPTION_MAX,
+  EXTERNAL_ID_MAX,
+  ImportSourceError,
+  LOCATION_MAX,
+  MAX_IMPORT_POSTINGS,
+  TITLE_MAX,
+  bounded,
+  boundedOrNull,
+  externalIdOrNull,
+  htmlToText,
+  httpsUrlOrNull,
+  timedFetch,
+  type FetchedPostings,
+  type ImportedJob,
+} from "@/lib/job-seeker/boards/contract";
+
+/**
+ * Job boards that publish everyone's postings rather than one company's.
+ *
+ * These differ from the ATS adapters in what a person supplies: not "which
+ * employer" but "what am I looking for". The identifier is therefore a search
+ * term, and `assertIdentifier` is deliberately not used — its pattern forbids
+ * spaces, which would reject "react developer", the most ordinary thing
+ * anyone would type.
+ *
+ * Every posting still carries its own real employer. `FetchedPostings.company`
+ * names the board instead, because there is no single company and putting the
+ * search term there would report "imported 12 postings from react developer".
+ *
+ * ## Attribution these boards require, and where it is honoured
+ *
+ * Two of them attach conditions to API use, and they are met by construction
+ * rather than by intention:
+ *
+ * - **Remote OK**: "Please link back (with follow, and without nofollow!) to
+ *   the URL on Remote OK and mention Remote OK as a source". Every posting
+ *   stores the provider's own `url`, and the jobs panel renders it as an
+ *   ordinary followed anchor — this repository adds no `nofollow` anywhere.
+ *   The `source` column records `remoteok`, which is the credit. Their logo is
+ *   a registered trademark and is not used.
+ * - **Jobicy**: "ensure Jobicy is clearly credited with a direct link to the
+ *   source, and all application buttons redirect to the original job URL".
+ *   Same mechanism: the stored `url` is Jobicy's own posting URL, never a
+ *   rewritten one.
+ *
+ * Both are recorded in `THIRD_PARTY_NOTICES.md` so a later change that strips
+ * job links has somewhere to discover what it would be breaking.
+ */
+
+/** A search term: free text, bounded, and not empty once trimmed. */
+export function assertSearchTerm(value: string): string {
+  const term = value.trim().replace(/\s+/g, " ");
+  if (term.length === 0 || term.length > 120) {
+    throw new ImportSourceError(
+      "identifier_invalid",
+      "Give a search term of up to 120 characters — a job title, a skill, or a keyword.",
+    );
+  }
+  return term;
+}
+
+async function aggregatorJson<T>(url: string, board: string): Promise<T> {
+  const response = await timedFetch(url);
+  // Same reasoning as the company boards: a rate limit is a wait, not a fault.
+  if (response.status === 429) {
+    throw new ImportSourceError(
+      "provider_error",
+      `${board} is rate limiting requests right now. Wait a minute and search again.`,
+    );
+  }
+  if (!response.ok) {
+    throw new ImportSourceError("provider_error", `${board} answered HTTP ${response.status}.`);
+  }
+  const body = (await response.json().catch(() => null)) as T | null;
+  if (body === null) {
+    throw new ImportSourceError("provider_error", `${board} answered with something that is not JSON.`);
+  }
+  return body;
+}
+
+/**
+ * A board returning nothing for a term is a real answer, not a failure.
+ *
+ * Every adapter here returns an empty posting list rather than throwing, so
+ * "no remote React roles today" reads as an empty import instead of an error
+ * that suggests the integration is broken.
+ */
+function emptyResult(board: string): FetchedPostings {
+  return { company: board, totalAvailable: 0, postings: [] };
+}
+
+/* ── Remotive ───────────────────────────────────────────────────────────── */
+
+type RemotiveJob = {
+  id?: unknown;
+  title?: unknown;
+  company_name?: unknown;
+  candidate_required_location?: unknown;
+  job_type?: unknown;
+  url?: unknown;
+  salary?: unknown;
+  description?: unknown;
+};
+
+export async function fetchRemotiveJobs(identifier: string): Promise<FetchedPostings> {
+  const term = assertSearchTerm(identifier);
+  const body = await aggregatorJson<{ jobs?: unknown }>(
+    `https://remotive.com/api/remote-jobs?search=${encodeURIComponent(term)}&limit=${MAX_IMPORT_POSTINGS}`,
+    "Remotive",
+  );
+  const jobs = Array.isArray(body.jobs) ? body.jobs : [];
+  if (jobs.length === 0) return emptyResult("Remotive");
+
+  const postings = jobs.slice(0, MAX_IMPORT_POSTINGS).flatMap((entry): ImportedJob[] => {
+    const job = entry as RemotiveJob;
+    const title = boundedOrNull(job.title, TITLE_MAX);
+    const company = boundedOrNull(job.company_name, COMPANY_MAX);
+    const id = externalIdOrNull(job.id, EXTERNAL_ID_MAX);
+    if (title === null || company === null || id === null) return [];
+    return [{
+      externalId: id,
+      url: httpsUrlOrNull(job.url),
+      title,
+      company,
+      // Remotive sends "" for a job with no stated pay; that is absent, not a
+      // salary of nothing.
+      salaryText: boundedOrNull(job.salary, 200),
+      location: boundedOrNull(job.candidate_required_location, LOCATION_MAX),
+      // Every posting on Remotive is a remote posting; that is the board.
+      workModel: "remote",
+      description: boundedOrNull(
+        typeof job.description === "string" ? htmlToText(job.description) : null,
+        DESCRIPTION_MAX,
+      ),
+    }];
+  });
+
+  return { company: "Remotive", totalAvailable: jobs.length, postings };
+}
+
+/* ── Arbeitnow ──────────────────────────────────────────────────────────── */
+
+type ArbeitnowJob = {
+  slug?: unknown;
+  title?: unknown;
+  company_name?: unknown;
+  location?: unknown;
+  remote?: unknown;
+  url?: unknown;
+  description?: unknown;
+};
+
+export async function fetchArbeitnowJobs(identifier: string): Promise<FetchedPostings> {
+  const term = assertSearchTerm(identifier).toLowerCase();
+  const body = await aggregatorJson<{ data?: unknown }>(
+    "https://www.arbeitnow.com/api/job-board-api",
+    "Arbeitnow",
+  );
+  const all = Array.isArray(body.data) ? body.data : [];
+  /*
+   * Arbeitnow's board endpoint takes no query parameter — it returns a page of
+   * everything. Filtering here rather than pretending the API searched is the
+   * honest arrangement: `totalAvailable` reports how many of the page matched,
+   * not how many exist on Arbeitnow, because this adapter cannot know that.
+   */
+  const matched = all.filter((entry) => {
+    const job = entry as ArbeitnowJob;
+    const haystack = [job.title, job.company_name, job.location]
+      .filter((part): part is string => typeof part === "string")
+      .join(" ")
+      .toLowerCase();
+    return haystack.includes(term);
+  });
+  if (matched.length === 0) return emptyResult("Arbeitnow");
+
+  const postings = matched.slice(0, MAX_IMPORT_POSTINGS).flatMap((entry): ImportedJob[] => {
+    const job = entry as ArbeitnowJob;
+    const title = boundedOrNull(job.title, TITLE_MAX);
+    const company = boundedOrNull(job.company_name, COMPANY_MAX);
+    const slug = boundedOrNull(job.slug, EXTERNAL_ID_MAX);
+    if (title === null || company === null || slug === null) return [];
+    const location = boundedOrNull(job.location, LOCATION_MAX);
+    return [{
+      externalId: slug,
+      url: httpsUrlOrNull(job.url),
+      title,
+      company,
+      salaryText: null,
+      location,
+      workModel: job.remote === true ? "remote" : null,
+      description: boundedOrNull(
+        typeof job.description === "string" ? htmlToText(job.description) : null,
+        DESCRIPTION_MAX,
+      ),
+    }];
+  });
+
+  return { company: "Arbeitnow", totalAvailable: matched.length, postings };
+}
+
+/* ── Jobicy ─────────────────────────────────────────────────────────────── */
+
+type JobicyJob = {
+  id?: unknown;
+  jobTitle?: unknown;
+  companyName?: unknown;
+  jobGeo?: unknown;
+  jobType?: unknown;
+  url?: unknown;
+  jobDescription?: unknown;
+  annualSalaryMin?: unknown;
+  annualSalaryMax?: unknown;
+  salaryCurrency?: unknown;
+};
+
+function jobicySalary(job: JobicyJob): string | null {
+  const min = typeof job.annualSalaryMin === "number" ? job.annualSalaryMin : null;
+  const max = typeof job.annualSalaryMax === "number" ? job.annualSalaryMax : null;
+  if (min === null && max === null) return null;
+  const currency = typeof job.salaryCurrency === "string" ? `${job.salaryCurrency} ` : "";
+  const range = min !== null && max !== null ? `${min}–${max}` : `${min ?? max}`;
+  return bounded(`${currency}${range}`, 200);
+}
+
+export async function fetchJobicyJobs(identifier: string): Promise<FetchedPostings> {
+  const term = assertSearchTerm(identifier);
+  const body = await aggregatorJson<{ jobs?: unknown }>(
+    `https://jobicy.com/api/v2/remote-jobs?count=${MAX_IMPORT_POSTINGS}&tag=${encodeURIComponent(term)}`,
+    "Jobicy",
+  );
+  const jobs = Array.isArray(body.jobs) ? body.jobs : [];
+  if (jobs.length === 0) return emptyResult("Jobicy");
+
+  const postings = jobs.slice(0, MAX_IMPORT_POSTINGS).flatMap((entry): ImportedJob[] => {
+    const job = entry as JobicyJob;
+    const title = boundedOrNull(job.jobTitle, TITLE_MAX);
+    const company = boundedOrNull(job.companyName, COMPANY_MAX);
+    const id = externalIdOrNull(job.id, EXTERNAL_ID_MAX);
+    if (title === null || company === null || id === null) return [];
+    return [{
+      externalId: id,
+      // Jobicy's terms require the link to be their posting URL, unrewritten.
+      url: httpsUrlOrNull(job.url),
+      title,
+      company,
+      salaryText: jobicySalary(job),
+      location: boundedOrNull(job.jobGeo, LOCATION_MAX),
+      workModel: "remote",
+      description: boundedOrNull(
+        typeof job.jobDescription === "string" ? htmlToText(job.jobDescription) : null,
+        DESCRIPTION_MAX,
+      ),
+    }];
+  });
+
+  return { company: "Jobicy", totalAvailable: jobs.length, postings };
+}
+
+/* ── Remote OK ──────────────────────────────────────────────────────────── */
+
+type RemoteOkJob = {
+  id?: unknown;
+  position?: unknown;
+  company?: unknown;
+  location?: unknown;
+  url?: unknown;
+  description?: unknown;
+  tags?: unknown;
+  salary_min?: unknown;
+  salary_max?: unknown;
+  legal?: unknown;
+};
+
+function remoteOkSalary(job: RemoteOkJob): string | null {
+  const min = typeof job.salary_min === "number" && job.salary_min > 0 ? job.salary_min : null;
+  const max = typeof job.salary_max === "number" && job.salary_max > 0 ? job.salary_max : null;
+  if (min === null && max === null) return null;
+  return bounded(`USD ${min !== null && max !== null ? `${min}–${max}` : `${min ?? max}`}`, 200);
+}
+
+export async function fetchRemoteOkJobs(identifier: string): Promise<FetchedPostings> {
+  const term = assertSearchTerm(identifier).toLowerCase();
+  const body = await aggregatorJson<unknown>("https://remoteok.com/api", "Remote OK");
+  if (!Array.isArray(body)) {
+    throw new ImportSourceError("provider_error", "Remote OK answered with an unexpected shape.");
+  }
+
+  /*
+   * The first element is not a job. Remote OK puts its API terms of service
+   * there — an object carrying `legal` and no posting fields — so a reader
+   * that maps the array straight through imports a job titled `undefined`.
+   * Filtering on the absence of an id is more durable than skipping index 0,
+   * because it survives them adding a second metadata entry.
+   */
+  const jobs = body.filter((entry) => {
+    const job = entry as RemoteOkJob;
+    return job.legal === undefined && job.id !== undefined && job.position !== undefined;
+  });
+
+  const matched = jobs.filter((entry) => {
+    const job = entry as RemoteOkJob;
+    const tags = Array.isArray(job.tags) ? job.tags.filter((t): t is string => typeof t === "string") : [];
+    const haystack = [job.position, job.company, job.location, ...tags]
+      .filter((part): part is string => typeof part === "string")
+      .join(" ")
+      .toLowerCase();
+    return haystack.includes(term);
+  });
+  if (matched.length === 0) return emptyResult("Remote OK");
+
+  const postings = matched.slice(0, MAX_IMPORT_POSTINGS).flatMap((entry): ImportedJob[] => {
+    const job = entry as RemoteOkJob;
+    const title = boundedOrNull(job.position, TITLE_MAX);
+    const company = boundedOrNull(job.company, COMPANY_MAX);
+    const id = externalIdOrNull(job.id, EXTERNAL_ID_MAX);
+    if (title === null || company === null || id === null) return [];
+    return [{
+      externalId: id,
+      // Their terms require the link back to be to the Remote OK URL itself.
+      url: httpsUrlOrNull(job.url),
+      title,
+      company,
+      salaryText: remoteOkSalary(job),
+      location: boundedOrNull(job.location, LOCATION_MAX),
+      workModel: "remote",
+      description: boundedOrNull(
+        typeof job.description === "string" ? htmlToText(job.description) : null,
+        DESCRIPTION_MAX,
+      ),
+    }];
+  });
+
+  return { company: "Remote OK", totalAvailable: matched.length, postings };
+}

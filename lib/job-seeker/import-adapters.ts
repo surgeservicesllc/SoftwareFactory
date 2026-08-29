@@ -18,161 +18,51 @@
  *   named variables, never by assertion.
  */
 
-export type ImportedJob = Readonly<{
-  externalId: string;
-  url: string | null;
-  title: string;
-  company: string;
-  salaryText: string | null;
-  location: string | null;
-  workModel: "remote" | "hybrid" | "onsite" | null;
-  description: string | null;
-}>;
+import {
+  fetchAshbyBoard,
+  fetchBreezyBoard,
+  fetchSmartRecruitersBoard,
+  fetchWorkableBoard,
+} from "@/lib/job-seeker/boards/company-boards";
+import {
+  fetchArbeitnowJobs,
+  fetchJobicyJobs,
+  fetchRemoteOkJobs,
+  fetchRemotiveJobs,
+} from "@/lib/job-seeker/boards/aggregators";
 
-/** What one fetch of a public board actually found. */
-export type FetchedPostings = Readonly<{
-  company: string;
-  totalAvailable: number;
-  postings: readonly ImportedJob[];
-}>;
-
-export type ImportSourceErrorCode =
-  | "identifier_invalid"
-  | "source_not_found"
-  | "provider_error"
-  | "provider_unreachable";
-
-/** A typed failure the route can map to an honest HTTP answer. */
-export class ImportSourceError extends Error {
-  constructor(
-    readonly code: ImportSourceErrorCode,
-    message: string,
-  ) {
-    super(message);
-    this.name = "ImportSourceError";
-  }
-}
-
-export type JobImportAdapter = Readonly<{
-  /** The `source` value recorded on every job this adapter imports. */
-  key: string;
-  name: string;
-  summary: string;
-  mode: "public" | "credentialed";
-  /** Public adapters: what the identifier field is called on the page. */
-  identifierLabel?: string;
-  /** Public adapters: where a person finds their identifier. */
-  identifierHint?: string;
-  /** Credentialed adapters: the exact configuration that must exist. */
-  requiredConfiguration: readonly string[];
-  /** Public adapters are always available; credentialed ones by detection. */
-  configured: boolean;
-  /** Present only where a real integration exists. */
-  fetchPostings?: (identifier: string) => Promise<FetchedPostings>;
-}>;
+import {
+  COMPANY_MAX,
+  DESCRIPTION_MAX,
+  EXTERNAL_ID_MAX,
+  ImportSourceError,
+  LOCATION_MAX,
+  MAX_IMPORT_POSTINGS,
+  TITLE_MAX,
+  assertIdentifier,
+  bounded,
+  boundedOrNull,
+  htmlToText,
+  httpsUrlOrNull,
+  timedFetch,
+  type FetchedPostings,
+  type ImportedJob,
+  type JobImportAdapter,
+} from "@/lib/job-seeker/boards/contract";
 
 /*
- * Bounds mirror the job_seeker_jobs CHECKs (migration 20260820000200):
- * title/company ≤ 300, url ≤ 800, external_id ≤ 200, location ≤ 200,
- * description ≤ 30000. One request imports at most MAX_IMPORT_POSTINGS —
- * bounded work, and the response states the board's true total so nothing
- * pretends the cap was the whole board.
+ * Re-exported so every existing importer of these names keeps working. The
+ * definitions moved; the public surface of this module did not.
  */
-export const MAX_IMPORT_POSTINGS = 40;
-const FETCH_TIMEOUT_MS = 10_000;
-const TITLE_MAX = 300;
-const COMPANY_MAX = 300;
-const URL_MAX = 800;
-const EXTERNAL_ID_MAX = 200;
-const LOCATION_MAX = 200;
-const DESCRIPTION_MAX = 30_000;
-
-const IDENTIFIER_PATTERN = /^[a-z0-9][a-z0-9_-]{0,62}$/;
-
-function assertIdentifier(value: string): string {
-  const identifier = value.trim().toLowerCase();
-  if (!IDENTIFIER_PATTERN.test(identifier)) {
-    throw new ImportSourceError(
-      "identifier_invalid",
-      "Identifiers are lowercase letters, digits, hyphens, and underscores — the last path segment of the board's public URL.",
-    );
-  }
-  return identifier;
-}
-
-function decodeEntities(value: string): string {
-  return value
-    .replaceAll(/&#x([0-9a-f]+);/gi, (_, hex: string) => {
-      const code = Number.parseInt(hex, 16);
-      return Number.isFinite(code) ? String.fromCodePoint(code) : "";
-    })
-    .replaceAll(/&#(\d+);/g, (_, dec: string) => {
-      const code = Number.parseInt(dec, 10);
-      return Number.isFinite(code) ? String.fromCodePoint(code) : "";
-    })
-    .replaceAll("&nbsp;", " ")
-    .replaceAll("&quot;", '"')
-    .replaceAll("&#39;", "'")
-    .replaceAll("&apos;", "'")
-    .replaceAll("&lt;", "<")
-    .replaceAll("&gt;", ">")
-    .replaceAll("&amp;", "&");
-}
-
-/**
- * Provider HTML to readable text. Greenhouse ships its content
- * entity-ESCAPED (the markup arrives as &lt;p&gt;), and that markup can
- * itself carry entities — so: decode to get the HTML, turn block
- * boundaries into newlines, strip the remaining tags, then decode once
- * more for the entities the first pass surfaced. Plain single-escaped
- * HTML (Lever's lists) passes through the same path unharmed.
- */
-export function htmlToText(html: string): string {
-  return decodeEntities(
-    decodeEntities(html)
-      .replaceAll(/<\s*(?:br|\/p|\/li|\/div|\/h[1-6]|\/ul|\/ol|\/tr)\b[^>]*>/gi, "\n")
-      .replaceAll(/<[^>]*>/g, " "),
-  )
-    .replaceAll(/[ \t]+/g, " ")
-    .replaceAll(/ ?\n ?/g, "\n")
-    .replaceAll(/\n{3,}/g, "\n\n")
-    .trim();
-}
-
-function bounded(value: string, max: number): string {
-  return value.length > max ? value.slice(0, max) : value;
-}
-
-function boundedOrNull(value: unknown, max: number): string | null {
-  if (typeof value !== "string") return null;
-  const trimmed = value.trim();
-  return trimmed ? bounded(trimmed, max) : null;
-}
-
-function httpsUrlOrNull(value: unknown): string | null {
-  if (typeof value !== "string") return null;
-  const trimmed = value.trim();
-  if (!/^https?:\/\//.test(trimmed) || trimmed.length > URL_MAX) return null;
-  return trimmed;
-}
-
-async function timedFetch(url: string): Promise<Response> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-  try {
-    return await fetch(url, {
-      signal: controller.signal,
-      headers: { Accept: "application/json" },
-    });
-  } catch {
-    throw new ImportSourceError(
-      "provider_unreachable",
-      "The provider did not answer. Try again shortly.",
-    );
-  } finally {
-    clearTimeout(timer);
-  }
-}
+export {
+  ImportSourceError,
+  MAX_IMPORT_POSTINGS,
+  htmlToText,
+  type FetchedPostings,
+  type ImportSourceErrorCode,
+  type ImportedJob,
+  type JobImportAdapter,
+} from "@/lib/job-seeker/boards/contract";
 
 type GreenhouseJob = {
   id?: number | string;
@@ -332,6 +222,99 @@ export function listImportAdapters(env: NodeJS.ProcessEnv = process.env): readon
       requiredConfiguration: [],
       configured: true,
       fetchPostings: fetchLeverSite,
+    },
+    {
+      key: "ashby",
+      name: "Ashby job boards",
+      summary: "Reads public postings from a company's Ashby board — no credential needed.",
+      mode: "public",
+      identifierLabel: "Board name",
+      identifierHint: "The last path segment of jobs.ashbyhq.com/{name} — e.g. \"ramp\".",
+      requiredConfiguration: [],
+      configured: true,
+      fetchPostings: fetchAshbyBoard,
+    },
+    {
+      key: "smartrecruiters",
+      name: "SmartRecruiters",
+      summary: "Reads public postings from a company's SmartRecruiters board — no credential needed.",
+      mode: "public",
+      identifierLabel: "Company",
+      identifierHint: "The company in jobs.smartrecruiters.com/{company} — e.g. \"smartrecruiters\".",
+      requiredConfiguration: [],
+      configured: true,
+      fetchPostings: fetchSmartRecruitersBoard,
+    },
+    {
+      key: "workable",
+      name: "Workable",
+      summary: "Reads public postings from a company's Workable account — no credential needed.",
+      mode: "public",
+      identifierLabel: "Account",
+      identifierHint: "The subdomain in apply.workable.com/{account} — e.g. \"deel\".",
+      requiredConfiguration: [],
+      configured: true,
+      fetchPostings: fetchWorkableBoard,
+    },
+    {
+      key: "breezy",
+      name: "Breezy HR",
+      summary: "Reads public postings from a company's Breezy board — no credential needed.",
+      mode: "public",
+      identifierLabel: "Company",
+      identifierHint: "The subdomain in {company}.breezy.hr — e.g. \"breezy\".",
+      requiredConfiguration: [],
+      configured: true,
+      fetchPostings: fetchBreezyBoard,
+    },
+    /*
+     * The aggregators. Their identifier is a search term rather than a
+     * company, which is why their labels ask a different question — and why
+     * `assertSearchTerm` rather than `assertIdentifier` validates it.
+     */
+    {
+      key: "remotive",
+      name: "Remotive",
+      summary: "Searches Remotive's remote-only job board across every employer on it.",
+      mode: "public",
+      identifierLabel: "Search term",
+      identifierHint: "A job title, skill or keyword — e.g. \"react developer\".",
+      requiredConfiguration: [],
+      configured: true,
+      fetchPostings: fetchRemotiveJobs,
+    },
+    {
+      key: "remoteok",
+      name: "Remote OK",
+      summary: "Searches Remote OK across every employer on it. Postings link back to Remote OK, as their API terms require.",
+      mode: "public",
+      identifierLabel: "Search term",
+      identifierHint: "A job title, skill or tag — e.g. \"golang\".",
+      requiredConfiguration: [],
+      configured: true,
+      fetchPostings: fetchRemoteOkJobs,
+    },
+    {
+      key: "jobicy",
+      name: "Jobicy",
+      summary: "Searches Jobicy's remote job board. Postings link to the original Jobicy listing, as their API terms require.",
+      mode: "public",
+      identifierLabel: "Search term",
+      identifierHint: "A job tag — e.g. \"python\" or \"design\".",
+      requiredConfiguration: [],
+      configured: true,
+      fetchPostings: fetchJobicyJobs,
+    },
+    {
+      key: "arbeitnow",
+      name: "Arbeitnow",
+      summary: "Searches Arbeitnow's board, strongest for roles in Germany and the EU.",
+      mode: "public",
+      identifierLabel: "Search term",
+      identifierHint: "A job title, company or city — e.g. \"backend\" or \"berlin\".",
+      requiredConfiguration: [],
+      configured: true,
+      fetchPostings: fetchArbeitnowJobs,
     },
     {
       key: "linkedin",
