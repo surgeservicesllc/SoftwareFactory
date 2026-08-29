@@ -2,6 +2,25 @@
 
 Last updated: 2026-08-28
 
+## Newest (2026-08-28 ~11:30Z): Agent Trail — a live map of the factory's runs (ADR-162)
+
+The owner directed sodiumsun/agenttrail (MIT) be built into the site.
+Adapted, not vendored: `/solutions/trail` renders each graph run as a
+live dependency map — `layoutTrail` (pure Kahn layering, unit-tested),
+`GET /api/graphs/edges` (member-scoped, zero migrations since
+graph_edges already had a member SELECT policy), states/gates/errors/
+closure notes from the existing runs projection on a 10s poll, and a
+declared-vs-observed panel per node. Attribution in
+THIRD_PARTY_NOTICES.md and on the page. The daemon/fs-watcher half of
+agenttrail is deliberately not ported (ADR-162 records why).
+
+Billing, same hour: the owner's one-click bootstrap ran in production —
+all four lookup-keyed prices and the webhook created, both secrets read
+ok, `connected: true`, and a real LIVE-mode checkout session was created
+through the API. The owner reports buying Basic with a real card;
+verification of the plan flip is theirs to read (RLS keeps their org's
+subscription invisible to the test account — working as designed).
+
 ## Newest (2026-08-28): target claims hosted; stop before postdeploy
 
 Cleanup release `ce86d9c04ff91f237e680a5db4b0cda97feea2ce` removed the

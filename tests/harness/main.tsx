@@ -25,6 +25,7 @@ import { AgentOsConsole } from "@/components/agentos-console";
 import { AutonomyConsole } from "@/components/autonomy-console";
 import { BotFabricConsole } from "@/components/bot-fabric-console";
 import { BotManagerHome } from "@/components/bot-manager/home";
+import { AgentTrailConsole } from "@/components/agent-trail-console";
 import { BillingConsole } from "@/components/billing-console";
 import { BotUsageConsole } from "@/components/bot-usage-console";
 import { JobSeekerConsole } from "@/components/job-seeker/console";
@@ -197,6 +198,16 @@ function serveFixtures() {
     if (url.includes("/api/pipeline-templates")) {
       return json({ templates: CUSTOM_PIPELINE_TEMPLATES, canManage: true });
     }
+    if (url.includes("/api/graphs/edges")) {
+      // A believable chain through the staged run's own node keys, so the
+      // trail map draws arrows at every width.
+      return json({
+        edges: [
+          { from: "goal", to: "prd", reason: "DATA", detail: "The PRD consumes the goal." },
+          { from: "prd", to: "architecture", reason: "DATA", detail: "Design follows requirements." },
+        ],
+      });
+    }
     // Before the runs branch: the artifacts URL contains "/api/graphs/runs"
     // too, and the longer match must win.
     if (/\/api\/graphs\/runs\/[^/]+\/artifacts/.test(url)) {
@@ -311,6 +322,7 @@ const CASES: Record<string, () => React.ReactElement> = {
   autonomy: () => <InShell><AutonomyConsole /></InShell>,
   "bot-usage": () => <InShell><BotUsageConsole /></InShell>,
   billing: () => <InShell><BillingConsole /></InShell>,
+  trail: () => <InShell><AgentTrailConsole /></InShell>,
   "job-seeker": () => <InShell><JobSeekerConsole /></InShell>,
   "job-search": () => <InShell><JobSearchPanel /></InShell>,
   /*

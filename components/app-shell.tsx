@@ -25,6 +25,7 @@ import {
   Menu,
   PanelLeft,
   PlugZap,
+  Radar,
   Plus,
   Rocket,
   Scale,
@@ -180,6 +181,7 @@ const navigationEntries: readonly NavigationEntry[] = [
    * be an untruth in the navigation.
    */
   { label: "Lifecycle", href: "/solutions/lifecycle", icon: Workflow },
+  { label: "Agent Trail", href: "/solutions/trail", icon: Radar },
   { label: "Runs", href: "/solutions/runs", icon: GitBranch },
   /*
    * Operations, promoted out of a group and placed above Reports by owner
