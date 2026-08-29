@@ -2,6 +2,18 @@
 
 Last updated: 2026-08-29
 
+## Newest (2026-08-29 late night): LinkedIn + Indeed deep link-outs (ADR-169)
+
+Owner asked for LinkedIn and Indeed "wired". The only permitted wiring is
+outward: `board-search/linkout.ts` translates the current search + filters
+into each site's own URL parameters (LinkedIn distance/f_TPR/f_WT/f_E/f_SB2;
+Indeed q/l/radius/fromage with salary + "remote" in q per its search tips),
+faithful-or-omitted per filter. The two chips sort first in "Also search on",
+accented, "· your filters". Other link-outs keep the plain template —
+unverified parameter mappings would be invented integrations. Partner/
+publisher credentials are the only path to a real adapter; catalogue notes
+say all of this.
+
 ## Newest (2026-08-29 late night): Job Search increment 5 — radius, specialty, industry (ADR-168)
 
 Location + radius: `lib/job-seeker/board-search/geo.ts` (server-only)

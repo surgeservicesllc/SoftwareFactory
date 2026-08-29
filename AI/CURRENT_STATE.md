@@ -374,6 +374,17 @@ facets labeled as derived, with unstated postings kept under "Any".
 Increment 4's marks migration was applied to hosted (run 33273330183)
 and production probes verified the deploy of #448.
 
+## 2026-08-29 (late night): LinkedIn and Indeed wired as deep link-outs (ADR-169)
+
+The permitted wiring, made real: LinkedIn and Indeed open their own search
+with the person's query AND filters translated into each site's own URL
+parameters (`board-search/linkout.ts`), sorted first in the "Also search
+on" strip and labeled "· your filters". Filters map faithfully or stay off
+the URL; other link-out sites keep the plain query+location template. A
+results-feed adapter for either site remains impossible without violating
+their terms, which this repository refuses; partner credentials would
+change that.
+
 ## 2026-08-29 (night): Job Search increment 4 — personal marks + title-derived seniority (ADR-167)
 
 Favorites, hide-job and viewed/unviewed are real: `job_seeker_result_marks`
