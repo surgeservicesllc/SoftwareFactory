@@ -2,6 +2,23 @@
 
 Last reviewed: 2026-08-29
 
+**Addendum, 2026-08-29 late — Job Search E2E acceptance + journey lane
+recovered (ADR-165):** journey workflow run `33266060493` on main
+`3cd6150` passed end to end: the full 178-migration chain applied on a
+real local Supabase stack, the production build served, and the
+real-browser fake-data journey (sign-in → onboarding → every job-seeker
+section → live board search → save a result → find it again after
+reload) completed — the lane's first green since 08-22. The six-day
+blackout was environment drift (supabase CLI 2.116.0's new postgres
+image seeds hosted-style default function privileges; no CLI wraps a
+migration file in a transaction), root-caused by Docker reproduction
+against both images and fixed in the chain itself (#442: roles.sql,
+000850's third accepted input, 000210's explicit transaction; sha pins
+moved at all four sites). Full local suite on the merged tree 5,412
+passed / 2 skipped; Vercel deploy of `3cd6150` success. Verdict:
+**E2E ACCEPTANCE PASSES FOR EVERYTHING AUTOMATABLE; THE EMAIL LEG
+REMAINS "NOT CONNECTED" UNTIL THE OWNER'S THREE ENV VARS EXIST.**
+
 **Addendum, 2026-08-29 evening — Job Search increments 2–3: match scores,
 saved searches, metering, alert engine (ADR-163 addendum, ADR-164):** merged
 as #437 squash `2319970` after four real completed CI checks on the exact
