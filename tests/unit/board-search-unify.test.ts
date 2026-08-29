@@ -6,6 +6,7 @@ import {
   EMPTY_FILTERS,
   applyUnifiedFilters,
   dedupeAcrossBoards,
+  deriveSeniority,
   normalizeIdentity,
   salaryCeiling,
   type UnifiedHit,
@@ -202,5 +203,52 @@ describe("applyUnifiedFilters", () => {
     // 2026-07-01 is out; the undated Wordsmith posting stays — absence of a
     // date is not evidence of staleness.
     expect(recent.map((h) => h.job.company)).toEqual(["Contra", "Wordsmith Co"]);
+  });
+
+  it("keeps only titles that state the requested seniority — no level is invented", () => {
+    const managers = applyUnifiedFilters(hits, { ...EMPTY_FILTERS, seniority: "manager" }, now);
+    expect(managers.map((h) => h.job.title)).toEqual(["Growth Marketing Manager"]);
+
+    // "Content Strategist" states no level; while the filter is set it is
+    // dropped, because "the title says senior" is what the filter means.
+    const seniors = applyUnifiedFilters(hits, { ...EMPTY_FILTERS, seniority: "senior" }, now);
+    expect(seniors.map((h) => h.job.title)).toEqual(["Senior Accountant"]);
+  });
+});
+
+describe("deriveSeniority", () => {
+  it("reads the level the title states", () => {
+    expect(deriveSeniority("Senior Marketing Manager")).toBe("manager");
+    expect(deriveSeniority("Sr. Backend Engineer")).toBe("senior");
+    expect(deriveSeniority("Junior Designer")).toBe("entry");
+    expect(deriveSeniority("Entry-Level Analyst")).toBe("entry");
+    expect(deriveSeniority("Marketing Intern")).toBe("intern");
+    expect(deriveSeniority("Staff Software Engineer")).toBe("lead");
+    expect(deriveSeniority("Tech Lead, Platform")).toBe("lead");
+    expect(deriveSeniority("Head of Growth")).toBe("director");
+    expect(deriveSeniority("Director of Communications")).toBe("director");
+    expect(deriveSeniority("VP Marketing")).toBe("executive");
+    expect(deriveSeniority("Chief Marketing Officer")).toBe("executive");
+  });
+
+  it("says nothing when the title states nothing", () => {
+    expect(deriveSeniority("Content Strategist")).toBeNull();
+    expect(deriveSeniority("Software Engineer")).toBeNull();
+    // "internal" is not "intern", and international is neither.
+    expect(deriveSeniority("Internal Communications Specialist")).toBeNull();
+    expect(deriveSeniority("International Sales Representative")).toBeNull();
+  });
+
+  it("treats lead generation as the marketing discipline, not the level", () => {
+    expect(deriveSeniority("Lead Generation Specialist")).toBeNull();
+    expect(deriveSeniority("Lead Gen Marketer")).toBeNull();
+    // …while an actual lead with the word elsewhere still counts.
+    expect(deriveSeniority("Demand Generation Lead")).toBe("lead");
+  });
+
+  it("lets the most senior stated level win a composed title", () => {
+    expect(deriveSeniority("Senior Engineering Manager")).toBe("manager");
+    expect(deriveSeniority("Lead Senior Engineer")).toBe("lead");
+    expect(deriveSeniority("Senior Vice President, Product")).toBe("executive");
   });
 });

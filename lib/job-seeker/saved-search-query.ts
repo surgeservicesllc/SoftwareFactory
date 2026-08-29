@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { SENIORITY_LEVELS } from "@/lib/job-seeker/board-search/unify";
+
 /**
  * The one definition of what a saved search stores.
  *
@@ -22,6 +24,8 @@ export const savedSearchQuerySchema = z
         excludeKeywords: z.array(z.string().trim().min(1).max(80)).max(16).optional(),
         excludeCompanies: z.array(z.string().trim().min(1).max(120)).max(16).optional(),
         workModel: z.enum(["remote", "hybrid", "onsite"]).nullish(),
+        /** Title-derived; optional so queries saved before it exist still parse. */
+        seniority: z.enum(SENIORITY_LEVELS).nullish(),
         salaryMinimum: z.number().int().min(0).max(10_000_000).nullish(),
         requireSalary: z.boolean().optional(),
         postedWithinDays: z.number().int().min(1).max(365).nullish(),

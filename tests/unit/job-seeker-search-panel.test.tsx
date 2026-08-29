@@ -666,4 +666,193 @@ describe("the search panel", () => {
     expect(within(strip).queryByRole("link", { name: /Indeed/ })).not.toBeInTheDocument();
     expect(within(strip).getByRole("link", { name: /LinkedIn Jobs/ })).toBeInTheDocument();
   });
+
+  it("filters by the seniority the title states, chips it, and saves it with the search", async () => {
+    respond({
+      results: [{
+        board: "jobnet",
+        boardName: "Jobnet",
+        totalAvailable: 3,
+        hits: [hit("Senior Platform Engineer"), hit("Platform Engineer"), hit("Engineering Manager")],
+        locationApplied: true,
+      }],
+      failures: [],
+    });
+    const user = userEvent.setup();
+    render(<JobSearchPanel />);
+    await screen.findByText(/Searching 2 boards:/);
+
+    await search(user);
+    expect(await screen.findByText("3 unique postings")).toBeInTheDocument();
+
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: /Seniority \(from the job title\)/ }),
+      "senior",
+    );
+
+    // Only the title that says "senior" stays; the untitled and the manager
+    // are counted as hidden by filters, and the chip names the derivation.
+    expect(screen.getByText("1 unique posting")).toBeInTheDocument();
+    expect(screen.getByText(/2 postings are hidden by\s+your filters/)).toBeInTheDocument();
+    expect(screen.getByText("title: senior")).toBeInTheDocument();
+
+    // The seniority travels into a saved search like every other filter.
+    await user.type(screen.getByPlaceholderText(/Name this search/), "Senior only");
+    await user.click(screen.getByRole("button", { name: "Save this search" }));
+    const savedCall = fetchMock.mock.calls.find(([url, init]) =>
+      typeof url === "string" && url.includes("/saved-searches") &&
+      (init as RequestInit | undefined)?.method === "POST");
+    const body = JSON.parse((savedCall?.[1] as RequestInit).body as string) as {
+      query: { filters?: { seniority?: string } };
+    };
+    expect(body.query.filters?.seniority).toBe("senior");
+  });
+
+  /** Board list + marks on mount, search results on POST, marks writes OK. */
+  function respondWithMarks(
+    searchBody: unknown,
+    stored: { favorite?: string[]; hidden?: string[]; viewed?: string[] } = {},
+    markWriteStatus = 200,
+  ) {
+    fetchMock.mockImplementation((url: string, init?: RequestInit) => {
+      if (typeof url === "string" && url.includes("/search/marks")) {
+        if (init?.method === "POST" || init?.method === "DELETE") {
+          return Promise.resolve(json(
+            markWriteStatus < 300 ? { marked: {} } : { error: { message: "no" } },
+            markWriteStatus,
+          ));
+        }
+        return Promise.resolve(json({
+          marks: {
+            favorite: stored.favorite ?? [],
+            hidden: stored.hidden ?? [],
+            viewed: stored.viewed ?? [],
+          },
+        }));
+      }
+      if (init?.method === "POST") return Promise.resolve(json(searchBody));
+      return Promise.resolve(json(BOARDS));
+    });
+  }
+
+  function markableHit(title: string, url: string) {
+    return { ...hit(title), job: { ...hit(title).job, url } };
+  }
+
+  const twoPostings = {
+    results: [{
+      board: "jobnet",
+      boardName: "Jobnet",
+      totalAvailable: 2,
+      hits: [
+        markableHit("Growth Engineer", "https://jobnet.dk/find-job/growth"),
+        markableHit("Data Engineer", "https://jobnet.dk/find-job/data"),
+      ],
+      locationApplied: true,
+    }],
+    failures: [],
+  };
+
+  it("favorites persist through the marks API and can narrow the list to favorites only", async () => {
+    respondWithMarks(twoPostings);
+    const user = userEvent.setup();
+    render(<JobSearchPanel />);
+    await screen.findByText(/Searching 2 boards:/);
+
+    await search(user);
+    expect(await screen.findByText("2 unique postings")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Favorite Growth Engineer" }));
+
+    // The star flips and the write is the real API call, not local decor.
+    expect(screen.getByRole("button", { name: "Unfavorite Growth Engineer" })).toBeInTheDocument();
+    const write = fetchMock.mock.calls.find(([url, init]) =>
+      typeof url === "string" && url.includes("/search/marks") &&
+      (init as RequestInit | undefined)?.method === "POST");
+    expect(JSON.parse((write?.[1] as RequestInit).body as string)).toEqual({
+      jobUrl: "https://jobnet.dk/find-job/growth",
+      mark: "favorite",
+    });
+
+    await user.click(screen.getByRole("checkbox", { name: "Favorites only" }));
+    expect(screen.getByText("1 unique posting")).toBeInTheDocument();
+    expect(screen.queryByText("Data Engineer")).not.toBeInTheDocument();
+  });
+
+  it("hides a posting, counts it honestly, and brings it back on request", async () => {
+    respondWithMarks(twoPostings);
+    const user = userEvent.setup();
+    render(<JobSearchPanel />);
+    await screen.findByText(/Searching 2 boards:/);
+
+    await search(user);
+    expect(await screen.findByText("2 unique postings")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Hide Data Engineer" }));
+
+    // Hidden-by-you is its own count, separate from hidden-by-filters.
+    expect(screen.getByText("1 unique posting")).toBeInTheDocument();
+    expect(screen.queryByText("Data Engineer")).not.toBeInTheDocument();
+    expect(screen.getByText(/1 posting hidden by you/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Show hidden" }));
+    expect(screen.getByText("Data Engineer")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Unhide Data Engineer" }));
+    expect(screen.queryByText(/hidden by you/)).not.toBeInTheDocument();
+  });
+
+  it("records viewed when a posting is opened and badges it, without ceremony", async () => {
+    respondWithMarks(twoPostings);
+    const user = userEvent.setup();
+    render(<JobSearchPanel />);
+    await screen.findByText(/Searching 2 boards:/);
+
+    await search(user);
+    expect(await screen.findByText("2 unique postings")).toBeInTheDocument();
+    expect(screen.queryByText("Viewed")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("link", { name: "Growth Engineer" }));
+
+    expect(await screen.findByText("Viewed")).toBeInTheDocument();
+    const write = fetchMock.mock.calls.find(([url, init]) =>
+      typeof url === "string" && url.includes("/search/marks") &&
+      (init as RequestInit | undefined)?.method === "POST");
+    expect(JSON.parse((write?.[1] as RequestInit).body as string)).toEqual({
+      jobUrl: "https://jobnet.dk/find-job/growth",
+      mark: "viewed",
+    });
+  });
+
+  it("reverts a failed favorite and says the save did not happen", async () => {
+    respondWithMarks(twoPostings, {}, 500);
+    const user = userEvent.setup();
+    render(<JobSearchPanel />);
+    await screen.findByText(/Searching 2 boards:/);
+
+    await search(user);
+    await screen.findByText("2 unique postings");
+
+    await user.click(screen.getByRole("button", { name: "Favorite Growth Engineer" }));
+
+    expect(await screen.findByText("The favorite could not be saved. Try again.")).toBeInTheDocument();
+    // The optimistic star is taken back rather than left lying.
+    expect(screen.getByRole("button", { name: "Favorite Growth Engineer" })).toBeInTheDocument();
+  });
+
+  it("keeps the mark controls unrendered while the person's marks are unknown", async () => {
+    // respond() answers the marks load with a body that has no marks in it.
+    respond(twoPostings);
+    const user = userEvent.setup();
+    render(<JobSearchPanel />);
+    await screen.findByText(/Searching 2 boards:/);
+
+    await search(user);
+    await screen.findByText("2 unique postings");
+
+    // A star that would forget yesterday's favorites is worse than no star.
+    expect(screen.queryByRole("button", { name: /Favorite/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Hide/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: "Favorites only" })).not.toBeInTheDocument();
+  });
 });

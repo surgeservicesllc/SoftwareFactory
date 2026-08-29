@@ -45,6 +45,7 @@ export function toUnifiedFilters(query: SavedSearchQuery): UnifiedFilters {
     excludeKeywords: filters.excludeKeywords ?? [],
     excludeCompanies: filters.excludeCompanies ?? [],
     workModel: filters.workModel ?? null,
+    seniority: filters.seniority ?? null,
     salaryMinimum: filters.salaryMinimum ?? null,
     requireSalary: filters.requireSalary ?? false,
     postedWithinDays: filters.postedWithinDays ?? null,

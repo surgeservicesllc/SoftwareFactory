@@ -229,5 +229,12 @@ describe("toDeliveryRows and toUnifiedFilters", () => {
     expect(filters.keywordMode).toBe("and");
     expect(filters.requireSalary).toBe(false);
     expect(filters.workModel).toBeNull();
+    // Queries saved before the seniority filter existed parse to "any".
+    expect(filters.seniority).toBeNull();
+  });
+
+  it("carries a stored seniority filter into the alert scan unchanged", () => {
+    const filters = toUnifiedFilters({ text: "x", filters: { seniority: "manager" } });
+    expect(filters.seniority).toBe("manager");
   });
 });

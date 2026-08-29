@@ -53,6 +53,7 @@ on:
           - job-seeker-discovery-surface
           - budget-tracker
           - job-seeker-alert-engine
+          - job-seeker-result-marks
           - probe
 permissions:
   actions: read
@@ -1728,6 +1729,69 @@ jobs:
             end
             \$\$;"
           echo "Alert engine applied and recorded; ledger RLS forced; definer boundary verified service_role-only."
+
+      - name: Apply the job seeker result marks table (scope=job-seeker-result-marks)
+        if: ${{ inputs.scope == 'job-seeker-result-marks' }}
+        run: |
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+          FILE=supabase/migrations/20260829000400_job_seeker_result_marks.sql
+          # Preflight: refuse a file that is not the reviewed one. The apply is
+          # forward-only and additive, but "additive" is a property of this
+          # exact text, not of the scope's name.
+          EXPECTED=$(sha256sum "$FILE" | cut -d" " -f1)
+          echo "Applying ${FILE} (sha256 ${EXPECTED})"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied 20260829000400
+          else
+            npx supabase migration repair --status applied 20260829000400 --db-url "$DB_URL"
+          fi
+          psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
+          # Postflight: the table's whole boundary must exist — RLS enabled
+          # and forced, the three own-row policies, no service_role or anon
+          # privilege, and the person-facing grant limited to
+          # select/insert/delete.
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
+            do \$\$
+            begin
+              if not exists (
+                select 1 from pg_class c
+                 join pg_namespace n on n.oid = c.relnamespace
+                 where n.nspname = 'public' and c.relname = 'job_seeker_result_marks'
+                   and c.relrowsecurity and c.relforcerowsecurity
+              ) then
+                raise exception 'job_seeker_result_marks is missing or does not force RLS';
+              end if;
+              if (
+                select count(*) from pg_policy p
+                 join pg_class c on c.oid = p.polrelid
+                 join pg_namespace n on n.oid = c.relnamespace
+                 where n.nspname = 'public' and c.relname = 'job_seeker_result_marks'
+              ) <> 3 then
+                raise exception 'job_seeker_result_marks does not carry exactly its three own-row policies';
+              end if;
+              if has_table_privilege('service_role', 'public.job_seeker_result_marks', 'SELECT')
+                or has_table_privilege('anon', 'public.job_seeker_result_marks', 'SELECT') then
+                raise exception 'service_role or anon can read job_seeker_result_marks directly';
+              end if;
+              if not (
+                has_table_privilege('authenticated', 'public.job_seeker_result_marks', 'SELECT')
+                and has_table_privilege('authenticated', 'public.job_seeker_result_marks', 'INSERT')
+                and has_table_privilege('authenticated', 'public.job_seeker_result_marks', 'DELETE')
+              ) then
+                raise exception 'authenticated is missing the select/insert/delete grant on job_seeker_result_marks';
+              end if;
+              if has_table_privilege('authenticated', 'public.job_seeker_result_marks', 'UPDATE') then
+                raise exception 'authenticated can update job_seeker_result_marks; no update path should exist';
+              end if;
+            end
+            \$\$;"
+          echo "Result marks table applied and recorded; RLS forced; own-row-only boundary verified."
 
       - name: Normalize exact legacy bot ACLs (scope=bot-legacy-acl-normalization)
         if: ${{ inputs.scope == 'bot-legacy-acl-normalization' }}

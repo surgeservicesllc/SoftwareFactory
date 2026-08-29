@@ -47,6 +47,17 @@ Last triaged: 2026-08-29
   `job-seeker-alert-engine.behavior.test.ts` (11 real-SQL tests) plus a
   service_role drive on the Docker stack cover due-ness, the ledger, and
   the definer boundary.
+- [x] Increment 4 (ADR-167): personal marks — favorite, hide, viewed —
+  on `job_seeker_result_marks` (20260829000400, forced RLS, own-row
+  policies, service_role revoked, no update path) via
+  `/api/job-seeker/search/marks`; panel star/Hide/Viewed controls that
+  render only after the person's real marks load, "hidden by you"
+  counted apart from "hidden by your filters", Show hidden, Favorites
+  only; plus the title-derived seniority facet (`deriveSeniority`,
+  seven levels, most-senior-wins, labeled "from the job title") wired
+  through route, panel, saved-search schema and the alert engine.
+  Hosted apply scope `job-seeker-result-marks` added to the workflow
+  (step + options entry) — dispatch after merge.
 - [ ] Production email delivery: owner-gated on RESEND_API_KEY,
   JOB_ALERT_EMAIL_FROM, CRON_SECRET in Vercel — the alert path's honest
   production state is **Not Connected** (503 fail-closed probe). Verify
