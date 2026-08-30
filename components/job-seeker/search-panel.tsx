@@ -871,6 +871,11 @@ export function JobSearchPanel() {
   const linkoutStrip = sources
     .filter((source) => source.searchUrl !== undefined && !deselected.has(source.key))
     .sort((a, b) => Number(linkoutCarriesFilters(b.key)) - Number(linkoutCarriesFilters(a.key)));
+  // LinkedIn and Indeed, promoted to the search form itself: the two sites
+  // whose links carry the whole filter set are one click from the search
+  // button, not just a strip below the results. Deselecting a site under
+  // Sources removes it here too.
+  const primaryLinkouts = linkoutStrip.filter((source) => linkoutCarriesFilters(source.key));
 
   const addChip = (raw: string, list: readonly string[], set: (next: readonly string[]) => void) => {
     const value = raw.trim();
@@ -951,7 +956,7 @@ export function JobSearchPanel() {
               disabled={location.trim() === ""}
               title={location.trim() === ""
                 ? "Give a place first; a distance needs somewhere to measure from."
-                : "Distance around the place, measured against a real city index. Remote postings and places the index does not know are kept and said so."}
+                : "Distance around the place, measured against a real city and US ZIP code index. Remote postings and places the index does not know are kept and said so."}
               className="w-full rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-2 text-sm disabled:opacity-60"
             >
               <option value="">Any distance</option>
@@ -968,6 +973,27 @@ export function JobSearchPanel() {
             {running ? "Searching…" : "Search"}
           </button>
         </form>
+
+        {primaryLinkouts.length > 0 ? (
+          <div data-testid="primary-linkouts" className="mt-3 flex flex-wrap items-center gap-2">
+            <span className="text-xs text-[var(--muted)]">Search directly on</span>
+            {primaryLinkouts.map((source) => (
+              <a
+                key={source.key}
+                href={buildLinkoutUrl(source.key, source.searchUrl!, linkoutQuery)}
+                target="_blank"
+                rel="noreferrer noopener"
+                title={`Opens ${source.name}'s own search with your query and filters applied where its URL supports them.`}
+                className="inline-flex items-center gap-1.5 rounded-md border border-[var(--accent)] px-3 py-1.5 text-sm font-medium text-[var(--accent)] hover:bg-[var(--surface-2)]"
+              >
+                {source.name} ↗
+              </a>
+            ))}
+            <span className="text-xs text-[var(--muted)]">
+              Their sites open with your query and filters — these sites permit links, not feeds.
+            </span>
+          </div>
+        ) : null}
 
         {searchError !== null ? (
           <div className="mt-3"><Notice tone="warning">{searchError}</Notice></div>

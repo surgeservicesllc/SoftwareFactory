@@ -2,6 +2,14 @@
 
 Last reviewed: 2026-08-29
 
+**Addendum, 2026-08-30 — primary link-outs + ZIP radius (ADR-170):**
+geo suite 9 tests (ZIP resolution against the real index, six-digit and
+unassigned-ZIP nulls, ZIP-centred radius), search-route 24 (ZIP centre
+end-to-end with exact counts and "Austin, TX 78701" center), panel 35
+(primary row present pre-search, live-updating hrefs, deselection).
+Journey acceptance run 33285610004 green on main 9a73e12. Lint zero
+warnings, production build, `tsc --noEmit` clean.
+
 **Addendum, 2026-08-29 late night — Job Search increment 5: the filter
 vocabulary complete (ADR-168):** location + radius over a real offline
 GeoNames-derived city index (server-side, honest not-applied reporting,
