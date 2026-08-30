@@ -21,7 +21,7 @@ const migrationsRoot = resolve(import.meta.dirname, "../../supabase/migrations")
  * migration added after this was written should make somebody re-read this
  * case rather than let it pass unexamined.
  */
-const latestMigration = "20260830000500_services_crm_foundation.sql";
+const latestMigration = "20260830000600_crm_grant_narrowing.sql";
 
 const ownerId = "00000000-0000-4000-8000-00000000c001";
 const organizationId = "10000000-0000-4000-8000-00000000c001";

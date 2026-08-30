@@ -19,7 +19,14 @@ machinery), three pages live-wired. Suites: services-crm-foundation
 behavior 6 (chain), services-crm-routes 8, services-customers-panel 4.
 Workflow scope services-crm (postflight: forced RLS ×4, immutability
 grants, trigger, anon/service_role shutout); runbook 184; sentinels
-swept to 20260830000500 (22 + the new suite). Dispatch the hosted
+swept to 20260830000600 (23). The first scope=services-crm dispatch
+FAILED its own postflight — hosted default privileges GRANT ALL on new
+tables to authenticated, so the foundation's narrow timeline grants
+shipped wide; 20260830000600 is the revoke-then-grant fix, the scope
+step now applies both files, and the behavior suite installs
+hosted-style defaults right before the CRM migrations so this class
+fails locally from now on (whole-chain defaults contradict an earlier
+migration's own security catalog — window them). Dispatch the hosted
 apply right after merge. TRAP unchanged from latest+7: owner-role
 writes in PGlite suites belong at wave boundaries/sequential points.
 

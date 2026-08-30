@@ -86,7 +86,7 @@ beforeAll(async () => {
   const migrationFiles = (await readdir(migrationsRoot))
     .filter((name) => /^\d+.*\.sql$/.test(name))
     .sort();
-  expect(migrationFiles.at(-1)).toBe("20260830000500_services_crm_foundation.sql");
+  expect(migrationFiles.at(-1)).toBe("20260830000600_crm_grant_narrowing.sql");
   for (const file of migrationFiles) {
     await db.exec(await readFile(resolve(migrationsRoot, file), "utf8"));
   }

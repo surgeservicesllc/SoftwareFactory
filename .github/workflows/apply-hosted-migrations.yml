@@ -1344,14 +1344,20 @@ jobs:
             DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
             echo "::add-mask::$DB_URL"
           fi
-          FILE=supabase/migrations/20260830000500_services_crm_foundation.sql
-          sha256sum "$FILE"
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
-          if [ "$MODE" = "token" ]; then
-            npx supabase migration repair --status applied 20260830000500
-          else
-            npx supabase migration repair --status applied 20260830000500 --db-url "$DB_URL"
-          fi
+          # Two files: the foundation (idempotent re-run) and the grant
+          # narrowing that collapses the hosted default privileges the first
+          # dispatch's postflight caught handing authenticated ALL on the
+          # timeline. Both repaired, so the ledger matches the truth.
+          for VERSION in 20260830000500_services_crm_foundation 20260830000600_crm_grant_narrowing; do
+            FILE="supabase/migrations/${VERSION}.sql"
+            sha256sum "$FILE"
+            psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
+            if [ "$MODE" = "token" ]; then
+              npx supabase migration repair --status applied "${VERSION%%_*}"
+            else
+              npx supabase migration repair --status applied "${VERSION%%_*}" --db-url "$DB_URL"
+            fi
+          done
           psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
           # Postflight: all four tables exist with forced RLS, the timeline is
           # append-only at the grant level, the status-change trigger exists,

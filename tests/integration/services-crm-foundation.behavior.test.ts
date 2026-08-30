@@ -9,7 +9,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const migrationsDirectory = resolve(repositoryRoot, "supabase/migrations");
-const latestMigration = "20260830000500_services_crm_foundation.sql";
+const latestMigration = "20260830000600_crm_grant_narrowing.sql";
 
 /**
  * The Services CRM foundation, exercised against the real migration chain
@@ -62,6 +62,24 @@ describe("the Services CRM foundation", { timeout: 240_000 }, () => {
       .sort();
     expect(migrationFiles.at(-1)).toBe(latestMigration);
     for (const file of migrationFiles) {
+      /*
+       * Hosted-style default privileges, installed exactly where the
+       * regression lived: the hosted database GRANTS ALL on every new table
+       * to these roles, which is how 20260830000500's narrow timeline
+       * grants shipped wide on hosted while every local suite stayed green
+       * (the scope=services-crm postflight caught it, 20260830000600 is
+       * the fix). Under the whole chain the defaults contradict earlier
+       * migrations' own security-catalog assertions, so they flip on just
+       * before the CRM tables are created — the window that must survive
+       * them. An immutability claim that relies on the ABSENCE of a grant
+       * now fails locally, like production.
+       */
+      if (file === "20260830000500_services_crm_foundation.sql") {
+        await db.exec(`
+          alter default privileges in schema public grant all privileges on tables to authenticated;
+          alter default privileges in schema public grant all privileges on tables to service_role;
+        `);
+      }
       await db.exec(await readFile(resolve(migrationsDirectory, file), "utf8"));
     }
 
