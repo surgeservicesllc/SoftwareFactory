@@ -2,9 +2,26 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import {
+  ArrowRight,
+  Building2,
+  Sparkles,
+  Target,
+  TrendingUp,
+  UserCheck,
+  UserPlus,
+  type LucideIcon,
+} from "lucide-react";
 
 import { Card, DemoNotice, Notice, PageHeader, SectionTitle } from "@/components/ui";
 import { DEMO_SOURCE } from "@/lib/services/demo-data";
+import {
+  AccountAvatar,
+  AccountStatusBadge,
+  STAGE_TONES,
+  dollars,
+} from "@/components/services/ui";
+import { cn } from "@/lib/cn";
 import type {
   AccountView,
   AccountsPayload,
@@ -13,13 +30,13 @@ import type {
 
 /**
  * The book of business at a glance: live counts by lifecycle and kind, the
- * pipeline's headline numbers, and the accounts that changed most recently.
- * Every number is counted from the same reads the Customers and Pipeline
- * pages render — nothing here is a second number that can drift from the
- * first, and an empty workspace says exactly what to do next instead of
- * dressing itself in zeros. An empty workspace can also seed the
- * clearly-labeled Demo Data book — real rows through the same live path,
- * every record marked "Demo Data" in its source.
+ * pipeline's headline numbers with its stage distribution, and the accounts
+ * that changed most recently. Every number is counted from the same reads
+ * the Customers and Pipeline pages render — nothing here is a second number
+ * that can drift from the first, and an empty workspace says exactly what
+ * to do next instead of dressing itself in zeros. An empty workspace can
+ * also seed the clearly-labeled Demo Data book — real rows through the same
+ * live path, every record marked "Demo Data" in its source.
  */
 export function ServicesOverviewPanel() {
   const [payload, setPayload] = useState<AccountsPayload | null>(null);
@@ -103,20 +120,40 @@ export function ServicesOverviewPanel() {
       {seeded !== null ? <Notice tone="info">{seeded}</Notice> : null}
 
       {counts !== null ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard label="Leads" value={counts.byStatus.lead ?? 0} />
-          <StatCard label="Prospects" value={counts.byStatus.prospect ?? 0} />
-          <StatCard label="Customers" value={counts.byStatus.customer ?? 0} />
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <StatCard
+            label="Leads"
+            value={counts.byStatus.lead ?? 0}
+            icon={UserPlus}
+            iconTone="bg-amber-100 text-amber-700"
+            detail="Waiting on first contact"
+          />
+          <StatCard
+            label="Prospects"
+            value={counts.byStatus.prospect ?? 0}
+            icon={Target}
+            iconTone="bg-sky-100 text-sky-700"
+            detail="In active conversation"
+          />
+          <StatCard
+            label="Customers"
+            value={counts.byStatus.customer ?? 0}
+            icon={UserCheck}
+            iconTone="bg-emerald-100 text-emerald-700"
+            detail="Under service"
+          />
           <StatCard
             label="Commercial accounts"
             value={counts.byKind.commercial ?? 0}
+            icon={Building2}
+            iconTone="bg-violet-100 text-violet-700"
             detail={`${counts.byKind.residential ?? 0} residential`}
           />
         </div>
       ) : error === null ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {[0, 1, 2, 3].map((i) => (
-            <Card key={i} className="h-24 animate-pulse">
+            <Card key={i} className="h-28 animate-pulse">
               <span className="sr-only">Loading counts</span>
             </Card>
           ))}
@@ -131,29 +168,33 @@ export function ServicesOverviewPanel() {
             action={
               <Link href="/Services/pipeline" className="btn btn-secondary px-3 py-1.5 text-sm">
                 Work the board
+                <ArrowRight className="size-3.5" aria-hidden="true" />
               </Link>
             }
           />
           <dl className="mt-4 grid gap-4 sm:grid-cols-3" data-testid="services-overview-pipeline">
-            <div>
-              <dt className="text-sm text-muted">Open pipeline</dt>
-              <dd className="mt-1 text-2xl font-semibold text-foreground">
+            <div className="rounded-lg bg-surface-raised p-4">
+              <dt className="flex items-center gap-2 text-sm text-muted">
+                <TrendingUp className="size-4 text-[var(--accent)]" aria-hidden="true" />
+                Open pipeline
+              </dt>
+              <dd className="mt-1 text-2xl font-semibold tracking-tight text-foreground">
                 {dollars(report.openValueCents)}
               </dd>
               <dd className="mt-1 text-xs text-faint">
                 {report.openCount} open {report.openCount === 1 ? "opportunity" : "opportunities"}
               </dd>
             </div>
-            <div>
+            <div className="rounded-lg bg-surface-raised p-4">
               <dt className="text-sm text-muted">Won</dt>
-              <dd className="mt-1 text-2xl font-semibold text-foreground">
+              <dd className="mt-1 text-2xl font-semibold tracking-tight text-emerald-700">
                 {dollars(report.wonValueCents)}
               </dd>
               <dd className="mt-1 text-xs text-faint">{report.wonCount} closed won</dd>
             </div>
-            <div>
+            <div className="rounded-lg bg-surface-raised p-4">
               <dt className="text-sm text-muted">Win rate</dt>
-              <dd className="mt-1 text-2xl font-semibold text-foreground">
+              <dd className="mt-1 text-2xl font-semibold tracking-tight text-foreground">
                 {report.winRatePercent === null ? "—" : `${report.winRatePercent}%`}
               </dd>
               <dd className="mt-1 text-xs text-faint">
@@ -163,6 +204,7 @@ export function ServicesOverviewPanel() {
               </dd>
             </div>
           </dl>
+          <StageDistribution byStage={report.byStage} />
         </Card>
       ) : null}
 
@@ -187,9 +229,15 @@ export function ServicesOverviewPanel() {
                 </Link>{" "}
                 page — the form there creates a real account in this workspace.
               </p>
-              <div className="rounded-md border border-line p-4" data-testid="services-demo-seed">
-                <p className="text-sm font-medium text-foreground">Or load Demo Data</p>
-                <p className="mt-1 text-sm text-muted">
+              <div
+                className="rounded-xl border border-dashed border-[var(--accent-border)] bg-[var(--accent-surface)] p-5"
+                data-testid="services-demo-seed"
+              >
+                <p className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                  <Sparkles className="size-4 text-[var(--accent)]" aria-hidden="true" />
+                  Or load Demo Data
+                </p>
+                <p className="mt-1.5 text-sm text-muted">
                   Seeds this workspace with a fictional pest-services clientele — commercial and
                   residential accounts, contacts, properties, deals across every stage, and months
                   of history. Every record is created through the same live path as a real one and
@@ -214,7 +262,7 @@ export function ServicesOverviewPanel() {
           ) : (
             <ul className="mt-4 divide-y divide-line">
               {payload.accounts.slice(0, 8).map((account) => (
-                <li key={account.id} className="py-2.5">
+                <li key={account.id} className="py-2">
                   <RecentRow account={account} />
                 </li>
               ))}
@@ -226,32 +274,95 @@ export function ServicesOverviewPanel() {
   );
 }
 
-function dollars(cents: number): string {
-  return `$${(cents / 100).toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
+function StatCard({
+  label,
+  value,
+  detail,
+  icon: Icon,
+  iconTone,
+}: {
+  label: string;
+  value: number;
+  detail?: string;
+  icon: LucideIcon;
+  iconTone: string;
+}) {
+  return (
+    <Card className="flex items-start justify-between gap-3">
+      <div>
+        <p className="text-sm text-muted">{label}</p>
+        <p className="mt-1 text-3xl font-semibold tracking-tight text-foreground">{value}</p>
+        {detail ? <p className="mt-1 text-xs text-faint">{detail}</p> : null}
+      </div>
+      <span
+        className={cn("flex size-10 shrink-0 items-center justify-center rounded-lg", iconTone)}
+        aria-hidden="true"
+      >
+        <Icon className="size-5" />
+      </span>
+    </Card>
+  );
 }
 
-function StatCard({ label, value, detail }: { label: string; value: number; detail?: string }) {
+/**
+ * One horizontal bar, split by stage, so the board's shape is readable
+ * before opening it. Rendered only when something is on the board.
+ */
+function StageDistribution({
+  byStage,
+}: {
+  byStage: Record<string, { count: number; valueCents: number }>;
+}) {
+  const stages = ["new", "contacted", "inspection", "proposal", "negotiation", "won", "lost"];
+  const total = stages.reduce((sum, stage) => sum + (byStage[stage]?.count ?? 0), 0);
+  if (total === 0) return null;
   return (
-    <Card>
-      <p className="text-sm text-muted">{label}</p>
-      <p className="mt-1 text-2xl font-semibold text-foreground">{value}</p>
-      {detail ? <p className="mt-1 text-xs text-faint">{detail}</p> : null}
-    </Card>
+    <div className="mt-4">
+      <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-surface-raised">
+        {stages.map((stage) => {
+          const count = byStage[stage]?.count ?? 0;
+          if (count === 0) return null;
+          return (
+            <span
+              key={stage}
+              className={(STAGE_TONES[stage] ?? STAGE_TONES.new).bar}
+              style={{ width: `${(count / total) * 100}%` }}
+              title={`${stage}: ${count}`}
+            />
+          );
+        })}
+      </div>
+      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+        {stages.map((stage) => {
+          const count = byStage[stage]?.count ?? 0;
+          if (count === 0) return null;
+          return (
+            <span key={stage} className="flex items-center gap-1.5 text-xs text-muted">
+              <span
+                className={cn("size-2 rounded-full", (STAGE_TONES[stage] ?? STAGE_TONES.new).bar)}
+                aria-hidden="true"
+              />
+              <span className="capitalize">{stage}</span> {count}
+            </span>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
 function RecentRow({ account }: { account: AccountView }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
-      <Link
-        href={`/Services/customers/${account.id}`}
-        className="min-w-0 break-words font-medium underline-offset-2 hover:underline"
-      >
-        {account.name}
-      </Link>
-      <span className="shrink-0 text-xs text-muted">
-        {account.kind} · {account.status}
+    <Link
+      href={`/Services/customers/${account.id}`}
+      className="-mx-2 flex items-center gap-3 rounded-lg px-2 py-1.5 transition-colors hover:bg-surface-raised"
+    >
+      <AccountAvatar name={account.name} size="sm" />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-medium text-foreground">{account.name}</span>
+        <span className="block text-xs capitalize text-faint">{account.kind}</span>
       </span>
-    </div>
+      <AccountStatusBadge status={account.status} />
+    </Link>
   );
 }

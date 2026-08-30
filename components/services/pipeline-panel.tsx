@@ -2,8 +2,11 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { CalendarDays, TrendingUp, Trophy, XCircle } from "lucide-react";
 
 import { Card, Notice, PageHeader, SectionTitle } from "@/components/ui";
+import { AccountAvatar, STAGE_TONES, dollars } from "@/components/services/ui";
+import { cn } from "@/lib/cn";
 import type {
   AccountsPayload,
   OpportunitiesPayload,
@@ -29,11 +32,6 @@ const STAGE_LABELS: Record<(typeof STAGES)[number], string> = {
   won: "Won",
   lost: "Lost",
 };
-
-function dollars(cents: number | null): string {
-  if (cents === null) return "—";
-  return `$${(cents / 100).toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
-}
 
 export function ServicesPipelinePanel() {
   const [payload, setPayload] = useState<OpportunitiesPayload | null>(null);
@@ -270,36 +268,39 @@ export function ServicesPipelinePanel() {
 
       {report !== null ? (
         <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4" data-testid="services-pipeline-report">
-          <Card>
-            <p className="text-xs uppercase tracking-wide text-faint">Open pipeline</p>
-            <p className="mt-1 text-2xl font-semibold text-foreground">{dollars(report.openValueCents)}</p>
-            <p className="mt-1 text-xs text-muted">
-              {report.openCount} open {report.openCount === 1 ? "opportunity" : "opportunities"}
-            </p>
-          </Card>
-          <Card>
-            <p className="text-xs uppercase tracking-wide text-faint">Won</p>
-            <p className="mt-1 text-2xl font-semibold text-foreground">{dollars(report.wonValueCents)}</p>
-            <p className="mt-1 text-xs text-muted">
-              {report.wonCount} {report.wonCount === 1 ? "deal" : "deals"} won
-            </p>
-          </Card>
-          <Card>
-            <p className="text-xs uppercase tracking-wide text-faint">Win rate</p>
-            <p className="mt-1 text-2xl font-semibold text-foreground">
-              {report.winRatePercent === null ? "—" : `${report.winRatePercent}%`}
-            </p>
-            <p className="mt-1 text-xs text-muted">
-              {report.winRatePercent === null
+          <ReportTile
+            label="Open pipeline"
+            value={dollars(report.openValueCents)}
+            detail={`${report.openCount} open ${report.openCount === 1 ? "opportunity" : "opportunities"}`}
+            icon={<TrendingUp className="size-5" aria-hidden="true" />}
+            iconTone="bg-[var(--accent-surface)] text-[var(--accent)]"
+          />
+          <ReportTile
+            label="Won"
+            value={dollars(report.wonValueCents)}
+            detail={`${report.wonCount} ${report.wonCount === 1 ? "deal" : "deals"} won`}
+            icon={<Trophy className="size-5" aria-hidden="true" />}
+            iconTone="bg-emerald-100 text-emerald-700"
+            valueClassName="text-emerald-700"
+          />
+          <ReportTile
+            label="Win rate"
+            value={report.winRatePercent === null ? "—" : `${report.winRatePercent}%`}
+            detail={
+              report.winRatePercent === null
                 ? "No closed deals yet"
-                : `Over ${report.wonCount + report.lostCount} closed`}
-            </p>
-          </Card>
-          <Card>
-            <p className="text-xs uppercase tracking-wide text-faint">Lost</p>
-            <p className="mt-1 text-2xl font-semibold text-foreground">{report.lostCount}</p>
-            <p className="mt-1 text-xs text-muted">Reasons live on each deal and its timeline</p>
-          </Card>
+                : `Over ${report.wonCount + report.lostCount} closed`
+            }
+            icon={<CalendarDays className="size-5" aria-hidden="true" />}
+            iconTone="bg-sky-100 text-sky-700"
+          />
+          <ReportTile
+            label="Lost"
+            value={String(report.lostCount)}
+            detail="Reasons live on each deal and its timeline"
+            icon={<XCircle className="size-5" aria-hidden="true" />}
+            iconTone="bg-rose-100 text-rose-600"
+          />
         </div>
       ) : null}
 
@@ -314,37 +315,64 @@ export function ServicesPipelinePanel() {
           </p>
         </Card>
       ) : opportunities !== null ? (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4" data-testid="services-pipeline-board">
+        <div
+          className="grid gap-4 md:grid-cols-2 xl:grid-cols-4"
+          data-testid="services-pipeline-board"
+        >
           {STAGES.map((stage) => {
             const group = byStage.get(stage) ?? [];
+            const tone = STAGE_TONES[stage] ?? STAGE_TONES.new;
             return (
-              <Card key={stage}>
-                <div className="flex items-baseline justify-between">
+              <section
+                key={stage}
+                className="flex flex-col overflow-hidden rounded-xl border border-line bg-surface shadow-[0_1px_2px_rgba(18,38,29,0.05)]"
+              >
+                <div className={cn("h-1 w-full", tone.bar)} aria-hidden="true" />
+                <div className="flex items-baseline justify-between px-4 pb-2 pt-3">
                   <h3 className="text-sm font-semibold text-foreground">{STAGE_LABELS[stage]}</h3>
-                  <span className="text-xs text-faint">
-                    {report ? `${report.byStage[stage]?.count ?? 0} · ${dollars(report.byStage[stage]?.valueCents ?? 0)}` : null}
+                  <span className="text-xs font-medium text-faint">
+                    {report
+                      ? `${report.byStage[stage]?.count ?? 0} · ${dollars(report.byStage[stage]?.valueCents ?? 0)}`
+                      : null}
                   </span>
                 </div>
                 {group.length === 0 ? (
-                  <p className="mt-3 text-xs text-faint">Nothing in {STAGE_LABELS[stage].toLowerCase()}.</p>
+                  <p className="px-4 pb-4 text-xs text-faint">
+                    Nothing in {STAGE_LABELS[stage].toLowerCase()}.
+                  </p>
                 ) : (
-                  <ul className="mt-3 space-y-3">
+                  <ul className="space-y-2.5 px-3 pb-3">
                     {group.map((opportunity) => (
-                      <li key={opportunity.id} className="rounded-md border border-line p-3">
-                        <p className="text-sm font-medium text-foreground">{opportunity.name}</p>
-                        <p className="mt-0.5 text-xs text-muted">
-                          <Link
-                            href={`/Services/customers/${opportunity.accountId}`}
-                            className="underline-offset-2 hover:underline"
-                          >
+                      <li
+                        key={opportunity.id}
+                        className="rounded-lg border border-line bg-surface-inset p-3 transition-shadow hover:shadow-md"
+                      >
+                        <p className="text-sm font-semibold leading-snug text-foreground">
+                          {opportunity.name}
+                        </p>
+                        <Link
+                          href={`/Services/customers/${opportunity.accountId}`}
+                          className="mt-1.5 flex items-center gap-2 text-xs text-muted underline-offset-2 hover:underline"
+                        >
+                          <AccountAvatar
+                            name={accountNames.get(opportunity.accountId) ?? "?"}
+                            size="sm"
+                            className="size-5 rounded text-[9px]"
+                          />
+                          <span className="truncate">
                             {accountNames.get(opportunity.accountId) ?? "View account"}
-                          </Link>
-                          {" · "}
-                          {dollars(opportunity.valueCents)}
-                          {opportunity.expectedCloseDate ? ` · closes ${opportunity.expectedCloseDate}` : ""}
+                          </span>
+                        </Link>
+                        <p className="mt-1.5 text-xs text-muted">
+                          <span className="font-semibold text-foreground">
+                            {dollars(opportunity.valueCents)}
+                          </span>
+                          {opportunity.expectedCloseDate
+                            ? ` · closes ${opportunity.expectedCloseDate}`
+                            : ""}
                         </p>
                         {opportunity.stage === "lost" && opportunity.lostReason ? (
-                          <p className="mt-1 text-xs text-faint">Lost: {opportunity.lostReason}</p>
+                          <p className="mt-1 text-xs text-rose-600/90">Lost: {opportunity.lostReason}</p>
                         ) : null}
                         {pendingLost?.id === opportunity.id ? (
                           <div className="mt-2 space-y-2">
@@ -399,7 +427,7 @@ export function ServicesPipelinePanel() {
                                 }
                                 void move(opportunity.id, { stage: next });
                               }}
-                              className="input w-full py-1 text-xs"
+                              className="input min-h-8 w-full py-1 text-xs"
                             >
                               {STAGES.map((entry) => (
                                 <option key={entry} value={entry}>
@@ -413,11 +441,45 @@ export function ServicesPipelinePanel() {
                     ))}
                   </ul>
                 )}
-              </Card>
+              </section>
             );
           })}
         </div>
       ) : null}
     </div>
+  );
+}
+
+function ReportTile({
+  label,
+  value,
+  detail,
+  icon,
+  iconTone,
+  valueClassName,
+}: {
+  label: string;
+  value: string;
+  detail: string;
+  icon: React.ReactNode;
+  iconTone: string;
+  valueClassName?: string;
+}) {
+  return (
+    <Card className="flex items-start justify-between gap-3">
+      <div>
+        <p className="text-xs font-medium uppercase tracking-wide text-faint">{label}</p>
+        <p className={cn("mt-1 text-2xl font-semibold tracking-tight text-foreground", valueClassName)}>
+          {value}
+        </p>
+        <p className="mt-1 text-xs text-muted">{detail}</p>
+      </div>
+      <span
+        className={cn("flex size-10 shrink-0 items-center justify-center rounded-lg", iconTone)}
+        aria-hidden="true"
+      >
+        {icon}
+      </span>
+    </Card>
   );
 }

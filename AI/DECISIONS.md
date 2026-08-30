@@ -3696,3 +3696,24 @@ undeclared until the goal's full seeded E2E passes.
   pins the fictional domains/phones, schema bounds, stage coverage and
   the seeder's unambiguous lookup keys; route and panel suites pin the
   empty-book guard, the deliberate button, and the labels.
+
+## ADR-188 - The Services CRM presents as a client product: scoped light theme
+
+- **Date**: 2026-08-30
+- **Status**: Accepted (task #63, owner: "need this fully built out and
+  production ready to present to clients")
+- **Decision**: `.services-theme` (globals.css, on the factory-theme
+  precedent) re-skins every token inside the Services shell: white cards
+  on a soft sage ground with an emerald identity, while the console
+  outside keeps its dark lime workspace and the global header frames the
+  product. `components/services/ui.tsx` is the CRM's visual vocabulary —
+  one lifecycle colour scale (lead amber → prospect sky → customer
+  emerald → inactive slate), one stage scale for badges and the board's
+  column bars, deterministic account avatars, one money formatter — so a
+  "customer" is the same green on the overview, the table, the kanban
+  board and the 360° page. Surfaces redesigned on it: icon stat cards and
+  a stage-distribution bar on the Overview, an avatar-led accounts table,
+  a real kanban board with per-stage colour bars, and a 360° page with a
+  hero header (avatar, badges, contact chips, notes) and an icon-railed
+  timeline. No behavior changed: every testid, string and wire the unit
+  suites pin is intact, and the suites prove it.

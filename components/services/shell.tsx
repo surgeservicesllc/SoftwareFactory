@@ -15,11 +15,13 @@ import { cn } from "@/lib/cn";
 
 /**
  * The Services CRM's own chrome, on the Budget Tracker's pattern: a product
- * in its own route group with its own rail, never the console's sidebar. A
- * labelled left rail on large screens, a drawer under them, and a heading
- * that names the product once. The global header above (rendered by the
- * route group's layout) moves a person between products; this moves them
- * inside one.
+ * in its own route group with its own rail, never the console's sidebar —
+ * and, uniquely, its own `services-theme` scope: this is the product a pest
+ * company's own staff and customers see, so it trades the console's dark
+ * workspace for a light client-facing ground. A labelled left rail on large
+ * screens, a drawer under them, and a brand block that names the product
+ * once. The global header above moves a person between products; this moves
+ * them inside one.
  */
 export function ServicesShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -31,8 +33,8 @@ export function ServicesShell({ children }: { children: React.ReactNode }) {
   }));
 
   return (
-    <div className="min-h-screen">
-      <div className="flex items-center gap-3 border-b border-line px-4 py-3 lg:hidden">
+    <div className="services-theme min-h-screen">
+      <div className="flex items-center gap-3 border-b border-line bg-surface px-4 py-3 lg:hidden">
         <button
           type="button"
           onClick={() => setDrawerOpen(true)}
@@ -43,14 +45,11 @@ export function ServicesShell({ children }: { children: React.ReactNode }) {
           <Menu className="size-4" aria-hidden="true" />
           <span className="sr-only">Open Services sections</span>
         </button>
-        <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
-          <Bug className="size-4 text-[var(--accent)]" aria-hidden="true" />
-          Services
-        </span>
+        <ServicesBrand compact />
       </div>
 
       {drawerOpen ? (
-        <div className="fixed inset-0 z-40 lg:hidden">
+        <div className="services-theme fixed inset-0 z-40 lg:hidden">
           <button
             type="button"
             aria-label="Close Services sections"
@@ -62,10 +61,7 @@ export function ServicesShell({ children }: { children: React.ReactNode }) {
             className="safe-area-bottom absolute inset-y-0 left-0 w-[min(88vw,300px)] overflow-y-auto border-r border-line bg-surface p-4"
           >
             <div className="mb-4 flex items-center justify-between">
-              <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
-                <Bug className="size-4 text-[var(--accent)]" aria-hidden="true" />
-                Services
-              </span>
+              <ServicesBrand compact />
               <button
                 type="button"
                 onClick={() => setDrawerOpen(false)}
@@ -86,15 +82,11 @@ export function ServicesShell({ children }: { children: React.ReactNode }) {
       ) : null}
 
       <aside
-        className="fixed inset-y-0 left-0 z-30 hidden w-64 overflow-y-auto border-r border-line bg-surface p-4 lg:block"
+        className="services-theme fixed inset-y-0 left-0 z-30 hidden w-64 overflow-y-auto border-r border-line bg-surface p-4 lg:block"
         style={{ top: "var(--shell-top, 0px)" }}
       >
-        <Link
-          href={SERVICES_ROOT}
-          className="mb-5 flex items-center gap-2 px-2 text-sm font-semibold text-foreground"
-        >
-          <Bug className="size-4 text-[var(--accent)]" aria-hidden="true" />
-          Services
+        <Link href={SERVICES_ROOT} className="mb-5 block px-1">
+          <ServicesBrand />
         </Link>
         <ServicesSearch />
         <ServicesNavList items={items} label="Services sections" />
@@ -106,6 +98,27 @@ export function ServicesShell({ children }: { children: React.ReactNode }) {
 
       <main className="px-4 py-6 sm:px-6 lg:pl-[calc(16rem+1.5rem)] lg:pr-6">{children}</main>
     </div>
+  );
+}
+
+function ServicesBrand({ compact = false }: { compact?: boolean }) {
+  return (
+    <span className="flex items-center gap-2.5">
+      <span
+        className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-teal-700 text-white shadow-sm"
+        aria-hidden="true"
+      >
+        <Bug className="size-4.5" />
+      </span>
+      <span className="min-w-0 leading-tight">
+        <span className="block text-sm font-semibold text-foreground">Services</span>
+        {compact ? null : (
+          <span className="block text-[11px] font-medium uppercase tracking-wide text-faint">
+            Pest Services CRM
+          </span>
+        )}
+      </span>
+    </span>
   );
 }
 
@@ -133,14 +146,14 @@ function ServicesNavList({
                 onClick={onNavigate}
                 aria-current={current ? "page" : undefined}
                 className={cn(
-                  "flex items-start gap-3 rounded-md px-2.5 py-2 text-sm",
+                  "flex items-start gap-3 rounded-lg px-2.5 py-2 text-sm transition-colors",
                   current
-                    ? "bg-[var(--accent-soft)] font-medium text-foreground"
+                    ? "bg-[var(--accent-surface)] font-medium text-foreground shadow-[inset_2px_0_0_var(--accent)]"
                     : "text-muted hover:bg-surface-raised hover:text-foreground",
                 )}
               >
                 <Icon
-                  className={cn("mt-0.5 size-4 shrink-0", current && "text-[var(--accent)]")}
+                  className={cn("mt-0.5 size-4 shrink-0", current ? "text-[var(--accent)]" : "text-faint")}
                   aria-hidden="true"
                 />
                 <span className="min-w-0">
