@@ -6,7 +6,7 @@ import { budgetForTemplate } from "@/lib/graph/templates";
 import { compileGraph } from "@/lib/graph/compiler";
 import { DEFAULT_GRAPH_BUDGET } from "@/lib/graph/budgets";
 import { buildLaunchPlan } from "@/lib/graph/launch-plan";
-import { validateNodeOutput } from "@/lib/graph/contracts";
+import { validateHandoffInput, validateNodeOutput } from "@/lib/graph/contracts";
 import {
   cloneTemplate,
   findTemplate,
@@ -168,6 +168,28 @@ describe("template contracts", () => {
       ],
     });
     expect(structured.valid).toBe(true);
+  });
+
+  it("types a dependent node's inbound envelope from its producers", () => {
+    const contracts = templateNodeContracts(findTemplate("code_review")!);
+    const reduce = contracts.find((node) => node.nodeId === "reduce")!;
+    const finding = {
+      findings: [{
+        title: "A finding",
+        severity: "HIGH",
+        location: "lib/example.ts",
+        evidence: "Observed in source.",
+      }],
+    };
+
+    expect(validateHandoffInput(reduce, {
+      outputs: { correctness: finding, security: finding, quality: finding },
+      missing: [],
+    }).valid).toBe(true);
+    expect(validateHandoffInput(reduce, {
+      outputs: { correctness: "unstructured prose" },
+      missing: ["security", "quality"],
+    }).valid).toBe(false);
   });
 
   it("routes extraction to the economy tier and synthesis to the strongest", () => {

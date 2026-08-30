@@ -385,16 +385,35 @@ const AGGREGATING_CAPABILITIES: ReadonlySet<NodeCapability> = new Set([
 
 /** Turn a template's declarative nodes into full contracts the compiler accepts. */
 export function templateNodeContracts(template: GraphTemplate): readonly NodeContract[] {
+  const outputSchemas = new Map(
+    template.nodes.map((node) => [node.nodeId, schemaFor(node)] as const),
+  );
+
   return template.nodes.map((node) =>
     defineNode({
       nodeId: node.nodeId,
       job: node.job,
       executor: node.executor,
       capability: node.capability,
-      // A node's input is whatever its dependencies handed it. An entry node
-      // receives the goal, which is legitimately a string.
-      inputSchema: (node.dependsOn ?? []).length === 0 ? z.string() : z.unknown(),
-      outputSchema: schemaFor(node),
+      // Entry nodes receive the goal. Every other node receives the worker's
+      // explicit handoff envelope, with each dependency value checked against
+      // the exact output contract that produced it. Fields are optional so a
+      // tolerant fan-in can name a failed dependency in `missing` instead.
+      inputSchema: (() => {
+        const dependencies = node.dependsOn ?? [];
+        if (dependencies.length === 0) return z.string();
+
+        const outputs: Record<string, z.ZodTypeAny> = {};
+        for (const dependency of dependencies) {
+          outputs[dependency] = (outputSchemas.get(dependency) ?? z.never()).optional();
+        }
+        const dependencyNames = dependencies as readonly [string, ...string[]];
+        return z.object({
+          outputs: z.object(outputs).strict(),
+          missing: z.array(z.enum(dependencyNames)).max(dependencies.length),
+        }).strict();
+      })(),
+      outputSchema: outputSchemas.get(node.nodeId) ?? z.never(),
       dependsOn: node.dependsOn ?? [],
       reads: node.reads ?? [],
       writes: node.writes ?? [],

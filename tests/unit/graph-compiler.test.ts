@@ -64,6 +64,41 @@ describe("graph compiler", () => {
     expect(result.errors[0].detail).toContain("ghost");
   });
 
+  it("rejects a declared dependency that has no enabled delivery edge", () => {
+    const result = compileGraph({
+      goal: "missing route",
+      nodes: [node("producer"), node("consumer", { dependsOn: ["producer"] })],
+      proposedEdges: [],
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.errors).toContainEqual(expect.objectContaining({
+      code: "MISSING_DEPENDENCY_EDGE",
+      nodes: ["producer", "consumer"],
+    }));
+  });
+
+  it("accepts a declared dependency when resource analysis discovers its edge", () => {
+    const resource = { kind: "file" as const, id: "lib/shared.ts" };
+    const result = compileGraph({
+      goal: "hidden resource route",
+      nodes: [
+        node("producer", { writes: [resource] }),
+        node("consumer", { dependsOn: ["producer"], reads: [resource] }),
+      ],
+      proposedEdges: [],
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.graph.edges).toContainEqual(expect.objectContaining({
+      from: "producer",
+      to: "consumer",
+      reason: "RESOURCE_READ_AFTER_WRITE",
+    }));
+  });
+
   it("rejects a duplicate node key", () => {
     const result = compileGraph({
       goal: "dupes",

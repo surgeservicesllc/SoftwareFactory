@@ -193,7 +193,7 @@ export function validateNodeOutput<T = unknown>(
  * of "done" from silently differing from the consumer's idea of "usable".
  */
 export function validateHandoffInput<T = unknown>(
-  receiving: NodeContract,
+  receiving: Pick<NodeContract, "nodeId" | "inputSchema">,
   input: unknown,
 ): ValidationOutcome<T> {
   const parsed = receiving.inputSchema.safeParse(input);

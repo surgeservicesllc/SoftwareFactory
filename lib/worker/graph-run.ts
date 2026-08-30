@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import { compileGraph, type CompiledGraph, type CompiledNode } from "@/lib/graph/compiler";
 import type { GraphBudget } from "@/lib/graph/budgets";
-import { defineNode, validateNodeOutput } from "@/lib/graph/contracts";
+import { defineNode, validateHandoffInput, validateNodeOutput } from "@/lib/graph/contracts";
 import type { ProposedEdge } from "@/lib/graph/dependencies";
 import { runGraph, type NodeExecutionResult, type RunResult } from "@/lib/graph/runner";
 import { rehydrateStoredSchema } from "@/lib/graph/stored-schema";
@@ -194,6 +194,7 @@ export function compileClaimedGraph(claim: ClaimedGraph):
     const input = rehydrateStoredSchema(
       node.input_schema,
       `Node ${node.node_key}'s input contract`,
+      { requireConstraint: (dependsOn.get(node.node_key)?.length ?? 0) > 0 },
     );
     if (!input.ok) return { ok: false, detail: input.detail };
 
@@ -476,15 +477,35 @@ export async function runClaimedGraph(
           missing.push(dependency);
         }
       }
+      const inbound: NodeInputs = { outputs, missing };
+      const dependencies = incoming.get(node.nodeKey) ?? [];
+      const inputValidation = dependencies.length === 0
+        ? null
+        : node.inputSchema
+          ? validateHandoffInput<NodeInputs>(
+              { nodeId: node.nodeKey, inputSchema: node.inputSchema },
+              inbound,
+            )
+          : null;
+      const inputRefusal = dependencies.length === 0
+        ? null
+        : inputValidation === null
+          ? `Node ${node.nodeKey} has no executable input contract.`
+          : !inputValidation.valid
+            ? `${inputValidation.message} ${inputValidation.issues.join("; ")}`
+            : null;
+      const validatedInbound = inputValidation?.valid ? inputValidation.value : inbound;
       // Model reviewers must judge the current run's exact subject rows. An
       // old verdict is useful provenance, but replaying it as a fresh current
       // verification would be false evidence, so reviewers always execute.
       const reused = attempt === 1
         && verificationLensFor(node) === null
         && reusable.has(node.nodeKey);
-      if (reused) reusedNodes.add(node.nodeKey);
+      if (reused && inputRefusal === null) reusedNodes.add(node.nodeKey);
       const prior = reused ? reusable.get(node.nodeKey) : undefined;
-      let outcome: NodeExecutionResult = reused
+      let outcome: NodeExecutionResult = inputRefusal !== null
+        ? { status: "FAILED", error: inputRefusal, retryable: false }
+        : reused
         ? {
             status: "SUCCEEDED",
             output: prior?.output,
@@ -493,7 +514,7 @@ export async function runClaimedGraph(
             latencyMs: 0,
             tokensUsed: 0,
           }
-        : await executeNode(node, attempt, { outputs, missing });
+        : await executeNode(node, attempt, validatedInbound);
 
       /*
        * Validate before any durable write and before the output enters the

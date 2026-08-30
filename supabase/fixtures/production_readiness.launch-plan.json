@@ -364,7 +364,285 @@
       "timeout_ms": 180000,
       "max_attempts": 2,
       "input_schema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema"
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "outputs": {
+            "type": "object",
+            "properties": {
+              "config": {
+                "type": "object",
+                "properties": {
+                  "findings": {
+                    "maxItems": 64,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "title": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 400
+                        },
+                        "severity": {
+                          "type": "string",
+                          "enum": [
+                            "INFO",
+                            "LOW",
+                            "MEDIUM",
+                            "HIGH",
+                            "CRITICAL"
+                          ]
+                        },
+                        "location": {
+                          "type": "string"
+                        },
+                        "evidence": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "title",
+                        "severity",
+                        "location",
+                        "evidence"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "dev_seed": {
+                    "type": "boolean",
+                    "const": true
+                  }
+                },
+                "required": [
+                  "findings"
+                ],
+                "additionalProperties": false
+              },
+              "migrations": {
+                "type": "object",
+                "properties": {
+                  "findings": {
+                    "maxItems": 64,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "title": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 400
+                        },
+                        "severity": {
+                          "type": "string",
+                          "enum": [
+                            "INFO",
+                            "LOW",
+                            "MEDIUM",
+                            "HIGH",
+                            "CRITICAL"
+                          ]
+                        },
+                        "location": {
+                          "type": "string"
+                        },
+                        "evidence": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "title",
+                        "severity",
+                        "location",
+                        "evidence"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "dev_seed": {
+                    "type": "boolean",
+                    "const": true
+                  }
+                },
+                "required": [
+                  "findings"
+                ],
+                "additionalProperties": false
+              },
+              "errors": {
+                "type": "object",
+                "properties": {
+                  "findings": {
+                    "maxItems": 64,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "title": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 400
+                        },
+                        "severity": {
+                          "type": "string",
+                          "enum": [
+                            "INFO",
+                            "LOW",
+                            "MEDIUM",
+                            "HIGH",
+                            "CRITICAL"
+                          ]
+                        },
+                        "location": {
+                          "type": "string"
+                        },
+                        "evidence": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "title",
+                        "severity",
+                        "location",
+                        "evidence"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "dev_seed": {
+                    "type": "boolean",
+                    "const": true
+                  }
+                },
+                "required": [
+                  "findings"
+                ],
+                "additionalProperties": false
+              },
+              "observability": {
+                "type": "object",
+                "properties": {
+                  "findings": {
+                    "maxItems": 64,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "title": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 400
+                        },
+                        "severity": {
+                          "type": "string",
+                          "enum": [
+                            "INFO",
+                            "LOW",
+                            "MEDIUM",
+                            "HIGH",
+                            "CRITICAL"
+                          ]
+                        },
+                        "location": {
+                          "type": "string"
+                        },
+                        "evidence": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "title",
+                        "severity",
+                        "location",
+                        "evidence"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "dev_seed": {
+                    "type": "boolean",
+                    "const": true
+                  }
+                },
+                "required": [
+                  "findings"
+                ],
+                "additionalProperties": false
+              },
+              "rollback": {
+                "type": "object",
+                "properties": {
+                  "findings": {
+                    "maxItems": 64,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "title": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 400
+                        },
+                        "severity": {
+                          "type": "string",
+                          "enum": [
+                            "INFO",
+                            "LOW",
+                            "MEDIUM",
+                            "HIGH",
+                            "CRITICAL"
+                          ]
+                        },
+                        "location": {
+                          "type": "string"
+                        },
+                        "evidence": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "title",
+                        "severity",
+                        "location",
+                        "evidence"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "dev_seed": {
+                    "type": "boolean",
+                    "const": true
+                  }
+                },
+                "required": [
+                  "findings"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "additionalProperties": false
+          },
+          "missing": {
+            "maxItems": 5,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "config",
+                "migrations",
+                "errors",
+                "observability",
+                "rollback"
+              ]
+            }
+          }
+        },
+        "required": [
+          "outputs",
+          "missing"
+        ],
+        "additionalProperties": false
       },
       "output_schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -472,7 +750,121 @@
       "timeout_ms": 480000,
       "max_attempts": 2,
       "input_schema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema"
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "outputs": {
+            "type": "object",
+            "properties": {
+              "reduce": {
+                "type": "object",
+                "properties": {
+                  "findings": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "title": {
+                          "type": "string"
+                        },
+                        "severity": {
+                          "type": "string"
+                        },
+                        "source": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "title",
+                        "severity",
+                        "source"
+                      ],
+                      "additionalProperties": {}
+                    }
+                  },
+                  "stats": {
+                    "type": "object",
+                    "properties": {
+                      "inputCount": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "outputCount": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "reductionRatio": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1
+                      }
+                    },
+                    "required": [
+                      "inputCount",
+                      "outputCount",
+                      "reductionRatio"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "sources": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "unusable_rows": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "unusable_inputs": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "missing_inputs": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "dev_seed": {
+                    "type": "boolean",
+                    "const": true
+                  }
+                },
+                "required": [
+                  "findings",
+                  "stats",
+                  "sources",
+                  "unusable_rows",
+                  "unusable_inputs",
+                  "missing_inputs"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "additionalProperties": false
+          },
+          "missing": {
+            "maxItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "reduce"
+              ]
+            }
+          }
+        },
+        "required": [
+          "outputs",
+          "missing"
+        ],
+        "additionalProperties": false
       },
       "output_schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",

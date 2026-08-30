@@ -21,6 +21,7 @@ import type { GraphEdge, RiskLevel } from "@/lib/graph/types";
 export const COMPILE_ERROR_CODES = [
   "DUPLICATE_NODE_KEY",
   "UNKNOWN_DEPENDENCY",
+  "MISSING_DEPENDENCY_EDGE",
   "CYCLE",
   "NO_ENTRY_NODE",
   "EMPTY_GRAPH",
@@ -175,6 +176,37 @@ export function compileGraph(input: CompileInput): CompileResult {
     iterative: input.iterative,
     risk: input.risk,
   });
+
+  /*
+   * `dependsOn` is the node contract's data-flow declaration; an edge is the
+   * scheduler's executable version of that declaration.  Requiring parity
+   * here prevents a graph from compiling with an input it promises to receive
+   * but no enabled route that can ever deliver it.  Check the analyzed edge
+   * set, not the planner's proposal, so removed/fake edges cannot satisfy the
+   * contract accidentally.
+   */
+  const dependencyEdgeReasons = new Set<GraphEdge["reason"]>([
+    "DATA",
+    "RESOURCE_READ_AFTER_WRITE",
+    "VERIFICATION",
+    "POLICY",
+  ]);
+  for (const node of input.nodes) {
+    for (const dependency of node.dependsOn) {
+      const hasEnabledEdge = decision.analysis.edges.some(
+        (edge) => edge.from === dependency
+          && edge.to === node.nodeId
+          && dependencyEdgeReasons.has(edge.reason),
+      );
+      if (!hasEnabledEdge) {
+        errors.push({
+          code: "MISSING_DEPENDENCY_EDGE",
+          detail: `${node.nodeId} declares ${dependency} in dependsOn, but no enabled data, resource, verification, or policy edge delivers it.`,
+          nodes: [dependency, node.nodeId],
+        });
+      }
+    }
+  }
 
   const cycle = findCycle(input.nodes, decision.analysis.edges);
   if (cycle) {

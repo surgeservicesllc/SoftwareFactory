@@ -209,11 +209,43 @@ const TEST_OUTPUT_SCHEMA = {
   ],
 };
 
-function withTestContracts(nodesJson: string): string {
+function withTestContracts(nodesJson: string, edgesJson: string): string {
   const nodes = JSON.parse(nodesJson) as Array<Record<string, unknown>>;
+  const edges = JSON.parse(edgesJson) as Array<{
+    readonly from_node_key: string;
+    readonly to_node_key: string;
+  }>;
+  const incoming = new Map<string, string[]>();
+  for (const edge of edges) {
+    const dependencies = incoming.get(edge.to_node_key) ?? [];
+    dependencies.push(edge.from_node_key);
+    incoming.set(edge.to_node_key, dependencies);
+  }
   return JSON.stringify(nodes.map((node) => ({
     ...node,
-    input_schema: node.input_schema ?? {},
+    input_schema: node.input_schema ?? (() => {
+      const dependencies = incoming.get(String(node.node_key)) ?? [];
+      if (dependencies.length === 0) return {};
+      return {
+        type: "object",
+        properties: {
+          outputs: {
+            type: "object",
+            properties: Object.fromEntries(
+              dependencies.map((dependency) => [dependency, TEST_OUTPUT_SCHEMA]),
+            ),
+            additionalProperties: false,
+          },
+          missing: {
+            type: "array",
+            items: { type: "string", enum: dependencies },
+            maxItems: dependencies.length,
+          },
+        },
+        required: ["outputs", "missing"],
+        additionalProperties: false,
+      };
+    })(),
     output_schema: node.output_schema ?? TEST_OUTPUT_SCHEMA,
   })));
 }
@@ -232,7 +264,7 @@ describe("the graph executor boundary", { timeout: 180_000 }, () => {
       `select public.create_graph_from_plan(
          $1::uuid, $2::uuid, $3, 'DIAMOND'::public.graph_topology, '[]'::jsonb,
          'green'::public.risk_level, $4, $5::jsonb, $6::jsonb, '{}'::jsonb)`,
-      [organizationId, projectId, goal, requiresApproval, withTestContracts(nodesJson), edgesJson],
+      [organizationId, projectId, goal, requiresApproval, withTestContracts(nodesJson, edgesJson), edgesJson],
     );
     await reset(db);
     return created.rows[0].create_graph_from_plan;
