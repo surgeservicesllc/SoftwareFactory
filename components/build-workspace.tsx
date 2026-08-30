@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { GateDecision } from "@/components/graph/gate-decision";
 import { Card, Notice, SectionTitle } from "@/components/ui";
 import { composeLaunchProposal, composePlan, type LaunchProposal } from "@/lib/factory/chief-of-staff";
+import { deriveReleaseEvidence } from "@/lib/factory/release-evidence";
 import { specialistForNode } from "@/lib/factory/specialists";
 import { SDLC_STAGES } from "@/lib/sdlc/lifecycle";
 
@@ -89,6 +90,8 @@ type RunArtifact = {
   nodeKey: string;
   kind: string;
   createdAt: string;
+  /** The recorded observation itself — what the release panel derives from. */
+  payload?: unknown;
 };
 
 type TranscriptEntry = {
@@ -752,6 +755,109 @@ export function BuildWorkspace() {
                 </p>
               </details>
             ) : null}
+
+            <details
+              className="mt-3"
+              data-testid="build-release"
+              onToggle={(event) => {
+                if ((event.target as HTMLDetailsElement).open && artifacts === null) {
+                  void loadArtifacts(watchedRun.graphRunId);
+                }
+              }}
+            >
+              <summary className="cursor-pointer text-sm font-medium">Changes &amp; release</summary>
+              {/* Everything here is an ANCHOR node's recorded observation:
+                  the pull request that carries the files changed and diffs,
+                  the produced commit, the exact-head CI verdict, the
+                  provider deployment, and the production health probe. */}
+              {artifactsError !== null ? (
+                <p className="mt-2 text-sm text-[var(--danger)]">{artifactsError}</p>
+              ) : artifacts === null ? (
+                <p className="mt-2 text-sm text-[var(--muted)]">Loading…</p>
+              ) : (() => {
+                const release = deriveReleaseEvidence(artifacts);
+                if (release.pullRequest === null && release.checks === null
+                  && release.deployment === null && release.health === null) {
+                  return (
+                    <p className="mt-2 text-sm text-[var(--muted)]">
+                      No release evidence yet — this fills in as the run&apos;s implementation,
+                      test, deployment and monitoring steps record their observations.
+                    </p>
+                  );
+                }
+                return (
+                  <ul className="mt-2 space-y-1 text-sm">
+                    {release.pullRequest !== null ? (
+                      <li className="break-words">
+                        <span className="font-medium">Files changed &amp; diffs: </span>
+                        <a
+                          href={`${release.pullRequest.url}/files`}
+                          className="underline underline-offset-2"
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          pull request #{release.pullRequest.number}
+                        </a>
+                        <span className="text-xs text-[var(--muted)]">
+                          {" "}on {release.pullRequest.repository}
+                          {release.producedCommit !== null ? ` · commit ${release.producedCommit.slice(0, 8)}` : ""}
+                          {release.baseBranch !== null ? ` → ${release.baseBranch}` : ""}
+                        </span>
+                      </li>
+                    ) : null}
+                    {release.checks !== null ? (
+                      <li className="break-words">
+                        <span className="font-medium">Test results: </span>
+                        {release.checks.length === 0 ? (
+                          <span className="text-xs text-[var(--muted)]">no required checks recorded</span>
+                        ) : release.checks.map((check, index) => (
+                          <span key={`${check.name}-${index}`} className="text-xs">
+                            {index > 0 ? " · " : ""}
+                            {check.url !== null ? (
+                              <a href={check.url} className="underline underline-offset-2" target="_blank" rel="noreferrer">
+                                {check.name}
+                              </a>
+                            ) : check.name}
+                            {" "}
+                            <span className={check.conclusion === "success" ? "text-[var(--muted)]" : "text-[var(--danger)]"}>
+                              {check.conclusion}
+                            </span>
+                          </span>
+                        ))}
+                      </li>
+                    ) : null}
+                    {release.deployment !== null ? (
+                      <li className="break-words">
+                        <span className="font-medium">Deployment: </span>
+                        <span className="text-xs">
+                          {release.deployment.state}
+                          {release.deployment.environment !== null ? ` to ${release.deployment.environment}` : ""}
+                          {release.deployment.url !== null ? (
+                            <>
+                              {" · "}
+                              <a href={release.deployment.url} className="underline underline-offset-2" target="_blank" rel="noreferrer">
+                                open
+                              </a>
+                            </>
+                          ) : null}
+                        </span>
+                      </li>
+                    ) : null}
+                    {release.health !== null ? (
+                      <li className="break-words">
+                        <span className="font-medium">Production health: </span>
+                        <span className={`text-xs ${release.health.healthy ? "" : "text-[var(--danger)]"}`}>
+                          {release.health.healthy ? "healthy" : "unhealthy"}
+                          {release.health.postDeployValidation !== null
+                            ? ` · post-deploy validation ${release.health.postDeployValidation}`
+                            : ""}
+                        </span>
+                      </li>
+                    ) : null}
+                  </ul>
+                );
+              })()}
+            </details>
 
             <details
               className="mt-3"

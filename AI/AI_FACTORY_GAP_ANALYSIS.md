@@ -38,8 +38,10 @@ and to reuse it. This file is that inspection.
 2. **One command center.** Conversation + plan + task graph + live agent
    activity + progress + artifacts + approvals in a single view, linking
    out to the deep pages instead of replacing them. *(Increment 1 starts
-   this; later increments add diffs/logs/preview panels from the same
-   real sources.)*
+   this; ADR-176 adds Changes & release — files changed/diffs on the
+   PR's files tab, per-check test results, deployment, production
+   health, all from ANCHOR observations. Still open: logs
+   (graph_events) and an inline preview.)*
 3. **Chief-of-Staff completion.** The analysis graph derives type,
    plan and stages, but structured *requirements + acceptance criteria*
    from free text are only as good as what the person typed; command

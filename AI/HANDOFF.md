@@ -2,7 +2,23 @@
 
 Last updated: 2026-08-30
 
-## Newest (2026-08-30, later still): plan approval before launch (ADR-175)
+## Newest (2026-08-30, latest): Changes & release panel (ADR-176)
+
+`lib/factory/release-evidence.ts` derives the release trail from the
+ANCHOR observation payloads (shapes verbatim from
+lib/worker/anchor-node-executor.ts: phase1c_change_lineage,
+phase1c_pull_request_review, ci_check_runs, github_production_deployment,
+production_http_probe) — null per section until its observation exists.
+Build's "Changes & release" disclosure (testid build-release, lazy,
+sharing the artifacts fetch/state) links files-changed/diffs to the
+PR's `/files` tab (GitHub's diff is authoritative — never re-rendered),
+shows produced commit + base, each check's real conclusion (failures
+red), deployment state/environment/URL, production health. Open gaps
+recorded in ADR-176: logs (graph_events not yet in Build) and inline
+preview. #456 merged as f3899d9, deployed (Vercel queued ~35 min —
+watch for that), probed.
+
+## Older (2026-08-30, later still): plan approval before launch (ADR-175)
 
 Build's submit now drafts instead of launching: `composeLaunchProposal`
 (chief-of-staff.ts) reads the full_lifecycle template — same nodes,

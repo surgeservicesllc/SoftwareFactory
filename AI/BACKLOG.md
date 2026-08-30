@@ -31,6 +31,12 @@ still the working plan of record.)
 - [ ] Increment 3b: run controls where endpoints exist (cancel/retry on
   command runs; pause/resume needs engine support first — never a dead
   button).
+- [x] Increment 6 (ADR-176): Changes & release panel —
+  `lib/factory/release-evidence.ts` derives the release trail from the
+  ANCHOR observations (lineage/review/ci_check_runs/deployment/probe);
+  Build links files-changed/diffs to the PR's files tab, shows each
+  check's real conclusion, deployment state/URL, and production health.
+  Open still: logs (graph_events in Build) and an inline preview.
 - [x] Increment 4 (ADR-172): the eleven specialists as a first-class
   catalogue (`lib/factory/specialists.ts`) bound to real engine
   capabilities/stages, the engineering bench told apart by the node's

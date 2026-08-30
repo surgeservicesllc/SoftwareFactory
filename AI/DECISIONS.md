@@ -3307,3 +3307,29 @@ wait for their own decisions. Acceptance criteria are not invented
 client-side: the proposal names the template's own first two steps as
 the place where checkable acceptance criteria and requirements are
 written as recorded artifacts.
+
+
+## ADR-176 - Changes & release: the command center reads the anchors
+
+Date: 2026-08-30
+
+The directive's command center lists files changed, diffs, test results
+and deployments. Those records already exist: the full_lifecycle ANCHOR
+nodes write real observations - `phase1c_change_lineage` (repository,
+base/head SHAs, pull request), `phase1c_pull_request_review`,
+`ci_check_runs` (every required check at its latest attempt, successes
+and failures apart), `github_production_deployment` (state,
+environment, URL) and `production_http_probe` (healthy, post-deploy
+validation). `lib/factory/release-evidence.ts` derives one composed
+view from those payloads, null per section until its observation
+exists.
+
+Build gains the "Changes & release" disclosure (lazy, sharing the
+artifacts fetch): files changed and diffs link to the pull request's
+own files tab - the diff is never re-rendered client-side, because
+GitHub's is the authoritative one and re-implementing it would invite
+divergence; the produced commit and base branch sit beside the link;
+test results show each check's real conclusion (failure stays red);
+deployment state/environment/URL and production health complete the
+trail. Logs and an inline preview remain open gaps - graph_events are
+not yet surfaced in Build, and preview is today the deployment URL.
