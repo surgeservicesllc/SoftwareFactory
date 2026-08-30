@@ -2,7 +2,28 @@
 
 Last updated: 2026-08-30
 
-## Newest (2026-08-30, latest+8): inline LinkedIn/Indeed via the keyed JSearch aggregator (ADR-184)
+## Newest (2026-08-30, latest+9): Services CRM foundation (ADR-185, task #63)
+
+New owner /goal: pest-services CRM + field-service platform. Plan of
+record: AI/SERVICES_CRM_GAP_ANALYSIS.md (10 increments; PRODUCTION
+READY only after the seeded E2E). Increment 1 shipped: /Services
+product (route group `(services)`, own shell/nav on the Budget Tracker
+pattern, requirePortalViewer gate, global-nav entry), migration
+20260830000500 (crm_accounts/contacts/properties + append-only
+crm_timeline_events; ORG-scoped member RLS — not person-scoped like
+Budget/JobSeeker; status changes self-record via AFTER UPDATE trigger;
+composite same-org FKs; no DELETE on accounts, no UPDATE/DELETE grants
+on timeline), five /api/services routes (manual timeline route refuses
+status_change/service/payment — those kinds belong to future database
+machinery), three pages live-wired. Suites: services-crm-foundation
+behavior 6 (chain), services-crm-routes 8, services-customers-panel 4.
+Workflow scope services-crm (postflight: forced RLS ×4, immutability
+grants, trigger, anon/service_role shutout); runbook 184; sentinels
+swept to 20260830000500 (22 + the new suite). Dispatch the hosted
+apply right after merge. TRAP unchanged from latest+7: owner-role
+writes in PGlite suites belong at wave boundaries/sequential points.
+
+## Older (2026-08-30, latest+8): inline LinkedIn/Indeed via the keyed JSearch aggregator (ADR-184)
 
 Owner screenshot directive: LinkedIn/Indeed results inside the site.
 Scraping stays refused; the built path is board-search/jsearch.ts —

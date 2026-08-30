@@ -196,10 +196,12 @@ describe("Phase 1E production operations behavior", () => {
     // added job_seeker_saved_searches, job_seeker_search_alerts and
     // job_seeker_search_events; 146 since the alert engine added its
     // append-only delivery ledger, job_seeker_alert_deliveries; 147 since
-    // job_seeker_result_marks added personal favorite/hidden/viewed marks.
+    // job_seeker_result_marks added personal favorite/hidden/viewed marks;
+    // 151 since the Services CRM foundation (ADR-185) added crm_accounts,
+    // crm_contacts, crm_properties and the append-only crm_timeline_events.
     // Each is RLS-enabled and forced, which the filter on the next line is
     // what actually proves.
-    expect(rlsRows).toHaveLength(147);
+    expect(rlsRows).toHaveLength(151);
     expect(rlsRows.filter((row) => !row.relrowsecurity || !row.relforcerowsecurity)).toEqual([]);
 
     const { rows: grantRows } = await db.query<{ table_name: string }>(

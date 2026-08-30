@@ -1,5 +1,18 @@
 # Current state
 
+## Services CRM (task #63, ADR-185 — newest product)
+
+`/Services` is the pest-services CRM's own product (route group, own
+shell, global-nav entry). Foundation live: org-scoped crm_accounts /
+crm_contacts / crm_properties under forced member RLS, and the
+append-only crm_timeline_events audit spine (no update/delete grants;
+status changes self-record by trigger; manual route refuses system
+kinds). Overview + Customers & Leads + 360° account pages wired to
+five /api/services routes. Plan of record:
+AI/SERVICES_CRM_GAP_ANALYSIS.md — ten increments; PEST CRM: PRODUCTION
+READY is declared only after the seeded E2E journey (increment 10).
+
+
 Last reviewed: 2026-08-29
 
 ## 2026-08-29: Budget Tracker — own navigation, dated import, and a plan/history fix

@@ -593,7 +593,7 @@ for (const layoutCase of CASES) {
  * the absence of an Admin entry worth asserting: the owner removed it on
  * 2026-08-23, and the badge beside it still says who is looking.
  */
-test("the signed-in header names the three products and nothing else", async ({ page }) => {
+test("the signed-in header names the four products and nothing else", async ({ page }) => {
   await open(page, "site-header", 1440);
 
   const primary = page.getByRole("navigation", { name: "Primary" });
@@ -601,9 +601,12 @@ test("the signed-in header names the three products and nothing else", async ({ 
 
   // Budget Tracker joined the header as the third product on 2026-08-29;
   // its addition shipped without this expectation moving, which made the
-  // base branch red. The claim stays exact: these products, nothing else.
+  // base branch red. Services joined as the second product on 2026-08-30
+  // (ADR-185) — and repeated that history on PR #465 before this line
+  // moved. The claim stays exact: these products, nothing else.
   await expect(primary.getByRole("link")).toHaveText([
     "Software Factory",
+    "Services",
     "Job Search",
     "Budget Tracker",
   ]);
@@ -611,6 +614,10 @@ test("the signed-in header names the three products and nothing else", async ({ 
   await expect(primary.getByRole("link", { name: "Software Factory" })).toHaveAttribute(
     "href",
     "/solutions",
+  );
+  await expect(primary.getByRole("link", { name: "Services" })).toHaveAttribute(
+    "href",
+    "/Services",
   );
   await expect(primary.getByRole("link", { name: "Job Search" })).toHaveAttribute(
     "href",
