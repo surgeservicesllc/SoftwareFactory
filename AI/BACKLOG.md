@@ -55,9 +55,13 @@ still the working plan of record.)
   (specialist beside real executor/provider/model/latency), Independent
   QA (graph_verifications verdicts), lazy Artifacts (real route), spend
   accounting, and Build history with closure notes and evidence links.
-- [ ] Increment 5: autonomy modes (Ask-Me/Balanced/Autonomous) as
-  parameterization of existing gates — policy review first; RED stays
-  owner-approved.
+- [x] Increment 5 (ADR-181): autonomy modes over the real Phase 1D
+  controls — deriveAutonomyMode + AUTONOMY_MODES (exact patches +
+  invariants); Build's Autonomy panel derives from GET controls and a
+  stronger-mode selection is a real PATCH whose refusal (schema pins
+  autonomousMode:false; the trigger refuses beneath) renders verbatim.
+  Opening the fence itself is RED and stays with the owner; nothing
+  here widens autonomous authority.
 - [x] Task #56 (ADR-174): node_runs.attempt persisted —
   20260830000100 replaces `record_node_state_as_worker` with the
   attempt-carrying eight-parameter definer (retry = real second RUNNING

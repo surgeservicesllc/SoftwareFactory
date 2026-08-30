@@ -2,6 +2,13 @@
 
 Last reviewed: 2026-08-30
 
+**Addendum, 2026-08-30 latest+5 — autonomy modes (ADR-181):**
+autonomy-mode suite 5 (Ask-Me derivation from today's only permitted
+state, future-state derivations, exact patches, invariants stated,
+patch round-trips); workspace 16 (mode derived from real GET controls,
+exact PATCH body with concurrency timestamp, the fence's refusal
+verbatim). Lint zero warnings, production build, `tsc --noEmit` clean.
+
 **Addendum, 2026-08-30 latest+4 — Stop as withdrawal (ADR-180):**
 worker-execution suite 36 green incl. the withdrawal pair (unclaimable
 after withdrawal, idempotent single audit event, RUNNING/secret/

@@ -597,6 +597,58 @@ describe("the build workspace", () => {
     expect(within(voidedRow).getByRole("button", { name: "Stop" })).toBeInTheDocument();
   });
 
+  it("derives the autonomy mode from real controls and shows the fence's refusal verbatim", async () => {
+    respond({});
+    fetchMock.mockImplementation((url: string, init?: RequestInit) => {
+      if (typeof url === "string" && url.includes("/controls")) {
+        if (init?.method === "PATCH") {
+          return Promise.resolve(json(
+            { error: { code: "invalid_controls", message: "Project control update is invalid." } },
+            400,
+          ));
+        }
+        return Promise.resolve(json({
+          projectId: "11111111-1111-4111-8111-111111111111",
+          controls: {
+            autonomousMode: false,
+            maximumAutonomousRisk: "green",
+            autoApprove: false,
+            autoMerge: false,
+            autoDeploy: false,
+            autoRollback: false,
+            updatedAt: "2026-08-30T07:00:00.000Z",
+          },
+        }));
+      }
+      if (typeof url === "string" && url.includes("/api/graphs/runs")) {
+        return Promise.resolve(json({ runs: [] }));
+      }
+      return Promise.resolve(json(PROJECTS));
+    });
+    const user = userEvent.setup();
+    render(<BuildWorkspace />);
+    await user.selectOptions(await screen.findByRole("combobox"), "11111111-1111-4111-8111-111111111111");
+
+    // The mode is derived from the stored controls, never assumed.
+    const panel = await screen.findByTestId("build-autonomy");
+    expect(await within(panel).findByText(/Autonomy — Ask Me/)).toBeInTheDocument();
+    await user.click(within(panel).getByText(/Autonomy — Ask Me/));
+    expect(within(panel).getByRole("button", { name: "Ask Me — active" })).toBeDisabled();
+
+    // Selecting a stronger mode is a real request with the exact patch…
+    await user.click(within(panel).getByRole("button", { name: "Autonomous" }));
+    const call = fetchMock.mock.calls.find(([url, init]) =>
+      typeof url === "string" && url.includes("/controls")
+      && (init as RequestInit | undefined)?.method === "PATCH");
+    expect(JSON.parse((call?.[1] as RequestInit).body as string)).toEqual({
+      autonomousMode: true,
+      maximumAutonomousRisk: "yellow",
+      expectedUpdatedAt: "2026-08-30T07:00:00.000Z",
+    });
+    // …and the server's refusal is the answer, in its own words.
+    expect(await within(panel).findByText("Project control update is invalid.")).toBeInTheDocument();
+  });
+
   it("lists unfinished lifecycle runs on arrival, so watching resumes across visits", async () => {
     respond({
       runs: [

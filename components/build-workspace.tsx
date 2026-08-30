@@ -5,6 +5,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { GateDecision } from "@/components/graph/gate-decision";
 import { Card, Notice, SectionTitle } from "@/components/ui";
+import {
+  AUTONOMY_MODES,
+  deriveAutonomyMode,
+  type AutonomyControls,
+} from "@/lib/factory/autonomy-mode";
 import { composeLaunchProposal, composePlan, type LaunchProposal } from "@/lib/factory/chief-of-staff";
 import { deriveReleaseEvidence } from "@/lib/factory/release-evidence";
 import { specialistForNode } from "@/lib/factory/specialists";
@@ -151,6 +156,9 @@ export function BuildWorkspace() {
   const [events, setEvents] = useState<{ rows: RunEvent[]; truncated: boolean } | null>(null);
   const [eventsError, setEventsError] = useState<string | null>(null);
   const [stopping, setStopping] = useState<string | null>(null);
+  const [controls, setControls] = useState<(AutonomyControls & { updatedAt: string }) | null>(null);
+  const [controlsError, setControlsError] = useState<string | null>(null);
+  const [modeNotice, setModeNotice] = useState<string | null>(null);
   /** The watched graph's stored dependency edges, one fetch per graph. */
   const [planEdges, setPlanEdges] = useState<{ graphId: string; edges: { from: string; to: string }[] } | null>(null);
 
@@ -426,6 +434,79 @@ export function BuildWorkspace() {
     }
   }, []);
 
+  // The selected project's real autonomy controls — the mode panel derives
+  // from these records and never invents a state the database does not hold.
+  useEffect(() => {
+    let active = true;
+    const kickoff = window.setTimeout(() => {
+      if (projectId === "") {
+        setControls(null);
+        setModeNotice(null);
+        return;
+      }
+      void (async () => {
+        setControlsError(null);
+        try {
+          const response = await fetch(`/api/projects/${projectId}/controls`, {
+            headers: { accept: "application/json" },
+          });
+          const payload = (await response.json()) as {
+            controls?: AutonomyControls & { updatedAt: string };
+            error?: { message?: string };
+          };
+          if (!active) return;
+          if (!response.ok || !payload.controls) {
+            setControlsError(payload.error?.message ?? "The project's autonomy controls could not be loaded.");
+            return;
+          }
+          setControls(payload.controls);
+        } catch {
+          if (active) setControlsError("The project's autonomy controls could not be loaded.");
+        }
+      })();
+    }, 0);
+    return () => {
+      active = false;
+      window.clearTimeout(kickoff);
+    };
+  }, [projectId]);
+
+  /**
+   * A mode selection is a real request to the real controls route. In this
+   * phase the route and the database fence refuse anything but Ask Me — and
+   * that refusal, shown verbatim, is the honest answer: enabling wider
+   * autonomy is a RED policy change an owner authorizes elsewhere, never a
+   * toggle this panel can flip.
+   */
+  const requestMode = useCallback(async (modeKey: string) => {
+    const definition = AUTONOMY_MODES.find((mode) => mode.key === modeKey);
+    if (!definition || controls === null || projectId === "") return;
+    setModeNotice(null);
+    try {
+      const response = await fetch(`/api/projects/${projectId}/controls`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          autonomousMode: definition.patch.autonomousMode,
+          maximumAutonomousRisk: definition.patch.maximumAutonomousRisk,
+          expectedUpdatedAt: controls.updatedAt,
+        }),
+      });
+      const payload = (await response.json()) as {
+        controls?: AutonomyControls & { updatedAt: string };
+        error?: { message?: string };
+      };
+      if (!response.ok || !payload.controls) {
+        setModeNotice(payload.error?.message ?? "The controls route refused the change.");
+        return;
+      }
+      setControls(payload.controls);
+      setModeNotice(`Autonomy is now ${definition.name}.`);
+    } catch {
+      setModeNotice("The mode request did not reach the server.");
+    }
+  }, [controls, projectId]);
+
   /**
    * Stop = withdrawal: the database marks the graph so no future claim
    * selects it. What comes back — the withdrawal note or the RUNNING
@@ -513,6 +594,45 @@ export function BuildWorkspace() {
             >
               {launching ? "Starting…" : "Build it"}
             </button>
+            {projectId !== "" ? (
+              <details className="min-w-0 basis-full text-xs text-[var(--muted)]" data-testid="build-autonomy">
+                <summary className="cursor-pointer">
+                  Autonomy — {controls !== null
+                    ? AUTONOMY_MODES.find((mode) => mode.key === deriveAutonomyMode(controls))?.name
+                    : "loading"}
+                </summary>
+                {controlsError !== null ? (
+                  <p className="mt-1 text-[var(--danger)]">{controlsError}</p>
+                ) : controls !== null ? (
+                  <div className="mt-1 max-w-xl space-y-1">
+                    {AUTONOMY_MODES.map((mode) => {
+                      const active = deriveAutonomyMode(controls) === mode.key;
+                      return (
+                        <p key={mode.key} className="break-words">
+                          <button
+                            type="button"
+                            onClick={() => void requestMode(mode.key)}
+                            disabled={active}
+                            className="rounded border border-[var(--border)] px-1.5 py-0.5 disabled:opacity-100 disabled:font-medium"
+                          >
+                            {mode.name}{active ? " — active" : ""}
+                          </button>
+                          {" "}{mode.promise} {mode.invariant}
+                        </p>
+                      );
+                    })}
+                    {modeNotice !== null ? <p className="break-words">{modeNotice}</p> : null}
+                    <p>
+                      Whatever the mode: in-run human gates, merges and deployments stay
+                      owner-approved, and the database fence has the last word — a selection here
+                      is a real request, and its refusal is shown in the server&apos;s own words.
+                    </p>
+                  </div>
+                ) : (
+                  <p className="mt-1">Loading the project&apos;s real controls…</p>
+                )}
+              </details>
+            ) : null}
             <details className="min-w-0 basis-full text-xs text-[var(--muted)]">
               <summary className="cursor-pointer">Advanced</summary>
               <p className="mt-1 max-w-md">

@@ -3449,3 +3449,35 @@ dead. The behavior suite proves the whole loop on the migrated chain:
 withdrawn graphs unclaimable, idempotence without a second audit event,
 the RUNNING/secret/non-member refusals, and Stop ending the
 failed-run-retry loop that used to be unstoppable.
+
+
+## ADR-181 - Autonomy modes derive from the real controls; the fence keeps the last word
+
+Date: 2026-08-30
+
+The directive names three modes - Ask Me, Balanced, Autonomous. The
+controls they parameterize have existed on `projects` since Phase 1D
+(autonomous_mode, maximum_autonomous_risk, the four auto_* switches),
+owner-writable through update_project_controls and fenced by
+enforce_safe_project_controls, which in this phase refuses any state
+but everything-off-with-a-GREEN-ceiling. RISK_CLASSIFICATION.md
+classifies enabling or widening autonomous approval authority as RED,
+and the owner-directed release rule explicitly does not cover it - so
+no increment of mine may open that fence, and none does.
+
+lib/factory/autonomy-mode.ts maps the three modes onto those records:
+deriveAutonomyMode reads the stored controls (today every project
+derives Ask Me, because the fence admits nothing else; the day policy
+opens, the same read reports the new truth), and AUTONOMY_MODES carries
+each mode's exact controls patch plus its invariant - RED is never
+autonomous, merges and deployments stay owner-approved in every mode.
+
+Build's Autonomy disclosure shows the derived mode from the project's
+real controls (GET /api/projects/[id]/controls). Selecting a stronger
+mode is a REAL PATCH to the real route with the exact patch and
+optimistic-concurrency timestamp - and the refusal that comes back
+(the route's schema pins autonomousMode to literal false; beneath it
+the trigger refuses too) is rendered verbatim as the honest answer.
+No fake toggle, no dead button, no paraphrase: the modes are named,
+the machinery is wired, and the guardrail visibly holds until an owner
+authorizes the RED change through governance, not through this panel.
