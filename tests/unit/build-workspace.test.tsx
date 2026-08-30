@@ -172,7 +172,11 @@ describe("the build workspace", () => {
         node("goal", "GOAL", "COMPLETED"),
         node("arch", "ARCHITECTURE", "COMPLETED"),
         node("impl", "IMPLEMENTATION", "RUNNING"),
-        node("review-gate", "REVIEW", "PLANNED", { gate_kind: "HUMAN", gate_state: "OPEN" }),
+        node("review-gate", "REVIEW", "PLANNED", {
+          gate_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          gate_kind: "HUMAN",
+          gate_state: "OPEN",
+        }),
       ],
     };
     respond({ runs: [runningRun] });
@@ -187,12 +191,59 @@ describe("the build workspace", () => {
     // Stages render in lifecycle order with their own counts.
     expect(within(live).getByText("goal")).toBeInTheDocument();
     expect(within(live).getByText("implementation")).toBeInTheDocument();
-    // The open human gate is a call to decide, linked to the run page.
+    // The open human gate is a call to decide, with the evidence linked.
     expect(within(live).getByText(/One step is waiting for your approval/)).toBeInTheDocument();
-    expect(within(live).getByRole("link", { name: "Review and decide" })).toHaveAttribute(
+    expect(within(live).getByRole("link", { name: "See the full evidence" })).toHaveAttribute(
       "href",
       `/solutions/lifecycle/run/${runningRun.graphRunId}`,
     );
+  });
+
+  it("decides an open gate inline through the real gate route", async () => {
+    const gated = {
+      graphRunId: "aaaaaaaa-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      graphId: LAUNCH.graphId,
+      goal: "Build me a bakery site",
+      state: "RUNNING",
+      projectId: "11111111-1111-4111-8111-111111111111",
+      startedAt: "2026-08-30T01:00:00Z",
+      completedAt: null,
+      isLifecycle: true,
+      nodes: [
+        node("arch-gate", "ARCHITECTURE", "VERIFYING", {
+          gate_id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          gate_kind: "HUMAN",
+          gate_state: "OPEN",
+        }),
+      ],
+    };
+    respond({ runs: [gated] });
+    fetchMock.mockImplementation((url: string, init?: RequestInit) => {
+      if (typeof url === "string" && url.includes("/api/graph-gates/")) {
+        return Promise.resolve(json({ workerWoken: true, note: "Approved; the worker was woken." }));
+      }
+      if (typeof url === "string" && url.includes("/api/graphs/runs")) {
+        return Promise.resolve(json({ runs: [gated] }));
+      }
+      if (typeof url === "string" && url.includes("/api/graphs") && init?.method === "POST") {
+        return Promise.resolve(json(LAUNCH));
+      }
+      return Promise.resolve(json(PROJECTS));
+    });
+    const user = userEvent.setup();
+    render(<BuildWorkspace />);
+    await launch(user);
+
+    const gates = await screen.findByTestId("build-gates");
+    await user.click(within(gates).getByRole("button", { name: "Approve" }));
+
+    // The decision goes to the shared gate route with the exact gate id…
+    const call = fetchMock.mock.calls.find(([url]) =>
+      typeof url === "string" && url.includes("/api/graph-gates/cccccccc-cccc-4ccc-8ccc-cccccccccccc/decide"));
+    expect(call).toBeDefined();
+    expect(JSON.parse((call?.[1] as RequestInit).body as string)).toEqual({ approved: true });
+    // …and the route's own note is what the person reads back.
+    expect(await within(gates).findByText("Approved; the worker was woken.")).toBeInTheDocument();
   });
 
   it("reports completion with the run's own closure note in the transcript", async () => {

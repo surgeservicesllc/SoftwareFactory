@@ -3185,9 +3185,10 @@ recorded state transitions (plan recorded with the compiler's real node
 count, the server's own worker-wake note verbatim, completion with the
 run's closure note), progress is a count of real node states rendered as
 "n of m steps", stages group by the engine's `lifecycle_stage` in SDLC
-order, an OPEN human gate is a visible call to decide linking to the run
-page, and a launch refusal is shown in the server's words with no run
-view pretending otherwise. Unfinished lifecycle runs list on arrival, so
+order, an OPEN human gate renders the shared GateDecision control inline —
+the same wording, route and evidence rules as every other gate surface,
+with the run page linked for the full evidence — and a launch refusal is
+shown in the server's words with no run view pretending otherwise. Unfinished lifecycle runs list on arrival, so
 watching resumes across visits — persistence is the database's, not the
 tab's. Deep surfaces (run detail, Agent Trail, factory steps) remain the
 detail views; Build links into them. "Hide complexity" never means hide

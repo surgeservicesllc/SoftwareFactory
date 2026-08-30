@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { GateDecision } from "@/components/graph/gate-decision";
 import { Card, Notice, SectionTitle } from "@/components/ui";
 import { SDLC_STAGES } from "@/lib/sdlc/lifecycle";
 
@@ -48,8 +49,10 @@ type RunNode = {
   lifecycle_stage: string | null;
   latency_ms: number | null;
   error_message: string | null;
+  gate_id?: string | null;
   gate_kind: string | null;
   gate_state: string | null;
+  gate_evidence_artifact_id?: string | null;
   provider: string | null;
   model: string | null;
 };
@@ -418,7 +421,7 @@ export function BuildWorkspace() {
             </div>
 
             {waitingGates.length > 0 ? (
-              <div className="mt-3">
+              <div className="mt-3 space-y-2" data-testid="build-gates">
                 <Notice tone="warning">
                   {waitingGates.length === 1
                     ? "One step is waiting for your approval."
@@ -427,9 +430,20 @@ export function BuildWorkspace() {
                     href={`/solutions/lifecycle/run/${watchedRun.graphRunId}`}
                     className="underline underline-offset-2"
                   >
-                    Review and decide
+                    See the full evidence
                   </Link>
                 </Notice>
+                {/* The decision offered where the gate is — the same shared
+                    control, wording, and route every other gate surface uses;
+                    a decision re-reads the live feed rather than assuming. */}
+                {waitingGates.map((node) => (
+                  <div key={node.node_key} className="rounded-md border border-[var(--border)] p-2 text-sm">
+                    <span className="font-medium">
+                      {(node.lifecycle_stage ?? node.node_key).toLowerCase()}
+                    </span>
+                    <GateDecision node={node} onDecided={() => void refreshRuns()} />
+                  </div>
+                ))}
               </div>
             ) : null}
 

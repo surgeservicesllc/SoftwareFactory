@@ -14,8 +14,13 @@ is armed — this section is the plan of record).
   resume list). Nav seat "Build" first after Overview.
 - [ ] Increment 2: draft acceptance criteria + plan approval in the
   workspace before launch.
-- [ ] Increment 3: inline gate decisions + run controls where endpoints
-  exist.
+- [x] Increment 3a (shipped with increment 1): inline gate decisions —
+  every OPEN human gate on the watched run renders the shared
+  GateDecision control (same wording, same route, same evidence rules as
+  the runs panel); a decision re-reads the live feed.
+- [ ] Increment 3b: run controls where endpoints exist (cancel/retry on
+  command runs; pause/resume needs engine support first — never a dead
+  button).
 - [ ] Increment 4: specialty-agent presentation over stages; bounded IO
   contracts.
 - [ ] Increment 5: autonomy modes (Ask-Me/Balanced/Autonomous) as
