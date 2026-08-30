@@ -2,6 +2,15 @@
 
 Last updated: 2026-08-29
 
+## Newest (2026-08-30, later still): specialists + evidence panels in Build (ADR-172)
+
+`lib/factory/specialists.ts` — eleven roles bound to real capabilities/
+stages; bench split by node-key words; null when nothing matches. Build
+gains Agents / Independent QA / lazy Artifacts / spend / Build history
+panels, all from the runs feed + artifacts route. Specialists tests pin
+the catalogue to NODE_CAPABILITIES and SDLC_STAGES so vocabulary drift
+fails loudly.
+
 ## Newest (2026-08-30, later): Build — conversational front door (ADR-171, task #61)
 
 `/solutions/build` launches full_lifecycle via POST /api/graphs and

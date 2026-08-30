@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { GateDecision } from "@/components/graph/gate-decision";
 import { Card, Notice, SectionTitle } from "@/components/ui";
+import { specialistForNode } from "@/lib/factory/specialists";
 import { SDLC_STAGES } from "@/lib/sdlc/lifecycle";
 
 /**
@@ -57,6 +58,13 @@ type RunNode = {
   model: string | null;
 };
 
+type GraphVerification = {
+  subject_node_key: string;
+  lens: string;
+  verdict: string;
+  verifier_provider: string | null;
+};
+
 type GraphRun = {
   graphRunId: string;
   graphId: string;
@@ -67,9 +75,19 @@ type GraphRun = {
   startedAt: string | null;
   completedAt: string | null;
   nodes: RunNode[];
+  verifications?: GraphVerification[];
+  tokensUsed?: number | null;
+  costMicros?: number | null;
   isLifecycle?: boolean;
   iteration?: number;
   maxIterations?: number;
+};
+
+type RunArtifact = {
+  artifactId: string;
+  nodeKey: string;
+  kind: string;
+  createdAt: string;
 };
 
 type TranscriptEntry = {
@@ -112,8 +130,11 @@ export function BuildWorkspace() {
   const [launched, setLaunched] = useState<(LaunchResult & { projectId: string }) | null>(null);
 
   const [watchedRun, setWatchedRun] = useState<GraphRun | null>(null);
-  const [activeRuns, setActiveRuns] = useState<GraphRun[]>([]);
+  const [lifecycleRuns, setLifecycleRuns] = useState<GraphRun[]>([]);
   const [watchError, setWatchError] = useState<string | null>(null);
+  /** Fetched when the person opens the Artifacts disclosure — not before. */
+  const [artifacts, setArtifacts] = useState<RunArtifact[] | null>(null);
+  const [artifactsError, setArtifactsError] = useState<string | null>(null);
 
   const entrySeq = useRef(0);
   const lastReportedState = useRef<string | null>(null);
@@ -166,11 +187,7 @@ export function BuildWorkspace() {
       const payload = (await response.json()) as { runs?: GraphRun[] };
       const runs = payload.runs ?? [];
       setWatchError(null);
-      setActiveRuns(
-        runs.filter(
-          (run) => run.isLifecycle === true && run.state !== "COMPLETED" && run.state !== "FAILED",
-        ),
-      );
+      setLifecycleRuns(runs.filter((run) => run.isLifecycle === true));
       if (launched !== null) {
         const mine = runs.find((run) => run.graphId === launched.graphId) ?? null;
         setWatchedRun(mine);
@@ -286,6 +303,33 @@ export function BuildWorkspace() {
   const connectedProjects = (projects ?? []).filter(
     (project) => project.connectionStatus === undefined || project.connectionStatus === "connected",
   );
+
+  const activeRuns = lifecycleRuns.filter(
+    (run) => run.state !== "COMPLETED" && run.state !== "FAILED",
+  );
+  const finishedRuns = lifecycleRuns.filter(
+    (run) => run.state === "COMPLETED" || run.state === "FAILED",
+  );
+
+  const loadArtifacts = useCallback(async (graphRunId: string) => {
+    setArtifactsError(null);
+    try {
+      const response = await fetch(`/api/graphs/runs/${graphRunId}/artifacts`, {
+        headers: { accept: "application/json" },
+      });
+      const payload = (await response.json()) as {
+        artifacts?: RunArtifact[];
+        error?: { message?: string };
+      };
+      if (!response.ok) {
+        setArtifactsError(payload.error?.message ?? "The run's artifacts could not be loaded.");
+        return;
+      }
+      setArtifacts(payload.artifacts ?? []);
+    } catch {
+      setArtifactsError("The run's artifacts could not be loaded.");
+    }
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -482,6 +526,98 @@ export function BuildWorkspace() {
               })}
             </ul>
 
+            <details className="mt-4" data-testid="build-agents">
+              <summary className="cursor-pointer text-sm font-medium">
+                Agents ({watchedRun.nodes.length} steps)
+              </summary>
+              {/* The specialist is the factory's role for the step; the
+                  executor, provider and model beside it are what actually
+                  ran. One never replaces the other. */}
+              <ul className="mt-2 space-y-1 text-sm">
+                {watchedRun.nodes.map((node) => {
+                  const specialist = specialistForNode(node);
+                  return (
+                    <li key={node.node_key} className="flex flex-wrap items-baseline gap-x-2">
+                      <span className="font-medium">{specialist?.name ?? node.executor ?? "—"}</span>
+                      <span className="text-xs text-[var(--muted)]">
+                        {node.node_key} · {(node.state ?? "planned").toLowerCase()}
+                        {node.provider !== null ? ` · ${node.provider}${node.model !== null ? ` ${node.model}` : ""}` : ""}
+                        {node.latency_ms !== null ? ` · ${(node.latency_ms / 1000).toFixed(1)}s` : ""}
+                      </span>
+                      {node.error_message !== null ? (
+                        <span className="basis-full text-xs text-[var(--danger)]">{node.error_message}</span>
+                      ) : null}
+                    </li>
+                  );
+                })}
+              </ul>
+            </details>
+
+            {(watchedRun.verifications ?? []).length > 0 ? (
+              <details className="mt-3" data-testid="build-verifications">
+                <summary className="cursor-pointer text-sm font-medium">
+                  Independent QA ({(watchedRun.verifications ?? []).length} verdicts)
+                </summary>
+                <ul className="mt-2 space-y-1 text-sm">
+                  {(watchedRun.verifications ?? []).map((verification, index) => (
+                    <li key={`${verification.subject_node_key}-${verification.lens}-${index}`} className="flex flex-wrap items-baseline gap-x-2">
+                      <span className={`font-medium ${verification.verdict === "PASS" ? "" : "text-[var(--danger)]"}`}>
+                        {verification.verdict}
+                      </span>
+                      <span className="text-xs text-[var(--muted)]">
+                        {verification.subject_node_key} · {verification.lens} lens
+                        {verification.verifier_provider !== null ? ` · verified by ${verification.verifier_provider}` : ""}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-1 text-xs text-[var(--muted)]">
+                  Verification is independent of the agent that did the work — done is only done
+                  when a verifier says so with evidence.
+                </p>
+              </details>
+            ) : null}
+
+            <details
+              className="mt-3"
+              data-testid="build-artifacts"
+              onToggle={(event) => {
+                if ((event.target as HTMLDetailsElement).open && artifacts === null) {
+                  void loadArtifacts(watchedRun.graphRunId);
+                }
+              }}
+            >
+              <summary className="cursor-pointer text-sm font-medium">Artifacts</summary>
+              {artifactsError !== null ? (
+                <p className="mt-2 text-sm text-[var(--danger)]">{artifactsError}</p>
+              ) : artifacts === null ? (
+                <p className="mt-2 text-sm text-[var(--muted)]">Loading…</p>
+              ) : artifacts.length === 0 ? (
+                <p className="mt-2 text-sm text-[var(--muted)]">
+                  No artifacts recorded yet — they appear as stages complete.
+                </p>
+              ) : (
+                <ul className="mt-2 space-y-1 text-sm">
+                  {artifacts.map((artifact) => (
+                    <li key={artifact.artifactId} className="flex flex-wrap items-baseline gap-x-2">
+                      <span className="font-medium">{artifact.kind}</span>
+                      <span className="text-xs text-[var(--muted)]">
+                        {artifact.nodeKey} · {artifact.createdAt.slice(0, 19).replace("T", " ")}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </details>
+
+            {typeof watchedRun.tokensUsed === "number" || typeof watchedRun.costMicros === "number" ? (
+              <p className="mt-3 text-xs text-[var(--muted)]">
+                Spend so far:
+                {typeof watchedRun.tokensUsed === "number" ? ` ${watchedRun.tokensUsed.toLocaleString("en-US")} tokens` : ""}
+                {typeof watchedRun.costMicros === "number" ? ` · $${(watchedRun.costMicros / 1_000_000).toFixed(4)}` : ""}
+              </p>
+            ) : null}
+
             <p className="mt-4 flex flex-wrap gap-3 text-sm">
               <Link href={`/solutions/lifecycle/run/${watchedRun.graphRunId}`} className="underline underline-offset-2">
                 Full run detail
@@ -525,6 +661,41 @@ export function BuildWorkspace() {
                     </li>
                   );
                 })}
+            </ul>
+          </div>
+        </Card>
+      ) : null}
+
+      {finishedRuns.length > 0 ? (
+        <Card>
+          <div data-testid="build-history">
+            <SectionTitle
+              title="Build history"
+              description="Every finished lifecycle run in this workspace, with the engine's own account of how it ended."
+            />
+            <ul className="mt-3 space-y-2">
+              {finishedRuns.slice(0, 10).map((run) => (
+                <li key={run.graphRunId} className="text-sm">
+                  <div className="flex flex-wrap items-baseline justify-between gap-2">
+                    <span className="min-w-0 break-words">{run.goal}</span>
+                    <span className="flex shrink-0 items-center gap-3 text-xs text-[var(--muted)]">
+                      <span className={run.state === "FAILED" ? "text-[var(--danger)]" : ""}>
+                        {run.state.toLowerCase()}
+                      </span>
+                      {run.completedAt !== null ? run.completedAt.slice(0, 10) : ""}
+                      <Link
+                        href={`/solutions/lifecycle/run/${run.graphRunId}`}
+                        className="underline underline-offset-2"
+                      >
+                        Evidence
+                      </Link>
+                    </span>
+                  </div>
+                  {run.closureNote ? (
+                    <p className="mt-0.5 text-xs text-[var(--muted)]">{run.closureNote}</p>
+                  ) : null}
+                </li>
+              ))}
             </ul>
           </div>
         </Card>

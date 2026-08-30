@@ -1,9 +1,9 @@
 # AI Factory → autonomous build platform: audit and gap analysis
 
 Written 2026-08-30 against main `a7083a8`, at the start of the owner's
-"Build me [what I want]" directive (task #61; the /goal registration
-exceeded the 4,000-character limit, so no automated evaluator is armed —
-this document and `AI/BACKLOG.md` carry the plan instead).
+"Build me [what I want]" directive (task #61; a trimmed /goal later
+registered, so the Stop-hook evaluator is armed — this document and
+`AI/BACKLOG.md` remain the plan of record).
 
 The directive's benchmark is a Grok-Build-class experience: one
 conversational command drives plan → agents → build → test → review →
