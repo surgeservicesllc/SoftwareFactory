@@ -2,6 +2,15 @@
 
 Last reviewed: 2026-08-30
 
+**Addendum, 2026-08-30 later still — plan approval before launch
+(ADR-175):** chief-of-staff suite 6 (proposal pinned to the real
+template: 14 steps, goal-first layering, widest layer 3, gates exactly
+architecture/test/deploy, 0% honestly planned, jobs verbatim);
+workspace suite 11 (submit drafts and POSTs nothing until Approve &
+launch; Edit withdraws keeping the words; every launch path re-proven
+through the approval step). Lint zero warnings, production build,
+`tsc --noEmit` clean.
+
 **Addendum, 2026-08-30 late night — attempt persistence (ADR-174, task
 #56):** graph-worker-execution suite 32 green against the full migrated
 chain including two new cases — a real retry persisting attempt 2 with

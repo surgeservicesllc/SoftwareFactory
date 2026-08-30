@@ -99,7 +99,10 @@ trademarks are used.)
    `/api/graphs/runs` polling; progress computed only from real node
    states; links to run/stage/trail pages; honest empty and
    Not-Connected states. No new tables.
-2. Draft acceptance criteria + plan approval in the same workspace.
+2. Draft acceptance criteria + plan approval in the same workspace
+   *(shipped, ADR-175: the proposal is the template read back; approval
+   is the launch boundary; acceptance criteria are the run's own
+   first-stage artifacts)*.
 3. Gate decisions inline (approve/reject via existing endpoint) +
    run controls where endpoints exist.
 4. Specialty-agent presentation over stages; bounded IO contracts.

@@ -2,7 +2,23 @@
 
 Last updated: 2026-08-30
 
-## Newest (2026-08-30, late night): node_runs.attempt persisted (ADR-174, task #56)
+## Newest (2026-08-30, later still): plan approval before launch (ADR-175)
+
+Build's submit now drafts instead of launching: `composeLaunchProposal`
+(chief-of-staff.ts) reads the full_lifecycle template — same nodes,
+jobs, gates, proposedEdges the launch route compiles — through
+composePlan. The proposal card (testid build-proposal) shows the goal
+verbatim, layers with specialists, the three HUMAN gates named
+(architecture, test, deploy), and template jobs under a disclosure;
+"Approve & launch" performs the old submit's POST, "Edit the request"
+withdraws keeping the prompt. Tests: unit proposal pinned to the real
+template (14 steps, widest layer 3, gates exact); workspace suite's
+`launch` helper now clicks Approve after propose. Templates.ts is
+client-safe (pure data + zod). The #56 hosted apply ran green
+(run 33293100915, single-signature postflight) — that scope is DONE;
+#455 merged as 69faa30, deployed, probed.
+
+## Older (2026-08-30, late night): node_runs.attempt persisted (ADR-174, task #56)
 
 `20260830000100_node_attempt_persistence.sql` replaces
 `record_node_state_as_worker` with the eight-parameter definer

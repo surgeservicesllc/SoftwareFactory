@@ -4,9 +4,10 @@ Last triaged: 2026-08-29
 
 ## AI Factory → autonomous build platform (task #61, owner directive 2026-08-30)
 
-The audit and increment plan live in `AI/AI_FACTORY_GAP_ANALYSIS.md`
-(the /goal text exceeded the 4,000-char registration limit; no evaluator
-is armed — this section is the plan of record).
+The audit and increment plan live in `AI/AI_FACTORY_GAP_ANALYSIS.md`.
+(The first /goal registration exceeded the 4,000-char limit; a trimmed
+/goal was later registered and its evaluator is armed. This section is
+still the working plan of record.)
 
 - [x] Increment 1 (ADR-171): `/solutions/build` — conversational front
   door; prompt → full_lifecycle launch → live watched run (counted
@@ -16,8 +17,13 @@ is armed — this section is the plan of record).
   compiler/scheduler/router; `composePlan` layers stored edges with
   specialist assignments, gates and counted percent; Build gains the
   Plan disclosure and a percent-led headline.
-- [ ] Increment 2 (open): draft acceptance criteria + plan approval in
-  the workspace before launch.
+- [x] Increment 2 (ADR-175): plan approval before launch —
+  `composeLaunchProposal` reads the full_lifecycle template back through
+  composePlan; submitting drafts the proposal (goal verbatim, layers
+  with specialists, the three HUMAN gates named, template jobs under a
+  disclosure) and POSTs nothing; Approve & launch is the old submit;
+  Edit withdraws keeping the words. Acceptance criteria stay the run's
+  own first-stage artifacts, never invented client-side.
 - [x] Increment 3a (shipped with increment 1): inline gate decisions —
   every OPEN human gate on the watched run renders the shared
   GateDecision control (same wording, same route, same evidence rules as

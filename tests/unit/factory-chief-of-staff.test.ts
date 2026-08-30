@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { composePlan } from "@/lib/factory/chief-of-staff";
+import { composeLaunchProposal, composePlan } from "@/lib/factory/chief-of-staff";
 
 /**
  * The Chief of Staff composes, it never invents: layers come from the
@@ -70,5 +70,25 @@ describe("composePlan", () => {
 
   it("answers null percent for an empty plan, never a fake zero of nothing", () => {
     expect(composePlan({ goal: "x", nodes: [], edges: [] }).progressPercent).toBeNull();
+  });
+});
+
+describe("composeLaunchProposal", () => {
+  it("reads the real full_lifecycle template back — nothing invented, nothing launched", () => {
+    const proposal = composeLaunchProposal("Build me a bakery site");
+    expect(proposal).not.toBeNull();
+    if (proposal === null) return;
+    expect(proposal.templateName).toBe("Full Lifecycle");
+    expect(proposal.plan.requirements).toBe("Build me a bakery site");
+    // The template's own shape: fourteen steps, the three parallel scans as
+    // the widest layer, the goal first, three human gates.
+    expect(proposal.plan.tasks).toHaveLength(14);
+    expect(proposal.plan.layers[0]).toEqual(["goal"]);
+    expect(proposal.plan.maxParallelism).toBe(3);
+    expect(proposal.plan.gatedTasks).toEqual(["architecture", "test", "deploy"]);
+    // Everything is still PLANNED — a proposal has honestly done nothing.
+    expect(proposal.plan.progressPercent).toBe(0);
+    // The jobs are the template's own words, acceptance criteria first.
+    expect(proposal.jobs.get("goal")).toMatch(/acceptance criteria/);
   });
 });

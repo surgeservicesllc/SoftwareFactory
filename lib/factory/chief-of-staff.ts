@@ -1,4 +1,5 @@
 import { specialistForNode, type Specialist } from "@/lib/factory/specialists";
+import { findTemplate } from "@/lib/graph/templates";
 
 /**
  * The Chief of Staff, named.
@@ -111,5 +112,42 @@ export function composePlan(input: Readonly<{
     gatedTasks: tasks.filter((task) => task.gated).map((task) => task.key),
     maxParallelism: layers.reduce((widest, layer) => Math.max(widest, layer.length), 0),
     progressPercent: tasks.length === 0 ? null : Math.round((done / tasks.length) * 100),
+  };
+}
+
+export type LaunchProposal = Readonly<{
+  plan: ComposedPlan;
+  templateName: string;
+  /** What each step will do, verbatim from the template, keyed by node. */
+  jobs: ReadonlyMap<string, string>;
+}>;
+
+/**
+ * Compose the proposal shown BEFORE anything launches.
+ *
+ * It is built from the same template the launch route hands the compiler —
+ * the identical nodes, jobs, gates and proposed edges — so approving the
+ * proposal approves the plan the factory will actually compile. The compiler
+ * still applies its own scrutiny after launch (a pruned edge is a success,
+ * not a divergence), and the live run view shows the compiled truth. Null
+ * when the template is not in this build, never a substitute plan.
+ */
+export function composeLaunchProposal(goal: string): LaunchProposal | null {
+  const template = findTemplate("full_lifecycle");
+  if (!template) return null;
+  return {
+    plan: composePlan({
+      goal,
+      nodes: template.nodes.map((node) => ({
+        node_key: node.nodeId,
+        capability: node.capability,
+        lifecycle_stage: node.lifecycleStage ?? null,
+        state: "PLANNED",
+        gate_kind: node.gate ?? null,
+      })),
+      edges: template.proposedEdges.map((edge) => ({ from: edge.from, to: edge.to })),
+    }),
+    templateName: template.name,
+    jobs: new Map(template.nodes.map((node) => [node.nodeId, node.job])),
   };
 }
