@@ -49,6 +49,32 @@ function stub(body: unknown, status = 200) {
   );
 }
 
+/**
+ * One reply per call, in order, for adapters that make more than one.
+ *
+ * Arbeitnow walks pages, so a single-response stub cannot express either the
+ * thing worth testing (a match found on a later page) or the failure mode
+ * worth protecting (a later page erroring must not discard an earlier one).
+ * Returns the recorded request URLs so a test can assert how far it walked.
+ */
+function stubSequence(replies: readonly { body: unknown; status?: number }[]) {
+  const urls: string[] = [];
+  let index = 0;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL) => {
+      urls.push(String(input));
+      const reply = replies[Math.min(index, replies.length - 1)];
+      index += 1;
+      return new Response(JSON.stringify(reply.body), {
+        status: reply.status ?? 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }),
+  );
+  return urls;
+}
+
 describe("the registry", () => {
   it("offers ten working boards, every one of them keyless", () => {
     const adapters = listImportAdapters({} as NodeJS.ProcessEnv);
@@ -158,6 +184,63 @@ describe("Workable", () => {
     stub({ error: "rate limited" }, 429);
     await expect(fetchWorkableBoard("deel")).rejects.toThrow(/rate limiting/i);
   });
+
+  /*
+   * Both of the following were written from a live account (blueground, 25
+   * postings), and both are regressions rather than hypotheticals: the adapter
+   * originally read `workplace` and `location.region`, neither of which
+   * Workable's widget actually sends. The payload below is the real shape,
+   * trimmed.
+   */
+  it("reads telecommuting, because there is no workplace field to read", async () => {
+    stub({
+      name: "Blueground",
+      jobs: [
+        {
+          shortcode: "0FD01ABC66",
+          title: "Business Development Representative",
+          city: "",
+          state: "",
+          country: "United States",
+          telecommuting: true,
+          url: "https://apply.workable.com/j/0FD01ABC66",
+        },
+        {
+          shortcode: "SECOND1234",
+          title: "Full-Stack Software Engineer",
+          city: "Athens",
+          state: "Attica",
+          country: "Greece",
+          telecommuting: false,
+          url: "https://apply.workable.com/j/SECOND1234",
+        },
+      ],
+    });
+    const result = await fetchWorkableBoard("blueground");
+
+    expect(result.postings[0]?.workModel).toBe("remote");
+    // `false` covers hybrid too, so it is not evidence of onsite and must not
+    // become one — the location rule stays the only other source.
+    expect(result.postings[1]?.workModel).toBeNull();
+  });
+
+  it("keeps the region, which lives in a flat state field", async () => {
+    stub({
+      name: "Blueground",
+      jobs: [{
+        shortcode: "SECOND1234",
+        title: "Full-Stack Software Engineer",
+        city: "Athens",
+        state: "Attica",
+        country: "Greece",
+        telecommuting: false,
+        url: "https://apply.workable.com/j/SECOND1234",
+      }],
+    });
+    const result = await fetchWorkableBoard("blueground");
+
+    expect(result.postings[0]?.location).toBe("Athens, Attica, Greece");
+  });
 });
 
 describe("Breezy", () => {
@@ -233,6 +316,82 @@ describe("Arbeitnow", () => {
     const result = await fetchArbeitnowJobs("berlin");
     expect(result.postings).toHaveLength(1);
     expect(result.totalAvailable).toBe(1);
+  });
+
+  /*
+   * The defect pagination fixed. Reading only page one meant a term whose
+   * matches sat further in returned nothing, and the board looked empty when
+   * it was not — Arbeitnow answers ~175 postings a page and does have a
+   * `links.next`.
+   */
+  it("keeps walking to find a match a later page holds", async () => {
+    const page = (slug: string, title: string, next: string | null) => ({
+      body: {
+        data: [{ slug, title, company_name: "Acme", location: "Berlin", url: `https://arbeitnow.com/jobs/${slug}`, remote: false }],
+        links: next ? { next } : {},
+      },
+    });
+    const urls = stubSequence([
+      page("p1", "Designer", "https://www.arbeitnow.com/api/job-board-api?page=2"),
+      page("p2", "Kotlin Engineer", "https://www.arbeitnow.com/api/job-board-api?page=3"),
+      page("p3", "Analyst", null),
+    ]);
+
+    const result = await fetchArbeitnowJobs("kotlin");
+    expect(result.postings).toHaveLength(1);
+    expect(result.postings[0]?.title).toBe("Kotlin Engineer");
+    expect(urls).toHaveLength(3);
+    expect(urls[1]).toContain("page=2");
+  });
+
+  it("stops when the board says there is no next page", async () => {
+    const urls = stubSequence([
+      { body: { data: [{ slug: "only", title: "Kotlin Engineer", company_name: "Acme", location: "Berlin", url: "https://arbeitnow.com/jobs/only", remote: false }], links: {} } },
+    ]);
+
+    await fetchArbeitnowJobs("kotlin");
+    expect(urls).toHaveLength(1);
+  });
+
+  /*
+   * Found live: walking five pages made Arbeitnow rate-limit the search. A
+   * later page failing must not throw away a first page that already answered
+   * the question — but the first page failing has nothing to degrade to, so
+   * that still surfaces the real reason.
+   */
+  it("returns what it found when a later page fails", async () => {
+    stubSequence([
+      { body: { data: [{ slug: "p1", title: "Kotlin Engineer", company_name: "Acme", location: "Berlin", url: "https://arbeitnow.com/jobs/p1", remote: false }], links: { next: "https://www.arbeitnow.com/api/job-board-api?page=2" } } },
+      { body: { error: "rate limited" }, status: 429 },
+    ]);
+
+    const result = await fetchArbeitnowJobs("kotlin");
+    expect(result.postings).toHaveLength(1);
+    expect(result.totalAvailable).toBe(1);
+  });
+
+  it("still reports the reason when the first page fails", async () => {
+    stubSequence([{ body: { error: "rate limited" }, status: 429 }]);
+    await expect(fetchArbeitnowJobs("kotlin")).rejects.toThrow(/rate limiting/i);
+  });
+
+  it("stops early once it has enough to fill an import", async () => {
+    const many = Array.from({ length: 40 }, (_, index) => ({
+      slug: `job-${index}`,
+      title: "Kotlin Engineer",
+      company_name: "Acme",
+      location: "Berlin",
+      url: `https://arbeitnow.com/jobs/job-${index}`,
+      remote: false,
+    }));
+    const urls = stubSequence([
+      { body: { data: many, links: { next: "https://www.arbeitnow.com/api/job-board-api?page=2" } } },
+    ]);
+
+    const result = await fetchArbeitnowJobs("kotlin");
+    expect(result.postings).toHaveLength(40);
+    // One page was enough; a second request would be work nobody asked for.
+    expect(urls).toHaveLength(1);
   });
 });
 

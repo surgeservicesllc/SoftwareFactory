@@ -152,20 +152,27 @@ type ArbeitnowJob = {
   description?: unknown;
 };
 
+/*
+ * How many Arbeitnow pages one search may walk.
+ *
+ * Its board endpoint takes no query parameter, so the term is matched here
+ * rather than by the API. Reading only the first page made that worse than it
+ * had to be: a term with matches on page three returned nothing at all, and
+ * the board looked empty when it was not. Pagination exists (`?page=N`, with
+ * a `links.next`), so the search walks it — bounded, because "no query
+ * parameter" must not become "read the whole board on every keystroke".
+ *
+ * Three pages is roughly 525 postings at the ~175 per page observed live, and
+ * the walk stops early as soon as it has more matches than one import can
+ * take. Five was tried first and Arbeitnow rate-limited the walk, which is the
+ * reason for both this number and the partial-result rule below.
+ */
+const ARBEITNOW_MAX_PAGES = 3;
+
 export async function fetchArbeitnowJobs(identifier: string): Promise<FetchedPostings> {
   const term = assertSearchTerm(identifier).toLowerCase();
-  const body = await aggregatorJson<{ data?: unknown }>(
-    "https://www.arbeitnow.com/api/job-board-api",
-    "Arbeitnow",
-  );
-  const all = Array.isArray(body.data) ? body.data : [];
-  /*
-   * Arbeitnow's board endpoint takes no query parameter — it returns a page of
-   * everything. Filtering here rather than pretending the API searched is the
-   * honest arrangement: `totalAvailable` reports how many of the page matched,
-   * not how many exist on Arbeitnow, because this adapter cannot know that.
-   */
-  const matched = all.filter((entry) => {
+
+  const matches = (entries: readonly unknown[]) => entries.filter((entry) => {
     const job = entry as ArbeitnowJob;
     const haystack = [job.title, job.company_name, job.location]
       .filter((part): part is string => typeof part === "string")
@@ -173,6 +180,39 @@ export async function fetchArbeitnowJobs(identifier: string): Promise<FetchedPos
       .toLowerCase();
     return haystack.includes(term);
   });
+
+  const matched: unknown[] = [];
+  for (let page = 1; page <= ARBEITNOW_MAX_PAGES; page += 1) {
+    let body: { data?: unknown; links?: { next?: unknown } };
+    try {
+      body = await aggregatorJson<{ data?: unknown; links?: { next?: unknown } }>(
+        `https://www.arbeitnow.com/api/job-board-api?page=${page}`,
+        "Arbeitnow",
+      );
+    } catch (error) {
+      /*
+       * A later page failing is not the search failing. Arbeitnow rate-limits
+       * a quick walk, and throwing there would discard a first page that
+       * already answered the question — so the walk stops and returns what it
+       * has. The first page is different: with nothing in hand there is
+       * nothing to degrade to, and the caller needs the real reason.
+       */
+      if (page === 1) throw error;
+      break;
+    }
+    const entries = Array.isArray(body.data) ? body.data : [];
+    if (entries.length === 0) break;
+    matched.push(...matches(entries));
+    // Enough to fill an import, or the board says there is nothing after this.
+    if (matched.length >= MAX_IMPORT_POSTINGS) break;
+    if (typeof body.links?.next !== "string" || body.links.next.length === 0) break;
+  }
+
+  /*
+   * `totalAvailable` is how many of the postings actually read matched, not
+   * how many exist on Arbeitnow. The walk is bounded, so this adapter still
+   * cannot know the latter and does not claim to.
+   */
   if (matched.length === 0) return emptyResult("Arbeitnow");
 
   const postings = matched.slice(0, MAX_IMPORT_POSTINGS).flatMap((entry): ImportedJob[] => {

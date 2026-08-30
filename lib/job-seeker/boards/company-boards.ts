@@ -209,23 +209,38 @@ export async function fetchSmartRecruitersBoard(identifier: string): Promise<Fet
 
 /* ── Workable ───────────────────────────────────────────────────────────── */
 
+/*
+ * Shaped from a live account (blueground, 25 postings) rather than from the
+ * documented widget payload, because the two disagree on the two fields that
+ * matter here.
+ *
+ * `workplace` does not exist: the widget answers with `telecommuting`, a
+ * boolean, and reading the absent field meant every Workable posting arrived
+ * with no work model at all. `location` does not exist either — the job
+ * carries flat `city`/`state`/`country`, and a `locations` array beside them —
+ * so a nested read dropped the region from every address ("Athens, Greece"
+ * where the payload said "Athens, Attica, Greece"). Both are kept as optional
+ * here so an account that does send them still works.
+ */
 type WorkableJob = {
   id?: unknown;
   shortcode?: unknown;
   title?: unknown;
   location?: { city?: unknown; region?: unknown; country?: unknown };
   city?: unknown;
+  state?: unknown;
   country?: unknown;
   url?: unknown;
   application_url?: unknown;
   workplace?: unknown;
+  telecommuting?: unknown;
   description?: unknown;
 };
 
 function workableLocation(job: WorkableJob): string | null {
   const parts = [
     job.location?.city ?? job.city,
-    job.location?.region,
+    job.location?.region ?? job.state,
     job.location?.country ?? job.country,
   ].filter((part): part is string => typeof part === "string" && part.trim().length > 0);
   return parts.length === 0 ? null : bounded(parts.join(", "), LOCATION_MAX);
@@ -255,10 +270,19 @@ export async function fetchWorkableBoard(identifier: string): Promise<FetchedPos
       company: accountName,
       salaryText: null,
       location,
-      workModel: workModelFrom(
-        typeof job.workplace === "string" ? job.workplace : null,
-        location,
-      ),
+      /*
+       * `telecommuting: true` is Workable's own statement that the role is
+       * remote, and it is the only one this payload makes. `false` is left to
+       * fall through to the location rule rather than treated as onsite —
+       * hybrid roles are flagged false too, so reading it as onsite would be
+       * inventing a fact the board never asserted.
+       */
+      workModel: job.telecommuting === true
+        ? "remote"
+        : workModelFrom(
+          typeof job.workplace === "string" ? job.workplace : null,
+          location,
+        ),
       description: boundedOrNull(
         typeof job.description === "string" ? htmlToText(job.description) : null,
         DESCRIPTION_MAX,
