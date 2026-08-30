@@ -21,8 +21,13 @@ is armed — this section is the plan of record).
 - [ ] Increment 3b: run controls where endpoints exist (cancel/retry on
   command runs; pause/resume needs engine support first — never a dead
   button).
-- [ ] Increment 4: specialty-agent presentation over stages; bounded IO
-  contracts.
+- [x] Increment 4 (ADR-172): the eleven specialists as a first-class
+  catalogue (`lib/factory/specialists.ts`) bound to real engine
+  capabilities/stages, the engineering bench told apart by the node's
+  own key; Build gains the command-center evidence panels — Agents
+  (specialist beside real executor/provider/model/latency), Independent
+  QA (graph_verifications verdicts), lazy Artifacts (real route), spend
+  accounting, and Build history with closure notes and evidence links.
 - [ ] Increment 5: autonomy modes (Ask-Me/Balanced/Autonomous) as
   parameterization of existing gates — policy review first; RED stays
   owner-approved.

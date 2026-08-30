@@ -374,6 +374,13 @@ facets labeled as derived, with unstated postings kept under "Any".
 Increment 4's marks migration was applied to hosted (run 33273330183)
 and production probes verified the deploy of #448.
 
+## 2026-08-30 (later still): the eleven specialists + command-center evidence (ADR-172)
+
+Roles derived from recorded facts only; Build shows agents beside their
+real executor evidence, independent QA verdicts, lazily fetched
+artifacts, the run's own spend, and finished-run history with closure
+notes.
+
 ## 2026-08-30 (later): Build — the conversational front door (ADR-171)
 
 One prompt launches the existing full_lifecycle workflow and the page

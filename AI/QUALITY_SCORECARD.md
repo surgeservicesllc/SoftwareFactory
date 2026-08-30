@@ -2,6 +2,15 @@
 
 Last reviewed: 2026-08-29
 
+**Addendum, 2026-08-30 later still — specialists + evidence panels
+(ADR-172):** specialists suite 7 tests (catalogue pinned to real
+NODE_CAPABILITIES/SDLC_STAGES, capability precedence, bench-by-key,
+stage fallback, null when nothing matches, all stages covered);
+workspace suite 10 (adds the evidence-panel flow: specialist beside
+executor, QA verdicts with verifier, artifacts fetched only on open,
+spend line, history card with evidence links). Lint zero warnings,
+production build, `tsc --noEmit` clean.
+
 **Addendum, 2026-08-30 later — Build front door (ADR-171):** workspace
 suite 7 tests (nothing-before-anything, projects-empty next step, exact
 launch payload, refusal in the server's words, counted progress + OPEN

@@ -3193,3 +3193,28 @@ watching resumes across visits — persistence is the database's, not the
 tab's. Deep surfaces (run detail, Agent Trail, factory steps) remain the
 detail views; Build links into them. "Hide complexity" never means hide
 state.
+
+
+## ADR-172 - The eleven specialists, derived not invented; Build becomes evidence-bearing
+
+Date: 2026-08-30
+
+The directive's eleven agents exist as `lib/factory/specialists.ts`: a
+catalogue bound to the engine's REAL vocabulary — each specialist owns
+exact NODE_CAPABILITIES entries and SDLC stage defaults, with bounded
+receives/produces text restating (never widening) what a node's contract
+already demands. `specialistForNode` assigns a role only from recorded
+facts: the implementation bench (Frontend/Backend/Database) is told apart
+by the words in the node's own key, the capability match comes next, the
+stage default after that, and a node nothing matches gets NO role — the
+surface shows the executor alone rather than a guessed persona. A shown
+specialist never replaces the executor/provider/model evidence beside it.
+
+Build's live run card gains the command-center panels, all from data the
+engine already serves: Agents (per-node specialist + executor evidence +
+latency + errors), Independent QA (graph_verifications verdicts with the
+verifier named — agent says done ≠ done, rendered), Artifacts (fetched
+from the run's artifacts route only when the disclosure opens), spend
+(the run's own tokens/cost accounting, absent when unmeasured), and a
+Build history card listing finished lifecycle runs with the engine's
+closure notes and links to their evidence.

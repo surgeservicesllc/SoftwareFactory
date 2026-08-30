@@ -273,6 +273,70 @@ describe("the build workspace", () => {
     expect(within(transcript).getByRole("link", { name: "Open the run" })).toBeInTheDocument();
   });
 
+  it("shows the command center evidence: specialists over real nodes, QA verdicts, lazy artifacts", async () => {
+    const evidenced = {
+      graphRunId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+      graphId: LAUNCH.graphId,
+      goal: "Build me a bakery site",
+      state: "RUNNING",
+      projectId: "11111111-1111-4111-8111-111111111111",
+      startedAt: "2026-08-30T03:00:00Z",
+      completedAt: null,
+      isLifecycle: true,
+      tokensUsed: 12345,
+      costMicros: 250000,
+      verifications: [
+        { subject_node_key: "implement-api", lens: "correctness", verdict: "PASS", verifier_provider: "anthropic" },
+      ],
+      nodes: [
+        node("scout", "DISCOVERY", "COMPLETED", { capability: "discovery", provider: "anthropic", model: "claude-x" }),
+        node("build-ui-page", "IMPLEMENTATION", "RUNNING", { capability: "implementation" }),
+      ],
+    };
+    respond({ runs: [evidenced] });
+    fetchMock.mockImplementation((url: string, init?: RequestInit) => {
+      if (typeof url === "string" && url.includes("/artifacts")) {
+        return Promise.resolve(json({
+          artifacts: [{ artifactId: "a1", nodeRunId: "n1", nodeKey: "scout", kind: "scout_report", payload: {}, createdAt: "2026-08-30T03:05:00Z" }],
+        }));
+      }
+      if (typeof url === "string" && url.includes("/api/graphs/runs")) {
+        return Promise.resolve(json({ runs: [evidenced] }));
+      }
+      if (typeof url === "string" && url.includes("/api/graphs") && init?.method === "POST") {
+        return Promise.resolve(json(LAUNCH));
+      }
+      return Promise.resolve(json(PROJECTS));
+    });
+    const user = userEvent.setup();
+    render(<BuildWorkspace />);
+    await launch(user);
+
+    // Agents: the specialist role beside the real executor evidence.
+    const agents = await screen.findByTestId("build-agents");
+    await user.click(within(agents).getByText(/Agents \(2 steps\)/));
+    expect(within(agents).getByText("Research")).toBeInTheDocument();
+    expect(within(agents).getByText(/anthropic claude-x/)).toBeInTheDocument();
+    // The engineering bench told apart by the node's own key.
+    expect(within(agents).getByText("Frontend")).toBeInTheDocument();
+
+    // QA: verdicts from graph_verifications, verifier named.
+    const qa = screen.getByTestId("build-verifications");
+    await user.click(within(qa).getByText(/Independent QA \(1 verdicts?\)/));
+    expect(within(qa).getByText("PASS")).toBeInTheDocument();
+    expect(within(qa).getByText(/verified by anthropic/)).toBeInTheDocument();
+
+    // Artifacts fetch only when opened, from the real route.
+    const artifactsPanel = screen.getByTestId("build-artifacts");
+    expect(fetchMock.mock.calls.some(([url]) =>
+      typeof url === "string" && url.includes("/artifacts"))).toBe(false);
+    await user.click(within(artifactsPanel).getByText("Artifacts"));
+    expect(await within(artifactsPanel).findByText("scout_report")).toBeInTheDocument();
+
+    // Spend is the run's own accounting, never invented.
+    expect(screen.getByText(/12,345 tokens · \$0\.2500/)).toBeInTheDocument();
+  });
+
   it("lists unfinished lifecycle runs on arrival, so watching resumes across visits", async () => {
     respond({
       runs: [
@@ -305,7 +369,14 @@ describe("the build workspace", () => {
     const active = await screen.findByTestId("build-active-runs");
     expect(within(active).getByText("Ship the pricing page")).toBeInTheDocument();
     expect(within(active).getByText(/1\/2 steps/)).toBeInTheDocument();
-    // Finished work is history, not "already building".
+    // Finished work is history, not "already building" — it lands in the
+    // history card with a link to its evidence.
     expect(within(active).queryByText("Old finished work")).not.toBeInTheDocument();
+    const history = screen.getByTestId("build-history");
+    expect(within(history).getByText("Old finished work")).toBeInTheDocument();
+    expect(within(history).getByRole("link", { name: "Evidence" })).toHaveAttribute(
+      "href",
+      "/solutions/lifecycle/run/88888888-8888-4888-8888-888888888888",
+    );
   });
 });
