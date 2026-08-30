@@ -9,7 +9,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const migrationsDirectory = resolve(repositoryRoot, "supabase/migrations");
-const latestMigration = "20260830000900_full_lifecycle_typed_input_identity.sql";
+const latestMigration = "20260830001000_grok_chief_of_staff_persistence.sql";
 
 const seekerId = "00000000-0000-4000-8000-00000000d501";
 const outsiderId = "00000000-0000-4000-8000-00000000d502";
