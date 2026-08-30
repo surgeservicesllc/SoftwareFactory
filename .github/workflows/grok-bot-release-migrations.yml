@@ -1,0 +1,891 @@
+name: Apply Grok Bot release migrations
+
+on:
+  workflow_dispatch:
+    inputs:
+      scope:
+        description: "Probe, apply one exact forward migration, or verify the completed release."
+        required: true
+        default: probe
+        type: choice
+        options:
+          - probe
+          - typed-input
+          - grok-persistence
+          - verify
+      confirm:
+        description: "Type apply for a mutation scope; probe and verify are read-only."
+        required: false
+        default: ""
+        type: string
+      release_sha:
+        description: "Exact lowercase 40-character main SHA already green and READY in Production."
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  checks: read
+  contents: read
+  deployments: read
+
+concurrency:
+  group: apply-hosted-migrations
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PROJECT_REF: qpuofpmagrmyamahqwxw
+      MIGRATION_00900: supabase/migrations/20260830000900_full_lifecycle_typed_input_identity.sql
+      MIGRATION_00900_SHA256: 08f4c618954d4fe65384f396a881f6546591a413c6fd3facacaaaa9ce8d984f5
+      MIGRATION_01000: supabase/migrations/20260830001000_grok_chief_of_staff_persistence.sql
+      MIGRATION_01000_SHA256: 225344f4d3e891dba6576bb86c78f1a460d5dc86d491652a2121f545a60d5fde
+      PRODUCTION_HEALTH_URL: https://www.theagoras.com/api/health
+      VERCEL_PROJECT_ID: prj_pAsrhftaVWI4SyaqstgRVSWHJkdD
+    steps:
+      - name: Authorize the exact mutation scope
+        env:
+          AUTHORIZED_ACTOR: ${{ vars.PRODUCTION_RELEASE_ACTOR }}
+          SCOPE: ${{ inputs.scope }}
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          case "$SCOPE" in
+            probe|verify) exit 0 ;;
+            typed-input|grok-persistence) ;;
+            *) echo "::error::Unknown Grok release scope."; exit 1 ;;
+          esac
+          if [ "$CONFIRM" != "apply" ]; then
+            echo "::error::A mutation scope requires confirm=apply."
+            exit 1
+          fi
+          if [ -z "$AUTHORIZED_ACTOR" ] \
+            || [ "$GITHUB_ACTOR" != "$AUTHORIZED_ACTOR" ] \
+            || [ "$GITHUB_TRIGGERING_ACTOR" != "$AUTHORIZED_ACTOR" ] \
+            || [ "$GITHUB_RUN_ATTEMPT" != "1" ]; then
+            echo "::error::Production mutation requires a first-attempt run by the exact configured actor; reruns are refused."
+            exit 1
+          fi
+
+      - name: Check out the exact release
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Verify exact green production and stopped execution workflows
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PHASE1C_WORKER_ENABLED: ${{ vars.SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED }}
+          GRAPH_WORKER_ENABLED: ${{ vars.SOFTWAREFACTORY_GRAPH_WORKER_ENABLED }}
+          GRAPH_WORKER_SCHEDULED: ${{ vars.SOFTWAREFACTORY_GRAPH_WORKER_SCHEDULED }}
+          AUTH_BROKER_DISABLED: ${{ vars.SOFTWAREFACTORY_AUTH_BROKER_DISABLED }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          SHA=$(git rev-parse HEAD)
+          if [[ ! "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]] \
+            || [ "$RELEASE_SHA" != "$SHA" ] \
+            || [ "$GITHUB_REPOSITORY" != "surgeservicesllc/SoftwareFactory" ] \
+            || [ "$GITHUB_REF" != "refs/heads/main" ] \
+            || [ "$GITHUB_SHA" != "$SHA" ]; then
+            echo "::error::Grok migration requires the requested exact lowercase SHA on SoftwareFactory main."
+            exit 1
+          fi
+
+          CURRENT_MAIN_SHA=$(curl --fail --silent --show-error \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/git/ref/heads/main" \
+            | jq -r '.object.sha // empty')
+          if [ "$CURRENT_MAIN_SHA" != "$SHA" ]; then
+            echo "::error::Current main moved away from the requested release SHA."
+            exit 1
+          fi
+
+          CHECKS=$(curl --fail --silent --show-error \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/commits/${SHA}/check-runs?per_page=100")
+          for NAME in \
+            "Lint, typecheck, test, and build" \
+            "Browser and accessibility tests 1/3" \
+            "Browser and accessibility tests 2/3" \
+            "Browser and accessibility tests 3/3"; do
+            STATE=$(jq -r --arg name "$NAME" --arg sha "$SHA" '
+              [.check_runs[] | select(.name==$name and .head_sha==$sha and .app.slug=="github-actions")]
+              | sort_by(.completed_at // .started_at // "") | last
+              | if .==null then "missing|missing" else "\(.status)|\(.conclusion // "null")" end
+            ' <<<"$CHECKS")
+            if [ "$STATE" != "completed|success" ]; then
+              echo "::error::Exact-head check '$NAME' is not green ($STATE)."
+              exit 1
+            fi
+          done
+
+          DEPLOYMENT=$(curl --fail --silent --show-error \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/deployments?environment=Production&per_page=100" \
+            | jq -c '[.[] | select(.environment=="Production" and .task=="deploy" and .creator.login=="vercel[bot]")][0] // empty')
+          if [ -z "$DEPLOYMENT" ] \
+            || ! jq -e --arg sha "$SHA" '.sha==$sha and (.ref==$sha or .ref=="main")' <<<"$DEPLOYMENT" >/dev/null; then
+            echo "::error::Latest Vercel Production identity is not the exact checked-out SHA."
+            exit 1
+          fi
+          STATUS_URL=$(jq -r '.statuses_url' <<<"$DEPLOYMENT")
+          STATUS=$(curl --fail --silent --show-error \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${STATUS_URL}?per_page=1")
+          if ! jq -e 'length==1 and .[0].state=="success" and .[0].creator.login=="vercel[bot]" and (.[0].environment_url | test("^https://softwarefactory-[a-z0-9]+-surgeservices-projects\\.vercel\\.app/?$"))' <<<"$STATUS" >/dev/null; then
+            echo "::error::Exact-SHA Vercel Production is not READY."
+            exit 1
+          fi
+          VERCEL_DEPLOYMENT_URL=$(jq -r '.[0].environment_url | rtrimstr("/")' <<<"$STATUS")
+
+          HEALTH=$(curl --fail --silent --show-error --max-time 20 --retry 2 "$PRODUCTION_HEALTH_URL")
+          if ! jq -e \
+            --arg sha "$SHA" \
+            --arg project "$PROJECT_REF" \
+            --arg deployment_url "$VERCEL_DEPLOYMENT_URL" \
+            --arg vercel_project "$VERCEL_PROJECT_ID" '
+            .status=="ok"
+            and .service=="SoftwareFactory"
+            and .database=="reachable"
+            and .databaseProject=="matched"
+            and .databaseProjectRef==$project
+            and .deployment=="matched"
+            and .deploymentUrl==$deployment_url
+            and .vercelProjectId==$vercel_project
+            and (.vercelDeploymentId | type=="string" and test("^dpl_[A-Za-z0-9]+$"))
+            and .release=="matched"
+            and .releaseSha==$sha
+            and .releaseRef=="main"
+          ' <<<"$HEALTH" >/dev/null; then
+            echo "::error::Public production health is not the exact release, Vercel deployment, and Supabase project."
+            exit 1
+          fi
+
+          for WORKFLOW in graph-worker.yml codex-worker.yml claude-worker.yml auth-broker.yml graph-live-canary.yml handoff-canary.yml graph-artifact-containment.yml e2e-test-data.yml journey-prod-user.yml; do
+            ACTIVE=$(curl --fail --silent --show-error \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/workflows/${WORKFLOW}/runs?per_page=100" \
+              | jq '[.workflow_runs[] | select(.status != "completed")] | length')
+            if [ "$ACTIVE" != "0" ]; then
+              echo "::error::${WORKFLOW} has ${ACTIVE} active run(s)."
+              exit 1
+            fi
+          done
+          if [ "${PHASE1C_WORKER_ENABLED,,}" = "true" ] \
+            || [ "${GRAPH_WORKER_ENABLED,,}" = "true" ] \
+            || [ "${GRAPH_WORKER_SCHEDULED,,}" = "true" ] \
+            || [ "${AUTH_BROKER_DISABLED,,}" != "true" ]; then
+            echo "::error::A worker switch or the AI-account auth broker is outside stopped containment."
+            exit 1
+          fi
+          echo "::notice::Exact main SHA ${SHA} is green and READY with execution workflows stopped."
+
+      - name: Connect to the exact Supabase project
+        env:
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          if [ -z "$SUPABASE_DB_PASSWORD" ]; then
+            echo "::error::SUPABASE_DB_PASSWORD is required."
+            exit 1
+          fi
+          ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+          echo "::add-mask::$ENC"
+          for HOST in aws-0-us-west-2.pooler.supabase.com aws-1-us-west-2.pooler.supabase.com; do
+            URL="postgresql://postgres.${PROJECT_REF}:${ENC}@${HOST}:5432/postgres"
+            echo "::add-mask::$URL"
+            if psql "$URL" -v ON_ERROR_STOP=1 -X -Atqc \
+              "select current_database()='postgres' and current_user='postgres' and to_regnamespace('supabase_migrations') is not null" \
+              | grep -qx t; then
+              echo "DB_URL=$URL" >> "$GITHUB_ENV"
+              exit 0
+            fi
+          done
+          echo "::error::Could not connect to exact Supabase project ${PROJECT_REF}."
+          exit 1
+
+      - name: Verify the two exact forward files
+        run: |
+          verify_file() {
+            FILE=$1
+            EXPECTED=$2
+            if [ ! -f "$FILE" ] \
+              || [[ ! "$EXPECTED" =~ ^[0-9a-f]{64}$ ]] \
+              || [ "$(sha256sum "$FILE" | cut -d' ' -f1)" != "$EXPECTED" ]; then
+              echo "::error::Exact migration file identity mismatch: $FILE"
+              exit 1
+            fi
+          }
+          verify_file "$MIGRATION_00900" "$MIGRATION_00900_SHA256"
+          verify_file "$MIGRATION_01000" "$MIGRATION_01000_SHA256"
+
+      - name: Verify prerequisite ledger catalog and stopped database state
+        env:
+          SCOPE: ${{ inputs.scope }}
+        run: |
+          LEDGER=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+            select
+              (select count(*) from supabase_migrations.schema_migrations where version='20260828000300')||'|'||
+              (select count(*) from supabase_migrations.schema_migrations where version='20260830000900')||'|'||
+              (select count(*) from supabase_migrations.schema_migrations where version='20260830001000');")
+          case "$SCOPE:$LEDGER" in
+            probe:1\|0\|0|probe:1\|1\|0|probe:1\|1\|1) ;;
+            typed-input:1\|0\|0) ;;
+            grok-persistence:1\|1\|0) ;;
+            verify:1\|1\|1) ;;
+            *) echo "::error::Prerequisite ledger is not the exact ordered state for scope=${SCOPE} (${LEDGER})."; exit 1 ;;
+          esac
+
+          if [ "$LEDGER" = "1|0|0" ]; then
+            EXPECTED_TYPED="
+              ('public.create_graph_from_plan_with_release_identity_as_server(uuid,uuid,uuid,text,public.graph_topology,jsonb,public.risk_level,boolean,jsonb,jsonb,jsonb,text,integer,uuid,text,text,jsonb)','878b6df53f450d723a4ef7da9dd677b2',true,false),
+              ('public.complete_graph_run_with_validated_release_as_worker(text,uuid,public.graph_run_state,boolean,bigint,bigint,text,text)','8c127b52d5961d49cba980e276edf414',true,false)"
+          else
+            EXPECTED_TYPED="
+              ('public.create_graph_from_plan_with_release_identity_as_server(uuid,uuid,uuid,text,public.graph_topology,jsonb,public.risk_level,boolean,jsonb,jsonb,jsonb,text,integer,uuid,text,text,jsonb)','0aff039a853c2c99fe733a72e9388f92',false,true),
+              ('public.complete_graph_run_with_validated_release_as_worker(text,uuid,public.graph_run_state,boolean,bigint,bigint,text,text)','b6ab6fa949a205887ac36d96442c9969',true,true)"
+          fi
+          TYPED_CATALOG=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+            with expected(signature,source_md5,has_prior,has_current) as (values ${EXPECTED_TYPED}), state as (
+              select expected.*,routine.oid,routine.proowner,routine.prosecdef,routine.proconfig,routine.proacl,
+                     md5(replace(replace(routine.prosrc,E'\\r\\n',E'\\n'),E'\\r',E'\\n')) actual_source_md5,
+                     strpos(routine.prosrc,'0ec1e97b80dc8696872d88162c5271f9ea822e7dea79556c5470730a025d3b49')>0 actual_prior,
+                     strpos(routine.prosrc,'02bb1e7b35782fad9f6024c080bd149f7ade4edb9d68326fd3b04ff94ba589ad')>0 actual_current,
+                     strpos(routine.prosrc,'ac9bde8fc1cdd21e735f02b1fa7d940ab680c2bde8c1ec24d704d42c59045a09')>0 actual_legacy
+                from expected left join pg_proc routine on routine.oid=to_regprocedure(expected.signature)
+            )
+            select count(oid)=2 and count(distinct oid)=2 and bool_and(
+              pg_get_userbyid(proowner)='postgres' and prosecdef
+              and proconfig=array['search_path=pg_catalog']::text[] and actual_source_md5=source_md5
+              and actual_prior=has_prior and actual_current=has_current and not actual_legacy
+              and proacl is not null and (select count(*) from aclexplode(proacl))=2
+              and not exists (select 1 from aclexplode(proacl) acl where acl.grantor<>proowner or acl.privilege_type<>'EXECUTE' or acl.is_grantable or acl.grantee not in (proowner,to_regrole('service_role')::oid))
+              and has_function_privilege('service_role',oid,'EXECUTE')
+              and not has_function_privilege('authenticated',oid,'EXECUTE')
+              and not has_function_privilege('anon',oid,'EXECUTE')
+            ) from state;")
+          if [ "$TYPED_CATALOG" != "t" ]; then
+            echo "::error::Lifecycle typed-input ledger and exact function catalog/ACL identity disagree."
+            exit 1
+          fi
+
+          SAFE=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+            select
+              not exists (
+                select 1 from public.organizations
+                where coalesce(autonomous_mode,false)
+                   or autonomy_kill_switch_active is distinct from true
+                   or coalesce(auto_plan,false) or coalesce(auto_code,false)
+                   or coalesce(auto_test,false) or coalesce(auto_repair,false)
+                   or coalesce(auto_review,false) or coalesce(auto_approve,false)
+                   or coalesce(auto_merge,false) or coalesce(auto_deploy,false)
+                   or coalesce(auto_rollback,false)
+              )
+              and not exists (
+                select 1 from public.projects
+                where coalesce(autonomous_mode,false)
+                   or coalesce(auto_plan,false) or coalesce(auto_code,false)
+                   or coalesce(auto_test,false) or coalesce(auto_repair,false)
+                   or coalesce(auto_review,false) or coalesce(auto_approve,false)
+                   or coalesce(auto_merge,false) or coalesce(auto_deploy,false)
+                   or coalesce(auto_rollback,false)
+              )
+              and not exists (select 1 from public.phase1c_workers where last_heartbeat_at > now()-interval '10 minutes')
+              and not exists (select 1 from public.phase1c_workers where last_heartbeat_at > now()+interval '1 minute')
+              and not exists (select 1 from public.phase1c_workers where current_run_id is not null)
+              and not exists (select 1 from public.graph_runs where state='RUNNING'::public.graph_run_state)
+              and not exists (select 1 from public.agent_runs where status='running'::public.run_status);")
+          if [ "$SAFE" != "t" ]; then
+            echo "::error::Autonomy, automatic actions, global kill switch, or worker/runtime state is outside stopped containment."
+            exit 1
+          fi
+
+          GROK_TABLES=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+            select count(*) from pg_class relation join pg_namespace space on space.oid=relation.relnamespace
+             where space.nspname='public' and relation.relname in (
+               'grok_sessions','grok_messages','grok_task_links','grok_graph_launches',
+               'grok_events','grok_artifact_links','grok_control_intents');")
+          case "$SCOPE:$LEDGER:$GROK_TABLES" in
+            probe:1\|0\|0:0|probe:1\|1\|0:0|probe:1\|1\|1:7|typed-input:1\|0\|0:0|grok-persistence:1\|1\|0:0|verify:1\|1\|1:7) ;;
+            *) echo "::error::Grok ledger and catalog identity disagree (${SCOPE}:${LEDGER}:${GROK_TABLES})."; exit 1 ;;
+          esac
+          echo "::notice::Ledger=${LEDGER}; catalog and stopped containment are exact."
+
+      - name: Apply exactly one ordered forward migration
+        if: ${{ inputs.scope == 'typed-input' || inputs.scope == 'grok-persistence' }}
+        env:
+          SCOPE: ${{ inputs.scope }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          SHA=$(git rev-parse HEAD)
+          CURRENT_MAIN_SHA=$(curl --fail --silent --show-error \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/git/ref/heads/main" \
+            | jq -r '.object.sha // empty')
+          if [ "$RELEASE_SHA" != "$SHA" ] || [ "$CURRENT_MAIN_SHA" != "$SHA" ]; then
+            echo "::error::Current repository main changed before the protected database mutation."
+            exit 1
+          fi
+
+          case "$SCOPE" in
+            typed-input)
+              FILE=$MIGRATION_00900
+              EXPECTED=$MIGRATION_00900_SHA256
+              VERSION=20260830000900
+              E900=0
+              E1000=0
+              CATALOG_GUARD="do \$guard\$ begin
+                if not exists (
+                  select 1 from pg_proc routine
+                   where routine.oid=to_regprocedure('public.create_graph_from_plan_with_release_identity_as_server(uuid,uuid,uuid,text,public.graph_topology,jsonb,public.risk_level,boolean,jsonb,jsonb,jsonb,text,integer,uuid,text,text,jsonb)')
+                     and pg_get_userbyid(routine.proowner)='postgres' and routine.prosecdef
+                     and routine.proconfig=array['search_path=pg_catalog']::text[]
+                     and md5(replace(replace(routine.prosrc,E'\\r\\n',E'\\n'),E'\\r',E'\\n'))='878b6df53f450d723a4ef7da9dd677b2'
+                     and routine.proacl is not null and (select count(*) from aclexplode(routine.proacl))=2
+                     and not exists (select 1 from aclexplode(routine.proacl) acl where acl.grantor<>routine.proowner or acl.privilege_type<>'EXECUTE' or acl.is_grantable or acl.grantee not in (routine.proowner,to_regrole('service_role')::oid))
+                     and has_function_privilege('service_role',routine.oid,'EXECUTE')
+                     and not has_function_privilege('authenticated',routine.oid,'EXECUTE')
+                     and not has_function_privilege('anon',routine.oid,'EXECUTE')
+                     and strpos(routine.prosrc,'0ec1e97b80dc8696872d88162c5271f9ea822e7dea79556c5470730a025d3b49')>0
+                     and strpos(routine.prosrc,'02bb1e7b35782fad9f6024c080bd149f7ade4edb9d68326fd3b04ff94ba589ad')=0
+                ) or not exists (
+                  select 1 from pg_proc routine
+                   where routine.oid=to_regprocedure('public.complete_graph_run_with_validated_release_as_worker(text,uuid,public.graph_run_state,boolean,bigint,bigint,text,text)')
+                     and pg_get_userbyid(routine.proowner)='postgres' and routine.prosecdef
+                     and routine.proconfig=array['search_path=pg_catalog']::text[]
+                     and md5(replace(replace(routine.prosrc,E'\\r\\n',E'\\n'),E'\\r',E'\\n'))='8c127b52d5961d49cba980e276edf414'
+                     and routine.proacl is not null and (select count(*) from aclexplode(routine.proacl))=2
+                     and not exists (select 1 from aclexplode(routine.proacl) acl where acl.grantor<>routine.proowner or acl.privilege_type<>'EXECUTE' or acl.is_grantable or acl.grantee not in (routine.proowner,to_regrole('service_role')::oid))
+                     and has_function_privilege('service_role',routine.oid,'EXECUTE')
+                     and not has_function_privilege('authenticated',routine.oid,'EXECUTE')
+                     and not has_function_privilege('anon',routine.oid,'EXECUTE')
+                     and strpos(routine.prosrc,'0ec1e97b80dc8696872d88162c5271f9ea822e7dea79556c5470730a025d3b49')>0
+                     and strpos(routine.prosrc,'02bb1e7b35782fad9f6024c080bd149f7ade4edb9d68326fd3b04ff94ba589ad')=0
+                ) then raise exception 'typed-input prerequisite function identity/catalog/ACL drifted'; end if;
+                if (select count(*) from pg_proc routine join pg_namespace space on space.oid=routine.pronamespace
+                     where space.nspname='public' and routine.proname in ('create_graph_from_plan_with_release_identity_as_server','complete_graph_run_with_validated_release_as_worker'))<>2
+                then raise exception 'typed-input prerequisite overload catalog drifted'; end if;
+              end \$guard\$;"
+              ;;
+            grok-persistence)
+              FILE=$MIGRATION_01000
+              EXPECTED=$MIGRATION_01000_SHA256
+              VERSION=20260830001000
+              E900=1
+              E1000=0
+              CATALOG_GUARD="do \$guard\$ begin
+                if exists (select 1 from pg_class relation join pg_namespace space on space.oid=relation.relnamespace where space.nspname='public' and relation.relname like 'grok_%')
+                  or exists (select 1 from pg_proc routine join pg_namespace space on space.oid=routine.pronamespace where space.nspname='public' and routine.proname like '%grok%')
+                then raise exception 'Grok persistence catalog is not pristine'; end if;
+                if to_regprocedure('public.create_graph_from_plan(uuid,uuid,text,public.graph_topology,jsonb,public.risk_level,boolean,jsonb,jsonb,jsonb)') is null
+                  or to_regclass('public.phase1c_run_artifacts') is null
+                  or to_regclass('public.graph_artifacts') is null
+                then raise exception 'Grok persistence prerequisite graph catalog is missing'; end if;
+              end \$guard\$;"
+              ;;
+          esac
+
+          STAGE_DIR=$(mktemp -d)
+          trap 'rm -rf -- "$STAGE_DIR"' EXIT
+          STAGED_FILE="$STAGE_DIR/$(basename "$FILE")"
+          cp -- "$FILE" "$STAGED_FILE"
+          if [ "$(sha256sum "$STAGED_FILE" | cut -d' ' -f1)" != "$EXPECTED" ] \
+            || [ "$(find "$STAGE_DIR" -maxdepth 1 -type f | wc -l | tr -d ' ')" != "1" ]; then
+            echo "::error::Exact one-file staging failed."
+            exit 1
+          fi
+
+          EXTENSION_BASELINE=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atq -F '|' -c "
+            select count(*) filter (where extension_row.oid is not null),
+                   count(*) filter (where routine.oid is not null)
+              from (values (1)) seed(value)
+              left join pg_extension extension_row on extension_row.extname='plpgsql_check'
+              left join pg_proc routine on routine.proname like 'plpgsql_check_function%';")
+          if [ "$EXTENSION_BASELINE" != "0|0" ]; then
+            echo "::error::plpgsql_check residue existed before linked-database rehearsal."
+            exit 1
+          fi
+
+          LINT_FINDINGS=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atq \
+            -c "begin; set local statement_timeout='10min';" \
+            -c "$CATALOG_GUARD" \
+            -f "$STAGED_FILE" \
+            -c "create extension if not exists plpgsql_check with schema extensions;" \
+            -c "with expected(signature,trigger_relation) as (values
+                    ('public.create_graph_from_plan_with_release_identity_as_server(uuid,uuid,uuid,text,public.graph_topology,jsonb,public.risk_level,boolean,jsonb,jsonb,jsonb,text,integer,uuid,text,text,jsonb)',null),
+                    ('public.complete_graph_run_with_validated_release_as_worker(text,uuid,public.graph_run_state,boolean,bigint,bigint,text,text)',null),
+                    ('public.reject_grok_evidence_mutation()','public.grok_messages'),
+                    ('public.enforce_grok_session_update()','public.grok_sessions'),
+                    ('public.enforce_grok_control_intent_update()','public.grok_control_intents'),
+                    ('public.create_grok_session(uuid,uuid,text,text)',null),
+                    ('public.list_grok_sessions(uuid,uuid,integer,timestamptz,uuid)',null),
+                    ('public.read_grok_session(uuid,uuid,bigint,bigint,integer)',null),
+                    ('public.append_grok_message_internal(uuid,uuid,text,text,jsonb,text,bigint,uuid,uuid)',null),
+                    ('public.append_grok_user_message(uuid,uuid,text,jsonb,text,bigint,uuid)',null),
+                    ('public.link_grok_task_as_server(uuid,uuid,uuid,uuid,uuid,uuid,uuid,text)',null),
+                    ('public.record_grok_event_as_server(uuid,uuid,text,uuid,jsonb,bigint,uuid,uuid)',null),
+                    ('public.link_grok_artifact_as_server(uuid,uuid,uuid,uuid,uuid,uuid,text)',null),
+                    ('public.request_grok_control_intent(uuid,uuid,text,uuid,text,text,text)',null),
+                    ('public.resolve_grok_control_intent_as_server(uuid,uuid,text,text,text)',null),
+                    ('public.set_grok_session_status_as_server(uuid,uuid,text,bigint)',null)
+                  ), available as (
+                    select expected.signature,to_regprocedure(expected.signature) routine_oid,
+                           to_regclass(expected.trigger_relation) trigger_relation_oid
+                      from expected where to_regprocedure(expected.signature) is not null
+                  )
+                  select 'LINTROW|'||available.signature||'|'||coalesce(finding.lineno::text,'')||'|'||coalesce(finding.level,'')||'|'||coalesce(finding.sqlstate,'')||'|'||coalesce(finding.message,'')
+                    from available
+                    cross join lateral extensions.plpgsql_check_function_tb(
+                      available.routine_oid::regprocedure,
+                      coalesce(available.trigger_relation_oid,0::oid)::regclass,
+                      false,true,true,false,false,false
+                    ) finding
+                   where finding.level in ('error','warning','extra')
+                   order by available.signature,finding.lineno,finding.position;" \
+            -c "rollback;")
+          if printf '%s\n' "$LINT_FINDINGS" | grep -q '^LINTROW|'; then
+            echo "::error::Transactional linked-database lint found release-function findings."
+            printf '%s\n' "$LINT_FINDINGS" | grep '^LINTROW|'
+            exit 1
+          fi
+          EXTENSION_RESIDUE=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atq -F '|' -c "
+            select count(*) filter (where extension_row.oid is not null),
+                   count(*) filter (where routine.oid is not null)
+              from (values (1)) seed(value)
+              left join pg_extension extension_row on extension_row.extname='plpgsql_check'
+              left join pg_proc routine on routine.proname like 'plpgsql_check_function%';")
+          if [ "$EXTENSION_RESIDUE" != "0|0" ]; then
+            echo "::error::Transactional linked-database lint left extension residue."
+            exit 1
+          fi
+
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -X --single-transaction -q \
+            -c "set local lock_timeout='15s';
+                set local statement_timeout='10min';
+                lock table supabase_migrations.schema_migrations in share row exclusive mode;
+                lock table public.organizations,public.projects,public.phase1c_workers,public.graph_runs,public.agent_runs in share mode;
+                do \$locked\$
+                begin
+                  if (select count(*) from supabase_migrations.schema_migrations where version='20260828000300')<>1
+                    or (select count(*) from supabase_migrations.schema_migrations where version='20260830000900')<>${E900}
+                    or (select count(*) from supabase_migrations.schema_migrations where version='20260830001000')<>${E1000}
+                  then raise exception 'locked Grok release ledger changed'; end if;
+                  if exists (select 1 from public.organizations where coalesce(autonomous_mode,false)
+                      or autonomy_kill_switch_active is distinct from true
+                      or coalesce(auto_plan,false) or coalesce(auto_code,false) or coalesce(auto_test,false)
+                      or coalesce(auto_repair,false) or coalesce(auto_review,false) or coalesce(auto_approve,false)
+                      or coalesce(auto_merge,false) or coalesce(auto_deploy,false) or coalesce(auto_rollback,false))
+                    or exists (select 1 from public.projects where coalesce(autonomous_mode,false)
+                      or coalesce(auto_plan,false) or coalesce(auto_code,false) or coalesce(auto_test,false)
+                      or coalesce(auto_repair,false) or coalesce(auto_review,false) or coalesce(auto_approve,false)
+                      or coalesce(auto_merge,false) or coalesce(auto_deploy,false) or coalesce(auto_rollback,false))
+                    or exists (select 1 from public.phase1c_workers where last_heartbeat_at>now()-interval '10 minutes')
+                    or exists (select 1 from public.phase1c_workers where last_heartbeat_at>now()+interval '1 minute')
+                    or exists (select 1 from public.phase1c_workers where current_run_id is not null)
+                    or exists (select 1 from public.graph_runs where state='RUNNING'::public.graph_run_state)
+                    or exists (select 1 from public.agent_runs where status='running'::public.run_status)
+                  then raise exception 'locked Grok release safety state changed'; end if;
+                end \$locked\$;" \
+            -c "$CATALOG_GUARD" \
+            -f "$STAGED_FILE" \
+            -c "insert into supabase_migrations.schema_migrations(version) values ('${VERSION}');"
+
+      - name: Reload the PostgREST schema cache
+        if: ${{ inputs.scope == 'typed-input' || inputs.scope == 'grok-persistence' }}
+        run: psql "$DB_URL" -v ON_ERROR_STOP=1 -X -c "NOTIFY pgrst, 'reload schema';"
+
+      - name: Verify ledger catalog ACL runtime lint health and stopped safety
+        env:
+          SCOPE: ${{ inputs.scope }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PHASE1C_WORKER_ENABLED: ${{ vars.SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED }}
+          GRAPH_WORKER_ENABLED: ${{ vars.SOFTWAREFACTORY_GRAPH_WORKER_ENABLED }}
+          GRAPH_WORKER_SCHEDULED: ${{ vars.SOFTWAREFACTORY_GRAPH_WORKER_SCHEDULED }}
+          AUTH_BROKER_DISABLED: ${{ vars.SOFTWAREFACTORY_AUTH_BROKER_DISABLED }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          LEDGER=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+            select
+              (select count(*) from supabase_migrations.schema_migrations where version='20260828000300')||'|'||
+              (select count(*) from supabase_migrations.schema_migrations where version='20260830000900')||'|'||
+              (select count(*) from supabase_migrations.schema_migrations where version='20260830001000');")
+          case "$SCOPE:$LEDGER" in
+            probe:1\|0\|0|probe:1\|1\|0|probe:1\|1\|1) ;;
+            typed-input:1\|1\|0) ;;
+            grok-persistence:1\|1\|1|verify:1\|1\|1) ;;
+            *) echo "::error::Postflight ledger is not scope-exact (${SCOPE}:${LEDGER})."; exit 1 ;;
+          esac
+
+          if [ "$LEDGER" = "1|0|0" ]; then
+            echo "::notice::Probe found the exact pre-release ledger; no Grok catalog postflight is due."
+          else
+            TYPED_READY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+              with expected(signature,source_md5) as (values
+                ('public.create_graph_from_plan_with_release_identity_as_server(uuid,uuid,uuid,text,public.graph_topology,jsonb,public.risk_level,boolean,jsonb,jsonb,jsonb,text,integer,uuid,text,text,jsonb)','0aff039a853c2c99fe733a72e9388f92'),
+                ('public.complete_graph_run_with_validated_release_as_worker(text,uuid,public.graph_run_state,boolean,bigint,bigint,text,text)','b6ab6fa949a205887ac36d96442c9969')
+              ), state as (
+                select expected.*,routine.oid,routine.proowner,routine.prosecdef,routine.proconfig,routine.proacl,routine.prosrc,
+                       md5(replace(replace(routine.prosrc,E'\\r\\n',E'\\n'),E'\\r',E'\\n')) actual_source_md5
+                  from expected left join pg_proc routine on routine.oid=to_regprocedure(expected.signature)
+              )
+              select count(oid)=2 and count(distinct oid)=2 and bool_and(
+                pg_get_userbyid(proowner)='postgres' and prosecdef
+                and proconfig=array['search_path=pg_catalog']::text[]
+                and actual_source_md5=source_md5
+                and proacl is not null and (select count(*) from aclexplode(proacl))=2
+                and not exists (select 1 from aclexplode(proacl) acl where acl.grantor<>proowner or acl.privilege_type<>'EXECUTE' or acl.is_grantable or acl.grantee not in (proowner,to_regrole('service_role')::oid))
+                and has_function_privilege('service_role',oid,'EXECUTE')
+                and not has_function_privilege('authenticated',oid,'EXECUTE')
+                and not has_function_privilege('anon',oid,'EXECUTE')
+                and strpos(prosrc,'02bb1e7b35782fad9f6024c080bd149f7ade4edb9d68326fd3b04ff94ba589ad')>0
+                and strpos(prosrc,'ac9bde8fc1cdd21e735f02b1fa7d940ab680c2bde8c1ec24d704d42c59045a09')=0
+              ) from state;")
+            if [ "$TYPED_READY" != "t" ]; then
+              echo "::error::Typed lifecycle function identity, source, catalog, or ACL postflight failed."
+              exit 1
+            fi
+
+            psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q -c "
+              do \$typed_runtime\$
+              declare runtime_message text;
+              begin
+                begin
+                  perform public.complete_graph_run_with_validated_release_as_worker(
+                    'grok-release-postflight','00000000-0000-4000-8000-000000000000'::uuid,
+                    'COMPLETED'::public.graph_run_state,false,null,null,null,null
+                  );
+                  raise exception 'typed completion missing-run runtime did not refuse';
+                exception when sqlstate 'P0002' then
+                  get stacked diagnostics runtime_message=message_text;
+                  if runtime_message is distinct from 'graph_run_not_found' then
+                    raise exception 'typed completion runtime refusal identity changed';
+                  end if;
+                end;
+              end;
+              \$typed_runtime\$;"
+          fi
+
+          if [ "$LEDGER" = "1|1|1" ]; then
+            GROK_TABLE_READY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+              with expected(name) as (values
+                ('grok_sessions'),('grok_messages'),('grok_task_links'),('grok_graph_launches'),
+                ('grok_events'),('grok_artifact_links'),('grok_control_intents')
+              ), state as (
+                select expected.name,relation.oid,relation.relowner,relation.relkind,
+                       relation.relrowsecurity,relation.relforcerowsecurity
+                  from expected
+                  left join pg_class relation on relation.oid=to_regclass('public.'||expected.name)
+              )
+              select count(oid)=7 and count(distinct oid)=7 and bool_and(
+                pg_get_userbyid(state.relowner)='postgres' and state.relkind='r'
+                and state.relrowsecurity and state.relforcerowsecurity
+                and (select relation.relacl from pg_class relation where relation.oid=state.oid) is not null
+                and not exists (select 1 from pg_class relation cross join lateral aclexplode(relation.relacl) acl
+                                  where relation.oid=state.oid and (acl.grantor<>state.relowner or acl.grantee<>state.relowner or acl.is_grantable))
+                and not exists (
+                  (select acl.privilege_type from pg_class relation cross join lateral aclexplode(relation.relacl) acl where relation.oid=state.oid)
+                  except
+                  (select acl.privilege_type from aclexplode(acldefault('r',state.relowner)) acl)
+                )
+                and not exists (
+                  (select acl.privilege_type from aclexplode(acldefault('r',state.relowner)) acl)
+                  except
+                  (select acl.privilege_type from pg_class relation cross join lateral aclexplode(relation.relacl) acl where relation.oid=state.oid)
+                )
+                and not has_table_privilege('anon',state.oid,'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+                and not has_table_privilege('authenticated',state.oid,'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+                and not has_table_privilege('service_role',state.oid,'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+                and not exists (select 1 from pg_attribute attribute where attribute.attrelid=state.oid and attribute.attnum>0 and not attribute.attisdropped and attribute.attacl is not null)
+                and (select count(*) from pg_policy policy where policy.polrelid=state.oid
+                      and policy.polcmd='r' and policy.polpermissive
+                      and policy.polroles=array[to_regrole('authenticated')::oid]
+                      and strpos(pg_get_expr(policy.polqual,policy.polrelid),'is_organization_member(organization_id)')>0
+                      and policy.polwithcheck is null)=1
+                and not exists (select 1 from pg_constraint constraint_row where constraint_row.conrelid=state.oid and not constraint_row.convalidated)
+                and not exists (select 1 from pg_index index_row where index_row.indrelid=state.oid and (not index_row.indisvalid or not index_row.indisready or not index_row.indislive))
+              )
+              and (select count(*) from pg_class relation join pg_namespace space on space.oid=relation.relnamespace
+                    where space.nspname='public' and relation.relkind='r' and relation.relname like 'grok_%')=7
+              from state;")
+            if [ "$GROK_TABLE_READY" != "t" ]; then
+              echo "::error::Grok table owner, RLS, ACL, policy, constraint, or index catalog postflight failed."
+              exit 1
+            fi
+
+            GROK_FUNCTION_READY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+              with expected(signature,execute_role,source_md5,volatility,language_name) as (values
+                ('public.reject_grok_evidence_mutation()','none','20f0ed5db994773371be8cb167fb2cf3','v','plpgsql'),
+                ('public.enforce_grok_session_update()','none','1e56d993c74f0981f6366a223fb88322','v','plpgsql'),
+                ('public.enforce_grok_control_intent_update()','none','4ce2cdcb48dc1e5bcc77a609e9c6f425','v','plpgsql'),
+                ('public.create_grok_session(uuid,uuid,text,text)','authenticated','be9cd7bb75766b9f05c898665ca91797','v','plpgsql'),
+                ('public.list_grok_sessions(uuid,uuid,integer,timestamptz,uuid)','authenticated','9a429e1ce48d9caf4a1dc604c4f5aaf4','s','plpgsql'),
+                ('public.read_grok_session(uuid,uuid,bigint,bigint,integer)','authenticated','fc25a54b07539b1e94477a0f482f9d11','s','plpgsql'),
+                ('public.append_grok_message_internal(uuid,uuid,text,text,jsonb,text,bigint,uuid,uuid)','none','51252dcf7c1826d843d0494a1c75d709','v','plpgsql'),
+                ('public.append_grok_user_message(uuid,uuid,text,jsonb,text,bigint,uuid)','authenticated','eb7a1404bd38eaf7de5462c74eabe03f','v','plpgsql'),
+                ('public.append_grok_message_as_server(uuid,uuid,text,text,jsonb,text,bigint,uuid)','service_role','5175abc05e284dccfcc6773912a4db47','v','sql'),
+                ('public.link_grok_task_as_server(uuid,uuid,uuid,uuid,uuid,uuid,uuid,text)','service_role','7149d87e48eb029194d38130b3ad7cd8','v','plpgsql'),
+                ('public.record_grok_event_as_server(uuid,uuid,text,uuid,jsonb,bigint,uuid,uuid)','service_role','aa62a1e9a3243c953c6ed6d8ff1b018d','v','plpgsql'),
+                ('public.link_grok_artifact_as_server(uuid,uuid,uuid,uuid,uuid,uuid,text)','service_role','23a3cca226675c99b31211549ce576d5','v','plpgsql'),
+                ('public.request_grok_control_intent(uuid,uuid,text,uuid,text,text,text)','authenticated','05adb140368fa0f59cc0bf1cad31caee','v','plpgsql'),
+                ('public.resolve_grok_control_intent_as_server(uuid,uuid,text,text,text)','service_role','bd952acdffd457e1ac03e64380284bec','v','plpgsql'),
+                ('public.set_grok_session_status_as_server(uuid,uuid,text,bigint)','service_role','15e4d93bf5b4507691052bca792e9523','v','plpgsql')
+              ), state as (
+                select expected.*,routine.oid,routine.proowner,routine.prosecdef,routine.proconfig,routine.proacl,
+                       routine.provolatile,language.lanname,
+                       md5(replace(replace(routine.prosrc,E'\\r\\n',E'\\n'),E'\\r',E'\\n')) actual_source_md5
+                  from expected
+                  left join pg_proc routine on routine.oid=to_regprocedure(expected.signature)
+                  left join pg_language language on language.oid=routine.prolang
+              )
+              select count(oid)=15 and count(distinct oid)=15 and bool_and(
+                pg_get_userbyid(proowner)='postgres' and lanname=language_name and prosecdef
+                and actual_source_md5=source_md5 and provolatile::text=volatility
+                and proconfig=array['search_path=pg_catalog']::text[] and proacl is not null
+                and (select count(*) from aclexplode(proacl))=case when execute_role='none' then 1 else 2 end
+                and not exists (select 1 from aclexplode(proacl) acl where acl.grantor<>proowner or acl.privilege_type<>'EXECUTE' or acl.is_grantable
+                  or acl.grantee not in (proowner,case execute_role when 'authenticated' then to_regrole('authenticated')::oid when 'service_role' then to_regrole('service_role')::oid else proowner end))
+                and has_function_privilege('anon',oid,'EXECUTE')=false
+                and has_function_privilege('authenticated',oid,'EXECUTE')=(execute_role='authenticated')
+                and has_function_privilege('service_role',oid,'EXECUTE')=(execute_role='service_role')
+              )
+              and (select count(*) from pg_proc routine join pg_namespace space on space.oid=routine.pronamespace
+                    where space.nspname='public' and routine.proname in (
+                      'reject_grok_evidence_mutation','enforce_grok_session_update','enforce_grok_control_intent_update',
+                      'create_grok_session','list_grok_sessions','read_grok_session','append_grok_message_internal',
+                      'append_grok_user_message','append_grok_message_as_server','link_grok_task_as_server',
+                      'record_grok_event_as_server','link_grok_artifact_as_server',
+                      'request_grok_control_intent','resolve_grok_control_intent_as_server','set_grok_session_status_as_server'))=15
+              from state;")
+            if [ "$GROK_FUNCTION_READY" != "t" ]; then
+              echo "::error::Grok function signature, owner, SECURITY DEFINER, search_path, overload, or raw ACL postflight failed."
+              exit 1
+            fi
+
+            GROK_EXECUTION_BOUNDARY_READY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+              with authenticated_boundary(signature) as (values
+                ('public.create_grok_session(uuid,uuid,text,text)'),
+                ('public.list_grok_sessions(uuid,uuid,integer,timestamptz,uuid)'),
+                ('public.read_grok_session(uuid,uuid,bigint,bigint,integer)'),
+                ('public.append_grok_user_message(uuid,uuid,text,jsonb,text,bigint,uuid)'),
+                ('public.request_grok_control_intent(uuid,uuid,text,uuid,text,text,text)')
+              )
+              select to_regprocedure('public.launch_grok_graph_for_session(uuid,uuid,uuid,text,text,public.graph_topology,jsonb,public.risk_level,boolean,jsonb,jsonb,jsonb)') is null
+                and not exists (select 1 from pg_proc routine join pg_namespace space on space.oid=routine.pronamespace
+                                 where space.nspname='public' and routine.proname='launch_grok_graph_for_session')
+                and not exists (select 1 from pg_proc routine join pg_namespace space on space.oid=routine.pronamespace
+                                 where space.nspname='public' and routine.proname like '%grok%'
+                                   and strpos(routine.prosrc,'public.create_graph_from_plan')>0)
+                and (select count(*) from authenticated_boundary boundary
+                      join pg_proc routine on routine.oid=to_regprocedure(boundary.signature)
+                     where strpos(routine.prosrc,'public.has_organization_role')>0
+                       and strpos(routine.prosrc,'''owner''::public.organization_member_role')>0)=5
+                and not has_table_privilege('anon','public.grok_graph_launches','SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+                and not has_table_privilege('authenticated','public.grok_graph_launches','SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+                and not has_table_privilege('service_role','public.grok_graph_launches','SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER');")
+            if [ "$GROK_EXECUTION_BOUNDARY_READY" != "t" ]; then
+              echo "::error::Grok owner-only authenticated RPC or fail-closed execution boundary is not exact."
+              exit 1
+            fi
+
+            GROK_AUDIT_READY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+              select
+                (select count(*) from pg_trigger trigger_row
+                  where trigger_row.tgrelid in (
+                    'public.grok_sessions'::regclass,'public.grok_messages'::regclass,'public.grok_task_links'::regclass,
+                    'public.grok_graph_launches'::regclass,'public.grok_events'::regclass,'public.grok_artifact_links'::regclass,
+                    'public.grok_control_intents'::regclass)
+                    and not trigger_row.tgisinternal)=16
+                and (select count(*) from pg_trigger trigger_row
+                  where trigger_row.tgfoid='public.reject_grok_evidence_mutation()'::regprocedure and not trigger_row.tgisinternal)=14
+                and exists (select 1 from pg_constraint where conname='grok_sessions_title_no_secret' and convalidated)
+                and exists (select 1 from pg_constraint where conname='grok_messages_content_no_secret' and convalidated)
+                and exists (select 1 from pg_constraint where conname='grok_messages_metadata_no_secret' and convalidated)
+                and exists (select 1 from pg_constraint where conname='grok_events_payload_no_secret' and convalidated)
+                and exists (select 1 from pg_constraint where conname='grok_artifact_links_purpose_no_secret' and convalidated)
+                and exists (select 1 from pg_constraint where conname='grok_control_intents_reason_no_secret' and convalidated)
+                and exists (select 1 from pg_constraint where conname='grok_control_intents_failure_no_secret' and convalidated);")
+            if [ "$GROK_AUDIT_READY" != "t" ]; then
+              echo "::error::Grok immutable-audit or secret-boundary catalog postflight failed."
+              exit 1
+            fi
+
+            psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q \
+              -c "begin; set local role authenticated; select set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000000',true);" \
+              -c "do \$grok_runtime\$
+                  declare runtime_message text; listed integer;
+                  begin
+                    select count(*) into listed from public.list_grok_sessions(
+                      '00000000-0000-4000-8000-000000000000'::uuid,null,1,null,null
+                    );
+                    if listed<>0 then raise exception 'non-member Grok list leaked rows'; end if;
+                    begin
+                      perform public.read_grok_session(
+                        '00000000-0000-4000-8000-000000000000'::uuid,
+                        '00000000-0000-4000-8000-000000000000'::uuid,0,0,1
+                      );
+                      raise exception 'non-member Grok read did not refuse';
+                    exception when sqlstate 'P0002' then
+                      get stacked diagnostics runtime_message=message_text;
+                      if runtime_message is distinct from 'grok_session_not_found' then
+                        raise exception 'Grok read runtime refusal identity changed';
+                      end if;
+                    end;
+                    begin
+                      perform public.create_grok_session(
+                        '00000000-0000-4000-8000-000000000000'::uuid,
+                        '00000000-0000-4000-8000-000000000000'::uuid,
+                        'Verify owner boundary','grok-release-owner-refusal'
+                      );
+                      raise exception 'non-owner Grok session create did not refuse';
+                    exception when sqlstate '42501' then
+                      get stacked diagnostics runtime_message=message_text;
+                      if runtime_message is distinct from 'organization owner access is required' then
+                        raise exception 'Grok session owner refusal identity changed';
+                      end if;
+                    end;
+                  end;
+                  \$grok_runtime\$;" \
+              -c "rollback;"
+          fi
+
+          POST_LINT=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atq \
+            -c "begin; create extension if not exists plpgsql_check with schema extensions;" \
+            -c "with expected(signature,trigger_relation) as (values
+                    ('public.create_graph_from_plan_with_release_identity_as_server(uuid,uuid,uuid,text,public.graph_topology,jsonb,public.risk_level,boolean,jsonb,jsonb,jsonb,text,integer,uuid,text,text,jsonb)',null),
+                    ('public.complete_graph_run_with_validated_release_as_worker(text,uuid,public.graph_run_state,boolean,bigint,bigint,text,text)',null),
+                    ('public.reject_grok_evidence_mutation()','public.grok_messages'),
+                    ('public.enforce_grok_session_update()','public.grok_sessions'),
+                    ('public.enforce_grok_control_intent_update()','public.grok_control_intents'),
+                    ('public.create_grok_session(uuid,uuid,text,text)',null),
+                    ('public.list_grok_sessions(uuid,uuid,integer,timestamptz,uuid)',null),
+                    ('public.read_grok_session(uuid,uuid,bigint,bigint,integer)',null),
+                    ('public.append_grok_message_internal(uuid,uuid,text,text,jsonb,text,bigint,uuid,uuid)',null),
+                    ('public.append_grok_user_message(uuid,uuid,text,jsonb,text,bigint,uuid)',null),
+                    ('public.link_grok_task_as_server(uuid,uuid,uuid,uuid,uuid,uuid,uuid,text)',null),
+                    ('public.record_grok_event_as_server(uuid,uuid,text,uuid,jsonb,bigint,uuid,uuid)',null),
+                    ('public.link_grok_artifact_as_server(uuid,uuid,uuid,uuid,uuid,uuid,text)',null),
+                    ('public.request_grok_control_intent(uuid,uuid,text,uuid,text,text,text)',null),
+                    ('public.resolve_grok_control_intent_as_server(uuid,uuid,text,text,text)',null),
+                    ('public.set_grok_session_status_as_server(uuid,uuid,text,bigint)',null)
+                  ), available as (
+                    select expected.signature,to_regprocedure(expected.signature) routine_oid,
+                           to_regclass(expected.trigger_relation) trigger_relation_oid
+                      from expected where to_regprocedure(expected.signature) is not null
+                  )
+                  select 'LINTROW|'||available.signature||'|'||coalesce(finding.lineno::text,'')||'|'||coalesce(finding.level,'')||'|'||coalesce(finding.sqlstate,'')||'|'||coalesce(finding.message,'')
+                    from available
+                    cross join lateral extensions.plpgsql_check_function_tb(
+                      available.routine_oid::regprocedure,
+                      coalesce(available.trigger_relation_oid,0::oid)::regclass,
+                      false,true,true,false,false,false
+                    ) finding
+                   where finding.level in ('error','warning','extra')
+                   order by available.signature,finding.lineno,finding.position;" \
+            -c "rollback;")
+          if printf '%s\n' "$POST_LINT" | grep -q '^LINTROW|'; then
+            echo "::error::Postflight linked-database lint found Grok release findings."
+            printf '%s\n' "$POST_LINT" | grep '^LINTROW|'
+            exit 1
+          fi
+          EXTENSION_RESIDUE=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atq -F '|' -c "
+            select count(*) filter (where extension_row.oid is not null),count(*) filter (where routine.oid is not null)
+              from (values (1)) seed(value)
+              left join pg_extension extension_row on extension_row.extname='plpgsql_check'
+              left join pg_proc routine on routine.proname like 'plpgsql_check_function%';")
+          if [ "$EXTENSION_RESIDUE" != "0|0" ]; then
+            echo "::error::Postflight linked-database lint left extension residue."
+            exit 1
+          fi
+
+          SAFE=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+            select not exists (select 1 from public.organizations where coalesce(autonomous_mode,false)
+                     or autonomy_kill_switch_active is distinct from true
+                     or coalesce(auto_plan,false) or coalesce(auto_code,false) or coalesce(auto_test,false)
+                     or coalesce(auto_repair,false) or coalesce(auto_review,false) or coalesce(auto_approve,false)
+                     or coalesce(auto_merge,false) or coalesce(auto_deploy,false) or coalesce(auto_rollback,false))
+              and not exists (select 1 from public.projects where coalesce(autonomous_mode,false)
+                     or coalesce(auto_plan,false) or coalesce(auto_code,false) or coalesce(auto_test,false)
+                     or coalesce(auto_repair,false) or coalesce(auto_review,false) or coalesce(auto_approve,false)
+                     or coalesce(auto_merge,false) or coalesce(auto_deploy,false) or coalesce(auto_rollback,false))
+              and not exists (select 1 from public.phase1c_workers where last_heartbeat_at>now()-interval '10 minutes')
+              and not exists (select 1 from public.phase1c_workers where last_heartbeat_at>now()+interval '1 minute')
+              and not exists (select 1 from public.phase1c_workers where current_run_id is not null)
+              and not exists (select 1 from public.graph_runs where state='RUNNING'::public.graph_run_state)
+              and not exists (select 1 from public.agent_runs where status='running'::public.run_status);")
+          if [ "$SAFE" != "t" ]; then
+            echo "::error::Stopped database containment changed during postflight."
+            exit 1
+          fi
+
+          SHA=$(git rev-parse HEAD)
+          CURRENT_MAIN_SHA=$(curl --fail --silent --show-error \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/git/ref/heads/main" | jq -r '.object.sha // empty')
+          if [ "$RELEASE_SHA" != "$SHA" ] || [ "$CURRENT_MAIN_SHA" != "$SHA" ]; then
+            echo "::error::Current main changed during Grok release verification."
+            exit 1
+          fi
+          DEPLOYMENT=$(curl --fail --silent --show-error \
+            -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/deployments?environment=Production&per_page=100" \
+            | jq -c '[.[] | select(.environment=="Production" and .task=="deploy" and .creator.login=="vercel[bot]")][0] // empty')
+          if [ -z "$DEPLOYMENT" ] || ! jq -e --arg sha "$SHA" '.sha==$sha and (.ref==$sha or .ref=="main")' <<<"$DEPLOYMENT" >/dev/null; then
+            echo "::error::Latest Vercel Production identity changed during postflight."
+            exit 1
+          fi
+          STATUS_URL=$(jq -r '.statuses_url' <<<"$DEPLOYMENT")
+          STATUS=$(curl --fail --silent --show-error -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${STATUS_URL}?per_page=1")
+          if ! jq -e 'length==1 and .[0].state=="success" and .[0].creator.login=="vercel[bot]" and (.[0].environment_url | test("^https://softwarefactory-[a-z0-9]+-surgeservices-projects\\.vercel\\.app/?$"))' <<<"$STATUS" >/dev/null; then
+            echo "::error::Exact-SHA Vercel Production changed during postflight."
+            exit 1
+          fi
+          VERCEL_DEPLOYMENT_URL=$(jq -r '.[0].environment_url | rtrimstr("/")' <<<"$STATUS")
+          HEALTH=$(curl --fail --silent --show-error --max-time 20 --retry 2 "$PRODUCTION_HEALTH_URL")
+          if ! jq -e --arg sha "$SHA" --arg project "$PROJECT_REF" --arg deployment_url "$VERCEL_DEPLOYMENT_URL" --arg vercel_project "$VERCEL_PROJECT_ID" '
+            .status=="ok" and .service=="SoftwareFactory" and .database=="reachable"
+            and .databaseProject=="matched" and .databaseProjectRef==$project
+            and .deployment=="matched" and .deploymentUrl==$deployment_url
+            and .vercelProjectId==$vercel_project and (.vercelDeploymentId|type=="string" and test("^dpl_[A-Za-z0-9]+$"))
+            and .release=="matched" and .releaseSha==$sha and .releaseRef=="main"
+          ' <<<"$HEALTH" >/dev/null; then
+            echo "::error::Production health identity changed during Grok release verification."
+            exit 1
+          fi
+
+          for WORKFLOW in graph-worker.yml codex-worker.yml claude-worker.yml auth-broker.yml graph-live-canary.yml handoff-canary.yml graph-artifact-containment.yml e2e-test-data.yml journey-prod-user.yml; do
+            ACTIVE=$(curl --fail --silent --show-error -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${GH_TOKEN}" -H "X-GitHub-Api-Version: 2022-11-28" \
+              "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/workflows/${WORKFLOW}/runs?per_page=100" \
+              | jq '[.workflow_runs[] | select(.status != "completed")] | length')
+            if [ "$ACTIVE" != "0" ]; then
+              echo "::error::${WORKFLOW} became active during postflight."
+              exit 1
+            fi
+          done
+          if [ "${PHASE1C_WORKER_ENABLED,,}" = "true" ] \
+            || [ "${GRAPH_WORKER_ENABLED,,}" = "true" ] \
+            || [ "${GRAPH_WORKER_SCHEDULED,,}" = "true" ] \
+            || [ "${AUTH_BROKER_DISABLED,,}" != "true" ]; then
+            echo "::error::A worker switch or auth broker changed during postflight."
+            exit 1
+          fi
+          echo "::notice::Scope ${SCOPE} passed exact ledger, catalog, ACL, runtime, lint, health, and stopped-safety postflight."
