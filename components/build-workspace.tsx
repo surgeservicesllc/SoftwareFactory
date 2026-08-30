@@ -309,9 +309,11 @@ export function BuildWorkspace() {
               className="w-full rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm"
             />
           </label>
-          <div className="flex flex-wrap items-center gap-3">
-            <label className="text-sm">
-              <span className="mr-2 text-xs text-[var(--muted)]">Project</span>
+          <div className="flex flex-wrap items-end gap-3">
+            {/* min-w-0 + a shrinkable select: a long project name must
+                truncate inside a phone's width, never widen the page. */}
+            <label className="min-w-0 grow basis-48 text-sm sm:max-w-xs">
+              <span className="mb-1 block text-xs text-[var(--muted)]">Project</span>
               {projectsError !== null ? (
                 <span className="text-xs text-[var(--danger)]">{projectsError}</span>
               ) : projects === null ? (
@@ -324,7 +326,7 @@ export function BuildWorkspace() {
                 <select
                   value={projectId}
                   onChange={(event) => setProjectId(event.target.value)}
-                  className="rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5 text-sm"
+                  className="w-full max-w-full rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5 text-sm"
                 >
                   <option value="">Choose…</option>
                   {connectedProjects.map((project) => (
@@ -340,7 +342,7 @@ export function BuildWorkspace() {
             >
               {launching ? "Starting…" : "Build it"}
             </button>
-            <details className="text-xs text-[var(--muted)]">
+            <details className="min-w-0 basis-full text-xs text-[var(--muted)]">
               <summary className="cursor-pointer">Advanced</summary>
               <p className="mt-1 max-w-md">
                 Runs the <code>full_lifecycle</code> workflow: requirement → discovery →
@@ -363,7 +365,7 @@ export function BuildWorkspace() {
                   <span className="shrink-0 font-medium text-[var(--muted)]">
                     {entry.from === "you" ? "You" : "Factory"}
                   </span>
-                  <span className="min-w-0">
+                  <span className="min-w-0 break-words">
                     {entry.text}
                     {entry.link ? (
                       <>
