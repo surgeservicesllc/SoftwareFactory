@@ -1,50 +1,24 @@
-with lifecycle(kind, object, marker) as (values
-  ('enum',     'sdlc_stage',                  'MONITORING'),
-  ('enum',     'gate_kind',                   'HUMAN'),
-  ('enum',     'gate_state',                  'APPROVED'),
-  ('enum',     'activity_event_type',         'lifecycle.gate_approved'),
-  ('table',    'graph_gates',                 null),
-  ('column',   'graph_nodes.lifecycle_stage', null),
-  ('column',   'graphs.max_iterations',       null),
-  ('column',   'graph_edges.is_feedback',     null),
-  ('column',   'node_runs.confidence',        null),
-  ('function', 'open_node_gate_as_worker',    null),
-  ('function', 'decide_node_gate',            null),
-  ('function', 'advance_graph_iteration',     null),
-  ('body',     'claim_planned_graph_v2',      'protocol version 2 is required'),
-  ('body',     'list_graph_runs',             'gate_anchor_count')
-)
-select lifecycle.kind,
-       lifecycle.object,
-       case lifecycle.kind
-         when 'enum' then exists (
-           select 1 from pg_type kind_type
-             join pg_namespace space on space.oid = kind_type.typnamespace
-             join pg_enum label on label.enumtypid = kind_type.oid
-            where space.nspname = 'public'
-              and kind_type.typname = lifecycle.object
-              and label.enumlabel = lifecycle.marker)
-         when 'table' then exists (
-           select 1 from pg_class relation
-             join pg_namespace space on space.oid = relation.relnamespace
-            where space.nspname = 'public'
-              and relation.relkind = 'r'
-              and relation.relname = lifecycle.object)
-         when 'column' then exists (
-           select 1 from information_schema.columns
-            where table_schema = 'public'
-              and table_name = split_part(lifecycle.object, '.', 1)
-              and column_name = split_part(lifecycle.object, '.', 2))
-         when 'function' then exists (
-           select 1 from pg_proc routine
-             join pg_namespace space on space.oid = routine.pronamespace
-            where space.nspname = 'public'
-              and routine.proname = lifecycle.object)
-         else exists (
-           select 1 from pg_proc routine
-             join pg_namespace space on space.oid = routine.pronamespace
-            where space.nspname = 'public'
-              and routine.proname = lifecycle.object
-              and strpos(pg_get_functiondef(routine.oid), lifecycle.marker) > 0)
-       end as present
-  from lifecycle;
+            select 'column' as kind, table_name || '.' || column_name as object
+              from information_schema.columns
+             where table_schema = 'public'
+               and (table_name, column_name) in (
+                 ('projects','engineering_priority'), ('projects','strategic_focus'),
+                 ('projects','engineering_paused'), ('projects','engineering_pause_reason'),
+                 ('projects','maximum_concurrent_runs'),
+                 ('organizations','maximum_concurrent_runs'),
+                 ('agent_runs','review_status'), ('agent_runs','review_note'))
+            union all
+            select 'table', c.relname from pg_class c
+              join pg_namespace n on n.oid = c.relnamespace
+             where n.nspname = 'public' and c.relkind = 'r'
+               and c.relname in ('scheduling_decisions','provider_capacity_limits')
+            union all
+            select 'function', p.proname from pg_proc p
+              join pg_namespace n on n.oid = p.pronamespace
+             where n.nspname = 'public'
+               and p.proname in (
+                 'archive_project','unarchive_project','update_project_details',
+                 'set_project_engineering_priority','set_project_engineering_pause',
+                 'focus_portfolio_engineering','set_portfolio_capacity_limits',
+                 'update_agent_run_review','delete_agent_run')
+            order by 1, 2;

@@ -2,7 +2,18 @@
 
 Last updated: 2026-08-30
 
-## Newest (2026-08-30, latest+2): workflow headroom (ADR-178)
+## Newest (2026-08-30, latest+3): probe extraction corrected (ADR-179)
+
+ADR-178's parser mis-terminated on blocks whose closing line carries a
+shell suffix (`|| echo`, `|| true`, `\` continuations): 40 real blocks,
+not 33; live probe dispatch 33297041401 failed at probe/04.sql:35. The
+re-extraction carries two machine proofs (byte-exact step surgery;
+every file == the bash-unescaped text psql received) and the guard that
+was missing: hosted-scope-replay now EXECUTES all 40 probe files
+against the migrated chain (supabase_migrations stubbed). Lifecycle pin
+is 08.sql now. Do not trust an extraction any test does not execute.
+
+## Older (2026-08-30, latest+2): workflow headroom (ADR-178)
 
 apply-hosted-migrations.yml was 44 bytes under its 490KB guard (GitHub
 hard-refuses at 500KB) — no new scope could be appended. The probe

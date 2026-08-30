@@ -2,6 +2,14 @@
 
 Last reviewed: 2026-08-30
 
+**Addendum, 2026-08-30 latest+3 — probe extraction corrected
+(ADR-179):** the ADR-178 addendum's "byte-honest" claim was wrong for
+seven suffix-closed blocks; the live scope=probe dispatch caught it
+(run 33297041401, syntax error in probe/04.sql). Corrected extraction
+carries dual machine proofs and the missing guard: all 40 probe files
+now EXECUTE against the migrated chain in hosted-scope-replay. 36
+tests green across the five workflow guard suites.
+
 **Addendum, 2026-08-30 latest+2 — workflow headroom (ADR-178):** probe
 SQL extracted byte-honest (33 files, psql -f, order preserved);
 workflow 49KB under its guard; all 14 workflow-reading suites green
