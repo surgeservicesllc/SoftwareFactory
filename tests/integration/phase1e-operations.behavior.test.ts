@@ -199,10 +199,11 @@ describe("Phase 1E production operations behavior", () => {
     // job_seeker_result_marks added personal favorite/hidden/viewed marks;
     // 151 since the Services CRM foundation (ADR-185) added crm_accounts,
     // crm_contacts, crm_properties and the append-only crm_timeline_events;
-    // 152 since the CRM pipeline (ADR-186) added crm_opportunities.
-    // Each is RLS-enabled and forced, which the filter on the next line is
-    // what actually proves.
-    expect(rlsRows).toHaveLength(152);
+    // 152 since the CRM pipeline (ADR-186) added crm_opportunities; 155
+    // since field service (ADR-189) added crm_technicians,
+    // crm_service_plans and crm_work_orders. Each is RLS-enabled and
+    // forced, which the filter on the next line is what actually proves.
+    expect(rlsRows).toHaveLength(155);
     expect(rlsRows.filter((row) => !row.relrowsecurity || !row.relforcerowsecurity)).toEqual([]);
 
     const { rows: grantRows } = await db.query<{ table_name: string }>(

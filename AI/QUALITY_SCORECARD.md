@@ -2,6 +2,27 @@
 
 Last reviewed: 2026-08-30
 
+**Addendum, 2026-08-30 latest+11 — field service core (ADR-189):**
+services-field-service behavior 5 on the real chain under hosted-style
+defaults (completion writes exactly one 'service' event with property
+detail, notes and actor — and only completion; cancellation records as
+its status change; completed_at truthful; cross-account property
+scheduling refused by the three-column FK; tenant isolation; roster and
+schedule undeletable; anon/service_role shutout).
+services-field-service-routes 10 (clamped recurrence math incl. leap
+February; schedule counts from the same authority; exact tenant booking;
+end-before-start refused pre-database; composite-key 404; completion
+PATCH passthrough; exact roster insert; generate advancing by
+recurrence with the visit carrying plan identity; concurrent
+double-generate = one visit + honest 409 with no work-order touch;
+paused plans refused; failed visit insert compensated back).
+services-schedule-panel 5 (board/counts/due-lane from live payloads,
+empty next step, due plan generating through the real route, notes-first
+completion, roster add). Demo book replay extended: field-service counts
+exact, one 'service' event per completion each naming its property.
+RLS census 155; hosted-grants all 8 crm tables; runbook 187; workflow
+scope field-service postflight.
+
 **Addendum, 2026-08-30 latest+10b — the Demo Data book (ADR-187):**
 services-crm-demo-book behavior 2 (the whole dataset replayed against
 the real chain: counts exact incl. one trigger line per status/stage

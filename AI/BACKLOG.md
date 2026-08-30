@@ -27,11 +27,20 @@ the full seeded E2E journey passes — increment 10 of the plan.
   record source-labeled "Demo Data", .example emails, 555 phones,
   history earned through the real triggers; Overview gains the loader,
   the DemoNotice label, and the pipeline headline. No migration.
-- [ ] Increment 3: field service core — technicians, work orders,
-  scheduling calendar, recurring services, dispatch board; service
-  completion writes `service` timeline events through a definer. Then
-  increments 4–10 per the gap analysis (IPM, chemicals/compliance,
-  invoicing, sales, marketing, AI copilot, seeded E2E acceptance).
+- [x] Increment 3 (ADR-189): field service core — technicians (no
+  DELETE), work orders (completion → trigger-written `service` event
+  with property + field notes; cancellation recorded; completed_at
+  trigger+CHECK; three-column same-account property FK), recurring
+  service plans (guarded generate + compensation, clamped month math);
+  /Services/schedule board + /Services/technicians roster; Demo Data
+  fields the operation. 20260830000800; hosted apply: dispatch
+  scope=field-service after merge.
+- [ ] Increment 4: pest/IPM differentiator — devices/stations with
+  QR/barcode identity, scans, station history/conditions,
+  captures/thresholds/trends, sighting logs, corrective actions,
+  multi-site commercial dashboards. Then increments 5–10 per the gap
+  analysis (chemicals/compliance, invoicing, sales, marketing, AI
+  copilot, seeded E2E acceptance).
 
 Last triaged: 2026-08-29
 

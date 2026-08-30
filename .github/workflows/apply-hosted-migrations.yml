@@ -60,6 +60,7 @@ on:
           - pause-graph
           - services-crm
           - crm-pipeline
+          - field-service
           - probe
 permissions:
   actions: read
@@ -1447,6 +1448,55 @@ jobs:
             end
             \$\$;"
           echo "CRM pipeline applied; RLS, grants, triggers and generated normals verified."
+
+      - name: Apply the field service core (scope=field-service)
+        if: ${{ inputs.scope == 'field-service' }}
+        run: |
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+          VERSION=20260830000800_field_service_core
+          FILE="supabase/migrations/${VERSION}.sql"
+          sha256sum "$FILE"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied "${VERSION%%_*}"
+          else
+            npx supabase migration repair --status applied "${VERSION%%_*}" --db-url "$DB_URL"
+          fi
+          psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
+          # Postflight: all three tables under forced RLS with no DELETE for
+          # authenticated (revoke-then-grant against hosted defaults), anon
+          # and service_role shut out, and both work-order triggers present.
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
+            do \$\$
+            declare v_table text;
+            begin
+              if (select count(*) from pg_class c
+                   join pg_namespace n on n.oid = c.relnamespace
+                  where n.nspname = 'public' and c.relrowsecurity and c.relforcerowsecurity
+                    and c.relname in ('crm_technicians','crm_service_plans','crm_work_orders')) <> 3 then
+                raise exception 'the field-service tables are missing or not under forced RLS';
+              end if;
+              foreach v_table in array array['crm_technicians','crm_service_plans','crm_work_orders'] loop
+                if not has_table_privilege('authenticated', 'public.' || v_table, 'update')
+                  or has_table_privilege('authenticated', 'public.' || v_table, 'delete')
+                  or has_table_privilege('anon', 'public.' || v_table, 'select')
+                  or has_table_privilege('service_role', 'public.' || v_table, 'select') then
+                  raise exception 'the field-service grants are wrong on %', v_table;
+                end if;
+              end loop;
+              if (select count(*) from pg_trigger t join pg_class c on c.oid = t.tgrelid
+                  where c.relname = 'crm_work_orders'
+                    and t.tgname in ('crm_work_orders_outcome','crm_work_orders_set_completed_at')) <> 2 then
+                raise exception 'a work-order trigger is missing';
+              end if;
+            end
+            \$\$;"
+          echo "Field service applied; RLS, grants and work-order triggers verified."
 
       - name: Normalize exact legacy bot ACLs (scope=bot-legacy-acl-normalization)
         if: ${{ inputs.scope == 'bot-legacy-acl-normalization' }}

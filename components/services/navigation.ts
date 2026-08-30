@@ -1,4 +1,6 @@
 import {
+  CalendarDays,
+  HardHat,
   KanbanSquare,
   LayoutDashboard,
   Users,
@@ -46,6 +48,18 @@ export const SERVICES_NAVIGATION: readonly ServicesNavItem[] = [
     label: "Pipeline",
     description: "Opportunities from first contact to won",
     icon: KanbanSquare,
+  },
+  {
+    href: `${SERVICES_ROOT}/schedule`,
+    label: "Schedule",
+    description: "Work orders, dispatch, recurring plans",
+    icon: CalendarDays,
+  },
+  {
+    href: `${SERVICES_ROOT}/technicians`,
+    label: "Technicians",
+    description: "The roster that performs service",
+    icon: HardHat,
   },
 ];
 

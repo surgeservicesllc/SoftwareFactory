@@ -35,6 +35,43 @@ export type DemoOpportunity = {
   lostReason?: string;
 };
 
+export type DemoTechnician = {
+  firstName: string;
+  lastName: string;
+  phone: string;
+  licenseNumber: string;
+};
+
+/** The roster the demo visits are assigned to, referenced by index. */
+export const DEMO_TECHNICIANS: readonly DemoTechnician[] = [
+  { firstName: "Miguel", lastName: "Santos", phone: "(555) 016-0001", licenseNumber: "DEMO-APP-10482" },
+  { firstName: "Aisha", lastName: "Robinson", phone: "(555) 016-0002", licenseNumber: "DEMO-APP-11217" },
+  { firstName: "Pete", lastName: "Kowalski", phone: "(555) 016-0003", licenseNumber: "DEMO-APP-09934" },
+];
+
+export type DemoPlan = {
+  /** Which of the account's properties, by label. */
+  propertyLabel: string;
+  serviceType: string;
+  recurrence: "weekly" | "biweekly" | "monthly" | "bimonthly" | "quarterly" | "semiannual" | "annual";
+  /** next_due relative to seed day: negative or zero shows in the due lane. */
+  dueInDays: number;
+  technicianIndex?: number;
+  valueCents?: number;
+};
+
+export type DemoVisit = {
+  propertyLabel: string;
+  serviceType: string;
+  /** Scheduled start relative to seed day: negative = past visit. */
+  inDays: number;
+  durationHours: number;
+  technicianIndex: number;
+  /** Statuses after the initial `scheduled`, walked so the trigger records outcomes. */
+  statusPath: readonly ("dispatched" | "in_progress" | "completed" | "cancelled")[];
+  completionNotes?: string;
+};
+
 export type DemoAccount = {
   name: string;
   kind: "residential" | "commercial";
@@ -54,6 +91,8 @@ export type DemoAccount = {
   properties: readonly { label: string; address: string; propertyType?: string; accessNotes?: string }[];
   opportunities: readonly DemoOpportunity[];
   events: readonly DemoEvent[];
+  plans?: readonly DemoPlan[];
+  visits?: readonly DemoVisit[];
 };
 
 export const DEMO_BOOK: readonly DemoAccount[] = [
@@ -83,6 +122,14 @@ export const DEMO_BOOK: readonly DemoAccount[] = [
       { kind: "note", summary: "Walkthrough done: activity at dock doors 3 and 7; racking legs clear.", detail: "Recommend 12 exterior stations along the north fence line and door sweeps on 3/7.", daysAgo: 112 },
       { kind: "task", summary: "Schedule quarterly deep inspection for the cold storage annex.", daysAgo: 9 },
     ],
+    plans: [
+      { propertyLabel: "Distribution Center", serviceType: "Monthly IPM service", recurrence: "monthly", dueInDays: 12, technicianIndex: 0, valueCents: 154_000 },
+      { propertyLabel: "Cold Storage Annex", serviceType: "Quarterly deep inspection", recurrence: "quarterly", dueInDays: -2, technicianIndex: 0, valueCents: 89_000 },
+    ],
+    visits: [
+      { propertyLabel: "Distribution Center", serviceType: "Monthly IPM service", inDays: -18, durationHours: 3, technicianIndex: 0, statusPath: ["dispatched", "completed"], completionNotes: "All 12 exterior stations serviced; two with activity at the north fence, rebaited. Door sweeps on 3 and 7 holding." },
+      { propertyLabel: "Distribution Center", serviceType: "Monthly IPM service", inDays: 10, durationHours: 3, technicianIndex: 0, statusPath: [] },
+    ],
   },
   {
     name: "Bluefin Grill Group",
@@ -110,6 +157,13 @@ export const DEMO_BOOK: readonly DemoAccount[] = [
       { kind: "email", summary: "Monthly service summaries now emailed to the group office after each visit.", daysAgo: 55 },
       { kind: "sms", summary: "Harborside GM texted a photo of a monitor; identified as an occasional invader, no action needed.", daysAgo: 12 },
     ],
+    plans: [
+      { propertyLabel: "Bluefin Cannery Row", serviceType: "Monthly kitchen service", recurrence: "monthly", dueInDays: 6, technicianIndex: 1, valueCents: 28_900 },
+      { propertyLabel: "Bluefin Harborside", serviceType: "Monthly kitchen service", recurrence: "monthly", dueInDays: 0, technicianIndex: 1, valueCents: 28_900 },
+    ],
+    visits: [
+      { propertyLabel: "Bluefin Harborside", serviceType: "Monthly kitchen service", inDays: -25, durationHours: 2, technicianIndex: 1, statusPath: ["dispatched", "completed"], completionNotes: "Dish pit monitors clear two months running; drain treatment refreshed, gel bait rotated." },
+    ],
   },
   {
     name: "Stonebridge Hotel & Suites",
@@ -135,6 +189,13 @@ export const DEMO_BOOK: readonly DemoAccount[] = [
       { kind: "note", summary: "Canine inspection of floors 9-11: two rooms confirmed, adjacent rooms clear.", daysAgo: 60 },
       { kind: "email", summary: "Sent treatment plan and room-turn schedule to housekeeping.", daysAgo: 59 },
       { kind: "task", summary: "Follow-up canine sweep of treated rooms.", daysAgo: 4 },
+    ],
+    plans: [
+      { propertyLabel: "Main Tower", serviceType: "Quarterly preventive service", recurrence: "quarterly", dueInDays: 34, technicianIndex: 2, valueCents: 384_000 },
+    ],
+    visits: [
+      { propertyLabel: "Main Tower", serviceType: "Bed bug heat treatment — floors 9-11", inDays: -55, durationHours: 8, technicianIndex: 2, statusPath: ["dispatched", "in_progress", "completed"], completionNotes: "Three rooms treated to temperature; adjacent rooms inspected clear. Follow-up canine sweep booked." },
+      { propertyLabel: "Main Tower", serviceType: "Follow-up canine sweep", inDays: 3, durationHours: 2, technicianIndex: 2, statusPath: [] },
     ],
   },
   {
@@ -182,6 +243,12 @@ export const DEMO_BOOK: readonly DemoAccount[] = [
       { kind: "call", summary: "Ants in the memory-care wing kitchenette; same-week start requested.", daysAgo: 87 },
       { kind: "note", summary: "Odorous house ants trailing from the courtyard expansion joint; baited and sealed.", daysAgo: 83 },
       { kind: "sms", summary: "Maintenance confirmed no activity two weeks after baiting.", daysAgo: 69 },
+    ],
+    plans: [
+      { propertyLabel: "Main Residence", serviceType: "Monthly interior/exterior service", recurrence: "monthly", dueInDays: -1, technicianIndex: 1, valueCents: 37_400 },
+    ],
+    visits: [
+      { propertyLabel: "Main Residence", serviceType: "Monthly interior/exterior service", inDays: -31, durationHours: 2, technicianIndex: 1, statusPath: ["completed"], completionNotes: "Courtyard expansion joint holding; low-odor perimeter treatment, nurses' station notified on arrival and departure." },
     ],
   },
   {
@@ -313,6 +380,12 @@ export const DEMO_BOOK: readonly DemoAccount[] = [
       { kind: "sms", summary: "No activity since treatment; quarterly plan started.", daysAgo: 180 },
       { kind: "note", summary: "Routine quarterly visit: exterior perimeter, wasp nest removed at the eave.", daysAgo: 21 },
     ],
+    plans: [
+      { propertyLabel: "Home", serviceType: "Quarterly home protection", recurrence: "quarterly", dueInDays: 68, technicianIndex: 2, valueCents: 19_900 },
+    ],
+    visits: [
+      { propertyLabel: "Home", serviceType: "Quarterly home protection", inDays: -21, durationHours: 1, technicianIndex: 2, statusPath: ["dispatched", "completed"], completionNotes: "Exterior perimeter treated; wasp nest removed at the east eave; gate latched on the way out." },
+    ],
   },
   {
     name: "The Chen Residence",
@@ -334,6 +407,10 @@ export const DEMO_BOOK: readonly DemoAccount[] = [
       { kind: "call", summary: "Noises in the attic at night; same-week inspection requested.", daysAgo: 74 },
       { kind: "note", summary: "Roof rat entry at the gable vent; exclusion scope written with photos.", daysAgo: 71 },
       { kind: "email", summary: "Exclusion complete; two-week trap check scheduled, warranty issued.", daysAgo: 58 },
+    ],
+    visits: [
+      { propertyLabel: "Home", serviceType: "Rodent exclusion + attic cleanout", inDays: -60, durationHours: 6, technicianIndex: 0, statusPath: ["dispatched", "in_progress", "completed"], completionNotes: "Gable vent screened, two entry points sealed, attic sanitized. Trap check in two weeks under warranty." },
+      { propertyLabel: "Home", serviceType: "Two-week trap check", inDays: -46, durationHours: 1, technicianIndex: 0, statusPath: ["cancelled"] },
     ],
   },
   {
@@ -389,12 +466,36 @@ export function demoBookTotals() {
       contacts: totals.contacts + account.contacts.length,
       properties: totals.properties + account.properties.length,
       opportunities: totals.opportunities + account.opportunities.length,
+      plans: totals.plans + (account.plans?.length ?? 0),
+      workOrders: totals.workOrders + (account.visits?.length ?? 0),
       manualEvents: totals.manualEvents + account.events.length,
       statusMoves: totals.statusMoves + account.statusPath.length,
       stageMoves:
         totals.stageMoves
         + account.opportunities.reduce((sum, opportunity) => sum + opportunity.stagePath.length, 0),
+      // Only completed and cancelled visits write timeline outcomes;
+      // dispatch progress is deliberately not history.
+      visitOutcomes:
+        totals.visitOutcomes
+        + (account.visits ?? []).reduce(
+          (sum, visit) =>
+            sum
+            + visit.statusPath.filter((status) => status === "completed" || status === "cancelled")
+              .length,
+          0,
+        ),
     }),
-    { accounts: 0, contacts: 0, properties: 0, opportunities: 0, manualEvents: 0, statusMoves: 0, stageMoves: 0 },
+    {
+      accounts: 0,
+      contacts: 0,
+      properties: 0,
+      opportunities: 0,
+      plans: 0,
+      workOrders: 0,
+      manualEvents: 0,
+      statusMoves: 0,
+      stageMoves: 0,
+      visitOutcomes: 0,
+    },
   );
 }

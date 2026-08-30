@@ -7,11 +7,11 @@ import { PGlite } from "@electric-sql/pglite";
 import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { DEMO_BOOK, DEMO_SOURCE, demoBookTotals } from "@/lib/services/demo-data";
+import { DEMO_BOOK, DEMO_SOURCE, DEMO_TECHNICIANS, demoBookTotals } from "@/lib/services/demo-data";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const migrationsDirectory = resolve(repositoryRoot, "supabase/migrations");
-const latestMigration = "20260830000700_crm_pipeline_search.sql";
+const latestMigration = "20260830000800_field_service_core.sql";
 
 /**
  * The Demo Data book, replayed against the real migration chain move for
@@ -79,6 +79,18 @@ describe("the Demo Data book against the real schema", { timeout: 240_000 }, () 
   });
 
   it("inserts whole and earns its history through the triggers", async () => {
+    const technicianIds: string[] = [];
+    for (const technician of DEMO_TECHNICIANS) {
+      const inserted = await db.query<{ id: string }>(
+        `insert into public.crm_technicians
+           (organization_id, first_name, last_name, phone, license_number, created_by)
+         values ($1, $2, $3, $4, $5, $6) returning id`,
+        [org, technician.firstName, technician.lastName, technician.phone,
+         technician.licenseNumber, owner],
+      );
+      technicianIds.push(inserted.rows[0].id);
+    }
+
     const accountIds = new Map<string, string>();
     for (const account of DEMO_BOOK) {
       const inserted = await db.query<{ id: string }>(
@@ -103,14 +115,49 @@ describe("the Demo Data book against the real schema", { timeout: 240_000 }, () 
            contact.email ?? null, contact.phone ?? null, index === 0],
         );
       }
+      const propertyIds = new Map<string, string>();
       for (const property of account.properties) {
-        await db.query(
+        const insertedProperty = await db.query<{ id: string }>(
           `insert into public.crm_properties
              (organization_id, account_id, label, address, property_type, access_notes)
-           values ($1, $2, $3, $4, $5, $6)`,
+           values ($1, $2, $3, $4, $5, $6) returning id`,
           [org, accountId, property.label, property.address,
            property.propertyType ?? null, property.accessNotes ?? null],
         );
+        propertyIds.set(property.label, insertedProperty.rows[0].id);
+      }
+      for (const plan of account.plans ?? []) {
+        await db.query(
+          `insert into public.crm_service_plans
+             (organization_id, account_id, property_id, service_type, recurrence, next_due, technician_id, value_cents, created_by)
+           values ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+          [org, accountId, propertyIds.get(plan.propertyLabel), plan.serviceType, plan.recurrence,
+           new Date(Date.now() + plan.dueInDays * 86_400_000).toISOString().slice(0, 10),
+           plan.technicianIndex === undefined ? null : technicianIds[plan.technicianIndex],
+           plan.valueCents ?? null, owner],
+        );
+      }
+      for (const visit of account.visits ?? []) {
+        const day = new Date(Date.now() + visit.inDays * 86_400_000).toISOString().slice(0, 10);
+        const insertedVisit = await db.query<{ id: string }>(
+          `insert into public.crm_work_orders
+             (organization_id, account_id, property_id, technician_id, service_type, scheduled_start, scheduled_end, created_by)
+           values ($1, $2, $3, $4, $5, $6, $7, $8) returning id`,
+          [org, accountId, propertyIds.get(visit.propertyLabel),
+           technicianIds[visit.technicianIndex], visit.serviceType,
+           `${day}T09:00:00Z`,
+           `${day}T${String(9 + visit.durationHours).padStart(2, "0")}:00:00Z`, owner],
+        );
+        for (const status of visit.statusPath) {
+          await db.query(
+            `update public.crm_work_orders
+                set status = $1, completion_notes = coalesce($2, completion_notes)
+              where id = $3`,
+            [status,
+             status === "completed" ? visit.completionNotes ?? null : null,
+             insertedVisit.rows[0].id],
+          );
+        }
       }
       for (const opportunity of account.opportunities) {
         const insertedOpportunity = await db.query<{ id: string }>(
@@ -144,12 +191,15 @@ describe("the Demo Data book against the real schema", { timeout: 240_000 }, () 
     }
 
     const totals = demoBookTotals();
-    const counted = await db.query<{ accounts: number; contacts: number; properties: number; opportunities: number; events: number }>(
+    const counted = await db.query<{ accounts: number; contacts: number; properties: number; opportunities: number; technicians: number; plans: number; work_orders: number; events: number }>(
       `select
          (select count(*)::integer from public.crm_accounts where organization_id = $1) as accounts,
          (select count(*)::integer from public.crm_contacts where organization_id = $1) as contacts,
          (select count(*)::integer from public.crm_properties where organization_id = $1) as properties,
          (select count(*)::integer from public.crm_opportunities where organization_id = $1) as opportunities,
+         (select count(*)::integer from public.crm_technicians where organization_id = $1) as technicians,
+         (select count(*)::integer from public.crm_service_plans where organization_id = $1) as plans,
+         (select count(*)::integer from public.crm_work_orders where organization_id = $1) as work_orders,
          (select count(*)::integer from public.crm_timeline_events where organization_id = $1) as events`,
       [org],
     );
@@ -158,9 +208,27 @@ describe("the Demo Data book against the real schema", { timeout: 240_000 }, () 
       contacts: totals.contacts,
       properties: totals.properties,
       opportunities: totals.opportunities,
-      // Manual events plus one trigger-written line per status and stage move.
-      events: totals.manualEvents + totals.statusMoves + totals.stageMoves,
+      technicians: DEMO_TECHNICIANS.length,
+      plans: totals.plans,
+      work_orders: totals.workOrders,
+      // Manual events plus one trigger-written line per status move, stage
+      // move, and visit outcome.
+      events: totals.manualEvents + totals.statusMoves + totals.stageMoves + totals.visitOutcomes,
     });
+
+    // The completion machinery told the story: a finished visit reads as a
+    // 'service' event naming its property in detail.
+    const serviceEvents = await db.query<{ count: number; with_property: number }>(
+      `select count(*)::integer as count,
+              count(*) filter (where detail like 'Property: %')::integer as with_property
+         from public.crm_timeline_events
+        where organization_id = $1 and kind = 'service'`,
+      [org],
+    );
+    const completions = DEMO_BOOK.flatMap((account) => account.visits ?? [])
+      .filter((visit) => visit.statusPath.includes("completed")).length;
+    expect(serviceEvents.rows[0].count).toBe(completions);
+    expect(serviceEvents.rows[0].with_property).toBe(completions);
   });
 
   it("every seeded row is labeled and fictional, and the machinery closed what should be closed", async () => {

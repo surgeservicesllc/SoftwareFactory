@@ -58,10 +58,17 @@ is a mockup commitment.
    allowDuplicate to proceed); global search across accounts, contacts,
    properties and opportunities in the Services shell. Migration
    20260830000700, hosted-apply scope `crm-pipeline`.
-3. **Field service core**: technicians, work orders, scheduling calendar,
-   recurring services, dispatch board; service completion writes
-   `service` timeline events through a definer (the timeline's system
-   kinds get their first real writer).
+3. **Field service core (SHIPPED with ADR-189)**: crm_technicians (no
+   DELETE — history hangs off them), crm_work_orders
+   (scheduled→dispatched→in_progress→completed/cancelled, completed_at
+   trigger+CHECK, three-column same-account property FK), and
+   crm_service_plans (recurrence + next_due, guarded generate with
+   compensation). Completion writes the `service` timeline event through
+   a definer — the system kinds' first real writer — naming the property
+   and carrying field notes; cancellation records as status_change.
+   /Services/schedule dispatch board + /Services/technicians roster;
+   Demo Data fields the whole operation. Migration 20260830000800,
+   hosted-apply scope `field-service`.
 4. **Pest/IPM differentiator**: devices/stations with QR/barcode
    identity, install/service/move/remove scans, station history and
    conditions, captures/consumption, thresholds and trends, pest

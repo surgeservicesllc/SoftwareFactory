@@ -13,7 +13,13 @@ pipeline (stage moves trigger-written onto the timeline, closed_at
 trigger+CHECK, no DELETE — conversion truth), whole-book report + board
 under /Services/pipeline, duplicate detection on account create via
 database-generated normals (surfaced 409, never auto-merged), and global
-search across all four record types in the shell. The Demo Data book
+search across all four record types in the shell. Increment 3 (ADR-189)
+live: technicians roster, work orders with trigger-written service
+history and a notes-first completion flow, recurring service plans with
+guarded visit generation, and the /Services/schedule dispatch board —
+five nav sections, all org-scoped forced RLS, nothing deletable, the
+timeline's 'service' kind now written only by the reviewed trigger.
+The Demo Data book
 (ADR-187) makes the product presentable on demand: an empty workspace
 can seed a 14-account fictional clientele through the real machinery —
 every record source-labeled "Demo Data", history written by the
