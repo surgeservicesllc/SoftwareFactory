@@ -23,7 +23,7 @@ and to reuse it. This file is that inspection.
 | Approvals and gates | `graph_gates` + `POST /api/graph-gates/[gateId]/decide`; command-level `requires_owner_approval`; RED policy gating per `policies/RISK_CLASSIFICATION.md` | **Live.** |
 | Run controls | `/api/runs/[runId]/cancel`, `/retry`, review PATCH, archive | **Live** for command runs; graph runs close via the engine. |
 | Agents & providers | Agent catalogue (#26), `project_agents` (#31), bots + roles + assignments + readiness (#24–#25), AI accounts (Claude/Codex connect), provider routing/capacity/rate limits | **Live** as configuration + routing; specialty-agent *personas* are not first-class. |
-| Reliability | Retries incl. 529 backoff (ADR-146), idempotent submission, work locks, lifecycle resume scope, immutable activity/audit events, budget stops | **Live**, with one known gap: `node_runs.attempt` never written (task #56). |
+| Reliability | Retries incl. 529 backoff (ADR-146), idempotent submission, work locks, lifecycle resume scope, immutable activity/audit events, budget stops | **Live**; the `node_runs.attempt` gap closed with ADR-174 (20260830000100). |
 | QA independence | `graph_verifications`, gate bridge, journey/E2E lanes, "agent says done ≠ done" enforced by verifier nodes and CI | **Live** in the engine; per-run acceptance-criteria checklists not surfaced. |
 | Supabase as system of record | 180 migrations, forced RLS everywhere (phase1e pins the count), audit events, storage, tenant isolation | **Live.** |
 | Autonomy | `/solutions/autonomy` decisions + controls; destructive actions default OFF; Phase 1A forbids auto-merge/auto-deploy | **Live** as policy; not yet expressed as named modes. |
@@ -56,7 +56,9 @@ and to reuse it. This file is that inspection.
    bypassing RED/destructive approvals, per `policies/`. *(Later
    increment; must not touch guardrails without owner approval per
    AGENTS.md.)*
-6. **node_runs.attempt** (task #56) — the one recorded reliability gap.
+6. **node_runs.attempt** (task #56) — closed by ADR-174/20260830000100:
+   every transition now records its measured attempt, and a retry is a
+   visible second RUNNING event instead of a swallowed replay.
 7. **Deploy/monitor stages beyond evidence links** remain bounded by
    Phase 1A: no auto-deploy workflow may be introduced; deployment
    remains owner-directed. Stated here so no increment pretends

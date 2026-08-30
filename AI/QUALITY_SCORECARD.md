@@ -1,6 +1,18 @@
 # Quality scorecard
 
-Last reviewed: 2026-08-29
+Last reviewed: 2026-08-30
+
+**Addendum, 2026-08-30 late night — attempt persistence (ADR-174, task
+#56):** graph-worker-execution suite 32 green against the full migrated
+chain including two new cases — a real retry persisting attempt 2 with
+its own second `node_running` event and the completion carrying the
+suffix; regression/nonsense refusals, exact-replay idempotence, the
+higher-attempt retry branch, and the seven-argument legacy caller still
+resolving with attempt honestly left at its insert default. Node-detail
+suite updated to state the new truth (writer exists, projection
+deliberately deferred). Runbook count 180 auto-guarded. Lint zero
+warnings, production build, `tsc --noEmit` clean, full vitest suite
+green.
 
 **Addendum, 2026-08-30 night — Chief of Staff plan (ADR-173):**
 chief-of-staff suite 5 tests (diamond layering, verbatim intent +

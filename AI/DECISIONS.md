@@ -3242,3 +3242,38 @@ disclosure (requirements verbatim, numbered dependency layers with
 assignments and gate markers, parallelism and gate counts) and the
 headline now leads with the counted percent. Everything is read back from
 records the engine made; the panel says so in its own caption.
+
+
+## ADR-174 - node_runs.attempt gets its writer; retries become visible
+
+Date: 2026-08-30
+
+`node_runs.attempt` has carried a default of 0 and a unique
+`(graph_run_id, node_id, attempt)` key since 20260814000100, but nothing
+ever wrote it: the runner counted attempts in memory and the counter died
+with the process, so an audited run could not say how many tries a node
+took, and a retry's second dispatch was swallowed by the recording
+function's replay branch as if it had never happened.
+
+Migration `20260830000100_node_attempt_persistence.sql` replaces
+`record_node_state_as_worker` with an eight-parameter definer adding
+`p_attempt integer default null` (old seven-argument callers resolve
+unchanged; ACLs restated service_role-only; search_path pinned):
+
+- an ordinary transition persists the attempt (`coalesce` keeps
+  attempt-less callers whole);
+- RUNNING again with a HIGHER attempt is a retry — a real second start
+  that moves the counter and appends its own `node_running` event with
+  an "attempt N" suffix, where before it was swallowed;
+- a LOWER attempt is refused (`node_attempt_regression`) and a
+  non-positive one as nonsense (`node_attempt_must_be_positive`);
+- an exact replay (same state, same attempt, same evidence) keeps the
+  established idempotent no-second-event behavior.
+
+The worker passes each dispatch's measured attempt on every transition
+(`lib/worker/graph-run.ts`), and the production store retries once
+without `p_attempt` on PGRST202 so the deploy window between app release
+and hosted apply degrades to the old unpersisted behavior instead of
+failing nodes. Projection into the runs feed stays deliberately deferred:
+a surfaced 0 would read as measured fact for historical rows, so the
+column is exposed nowhere until it is surfaced everywhere at once.

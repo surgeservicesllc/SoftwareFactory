@@ -35,7 +35,23 @@ is armed — this section is the plan of record).
 - [ ] Increment 5: autonomy modes (Ask-Me/Balanced/Autonomous) as
   parameterization of existing gates — policy review first; RED stays
   owner-approved.
-- [ ] Task #56: persist node_runs.attempt.
+- [x] Task #56 (ADR-174): node_runs.attempt persisted —
+  20260830000100 replaces `record_node_state_as_worker` with the
+  attempt-carrying eight-parameter definer (retry = real second RUNNING
+  with its own event; regressions refused; old callers resolve; ACLs
+  restated service_role-only); the worker passes the measured attempt on
+  every transition with a PGRST202 deploy-window fallback; hosted-apply
+  scope `node-attempt-persistence` with signature postflight. Projection
+  into the runs feed stays deliberately deferred (a surfaced 0 on
+  historical rows would read as measured fact).
+- [ ] **apply-hosted-migrations.yml is 44 bytes under its 490KB guard**
+  (GitHub refuses workflows over 500KB). The next scope CANNOT be added
+  by appending another boilerplate step: factor the repeated
+  DB_URL/apply/repair/postflight scaffolding into a script the steps
+  call, or retire scopes whose migrations are confirmed hosted, before
+  adding one more. The ceiling test in
+  `tests/unit/hosted-apply-graph-protocol-cutover-scope.test.ts` is the
+  guard that catches this — do not raise it.
 
 ## Job Search 50-source engine (active owner goal, ADR-163)
 
@@ -303,8 +319,8 @@ deferrals, in the order they become worth doing once money moves:
   the month's launch usage but is gated by command budgets, not the plan
   quota. Pricing the command surface needs a decision about whether a
   command's implicit graph is a launch or an overhead.
-- **`node_runs.attempt` bridge** (task #56) is unrelated to billing but
-  queued behind the same release for migration-ordering reasons.
+- **`node_runs.attempt` bridge** (task #56): shipped 2026-08-30 as
+  20260830000100 (ADR-174); no longer queued here.
 
 ## One graph stranded behind an undecidable gate (2026-08-25, needs an owner call)
 
