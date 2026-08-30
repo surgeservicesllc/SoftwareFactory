@@ -3333,3 +3333,26 @@ test results show each check's real conclusion (failure stays red);
 deployment state/environment/URL and production health complete the
 trail. Logs and an inline preview remain open gaps - graph_events are
 not yet surfaced in Build, and preview is today the deployment URL.
+
+
+## ADR-177 - The activity log is graph_events read back, never console output
+
+Date: 2026-08-30
+
+The directive's command center lists "terminal/logs". This platform's
+honest equivalent is the engine's own append-only record:
+`graph_events` has held every durable transition since 20260814000100
+(node_running/node_completed/..., verification_recorded, gate and run
+events) behind member-scoped RLS with a (graph_run_id, created_at)
+index - and no member-facing read ever surfaced it.
+
+`GET /api/graphs/runs/[graphRunId]/events` reads it verbatim through
+the RLS-scoped tenant client (organization filter restated), bounded to
+the newest 500 rows with an admitted `truncated` flag, returned
+chronological, with each event's node named by two bounded lookups
+(node_runs -> graph_nodes) rather than a projection change. Build gains
+the lazy "Activity log" disclosure rendering the lines monospace -
+time, event type, node key, detail - with the ADR-174 attempt suffixes
+now visible to a person. The panel's caption says what it is: the
+engine's recorded events, not console output the browser invents.
+Inline preview remains the one open command-center panel.

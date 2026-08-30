@@ -94,6 +94,14 @@ type RunArtifact = {
   payload?: unknown;
 };
 
+type RunEvent = {
+  eventId: string;
+  eventType: string;
+  detail: string | null;
+  nodeKey: string | null;
+  createdAt: string;
+};
+
 type TranscriptEntry = {
   id: string;
   at: string;
@@ -140,6 +148,8 @@ export function BuildWorkspace() {
   /** Fetched when the person opens the Artifacts disclosure — not before. */
   const [artifacts, setArtifacts] = useState<RunArtifact[] | null>(null);
   const [artifactsError, setArtifactsError] = useState<string | null>(null);
+  const [events, setEvents] = useState<{ rows: RunEvent[]; truncated: boolean } | null>(null);
+  const [eventsError, setEventsError] = useState<string | null>(null);
   /** The watched graph's stored dependency edges, one fetch per graph. */
   const [planEdges, setPlanEdges] = useState<{ graphId: string; edges: { from: string; to: string }[] } | null>(null);
 
@@ -391,6 +401,27 @@ export function BuildWorkspace() {
       setArtifacts(payload.artifacts ?? []);
     } catch {
       setArtifactsError("The run's artifacts could not be loaded.");
+    }
+  }, []);
+
+  const loadEvents = useCallback(async (graphRunId: string) => {
+    setEventsError(null);
+    try {
+      const response = await fetch(`/api/graphs/runs/${graphRunId}/events`, {
+        headers: { accept: "application/json" },
+      });
+      const payload = (await response.json()) as {
+        events?: RunEvent[];
+        truncated?: boolean;
+        error?: { message?: string };
+      };
+      if (!response.ok) {
+        setEventsError(payload.error?.message ?? "The run's activity log could not be loaded.");
+        return;
+      }
+      setEvents({ rows: payload.events ?? [], truncated: payload.truncated === true });
+    } catch {
+      setEventsError("The run's activity log could not be loaded.");
     }
   }, []);
 
@@ -888,6 +919,47 @@ export function BuildWorkspace() {
                     </li>
                   ))}
                 </ul>
+              )}
+            </details>
+
+            <details
+              className="mt-3"
+              data-testid="build-events"
+              onToggle={(event) => {
+                if ((event.target as HTMLDetailsElement).open && events === null) {
+                  void loadEvents(watchedRun.graphRunId);
+                }
+              }}
+            >
+              <summary className="cursor-pointer text-sm font-medium">Activity log</summary>
+              {/* graph_events verbatim — the engine's own append-only record
+                  of what happened, never console output the browser invents. */}
+              {eventsError !== null ? (
+                <p className="mt-2 text-sm text-[var(--danger)]">{eventsError}</p>
+              ) : events === null ? (
+                <p className="mt-2 text-sm text-[var(--muted)]">Loading…</p>
+              ) : events.rows.length === 0 ? (
+                <p className="mt-2 text-sm text-[var(--muted)]">
+                  No events recorded yet — they appear as the run makes durable progress.
+                </p>
+              ) : (
+                <>
+                  <ol className="mt-2 max-h-64 space-y-0.5 overflow-y-auto font-mono text-xs">
+                    {events.rows.map((entry) => (
+                      <li key={entry.eventId} className="break-words">
+                        <span className="text-[var(--muted)]">{entry.createdAt.slice(11, 19)}</span>
+                        {" "}{entry.eventType}
+                        {entry.nodeKey !== null ? ` · ${entry.nodeKey}` : ""}
+                        {entry.detail !== null ? ` — ${entry.detail}` : ""}
+                      </li>
+                    ))}
+                  </ol>
+                  {events.truncated ? (
+                    <p className="mt-1 text-xs text-[var(--muted)]">
+                      Showing the newest 500 events; the full record stays in the database.
+                    </p>
+                  ) : null}
+                </>
               )}
             </details>
 

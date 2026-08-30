@@ -475,6 +475,55 @@ describe("the build workspace", () => {
     expect(within(release).getByText("success")).toBeInTheDocument();
   });
 
+  it("shows the run's activity log verbatim from recorded events, fetched only on open", async () => {
+    const logged = {
+      graphRunId: "ffffffff-ffff-4fff-8fff-ffffffffffff",
+      graphId: LAUNCH.graphId,
+      goal: "Build me a bakery site",
+      state: "RUNNING",
+      projectId: "11111111-1111-4111-8111-111111111111",
+      startedAt: "2026-08-30T05:00:00Z",
+      completedAt: null,
+      isLifecycle: true,
+      nodes: [node("implement", "IMPLEMENTATION", "RUNNING")],
+    };
+    respond({ runs: [logged] });
+    fetchMock.mockImplementation((url: string, init?: RequestInit) => {
+      if (typeof url === "string" && url.includes("/events")) {
+        return Promise.resolve(json({
+          events: [{
+            eventId: "e1",
+            eventType: "node_running",
+            detail: "worker graph-worker-test attempt 2",
+            nodeKey: "implement",
+            createdAt: "2026-08-30T05:01:22.000Z",
+          }],
+          truncated: false,
+        }));
+      }
+      if (typeof url === "string" && url.includes("/api/graphs/runs")) {
+        return Promise.resolve(json({ runs: [logged] }));
+      }
+      if (typeof url === "string" && url.includes("/api/graphs") && init?.method === "POST") {
+        return Promise.resolve(json(LAUNCH));
+      }
+      return Promise.resolve(json(PROJECTS));
+    });
+    const user = userEvent.setup();
+    render(<BuildWorkspace />);
+    await launch(user);
+
+    const log = await screen.findByTestId("build-events");
+    expect(fetchMock.mock.calls.some(([url]) =>
+      typeof url === "string" && url.includes("/events"))).toBe(false);
+    await user.click(within(log).getByText("Activity log"));
+
+    // The line is the recorded event, verbatim: time, type, node, detail.
+    expect(await within(log).findByText(/05:01:22/)).toBeInTheDocument();
+    expect(within(log).getByText(/node_running · implement — worker graph-worker-test attempt 2/)).toBeInTheDocument();
+    expect(within(log).queryByText(/Showing the newest 500 events/)).not.toBeInTheDocument();
+  });
+
   it("lists unfinished lifecycle runs on arrival, so watching resumes across visits", async () => {
     respond({
       runs: [

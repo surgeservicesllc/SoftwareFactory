@@ -36,7 +36,13 @@ still the working plan of record.)
   ANCHOR observations (lineage/review/ci_check_runs/deployment/probe);
   Build links files-changed/diffs to the PR's files tab, shows each
   check's real conclusion, deployment state/URL, and production health.
-  Open still: logs (graph_events in Build) and an inline preview.
+  Open still: an inline preview.
+- [x] Increment 7 (ADR-177): Activity log — GET
+  /api/graphs/runs/[graphRunId]/events reads graph_events verbatim
+  (RLS tenant client, newest-500 bound with admitted truncation, node
+  keys resolved via node_runs→graph_nodes); Build's lazy log panel
+  renders time/type/node/detail monospace. "Terminal/logs" =
+  the engine's recorded events, never invented console output.
 - [x] Increment 4 (ADR-172): the eleven specialists as a first-class
   catalogue (`lib/factory/specialists.ts`) bound to real engine
   capabilities/stages, the engineering bench told apart by the node's

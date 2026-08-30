@@ -2,7 +2,18 @@
 
 Last updated: 2026-08-30
 
-## Newest (2026-08-30, latest): Changes & release panel (ADR-176)
+## Newest (2026-08-30, latest+1): Activity log (ADR-177)
+
+GET /api/graphs/runs/[graphRunId]/events — graph_events verbatim via
+the RLS tenant client (org filter restated; policies from
+20260814000100 already grant member SELECT on graph_events, node_runs,
+graph_nodes — no migration). Newest-500 bound, `truncated` admitted,
+chronological, node keys via two bounded lookups. Build panel
+build-events: lazy, monospace time/type/node/detail lines (ADR-174
+attempt suffixes now person-visible). Inline preview is the last open
+command-center panel.
+
+## Older (2026-08-30, latest): Changes & release panel (ADR-176)
 
 `lib/factory/release-evidence.ts` derives the release trail from the
 ANCHOR observation payloads (shapes verbatim from
