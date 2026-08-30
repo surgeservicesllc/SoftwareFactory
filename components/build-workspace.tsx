@@ -150,6 +150,7 @@ export function BuildWorkspace() {
   const [artifactsError, setArtifactsError] = useState<string | null>(null);
   const [events, setEvents] = useState<{ rows: RunEvent[]; truncated: boolean } | null>(null);
   const [eventsError, setEventsError] = useState<string | null>(null);
+  const [stopping, setStopping] = useState<string | null>(null);
   /** The watched graph's stored dependency edges, one fetch per graph. */
   const [planEdges, setPlanEdges] = useState<{ graphId: string; edges: { from: string; to: string }[] } | null>(null);
 
@@ -425,6 +426,38 @@ export function BuildWorkspace() {
     }
   }, []);
 
+  /**
+   * Stop = withdrawal: the database marks the graph so no future claim
+   * selects it. What comes back — the withdrawal note or the RUNNING
+   * refusal — is shown in the server's words, never paraphrased into a
+   * success the system did not deliver.
+   */
+  const withdraw = useCallback(async (graphId: string) => {
+    setStopping(graphId);
+    try {
+      const response = await fetch(`/api/graphs/${graphId}/withdraw`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const payload = (await response.json()) as {
+        note?: string;
+        error?: { message?: string };
+      };
+      if (!response.ok) {
+        say("factory", payload.error?.message ?? "The graph could not be withdrawn.");
+        return;
+      }
+      say("factory", payload.note ?? "The graph is withdrawn.");
+      if (launched?.graphId === graphId) setLaunched(null);
+      void refreshRuns();
+    } catch {
+      say("factory", "The stop request did not reach the server.");
+    } finally {
+      setStopping(null);
+    }
+  }, [launched, refreshRuns, say]);
+
   return (
     <div className="space-y-6">
       <Card>
@@ -597,6 +630,14 @@ export function BuildWorkspace() {
             The plan is recorded ({launched.nodeCount} steps). Waiting for its run to appear in
             the live feed{launched.requiresOwnerApproval ? " — it needs owner approval first" : ""}.
           </p>
+          <button
+            type="button"
+            onClick={() => void withdraw(launched.graphId)}
+            disabled={stopping !== null}
+            className="mt-2 rounded-md border border-[var(--border)] px-3 py-1.5 text-sm disabled:opacity-60"
+          >
+            {stopping === launched.graphId ? "Stopping…" : "Stop"}
+          </button>
         </Card>
       ) : null}
 
@@ -1010,6 +1051,18 @@ export function BuildWorkspace() {
                         >
                           Watch
                         </Link>
+                        {/* A RUNNING claim belongs to its worker — its own budget
+                            and failure paths stop it, so no button pretends to. */}
+                        {run.state !== "RUNNING" ? (
+                          <button
+                            type="button"
+                            onClick={() => void withdraw(run.graphId)}
+                            disabled={stopping !== null}
+                            className="rounded-md border border-[var(--border)] px-2 py-1 disabled:opacity-60"
+                          >
+                            {stopping === run.graphId ? "Stopping…" : "Stop"}
+                          </button>
+                        ) : null}
                       </span>
                     </li>
                   );

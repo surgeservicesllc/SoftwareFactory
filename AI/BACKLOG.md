@@ -28,9 +28,14 @@ still the working plan of record.)
   every OPEN human gate on the watched run renders the shared
   GateDecision control (same wording, same route, same evidence rules as
   the runs panel); a decision re-reads the live feed.
-- [ ] Increment 3b: run controls where endpoints exist (cancel/retry on
-  command runs; pause/resume needs engine support first — never a dead
-  button).
+- [x] Increment 3b, Stop half (ADR-180): withdrawal —
+  20260830000200 adds graphs.withdrawn_* + the one claim predicate;
+  withdraw_graph_as_member (authenticated definer, RUNNING refusal,
+  idempotent, audited); POST /api/graphs/[graphId]/withdraw; Build
+  shows Stop only where it is true (waiting card + non-RUNNING active
+  rows). Pause/Resume still need engine support — deliberately unbuilt
+  rather than dead. Hosted apply: dispatch scope=withdraw-graph after
+  merge.
 - [x] Increment 6 (ADR-176): Changes & release panel —
   `lib/factory/release-evidence.ts` derives the release trail from the
   ANCHOR observations (lineage/review/ci_check_runs/deployment/probe);

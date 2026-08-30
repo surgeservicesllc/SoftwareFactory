@@ -9,7 +9,7 @@ import { describe, expect, it } from "vitest";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const migrationsRoot = resolve(repositoryRoot, "supabase/migrations");
-const latestMigration = "20260830000100_node_attempt_persistence.sql";
+const latestMigration = "20260830000200_withdraw_graph_as_member.sql";
 
 const ownerId = "00000000-0000-4000-8000-000000000101";
 const adminId = "00000000-0000-4000-8000-000000000102";
