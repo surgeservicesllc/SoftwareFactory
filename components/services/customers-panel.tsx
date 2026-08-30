@@ -4,13 +4,16 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { Card, Notice, PageHeader, SectionTitle } from "@/components/ui";
-import type { AccountsPayload } from "@/components/services/types";
+import type { AccountView, AccountsPayload } from "@/components/services/types";
 
 /**
  * The book of business: every account this workspace holds, searchable and
  * filterable, with the form that records a new one. Creation is a real
  * insert under RLS; a refusal comes back in the server's words, and the
- * list re-reads rather than optimistically inventing a row.
+ * list re-reads rather than optimistically inventing a row. When the server
+ * surfaces likely duplicates (same normalized name, email or phone), they
+ * are shown for a person to judge — records are never merged automatically,
+ * and "Record anyway" is the deliberate second step.
  */
 
 const STATUSES = ["lead", "prospect", "customer", "inactive"] as const;
@@ -32,6 +35,7 @@ export function ServicesCustomersPanel() {
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [created, setCreated] = useState<string | null>(null);
+  const [duplicates, setDuplicates] = useState<AccountView[] | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -60,10 +64,11 @@ export function ServicesCustomersPanel() {
     return () => window.clearTimeout(kickoff);
   }, [refresh]);
 
-  const create = useCallback(async () => {
+  const create = useCallback(async (allowDuplicate = false) => {
     setCreating(true);
     setCreateError(null);
     setCreated(null);
+    setDuplicates(null);
     try {
       const response = await fetch("/api/services/accounts", {
         method: "POST",
@@ -74,12 +79,19 @@ export function ServicesCustomersPanel() {
           ...(email.trim() ? { email: email.trim() } : {}),
           ...(phone.trim() ? { phone: phone.trim() } : {}),
           ...(source.trim() ? { source: source.trim() } : {}),
+          ...(allowDuplicate ? { allowDuplicate: true } : {}),
         }),
       });
       const body = (await response.json()) as {
         account?: { id: string; name: string };
-        error?: { message?: string };
+        duplicates?: AccountView[];
+        error?: { code?: string; message?: string };
       };
+      if (response.status === 409 && Array.isArray(body.duplicates)) {
+        setDuplicates(body.duplicates);
+        setCreateError(body.error?.message ?? "An account like this may already exist.");
+        return;
+      }
       if (!response.ok || !body.account) {
         setCreateError(body.error?.message ?? "The account could not be recorded.");
         return;
@@ -194,6 +206,38 @@ export function ServicesCustomersPanel() {
           {createError !== null ? (
             <div className="mt-3">
               <Notice tone="warning">{createError}</Notice>
+            </div>
+          ) : null}
+          {duplicates !== null && duplicates.length > 0 ? (
+            <div className="mt-3 rounded-md border border-line p-3" data-testid="services-duplicates">
+              <p className="text-sm font-medium text-foreground">Possible duplicates</p>
+              <ul className="mt-2 space-y-1 text-sm text-muted">
+                {duplicates.map((match) => (
+                  <li key={match.id}>
+                    <Link
+                      href={`/Services/customers/${match.id}`}
+                      className="underline underline-offset-2"
+                    >
+                      {match.name}
+                    </Link>{" "}
+                    — {match.kind}, {match.status}
+                    {match.email ? `, ${match.email}` : ""}
+                    {match.phone ? `, ${match.phone}` : ""}
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-2 text-xs text-faint">
+                Nothing is merged automatically. Open a match to work with the existing record, or
+                record this as a genuinely different account.
+              </p>
+              <button
+                type="button"
+                onClick={() => void create(true)}
+                disabled={creating}
+                className="btn btn-secondary mt-2 px-3 py-1.5 text-xs"
+              >
+                Record anyway
+              </button>
             </div>
           ) : null}
           {created !== null ? <p className="mt-3 text-sm text-muted">{created}</p> : null}

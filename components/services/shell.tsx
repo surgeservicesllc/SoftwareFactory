@@ -10,6 +10,7 @@ import {
   SERVICES_ROOT,
   isCurrentServicesPath,
 } from "@/components/services/navigation";
+import { ServicesSearch } from "@/components/services/search";
 import { cn } from "@/lib/cn";
 
 /**
@@ -74,6 +75,7 @@ export function ServicesShell({ children }: { children: React.ReactNode }) {
                 <span className="sr-only">Close</span>
               </button>
             </div>
+            <ServicesSearch onNavigate={() => setDrawerOpen(false)} />
             <ServicesNavList
               items={items}
               label="Services sections"
@@ -94,6 +96,7 @@ export function ServicesShell({ children }: { children: React.ReactNode }) {
           <Bug className="size-4 text-[var(--accent)]" aria-hidden="true" />
           Services
         </Link>
+        <ServicesSearch />
         <ServicesNavList items={items} label="Services sections" />
         <p className="mt-6 px-2 text-xs leading-relaxed text-faint">
           The pest-services CRM. Every figure comes from records this workspace

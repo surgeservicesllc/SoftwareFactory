@@ -8,9 +8,19 @@ crm_contacts / crm_properties under forced member RLS, and the
 append-only crm_timeline_events audit spine (no update/delete grants;
 status changes self-record by trigger; manual route refuses system
 kinds). Overview + Customers & Leads + 360° account pages wired to
-five /api/services routes. Plan of record:
-AI/SERVICES_CRM_GAP_ANALYSIS.md — ten increments; PEST CRM: PRODUCTION
-READY is declared only after the seeded E2E journey (increment 10).
+five /api/services routes. Increment 2 (ADR-186) live: crm_opportunities
+pipeline (stage moves trigger-written onto the timeline, closed_at
+trigger+CHECK, no DELETE — conversion truth), whole-book report + board
+under /Services/pipeline, duplicate detection on account create via
+database-generated normals (surfaced 409, never auto-merged), and global
+search across all four record types in the shell. The Demo Data book
+(ADR-187) makes the product presentable on demand: an empty workspace
+can seed a 14-account fictional clientele through the real machinery —
+every record source-labeled "Demo Data", history written by the
+triggers, loader + DemoNotice + pipeline headline on the Overview.
+Plan of record: AI/SERVICES_CRM_GAP_ANALYSIS.md — ten increments;
+PEST CRM: PRODUCTION READY is declared only after the seeded E2E
+journey (increment 10).
 
 
 Last reviewed: 2026-08-29

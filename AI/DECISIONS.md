@@ -3626,3 +3626,73 @@ history exactly once, grant-level immutability, the secret guard — and
 the routes/panels are pinned separately. Hosted-apply scope
 services-crm (runbook 184). PEST CRM: PRODUCTION READY remains
 undeclared until the goal's full seeded E2E passes.
+
+## ADR-186 - CRM pipeline: opportunities, duplicate surfacing, global search
+
+- **Date**: 2026-08-30
+- **Status**: Accepted (task #63, owner /goal — increment 2 of
+  AI/SERVICES_CRM_GAP_ANALYSIS.md)
+- **Decision**: `crm_opportunities` (migration 20260830000700) carries the
+  sales motion on the ADR-185 posture: org-scoped forced RLS, composite
+  same-org FK to accounts, anon/service_role revoked, and — because the
+  table records conversion truth (win rate = won/(won+lost)) — **no
+  DELETE grant**: a dead deal is marked `lost` with an optional
+  `lost_reason`, never erased into a better-looking rate. Stage moves
+  write themselves onto the account timeline through a SECURITY DEFINER
+  AFTER UPDATE trigger using the same system kind (`status_change`) the
+  manual route refuses; the loss reason travels in `detail`. `closed_at`
+  is maintained by a BEFORE trigger and CHECKed to exist exactly when the
+  stage is terminal, so closed-deal reporting cannot disagree with the
+  stage column. Creation is restricted to open stages at the route — a
+  deal born won never went through the pipeline.
+- **Duplicate detection**: generated stored columns on `crm_accounts`
+  (`name_normal` lowercased alphanumeric, `email_normal` trimmed
+  lowercase, `phone_normal` digits only) are computed by the database;
+  `lib/services/crm.ts` mirrors the expressions for the probe side, and
+  the chain suite asserts stored values so the two cannot drift silently.
+  The create route probes per criterion with separate equality queries
+  (immune to or()-string injection), returns 409 with the matches, and
+  proceeds only on an explicit `allowDuplicate` — records are surfaced,
+  **never auto-merged**.
+- **Global search**: one ilike probe per searchable column across
+  accounts/contacts/properties/opportunities (composed or() filters break
+  on commas inside real addresses), merged and de-duplicated per group,
+  all under RLS; the shell carries the box on every Services page and
+  every hit lands on the owning account's 360° record.
+- **Grants under hosted defaults**: the new table's grants are stated
+  revoke-then-grant in the same migration (the 20260830000600 lesson),
+  and the chain suites run with hosted-style default privileges flipped
+  on before the CRM window, so a forgotten revoke fails locally.
+- **Verification**: services-crm-pipeline.behavior suite on the real
+  chain (trigger-written moves, closed_at truth, loss-reason CHECK,
+  normals parity, tenant isolation, undeletability, anon/service_role
+  shutout); routes and panels pinned in unit suites; RLS census 152;
+  hosted-apply scope crm-pipeline (runbook 186).
+
+## ADR-187 - The Demo Data book: a seedable, labeled, fictional clientele
+
+- **Date**: 2026-08-30
+- **Status**: Accepted (task #63, owner directive: CRM fully built out and
+  presentable, with fake customer seed data)
+- **Decision**: `lib/services/demo-data.ts` carries a deterministic
+  fictional pest-services clientele (14 accounts across kinds and
+  lifecycles, 18 contacts, 18 properties, 15 opportunities across every
+  stage, 40 hand-recorded events). A workspace seeds it through
+  `POST /api/services/demo-seed` → `seedDemoData`, which walks statuses
+  and stages one real move at a time so the database triggers write the
+  history — seeded records earn their timeline through the same machinery
+  as live ones, and no system row is ever forged. Honesty is structural:
+  every seeded account's `source` is exactly **Demo Data** (AGENTS.md's
+  required label, surfaced per-row in the Customers table and as the
+  reserved `DemoNotice` on the Overview), every email is on a reserved
+  `.example` domain, every phone in the fictional 555 range. The route
+  seeds only an EMPTY book (409 otherwise) — demo rows must never mix
+  into a real clientele, and accounts are undeletable by design so there
+  is no quiet way back out. No migration: seeding is per-organization
+  product behavior, not schema.
+- **Verification**: the dataset is replayed against the real migration
+  chain (services-crm-demo-book behavior suite), proving every CHECK
+  accepts it and the trigger history reads as the story; a hygiene suite
+  pins the fictional domains/phones, schema bounds, stage coverage and
+  the seeder's unambiguous lookup keys; route and panel suites pin the
+  empty-book guard, the deliberate button, and the labels.

@@ -47,9 +47,17 @@ is a mockup commitment.
    patch/contacts/properties/timeline; Overview + Customers & Leads +
    360° account pages, all live-wired. Migration 20260830000500,
    hosted-apply scope `services-crm`.
-2. **Pipeline & opportunities**: stages, values, expected close,
-   conversion reporting; duplicate detection on create (normalized
-   name/email/phone match surfaced, never auto-merged); global search.
+2. **Pipeline & opportunities (SHIPPED with ADR-186)**: crm_opportunities
+   with stages new→contacted→inspection→proposal→negotiation→won/lost,
+   values in cents, expected close, trigger-written stage history on the
+   account timeline, closed_at kept truthful by trigger+CHECK, no DELETE
+   (conversion truth); whole-book report (per-stage counts/values, open,
+   won, win rate) from the same authority as the board; duplicate
+   detection on create via database-generated normals (name/email/phone
+   surfaced as a 409 with matches, never auto-merged, explicit
+   allowDuplicate to proceed); global search across accounts, contacts,
+   properties and opportunities in the Services shell. Migration
+   20260830000700, hosted-apply scope `crm-pipeline`.
 3. **Field service core**: technicians, work orders, scheduling calendar,
    recurring services, dispatch board; service completion writes
    `service` timeline events through a definer (the timeline's system
@@ -93,4 +101,7 @@ is a mockup commitment.
   page genuinely works; gated integrations say **Not Connected** and name
   the exact variable.
 - No fake production data, dead buttons, mock integrations, TODOs or
-  hardcoded success.
+  hardcoded success. The one sanctioned fake dataset is the Demo Data
+  book (ADR-187): seeded only into an empty workspace, through the real
+  machinery, with every record carrying the exact **Demo Data** source
+  label and fictional-only contact ranges.

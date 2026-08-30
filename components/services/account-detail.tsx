@@ -15,6 +15,20 @@ import type { AccountDetailPayload } from "@/components/services/types";
  */
 
 const STATUSES = ["lead", "prospect", "customer", "inactive"] as const;
+const OPPORTUNITY_STAGES = [
+  "new",
+  "contacted",
+  "inspection",
+  "proposal",
+  "negotiation",
+  "won",
+  "lost",
+] as const;
+
+function dollars(cents: number | null): string {
+  if (cents === null) return "—";
+  return `$${(cents / 100).toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
+}
 
 export function ServicesAccountDetail({ accountId }: { accountId: string }) {
   const [detail, setDetail] = useState<AccountDetailPayload | null>(null);
@@ -29,6 +43,8 @@ export function ServicesAccountDetail({ accountId }: { accountId: string }) {
   const [contactPhone, setContactPhone] = useState("");
   const [propertyLabel, setPropertyLabel] = useState("");
   const [propertyAddress, setPropertyAddress] = useState("");
+  const [opportunityName, setOpportunityName] = useState("");
+  const [opportunityValue, setOpportunityValue] = useState("");
 
   const refresh = useCallback(async () => {
     try {
@@ -102,7 +118,7 @@ export function ServicesAccountDetail({ accountId }: { accountId: string }) {
     );
   }
 
-  const { account, contacts, properties, timeline, timelineTruncated } = detail;
+  const { account, contacts, properties, opportunities, timeline, timelineTruncated } = detail;
 
   return (
     <div>
@@ -289,6 +305,104 @@ export function ServicesAccountDetail({ accountId }: { accountId: string }) {
               maxLength={500}
               placeholder="Address"
               aria-label="Property address"
+              className="input"
+            />
+            <button type="submit" disabled={busy} className="btn btn-secondary px-3 py-2 text-sm">
+              Add
+            </button>
+          </form>
+        </Card>
+
+        <Card>
+          <SectionTitle
+            title={`Opportunities (${opportunities.length})`}
+            description="Deals on this account. Stage moves land on the timeline below, written by the database."
+          />
+          {opportunities.length === 0 ? (
+            <p className="mt-3 text-sm text-muted">
+              No opportunities yet. Record the first deal below, or work the whole board under{" "}
+              <Link href="/Services/pipeline" className="underline underline-offset-2">
+                Pipeline
+              </Link>
+              .
+            </p>
+          ) : (
+            <ul className="mt-3 space-y-2 text-sm" data-testid="services-account-opportunities">
+              {opportunities.map((opportunity) => (
+                <li key={opportunity.id} className="flex flex-wrap items-center gap-2">
+                  <span className="min-w-0 font-medium">{opportunity.name}</span>
+                  <span className="text-muted">
+                    {dollars(opportunity.valueCents)}
+                    {opportunity.expectedCloseDate ? ` · closes ${opportunity.expectedCloseDate}` : ""}
+                    {opportunity.stage === "lost" && opportunity.lostReason
+                      ? ` · lost: ${opportunity.lostReason}`
+                      : ""}
+                  </span>
+                  <label className="ml-auto shrink-0 text-xs">
+                    <span className="sr-only">Stage for {opportunity.name}</span>
+                    <select
+                      value={opportunity.stage}
+                      disabled={busy}
+                      onChange={(event) =>
+                        void act({
+                          url: `/api/services/opportunities/${opportunity.id}`,
+                          method: "PATCH",
+                          body: { stage: event.target.value },
+                        })
+                      }
+                      className="input py-1 text-xs"
+                    >
+                      {OPPORTUNITY_STAGES.map((entry) => (
+                        <option key={entry} value={entry}>
+                          {entry}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </li>
+              ))}
+            </ul>
+          )}
+          <form
+            className="mt-4 grid gap-2 sm:grid-cols-[2fr_1fr_auto]"
+            onSubmit={(event) => {
+              event.preventDefault();
+              const parsedValue = opportunityValue.trim() === "" ? null : Number(opportunityValue);
+              void act({
+                url: "/api/services/opportunities",
+                method: "POST",
+                body: {
+                  accountId,
+                  name: opportunityName.trim(),
+                  ...(parsedValue !== null && Number.isFinite(parsedValue) && parsedValue >= 0
+                    ? { valueCents: Math.round(parsedValue * 100) }
+                    : {}),
+                },
+                after: () => {
+                  setOpportunityName("");
+                  setOpportunityValue("");
+                },
+              });
+            }}
+          >
+            <input
+              type="text"
+              value={opportunityName}
+              onChange={(event) => setOpportunityName(event.target.value)}
+              required
+              maxLength={200}
+              placeholder="Deal name (Quarterly IPM service…)"
+              aria-label="Opportunity name"
+              className="input"
+            />
+            <input
+              type="number"
+              min={0}
+              step="0.01"
+              value={opportunityValue}
+              onChange={(event) => setOpportunityValue(event.target.value)}
+              placeholder="Value $"
+              aria-label="Opportunity value in dollars"
               className="input"
             />
             <button type="submit" disabled={busy} className="btn btn-secondary px-3 py-2 text-sm">
