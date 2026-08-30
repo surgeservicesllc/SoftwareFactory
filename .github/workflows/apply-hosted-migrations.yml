@@ -63,6 +63,7 @@ on:
           - field-service
           - pest-ipm
           - chemicals-compliance
+          - billing-contracts
           - probe
 permissions:
   actions: read
@@ -1509,7 +1510,7 @@ jobs:
             DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
             echo "::add-mask::$DB_URL"
           fi
-          VERSION=20260830000900_pest_ipm_core
+          VERSION=20260830001100_pest_ipm_core
           FILE="supabase/migrations/${VERSION}.sql"
           sha256sum "$FILE"
           psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
@@ -1572,7 +1573,7 @@ jobs:
             DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
             echo "::add-mask::$DB_URL"
           fi
-          VERSION=20260830001000_chemicals_compliance
+          VERSION=20260830001200_chemicals_compliance
           FILE="supabase/migrations/${VERSION}.sql"
           sha256sum "$FILE"
           psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
@@ -1620,6 +1621,72 @@ jobs:
             end
             \$\$;"
           echo "Chemicals and compliance applied; RLS, append-only log, triggers verified."
+
+      - name: Apply billing and contracts (scope=billing-contracts)
+        if: ${{ inputs.scope == 'billing-contracts' }}
+        run: |
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+          VERSION=20260830001300_billing_contracts
+          FILE="supabase/migrations/${VERSION}.sql"
+          sha256sum "$FILE"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied "${VERSION%%_*}"
+          else
+            npx supabase migration repair --status applied "${VERSION%%_*}" --db-url "$DB_URL"
+          fi
+          psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
+          # Postflight: seven tables under forced RLS; payments and refunds
+          # hold select+insert ONLY (money that moved is a record, not a
+          # draft — and hosted default privileges granted ALL at creation,
+          # so the absence of update/delete is what must be proven);
+          # nothing deletable anywhere, because an invoice raised in error
+          # is voided rather than removed; anon and service_role hold
+          # nothing; the settlement and refund-guard triggers exist.
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
+            do \$\$
+            declare
+              v_table text;
+            begin
+              if (select count(*) from pg_class c
+                   join pg_namespace n on n.oid = c.relnamespace
+                  where n.nspname = 'public' and c.relrowsecurity and c.relforcerowsecurity
+                    and c.relname in (
+                      'crm_estimates','crm_estimate_lines','crm_contracts','crm_invoices',
+                      'crm_invoice_lines','crm_payments','crm_refunds')) <> 7 then
+                raise exception 'the billing tables are missing or not under forced RLS';
+              end if;
+              foreach v_table in array array['crm_payments','crm_refunds'] loop
+                if has_table_privilege('authenticated', 'public.' || v_table, 'update') then
+                  raise exception 'money that moved is rewritable on %', v_table;
+                end if;
+              end loop;
+              foreach v_table in array array[
+                'crm_estimates','crm_estimate_lines','crm_contracts','crm_invoices',
+                'crm_invoice_lines','crm_payments','crm_refunds'
+              ] loop
+                if has_table_privilege('authenticated', 'public.' || v_table, 'delete') then
+                  raise exception 'billing records are deletable on %', v_table;
+                end if;
+                if has_table_privilege('anon', 'public.' || v_table, 'select')
+                  or has_table_privilege('service_role', 'public.' || v_table, 'select') then
+                  raise exception 'anon or service_role can reach %', v_table;
+                end if;
+              end loop;
+              if (select count(*) from pg_trigger t join pg_class c on c.oid = t.tgrelid
+                  where c.relname in ('crm_payments','crm_refunds')
+                    and t.tgname in (
+                      'crm_payments_record','crm_refunds_guard_total','crm_refunds_resettle')) <> 3 then
+                raise exception 'a settlement trigger is missing';
+              end if;
+            end
+            \$\$;"
+          echo "Billing and contracts applied; RLS, append-only money, settlement triggers verified."
 
       - name: Normalize exact legacy bot ACLs (scope=bot-legacy-acl-normalization)
         if: ${{ inputs.scope == 'bot-legacy-acl-normalization' }}

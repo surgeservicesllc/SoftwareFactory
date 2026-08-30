@@ -40,6 +40,13 @@ export type SeedCounts = {
   lots: number;
   applications: number;
   complianceRules: number;
+  estimates: number;
+  estimateLines: number;
+  contracts: number;
+  invoices: number;
+  invoiceLines: number;
+  payments: number;
+  refunds: number;
   timelineEvents: number;
 };
 
@@ -566,6 +573,195 @@ export async function runSeed(
   const corrections = await insertAll(client, "crm_applications", correctionRows, "id");
   if ("error" in corrections) return corrections;
 
+  /* ---------------------------------------------------------- the money */
+
+  const dayOf = (days: number) => dateInDays(days);
+
+  const estimateRows = dataset.accounts.flatMap((account) =>
+    (operations.get(account.name)?.billing.estimates ?? []).map((estimate) => {
+      const subtotal = estimate.lines.reduce(
+        (sum, line) => sum + line.quantity * line.unitPriceCents,
+        0,
+      );
+      return {
+        organization_id: org,
+        account_id: accountIdByName.get(account.name),
+        property_id: propertyFor(account.name, estimate.propertyIndex),
+        opportunity_id:
+          estimate.opportunityIndex === undefined
+            ? null
+            : opportunityIdByName.get(
+                account.opportunities[estimate.opportunityIndex]?.name ?? "",
+              ) ?? null,
+        number: estimate.number,
+        status: estimate.status,
+        subtotal_cents: subtotal,
+        tax_cents: estimate.taxCents,
+        total_cents: subtotal + estimate.taxCents,
+        valid_until: dayOf(estimate.validInDays),
+        terms: estimate.terms,
+        notes: estimate.notes,
+        sent_at: daysAgoIso(estimate.sentDaysAgo),
+        // The schema ties a decision timestamp to a decided status.
+        decided_at:
+          estimate.decidedDaysAgo === undefined ? null : daysAgoIso(estimate.decidedDaysAgo),
+        created_by: userId,
+      };
+    }),
+  );
+  const estimates = await insertAll(client, "crm_estimates", estimateRows, "id, number");
+  if ("error" in estimates) return estimates;
+  const estimateIdByNumber = new Map(
+    estimates.data.map((row) => [row.number as string, row.id as string]),
+  );
+
+  const estimateLineRows = dataset.accounts.flatMap((account) =>
+    (operations.get(account.name)?.billing.estimates ?? []).flatMap((estimate) =>
+      estimate.lines.map((line, seat) => ({
+        organization_id: org,
+        estimate_id: estimateIdByNumber.get(estimate.number),
+        position: seat + 1,
+        description: line.description,
+        quantity: line.quantity,
+        unit_price_cents: line.unitPriceCents,
+        amount_cents: line.quantity * line.unitPriceCents,
+      })),
+    ),
+  );
+  const estimateLines = await insertAll(client, "crm_estimate_lines", estimateLineRows, "id");
+  if ("error" in estimateLines) return estimateLines;
+
+  const contractRows = dataset.accounts.flatMap((account) => {
+    const billing = operations.get(account.name)?.billing;
+    const planOffset = planOffsets.get(account.name) ?? 0;
+    return (billing?.contracts ?? []).map((contract) => ({
+      organization_id: org,
+      account_id: accountIdByName.get(account.name),
+      estimate_id:
+        contract.estimateIndex === undefined
+          ? null
+          : estimateIdByNumber.get(billing?.estimates[contract.estimateIndex]?.number ?? "") ?? null,
+      plan_id: contract.planIndex === undefined ? null : planIds[planOffset + contract.planIndex] ?? null,
+      number: contract.number,
+      status: contract.status,
+      value_cents: contract.valueCents,
+      starts_on: dayOf(contract.startsInDays),
+      ends_on: dayOf(contract.endsInDays),
+      auto_renew: contract.autoRenew,
+      terms: contract.terms,
+      notes: contract.notes,
+      signed_at: contract.signedDaysAgo === undefined ? null : daysAgoIso(contract.signedDaysAgo),
+      signed_by_name: contract.signedByName ?? null,
+      ended_at: contract.endedDaysAgo === undefined ? null : daysAgoIso(contract.endedDaysAgo),
+      created_by: userId,
+    }));
+  });
+  const contracts = await insertAll(client, "crm_contracts", contractRows, "id, number");
+  if ("error" in contracts) return contracts;
+  const contractIdByNumber = new Map(
+    contracts.data.map((row) => [row.number as string, row.id as string]),
+  );
+
+  const invoiceRows = dataset.accounts.flatMap((account) => {
+    const billing = operations.get(account.name)?.billing;
+    const visitOffset = visitOffsets.get(account.name) ?? 0;
+    return (billing?.invoices ?? []).map((invoice) => {
+      const subtotal = invoice.lines.reduce(
+        (sum, line) => sum + line.quantity * line.unitPriceCents,
+        0,
+      );
+      return {
+        organization_id: org,
+        account_id: accountIdByName.get(account.name),
+        contract_id:
+          invoice.contractIndex === undefined
+            ? null
+            : contractIdByNumber.get(billing?.contracts[invoice.contractIndex]?.number ?? "") ?? null,
+        work_order_id:
+          invoice.visitIndex === undefined ? null : visitIds[visitOffset + invoice.visitIndex] ?? null,
+        number: invoice.number,
+        status: invoice.status,
+        subtotal_cents: subtotal,
+        tax_cents: invoice.taxCents,
+        total_cents: subtotal + invoice.taxCents,
+        issued_on: daysAgoIso(invoice.issuedDaysAgo).slice(0, 10),
+        // Net terms run from the issue date; the schema refuses a due date
+        // that precedes it, and rightly.
+        due_on: dayOf(invoice.netDays - invoice.issuedDaysAgo),
+        memo: invoice.memo,
+        voided_at: invoice.voidReason === undefined ? null : daysAgoIso(invoice.issuedDaysAgo),
+        void_reason: invoice.voidReason ?? null,
+        created_by: userId,
+      };
+    });
+  });
+  const invoices = await insertAll(client, "crm_invoices", invoiceRows, "id, number");
+  if ("error" in invoices) return invoices;
+  const invoiceIdByNumber = new Map(
+    invoices.data.map((row) => [row.number as string, row.id as string]),
+  );
+
+  const invoiceLineRows = dataset.accounts.flatMap((account) =>
+    (operations.get(account.name)?.billing.invoices ?? []).flatMap((invoice) =>
+      invoice.lines.map((line, seat) => ({
+        organization_id: org,
+        invoice_id: invoiceIdByNumber.get(invoice.number),
+        position: seat + 1,
+        description: line.description,
+        quantity: line.quantity,
+        unit_price_cents: line.unitPriceCents,
+        amount_cents: line.quantity * line.unitPriceCents,
+      })),
+    ),
+  );
+  const invoiceLines = await insertAll(client, "crm_invoice_lines", invoiceLineRows, "id");
+  if ("error" in invoiceLines) return invoiceLines;
+
+  // Payments settle their invoices and write their own history by trigger.
+  const paymentRows = dataset.accounts.flatMap((account) =>
+    (operations.get(account.name)?.billing.invoices ?? []).flatMap((invoice) =>
+      invoice.payments.map((payment) => ({
+        organization_id: org,
+        account_id: accountIdByName.get(account.name),
+        invoice_id: invoiceIdByNumber.get(invoice.number),
+        amount_cents: payment.amountCents,
+        method: payment.method,
+        reference: payment.reference,
+        received_at: daysAgoIso(payment.daysAgo),
+        note: payment.note,
+        created_by: userId,
+      })),
+    ),
+  );
+  const payments = await insertAll(client, "crm_payments", paymentRows, "id");
+  if ("error" in payments) return payments;
+  const paymentIds = payments.data.map((row) => row.id as string);
+
+  // Refunds reference the payment they credit, by its position in the batch.
+  const refundRows: SeedRow[] = [];
+  {
+    let cursor = 0;
+    for (const account of dataset.accounts) {
+      for (const invoice of operations.get(account.name)?.billing.invoices ?? []) {
+        for (const payment of invoice.payments) {
+          if (payment.refund) {
+            refundRows.push({
+              organization_id: org,
+              payment_id: paymentIds[cursor],
+              amount_cents: payment.refund.amountCents,
+              reason: payment.refund.reason,
+              refunded_at: daysAgoIso(payment.refund.daysAgo),
+              created_by: userId,
+            });
+          }
+          cursor += 1;
+        }
+      }
+    }
+  }
+  const refunds = await insertAll(client, "crm_refunds", refundRows, "id");
+  if ("error" in refunds) return refunds;
+
   /* --------------------------------------------------- hand-recorded history */
 
   const eventRows = dataset.accounts.flatMap((account) =>
@@ -606,6 +802,13 @@ export async function runSeed(
       lots: lots.data.length,
       applications: applications.data.length + corrections.data.length,
       complianceRules: rules.data.length,
+      estimates: estimates.data.length,
+      estimateLines: estimateLines.data.length,
+      contracts: contracts.data.length,
+      invoices: invoices.data.length,
+      invoiceLines: invoiceLines.data.length,
+      payments: payments.data.length,
+      refunds: refunds.data.length,
       timelineEvents: timelineTotal.count ?? 0,
     },
   };

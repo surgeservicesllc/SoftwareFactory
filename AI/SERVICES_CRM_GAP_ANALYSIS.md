@@ -77,7 +77,7 @@ is a mockup commitment.
    makes "resolved" mean something. The /Services/ipm command center:
    scan box, per-site station tables, over-threshold flags, and the
    sighting loop. Nothing deletable anywhere — a pulled station is a
-   remove scan. Migration 20260830000900, hosted-apply scope `pest-ipm`.
+   remove scan. Migration 20260830001100, hosted-apply scope `pest-ipm`.
    Still ahead in this pillar: device/site MAPS (coordinates and floor
    plans), QR label generation, and long-run trend charts.
 5. **Chemicals & compliance (SHIPPED with ADR-191)**: crm_products (EPA
@@ -89,11 +89,24 @@ is a mockup commitment.
    as configurable per-jurisdiction rows enforced at the application
    boundary. Audit-ready report by customer/site/date/product/technician,
    as JSON or injection-guarded CSV. /Services/compliance. Migration
-   20260830001000, hosted-apply scope `chemicals-compliance`. Still ahead
+   20260830001200, hosted-apply scope `chemicals-compliance`. Still ahead
    in this pillar: PDF rendering (CSV ships now) and retention-window
    reporting driven by each rule's configured years.
-6. **Invoicing & payments**: estimates/proposals → invoice → payment on
-   the existing Stripe machinery; `payment` timeline events.
+6. **Billing: estimates, contracts, invoices, payments (SHIPPED with
+   ADR-193)**: crm_estimates and lines (totals derived from the lines at
+   the boundary, decided-iff-closed CHECK), crm_contracts (term, signature
+   completeness, ended-iff-closed), crm_invoices and lines (paid_cents and
+   the `paid` status maintained by trigger — never assertable by a
+   caller), and the APPEND-ONLY crm_payments and crm_refunds, with a
+   row-locking trigger that refuses a credit larger than the payment it
+   refunds. Every payment writes a `payment` timeline event, so all three
+   system kinds now have real database writers. Nothing deletable: a void
+   invoice keeps its reason on the record. /Services/billing reads the
+   four books and the ledger behind them. Migration 20260830001300,
+   hosted-apply scope `billing-contracts`. Still ahead in this pillar:
+   taking card payments through the existing Stripe machinery (the ledger
+   records money that moved; it does not yet move it), dunning schedules,
+   and PDF invoice rendering.
 7. **Sales**: territories, canvassing routes, dispositions, leaderboards,
    commissions, attribution.
 8. **Marketing hub**: segments, lists, campaigns, email/SMS sends over

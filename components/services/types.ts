@@ -309,3 +309,116 @@ export type AccountDetailPayload = {
   timeline: TimelineView[];
   timelineTruncated: boolean;
 };
+
+export type LineView = {
+  id: string;
+  position: number;
+  description: string;
+  quantity: number;
+  unitPriceCents: number;
+  amountCents: number;
+  createdAt: string;
+};
+
+export type EstimateView = {
+  id: string;
+  accountId: string;
+  propertyId: string | null;
+  opportunityId: string | null;
+  number: string;
+  status: string;
+  subtotalCents: number;
+  taxCents: number;
+  totalCents: number;
+  validUntil: string | null;
+  terms: string | null;
+  notes: string | null;
+  sentAt: string | null;
+  decidedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  lines: LineView[];
+};
+
+export type ContractView = {
+  id: string;
+  accountId: string;
+  estimateId: string | null;
+  planId: string | null;
+  number: string;
+  status: string;
+  valueCents: number;
+  startsOn: string;
+  endsOn: string | null;
+  autoRenew: boolean;
+  terms: string | null;
+  notes: string | null;
+  signedAt: string | null;
+  signedByName: string | null;
+  endedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type InvoiceView = {
+  id: string;
+  accountId: string;
+  contractId: string | null;
+  workOrderId: string | null;
+  number: string;
+  status: string;
+  subtotalCents: number;
+  taxCents: number;
+  totalCents: number;
+  paidCents: number;
+  balanceCents: number;
+  issuedOn: string | null;
+  dueOn: string | null;
+  memo: string | null;
+  voidedAt: string | null;
+  voidReason: string | null;
+  createdAt: string;
+  updatedAt: string;
+  overdue: boolean;
+  lines: LineView[];
+};
+
+export type PaymentView = {
+  id: string;
+  accountId: string;
+  invoiceId: string;
+  amountCents: number;
+  method: string;
+  reference: string | null;
+  receivedAt: string;
+  recordedAt: string;
+  note: string | null;
+};
+
+export type RefundView = {
+  id: string;
+  paymentId: string;
+  amountCents: number;
+  reason: string;
+  refundedAt: string;
+  recordedAt: string;
+};
+
+export type EstimatesPayload = { estimates: EstimateView[]; openValueCents: number };
+
+export type ContractsPayload = {
+  contracts: ContractView[];
+  activeValueCents: number;
+  renewingCount: number;
+};
+
+export type InvoicesPayload = {
+  invoices: InvoiceView[];
+  outstandingCents: number;
+  overdueCents: number;
+  collectedCents: number;
+};
+
+export type PaymentsPayload = { payments: PaymentView[]; receivedCents: number };
+
+export type RefundsPayload = { refunds: RefundView[]; refundedCents: number };

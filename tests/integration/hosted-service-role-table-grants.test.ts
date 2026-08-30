@@ -12,7 +12,7 @@ const migrationsDirectory = resolve(repositoryRoot, "supabase/migrations");
 const grantsMigration =
   "20260812002600_narrow_hosted_service_role_table_grants.sql";
 const latestMigration =
-  "20260830001000_chemicals_compliance.sql";
+  "20260830001300_billing_contracts.sql";
 
 const publicTables = [
   // Sorted alphabetically to match the catalogue query. Keep it sorted when
@@ -71,19 +71,27 @@ const publicTables = [
   "connection_capability_types",
   "connection_routing_decisions",
   "connections",
-  // The Services CRM (ADR-185/186/189/190/191): fifteen org-scoped tables
-  // with service_role revoked outright — nothing server-side reads the CRM.
+  // The Services CRM (ADR-185/186/189/190/191/193): twenty-two org-scoped
+  // tables with service_role revoked outright — nothing server-side reads
+  // the CRM.
   "crm_accounts",
   "crm_applications",
   "crm_compliance_rules",
   "crm_contacts",
+  "crm_contracts",
   "crm_device_events",
   "crm_devices",
+  "crm_estimate_lines",
+  "crm_estimates",
+  "crm_invoice_lines",
+  "crm_invoices",
   "crm_opportunities",
+  "crm_payments",
   "crm_pest_sightings",
   "crm_product_lots",
   "crm_products",
   "crm_properties",
+  "crm_refunds",
   "crm_service_plans",
   "crm_technicians",
   "crm_timeline_events",

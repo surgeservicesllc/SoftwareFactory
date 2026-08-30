@@ -2,6 +2,51 @@
 
 Last updated: 2026-08-30
 
+## Newest (2026-08-30, latest+15): billing closes the chain (ADR-193, task #63)
+
+Increment 6. `20260830001300_billing_contracts.sql` adds crm_estimates
+(+lines), crm_contracts, crm_invoices (+lines), crm_payments and
+crm_refunds. Five invariants live in the SCHEMA, not in a route:
+
+1. crm_payments and crm_refunds hold `select, insert` and nothing else —
+   append-only AT THE GRANT LEVEL, so no policy or later migration can
+   quietly make money editable.
+2. `crm_guard_refund_total` locks the payment `for update`, sums the
+   credits already against it, refuses the excess. Two concurrent refunds
+   cannot together overdraw one payment.
+3. `crm_settle_invoice` derives paid_cents from payments minus refunds
+   and sets the status from that total; a refund that drops the total
+   reopens the invoice. `void`/`uncollectible` keep their status. The
+   API's settable set deliberately OMITS `paid` — a caller cannot assert
+   it, and services-billing-routes pins that (422, table never touched).
+4. Every payment writes a `payment` timeline event by trigger. All three
+   system kinds (status_change, service, payment) now have real writers.
+5. Integer cents under non-negative CHECKs; no floating-point money.
+
+Nothing is deletable: a withdrawn estimate is `declined`, a closed
+contract `ended`, an invoice raised in error `void` — with its reason on
+the record.
+
+Surfaces: /Services/billing (four books + the ledger) and
+/api/services/{estimates,estimates/[id],contracts,invoices,invoices/[id],
+payments,refunds}. Routes derive every total from the lines they were
+sent and surface the ledger's refusals as 409s, never 500s.
+
+WHAT IS NOT TRUE YET, say it plainly: this records money that moved; it
+does not move money. No card is charged from /Services/billing — the
+Stripe machinery is not wired to it. That is the next item in the
+pillar, tracked in BACKLOG.
+
+TRAPS RE-CONFIRMED THIS INCREMENT:
+- PGlite composite-FK trap, hit a 3rd and 4th time: a composite FK needs
+  its target's unique index to EXIST FIRST. crm_opportunities and
+  crm_service_plans had none, so 20260830001300 PREPENDS both
+  `(organization_id, id)` unique indexes before its own tables.
+- The hosted default-privileges trap: every new table is granted ALL to
+  authenticated/service_role on creation, so append-only is expressed by
+  REVOKE-then-GRANT, and the `billing-contracts` postflight proves the
+  ABSENCE of update/delete rather than assuming it.
+
 ## Newest (2026-08-30, latest+14): the full-scale seed corpus (ADR-192, task #63)
 
 New owner /goal: populate the CRM so every feature can be tested end to
@@ -21,15 +66,16 @@ production seeder and validator unmodified against the real chain in
 PGlite, through tests/support/pglite-supabase-client.ts — a shim
 implementing the slice of the supabase-js builder those modules use, and
 translating Postgres errors into Supabase's shapes (23505/23503/23514/
-42501) so the code takes the same branches it would live. Result:
-15/15 PASS, 15,943 rows, zero orphans. Set SEED_REPORT_PATH to capture
+42501) so the code takes the same branches it would live. Result (with
+increment 6's billing tables covered): 22/22 PASS, 23,375 rows, zero
+orphans. Set SEED_REPORT_PATH to capture
 the report; a passing vitest run swallows console output.
 
 BUG THIS FOUND (would have hit production): crm_products.sds_url and
 label_url used `~ '^https://[^[:space:]]{4,500}$'`. Postgres refuses a
 regex repetition count above 255, so the CHECK compiled only when a row
 carried a URL — every prior test left it null. Fixed in
-20260830001000 (NOT yet applied to hosted, so edited in place; shape and
+20260830001200 (NOT yet applied to hosted, so edited in place; shape and
 length are separate checks now) and pinned by a chain test that inserts
 a linked product.
 
@@ -42,7 +88,7 @@ trigger-written status changes, which would fail a fully-populated table.
 
 ## Older (2026-08-30, latest+13): chemicals & compliance (ADR-191, task #63)
 
-Increment 5, the regulated pillar. 20260830001000 adds crm_products /
+Increment 5, the regulated pillar. 20260830001200 adds crm_products /
 crm_product_lots / crm_applications / crm_compliance_rules. Five schema
 invariants: applications are APPEND-ONLY at the grant level (a
 correction is a superseding record naming the original, never an edit);
@@ -70,13 +116,13 @@ applications drawing them down, and two contrasting jurisdictions.
 Suites: services-chemicals-compliance.behavior 6, compliance routes 9,
 compliance panel 3, demo hygiene +1, demo-book replay extended (the two
 'service' writers counted apart). Census: RLS 162, hosted-grants fifteen
-crm tables, sentinels swept to 20260830001000 (28), runbook 189,
+crm tables, sentinels swept to 20260830001200 (28), runbook 189,
 workflow scope chemicals-compliance. Dispatch after merge. Next:
 increment 6, invoicing on the existing Stripe machinery.
 
 ## Older (2026-08-30, latest+12): pest/IPM core (ADR-190, task #63)
 
-Increment 4, the goal's differentiator pillar. 20260830000900 adds
+Increment 4, the goal's differentiator pillar. 20260830001100 adds
 crm_devices / crm_device_events / crm_pest_sightings on the established
 posture (org-scoped forced RLS, revoke-then-grant against hosted
 defaults, anon+service_role revoked, three-column composite keys to the
@@ -108,7 +154,7 @@ closed sighting), replayed against the chain.
 Suites: services-pest-ipm.behavior 4 (chain), pest-ipm routes 7, IPM
 panel 4, demo-data hygiene +1, demo-book replay extended. Census: RLS
 158, hosted-grants eleven crm tables, sentinels swept to
-20260830000900 (26), runbook 188, workflow scope pest-ipm (postflight:
+20260830001100 (26), runbook 188, workflow scope pest-ipm (postflight:
 forced RLS x3, ledger immutability, no-DELETE, anon/service_role
 shutout, both device triggers, barcode uniqueness). Dispatch
 scope=pest-ipm right after merge. Next: increment 5, chemicals and

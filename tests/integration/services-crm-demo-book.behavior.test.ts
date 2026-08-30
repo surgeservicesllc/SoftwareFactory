@@ -18,7 +18,7 @@ import {
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const migrationsDirectory = resolve(repositoryRoot, "supabase/migrations");
-const latestMigration = "20260830001000_chemicals_compliance.sql";
+const latestMigration = "20260830001300_billing_contracts.sql";
 
 /**
  * The Demo Data book, replayed against the real migration chain move for

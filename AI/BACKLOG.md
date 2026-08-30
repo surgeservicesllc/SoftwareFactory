@@ -41,19 +41,31 @@ the full seeded E2E journey passes — increment 10 of the plan.
   trigger), crm_pest_sightings with the corrective-action CHECK; the
   /Services/ipm command center (scan box, per-site station tables,
   threshold flags, sighting loop); Demo Data now runs a real IPM
-  program. 20260830000900; hosted apply: scope=pest-ipm after merge.
+  program. 20260830001100; hosted apply: scope=pest-ipm after merge.
 - [x] Increment 5 (ADR-191): chemicals & compliance — crm_products with
   EPA identity and https-checked SDS/label references, crm_product_lots
   with trigger drawdown, the APPEND-ONLY crm_applications log (license
   copied at recording, supersede-not-edit corrections, its own timeline
   event), and crm_compliance_rules as configurable per-jurisdiction rows
   enforced at the application boundary; the audit report as JSON or
-  injection-guarded CSV; /Services/compliance. 20260830001000; hosted
+  injection-guarded CSV; /Services/compliance. 20260830001200; hosted
   apply: scope=chemicals-compliance after merge.
-- [ ] Increment 6: invoicing & payments — estimates/proposals → invoice →
-  payment on the existing Stripe machinery, with `payment` timeline
-  events. Then 7-10 per the gap analysis (sales/canvassing, marketing
-  hub, AI copilot, seeded E2E acceptance).
+- [x] Increment 6 (ADR-193): billing — crm_estimates and lines (totals
+  derived from the lines at the boundary), crm_contracts (term,
+  signature completeness, ended-iff-closed), crm_invoices and lines
+  whose paid total and `paid` status are decided by the settlement
+  trigger rather than any caller, and the APPEND-ONLY crm_payments /
+  crm_refunds with a row-locking trigger that refuses a credit larger
+  than the payment it refunds; every payment writes a `payment` timeline
+  event; /Services/billing. 20260830001300; hosted apply:
+  scope=billing-contracts after merge.
+- [ ] Increment 6 follow-on: take card payments through the existing
+  Stripe machinery. The ledger records money that moved; it does not yet
+  move it, and /Services/billing says so rather than implying otherwise.
+  Also open in this pillar: dunning schedules and PDF invoice rendering.
+- [ ] Increments 7-10 per the gap analysis: sales/canvassing, marketing
+  hub, AI copilot, and the seeded E2E acceptance journey — after which,
+  and only after which, PEST CRM: PRODUCTION READY may be declared.
 - [ ] Queue-diagnosis honesty follow-up: `diagnose_graph_queue_as_worker_v2`
   predates withdrawal and pause, so a withdrawn or paused graph shows in
   the drain log as "looks claimable — an empty claim contradicts this

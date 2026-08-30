@@ -1,5 +1,6 @@
 import {
   CalendarDays,
+  Coins,
   HardHat,
   KanbanSquare,
   LayoutDashboard,
@@ -74,6 +75,12 @@ export const SERVICES_NAVIGATION: readonly ServicesNavItem[] = [
     label: "Chemicals & Compliance",
     description: "Products, lots, applications, audit reports",
     icon: ShieldCheck,
+  },
+  {
+    href: `${SERVICES_ROOT}/billing`,
+    label: "Billing",
+    description: "Estimates, contracts, invoices, payments",
+    icon: Coins,
   },
 ];
 

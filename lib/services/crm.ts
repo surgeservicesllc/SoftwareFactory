@@ -660,3 +660,256 @@ export function toTimelineView(row: CrmTimelineRow) {
     recordedBySystem: row.actor_user_id === null,
   };
 }
+
+/* -------------------------------------------------------------------------
+ * Billing: estimates, contracts, invoices, payments and refunds. The money
+ * half of the chain. Every amount here is integer cents — the schema has no
+ * floating-point money, and neither does this vocabulary.
+ * ---------------------------------------------------------------------- */
+
+export const CRM_ESTIMATE_STATUSES = ["draft", "sent", "accepted", "declined", "expired"] as const;
+export type CrmEstimateStatus = (typeof CRM_ESTIMATE_STATUSES)[number];
+/** The statuses that mean an estimate has been answered; these carry a decided_at. */
+export const CRM_DECIDED_ESTIMATE_STATUSES = ["accepted", "declined", "expired"] as const;
+
+export const CRM_CONTRACT_STATUSES = ["active", "ended", "cancelled"] as const;
+export type CrmContractStatus = (typeof CRM_CONTRACT_STATUSES)[number];
+/** The statuses that close a contract; these carry an ended_at. */
+export const CRM_CLOSED_CONTRACT_STATUSES = ["ended", "cancelled"] as const;
+
+export const CRM_INVOICE_STATUSES = ["draft", "open", "paid", "void", "uncollectible"] as const;
+export type CrmInvoiceStatus = (typeof CRM_INVOICE_STATUSES)[number];
+/**
+ * `paid` is missing on purpose: the ledger decides it. A caller may raise,
+ * void or write off an invoice; only a payment can mark one paid.
+ */
+export const CRM_SETTABLE_INVOICE_STATUSES = ["draft", "open", "void", "uncollectible"] as const;
+
+export const CRM_PAYMENT_METHODS = ["card", "ach", "check", "cash", "other"] as const;
+export type CrmPaymentMethod = (typeof CRM_PAYMENT_METHODS)[number];
+
+export const CRM_ESTIMATE_COLUMNS =
+  "id, account_id, property_id, opportunity_id, number, status, subtotal_cents, tax_cents, total_cents, valid_until, terms, notes, sent_at, decided_at, created_at, updated_at";
+export const CRM_ESTIMATE_LINE_COLUMNS =
+  "id, estimate_id, position, description, quantity, unit_price_cents, amount_cents, created_at";
+export const CRM_CONTRACT_COLUMNS =
+  "id, account_id, estimate_id, plan_id, number, status, value_cents, starts_on, ends_on, auto_renew, terms, notes, signed_at, signed_by_name, ended_at, created_at, updated_at";
+export const CRM_INVOICE_COLUMNS =
+  "id, account_id, contract_id, work_order_id, number, status, subtotal_cents, tax_cents, total_cents, paid_cents, issued_on, due_on, memo, voided_at, void_reason, created_at, updated_at";
+export const CRM_INVOICE_LINE_COLUMNS =
+  "id, invoice_id, position, description, quantity, unit_price_cents, amount_cents, created_at";
+export const CRM_PAYMENT_COLUMNS =
+  "id, account_id, invoice_id, amount_cents, method, reference, received_at, recorded_at, note";
+export const CRM_REFUND_COLUMNS =
+  "id, payment_id, amount_cents, reason, refunded_at, recorded_at";
+
+export type CrmEstimateRow = {
+  id: string;
+  account_id: string;
+  property_id: string | null;
+  opportunity_id: string | null;
+  number: string;
+  status: CrmEstimateStatus;
+  subtotal_cents: number;
+  tax_cents: number;
+  total_cents: number;
+  valid_until: string | null;
+  terms: string | null;
+  notes: string | null;
+  sent_at: string | null;
+  decided_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CrmLineRow = {
+  id: string;
+  position: number;
+  description: string;
+  quantity: number | string;
+  unit_price_cents: number;
+  amount_cents: number;
+  created_at: string;
+};
+
+export type CrmEstimateLineRow = CrmLineRow & { estimate_id: string };
+export type CrmInvoiceLineRow = CrmLineRow & { invoice_id: string };
+
+export type CrmContractRow = {
+  id: string;
+  account_id: string;
+  estimate_id: string | null;
+  plan_id: string | null;
+  number: string;
+  status: CrmContractStatus;
+  value_cents: number;
+  starts_on: string;
+  ends_on: string | null;
+  auto_renew: boolean;
+  terms: string | null;
+  notes: string | null;
+  signed_at: string | null;
+  signed_by_name: string | null;
+  ended_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CrmInvoiceRow = {
+  id: string;
+  account_id: string;
+  contract_id: string | null;
+  work_order_id: string | null;
+  number: string;
+  status: CrmInvoiceStatus;
+  subtotal_cents: number;
+  tax_cents: number;
+  total_cents: number;
+  paid_cents: number;
+  issued_on: string | null;
+  due_on: string | null;
+  memo: string | null;
+  voided_at: string | null;
+  void_reason: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CrmPaymentRow = {
+  id: string;
+  account_id: string;
+  invoice_id: string;
+  amount_cents: number;
+  method: CrmPaymentMethod;
+  reference: string | null;
+  received_at: string;
+  recorded_at: string;
+  note: string | null;
+};
+
+export type CrmRefundRow = {
+  id: string;
+  payment_id: string;
+  amount_cents: number;
+  reason: string;
+  refunded_at: string;
+  recorded_at: string;
+};
+
+export function toEstimateView(row: CrmEstimateRow) {
+  return {
+    id: row.id,
+    accountId: row.account_id,
+    propertyId: row.property_id,
+    opportunityId: row.opportunity_id,
+    number: row.number,
+    status: row.status,
+    subtotalCents: row.subtotal_cents,
+    taxCents: row.tax_cents,
+    totalCents: row.total_cents,
+    validUntil: row.valid_until,
+    terms: row.terms,
+    notes: row.notes,
+    sentAt: row.sent_at,
+    decidedAt: row.decided_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function toLineView(row: CrmLineRow) {
+  return {
+    id: row.id,
+    position: row.position,
+    description: row.description,
+    quantity: decimal(row.quantity),
+    unitPriceCents: row.unit_price_cents,
+    amountCents: row.amount_cents,
+    createdAt: row.created_at,
+  };
+}
+
+export function toContractView(row: CrmContractRow) {
+  return {
+    id: row.id,
+    accountId: row.account_id,
+    estimateId: row.estimate_id,
+    planId: row.plan_id,
+    number: row.number,
+    status: row.status,
+    valueCents: row.value_cents,
+    startsOn: row.starts_on,
+    endsOn: row.ends_on,
+    autoRenew: row.auto_renew,
+    terms: row.terms,
+    notes: row.notes,
+    signedAt: row.signed_at,
+    signedByName: row.signed_by_name,
+    endedAt: row.ended_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function toInvoiceView(row: CrmInvoiceRow) {
+  return {
+    id: row.id,
+    accountId: row.account_id,
+    contractId: row.contract_id,
+    workOrderId: row.work_order_id,
+    number: row.number,
+    status: row.status,
+    subtotalCents: row.subtotal_cents,
+    taxCents: row.tax_cents,
+    totalCents: row.total_cents,
+    paidCents: row.paid_cents,
+    // Derived, never stored: what the ledger says is still owed.
+    balanceCents: Math.max(0, row.total_cents - row.paid_cents),
+    issuedOn: row.issued_on,
+    dueOn: row.due_on,
+    memo: row.memo,
+    voidedAt: row.voided_at,
+    voidReason: row.void_reason,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function toPaymentView(row: CrmPaymentRow) {
+  return {
+    id: row.id,
+    accountId: row.account_id,
+    invoiceId: row.invoice_id,
+    amountCents: row.amount_cents,
+    method: row.method,
+    reference: row.reference,
+    receivedAt: row.received_at,
+    recordedAt: row.recorded_at,
+    note: row.note,
+  };
+}
+
+export function toRefundView(row: CrmRefundRow) {
+  return {
+    id: row.id,
+    paymentId: row.payment_id,
+    amountCents: row.amount_cents,
+    reason: row.reason,
+    refundedAt: row.refunded_at,
+    recordedAt: row.recorded_at,
+  };
+}
+
+/**
+ * An invoice is overdue when the ledger still shows a balance and the due
+ * date has passed. Void and uncollectible invoices are settled matters —
+ * they are not chased — and a draft has not been issued yet.
+ */
+export function isInvoiceOverdue(
+  invoice: ReturnType<typeof toInvoiceView>,
+  today = new Date().toISOString().slice(0, 10),
+): boolean {
+  if (invoice.status !== "open") return false;
+  if (invoice.balanceCents <= 0) return false;
+  return invoice.dueOn !== null && invoice.dueOn < today;
+}

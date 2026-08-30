@@ -34,17 +34,26 @@ catalogue with EPA identity and SDS/label links, lots drawn down by
 trigger, an append-only application log that copies the applicator's
 license and writes its own timeline event, jurisdiction rules configured
 as rows and enforced at the boundary, and an audit report served as JSON
-or injection-guarded CSV. A workspace can populate itself two ways (ADR-192): the curated Demo Data
-book for presenting the product, or the full corpus — 15,943 rows across
-all fifteen tables, every optional field populated, spanning years — for
-testing dashboards, reports and pagination at the size of a real book.
+or injection-guarded CSV. Billing (ADR-193) closes the money half:
+estimates and their lines, contracts with signature and term
+completeness, invoices whose paid total and `paid` status are decided by
+the settlement trigger rather than asserted by any caller, and the
+append-only crm_payments / crm_refunds ledger with a row-locking trigger
+that refuses a credit larger than the payment it refunds. Every payment
+writes a `payment` timeline event, so all three system kinds now have
+real database writers; nothing in billing is deletable, and a void
+invoice keeps its reason. /Services/billing reads the four books and the
+ledger behind them. A workspace can populate itself two ways (ADR-192): the curated Demo Data
+book for presenting the product, or the full corpus — 23,375 rows across
+all twenty-two tables, every optional field populated, spanning years —
+for testing dashboards, reports and pagination at the size of a real book.
 GET /api/services/seed-report audits whichever is loaded, table by table,
 PASS or FAIL. Plan of record: AI/SERVICES_CRM_GAP_ANALYSIS.md — ten increments;
 PEST CRM: PRODUCTION READY is declared only after the seeded E2E
 journey (increment 10).
 
 
-Last reviewed: 2026-08-29
+Last reviewed: 2026-08-30
 
 ## 2026-08-29: Budget Tracker — own navigation, dated import, and a plan/history fix
 

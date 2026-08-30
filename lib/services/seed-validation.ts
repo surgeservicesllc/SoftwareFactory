@@ -159,6 +159,48 @@ const SPECS: Spec[] = [
     optional: ["notes"],
     parents: [],
   },
+  {
+    table: "crm_estimates",
+    optional: ["property_id", "opportunity_id", "valid_until", "terms", "notes", "sent_at", "decided_at"],
+    enumColumn: "status",
+    parents: [{ column: "account_id", table: "crm_accounts" }],
+  },
+  {
+    table: "crm_estimate_lines",
+    optional: [],
+    parents: [{ column: "estimate_id", table: "crm_estimates" }],
+  },
+  {
+    table: "crm_contracts",
+    optional: ["estimate_id", "plan_id", "ends_on", "terms", "notes", "signed_at", "signed_by_name", "ended_at"],
+    enumColumn: "status",
+    parents: [{ column: "account_id", table: "crm_accounts" }],
+  },
+  {
+    table: "crm_invoices",
+    optional: ["contract_id", "work_order_id", "issued_on", "due_on", "memo", "voided_at", "void_reason"],
+    enumColumn: "status",
+    parents: [{ column: "account_id", table: "crm_accounts" }],
+  },
+  {
+    table: "crm_invoice_lines",
+    optional: [],
+    parents: [{ column: "invoice_id", table: "crm_invoices" }],
+  },
+  {
+    table: "crm_payments",
+    optional: ["reference", "note"],
+    enumColumn: "method",
+    parents: [
+      { column: "account_id", table: "crm_accounts" },
+      { column: "invoice_id", table: "crm_invoices" },
+    ],
+  },
+  {
+    table: "crm_refunds",
+    optional: [],
+    parents: [{ column: "payment_id", table: "crm_payments" }],
+  },
 ];
 
 const SAMPLE = 1000;

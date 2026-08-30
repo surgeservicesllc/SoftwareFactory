@@ -2,17 +2,41 @@
 
 Last reviewed: 2026-08-30
 
+**Addendum, 2026-08-30 latest+15 - billing (ADR-193):**
+services-billing.behavior 6 on the real migration chain (settlement
+derived from the ledger and the invoice reopened by a refund; the refund
+cap proved at its exact remainder AND one cent past it; append-only
+enforced at the grant level for both payments and refunds; the arithmetic,
+signature and void CHECKs; void stays void through a full payment; tenant
+isolation). services-billing-routes 17 (totals derived from the lines and
+a caller-asserted subtotal refused; duplicate numbers surfaced as 409 and
+never merged; a decision given its moment and taken back on reopen; lines
+attached to the right parent; balance and overdue read from the ledger's
+own figures; `paid` unreachable by assertion with the table never touched;
+a void required to name its reason; due-before-issued refused; a payment
+filed against the invoice's own account with the ledger's verdict read
+back; payment refused against a void invoice; cross-origin refused before
+any read; the refund cap surfaced as 409 rather than 500; contract totals
+counting only running terms and ended_at taken back on reopen). The
+full-scale seed now covers all 22 tables — 23,375 rows, 22/22 PASS, zero
+orphans. Workflow scope `billing-contracts` postflight proves forced RLS
+on seven tables, the absence of update on payments/refunds, the absence of
+delete anywhere, the anon/service_role shutout and all three settlement
+triggers. Lint zero warnings, tsc clean; full vitest + production build
+before shipping.
+
 **Addendum, 2026-08-30 latest+14 - the full-scale seed (ADR-192):**
 services-crm-seed.behavior 5 against the real migration chain, running the
 production seeder and the production validator unmodified through a
 PGlite-backed supabase client shim: the whole book seeds (every table over
-the 250 floor); the audit passes 15/15 with zero orphans and every optional
+the 250 floor); the audit passes for every table with zero orphans and every optional
 column populated; history is trigger-written (status_change and both
 'service' writers present, lots genuinely drawn down, one install scan per
 station); the lifecycle spread covers all four account statuses, all seven
 pipeline stages, four work-order statuses, both account kinds and more than
 a year of history; and a re-seed is refused by the barcode constraint
-rather than duplicated. Report: 15,943 rows across 15 tables — PASS.
+rather than duplicated. Report at the time: 15,943 rows across 15 tables — PASS; 23,375 across
+22 after billing landed.
 The run surfaced a real production defect: the sds_url/label_url CHECK
 regexes used a repetition count above PostgreSQL's 255 limit and would have
 failed the first product carrying a link; fixed and pinned. Route suite

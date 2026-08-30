@@ -3761,7 +3761,7 @@ undeclared until the goal's full seeded E2E passes.
 - **Status**: Accepted (task #63, owner /goal — increment 4 of
   AI/SERVICES_CRM_GAP_ANALYSIS.md, the differentiator pillar)
 - **Decision**: `crm_devices`, `crm_device_events` and
-  `crm_pest_sightings` (migration 20260830000900) on the established
+  `crm_pest_sightings` (migration 20260830001100) on the established
   posture — org-scoped forced RLS, revoke-then-grant against hosted
   default privileges, anon/service_role shut out, three-column composite
   keys so a station or sighting can only land on its own account's
@@ -3803,7 +3803,7 @@ undeclared until the goal's full seeded E2E passes.
 - **Status**: Accepted (task #63, owner /goal — increment 5 of
   AI/SERVICES_CRM_GAP_ANALYSIS.md, the regulated pillar)
 - **Decision**: `crm_products`, `crm_product_lots`, `crm_applications`
-  and `crm_compliance_rules` (migration 20260830001000) on the
+  and `crm_compliance_rules` (migration 20260830001200) on the
   established posture. Five things live in the schema:
   1. **Applications are append-only at the grant level** —
      select+insert, nothing else. A pesticide application is a legal
@@ -3895,5 +3895,63 @@ undeclared until the goal's full seeded E2E passes.
   `book` (curated narrative, the default, unchanged for existing callers)
   or `full` (the corpus). `GET /api/services/seed-report` returns the
   audit for the live workspace as JSON or `format=text`.
-- **Result**: 15/15 tables PASS — 15,943 rows, every table over the floor,
-  every optional column populated, zero orphans.
+- **Result**: with increment 6's billing tables covered, 22/22 tables PASS
+  — 23,375 rows, every table over the 250-row floor, every optional column
+  populated, zero orphans.
+
+## ADR-193 - Billing: money is recorded, never revised
+
+- **Date**: 2026-08-30
+- **Status**: Accepted (task #63, owner /goal: a production-ready Pest
+  Services CRM, wired end to end to Supabase)
+- **Context**: the CRM chain reached Lead → Customer → Property → Contract
+  → Service → Route → Work Order → IPM/Chemical, and stopped at the money.
+  Every field-service platform this is measured against — FieldRoutes,
+  PestPac, Briostack, Jobber — closes that chain with estimates, contracts,
+  invoices and payments, and every one of them is audited on it.
+- **Decision**: `20260830001300_billing_contracts.sql` adds seven tables —
+  `crm_estimates` and its lines, `crm_contracts`, `crm_invoices` and its
+  lines, `crm_payments`, `crm_refunds` — on the established posture
+  (organization-scoped forced RLS, revoke-then-grant against the hosted
+  default privileges, `anon` and `service_role` shut out, same-org
+  composite foreign keys throughout). Five invariants live in the schema
+  rather than in a route:
+  1. **Payments and refunds are append-only at the grant level.** They hold
+     `select, insert` and nothing else, so no policy, no route and no
+     future migration can quietly make money editable. A payment recorded
+     in error is corrected by the opposite movement, as a ledger is
+     corrected by a contra entry.
+  2. **A refund can never exceed what was paid.** `crm_guard_refund_total`
+     locks the payment `for update`, sums the credits already against it
+     and refuses the excess — so two refunds racing each other cannot
+     together overdraw one payment.
+  3. **`paid` is the ledger's verdict, never a caller's assertion.**
+     `crm_settle_invoice` derives `paid_cents` from the payments and
+     refunds and sets the status from that total; a refund that drops the
+     total below the invoice reopens it. `void` and `uncollectible` keep
+     their status — a settled matter is not re-decided by arithmetic. The
+     API's settable set deliberately omits `paid`.
+  4. **Every payment writes a `payment` event onto the account timeline in
+     the same transaction.** With this, all three system timeline kinds
+     (`status_change`, `service`, `payment`) have real database writers;
+     none is decoration.
+  5. **Amounts are integer cents under non-negative CHECKs.** There is no
+     floating-point money anywhere in this schema.
+- **Nothing is deletable.** A withdrawn estimate is `declined`, a closed
+  contract is `ended`, an invoice raised in error is `void` — and the void,
+  with its reason, is part of the record.
+- **Surfaces**: `/Services/billing` reads the four books and the ledger
+  behind them; `/api/services/estimates`, `/estimates/[estimateId]`,
+  `/contracts`, `/invoices`, `/invoices/[invoiceId]`, `/payments` and
+  `/refunds` are its live boundary. The routes derive every total from the
+  lines they were sent — a browser cannot assert a subtotal that disagrees
+  with its own lines — and surface the ledger's refusals as 409s rather
+  than 500s.
+- **Verification**: `services-billing.behavior` runs the real migration
+  chain and proves settlement, the refund cap at its exact boundary and one
+  cent past it, append-only enforcement, the arithmetic and signature
+  CHECKs, void-stays-void, and tenant isolation.
+  `services-billing-routes` pins the boundary's own conduct. The full-scale
+  seed covers all seven tables, and the hosted apply scope
+  `billing-contracts` re-proves RLS, the append-only grants and the
+  settlement triggers against production after every apply.

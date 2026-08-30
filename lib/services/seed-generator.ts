@@ -582,12 +582,66 @@ export type SeedApplication = {
   note: string;
 };
 
+export type SeedBilling = {
+  estimates: {
+    number: string;
+    status: "draft" | "sent" | "accepted" | "declined" | "expired";
+    lines: { description: string; quantity: number; unitPriceCents: number }[];
+    taxCents: number;
+    validInDays: number;
+    terms: string;
+    notes: string;
+    sentDaysAgo: number;
+    decidedDaysAgo?: number;
+    propertyIndex: number;
+    opportunityIndex?: number;
+  }[];
+  contracts: {
+    number: string;
+    status: "active" | "ended" | "cancelled";
+    estimateIndex?: number;
+    planIndex?: number;
+    valueCents: number;
+    startsInDays: number;
+    endsInDays: number;
+    autoRenew: boolean;
+    terms: string;
+    notes: string;
+    signedDaysAgo?: number;
+    signedByName?: string;
+    endedDaysAgo?: number;
+  }[];
+  invoices: {
+    number: string;
+    status: "draft" | "open" | "void" | "uncollectible";
+    contractIndex?: number;
+    visitIndex?: number;
+    lines: { description: string; quantity: number; unitPriceCents: number }[];
+    taxCents: number;
+    issuedDaysAgo: number;
+    /** Net terms in days from the issue date. */
+    netDays: number;
+    memo: string;
+    voidReason?: string;
+    /** Payments against this invoice, in cents; empty means unpaid. */
+    payments: {
+      amountCents: number;
+      method: "card" | "ach" | "check" | "cash" | "other";
+      reference: string;
+      daysAgo: number;
+      note: string;
+      refund?: { amountCents: number; reason: string; daysAgo: number };
+    }[];
+  }[];
+};
+
 export type SeedOperations = {
   plans: SeedPlan[];
   visits: SeedVisit[];
   devices: SeedDevice[];
   sightings: SeedSighting[];
   applications: SeedApplication[];
+  billing: SeedBilling;
 };
 
 /**
@@ -603,7 +657,17 @@ export function generateOperations(
 ): SeedOperations {
   const random = makeRandom(seed + account.index * 7919);
   const serviced = account.statusPath.includes("customer");
-  if (!serviced) return { plans: [], visits: [], devices: [], sightings: [], applications: [] };
+  if (!serviced) {
+    /*
+     * A lead has no service history — but it may well have been quoted,
+     * and a declined estimate is exactly how a book records the ones that
+     * got away. So prospects and leads carry paper without operations.
+     */
+    return {
+      plans: [], visits: [], devices: [], sightings: [], applications: [],
+      billing: generateBilling(account, [], [], makeRandom(seed + account.index * 104729), false),
+    };
+  }
 
   const technicianCount = dataset.technicians.length;
   const productCount = dataset.products.length;
@@ -747,7 +811,249 @@ export function generateOperations(
     };
   });
 
-  return { plans, visits, devices, sightings, applications };
+  return {
+    plans,
+    visits,
+    devices,
+    sightings,
+    applications,
+    billing: generateBilling(account, plans, visits, makeRandom(seed + account.index * 104729), true),
+  };
+}
+
+const LINE_DESCRIPTIONS = [
+  "Initial service and inspection", "Monthly IPM service", "Quarterly deep inspection",
+  "Rodent exclusion labour", "Exclusion materials", "Bait station installation",
+  "Bed bug heat treatment", "Termite inspection", "Emergency callback",
+  "Monitoring devices", "Sanitation consultation", "Wildlife exclusion",
+] as const;
+const VOID_REASONS = [
+  "Raised against the wrong site.", "Duplicate of an earlier invoice.",
+  "Superseded by the corrected contract total.", "Billed before the work was authorised.",
+] as const;
+const REFUND_REASONS = [
+  "Partial credit for a missed visit.", "Overcharged on the materials line.",
+  "Goodwill credit after a rescheduled appointment.", "Service cancelled mid-term.",
+] as const;
+
+/**
+ * The paper trail for one account: estimates that were quoted, the contract
+ * an accepted one became, and the invoices raised against it — some paid,
+ * some open, some overdue, one void, and a few carrying refunds. The point
+ * is the spread: a billing page tested only against paid invoices is not
+ * tested.
+ */
+function generateBilling(
+  account: SeedAccount,
+  plans: SeedPlan[],
+  visits: SeedVisit[],
+  random: Random,
+  serviced: boolean,
+): SeedBilling {
+  const propertyCount = Math.max(1, account.properties.length);
+  const completedVisits = visits
+    .map((visit, position) => ({ visit, position }))
+    .filter((entry) => entry.visit.statusPath.includes("completed"))
+    .map((entry) => entry.position);
+
+  const estimateCount = between(random, 1, 3);
+  const estimates = Array.from({ length: estimateCount }, (_, seat) => {
+    /*
+     * An account became a customer by accepting something, so a serviced
+     * account's first estimate is always accepted; the rest spread across
+     * the other outcomes. A book where nobody ever said yes would have no
+     * contracts to test against.
+     */
+    const outcome = (account.index + seat) % 5;
+    const status =
+      seat === 0 && serviced ? "accepted"
+      : outcome === 0 ? "draft"
+      : outcome === 1 ? "sent"
+      : outcome === 2 ? "declined"
+      : outcome === 3 ? "expired"
+      : "accepted";
+    const lineCount = between(random, 1, 4);
+    const lines = Array.from({ length: lineCount }, (_, line) => ({
+      description: LINE_DESCRIPTIONS[(account.index + seat + line) % LINE_DESCRIPTIONS.length],
+      quantity: between(random, 1, 12),
+      unitPriceCents: between(random, 45, 900) * 100,
+    }));
+    const sentDaysAgo = between(random, 20, 800);
+    return {
+      number: `EST-${pad(account.index, 4)}-${pad(seat + 1, 2)}`,
+      status: status as SeedBilling["estimates"][number]["status"],
+      lines,
+      taxCents: Math.round(
+        lines.reduce((sum, line) => sum + line.quantity * line.unitPriceCents, 0) * 0.08,
+      ),
+      validInDays: between(random, -200, 60),
+      terms: `${pick(random, ["Net 30", "Net 15", "Due on receipt", "Net 45"])}. ${pick(random, ["Service begins on signature.", "Materials included.", "Annual term, cancellable with 30 days' notice.", "Price held for 60 days."])}`,
+      notes: `Quoted after the ${pick(random, ["site walk", "inspection", "phone intake", "renewal review"])}.`,
+      sentDaysAgo,
+      ...(status === "draft" || status === "sent"
+        ? {}
+        : { decidedDaysAgo: Math.max(1, sentDaysAgo - between(random, 1, 19)) }),
+      propertyIndex: seat % propertyCount,
+      ...(account.opportunities.length > 0 ? { opportunityIndex: seat % account.opportunities.length } : {}),
+    };
+  });
+
+  const acceptedIndex = estimates.findIndex((estimate) => estimate.status === "accepted");
+  /*
+   * A renewed annual agreement leaves two rows behind: the prior term,
+   * closed on the day the new one started, and the current term that
+   * replaced it. Roughly a third of the book has been with us long enough
+   * to have renewed at least once — without that, a renewals report and a
+   * contract history panel have nothing to read.
+   */
+  const renewed = acceptedIndex !== -1 && account.index % 3 === 0;
+  const signatory = `${account.contacts[0]?.firstName ?? "Alex"} ${account.contacts[0]?.lastName ?? "Reyes"}`;
+  const currentStartsInDays = -between(random, 30, 700);
+  const currentValueCents =
+    acceptedIndex === -1
+      ? 0
+      : estimates[acceptedIndex].lines.reduce(
+          (sum, line) => sum + line.quantity * line.unitPriceCents,
+          0,
+        ) + estimates[acceptedIndex].taxCents;
+  const contracts =
+    acceptedIndex === -1
+      ? []
+      : [
+          {
+            // The current term keeps index 0 so the newest paper is first.
+            number: `CON-${pad(account.index, 4)}-${renewed ? "02" : "01"}`,
+            status: (account.index % 9 === 0
+              ? "ended"
+              : account.index % 13 === 0
+                ? "cancelled"
+                : "active") as SeedBilling["contracts"][number]["status"],
+            estimateIndex: acceptedIndex,
+            ...(plans.length > 0 ? { planIndex: 0 } : {}),
+            valueCents: currentValueCents,
+            startsInDays: currentStartsInDays,
+            endsInDays: between(random, 30, 400),
+            autoRenew: account.index % 3 !== 0,
+            terms: "Annual agreement; service per the accepted estimate.",
+            notes: `Signed ${pick(random, ["at the site", "by email", "at the branch office", "on the customer portal"])}.`,
+            signedDaysAgo: between(random, 30, 700),
+            signedByName: signatory,
+            ...(account.index % 9 === 0 || account.index % 13 === 0
+              ? { endedDaysAgo: between(random, 1, 29) }
+              : {}),
+          },
+          ...(renewed
+            ? [
+                {
+                  number: `CON-${pad(account.index, 4)}-01`,
+                  status: "ended" as SeedBilling["contracts"][number]["status"],
+                  // The prior term was quoted before the paper we still
+                  // hold, so it names no estimate — which is also the only
+                  // thing in the book exercising the nullable estimate.
+                  ...(plans.length > 0 ? { planIndex: 0 } : {}),
+                  valueCents: Math.round(currentValueCents * 0.92),
+                  startsInDays: currentStartsInDays - 365,
+                  // It ended the day the renewal took over.
+                  endsInDays: currentStartsInDays,
+                  autoRenew: true,
+                  terms: "Annual agreement; renewed on its anniversary.",
+                  notes: "Prior term; superseded by the renewal on the same site.",
+                  signedDaysAgo: -currentStartsInDays + 365,
+                  signedByName: signatory,
+                  endedDaysAgo: -currentStartsInDays,
+                },
+              ]
+            : []),
+        ];
+
+  const invoiceCount = between(random, 2, 5);
+  const invoices = Array.from({ length: invoiceCount }, (_, seat) => {
+    const lineCount = between(random, 1, 3);
+    const lines = Array.from({ length: lineCount }, (_, line) => ({
+      description: LINE_DESCRIPTIONS[(account.index + seat * 2 + line) % LINE_DESCRIPTIONS.length],
+      quantity: between(random, 1, 6),
+      unitPriceCents: between(random, 45, 620) * 100,
+    }));
+    const subtotal = lines.reduce((sum, line) => sum + line.quantity * line.unitPriceCents, 0);
+    const tax = Math.round(subtotal * 0.08);
+    const total = subtotal + tax;
+    const issuedDaysAgo = between(random, 5, 700);
+
+    // The spread: mostly settled, some part-paid, some untouched and
+    // overdue, an occasional void, and a rare write-off.
+    const outcome = (account.index + seat) % 8;
+    const status =
+      outcome === 6 ? "void"
+      : outcome === 7 ? "uncollectible"
+      : outcome === 5 ? "draft"
+      : "open";
+    const payments =
+      status === "void" || status === "draft"
+        ? []
+        : outcome === 0 || outcome === 1 || outcome === 2
+          ? [
+              {
+                amountCents: total,
+                method: pick(random, ["card", "ach", "check", "cash", "other"] as const),
+                reference: `DEMO-PAY-${pad(account.index, 4)}-${pad(seat, 2)}`,
+                daysAgo: Math.max(1, issuedDaysAgo - between(random, 1, 20)),
+                note: `Settled in full by ${pick(random, ["the office", "the customer portal", "the branch", "autopay"])}.`,
+                /*
+                 * A settled invoice can still be credited afterwards — a
+                 * missed visit, an overcharged materials line. Two of the
+                 * eight outcomes carry one, at different sizes, so a
+                 * credits report reads a spread rather than one figure.
+                 */
+                ...(outcome === 1 || outcome === 2
+                  ? {
+                      refund: {
+                        amountCents: Math.max(
+                          100,
+                          Math.round(total * (outcome === 2 ? 0.25 : 0.15)),
+                        ),
+                        reason: pick(random, REFUND_REASONS),
+                        daysAgo: Math.max(1, issuedDaysAgo - between(random, 21, 40)),
+                      },
+                    }
+                  : {}),
+              },
+            ]
+          : outcome === 3
+            ? [
+                {
+                  amountCents: Math.max(100, Math.round(total / 2)),
+                  method: pick(random, ["card", "ach", "check"] as const),
+                  reference: `DEMO-PAY-${pad(account.index, 4)}-${pad(seat, 2)}`,
+                  daysAgo: Math.max(1, issuedDaysAgo - between(random, 1, 15)),
+                  note: "Part payment; balance agreed for the following month.",
+                  // The balance was renegotiated down rather than chased.
+                  refund: {
+                    amountCents: Math.max(100, Math.round(total * 0.1)),
+                    reason: "Partial credit agreed while the balance was renegotiated.",
+                    daysAgo: Math.max(1, issuedDaysAgo - between(random, 16, 30)),
+                  },
+                },
+              ]
+            : [];
+    return {
+      number: `INV-${pad(account.index, 4)}-${pad(seat + 1, 2)}`,
+      status: status as SeedBilling["invoices"][number]["status"],
+      // Older invoices sit on the prior term where one exists.
+      ...(contracts.length > 0 ? { contractIndex: seat % contracts.length } : {}),
+      ...(completedVisits.length > 0 && seat % 2 === 0
+        ? { visitIndex: completedVisits[seat % completedVisits.length] }
+        : {}),
+      lines,
+      taxCents: tax,
+      issuedDaysAgo,
+      netDays: pick(random, [0, 15, 30, 45]),
+      memo: `${pick(random, ["Service for the period stated", "Per the signed agreement", "Callback visit", "Materials and labour"])}.`,
+      ...(status === "void" ? { voidReason: pick(random, VOID_REASONS) } : {}),
+      payments,
+    };
+  });
+
+  return { estimates, contracts, invoices };
 }
 
 /** Everything the seeder needs to label a row as demonstration data. */

@@ -206,8 +206,11 @@ describe("Phase 1E production operations behavior", () => {
     // crm_pest_sightings; 162 since chemicals/compliance (ADR-191) added
     // crm_products, crm_product_lots, the append-only crm_applications
     // log and crm_compliance_rules. Each is RLS-enabled and forced, which
+    // 169 since billing (ADR-193) added crm_estimates, crm_estimate_lines,
+    // crm_contracts, crm_invoices, crm_invoice_lines and the append-only
+    // crm_payments and crm_refunds. Each is RLS-enabled and forced, which
     // the filter on the next line is what actually proves.
-    expect(rlsRows).toHaveLength(162);
+    expect(rlsRows).toHaveLength(169);
     expect(rlsRows.filter((row) => !row.relrowsecurity || !row.relforcerowsecurity)).toEqual([]);
 
     const { rows: grantRows } = await db.query<{ table_name: string }>(
