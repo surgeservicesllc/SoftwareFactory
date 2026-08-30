@@ -51,6 +51,43 @@ export type TimelineView = {
   recordedBySystem: boolean;
 };
 
+export type OpportunityView = {
+  id: string;
+  accountId: string;
+  name: string;
+  stage: string;
+  valueCents: number | null;
+  expectedCloseDate: string | null;
+  notes: string | null;
+  lostReason: string | null;
+  closedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type PipelineReport = {
+  byStage: Record<string, { count: number; valueCents: number }>;
+  openCount: number;
+  openValueCents: number;
+  wonCount: number;
+  wonValueCents: number;
+  lostCount: number;
+  winRatePercent: number | null;
+};
+
+export type OpportunitiesPayload = {
+  opportunities: OpportunityView[];
+  report: PipelineReport;
+};
+
+export type SearchPayload = {
+  query: string;
+  accounts: AccountView[];
+  contacts: ContactView[];
+  properties: PropertyView[];
+  opportunities: OpportunityView[];
+};
+
 export type AccountsPayload = {
   accounts: AccountView[];
   counts: {
@@ -64,6 +101,7 @@ export type AccountDetailPayload = {
   account: AccountView;
   contacts: ContactView[];
   properties: PropertyView[];
+  opportunities: OpportunityView[];
   timeline: TimelineView[];
   timelineTruncated: boolean;
 };

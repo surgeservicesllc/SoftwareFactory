@@ -98,6 +98,46 @@ describe("the customers panel", () => {
     });
     expect(await screen.findByText("The account could not be recorded.")).toBeInTheDocument();
   });
+
+  it("surfaces likely duplicates and records anyway only on the deliberate second step", async () => {
+    const posts: unknown[] = [];
+    fetchMock.mockImplementation((_url: string, init?: RequestInit) => {
+      if (init?.method === "POST") {
+        const body = JSON.parse(init.body as string) as { allowDuplicate?: boolean };
+        posts.push(body);
+        if (body.allowDuplicate !== true) {
+          return Promise.resolve(json(
+            {
+              error: {
+                code: "possible_duplicate",
+                message: "An account with the same name, email or phone already exists. Review the matches, or record it anyway.",
+              },
+              duplicates: [account],
+            },
+            409,
+          ));
+        }
+        return Promise.resolve(json({ account: { id: account.id, name: "Harborview Foods" } }, 201));
+      }
+      return Promise.resolve(json({ accounts: [], counts: { byStatus: {}, byKind: {}, total: 0 } }));
+    });
+    const user = userEvent.setup();
+    render(<ServicesCustomersPanel />);
+    await screen.findByTestId("services-empty");
+
+    await user.click(screen.getByRole("button", { name: "New account" }));
+    await user.type(screen.getByPlaceholderText("Person or company"), "Harborview Foods");
+    await user.click(screen.getByRole("button", { name: "Record account" }));
+
+    // The matches are shown; nothing was merged or created.
+    const matches = await screen.findByTestId("services-duplicates");
+    expect(within(matches).getByText("Harborview Foods")).toBeInTheDocument();
+    expect(posts).toHaveLength(1);
+
+    await user.click(screen.getByRole("button", { name: "Record anyway" }));
+    expect(await screen.findByText("Harborview Foods is recorded as a lead.")).toBeInTheDocument();
+    expect(posts[1]).toMatchObject({ name: "Harborview Foods", allowDuplicate: true });
+  });
 });
 
 describe("the overview panel", () => {
@@ -113,5 +153,73 @@ describe("the overview panel", () => {
     expect(screen.getByText("5")).toBeInTheDocument();
     expect(screen.getByText("6 residential")).toBeInTheDocument();
     expect(screen.getByText(/recording your first lead/)).toBeInTheDocument();
+  });
+
+  it("renders the pipeline headline from the board's own read", async () => {
+    fetchMock.mockImplementation((url: string) => {
+      if (url.startsWith("/api/services/opportunities")) {
+        return Promise.resolve(json({
+          opportunities: [],
+          report: {
+            byStage: {},
+            openCount: 3,
+            openValueCents: 620_000,
+            wonCount: 4,
+            wonValueCents: 1_848_000,
+            lostCount: 2,
+            winRatePercent: 67,
+          },
+        }));
+      }
+      return Promise.resolve(json({
+        accounts: [account],
+        counts: { byStatus: { lead: 1 }, byKind: { commercial: 1 }, total: 1 },
+      }));
+    });
+    render(<ServicesOverviewPanel />);
+
+    const pipeline = await screen.findByTestId("services-overview-pipeline");
+    expect(within(pipeline).getByText("$6,200")).toBeInTheDocument();
+    expect(within(pipeline).getByText("$18,480")).toBeInTheDocument();
+    expect(within(pipeline).getByText("67%")).toBeInTheDocument();
+  });
+
+  it("an empty book can seed the Demo Data clientele through the real route", async () => {
+    let posted = 0;
+    fetchMock.mockImplementation((url: string, init?: RequestInit) => {
+      if (init?.method === "POST") {
+        posted += 1;
+        expect(url).toBe("/api/services/demo-seed");
+        return Promise.resolve(json({ seeded: { accounts: 14, timelineEvents: 90 } }, 201));
+      }
+      if (url.startsWith("/api/services/opportunities")) {
+        return Promise.resolve(json({ opportunities: [], report: null }));
+      }
+      return Promise.resolve(json({ accounts: [], counts: { byStatus: {}, byKind: {}, total: 0 } }));
+    });
+    const user = userEvent.setup();
+    render(<ServicesOverviewPanel />);
+
+    const seedBlock = await screen.findByTestId("services-demo-seed");
+    expect(seedBlock.textContent).toContain("Demo Data");
+    await user.click(screen.getByRole("button", { name: "Load Demo Data" }));
+
+    expect(posted).toBe(1);
+    expect(await screen.findByText(/Demo Data loaded: 14 accounts/)).toBeInTheDocument();
+  });
+
+  it("a seeded book is labeled Demo Data at the top of the page", async () => {
+    fetchMock.mockImplementation((url: string) => {
+      if (url.startsWith("/api/services/opportunities")) {
+        return Promise.resolve(json({ opportunities: [], report: null }));
+      }
+      return Promise.resolve(json({
+        accounts: [{ ...account, source: "Demo Data" }],
+        counts: { byStatus: { lead: 1 }, byKind: { commercial: 1 }, total: 1 },
+      }));
+    });
+    render(<ServicesOverviewPanel />);
+
+    expect(await screen.findByText(/seeded demonstration book/)).toBeInTheDocument();
   });
 });

@@ -1,4 +1,5 @@
 import {
+  KanbanSquare,
   LayoutDashboard,
   Users,
   type LucideIcon,
@@ -39,6 +40,12 @@ export const SERVICES_NAVIGATION: readonly ServicesNavItem[] = [
     label: "Customers & Leads",
     description: "Accounts, contacts, properties, history",
     icon: Users,
+  },
+  {
+    href: `${SERVICES_ROOT}/pipeline`,
+    label: "Pipeline",
+    description: "Opportunities from first contact to won",
+    icon: KanbanSquare,
   },
 ];
 

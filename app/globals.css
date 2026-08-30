@@ -371,3 +371,59 @@
 .factory-theme .label {
   color: var(--accent-text);
 }
+
+/*
+ * The Services CRM palette — a client-facing product, scoped.
+ *
+ * The pest-services CRM is presented to customers, not operators, so inside
+ * `.services-theme` the console's dark lime workspace gives way to a light,
+ * airy ground with an emerald identity: white cards on a soft sage field,
+ * green as the brand and the "healthy account" colour. Every token-reading
+ * component inside the scope re-skins itself; everything outside keeps the
+ * console's own palette, and the global header above stays the console's,
+ * framing the product.
+ */
+.services-theme {
+  --bg: #f4f7f5;
+  --surface: #ffffff;
+  --surface-raised: #f0f4f1;
+  --surface-inset: #f7faf8;
+  --border: #e3e9e5;
+  --border-strong: #c9d4cd;
+  --text: #14211b;
+  --text-muted: #51625a;
+  --text-faint: #7d8c84;
+  --accent: #059669;
+  --accent-ink: #ffffff;
+  --accent-text: #047857;
+  --accent-border: #b5dcc9;
+  --accent-surface: rgba(5, 150, 105, 0.09);
+  --info: #086992;
+  --info-surface: rgba(8, 105, 146, 0.07);
+  --info-border: #bcdcea;
+  --warning: #96570c;
+  --warning-surface: rgba(180, 110, 9, 0.08);
+  --warning-border: #ecd6b2;
+  --danger: #b3123f;
+  --danger-surface: rgba(190, 18, 63, 0.06);
+  --danger-border: #eec6d0;
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* White cards on the sage field need a real (soft) elevation to separate. */
+.services-theme .card {
+  box-shadow:
+    0 1px 2px rgba(18, 38, 29, 0.05),
+    0 8px 24px -16px rgba(18, 38, 29, 0.12);
+}
+
+/* The console's lime hover is hard-coded; emerald needs its own. */
+.services-theme .btn-primary:hover:not(:disabled) {
+  background: #047857;
+}
+
+/* Inputs sit on white cards here, so the inset ground reads as a field. */
+.services-theme .input {
+  background: #ffffff;
+}

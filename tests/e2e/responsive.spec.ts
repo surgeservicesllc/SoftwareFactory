@@ -227,7 +227,7 @@ test("every Services CRM section is gated server-side through its layout", async
    * Asking for the URLs directly while signed out is the only way to tell a
    * real server gate from a link merely left out of the navigation.
    */
-  for (const path of ["/Services", "/Services/customers"]) {
+  for (const path of ["/Services", "/Services/customers", "/Services/pipeline"]) {
     await page.goto(path);
     await expect(page).toHaveURL(/\/auth\/sign-in\?next=%2FServices/);
   }

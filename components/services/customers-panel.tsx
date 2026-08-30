@@ -2,15 +2,20 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { Search } from "lucide-react";
 
 import { Card, Notice, PageHeader, SectionTitle } from "@/components/ui";
-import type { AccountsPayload } from "@/components/services/types";
+import { AccountAvatar, AccountStatusBadge } from "@/components/services/ui";
+import type { AccountView, AccountsPayload } from "@/components/services/types";
 
 /**
  * The book of business: every account this workspace holds, searchable and
  * filterable, with the form that records a new one. Creation is a real
  * insert under RLS; a refusal comes back in the server's words, and the
- * list re-reads rather than optimistically inventing a row.
+ * list re-reads rather than optimistically inventing a row. When the server
+ * surfaces likely duplicates (same normalized name, email or phone), they
+ * are shown for a person to judge — records are never merged automatically,
+ * and "Record anyway" is the deliberate second step.
  */
 
 const STATUSES = ["lead", "prospect", "customer", "inactive"] as const;
@@ -32,6 +37,7 @@ export function ServicesCustomersPanel() {
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [created, setCreated] = useState<string | null>(null);
+  const [duplicates, setDuplicates] = useState<AccountView[] | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -60,10 +66,11 @@ export function ServicesCustomersPanel() {
     return () => window.clearTimeout(kickoff);
   }, [refresh]);
 
-  const create = useCallback(async () => {
+  const create = useCallback(async (allowDuplicate = false) => {
     setCreating(true);
     setCreateError(null);
     setCreated(null);
+    setDuplicates(null);
     try {
       const response = await fetch("/api/services/accounts", {
         method: "POST",
@@ -74,12 +81,19 @@ export function ServicesCustomersPanel() {
           ...(email.trim() ? { email: email.trim() } : {}),
           ...(phone.trim() ? { phone: phone.trim() } : {}),
           ...(source.trim() ? { source: source.trim() } : {}),
+          ...(allowDuplicate ? { allowDuplicate: true } : {}),
         }),
       });
       const body = (await response.json()) as {
         account?: { id: string; name: string };
-        error?: { message?: string };
+        duplicates?: AccountView[];
+        error?: { code?: string; message?: string };
       };
+      if (response.status === 409 && Array.isArray(body.duplicates)) {
+        setDuplicates(body.duplicates);
+        setCreateError(body.error?.message ?? "An account like this may already exist.");
+        return;
+      }
       if (!response.ok || !body.account) {
         setCreateError(body.error?.message ?? "The account could not be recorded.");
         return;
@@ -196,6 +210,46 @@ export function ServicesCustomersPanel() {
               <Notice tone="warning">{createError}</Notice>
             </div>
           ) : null}
+          {duplicates !== null && duplicates.length > 0 ? (
+            <div
+              className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-4"
+              data-testid="services-duplicates"
+            >
+              <p className="text-sm font-semibold text-amber-900">Possible duplicates</p>
+              <ul className="mt-2 space-y-2 text-sm">
+                {duplicates.map((match) => (
+                  <li key={match.id} className="flex items-center gap-2.5">
+                    <AccountAvatar name={match.name} size="sm" />
+                    <span className="min-w-0">
+                      <Link
+                        href={`/Services/customers/${match.id}`}
+                        className="font-medium text-foreground underline-offset-2 hover:underline"
+                      >
+                        {match.name}
+                      </Link>
+                      <span className="block text-xs text-muted">
+                        {match.kind}, {match.status}
+                        {match.email ? `, ${match.email}` : ""}
+                        {match.phone ? `, ${match.phone}` : ""}
+                      </span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-2 text-xs text-amber-800/80">
+                Nothing is merged automatically. Open a match to work with the existing record, or
+                record this as a genuinely different account.
+              </p>
+              <button
+                type="button"
+                onClick={() => void create(true)}
+                disabled={creating}
+                className="btn btn-secondary mt-2 px-3 py-1.5 text-xs"
+              >
+                Record anyway
+              </button>
+            </div>
+          ) : null}
           {created !== null ? <p className="mt-3 text-sm text-muted">{created}</p> : null}
         </Card>
       ) : null}
@@ -210,7 +264,11 @@ export function ServicesCustomersPanel() {
             void refresh();
           }}
         >
-          <label className="block">
+          <label className="relative block">
+            <Search
+              className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-faint"
+              aria-hidden="true"
+            />
             <span className="sr-only">Search by name</span>
             <input
               type="search"
@@ -218,7 +276,7 @@ export function ServicesCustomersPanel() {
               onChange={(event) => setQ(event.target.value)}
               placeholder="Search by name"
               maxLength={120}
-              className="input w-full"
+              className="input w-full pl-9"
             />
           </label>
           <label className="block">
@@ -261,27 +319,37 @@ export function ServicesCustomersPanel() {
             <table className="w-full text-left text-sm" data-testid="services-accounts-table">
               <thead>
                 <tr className="border-b border-line text-xs uppercase tracking-wide text-faint">
-                  <th className="py-2 pr-3 font-medium">Name</th>
-                  <th className="py-2 pr-3 font-medium">Kind</th>
+                  <th className="py-2 pr-3 font-medium">Account</th>
                   <th className="py-2 pr-3 font-medium">Status</th>
-                  <th className="py-2 pr-3 font-medium">Source</th>
+                  <th className="hidden py-2 pr-3 font-medium md:table-cell">Contact</th>
+                  <th className="hidden py-2 pr-3 font-medium sm:table-cell">Source</th>
                   <th className="py-2 font-medium">Updated</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
                 {accounts.map((account) => (
-                  <tr key={account.id}>
+                  <tr key={account.id} className="group transition-colors hover:bg-surface-raised">
                     <td className="py-2.5 pr-3">
                       <Link
                         href={`/Services/customers/${account.id}`}
-                        className="font-medium underline-offset-2 hover:underline"
+                        className="flex min-w-0 items-center gap-3"
                       >
-                        {account.name}
+                        <AccountAvatar name={account.name} size="sm" />
+                        <span className="min-w-0">
+                          <span className="block truncate font-medium text-foreground underline-offset-2 group-hover:underline">
+                            {account.name}
+                          </span>
+                          <span className="block text-xs capitalize text-faint">{account.kind}</span>
+                        </span>
                       </Link>
                     </td>
-                    <td className="py-2.5 pr-3 text-muted">{account.kind}</td>
-                    <td className="py-2.5 pr-3 text-muted">{account.status}</td>
-                    <td className="py-2.5 pr-3 text-muted">{account.source ?? "—"}</td>
+                    <td className="py-2.5 pr-3">
+                      <AccountStatusBadge status={account.status} />
+                    </td>
+                    <td className="hidden max-w-[16rem] py-2.5 pr-3 text-muted md:table-cell">
+                      <span className="block truncate">{account.email ?? account.phone ?? "—"}</span>
+                    </td>
+                    <td className="hidden py-2.5 pr-3 text-muted sm:table-cell">{account.source ?? "—"}</td>
                     <td className="py-2.5 text-muted">{account.updatedAt.slice(0, 10)}</td>
                   </tr>
                 ))}

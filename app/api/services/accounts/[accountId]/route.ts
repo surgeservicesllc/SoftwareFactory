@@ -4,14 +4,17 @@ import {
   CRM_ACCOUNT_COLUMNS,
   CRM_ACCOUNT_STATUSES,
   CRM_CONTACT_COLUMNS,
+  CRM_OPPORTUNITY_COLUMNS,
   CRM_PROPERTY_COLUMNS,
   CRM_TIMELINE_COLUMNS,
   toAccountView,
   toContactView,
+  toOpportunityView,
   toPropertyView,
   toTimelineView,
   type CrmAccountRow,
   type CrmContactRow,
+  type CrmOpportunityRow,
   type CrmPropertyRow,
   type CrmTimelineRow,
 } from "@/lib/services/crm";
@@ -81,7 +84,7 @@ export async function GET(
       );
     }
 
-    const [contacts, properties, timeline] = await Promise.all([
+    const [contacts, properties, opportunities, timeline] = await Promise.all([
       client
         .from("crm_contacts")
         .select(CRM_CONTACT_COLUMNS)
@@ -98,6 +101,13 @@ export async function GET(
         .order("created_at", { ascending: true })
         .limit(100),
       client
+        .from("crm_opportunities")
+        .select(CRM_OPPORTUNITY_COLUMNS)
+        .eq("organization_id", activeOrganization.id)
+        .eq("account_id", parsed.data.accountId)
+        .order("created_at", { ascending: false })
+        .limit(100),
+      client
         .from("crm_timeline_events")
         .select(CRM_TIMELINE_COLUMNS)
         .eq("organization_id", activeOrganization.id)
@@ -107,6 +117,7 @@ export async function GET(
     ]);
     if (contacts.error) return databaseErrorResponse(contacts.error);
     if (properties.error) return databaseErrorResponse(properties.error);
+    if (opportunities.error) return databaseErrorResponse(opportunities.error);
     if (timeline.error) return databaseErrorResponse(timeline.error);
 
     const timelineRows = (timeline.data ?? []) as unknown as CrmTimelineRow[];
@@ -114,6 +125,7 @@ export async function GET(
       account: toAccountView(account.data as unknown as CrmAccountRow),
       contacts: ((contacts.data ?? []) as unknown as CrmContactRow[]).map(toContactView),
       properties: ((properties.data ?? []) as unknown as CrmPropertyRow[]).map(toPropertyView),
+      opportunities: ((opportunities.data ?? []) as unknown as CrmOpportunityRow[]).map(toOpportunityView),
       timeline: timelineRows.slice(0, TIMELINE_PAGE).map(toTimelineView),
       // Admitted, not silently cut: the reader learns there is older history.
       timelineTruncated: timelineRows.length > TIMELINE_PAGE,

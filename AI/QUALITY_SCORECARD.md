@@ -2,6 +2,41 @@
 
 Last reviewed: 2026-08-30
 
+**Addendum, 2026-08-30 latest+10b — the Demo Data book (ADR-187):**
+services-crm-demo-book behavior 2 (the whole dataset replayed against
+the real chain: counts exact incl. one trigger line per status/stage
+move; every row labeled Demo Data with .example email and 555 phone;
+closed_at/lost_reason coherent everywhere; the Whitfield journey reads
+lead → prospect → customer → inactive); services-demo-data 4 (scale and
+coverage, fictional-only reachability, every schema CHECK bound,
+unambiguous seeder keys); demo-seed route 3 (cross-origin refused,
+empty-book-only 409, session-scoped seed with reported counts);
+overview panel now 4 (pipeline headline from the board's read, Demo
+Data loader through the real route, DemoNotice on a seeded book).
+
+**Addendum, 2026-08-30 latest+10 — CRM pipeline, duplicates, global
+search (ADR-186):** services-crm-pipeline behavior 5 on the real chain
+under hosted-style default privileges (every stage move trigger-written
+onto the timeline with its actor and closed_at kept truthful through
+close/edit/reopen; loss reason CHECKed to lost only and carried into
+history detail; generated normals pinned to the exact values the route's
+JS mirrors produce, respellings landing on one normal; tenant isolation
++ composite-FK attachment refusal + no-DELETE conversion record;
+anon/service_role shutout). services-crm-routes 15 (whole-book pipeline
+report incl. win rate, exact tenant insert, born-closed deals refused,
+FK-honest 404, loss-reason-without-lost refused pre-database, leaving
+lost clears the reason, duplicate 409 surfacing matches with nothing
+inserted and the probe on the normalized column, explicit allowDuplicate
+path, per-column search merged and de-duplicated, short needle refused
+pre-database). services-pipeline-panel 4 (board + report from one
+payload, empty state naming the next step, dollars→cents on the real
+POST, immediate stage PATCH but reason-first lost flow);
+services-customers-panel 5 (+ duplicates surfaced, Record anyway as the
+deliberate second step). RLS census 152; hosted-grants
++crm_opportunities; runbook 186; workflow scope crm-pipeline postflight.
+Lint zero warnings, tsc clean; full vitest + production build before
+shipping.
+
 **Addendum, 2026-08-30 latest+9 — Services CRM foundation (ADR-185):**
 services-crm-foundation behavior 6 on the real chain (360° record held
 together; tenant isolation both directions incl. composite-FK

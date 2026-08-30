@@ -59,6 +59,7 @@ on:
           - node-attempt-projection
           - pause-graph
           - services-crm
+          - crm-pipeline
           - probe
 permissions:
   actions: read
@@ -1389,6 +1390,63 @@ jobs:
             end
             \$\$;"
           echo "Services CRM foundation applied; RLS, immutability grants and history trigger verified."
+
+      - name: Apply the CRM pipeline and search support (scope=crm-pipeline)
+        if: ${{ inputs.scope == 'crm-pipeline' }}
+        run: |
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+          VERSION=20260830000700_crm_pipeline_search
+          FILE="supabase/migrations/${VERSION}.sql"
+          sha256sum "$FILE"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied "${VERSION%%_*}"
+          else
+            npx supabase migration repair --status applied "${VERSION%%_*}" --db-url "$DB_URL"
+          fi
+          psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
+          # Postflight: crm_opportunities exists under forced RLS with no
+          # DELETE for authenticated (the migration revokes the hosted
+          # default privileges the services-crm dispatch caught), anon and
+          # service_role hold nothing, both pipeline triggers exist, and the
+          # duplicate-detection normals are real generated columns.
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
+            do \$\$
+            begin
+              if not exists (select 1 from pg_class c
+                   join pg_namespace n on n.oid = c.relnamespace
+                  where n.nspname = 'public' and c.relname = 'crm_opportunities'
+                    and c.relrowsecurity and c.relforcerowsecurity) then
+                raise exception 'crm_opportunities is missing or not under forced RLS';
+              end if;
+              if not has_table_privilege('authenticated', 'public.crm_opportunities', 'update')
+                or has_table_privilege('authenticated', 'public.crm_opportunities', 'delete') then
+                raise exception 'the crm_opportunities grants are wrong';
+              end if;
+              if has_table_privilege('anon', 'public.crm_opportunities', 'select')
+                or has_table_privilege('service_role', 'public.crm_opportunities', 'select') then
+                raise exception 'anon or service_role can reach the pipeline';
+              end if;
+              if (select count(*) from pg_trigger t join pg_class c on c.oid = t.tgrelid
+                  where c.relname = 'crm_opportunities'
+                    and t.tgname in ('crm_opportunities_stage_change','crm_opportunities_set_closed_at')) <> 2 then
+                raise exception 'a pipeline trigger is missing';
+              end if;
+              if (select count(*) from pg_attribute a join pg_class c on c.oid = a.attrelid
+                   join pg_namespace n on n.oid = c.relnamespace
+                  where n.nspname = 'public' and c.relname = 'crm_accounts'
+                    and a.attname in ('name_normal','email_normal','phone_normal')
+                    and a.attgenerated = 's') <> 3 then
+                raise exception 'the duplicate-detection generated columns are missing';
+              end if;
+            end
+            \$\$;"
+          echo "CRM pipeline applied; RLS, grants, triggers and generated normals verified."
 
       - name: Normalize exact legacy bot ACLs (scope=bot-legacy-acl-normalization)
         if: ${{ inputs.scope == 'bot-legacy-acl-normalization' }}

@@ -16,10 +16,22 @@ the full seeded E2E journey passes — increment 10 of the plan.
   timeline with system-kind refusal); Overview + Customers & Leads +
   360° account pages live-wired. Hosted apply: dispatch
   scope=services-crm after merge.
-- [ ] Increment 2: pipeline & opportunities, duplicate detection,
-  global search. Then increments 3–10 per the gap analysis (field
-  service, IPM, chemicals/compliance, invoicing, sales, marketing,
-  AI copilot, seeded E2E acceptance).
+- [x] Increment 2 (ADR-186): crm_opportunities pipeline (trigger-written
+  stage history, closed_at trigger+CHECK, loss reasons, no DELETE),
+  whole-book conversion report + /Services/pipeline board, duplicate
+  detection on create via generated normals (409 surfaced, explicit
+  allowDuplicate, never merged), global search in the shell.
+  20260830000700; hosted apply: dispatch scope=crm-pipeline after merge.
+- [x] Demo Data book (ADR-187, owner directive): seedable fictional
+  clientele through /api/services/demo-seed — empty-book-only, every
+  record source-labeled "Demo Data", .example emails, 555 phones,
+  history earned through the real triggers; Overview gains the loader,
+  the DemoNotice label, and the pipeline headline. No migration.
+- [ ] Increment 3: field service core — technicians, work orders,
+  scheduling calendar, recurring services, dispatch board; service
+  completion writes `service` timeline events through a definer. Then
+  increments 4–10 per the gap analysis (IPM, chemicals/compliance,
+  invoicing, sales, marketing, AI copilot, seeded E2E acceptance).
 
 Last triaged: 2026-08-29
 

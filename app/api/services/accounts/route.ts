@@ -4,6 +4,9 @@ import {
   CRM_ACCOUNT_COLUMNS,
   CRM_ACCOUNT_KINDS,
   CRM_ACCOUNT_STATUSES,
+  normalizeAccountEmail,
+  normalizeAccountName,
+  normalizeAccountPhone,
   toAccountView,
   type CrmAccountRow,
 } from "@/lib/services/crm";
@@ -48,6 +51,9 @@ const createSchema = z
     source: z.string().trim().min(1).max(120).nullish(),
     billingAddress: z.string().trim().min(1).max(500).nullish(),
     notes: z.string().trim().min(1).max(4000).nullish(),
+    // "Yes, record it anyway": the caller has seen the surfaced duplicates
+    // and decided this is genuinely a different account.
+    allowDuplicate: z.boolean().default(false),
   })
   .strict();
 
@@ -122,6 +128,56 @@ export async function POST(request: Request) {
     assertSameOriginRequest(request);
     const payload = createSchema.parse(await readBoundedJson(request, 32_000));
     const { client, user, activeOrganization } = await requireActiveOrganization();
+
+    /*
+     * Duplicate detection (ADR-186): probe the database's own normalized
+     * columns for the same name, email or phone in this organization, and
+     * SURFACE what matches — records are never merged automatically, and a
+     * caller who has seen the matches proceeds with allowDuplicate.
+     * One probe per criterion: separate equality queries cannot be broken
+     * by commas or parentheses inside a value the way a composed or()
+     * filter string can.
+     */
+    if (!payload.allowDuplicate) {
+      const probes: { column: string; value: string }[] = [];
+      const nameNormal = normalizeAccountName(payload.name);
+      const emailNormal = normalizeAccountEmail(payload.email);
+      const phoneNormal = normalizeAccountPhone(payload.phone);
+      if (nameNormal) probes.push({ column: "name_normal", value: nameNormal });
+      if (emailNormal) probes.push({ column: "email_normal", value: emailNormal });
+      if (phoneNormal) probes.push({ column: "phone_normal", value: phoneNormal });
+
+      const results = await Promise.all(
+        probes.map((probe) =>
+          client
+            .from("crm_accounts")
+            .select(CRM_ACCOUNT_COLUMNS)
+            .eq("organization_id", activeOrganization.id)
+            .eq(probe.column, probe.value)
+            .limit(5),
+        ),
+      );
+      const seen = new Map<string, CrmAccountRow>();
+      for (const result of results) {
+        if (result.error) return databaseErrorResponse(result.error);
+        for (const row of (result.data ?? []) as unknown as CrmAccountRow[]) {
+          seen.set(row.id, row);
+        }
+      }
+      if (seen.size > 0) {
+        return jsonNoStore(
+          {
+            error: {
+              code: "possible_duplicate",
+              message:
+                "An account with the same name, email or phone already exists. Review the matches, or record it anyway.",
+            },
+            duplicates: [...seen.values()].map(toAccountView),
+          },
+          { status: 409 },
+        );
+      }
+    }
 
     const { data, error } = await client
       .from("crm_accounts")

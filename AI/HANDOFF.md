@@ -2,7 +2,49 @@
 
 Last updated: 2026-08-30
 
-## Newest (2026-08-30, latest+9): Services CRM foundation (ADR-185, task #63)
+## Newest (2026-08-30, latest+10): CRM pipeline, duplicates, global search (ADR-186, task #63)
+
+Increment 2 of the CRM plan: crm_opportunities (20260830000700) on the
+ADR-185 posture — org-scoped forced RLS, composite same-org FK,
+anon/service_role revoked, revoke-then-grant in the SAME migration
+because hosted defaults GRANT ALL on creation (chain suites now install
+those defaults before the CRM window, so the class fails locally). Stage
+moves are trigger-written onto the account timeline (system kind
+status_change, loss reason in detail); closed_at maintained by BEFORE
+trigger + CHECKed `(stage in won/lost) = (closed_at not null)`; NO
+DELETE grant — win rate is won/(won+lost) and erasing losses would
+inflate it; lost_reason CHECKed to lost only, so PATCH clears it when
+leaving lost. Creation restricted to open stages at the route. Duplicate
+detection: generated normals on crm_accounts (name alnum-lower, email
+trim-lower, phone digits) with JS mirrors in lib/services/crm.ts — the
+chain suite pins stored values so probe/stored can't drift; create
+returns 409 + matches, explicit allowDuplicate proceeds, nothing is ever
+merged. Global search: per-column ilike probes (or() strings break on
+commas in addresses), merged per group, box in the shell. New surfaces:
+/Services/pipeline board + report, Opportunities card on the account
+page, search in shell/drawer. Suites: services-crm-pipeline behavior 5
+(chain), routes now 15, pipeline panel 4, customers panel 5. Census:
+RLS 152, hosted-grants +crm_opportunities, sentinels swept to
+20260830000700 (23), runbook 186, workflow scope crm-pipeline
+(postflight: forced RLS, no-DELETE, both triggers, generated columns).
+Dispatch scope=crm-pipeline right after merge. Next: increment 3, field
+service core.
+
+Same window, owner directive ("CRM looks like a placeholder… fake seed
+data fully built out"): the Demo Data book (ADR-187). 14-account
+fictional clientele in lib/services/demo-data.ts, seeded per-org via
+POST /api/services/demo-seed → seedDemoData walking statuses/stages one
+real move at a time (triggers write the history; nothing forges system
+rows). Empty-book-only (409 book_not_empty); source = "Demo Data" on
+every seeded account; .example emails, 555 phones; Overview gains the
+loader block, the reserved DemoNotice when seeded rows are present, and
+a pipeline headline (open value / won / win rate from the board's own
+read). Dataset replayed against the real chain in
+services-crm-demo-book.behavior (any CHECK overstep fails there before
+production); hygiene pins in services-demo-data unit suite. No
+migration — hosted apply for this window is scope=crm-pipeline only.
+
+## Older (2026-08-30, latest+9): Services CRM foundation (ADR-185, task #63)
 
 New owner /goal: pest-services CRM + field-service platform. Plan of
 record: AI/SERVICES_CRM_GAP_ANALYSIS.md (10 increments; PRODUCTION
