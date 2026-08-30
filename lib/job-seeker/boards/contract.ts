@@ -72,7 +72,7 @@ export type JobImportAdapter = Readonly<{
 
 /*
  * Bounds mirror the job_seeker_jobs CHECKs (migration 20260820000200):
- * title/company ≤ 300, url ≤ 800, external_id ≤ 200, location ≤ 200,
+ * title/company ≤ 300, url ≤ 800, external_id ≤ 200, location/salary ≤ 200,
  * description ≤ 30000. One request imports at most MAX_IMPORT_POSTINGS —
  * bounded work, and the response states the board's true total so nothing
  * pretends the cap was the whole board.
@@ -84,6 +84,8 @@ export const COMPANY_MAX = 300;
 export const URL_MAX = 800;
 export const EXTERNAL_ID_MAX = 200;
 export const LOCATION_MAX = 200;
+/** Mirrors the salary_text CHECK on job_seeker_jobs (migration 20260820000200). */
+export const SALARY_MAX = 200;
 export const DESCRIPTION_MAX = 30_000;
 
 const IDENTIFIER_PATTERN = /^[a-z0-9][a-z0-9_-]{0,62}$/;

@@ -165,6 +165,66 @@ describe("SmartRecruiters", () => {
   });
 });
 
+describe("pay, where the board publishes it", () => {
+  /*
+   * Both of these were being fetched and discarded. Ashby's request already
+   * carries `includeCompensation=true`, and Breezy's payload has always had a
+   * `salary` string — the adapters simply hardcoded null. Found by probing all
+   * eleven boards live and noticing which came back without pay.
+   */
+  it("takes Ashby's own formatted range", async () => {
+    stub({ jobs: [{
+      id: "ash-1",
+      title: "Security Engineer, Cloud",
+      location: "New York",
+      jobUrl: "https://jobs.ashbyhq.com/ramp/ash-1",
+      compensation: { compensationTierSummary: "$211.4K – $290.6K • Offers Equity" },
+      shouldDisplayCompensationOnJobPostings: true,
+    }] });
+    const result = await fetchAshbyBoard("ramp");
+
+    expect(result.postings[0]?.salaryText).toBe("$211.4K – $290.6K • Offers Equity");
+  });
+
+  /*
+   * The employer's own decision, and it is theirs to make: 5 of the 139 roles
+   * on the board this was written against opt out. Publishing a range they
+   * chose to withhold would be republishing something they declined to.
+   */
+  it("withholds pay the employer chose not to display", async () => {
+    stub({ jobs: [{
+      id: "ash-2",
+      title: "Staff Engineer",
+      location: "New York",
+      jobUrl: "https://jobs.ashbyhq.com/ramp/ash-2",
+      compensation: { compensationTierSummary: "$211.4K – $290.6K" },
+      shouldDisplayCompensationOnJobPostings: false,
+    }] });
+    const result = await fetchAshbyBoard("ramp");
+
+    expect(result.postings[0]?.salaryText).toBeNull();
+  });
+
+  it("takes Breezy's salary string", async () => {
+    stub([{
+      id: "bz-1",
+      name: "Employee #12",
+      salary: "$120K – $150K / year",
+      url: "https://breezy.breezy.hr/p/bz-1",
+    }]);
+    const result = await fetchBreezyBoard("breezy");
+
+    expect(result.postings[0]?.salaryText).toBe("$120K – $150K / year");
+  });
+
+  it("leaves pay null where the board does not send it", async () => {
+    stub([{ id: "bz-2", name: "Open Position", url: "https://breezy.breezy.hr/p/bz-2" }]);
+    const result = await fetchBreezyBoard("breezy");
+
+    expect(result.postings[0]?.salaryText).toBeNull();
+  });
+});
+
 describe("Workable", () => {
   it("prefers the shortcode, which is what its public URLs use", async () => {
     stub({ name: "Deel", jobs: [{ id: 99, shortcode: "A1B2C3", title: "Engineer", url: "https://apply.workable.com/deel/j/A1B2C3" }] });

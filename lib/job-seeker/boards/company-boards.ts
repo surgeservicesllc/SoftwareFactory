@@ -4,6 +4,7 @@ import {
   EXTERNAL_ID_MAX,
   ImportSourceError,
   LOCATION_MAX,
+  SALARY_MAX,
   MAX_IMPORT_POSTINGS,
   TITLE_MAX,
   assertIdentifier,
@@ -101,7 +102,27 @@ type AshbyJob = {
   isRemote?: unknown;
   descriptionPlain?: unknown;
   descriptionHtml?: unknown;
+  compensation?: { compensationTierSummary?: unknown };
+  shouldDisplayCompensationOnJobPostings?: unknown;
 };
+
+/**
+ * Ashby's pay range, when the employer publishes one.
+ *
+ * The request already asks for `includeCompensation=true`, so this data was
+ * being fetched and discarded. `compensationTierSummary` is Ashby's own
+ * formatted string — "$211.4K – $290.6K • Offers Equity" — which is better
+ * than anything reassembled from the tier objects beside it.
+ *
+ * `shouldDisplayCompensationOnJobPostings` is the employer's decision about
+ * publishing it, and it is honoured: 5 of 139 roles on the board this was
+ * written against opt out, and showing a range the employer chose to withhold
+ * would be republishing something they declined to publish.
+ */
+function ashbySalary(job: AshbyJob): string | null {
+  if (job.shouldDisplayCompensationOnJobPostings === false) return null;
+  return boundedOrNull(job.compensation?.compensationTierSummary, SALARY_MAX);
+}
 
 export async function fetchAshbyBoard(identifier: string): Promise<FetchedPostings> {
   const name = assertIdentifier(identifier);
@@ -138,7 +159,7 @@ export async function fetchAshbyBoard(identifier: string): Promise<FetchedPostin
       // Ashby's board payload names no employer; the board name a person typed
       // is the attribution they can verify.
       company: name,
-      salaryText: null,
+      salaryText: ashbySalary(job),
       location,
       workModel: workModelFrom(
         typeof job.employmentType === "string" ? job.employmentType : null,
@@ -192,6 +213,11 @@ export async function fetchSmartRecruitersBoard(identifier: string): Promise<Fet
       url: httpsUrlOrNull(`https://jobs.smartrecruiters.com/${company}/${id}`),
       title,
       company: boundedOrNull(posting.company?.name, COMPANY_MAX) ?? company,
+      /*
+       * SmartRecruiters' postings list carries no pay and no body: the full ad
+       * is a separate call per posting, so importing 40 would mean 40 more
+       * requests. Null rather than a guess, and rather than that cost.
+       */
       salaryText: null,
       location,
       workModel: workModelFrom(null, location, posting.location?.remote === true),
@@ -298,6 +324,8 @@ export async function fetchWorkableBoard(identifier: string): Promise<FetchedPos
 type BreezyPosition = {
   id?: unknown;
   name?: unknown;
+  /** Breezy's own formatted range, e.g. "$120K – $150K / year". */
+  salary?: unknown;
   type?: { name?: unknown };
   location?: {
     name?: unknown;
@@ -343,7 +371,7 @@ export async function fetchBreezyBoard(identifier: string): Promise<FetchedPosti
       url: httpsUrlOrNull(position.url),
       title,
       company,
-      salaryText: null,
+      salaryText: boundedOrNull(position.salary, SALARY_MAX),
       location,
       workModel: workModelFrom(
         typeof position.type?.name === "string" ? position.type.name : null,
