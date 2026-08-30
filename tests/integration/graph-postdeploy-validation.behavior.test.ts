@@ -32,12 +32,14 @@ const mergeSha = "c".repeat(40);
 const deploymentUrl = "https://deploy.factory.test";
 const publicUrl = "https://www.factory.test";
 const legacyPlanDigest = "ac9bde8fc1cdd21e735f02b1fa7d940ab680c2bde8c1ec24d704d42c59045a09";
-const validatedPlanDigest = "0ec1e97b80dc8696872d88162c5271f9ea822e7dea79556c5470730a025d3b49";
+const priorPostdeployPlanDigest = "0ec1e97b80dc8696872d88162c5271f9ea822e7dea79556c5470730a025d3b49";
+const validatedPlanDigest = "02bb1e7b35782fad9f6024c080bd149f7ade4edb9d68326fd3b04ff94ba589ad";
 
 type FixtureOptions = {
   readonly artifactReleaseSha?: string;
   readonly conflictingMonitor?: boolean;
   readonly legacyPlan?: boolean;
+  readonly priorPostdeployPlan?: boolean;
 };
 
 function validationChecks() {
@@ -146,7 +148,11 @@ async function createFixture(options: FixtureOptions = {}) {
     ) values (
       '${graphId}', '${organizationId}', '${projectId}', 'Validate exact release',
       'SEQUENTIAL', 'yellow', false, '${ownerId}', true, 'full_lifecycle', 2,
-      '${options.legacyPlan ? legacyPlanDigest : validatedPlanDigest}',
+      '${options.legacyPlan
+        ? legacyPlanDigest
+        : options.priorPostdeployPlan
+          ? priorPostdeployPlanDigest
+          : validatedPlanDigest}',
       '${"31000000-0000-4000-8000-00000000e101"}',
       'main', '${"b".repeat(40)}', '["Quality"]'::jsonb,
       encode(sha256(convert_to('["Quality"]'::jsonb::text, 'UTF8')), 'hex')
@@ -421,6 +427,24 @@ describe("validated lifecycle completion", { timeout: 240_000 }, () => {
         validation_state: "inconclusive",
         validator_version: "graph-http-probe-v2",
       }]);
+    } finally {
+      await db.close();
+    }
+  });
+
+  it("keeps the preceding post-deploy digest on the strong validated completion path", async () => {
+    const db = await createFixture({ priorPostdeployPlan: true });
+    try {
+      expect((await complete(db)).rows).toEqual([{ id: graphRunId }]);
+
+      expect(await readWriteState(db)).toMatchObject({
+        bridge_state: "VALIDATED",
+        monitor_count: 1,
+        observation_count: 1,
+        run_event_count: 1,
+        run_state: "COMPLETED",
+        validation_count: 1,
+      });
     } finally {
       await db.close();
     }

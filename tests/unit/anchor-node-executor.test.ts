@@ -2,7 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
 import type { CompiledNode } from "@/lib/graph/compiler";
-import { FULL_LIFECYCLE_V2_POSTDEPLOY_PLAN_SHA256 } from "@/lib/graph/templates";
+import {
+  FULL_LIFECYCLE_V2_POSTDEPLOY_PLAN_SHA256,
+  FULL_LIFECYCLE_V2_PRE_TYPED_INPUT_PLAN_SHA256,
+} from "@/lib/graph/templates";
 import { buildAnchorNodeExecutor } from "@/lib/worker/anchor-node-executor";
 
 /**
@@ -512,7 +515,12 @@ describe("the MONITOR anchor (synthesis): the production probe", () => {
     expect(result.error).toContain("production_http_probe");
   });
 
-  it("completes release-bound validation only after public health, auth, security, CI, and a bounded window pass", async () => {
+  it.each([
+    FULL_LIFECYCLE_V2_POSTDEPLOY_PLAN_SHA256,
+    FULL_LIFECYCLE_V2_PRE_TYPED_INPUT_PLAN_SHA256,
+  ])(
+    "completes release-bound validation for post-deploy plan %s only after public health, auth, security, CI, and a bounded window pass",
+    async (templatePlanSha256) => {
     const publicHeaders = {
       "content-security-policy": "default-src 'self'",
       "strict-transport-security": "max-age=63072000",
@@ -550,7 +558,7 @@ describe("the MONITOR anchor (synthesis): the production probe", () => {
     });
     const execute = buildAnchorNodeExecutor({
       ...connected,
-      templatePlanSha256: FULL_LIFECYCLE_V2_POSTDEPLOY_PLAN_SHA256,
+      templatePlanSha256,
       validationObservationAttempts: 3,
       monitorMaxAttempts: 3,
       fetchImpl,
@@ -579,7 +587,8 @@ describe("the MONITOR anchor (synthesis): the production probe", () => {
       ],
     });
     expect(fetchImpl.mock.calls.filter(([input]) => String(input) === connected.projectProductionUrl)).toHaveLength(3);
-  });
+    },
+  );
 
   it("refuses to validate a healthy public alias whose health endpoint identifies another release", async () => {
     const publicHeaders = {

@@ -61,7 +61,7 @@ const baseSha = "a".repeat(40);
 const headSha = "b".repeat(40);
 const mergeSha = "c".repeat(40);
 const canonicalTemplatePlanSha256 =
-  "0ec1e97b80dc8696872d88162c5271f9ea822e7dea79556c5470730a025d3b49";
+  "02bb1e7b35782fad9f6024c080bd149f7ade4edb9d68326fd3b04ff94ba589ad";
 const requiredCheckNames = [
   "Lint, typecheck, test, and build",
   "Browser and accessibility tests 1/3",
@@ -325,6 +325,71 @@ describe("graph to Phase 1C release lineage", { timeout: 240_000 }, () => {
 
   afterAll(async () => {
     await db?.close();
+  });
+
+  it("preserves the exact release-function catalogs while admitting typed inputs", async () => {
+    await resetRole(db);
+    const catalogs = await db.query<{
+      acl_count: number;
+      acl_exact: boolean;
+      has_current: boolean;
+      has_legacy: boolean;
+      has_prior: boolean;
+      owner_name: string;
+      proconfig: string[];
+      prosecdef: boolean;
+      proname: string;
+      source_md5: string;
+    }>(
+      `select routine.proname,
+              md5(replace(replace(routine.prosrc, E'\\r\\n', E'\\n'), E'\\r', E'\\n')) as source_md5,
+              routine.prosecdef, routine.proconfig,
+              pg_get_userbyid(routine.proowner) as owner_name,
+              (select count(*)::integer from aclexplode(routine.proacl)) as acl_count,
+              not exists (
+                select 1 from aclexplode(routine.proacl) privilege
+                where privilege.grantor <> routine.proowner
+                   or privilege.privilege_type <> 'EXECUTE'
+                   or privilege.is_grantable
+                   or privilege.grantee not in (routine.proowner, to_regrole('service_role')::oid)
+              ) as acl_exact,
+              strpos(routine.prosrc, '0ec1e97b80dc8696872d88162c5271f9ea822e7dea79556c5470730a025d3b49') > 0 as has_prior,
+              strpos(routine.prosrc, '02bb1e7b35782fad9f6024c080bd149f7ade4edb9d68326fd3b04ff94ba589ad') > 0 as has_current,
+              strpos(routine.prosrc, 'ac9bde8fc1cdd21e735f02b1fa7d940ab680c2bde8c1ec24d704d42c59045a09') > 0 as has_legacy
+         from pg_proc routine
+        where routine.oid in (
+          'public.create_graph_from_plan_with_release_identity_as_server(uuid,uuid,uuid,text,public.graph_topology,jsonb,public.risk_level,boolean,jsonb,jsonb,jsonb,text,integer,uuid,text,text,jsonb)'::regprocedure,
+          'public.complete_graph_run_with_validated_release_as_worker(text,uuid,public.graph_run_state,boolean,bigint,bigint,text,text)'::regprocedure
+        )
+        order by routine.proname`,
+    );
+
+    expect(catalogs.rows).toEqual([
+      {
+        acl_count: 2,
+        acl_exact: true,
+        has_current: true,
+        has_legacy: false,
+        has_prior: true,
+        owner_name: "postgres",
+        proconfig: ["search_path=pg_catalog"],
+        prosecdef: true,
+        proname: "complete_graph_run_with_validated_release_as_worker",
+        source_md5: "b6ab6fa949a205887ac36d96442c9969",
+      },
+      {
+        acl_count: 2,
+        acl_exact: true,
+        has_current: true,
+        has_legacy: false,
+        has_prior: false,
+        owner_name: "postgres",
+        proconfig: ["search_path=pg_catalog"],
+        prosecdef: true,
+        proname: "create_graph_from_plan_with_release_identity_as_server",
+        source_md5: "0aff039a853c2c99fe733a72e9388f92",
+      },
+    ]);
   });
 
   it("forces tenant RLS while keeping bridge and owner-intent writes private", async () => {
@@ -1654,9 +1719,12 @@ describe("graph to Phase 1C release lineage", { timeout: 240_000 }, () => {
     const built = buildLaunchPlan(template!, budgetForTemplate(template!, DEFAULT_GRAPH_BUDGET));
     if (!built.ok) throw new Error(built.errors.join("; "));
 
-    // Reconstruct the exact pre-post-deploy plan so the forward migration
-    // proves it replaced one digest instead of widening template admission.
-    const legacyNodes = JSON.parse(JSON.stringify(built.plan.nodes)) as Array<{
+    // Reconstruct the immediately preceding post-deploy plan. Its output
+    // contract is still strong, but its non-entry inputs predate typed handoff
+    // envelopes, so the new launch boundary must reject it while in-flight
+    // graphs continue through validated completion.
+    const priorPostdeployNodes = JSON.parse(JSON.stringify(built.plan.nodes)) as Array<{
+      input_schema: Record<string, unknown>;
       job: string;
       node_key: string;
       output_schema: {
@@ -1665,6 +1733,34 @@ describe("graph to Phase 1C release lineage", { timeout: 240_000 }, () => {
         properties?: Record<string, unknown>;
       };
     }>;
+    for (const node of priorPostdeployNodes) {
+      if (node.node_key !== "goal") {
+        node.input_schema = {
+          $schema: "https://json-schema.org/draft/2020-12/schema",
+        };
+      }
+    }
+    const priorPostdeployCanonicalPlan = {
+      topology: built.plan.topology,
+      topologyReasons: built.plan.topologyReasons,
+      riskLevel: built.plan.riskLevel,
+      requiresOwnerApproval: built.plan.requiresOwnerApproval,
+      nodes: priorPostdeployNodes,
+      edges: built.plan.edges,
+      budget: built.plan.budget,
+    };
+    await resetRole(db);
+    const priorPostdeployDigest = await db.query<{ digest: string }>(
+      `select encode(sha256(convert_to($1::jsonb::text, 'UTF8')), 'hex') as digest`,
+      [JSON.stringify(priorPostdeployCanonicalPlan)],
+    );
+    expect(priorPostdeployDigest.rows[0].digest).toBe(
+      "0ec1e97b80dc8696872d88162c5271f9ea822e7dea79556c5470730a025d3b49",
+    );
+
+    // Reconstruct the immutable pre-post-deploy plan separately. A current
+    // contract improvement must never rewrite either historical identity.
+    const legacyNodes = JSON.parse(JSON.stringify(priorPostdeployNodes)) as typeof priorPostdeployNodes;
     const legacyDeploy = legacyNodes.find((node) => node.node_key === "deploy");
     const legacyMonitor = legacyNodes.find((node) => node.node_key === "monitor");
     if (!legacyDeploy?.output_schema.properties || !legacyMonitor?.output_schema.anyOf?.[1]) {
@@ -1730,6 +1826,30 @@ describe("graph to Phase 1C release lineage", { timeout: 240_000 }, () => {
     )).rows[0].count).toBe(beforeLaunch);
 
     await asWorker(db);
+    await expect(db.query(
+      `select public.create_graph_from_plan_with_release_identity_as_server(
+         $1, $2, $3, $4, $5::public.graph_topology, $6::jsonb,
+         $7::public.risk_level, $8, $9::jsonb, $10::jsonb, $11::jsonb,
+         'full_lifecycle', 2, $12, 'main', $13, $14::jsonb
+       ) as graph_id`,
+      [
+        organizationId,
+        ownerId,
+        projectId,
+        built.plan.goal,
+        built.plan.topology,
+        JSON.stringify(built.plan.topologyReasons),
+        built.plan.riskLevel,
+        built.plan.requiresOwnerApproval,
+        JSON.stringify(priorPostdeployNodes),
+        JSON.stringify(built.plan.edges),
+        JSON.stringify(built.plan.budget),
+        repositoryId,
+        baseSha,
+        requiredCheckNamesJson,
+      ],
+    )).rejects.toThrow(/canonical digest/i);
+
     await expect(db.query(
       `select public.create_graph_from_plan_with_release_identity_as_server(
          $1, $2, $3, $4, $5::public.graph_topology, $6::jsonb,
