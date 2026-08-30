@@ -1,9 +1,11 @@
-select assignment.id, project.name as project, bot.name as bot,
-       assignment.model as assignment_model, assignment.repository_access,
-       assignment.can_open_pull_request, assignment.pipeline_access,
-       assignment.requires_human_approval, assignment.max_concurrent_tasks,
-       assignment.work_effort
-  from public.bot_assignments assignment
-  join public.bots bot on bot.id = assignment.bot_id
-  join public.projects project on project.id = assignment.project_id
- order by project.name, bot.name;
+            select relation.relname,
+                   relation.relrowsecurity as rls,
+                   relation.relforcerowsecurity as force_rls,
+                   (select count(*) from pg_policy policy where policy.polrelid = relation.oid) as policies,
+                   has_table_privilege('authenticated', relation.oid, 'SELECT') as authenticated_select,
+                   has_table_privilege('service_role', relation.oid, 'SELECT') as service_role_select
+              from pg_class relation
+              join pg_namespace space on space.oid = relation.relnamespace
+             where space.nspname = 'public'
+               and relation.relname in ('provider_credentials', 'provider_connect_sessions')
+             order by relation.relname;

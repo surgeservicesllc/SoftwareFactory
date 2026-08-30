@@ -1,13 +1,16 @@
-select object_name, object_kind, present from (
-  values
-    ('provider_credentials', 'table', to_regclass('public.provider_credentials') is not null),
-    ('provider_connect_sessions', 'table', to_regclass('public.provider_connect_sessions') is not null),
-    ('provider_connect_sessions_expiry_idx', 'index', to_regclass('public.provider_connect_sessions_expiry_idx') is not null),
-    ('list_provider_credentials', 'function', to_regprocedure('public.list_provider_credentials(uuid)') is not null),
-    ('open_provider_connect_session', 'function', to_regprocedure('public.open_provider_connect_session(uuid,text,text,integer)') is not null),
-    ('resolve_provider_connect_session', 'function', to_regprocedure('public.resolve_provider_connect_session(text)') is not null),
-    ('claim_provider_connect_session', 'function', to_regprocedure('public.claim_provider_connect_session(text,text)') is not null),
-    ('read_provider_credential', 'function', to_regprocedure('public.read_provider_credential(uuid,text)') is not null),
-    ('forget_provider_credential', 'function', to_regprocedure('public.forget_provider_credential(uuid,text)') is not null)
-) as inventory(object_name, object_kind, present)
-order by object_kind, object_name;
+            set search_path = pg_catalog;
+            select relation.relname, relation.relrowsecurity as rls, relation.relforcerowsecurity as force_rls,
+                   coalesce(relation.relacl::text, '<null>') as relacl,
+                   has_table_privilege('anon', relation.oid, 'SELECT') as anon_sel,
+                   has_table_privilege('service_role', relation.oid, 'SELECT') as service_sel,
+                   has_table_privilege('authenticated', relation.oid, 'SELECT') as auth_sel,
+                   has_table_privilege('authenticated', relation.oid, 'INSERT') as auth_ins
+              from pg_class relation
+             where relation.relnamespace = 'public'::regnamespace
+               and relation.relname in (
+                 'factory_record_only_submission_guards',
+                 'agentos_environments', 'agentos_mcp_connections', 'agentos_skills',
+                 'agentos_agent_grants', 'agentos_agent_mcp_grants',
+                 'agentos_agent_skill_grants', 'agentos_agent_repo_grants',
+                 'agentos_agent_filesystem_grants', 'agentos_agent_collaborators')
+             order by relation.relname;

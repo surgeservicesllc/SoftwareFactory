@@ -1,8 +1,6 @@
-select command.id, command.status, command.requested_risk, command.command_type,
-       command.parameters ->> 'executionMode' as execution_mode,
-       command.parameters ->> 'provider' as provider,
-       command.parameters ->> 'model' as model,
-       command.created_at
-  from public.commands command
- order by command.created_at desc
- limit 5;
+            select coalesce(
+              (select array_to_string(proargnames, ', ')
+                 from pg_proc
+                where oid = to_regprocedure('public.delete_selected_pipelines(uuid,uuid[],text,boolean)')),
+              'delete_selected_pipelines absent (pre-20260823000200 database)'
+            ) as selection_delete_arguments;

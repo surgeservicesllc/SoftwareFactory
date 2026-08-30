@@ -448,8 +448,9 @@ jobs:
         if: ${{ inputs.scope == 'probe' }}
         run: |
           # Read-only probe SQL lives in .github/hosted-apply/probe/ —
-          # extracted verbatim so the workflow stays under GitHub's 500KB
-          # planning ceiling. Order and output are unchanged.
+          # extracted so the workflow stays under GitHub's 500KB planning
+          # ceiling. Each file is byte-for-byte what bash handed psql -c
+          # before; order, pipeline suffixes and output are unchanged.
           if [ "$MODE" != "dburl" ]; then
             ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
             echo "::add-mask::$ENC"
@@ -476,7 +477,13 @@ jobs:
           echo "secret-free (<=400 chars, text_has_likely_secret refused), so printing it in a"
           echo "log is safe, and it is the only way to read WHY a probe failed without a"
           echo "database console: the counts in the auth-broker log say only that it failed."
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/04.sql
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/04.sql || echo "usage observations table absent: migration 20260816001500 has not run here."
+          echo ""
+          echo "Ownership and grants for the AI-account section, which is where a 42501 comes from."
+          echo "A SECURITY DEFINER function runs as its owner: if the function and the tables it"
+          echo "writes were applied by different roles, the function can lack privileges on them"
+          echo "and the console reports 'permission denied for table ...' as a bare 42501."
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/05.sql
           echo "For a table row the boolean column is FORCE row level security, not execute."
           echo "Every function above should share one owner with every table above."
           echo ""
@@ -485,7 +492,7 @@ jobs:
           echo "superuser or a BYPASSRLS role escapes that. activity_events carries exactly one"
           echo "policy and it is SELECT, so an owner that does not bypass cannot insert an audit"
           echo "row - which is the last statement of remove_ai_account, and a 42501."
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/05.sql
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/06.sql
           cat > /tmp/audit-write-probe.sql <<'PROBE_SQL'
           do $probe$
           declare
@@ -702,7 +709,7 @@ jobs:
           rollback;
           AGENT_SQL
           psql "$DB_URL" -q -f /tmp/agent-assignment-probe.sql
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/06.sql
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/07.sql
           echo ""
           echo "The Agentic SDLC lifecycle (20260821000100 and 20260821000200), asked about"
           echo "directly. These two files are newer than the measured ledger table in"
@@ -710,14 +717,14 @@ jobs:
           echo "above: that one reports a measurement, and appending an unmeasured version"
           echo "to it would turn evidence into assertion. present = f for every row is the"
           echo "expected reading before scope=lifecycle runs, and t for every row after."
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/07.sql
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/08.sql
           echo "The last two rows matter most: both files only REPLACE claim_planned_graph and"
           echo "list_graph_runs, so their existence proves nothing. Those rows ask whether the"
           echo "replacement body is the lifecycle-aware one."
           echo ""
           echo "And whether graph_gates is protected, if it exists at all. A new table without"
           echo "row level security is an exposed table, and the ledger cannot say either way."
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/08.sql
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/09.sql
           echo "No row at all means the table is absent and 20260821000200 has not run here —"
           echo "this asks pg_class, so a missing table is zero rows rather than an error."
           echo "Expected once applied: rls_enabled t, rls_forced t, one SELECT policy,"
@@ -728,11 +735,34 @@ jobs:
           echo "The job-seeker resume extraction table's actual privileges, clause by"
           echo "clause. The apply step asserts these as one AND, which tells you it"
           echo "failed but not which part — this prints each separately."
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/09.sql
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/10.sql \
+            || echo "the table does not exist yet"
+          echo "Expected: rls t, forced t, policies 3, auth_select t, auth_update f,"
+          echo "anon_select f, service_update f, definer t, auth_execute t, anon_execute f,"
+          echo "service_execute f, and function_acl owner plus authenticated only."
+          echo "A true auth_update or service_update means Supabase default privileges"
+          echo "granted the table to those roles at CREATE TABLE time and the migration"
+          echo "revoked only anon — a hole PGlite cannot reproduce, because it has no"
+          echo "default privileges configured for these roles."
+          echo ""
+          echo "The two clear controls, read from a fresh run rather than from the apply"
+          echo "that installed them. An apply grading its own work is the weaker evidence:"
+          echo "the same step that ran the DDL also decides whether the DDL is correct, so"
+          echo "a mistake in the assertion and a mistake in the migration cancel out. This"
+          echo "is the independent read, asking the catalogue the same questions."
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/11.sql \
+            || echo "neither clear function exists yet"
+          echo "Expected: two rows, security_definer t, member_may_execute t, anon_may_execute f."
+          echo "No row for a name means scope=clear-controls has not run against this database."
+          echo ""
+          echo "The exact sixteen-function protected pre-repair catalog, row by row."
+          echo "Every actual field is printed beside its frozen expectation so a fail-closed"
+          echo "release gate identifies drift without changing the database."
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -x -f .github/hosted-apply/probe/12.sql
           echo ""
           echo "The audit labels those functions write. A clear that cannot record itself is"
           echo "a silent deletion, so the enum values are as load-bearing as the functions."
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/10.sql
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/13.sql
           echo "Expected: both labels present. A missing label means 20260822000700 has not run,"
           echo "and the function above would fail at its audit insert rather than at its delete."
 
@@ -741,7 +771,7 @@ jobs:
           echo "protected chain's containment gate, which asserts all of this as one AND,"
           echo "so its refusal said the posture is wrong without saying which part."
           echo "Read-only: the same rows the gate reads, printed one verdict per clause."
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -x -f .github/hosted-apply/probe/11.sql
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -x -f .github/hosted-apply/probe/14.sql
           echo "Gate requires per row: project_present t, org_kill_switch_active t,"
           echo "org/project autonomous_mode f, both max risks green, no auto action t,"
           echo "resolved_kill_switch_active t, resolved_executor_connected f,"
@@ -750,24 +780,24 @@ jobs:
           echo ""
           echo "The gate's remaining clauses, which the per-project report above cannot"
           echo "show: the exact named-project census and the append-only audit posture."
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -x -f .github/hosted-apply/probe/12.sql
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -x -f .github/hosted-apply/probe/15.sql
           echo "The AgentOS foundation census: which of 20260822000900's 32 named"
           echo "objects exist. The chain's first in-file guard refuses anything"
           echo "between 0 and 32 (run 32600709789 found 4), and a cleanup needs to"
           echo "know exactly which remnants a partial 20260814000300 apply left."
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/13.sql
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/16.sql
           echo "Row counts for whichever roster tables exist (a cleanup may only ever"
           echo "drop empty remnants)."
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/14.sql
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/17.sql
 
           echo "Every row of the named-project census, so a duplicate name is visible"
           echo "instead of inferred from a count."
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/15.sql
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/18.sql
           echo ""
           echo "Worker rows the gate reads. Any heartbeat in the future or inside ten"
           echo "minutes, or any held run, refuses the chain."
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/16.sql
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/17.sql
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/19.sql
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/20.sql
           echo "Expected: heartbeats_in_future 0, heartbeats_last_10_minutes 0, holding_a_run 0."
 
           echo ""
@@ -803,20 +833,20 @@ jobs:
                  group by expected.signature
                  order by expected.signature;" \
             -c "rollback;"
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/18.sql
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/21.sql
           echo "Expected after rollback: extension_rows 0, function_rows 0."
 
           echo ""
           echo "Post-apply record-only posture, clause by clause. The chain committed in"
           echo "run 32607123713 and the step then refused at the RECORD_ONLY_READY"
           echo "postflight; these rows show exactly which wrapper drifted and how."
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/19.sql
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/20.sql
-          echo ""
-          echo "Guard table and AgentOS foundation posture the two later postflights pin."
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/21.sql
           psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/22.sql
           psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/23.sql
+          echo ""
+          echo "Guard table and AgentOS foundation posture the two later postflights pin."
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/24.sql
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/25.sql
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/26.sql
           echo "Expected: record_only_agent_runs 0 (the record-only boundary produced no run)."
 
           echo ""
@@ -825,26 +855,44 @@ jobs:
           echo "exists - which is why the Supabase Preview branch replays it and"
           echo "dies with 42P07. Finishing it needs to know precisely which"
           echo "pieces landed, because NOT VISIBLE is not absent."
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/24.sql
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/27.sql
 
           echo ""
           echo "And the columns those two tables actually carry, because a table"
           echo "that exists is not the same as a table that is complete."
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/25.sql
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/26.sql
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/27.sql
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/28.sql || true
+
+          echo ""
+          echo "RLS posture and client grants on those tables - the part a"
+          echo "migration that died before its grants would have skipped."
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/29.sql || true
+
+          echo ""
+          echo "The Pipelines page's selection delete, as the database actually"
+          echo "declares it: which output columns it returns tells you whether a"
+          echo "selected pipeline is stopped before removal (stopped_count) or"
+          echo "merely skipped (kept_running). Tolerant of either era."
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/30.sql || true
+
+          echo ""
+          echo "Analysis graphs and their command links - the record-only execution"
+          echo "surface. Tolerant of a database that predates the link migration."
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/31.sql
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/32.sql
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/33.sql || true
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/34.sql
 
           echo ""
           echo "Execution-path readiness for a real manual Codex run: which bots carry"
           echo "the one executable identity, whether their accounts read connected,"
           echo "how their project assignments are configured, and what the recent"
           echo "commands, tasks, and runs actually did. Metadata only - never secrets."
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/28.sql
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/29.sql
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/30.sql
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/31.sql
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/32.sql
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/33.sql
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/35.sql
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/36.sql
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/37.sql
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/38.sql
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/39.sql
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/40.sql
 
       - name: Apply the project control migrations surgically (scope=project-controls)
         if: ${{ inputs.scope == 'project-controls' }}

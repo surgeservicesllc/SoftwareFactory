@@ -3389,3 +3389,30 @@ The three remaining giants (factory-any-model-record-only 82KB,
 scope=all 65KB, bot-account-binding 41KB) are mutating release-path
 steps and deliberately not extracted in the same change; they are the
 recorded follow-up if headroom runs low again.
+
+
+## ADR-179 - The probe extraction was wrong once, and now a test executes it
+
+Date: 2026-08-30
+
+ADR-178's extraction claimed verbatim and was not: the parser required
+the closing `;"` at end-of-line, but seven probe blocks close with a
+shell suffix on the same line (`|| echo …`, `|| true`, pipeline `\`
+continuations), so the lazy match ran past the real terminator and
+swallowed shell fragments into the SQL files - the original had 40
+multi-line blocks, not 33. CI could not catch it (the YAML stayed
+valid and only 07.sql was ever executed by a test); the live
+`scope=probe` dispatch this session ran to verify ADR-178 caught it:
+run 33297041401 failed with a syntax error at probe/04.sql:35.
+
+The fix re-extracts all 40 blocks from the pre-change original with a
+correct parser (capture to the first unescaped `"`, preserve the
+closing line's shell suffix exactly) and ships two machine-checked
+proofs: rebuilding the step with the original bodies reproduces the
+pre-change step byte-for-byte, and every file equals the
+bash-unescaped text psql previously received. The lesson is now a
+test: hosted-scope-replay executes EVERY probe file against the fully
+migrated PGlite chain (hosted ledger schema stubbed), so a mangled
+extraction fails a unit run instead of a production dispatch. The
+lifecycle pin moved 07.sql -> 08.sql with the renumbering. A green
+re-dispatch of scope=probe is the closing evidence.

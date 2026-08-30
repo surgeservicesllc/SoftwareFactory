@@ -1,4 +1,5 @@
-select case when to_regclass('public.command_analysis_graphs') is null
-            then 'link table absent (pre-20260823000100 database)'
-            else 'link rows: ' || (select count(*)::text from public.command_analysis_graphs)
-       end as command_analysis_links;
+            select count(*) as record_only_agent_runs
+              from public.agent_runs run
+              join public.tasks task on task.id = run.task_id
+              join public.commands command on command.id = task.command_id
+             where command.parameters ->> 'executionMode' = 'record_only';
