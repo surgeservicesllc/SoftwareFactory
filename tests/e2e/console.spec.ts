@@ -6,6 +6,8 @@ import { expect, test } from "@playwright/test";
 // real page — this list is the reachability contract for the whole console.
 const consoleNavigation = [
   "Overview",
+  // The conversational front door (ADR-171): one prompt, one live run.
+  "Build",
   // The owner's 2026-08-24 design: setup first, then the running factory's
   // ten steps as their own numbered group.
   "01. Factory Setup",

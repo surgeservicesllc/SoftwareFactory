@@ -2,6 +2,14 @@
 
 Last reviewed: 2026-08-29
 
+**Addendum, 2026-08-30 later — Build front door (ADR-171):** workspace
+suite 7 tests (nothing-before-anything, projects-empty next step, exact
+launch payload, refusal in the server's words, counted progress + OPEN
+gate + stage states, closure note in transcript, resume list excluding
+finished runs); app-shell nav 25 tests; e2e nav/pages/responsive lists
+seated. Lint zero warnings, production build lists /solutions/build,
+`tsc --noEmit` clean.
+
 **Addendum, 2026-08-30 — primary link-outs + ZIP radius (ADR-170):**
 geo suite 9 tests (ZIP resolution against the real index, six-digit and
 unassigned-ZIP nulls, ZIP-centred radius), search-route 24 (ZIP centre

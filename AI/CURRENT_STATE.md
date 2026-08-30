@@ -374,6 +374,14 @@ facets labeled as derived, with unstated postings kept under "Any".
 Increment 4's marks migration was applied to hosted (run 33273330183)
 and production probes verified the deploy of #448.
 
+## 2026-08-30 (later): Build — the conversational front door (ADR-171)
+
+One prompt launches the existing full_lifecycle workflow and the page
+watches the real run: counted progress, SDLC-ordered stage states, gate
+calls-to-decide, closure notes, and a resume list of unfinished runs.
+Composition over existing endpoints only; audit and increment plan in
+`AI/AI_FACTORY_GAP_ANALYSIS.md` (task #61).
+
 ## 2026-08-30: LinkedIn/Indeed primary; ZIP codes centre the radius (ADR-170)
 
 The deep pair is one click from the Search button before any board is

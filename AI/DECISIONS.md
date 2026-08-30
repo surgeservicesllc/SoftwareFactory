@@ -3166,3 +3166,30 @@ never match; an unassigned ZIP resolves to nothing rather than a guess.
 The index is server-only alongside the city index. Journey acceptance run
 33285610004 re-proved the goal's full E2E list on the pre-increment tree
 the same evening.
+
+## ADR-171 - Build: the conversational front door over the existing engine
+
+Date: 2026-08-30
+
+The owner's directive (task #61 — its /goal text exceeded the 4,000-char
+registration limit, so `AI/AI_FACTORY_GAP_ANALYSIS.md` carries the audit
+and plan) centers the factory on one conversational command. Increment 1
+is `/solutions/build`: a person types what they want, and the page
+launches the existing `full_lifecycle` workflow through `POST /api/graphs`
+— the same call the Workflows page makes — then watches the run through
+`GET /api/graphs/runs`, the same feed Agent Trail polls. Nothing new
+executes anything; the page is composition.
+
+Its honesty rules are the factory's: the transcript's factory entries are
+recorded state transitions (plan recorded with the compiler's real node
+count, the server's own worker-wake note verbatim, completion with the
+run's closure note), progress is a count of real node states rendered as
+"n of m steps", stages group by the engine's `lifecycle_stage` in SDLC
+order, an OPEN human gate renders the shared GateDecision control inline —
+the same wording, route and evidence rules as every other gate surface,
+with the run page linked for the full evidence — and a launch refusal is
+shown in the server's words with no run view pretending otherwise. Unfinished lifecycle runs list on arrival, so
+watching resumes across visits — persistence is the database's, not the
+tab's. Deep surfaces (run detail, Agent Trail, factory steps) remain the
+detail views; Build links into them. "Hide complexity" never means hide
+state.

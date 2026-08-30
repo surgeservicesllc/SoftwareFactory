@@ -2,6 +2,32 @@
 
 Last triaged: 2026-08-29
 
+## AI Factory → autonomous build platform (task #61, owner directive 2026-08-30)
+
+The audit and increment plan live in `AI/AI_FACTORY_GAP_ANALYSIS.md`
+(the /goal text exceeded the 4,000-char registration limit; no evaluator
+is armed — this section is the plan of record).
+
+- [x] Increment 1 (ADR-171): `/solutions/build` — conversational front
+  door; prompt → full_lifecycle launch → live watched run (counted
+  progress, SDLC-ordered stages, OPEN-gate call to decide, closure notes,
+  resume list). Nav seat "Build" first after Overview.
+- [ ] Increment 2: draft acceptance criteria + plan approval in the
+  workspace before launch.
+- [x] Increment 3a (shipped with increment 1): inline gate decisions —
+  every OPEN human gate on the watched run renders the shared
+  GateDecision control (same wording, same route, same evidence rules as
+  the runs panel); a decision re-reads the live feed.
+- [ ] Increment 3b: run controls where endpoints exist (cancel/retry on
+  command runs; pause/resume needs engine support first — never a dead
+  button).
+- [ ] Increment 4: specialty-agent presentation over stages; bounded IO
+  contracts.
+- [ ] Increment 5: autonomy modes (Ask-Me/Balanced/Autonomous) as
+  parameterization of existing gates — policy review first; RED stays
+  owner-approved.
+- [ ] Task #56: persist node_runs.attempt.
+
 ## Job Search 50-source engine (active owner goal, ADR-163)
 
 - [x] Increment 1: six probed adapters (Remotive, Remote OK, Jobicy,
