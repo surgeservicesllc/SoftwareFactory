@@ -11,6 +11,7 @@ import { workingnomadsAdapter } from "@/lib/job-seeker/board-search/workingnomad
 import { jobdanmarkAdapter } from "@/lib/job-seeker/board-search/jobdanmark";
 import { jobindexAdapter } from "@/lib/job-seeker/board-search/jobindex";
 import { jobnetAdapter } from "@/lib/job-seeker/board-search/jobnet";
+import { jsearchAdapter, jsearchConfigured } from "@/lib/job-seeker/board-search/jsearch";
 import type { BoardSearchAdapter } from "@/lib/job-seeker/board-search/types";
 
 /**
@@ -38,6 +39,15 @@ import type { BoardSearchAdapter } from "@/lib/job-seeker/board-search/types";
  *
  * If LinkedIn is ever wanted, the route is a credentialed integration under
  * the existing import-adapter rules, not this list.
+ *
+ * That credentialed route now exists: the JSearch aggregator (jsearch.ts)
+ * reads the Google for Jobs index over an official keyed API, and its
+ * results carry LinkedIn, Indeed, Glassdoor and ZipRecruiter postings with
+ * each one naming its publisher. It joins `availableBoardSearchAdapters()`
+ * only while its key is configured — an unkeyed entry here would be the
+ * permanently-failing board the Jobbank paragraph below warns about. The
+ * scraping refusal stands unchanged; nothing here touches LinkedIn or
+ * Indeed directly.
  *
  * ## Jobbank is absent because it does not work, by its own author's account
  *
@@ -74,11 +84,26 @@ export const BOARD_SEARCH_ADAPTERS: readonly BoardSearchAdapter[] = Object.freez
   jobspressoAdapter,
 ]);
 
+/**
+ * The boards a search can use RIGHT NOW: the always-on registry plus every
+ * credential-gated adapter whose key this deployment actually holds.
+ *
+ * A function rather than a constant because configuration is read at call
+ * time: the moment the owner sets the key in the environment, the next
+ * request offers the board — and while the key is absent, the board simply
+ * is not offered, instead of being a checkbox that always fails.
+ */
+export function availableBoardSearchAdapters(): readonly BoardSearchAdapter[] {
+  return jsearchConfigured()
+    ? [...BOARD_SEARCH_ADAPTERS, jsearchAdapter]
+    : BOARD_SEARCH_ADAPTERS;
+}
+
 export function boardSearchAdapter(key: string): BoardSearchAdapter | null {
-  return BOARD_SEARCH_ADAPTERS.find((adapter) => adapter.key === key) ?? null;
+  return availableBoardSearchAdapters().find((adapter) => adapter.key === key) ?? null;
 }
 
 /** Every board key, for validating what a request asked for. */
 export function boardSearchKeys(): readonly string[] {
-  return BOARD_SEARCH_ADAPTERS.map((adapter) => adapter.key);
+  return availableBoardSearchAdapters().map((adapter) => adapter.key);
 }

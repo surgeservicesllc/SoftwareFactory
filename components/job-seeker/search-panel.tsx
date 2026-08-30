@@ -84,6 +84,8 @@ type Hit = {
   };
   publishedOn: string | null;
   closesOn: string | null;
+  /** Aggregator hits: the site that hosts the posting (LinkedIn, Indeed…). */
+  publisher?: string | null;
   saveToken: string;
 };
 
@@ -876,6 +878,10 @@ export function JobSearchPanel() {
   // button, not just a strip below the results. Deselecting a site under
   // Sources removes it here too.
   const primaryLinkouts = linkoutStrip.filter((source) => linkoutCarriesFilters(source.key));
+  // Whether the JSearch aggregator is connected — the board list is the
+  // server's account of what this deployment can actually query, so its
+  // presence there IS the fact, never an assumption.
+  const aggregatorConnected = boards?.some((board) => board.key === "jsearch") ?? false;
 
   const addChip = (raw: string, list: readonly string[], set: (next: readonly string[]) => void) => {
     const value = raw.trim();
@@ -990,7 +996,9 @@ export function JobSearchPanel() {
               </a>
             ))}
             <span className="text-xs text-[var(--muted)]">
-              Their sites open with your query and filters — these sites permit links, not feeds.
+              {aggregatorConnected
+                ? "Their sites open with your query and filters — and their postings also appear inline in the results below, labeled by site, through the connected JSearch aggregator (Google's job index)."
+                : "Their sites open with your query and filters — direct feeds are not permitted. Inline LinkedIn and Indeed results arrive through the JSearch aggregator, currently Not Connected: the owner sets JSEARCH_RAPIDAPI_KEY to turn it on."}
             </span>
           </div>
         ) : null}
@@ -1793,6 +1801,9 @@ export function JobSearchPanel() {
                                 {hit.job.location === null ? "" : ` · ${hit.job.location}`}
                                 {hit.publishedOn === null ? "" : ` · posted ${hit.publishedOn}`}
                                 {hit.closesOn === null ? "" : ` · closes ${hit.closesOn}`}
+                                {/* Aggregator results say which site hosts the
+                                    posting — "on LinkedIn" is data, not décor. */}
+                                {(hit.publisher ?? null) === null ? "" : ` · on ${hit.publisher}`}
                               </p>
                             </div>
                             {renderSaveButton(key, result.board, hit.job, hit.saveToken)}

@@ -191,6 +191,27 @@ export class SupabaseGraphStore implements GraphRunStore {
   }
 
   /**
+   * Whether a person has asked this run's graph to pause. Polled by the
+   * engine at wave boundaries. A read that fails — a database from before
+   * 20260830000400 (PGRST202), or a transient fault — answers false rather
+   * than throwing: killing every organization's drain over a pause poll
+   * would cost far more than one wave of work the person wanted held, and
+   * the claim selector's own pause predicate still stops the next run.
+   */
+  async readPauseRequested(graphRunId: string): Promise<boolean> {
+    try {
+      const { data, error } = await this.client.rpc("read_graph_pause_as_worker", {
+        p_worker_id: this.workerId,
+        p_graph_run_id: graphRunId,
+      });
+      if (error) return false;
+      return data === true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * Approve an anchored AUTOMATIC gate after its run has closed.
    *
    * The database refuses everything the rule refuses — human gates, zero

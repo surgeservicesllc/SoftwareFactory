@@ -9,7 +9,7 @@ import {
   toDeliveryRows,
 } from "@/lib/job-seeker/alerts";
 import { applyRadius, resolvePlace } from "@/lib/job-seeker/board-search/geo";
-import { BOARD_SEARCH_ADAPTERS, boardSearchAdapter } from "@/lib/job-seeker/board-search/registry";
+import { availableBoardSearchAdapters, boardSearchAdapter } from "@/lib/job-seeker/board-search/registry";
 import { toEvaluationInputs } from "@/lib/job-seeker/record";
 import { savedSearchQuerySchema } from "@/lib/job-seeker/saved-search-query";
 import { jsonNoStore } from "@/lib/server/http";
@@ -108,7 +108,7 @@ async function runAlerts(request: Request) {
   }
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.theagoras.com";
-  const boardNames = new Map(BOARD_SEARCH_ADAPTERS.map((adapter) => [adapter.key, adapter.name]));
+  const boardNames = new Map(availableBoardSearchAdapters().map((adapter) => [adapter.key, adapter.name]));
   let scanned = 0;
   let emailed = 0;
   const failures: Array<{ alertId: string; detail: string }> = [];
@@ -121,7 +121,10 @@ async function runAlerts(request: Request) {
         continue;
       }
       const query = parsedQuery.data;
-      const keys = query.boards ?? BOARD_SEARCH_ADAPTERS.map((adapter) => adapter.key);
+      // The available set, not the static one: an alert covers the aggregator
+      // while its key is configured, and a stored "jsearch" pick simply drops
+      // out (the null filter below) if the key is later removed.
+      const keys = query.boards ?? availableBoardSearchAdapters().map((adapter) => adapter.key);
       const adapters = keys
         .map((key) => boardSearchAdapter(key))
         .filter((adapter): adapter is NonNullable<typeof adapter> => adapter !== null);

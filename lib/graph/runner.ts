@@ -111,6 +111,14 @@ export type RunnerDependencies = {
    * happened without spending it, and defaulted so production waits for real.
    */
   readonly delay?: (ms: number) => Promise<void>;
+  /**
+   * Answers whether a pause has been requested for this run. Polled once per
+   * scheduling round before anything new starts, so a paused run finishes
+   * the work already in flight and stops between waves — nothing
+   * mid-execution is interrupted. Optional so an isolated graph runs
+   * without a control plane around it.
+   */
+  readonly checkPause?: () => Promise<boolean> | boolean;
   readonly onEvent?: (event: RunnerEvent) => void;
 };
 
@@ -125,6 +133,7 @@ export type RunnerEvent = {
     | "budget_degraded"
     | "budget_stopped"
     | "capacity_withheld"
+    | "pause_honored"
     | "retry_backoff";
   readonly nodeKey?: string;
   readonly detail: string;
@@ -139,6 +148,9 @@ export const RUN_OUTCOMES = [
   // Distinct from STALLED on purpose. A stalled graph cannot proceed however
   // long you wait; a capacity-withheld graph is simply behind other work.
   "CAPACITY_WITHHELD",
+  // A person asked the run to stop between steps. Completed work is kept and
+  // the graph stays claimable, so a later run resumes from it.
+  "PAUSED",
 ] as const;
 export type RunOutcome = (typeof RUN_OUTCOMES)[number];
 
@@ -213,11 +225,23 @@ export async function runGraph(
   let assessment = assessBudget(budget, spendNow());
   let stoppedByBudget = false;
   let capacityWithheld = false;
+  let pausedByRequest = false;
 
   // Bounded by node count and attempts, so a pathological graph cannot spin.
   const maxIterations = budget.maxNodes * (Math.max(1, budget.maxRetries) + 2) + 10;
 
   for (let iteration = 0; iteration < maxIterations; iteration += 1) {
+    // The pause is honored at the wave boundary: everything the previous
+    // round started has already settled, and nothing new begins.
+    if (deps.checkPause && await deps.checkPause()) {
+      pausedByRequest = true;
+      emit({
+        type: "pause_honored",
+        detail: "Pause requested; nothing new starts. Completed work is kept and the run resumes on a later claim.",
+      });
+      break;
+    }
+
     assessment = assessBudget(budget, spendNow());
 
     if (assessment.action === "STOP_GRACEFULLY") {
@@ -398,7 +422,9 @@ export async function runGraph(
     state,
   );
 
-  const outcome: RunOutcome = capacityWithheld
+  const outcome: RunOutcome = pausedByRequest
+    ? "PAUSED"
+    : capacityWithheld
     ? "CAPACITY_WITHHELD"
     : stoppedByBudget
     ? "BUDGET_STOPPED"

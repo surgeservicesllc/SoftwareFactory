@@ -107,13 +107,15 @@ describe("graph runs route", () => {
         isLifecycle: true,
         templateKey: "full_lifecycle",
         templateVersion: 2,
+        pausedAt: null,
+        withdrawnAt: null,
         iteration: 2,
         maxIterations: 5,
       }],
     });
     expect(harness.from).toHaveBeenCalledExactlyOnceWith("graphs");
     expect(harness.select).toHaveBeenCalledExactlyOnceWith(
-      "id,template_key,template_version",
+      "id,template_key,template_version,withdrawn_at,pause_requested_at",
     );
     expect(harness.eq).toHaveBeenCalledExactlyOnceWith("organization_id", organizationId);
     expect(harness.in).toHaveBeenCalledExactlyOnceWith("id", [graphId]);
@@ -135,6 +137,47 @@ describe("graph runs route", () => {
       templateKey: null,
       templateVersion: null,
     });
+  });
+
+  it("projects the graph's recorded run controls, so paused reads as paused", async () => {
+    harness.in.mockResolvedValue({
+      data: [{
+        id: graphId,
+        template_key: "full_lifecycle",
+        template_version: 2,
+        withdrawn_at: null,
+        pause_requested_at: "2026-08-30T08:00:00.000Z",
+      }],
+      error: null,
+    });
+
+    const response = await GET(new Request("https://factory.example/api/graphs/runs"));
+    const body = await response.json() as { runs: Array<Record<string, unknown>> };
+
+    expect(body.runs[0]).toMatchObject({
+      pausedAt: "2026-08-30T08:00:00.000Z",
+      withdrawnAt: null,
+    });
+  });
+
+  it("answers through the deploy window: a database without the control columns still lists runs", async () => {
+    // 42703 is "undefined column" — the exact shape of a build deployed
+    // before its hosted apply. The listing must not go dark for that window.
+    harness.in
+      .mockResolvedValueOnce({ data: null, error: { code: "42703", message: "column graphs.pause_requested_at does not exist" } })
+      .mockResolvedValueOnce({
+        data: [{ id: graphId, template_key: "full_lifecycle", template_version: 2 }],
+        error: null,
+      });
+
+    const response = await GET(new Request("https://factory.example/api/graphs/runs"));
+    expect(response.status).toBe(200);
+    const body = await response.json() as { runs: Array<Record<string, unknown>> };
+    expect(body.runs[0]).toMatchObject({ pausedAt: null, withdrawnAt: null });
+    expect(harness.select).toHaveBeenNthCalledWith(
+      1, "id,template_key,template_version,withdrawn_at,pause_requested_at",
+    );
+    expect(harness.select).toHaveBeenNthCalledWith(2, "id,template_key,template_version");
   });
 
   it("fails closed when an RLS-scoped graph identity is missing", async () => {

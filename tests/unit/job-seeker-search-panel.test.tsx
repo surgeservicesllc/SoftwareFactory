@@ -1098,3 +1098,98 @@ describe("the search panel", () => {
     expect(screen.queryByRole("checkbox", { name: "Favorites only" })).not.toBeInTheDocument();
   });
 });
+
+describe("the inline LinkedIn/Indeed door", () => {
+  const linkoutSources = [
+    {
+      key: "linkedin_jobs",
+      name: "LinkedIn Jobs",
+      focus: "general",
+      status: "external_link",
+      searchUrl: "https://www.linkedin.com/jobs/search/?keywords={query}&location={location}",
+      note: "LinkedIn's terms prohibit automated collection.",
+    },
+    {
+      key: "indeed",
+      name: "Indeed",
+      focus: "general",
+      status: "external_link",
+      searchUrl: "https://www.indeed.com/jobs?q={query}&l={location}",
+      note: "Indeed's publisher API is closed to new partners.",
+    },
+  ];
+
+  it("says exactly what is missing while the aggregator is Not Connected", async () => {
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(json({ ...BOARDS, sources: linkoutSources })));
+    render(<JobSearchPanel />);
+    await screen.findByText(/Searching 2 boards:/);
+
+    const strip = screen.getByTestId("primary-linkouts");
+    expect(within(strip).getByText(/Not Connected/)).toBeInTheDocument();
+    expect(within(strip).getByText(/JSEARCH_RAPIDAPI_KEY/)).toBeInTheDocument();
+  });
+
+  it("says the postings appear inline once the aggregator board is offered", async () => {
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(json({
+        boards: [
+          ...BOARDS.boards,
+          {
+            key: "jsearch",
+            name: "JSearch",
+            summary: "Google's job index.",
+            coverage: "Worldwide aggregator",
+            supportsLocation: true,
+          },
+        ],
+        sources: linkoutSources,
+      })));
+    render(<JobSearchPanel />);
+    await screen.findByText(/Searching 3 boards:/);
+
+    const strip = screen.getByTestId("primary-linkouts");
+    expect(within(strip).getByText(/also appear inline/)).toBeInTheDocument();
+    expect(within(strip).queryByText(/Not Connected/)).not.toBeInTheDocument();
+  });
+
+  it("labels an aggregator result with the site that hosts the posting", async () => {
+    // The route badges an aggregator source with its publisher —
+    // "LinkedIn (JSearch)" — so the card says which site hosts the posting.
+    respond({
+      results: [{
+        board: "jsearch",
+        boardName: "JSearch",
+        totalAvailable: null,
+        hits: [{ ...hit("Marketing Manager"), publisher: "LinkedIn" }],
+        locationApplied: true,
+      }],
+      failures: [],
+      unified: {
+        hits: [{
+          job: hit("Marketing Manager").job,
+          publishedOn: "2026-08-28",
+          closesOn: null,
+          sources: [{
+            board: "jsearch",
+            boardName: "LinkedIn (JSearch)",
+            url: "https://www.linkedin.com/jobs/view/12345",
+            externalId: "li-1",
+            saveToken: "t-li",
+          }],
+          primarySourceIndex: 0,
+          match: null,
+        }],
+        dedupedFrom: 1,
+        beforeFilters: 1,
+        matchBasis: { computed: false, reason: "No Career Profile is recorded yet." },
+      },
+    });
+    const user = userEvent.setup();
+    render(<JobSearchPanel />);
+    await screen.findByText(/Searching 2 boards:/);
+    await search(user);
+
+    expect(await screen.findByText("via LinkedIn (JSearch)")).toBeInTheDocument();
+  });
+});

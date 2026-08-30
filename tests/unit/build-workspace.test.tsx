@@ -597,6 +597,86 @@ describe("the build workspace", () => {
     expect(within(voidedRow).getByRole("button", { name: "Stop" })).toBeInTheDocument();
   });
 
+  it("pauses a running build and resumes a paused one through the real pause route", async () => {
+    const runningGraphId = "77777777-7777-4777-8777-777777777777";
+    const pausedGraphId = "99999999-9999-4999-8999-999999999998";
+    respond({});
+    fetchMock.mockImplementation((url: string, init?: RequestInit) => {
+      if (typeof url === "string" && url.includes("/pause")) {
+        const paused = (JSON.parse((init?.body as string) ?? "{}") as { paused?: boolean }).paused;
+        return Promise.resolve(json({
+          graphId: runningGraphId,
+          pausedAt: paused ? "2026-08-30T08:00:00Z" : null,
+          workerWoken: !paused,
+          note: paused
+            ? "The graph is paused: running work finishes its current step, nothing new starts, and no worker will claim it until it is resumed."
+            : "The graph is resumed and the executor worker has been woken to pick it back up. Completed work carries forward.",
+        }));
+      }
+      if (typeof url === "string" && url.includes("/api/graphs/runs")) {
+        return Promise.resolve(json({
+          runs: [
+            {
+              graphRunId: "66666666-6666-4666-8666-666666666666",
+              graphId: runningGraphId,
+              goal: "Live claim",
+              state: "RUNNING",
+              projectId: "22222222-2222-4222-8222-222222222222",
+              isLifecycle: true,
+              startedAt: "2026-08-30T00:00:00Z",
+              completedAt: null,
+              pausedAt: null,
+              nodes: [node("goal", "GOAL", "RUNNING")],
+            },
+            {
+              graphRunId: "88888888-8888-4888-8888-888888888889",
+              graphId: pausedGraphId,
+              goal: "Held build",
+              state: "CANCELLED",
+              projectId: "22222222-2222-4222-8222-222222222222",
+              isLifecycle: true,
+              startedAt: "2026-08-30T00:00:00Z",
+              completedAt: null,
+              pausedAt: "2026-08-30T07:30:00Z",
+              nodes: [node("goal", "GOAL", "COMPLETED"), node("plan", "PLAN", "SKIPPED")],
+            },
+          ],
+        }));
+      }
+      return Promise.resolve(json(PROJECTS));
+    });
+    const user = userEvent.setup();
+    render(<BuildWorkspace />);
+
+    const active = await screen.findByTestId("build-active-runs");
+    const rows = within(active).getAllByRole("listitem");
+    const liveRow = rows.find((row) => within(row).queryByText("Live claim") !== null)!;
+    const heldRow = rows.find((row) => within(row).queryByText("Held build") !== null)!;
+
+    // The live claim offers Pause (the honest control for a running claim);
+    // the held build says it is paused and offers Resume.
+    expect(within(heldRow).getByText(/paused ·/)).toBeInTheDocument();
+    expect(within(liveRow).queryByRole("button", { name: "Resume" })).not.toBeInTheDocument();
+    expect(within(heldRow).queryByRole("button", { name: "Pause" })).not.toBeInTheDocument();
+
+    await user.click(within(liveRow).getByRole("button", { name: "Pause" }));
+    const pauseCall = fetchMock.mock.calls.find(([url]) =>
+      typeof url === "string" && url.includes(`/api/graphs/${runningGraphId}/pause`));
+    expect(pauseCall).toBeDefined();
+    expect(JSON.parse((pauseCall?.[1] as RequestInit).body as string)).toEqual({ paused: true });
+
+    await user.click(within(heldRow).getByRole("button", { name: "Resume" }));
+    const resumeCall = fetchMock.mock.calls.find(([url]) =>
+      typeof url === "string" && url.includes(`/api/graphs/${pausedGraphId}/pause`));
+    expect(resumeCall).toBeDefined();
+    expect(JSON.parse((resumeCall?.[1] as RequestInit).body as string)).toEqual({ paused: false });
+
+    // The server's own sentences land in the transcript, never a paraphrase.
+    const transcript = await screen.findByTestId("build-transcript");
+    expect(within(transcript).getByText(/nothing new starts/)).toBeInTheDocument();
+    expect(within(transcript).getByText(/woken to pick it back up/)).toBeInTheDocument();
+  });
+
   it("derives the autonomy mode from real controls and shows the fence's refusal verbatim", async () => {
     respond({});
     fetchMock.mockImplementation((url: string, init?: RequestInit) => {
