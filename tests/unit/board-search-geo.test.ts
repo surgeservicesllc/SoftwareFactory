@@ -66,6 +66,26 @@ describe("resolvePlace", () => {
     expect(resolvePlace("EU only")).toBeNull();
     expect(resolvePlace("")).toBeNull();
   });
+
+  it("resolves a US ZIP code to its centroid, wherever it sits in the text", () => {
+    const bare = resolvePlace("78701");
+    expect(bare?.name).toBe("Austin, TX 78701");
+    expect(bare?.country).toBe("US");
+    expect(bare?.lat).toBeCloseTo(30.27, 1);
+    expect(bare?.lng).toBeCloseTo(-97.74, 1);
+
+    // ZIP+4 and city-state-ZIP forms carry the same five digits.
+    expect(resolvePlace("78701-1234")?.name).toBe("Austin, TX 78701");
+    expect(resolvePlace("Austin, TX 78701")?.name).toBe("Austin");
+    expect(resolvePlace("90210")?.name).toBe("Beverly Hills, CA 90210");
+    expect(resolvePlace("10001")?.name).toBe("New York, NY 10001");
+  });
+
+  it("does not turn other digits into a place", () => {
+    // Six digits are not a ZIP, and an unassigned ZIP resolves to nothing.
+    expect(resolvePlace("123456")).toBeNull();
+    expect(resolvePlace("00000")).toBeNull();
+  });
 });
 
 describe("haversineKm", () => {
@@ -100,5 +120,13 @@ describe("applyRadius", () => {
     const tight = applyRadius(hits, copenhagen, 10);
     expect(tight.hits).toHaveLength(3);
     expect(tight.excluded).toBe(2);
+  });
+
+  it("centres a radius on a ZIP code exactly as on a city", () => {
+    const zip = resolvePlace("78701")!;
+    const out = applyRadius([hit("Austin", "onsite"), hit("Dallas", "onsite")], zip, 25);
+    expect(out.hits).toHaveLength(1);
+    expect(out.hits[0]?.job.location).toBe("Austin");
+    expect(out.excluded).toBe(1);
   });
 });

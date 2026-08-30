@@ -76,6 +76,12 @@ Last triaged: 2026-08-29
   terms (LinkedIn API partner-only; Indeed publisher API closed), which
   the goal forbids; partner credentials would enable one behind env
   vars like the keyed boards.
+- [x] Owner request (2026-08-30, ADR-170): LinkedIn + Indeed primary —
+  "Search directly on" row beside the Search button, deep links live as
+  the person types; US ZIP codes resolve in the radius filter via the
+  GeoNames postal set (41,488 ZIPs, server-only index), shown as
+  "City, ST 78701" in the radius report. Journey acceptance re-proved
+  green on main 9a73e12 (run 33285610004).
 - [ ] Production email delivery: owner-gated on RESEND_API_KEY,
   JOB_ALERT_EMAIL_FROM, CRON_SECRET in Vercel — the alert path's honest
   production state is **Not Connected** (503 fail-closed probe). Verify

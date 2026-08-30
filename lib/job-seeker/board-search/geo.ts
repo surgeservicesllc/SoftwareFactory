@@ -1,6 +1,7 @@
 import "server-only";
 
 import cities from "@/lib/job-seeker/board-search/data/cities.json";
+import postalCodes from "@/lib/job-seeker/board-search/data/postal-codes-us.json";
 
 import type { UnifiedHit } from "@/lib/job-seeker/board-search/unify";
 
@@ -16,6 +17,13 @@ import type { UnifiedHit } from "@/lib/job-seeker/board-search/unify";
  * several cities the most populous one wins, deterministically — a person
  * filtering around "Portland" gets the bigger Portland, and the resolved
  * city and country are always shown so the choice is visible.
+ *
+ * ZIP codes resolve too: `data/postal-codes-us.json` is derived from
+ * GeoNames' US postal-code set (same CC BY 4.0 source), one row per
+ * five-digit ZIP with its place name and centroid. A ZIP anywhere in the
+ * text — "78701", "Austin, TX 78701", "78701-1234" — resolves to that
+ * centroid after the city lookups have had their chance, and the resolved
+ * place is shown with the ZIP so the person sees exactly what was used.
  *
  * The module is server-only: the index is a few megabytes and belongs in
  * the server bundle, never in the browser.
@@ -74,9 +82,29 @@ function placeIndex(): Map<string, ResolvedPlace> {
   return index;
 }
 
+type PostalRow = [zip: string, display: string, lat: number, lng: number];
+
+let zipIndex: Map<string, ResolvedPlace> | null = null;
+
+function postalIndex(): Map<string, ResolvedPlace> {
+  if (zipIndex === null) {
+    zipIndex = new Map(
+      (postalCodes as PostalRow[]).map(([zip, display, lat, lng]) => [
+        zip,
+        // The ZIP stays in the shown name so the person sees exactly what
+        // the radius was centred on.
+        { name: `${display} ${zip}`, country: "US", lat, lng },
+      ]),
+    );
+  }
+  return zipIndex;
+}
+
 /**
- * Resolve free place text to a city. Tries the whole folded string, then
- * each comma-separated segment ("Copenhagen, Denmark" → "copenhagen").
+ * Resolve free place text to a point. Tries the whole folded string as a
+ * city, then each comma-separated segment ("Copenhagen, Denmark" →
+ * "copenhagen"), then any five-digit US ZIP in the text ("78701",
+ * "Austin, TX 78701", "78701-1234" all resolve to the ZIP's centroid).
  */
 export function resolvePlace(text: string): ResolvedPlace | null {
   const lookup = placeIndex();
@@ -88,6 +116,11 @@ export function resolvePlace(text: string): ResolvedPlace | null {
     const key = foldPlaceName(segment);
     if (key.length === 0) continue;
     const found = lookup.get(key);
+    if (found !== undefined) return found;
+  }
+  const zip = /\b(\d{5})\b/.exec(text);
+  if (zip !== null) {
+    const found = postalIndex().get(zip[1]);
     if (found !== undefined) return found;
   }
   return null;

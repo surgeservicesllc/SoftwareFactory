@@ -667,6 +667,58 @@ describe("the search panel", () => {
     expect(within(strip).getByRole("link", { name: /LinkedIn Jobs/ })).toBeInTheDocument();
   });
 
+  it("makes LinkedIn and Indeed primary: one click from the search form, before any search runs", async () => {
+    const boardsWithSources = {
+      ...BOARDS,
+      sources: [
+        {
+          key: "linkedin_jobs", name: "LinkedIn Jobs", focus: "general", status: "external_link",
+          searchUrl: "https://www.linkedin.com/jobs/search/?keywords={query}&location={location}",
+          note: "Opens LinkedIn's own job search.",
+        },
+        {
+          key: "indeed", name: "Indeed", focus: "general", status: "external_link",
+          searchUrl: "https://www.indeed.com/jobs?q={query}&l={location}",
+          note: "Opens Indeed's own search.",
+        },
+        {
+          key: "glassdoor", name: "Glassdoor", focus: "general", status: "external_link",
+          searchUrl: "https://www.glassdoor.com/Job/jobs.htm?sc.keyword={query}&locKeyword={location}",
+          note: "Opens Glassdoor's own search.",
+        },
+      ],
+    };
+    fetchMock.mockImplementation((_url: string, init?: RequestInit) => {
+      if (init?.method === "POST") return Promise.resolve(json({ results: [], failures: [] }));
+      return Promise.resolve(json(boardsWithSources));
+    });
+    const user = userEvent.setup();
+    render(<JobSearchPanel />);
+    await screen.findByText(/Searching 2 boards:/);
+
+    // Primary means primary: the two sites sit beside the search button
+    // before our boards have been asked anything — only the deeply wired
+    // pair, not every link-out site.
+    const primary = await screen.findByTestId("primary-linkouts");
+    expect(within(primary).getByRole("link", { name: /LinkedIn Jobs/ })).toBeInTheDocument();
+    expect(within(primary).getByRole("link", { name: /Indeed/ })).toBeInTheDocument();
+    expect(within(primary).queryByRole("link", { name: /Glassdoor/ })).not.toBeInTheDocument();
+
+    // The links live-update with what the person types, filters included.
+    await user.type(screen.getByPlaceholderText("Job title, skill or keyword"), "designer");
+    await user.type(screen.getByPlaceholderText("Place or postcode"), "78701");
+    const linkedin = new URL(
+      within(primary).getByRole("link", { name: /LinkedIn Jobs/ }).getAttribute("href")!,
+    );
+    expect(linkedin.searchParams.get("keywords")).toBe("designer");
+    expect(linkedin.searchParams.get("location")).toBe("78701");
+
+    // Deselecting a site under Sources removes it here too.
+    await user.click(screen.getByText(/Sources \(2 searched live/));
+    await user.click(screen.getByRole("checkbox", { name: "Include Indeed in the link-out row" }));
+    expect(within(primary).queryByRole("link", { name: /Indeed/ })).not.toBeInTheDocument();
+  });
+
   it("wires LinkedIn and Indeed deeply: their links carry the filters and sort first", async () => {
     const boardsWithSources = {
       ...BOARDS,

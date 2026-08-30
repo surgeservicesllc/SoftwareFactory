@@ -3141,3 +3141,28 @@ verified against the target site would be an invented integration. If the
 owner ever obtains LinkedIn partner or Indeed publisher credentials, a real
 adapter goes behind env vars like the six keyed boards; until then this is
 the whole of what those sites allow, and the catalogue notes say so.
+
+## ADR-170 - LinkedIn/Indeed made primary; ZIP codes join the place index
+
+Date: 2026-08-30
+
+Two owner asks in one increment. First, the deeply wired pair moved from
+the below-results strip to the search form itself: a "Search directly on"
+row renders LinkedIn and Indeed beside the Search button before any board
+is queried, with the same deep-link builder (ADR-169) recomputing each
+site's URL live as the person types — one click from query to that site's
+own filtered results, which is the most primary these sites permit.
+Deselecting a site under Sources removes it there too. The strip stays for
+the other link-out sites.
+
+Second, the radius filter's place index learned US ZIP codes:
+`data/postal-codes-us.json` is derived from GeoNames' US postal set (same
+CC BY 4.0 source as cities15000), 41,488 five-digit ZIPs with place name
+and centroid. `resolvePlace` tries city lookups first, then any
+`\b\d{5}\b` in the text — so "78701", "Austin, TX 78701" and "78701-1234"
+all centre the radius, and the resolved name keeps the ZIP visible
+("Austin, TX 78701") so the person sees exactly what was used. Six digits
+never match; an unassigned ZIP resolves to nothing rather than a guess.
+The index is server-only alongside the city index. Journey acceptance run
+33285610004 re-proved the goal's full E2E list on the pre-increment tree
+the same evening.

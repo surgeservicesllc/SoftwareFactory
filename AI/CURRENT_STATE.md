@@ -374,6 +374,14 @@ facets labeled as derived, with unstated postings kept under "Any".
 Increment 4's marks migration was applied to hosted (run 33273330183)
 and production probes verified the deploy of #448.
 
+## 2026-08-30: LinkedIn/Indeed primary; ZIP codes centre the radius (ADR-170)
+
+The deep pair is one click from the Search button before any board is
+asked, links recomputed live; US ZIP codes ("78701", "Austin, TX 78701",
+"78701-1234") resolve to GeoNames postal centroids in the radius filter,
+reported with the ZIP visible. Journey acceptance run 33285610004 (main
+9a73e12): the goal's full E2E list green after all increments.
+
 ## 2026-08-29 (late night): LinkedIn and Indeed wired as deep link-outs (ADR-169)
 
 The permitted wiring, made real: LinkedIn and Indeed open their own search

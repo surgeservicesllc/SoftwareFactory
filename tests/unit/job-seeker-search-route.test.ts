@@ -452,6 +452,33 @@ describe("the unified view", () => {
     });
   });
 
+  it("centres a radius on a US ZIP code, showing the resolved place with the ZIP", async () => {
+    const placed = (title: string, location: string) => ({
+      ...hit(title),
+      job: { ...hit(title).job, externalId: `id-${title}`, location },
+    });
+    harness.searchRemotive.mockResolvedValue({ board: "remotive", hits: [placed("Austin Role", "Austin")], totalAvailable: 1 });
+    harness.searchRemoteok.mockResolvedValue({ board: "remoteok", hits: [placed("Dallas Role", "Dallas")], totalAvailable: 1 });
+
+    const response = await POST(searchRequest({
+      text: "role",
+      location: "78701",
+      radiusKm: 25,
+      boards: ["remotive", "remoteok"],
+    }));
+    const payload = (await response.json()) as RadiusPayload;
+
+    expect(payload.unified.hits.map((h) => h.job.title)).toEqual(["Austin Role"]);
+    expect(payload.unified.radius).toEqual({
+      applied: true,
+      radiusKm: 25,
+      center: { name: "Austin, TX 78701", country: "US" },
+      excluded: 1,
+      unresolvedKept: 0,
+      remoteKept: 0,
+    });
+  });
+
   it("reports an unknown centre as not applied rather than failing or silently narrowing", async () => {
     const response = await POST(searchRequest({
       text: "role",

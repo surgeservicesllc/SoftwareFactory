@@ -2,6 +2,16 @@
 
 Last updated: 2026-08-29
 
+## Newest (2026-08-30): LinkedIn/Indeed primary + ZIP-code radius (ADR-170)
+
+"Search directly on LinkedIn / Indeed" row now sits beside the Search
+button (testid primary-linkouts), recomputing the ADR-169 deep links live;
+deselection under Sources still governs it. `resolvePlace` now falls back
+to a 41,488-entry GeoNames US postal index (`data/postal-codes-us.json`,
+server-only) — city lookups first, then \b\d{5}\b; resolved centers show
+the ZIP ("Austin, TX 78701"). Journey acceptance run 33285610004 green on
+main 9a73e12 re-proved the whole goal E2E list post-increments.
+
 ## Newest (2026-08-29 late night): LinkedIn + Indeed deep link-outs (ADR-169)
 
 Owner asked for LinkedIn and Indeed "wired". The only permitted wiring is
