@@ -62,6 +62,34 @@ and to reuse it. This file is that inspection.
    remains owner-directed. Stated here so no increment pretends
    otherwise.
 
+## Benchmark: Grok Build (researched 2026-08-30)
+
+Grok Build is xAI's terminal-native agentic coding CLI (beta 2026-05-14;
+SuperGrok subscription): a **plan → search → build** staged flow with a
+plan mode, up to **8 parallel sub-agents each in an isolated git
+worktree**, MCP support, IDE integrations, a **/goal mode that plans,
+executes and self-verifies**, and 70.8% on SWE-bench Verified. Its
+strongest concepts for this platform, translated to our architecture:
+
+- *One-prompt staged flow* → our full_lifecycle launch from `/solutions/build`
+  (shipped, increment 1) already stages requirement → … → monitoring.
+- *Parallel isolated sub-agents* → the graph engine's fan-out with
+  claims/work-locks is our parallelism; per-node branch isolation on the
+  bound repository is the worktree analogue to deepen in a later
+  increment (the engine already binds one verified repo per project).
+- *Plan mode + approval* → HUMAN gates; increment 2 put the decision
+  inline in the workspace.
+- *Self-verifying /goal loops* → graph_verifications + verifier nodes +
+  iteration/maxIterations already exist; surfacing them in Build is
+  planned.
+
+Cautionary half of the benchmark: Grok Build's July 2026 incident —
+uploading users' repositories to cloud storage without authorization —
+is exactly what this repository's consent, audit-event, and
+default-OFF rules exist to prevent. The benchmark is the UX, never the
+permission posture. (Our design is our own; no xAI code, branding, or
+trademarks are used.)
+
 ## Increment plan
 
 1. `/solutions/build` conversational workspace v1 (this PR): prompt →
