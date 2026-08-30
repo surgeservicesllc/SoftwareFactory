@@ -13,6 +13,10 @@ import {
 import { composeLaunchProposal, composePlan, type LaunchProposal } from "@/lib/factory/chief-of-staff";
 import { deriveReleaseEvidence } from "@/lib/factory/release-evidence";
 import { specialistForNode } from "@/lib/factory/specialists";
+import {
+  graphRunStateMetadata,
+  isTerminalGraphRunState,
+} from "@/lib/graph/run-state";
 import { SDLC_STAGES } from "@/lib/sdlc/lifecycle";
 
 /**
@@ -171,6 +175,9 @@ export function BuildWorkspace() {
 
   const entrySeq = useRef(0);
   const lastReportedState = useRef<string | null>(null);
+  const launchedGraphId = useRef<string | null>(null);
+  const artifactRequestRunId = useRef<string | null>(null);
+  const eventRequestRunId = useRef<string | null>(null);
 
   const say = useCallback((from: TranscriptEntry["from"], text: string, link?: TranscriptEntry["link"]) => {
     entrySeq.current += 1;
@@ -221,8 +228,9 @@ export function BuildWorkspace() {
       const runs = payload.runs ?? [];
       setWatchError(null);
       setLifecycleRuns(runs.filter((run) => run.isLifecycle === true));
-      if (launched !== null) {
-        const mine = runs.find((run) => run.graphId === launched.graphId) ?? null;
+      const currentGraphId = launchedGraphId.current;
+      if (currentGraphId !== null) {
+        const mine = runs.find((run) => run.graphId === currentGraphId) ?? null;
         setWatchedRun(mine);
         if (mine !== null && mine.state !== lastReportedState.current) {
           lastReportedState.current = mine.state;
@@ -244,13 +252,22 @@ export function BuildWorkspace() {
                 : "The run stopped before finishing. The failed stage says why.",
               { href: `/solutions/lifecycle/run/${mine.graphRunId}`, label: "See what failed" },
             );
+          } else if (isTerminalGraphRunState(mine.state)) {
+            const ended = graphRunStateMetadata(mine.state).label;
+            say(
+              "factory",
+              mine.closureNote
+                ? `The run ended ${ended}. ${mine.closureNote}`
+                : `The run ended ${ended}. Its completed evidence is preserved on the run page.`,
+              { href: `/solutions/lifecycle/run/${mine.graphRunId}`, label: "Open the run" },
+            );
           }
         }
       }
     } catch {
       setWatchError("The live run feed could not be read.");
     }
-  }, [launched, say]);
+  }, [say]);
 
   useEffect(() => {
     // Same shape as the Agent Trail's poll: the first read on a zero timeout
@@ -317,6 +334,21 @@ export function BuildWorkspace() {
   const launch = useCallback(async () => {
     if (proposal === null) return;
     const goal = proposal.goal;
+    // A newly approved plan owns a new evidence identity. Clear every panel
+    // together before the request starts, and invalidate old lazy reads, so a
+    // slow response from the previous run cannot appear under the new build.
+    launchedGraphId.current = null;
+    artifactRequestRunId.current = null;
+    eventRequestRunId.current = null;
+    setLaunched(null);
+    setWatchedRun(null);
+    setWatchError(null);
+    setArtifacts(null);
+    setArtifactsError(null);
+    setEvents(null);
+    setEventsError(null);
+    setPlanEdges(null);
+    lastReportedState.current = null;
     setLaunching(true);
     try {
       const response = await fetch("/api/graphs", {
@@ -337,8 +369,12 @@ export function BuildWorkspace() {
         return;
       }
       const result = body as LaunchResult;
+      launchedGraphId.current = result.graphId;
       setLaunched({ ...result, projectId });
-      lastReportedState.current = null;
+      // Do not wait for the five-second poll cadence after a launch. The ref
+      // already carries the exact new identity, so this read cannot rediscover
+      // the previous graph.
+      void refreshRuns();
       setPrompt("");
       setProposal(null);
       say(
@@ -357,7 +393,7 @@ export function BuildWorkspace() {
     } finally {
       setLaunching(false);
     }
-  }, [proposal, projectId, say]);
+  }, [proposal, projectId, refreshRuns, say]);
 
   const progress = useMemo(() => {
     if (watchedRun === null) return null;
@@ -396,13 +432,18 @@ export function BuildWorkspace() {
   // A withdrawn graph is finished by decision, whatever its last run's state:
   // listing it under "Already building" would claim work nobody will do.
   const activeRuns = lifecycleRuns.filter(
-    (run) => run.state !== "COMPLETED" && run.state !== "FAILED" && (run.withdrawnAt ?? null) === null,
+    (run) =>
+      (run.withdrawnAt ?? null) === null
+      && (!isTerminalGraphRunState(run.state) || (run.pausedAt ?? null) !== null),
   );
   const finishedRuns = lifecycleRuns.filter(
-    (run) => run.state === "COMPLETED" || run.state === "FAILED" || (run.withdrawnAt ?? null) !== null,
+    (run) =>
+      (run.withdrawnAt ?? null) !== null
+      || (isTerminalGraphRunState(run.state) && (run.pausedAt ?? null) === null),
   );
 
   const loadArtifacts = useCallback(async (graphRunId: string) => {
+    artifactRequestRunId.current = graphRunId;
     setArtifactsError(null);
     try {
       const response = await fetch(`/api/graphs/runs/${graphRunId}/artifacts`, {
@@ -412,17 +453,21 @@ export function BuildWorkspace() {
         artifacts?: RunArtifact[];
         error?: { message?: string };
       };
+      if (artifactRequestRunId.current !== graphRunId) return;
       if (!response.ok) {
         setArtifactsError(payload.error?.message ?? "The run's artifacts could not be loaded.");
         return;
       }
       setArtifacts(payload.artifacts ?? []);
     } catch {
-      setArtifactsError("The run's artifacts could not be loaded.");
+      if (artifactRequestRunId.current === graphRunId) {
+        setArtifactsError("The run's artifacts could not be loaded.");
+      }
     }
   }, []);
 
   const loadEvents = useCallback(async (graphRunId: string) => {
+    eventRequestRunId.current = graphRunId;
     setEventsError(null);
     try {
       const response = await fetch(`/api/graphs/runs/${graphRunId}/events`, {
@@ -433,13 +478,16 @@ export function BuildWorkspace() {
         truncated?: boolean;
         error?: { message?: string };
       };
+      if (eventRequestRunId.current !== graphRunId) return;
       if (!response.ok) {
         setEventsError(payload.error?.message ?? "The run's activity log could not be loaded.");
         return;
       }
       setEvents({ rows: payload.events ?? [], truncated: payload.truncated === true });
     } catch {
-      setEventsError("The run's activity log could not be loaded.");
+      if (eventRequestRunId.current === graphRunId) {
+        setEventsError("The run's activity log could not be loaded.");
+      }
     }
   }, []);
 
@@ -539,7 +587,10 @@ export function BuildWorkspace() {
         return;
       }
       say("factory", payload.note ?? "The graph is withdrawn.");
-      if (launched?.graphId === graphId) setLaunched(null);
+      if (launched?.graphId === graphId) {
+        launchedGraphId.current = null;
+        setLaunched(null);
+      }
       void refreshRuns();
     } catch {
       say("factory", "The stop request did not reach the server.");
@@ -1298,8 +1349,8 @@ export function BuildWorkspace() {
                   <div className="flex flex-wrap items-baseline justify-between gap-2">
                     <span className="min-w-0 break-words">{run.goal}</span>
                     <span className="flex shrink-0 items-center gap-3 text-xs text-[var(--muted)]">
-                      <span className={run.state === "FAILED" ? "text-[var(--danger)]" : ""}>
-                        {run.state.toLowerCase()}
+                      <span className={graphRunStateMetadata(run.state).tone === "danger" ? "text-[var(--danger)]" : ""}>
+                        {graphRunStateMetadata(run.state).label}
                         {(run.withdrawnAt ?? null) !== null ? " · stopped for good" : ""}
                       </span>
                       {run.completedAt !== null ? run.completedAt.slice(0, 10) : ""}

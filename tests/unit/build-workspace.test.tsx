@@ -560,7 +560,7 @@ describe("the build workspace", () => {
     expect(screen.queryByTestId("build-awaiting-run")).not.toBeInTheDocument();
   });
 
-  it("offers Stop only where it is true: never on a RUNNING claim", async () => {
+  it("keeps terminal cancelled runs out of Already building", async () => {
     respond({
       runs: [
         {
@@ -592,9 +592,9 @@ describe("the build workspace", () => {
     const active = await screen.findByTestId("build-active-runs");
     const rows = within(active).getAllByRole("listitem");
     const liveRow = rows.find((row) => within(row).queryByText("Live claim") !== null)!;
-    const voidedRow = rows.find((row) => within(row).queryByText(/Voided run/) !== null)!;
     expect(within(liveRow).queryByRole("button", { name: "Stop" })).not.toBeInTheDocument();
-    expect(within(voidedRow).getByRole("button", { name: "Stop" })).toBeInTheDocument();
+    expect(within(active).queryByText(/Voided run/)).not.toBeInTheDocument();
+    expect(within(screen.getByTestId("build-history")).getByText(/Voided run/)).toBeInTheDocument();
   });
 
   it("pauses a running build and resumes a paused one through the real pause route", async () => {
