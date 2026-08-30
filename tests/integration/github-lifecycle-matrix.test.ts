@@ -16,7 +16,7 @@ const migrationsDirectory = resolve(repositoryRoot, "supabase/migrations");
 // hosted project actually runs, so a stale hand-maintained list is worse than
 // no list. The pin below fails deliberately when a new migration lands, so its
 // author reviews this matrix.
-const newestMigration = "20260830000800_field_service_core.sql";
+const newestMigration = "20260830000900_full_lifecycle_typed_input_identity.sql";
 
 const ownerAId = "00000000-0000-4000-8000-000000000301";
 const memberAId = "00000000-0000-4000-8000-000000000302";

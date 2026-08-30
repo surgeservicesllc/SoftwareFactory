@@ -83,6 +83,7 @@ const FULL_LIFECYCLE_RELEASE = [
   "20260828000100_project_production_url_configuration.sql",
   "20260828000200_target_bound_worker_claims.sql",
   "20260828000300_graph_postdeploy_validation.sql",
+  "20260830000900_full_lifecycle_typed_input_identity.sql",
 ] as const;
 
 async function applyChain(db: PGlite, options: { skip?: readonly string[] } = {}): Promise<void> {

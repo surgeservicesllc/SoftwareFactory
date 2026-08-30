@@ -9,7 +9,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const migrationsDirectory = resolve(repositoryRoot, "supabase/migrations");
-const latestMigration = "20260830000800_field_service_core.sql";
+const latestMigration = "20260830000900_full_lifecycle_typed_input_identity.sql";
 
 /**
  * CRM increment 2 (ADR-186) against the real migration chain: the pipeline's
