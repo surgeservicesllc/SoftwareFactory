@@ -3955,3 +3955,71 @@ undeclared until the goal's full seeded E2E passes.
   seed covers all seven tables, and the hosted apply scope
   `billing-contracts` re-proves RLS, the append-only grants and the
   settlement triggers against production after every apply.
+
+## ADR-194 - The company: branches, the org chart, territories and commissions
+
+- **Date**: 2026-08-30
+- **Status**: Accepted (task #64, owner directive: "build into the CRM
+  locations, branches, managers, salesman, etc… research competitors and
+  build into it")
+- **Context**: every row in the CRM belonged to an organization and to
+  nobody in particular. A pest-services business is run out of branches, by
+  managers, through territories, by named people measured on what they
+  sell. The platforms this is judged against agree: Briostack maps sales
+  territories and tracks performance *by territory and by rep* with
+  leaderboards and commission management; FieldRoutes and PestPac both
+  report by office. Without a company layer, none of that is expressible.
+- **Decision**: `20260830001400_branches_org_sales.sql` adds four tables and
+  three sets of columns.
+  - **`crm_branches`** — the physical operation: a code unique per
+    organization, address, phone, an IANA time zone (so a route sheet's
+    "8am" means the branch's 8am), open and close dates.
+  - **`crm_employees`** — the org chart: owner, branch manager, sales
+    manager, sales rep, CSR, dispatcher, admin; a branch, a supervisor, a
+    hire and end date, a commission rate in basis points, a monthly quota.
+  - **`crm_territories`** — a branch's slice of the map, worked by one rep,
+    defined by the postal codes it covers.
+  - **`crm_commissions`** — what a sale earned the person who made it,
+    against a won deal, a signed contract, a paid invoice, or several.
+  - `crm_accounts` gains `branch_id`, `territory_id` and
+    `owner_employee_id`; `crm_opportunities` gains `owner_employee_id`;
+    `crm_technicians` gains `branch_id`, `reports_to_id` and `hire_date`.
+- **Three invariants live in the schema**:
+  1. **A commission's amount is DERIVED.** `crm_derive_commission_amount`
+     multiplies the basis by the rate on every insert and update, so a
+     payout can never disagree with the arithmetic that produced it. The
+     API schema has no `amountCents` field at all — the number cannot be
+     sent, not merely ignored.
+  2. **"Active" never contradicts a date.** A branch with a close date
+     cannot be open; an employee with an end date cannot be on the active
+     roster; a term cannot close before it opened. And nobody reports to
+     themselves.
+  3. **A commission is earned on something.** `num_nonnulls(...) >= 1`
+     across the three sources, with approval and payment recorded as
+     ordered moments — a paid commission carries both, an accrued one
+     carries neither.
+- **Why technicians kept their own table**: a technician is someone a work
+  order can be assigned to, carrying a licence and a service history; an
+  employee is a person in the business, most of whom will never take a
+  dispatch. Merging them would have meant repointing three foreign keys and
+  dropping a table with live history for a naming preference. Both now
+  carry a branch and a supervisor, which is what the org chart actually
+  needed, and the Team page shows them side by side under one roof.
+- **Two honesty rules on the surfaces**: a rep with nothing decided shows
+  **no win rate rather than a zero** (zero reads as "loses everything",
+  which is a different claim), and the deals nobody owns are reported at
+  the top of the leaderboard rather than quietly excluded — a board that
+  drops its own denominator flatters everyone on it. The same rule governs
+  Branches, which names how much of the book no branch serves, and
+  Territories, which names how much of the map nobody works.
+- **Surfaces**: `/Services/branches`, `/Services/team`, `/Services/sales`,
+  over `/api/services/{branches,employees,territories,commissions,sales/leaderboard}`.
+- **Verification**: `services-org-sales.behavior` (9) proves the derived
+  payout — including that it stays derived through an update — the
+  closed/ended/self-report refusals, the postal-code CHECK discriminating
+  rather than merely hostile, cross-tenant invisibility *and* the
+  impossibility of a cross-tenant reference, the anon/service_role shutout
+  and the grant-level absence of DELETE.
+  `services-org-sales-routes` (18) pins the boundary. The full-scale seed
+  covers all four tables; hosted-apply scope `branches-org-sales`
+  re-proves the posture against production after every apply.

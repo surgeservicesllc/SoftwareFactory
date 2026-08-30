@@ -47,6 +47,10 @@ export type SeedCounts = {
   invoiceLines: number;
   payments: number;
   refunds: number;
+  branches: number;
+  employees: number;
+  territories: number;
+  commissions: number;
   timelineEvents: number;
 };
 
@@ -91,6 +95,116 @@ export async function runSeed(
   const dataset = generateSeedDataset(scale);
   const org = organizationId;
 
+  /* ------------------------------------------------------------ the company */
+
+  /*
+   * Branches first, then the org chart, then the managers attached back onto
+   * the branches. The database makes the same choice — a branch is managed
+   * by an employee who belongs to a branch, so one of those two directions
+   * has to be declared second — and the seeder walks it the same way rather
+   * than pretending the cycle is not there.
+   */
+  const branchRows = dataset.branches.map((branch) => ({
+    organization_id: org,
+    code: branch.code,
+    name: branch.name,
+    address: branch.address,
+    phone: branch.phone,
+    email: branch.email,
+    time_zone: branch.timeZone,
+    opened_on: dateInDays(-branch.openedDaysAgo),
+    closed_on: branch.closedDaysAgo === undefined ? null : dateInDays(-branch.closedDaysAgo),
+    active: branch.active,
+    notes: branch.notes,
+    created_by: userId,
+  }));
+  const branches = await insertAll(client, "crm_branches", branchRows, "id, code");
+  if ("error" in branches) return branches;
+  const branchIdByCode = new Map(branches.data.map((row) => [row.code as string, row.id as string]));
+  const branchId = (index: number | undefined) =>
+    index === undefined ? null : branchIdByCode.get(dataset.branches[index].code) ?? null;
+
+  const employeeRows = dataset.employees.map((employee) => ({
+    organization_id: org,
+    branch_id: branchId(employee.branchIndex),
+    employee_code: employee.employeeCode,
+    first_name: employee.firstName,
+    last_name: employee.lastName,
+    email: employee.email,
+    phone: employee.phone,
+    role: employee.role,
+    title: employee.title,
+    hire_date: dateInDays(-employee.hiredDaysAgo),
+    end_date: employee.endedDaysAgo === undefined ? null : dateInDays(-employee.endedDaysAgo),
+    commission_bps: employee.commissionBps ?? null,
+    monthly_quota_cents: employee.monthlyQuotaCents ?? null,
+    active: employee.active,
+    notes: employee.notes,
+    created_by: userId,
+  }));
+  const employees = await insertAll(client, "crm_employees", employeeRows, "id, employee_code");
+  if ("error" in employees) return employees;
+  const employeeIdByCode = new Map(
+    employees.data.map((row) => [row.employee_code as string, row.id as string]),
+  );
+  const employeeId = (index: number | undefined) =>
+    index === undefined ? null : employeeIdByCode.get(dataset.employees[index].employeeCode) ?? null;
+
+  // The org chart's edges, once every node exists.
+  for (const [index, employee] of dataset.employees.entries()) {
+    if (employee.reportsToIndex === undefined) continue;
+    const supervisor = employeeId(employee.reportsToIndex);
+    const person = employeeId(index);
+    if (supervisor === null || person === null || supervisor === person) continue;
+    const linked = await client
+      .from("crm_employees")
+      .update({ reports_to_id: supervisor } as never)
+      .eq("organization_id", org)
+      .eq("id", person);
+    if (linked.error) return { error: linked.error };
+  }
+
+  // …and the branches' managers, grouped so one statement serves every
+  // branch a given manager runs.
+  const branchesByManager = new Map<string, string[]>();
+  for (const [index, branch] of dataset.branches.entries()) {
+    const manager = employeeId(branch.managerIndex);
+    const id = branchId(index);
+    if (manager === null || id === null) continue;
+    const bucket = branchesByManager.get(manager) ?? [];
+    bucket.push(id);
+    branchesByManager.set(manager, bucket);
+  }
+  for (const [manager, ids] of branchesByManager) {
+    const managed = await client
+      .from("crm_branches")
+      .update({ manager_id: manager } as never)
+      .eq("organization_id", org)
+      .in("id", ids);
+    if (managed.error) return { error: managed.error };
+  }
+
+  const territoryRows = dataset.territories.map((territory) => ({
+    organization_id: org,
+    branch_id: branchId(territory.branchIndex),
+    rep_id: employeeId(territory.repIndex),
+    code: territory.code,
+    name: territory.name,
+    city: territory.city,
+    region: territory.region,
+    postal_codes: territory.postalCodes,
+    active: territory.active,
+    notes: territory.notes,
+    created_by: userId,
+  }));
+  const territories = await insertAll(client, "crm_territories", territoryRows, "id, code");
+  if ("error" in territories) return territories;
+  const territoryIdByCode = new Map(
+    territories.data.map((row) => [row.code as string, row.id as string]),
+  );
+  const territoryId = (index: number | undefined) =>
+    index === undefined ? null : territoryIdByCode.get(dataset.territories[index].code) ?? null;
+
   /* ---------------------------------------------------------- independents */
 
   const technicianRows = dataset.technicians.map((technician) => ({
@@ -101,6 +215,9 @@ export async function runSeed(
     phone: technician.phone,
     license_number: technician.licenseNumber,
     active: technician.active,
+    branch_id: branchId(technician.branchIndex),
+    reports_to_id: employeeId(technician.reportsToIndex),
+    hire_date: technician.hiredDaysAgo === undefined ? null : dateInDays(-technician.hiredDaysAgo),
     created_by: userId,
   }));
   const technicians = await insertAll(client, "crm_technicians", technicianRows, "id, license_number");
@@ -174,6 +291,9 @@ export async function runSeed(
     source: SEED_SOURCE,
     billing_address: account.billingAddress,
     notes: account.notes,
+    branch_id: branchId(account.branchIndex),
+    territory_id: territoryId(account.territoryIndex),
+    owner_employee_id: employeeId(account.ownerEmployeeIndex),
     created_by: userId,
   }));
   const accounts = await insertAll(client, "crm_accounts", accountRows, "id, name");
@@ -251,6 +371,9 @@ export async function runSeed(
       value_cents: opportunity.valueCents,
       expected_close_date: dateInDays(opportunity.expectedInDays),
       notes: opportunity.notes,
+      // The rep who owns the account works its deals; without this the
+      // leaderboard would have nothing to attribute.
+      owner_employee_id: employeeId(account.ownerEmployeeIndex),
       created_by: userId,
     })),
   );
@@ -762,6 +885,68 @@ export async function runSeed(
   const refunds = await insertAll(client, "crm_refunds", refundRows, "id");
   if ("error" in refunds) return refunds;
 
+  /* ------------------------------------------------------------ commissions */
+
+  /*
+   * What each sale earned the rep who owns the account. No amount is sent:
+   * the database multiplies the basis by the rate, and a seeded payout that
+   * stated its own total would be asserting the one number this schema
+   * refuses to take from a caller. The row comes back with the amount the
+   * trigger computed.
+   */
+  const commissionRows = dataset.accounts.flatMap((account) => {
+    const billing = operations.get(account.name)?.billing;
+    const owner = employeeId(account.ownerEmployeeIndex);
+    if (billing === undefined || owner === null) return [];
+    return billing.commissions.flatMap((commission) => {
+      const earnedAt = daysAgoIso(commission.earnedDaysAgo);
+      const stamped =
+        commission.status === "accrued"
+          ? { approved_at: null, paid_at: null }
+          : commission.status === "approved"
+            ? { approved_at: earnedAt, paid_at: null }
+            : commission.status === "paid"
+              ? { approved_at: earnedAt, paid_at: earnedAt }
+              : // A voided commission keeps whatever moments it reached.
+                { approved_at: earnedAt, paid_at: null };
+      return [
+        {
+          organization_id: org,
+          employee_id: owner,
+          opportunity_id:
+            commission.opportunityIndex === undefined
+              ? null
+              : opportunityIdByName.get(
+                  account.opportunities[commission.opportunityIndex]?.name ?? "",
+                ) ?? null,
+          contract_id:
+            commission.contractIndex === undefined
+              ? null
+              : contractIdByNumber.get(billing.contracts[commission.contractIndex]?.number ?? "") ?? null,
+          invoice_id:
+            commission.invoiceIndex === undefined
+              ? null
+              : invoiceIdByNumber.get(billing.invoices[commission.invoiceIndex]?.number ?? "") ?? null,
+          basis_cents: commission.basisCents,
+          rate_bps: commission.rateBps,
+          status: commission.status,
+          earned_on: dateInDays(-commission.earnedDaysAgo),
+          ...stamped,
+          note: commission.note,
+          created_by: userId,
+        },
+      ];
+    });
+  })
+    // A commission has to name what it was earned on; one whose source did
+    // not survive resolution is dropped rather than filed against nothing.
+    .filter(
+      (row) =>
+        row.opportunity_id !== null || row.contract_id !== null || row.invoice_id !== null,
+    );
+  const commissions = await insertAll(client, "crm_commissions", commissionRows, "id");
+  if ("error" in commissions) return commissions;
+
   /* --------------------------------------------------- hand-recorded history */
 
   const eventRows = dataset.accounts.flatMap((account) =>
@@ -809,6 +994,10 @@ export async function runSeed(
       invoiceLines: invoiceLines.data.length,
       payments: payments.data.length,
       refunds: refunds.data.length,
+      branches: branches.data.length,
+      employees: employees.data.length,
+      territories: territories.data.length,
+      commissions: commissions.data.length,
       timelineEvents: timelineTotal.count ?? 0,
     },
   };

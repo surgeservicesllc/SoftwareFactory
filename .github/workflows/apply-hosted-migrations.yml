@@ -64,6 +64,7 @@ on:
           - pest-ipm
           - chemicals-compliance
           - billing-contracts
+          - branches-org-sales
           - probe
 permissions:
   actions: read
@@ -1687,6 +1688,70 @@ jobs:
             end
             \$\$;"
           echo "Billing and contracts applied; RLS, append-only money, settlement triggers verified."
+
+      - name: Apply branches, the org chart and the sales motion (scope=branches-org-sales)
+        if: ${{ inputs.scope == 'branches-org-sales' }}
+        run: |
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+          VERSION=20260830001400_branches_org_sales
+          FILE="supabase/migrations/${VERSION}.sql"
+          sha256sum "$FILE"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied "${VERSION%%_*}"
+          else
+            npx supabase migration repair --status applied "${VERSION%%_*}" --db-url "$DB_URL"
+          fi
+          psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
+          # Postflight: four tables under forced RLS; nothing deletable, because
+          # a closed branch, an ended employee and a voided commission all stay
+          # on the record (hosted default privileges granted ALL at creation,
+          # so the ABSENCE of delete is what must be proven); anon and
+          # service_role hold nothing; the commission amount really is derived
+          # by trigger rather than taken from a caller.
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
+            do \$\$
+            declare
+              v_table text;
+            begin
+              if (select count(*) from pg_class c
+                   join pg_namespace n on n.oid = c.relnamespace
+                  where n.nspname = 'public' and c.relrowsecurity and c.relforcerowsecurity
+                    and c.relname in (
+                      'crm_branches','crm_employees','crm_territories','crm_commissions')) <> 4 then
+                raise exception 'the company tables are missing or not under forced RLS';
+              end if;
+              foreach v_table in array array[
+                'crm_branches','crm_employees','crm_territories','crm_commissions'
+              ] loop
+                if has_table_privilege('authenticated', 'public.' || v_table, 'delete') then
+                  raise exception 'company records are deletable on %', v_table;
+                end if;
+                if has_table_privilege('anon', 'public.' || v_table, 'select')
+                  or has_table_privilege('service_role', 'public.' || v_table, 'select') then
+                  raise exception 'anon or service_role can reach %', v_table;
+                end if;
+              end loop;
+              if not exists (
+                select 1 from pg_trigger t join pg_class c on c.oid = t.tgrelid
+                 where c.relname = 'crm_commissions' and t.tgname = 'crm_commissions_derive_amount'
+              ) then
+                raise exception 'the commission amount is not derived by trigger';
+              end if;
+              -- The org chart's own columns, on the tables that gained them.
+              if (select count(*) from information_schema.columns
+                   where table_schema = 'public' and table_name = 'crm_accounts'
+                     and column_name in ('branch_id','territory_id','owner_employee_id')) <> 3 then
+                raise exception 'the book of business did not gain its place in the company';
+              end if;
+            end
+            \$\$;"
+          echo "Branches, the org chart and the sales motion applied; RLS, no-delete, derived commissions verified."
 
       - name: Normalize exact legacy bot ACLs (scope=bot-legacy-acl-normalization)
         if: ${{ inputs.scope == 'bot-legacy-acl-normalization' }}

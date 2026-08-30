@@ -107,8 +107,23 @@ is a mockup commitment.
    taking card payments through the existing Stripe machinery (the ledger
    records money that moved; it does not yet move it), dunning schedules,
    and PDF invoice rendering.
-7. **Sales**: territories, canvassing routes, dispositions, leaderboards,
-   commissions, attribution.
+7. **The company and the sales motion (SHIPPED with ADR-194)**:
+   crm_branches (per-organization code, address, IANA time zone, open and
+   close dates, a manager from the org chart), crm_employees as the org
+   chart itself (owner / branch manager / sales manager / sales rep / CSR /
+   dispatcher / admin, each with a branch, a supervisor, hire and end
+   dates, a commission rate in basis points and a monthly quota),
+   crm_territories (a branch's slice of the map, worked by one rep,
+   defined by the postal codes it covers, CHECKed element by element), and
+   crm_commissions whose amount is DERIVED from basis × rate by trigger —
+   the API carries no amount field, so the number cannot be asserted at
+   all. Accounts gained branch/territory/owning rep, opportunities an
+   owner, technicians a branch and a supervisor. /Services/branches,
+   /Services/team and /Services/sales, each naming the uncomfortable
+   figure: the book no branch serves, the map nobody works, the deals
+   nobody owns. Migration 20260830001400, hosted-apply scope
+   `branches-org-sales`. Still ahead in this pillar: door-to-door
+   canvassing routes and knock dispositions, and multi-touch attribution.
 8. **Marketing hub**: segments, lists, campaigns, email/SMS sends over
    env-gated providers (Resend machinery exists for email), consent and
    unsubscribe as first-class records, deliverability events, ROI;

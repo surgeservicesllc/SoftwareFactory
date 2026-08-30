@@ -31,9 +31,28 @@ export const SEED_SCALES = ["demo", "full"] as const;
 export type SeedScale = (typeof SEED_SCALES)[number];
 
 /** Row targets per scale. `full` clears the goal's 250-row floor everywhere. */
-export const SEED_TARGETS: Record<SeedScale, { accounts: number; technicians: number; products: number; jurisdictions: number }> = {
-  demo: { accounts: 40, technicians: 12, products: 14, jurisdictions: 8 },
-  full: { accounts: 320, technicians: 260, products: 260, jurisdictions: 260 },
+export const SEED_TARGETS: Record<
+  SeedScale,
+  {
+    accounts: number;
+    technicians: number;
+    products: number;
+    jurisdictions: number;
+    branches: number;
+    employees: number;
+    territories: number;
+  }
+> = {
+  demo: { accounts: 40, technicians: 12, products: 14, jurisdictions: 8, branches: 4, employees: 14, territories: 8 },
+  full: {
+    accounts: 320,
+    technicians: 260,
+    products: 260,
+    jurisdictions: 260,
+    branches: 260,
+    employees: 340,
+    territories: 300,
+  },
 };
 
 /* --------------------------------------------------------------- randomness */
@@ -234,6 +253,17 @@ export type SeedAccount = {
     lostReason?: string;
   }[];
   events: { kind: string; summary: string; detail: string; daysAgo: number }[];
+  /*
+   * Where this account sits in the company. Assigned once every branch,
+   * territory and rep exists, so the indices always resolve. A minority are
+   * left unassigned on purpose: a real book has customers nobody has
+   * claimed yet, and a page that never sees one is not tested.
+   */
+  branchIndex?: number;
+  territoryIndex?: number;
+  ownerEmployeeIndex?: number;
+  /** The owner's own rate, so a commission is earned at the rate they carry. */
+  ownerCommissionBps?: number;
 };
 
 export type SeedTechnician = {
@@ -243,6 +273,55 @@ export type SeedTechnician = {
   phone: string;
   licenseNumber: string;
   active: boolean;
+  branchIndex?: number;
+  reportsToIndex?: number;
+  hiredDaysAgo?: number;
+};
+
+export type SeedBranch = {
+  code: string;
+  name: string;
+  address: string;
+  phone: string;
+  email: string;
+  timeZone: string;
+  openedDaysAgo: number;
+  /** A closed branch keeps its history; the schema refuses to call it open. */
+  closedDaysAgo?: number;
+  active: boolean;
+  notes: string;
+  /** Filled once the org chart exists — a branch is managed by a person. */
+  managerIndex?: number;
+};
+
+export type SeedEmployee = {
+  employeeCode: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  role: "owner" | "branch_manager" | "sales_manager" | "sales_rep" | "csr" | "dispatcher" | "admin";
+  title: string;
+  branchIndex?: number;
+  reportsToIndex?: number;
+  hiredDaysAgo: number;
+  endedDaysAgo?: number;
+  active: boolean;
+  commissionBps?: number;
+  monthlyQuotaCents?: number;
+  notes: string;
+};
+
+export type SeedTerritory = {
+  code: string;
+  name: string;
+  branchIndex: number;
+  repIndex?: number;
+  city: string;
+  region: string;
+  postalCodes: string[];
+  active: boolean;
+  notes: string;
 };
 
 export type SeedProduct = {
@@ -276,6 +355,9 @@ export type SeedDataset = {
   technicians: SeedTechnician[];
   products: SeedProduct[];
   jurisdictions: SeedJurisdiction[];
+  branches: SeedBranch[];
+  employees: SeedEmployee[];
+  territories: SeedTerritory[];
 };
 
 /* ---------------------------------------------------------------- generators */
@@ -491,12 +573,76 @@ function generateJurisdiction(random: Random, index: number): SeedJurisdiction {
 export function generateSeedDataset(scale: SeedScale, seed = 20260830): SeedDataset {
   const targets = SEED_TARGETS[scale];
   const random = makeRandom(seed);
+
+  /*
+   * The company is built first, because everything else takes its place in
+   * it: a branch serves accounts, a rep owns them, a territory covers them.
+   * Branches carry no manager yet — the org chart does not exist until the
+   * next line — so the managers are attached in a second pass below, the
+   * same way the database has to declare one of those two directions last.
+   */
+  const branches = Array.from({ length: targets.branches }, (_, index) =>
+    generateBranch(random, index),
+  );
+  const employees = Array.from({ length: targets.employees }, (_, index) =>
+    generateEmployee(random, index, branches.length),
+  );
+  const branchManagers = employees
+    .map((employee, index) => ({ employee, index }))
+    .filter((entry) => entry.employee.role === "branch_manager")
+    .map((entry) => entry.index);
+  const salesReps = employees
+    .map((employee, index) => ({ employee, index }))
+    .filter((entry) => entry.employee.role === "sales_rep" || entry.employee.role === "sales_manager")
+    .map((entry) => entry.index);
+
+  for (const [index, branch] of branches.entries()) {
+    if (branchManagers.length === 0) continue;
+    branch.managerIndex = branchManagers[index % branchManagers.length];
+  }
+
+  const territories = Array.from({ length: targets.territories }, (_, index) =>
+    generateTerritory(random, index, branches.length, salesReps),
+  );
+
+  const accounts = Array.from({ length: targets.accounts }, (_, index) =>
+    generateAccount(random, index),
+  );
+  for (const account of accounts) {
+    if (branches.length > 0) account.branchIndex = account.index % branches.length;
+    // A nineteenth of the book sits outside any territory and a thirteenth
+    // has no owner: unassigned is a real state, and the pages that report
+    // it need rows to report.
+    if (territories.length > 0 && account.index % 19 !== 0) {
+      account.territoryIndex = account.index % territories.length;
+    }
+    if (salesReps.length > 0 && account.index % 13 !== 0) {
+      const repIndex = salesReps[account.index % salesReps.length];
+      account.ownerEmployeeIndex = repIndex;
+      account.ownerCommissionBps = employees[repIndex].commissionBps;
+    }
+  }
+
+  const technicians = Array.from({ length: targets.technicians }, (_, index) =>
+    generateTechnician(random, index),
+  );
+  for (const [index, technician] of technicians.entries()) {
+    if (branches.length > 0) technician.branchIndex = index % branches.length;
+    if (branchManagers.length > 0) {
+      technician.reportsToIndex = branchManagers[index % branchManagers.length];
+    }
+    technician.hiredDaysAgo = between(random, 45, 3600);
+  }
+
   return {
     scale,
-    accounts: Array.from({ length: targets.accounts }, (_, index) => generateAccount(random, index)),
-    technicians: Array.from({ length: targets.technicians }, (_, index) => generateTechnician(random, index)),
+    accounts,
+    technicians,
     products: Array.from({ length: targets.products }, (_, index) => generateProduct(random, index)),
     jurisdictions: Array.from({ length: targets.jurisdictions }, (_, index) => generateJurisdiction(random, index)),
+    branches,
+    employees,
+    territories,
   };
 }
 
@@ -610,6 +756,22 @@ export type SeedBilling = {
     signedDaysAgo?: number;
     signedByName?: string;
     endedDaysAgo?: number;
+  }[];
+  /**
+   * What the sale earned the person who made it. The amount is deliberately
+   * absent: the database multiplies the basis by the rate, and a seeded
+   * payout that stated its own total would be asserting the one number this
+   * schema refuses to take from a caller.
+   */
+  commissions: {
+    opportunityIndex?: number;
+    contractIndex?: number;
+    invoiceIndex?: number;
+    basisCents: number;
+    rateBps: number;
+    status: "accrued" | "approved" | "paid" | "void";
+    earnedDaysAgo: number;
+    note: string;
   }[];
   invoices: {
     number: string;
@@ -1053,10 +1215,182 @@ function generateBilling(
     };
   });
 
-  return { estimates, contracts, invoices };
+  /*
+   * Commissions. A won deal earns one at the owner's own rate; a fully
+   * settled invoice earns one on collection, which is how most of these
+   * businesses actually pay — something sold is not something banked. An
+   * account nobody owns earns nobody anything, and that is left true rather
+   * than papered over with a house rate.
+   */
+  const rateBps = account.ownerCommissionBps;
+  const commissions: SeedBilling["commissions"] =
+    rateBps === undefined
+      ? []
+      : [
+          ...account.opportunities.flatMap((opportunity, seat) =>
+            opportunity.stagePath[opportunity.stagePath.length - 1] === "won"
+              ? [
+                  {
+                    opportunityIndex: seat,
+                    basisCents: opportunity.valueCents,
+                    rateBps,
+                    status: (["accrued", "approved", "paid", "paid", "void"] as const)[
+                      (account.index + seat) % 5
+                    ],
+                    earnedDaysAgo: between(random, 20, 700),
+                    note: `Earned on the signed ${pick(random, ["annual agreement", "initial service", "commercial contract", "renewal"])}.`,
+                  },
+                ]
+              : [],
+          ),
+          ...invoices.flatMap((invoice, seat) =>
+            // Collected in full, and only every other one — a commission on
+            // every invoice would make the ledger read like a bonus scheme.
+            invoice.status === "open"
+            && invoice.payments.length === 1
+            && invoice.payments[0].amountCents
+              >= invoice.lines.reduce((sum, line) => sum + line.quantity * line.unitPriceCents, 0)
+                + invoice.taxCents
+            && seat % 2 === 0
+              ? [
+                  {
+                    invoiceIndex: seat,
+                    ...(contracts.length > 0 ? { contractIndex: seat % contracts.length } : {}),
+                    basisCents:
+                      invoice.lines.reduce((sum, line) => sum + line.quantity * line.unitPriceCents, 0),
+                    rateBps: Math.round(rateBps / 2),
+                    status: (["accrued", "approved", "paid"] as const)[(account.index + seat) % 3],
+                    earnedDaysAgo: Math.max(1, invoice.issuedDaysAgo - between(random, 1, 15)),
+                    note: "Earned on collection, at half the new-business rate.",
+                  },
+                ]
+              : [],
+          ),
+        ];
+
+  return { estimates, contracts, invoices, commissions };
 }
 
 /** Everything the seeder needs to label a row as demonstration data. */
 export const SEED_SOURCE = DEMO_SOURCE;
 
 export { daysAgoIso, dateInDays };
+
+/* ----------------------------------------------- the company: increment 7 */
+
+const BRANCH_SUFFIXES = [
+  "Branch", "Service Center", "Depot", "Operations", "Field Office", "Yard",
+] as const;
+const ZONE_BY_REGION: Record<string, string> = {
+  OR: "America/Los_Angeles",
+  WA: "America/Los_Angeles",
+  ID: "America/Boise",
+};
+const EMPLOYEE_TITLES: Record<SeedEmployee["role"], string> = {
+  owner: "Owner",
+  branch_manager: "Branch Manager",
+  sales_manager: "Sales Manager",
+  sales_rep: "Sales Representative",
+  csr: "Customer Service Representative",
+  dispatcher: "Dispatcher",
+  admin: "Office Administrator",
+};
+const TERRITORY_DIRECTIONS = [
+  "North", "South", "East", "West", "Central", "Ridge", "Valley", "Coast",
+] as const;
+
+/**
+ * A branch is a real place: a city, a phone, a time zone that decides what
+ * "8am" means on its route sheet. Every seventeenth one has closed — a book
+ * that has never lost an office is not a book anyone has run for long.
+ */
+function generateBranch(random: Random, index: number): SeedBranch {
+  const [city, region, zip] = CITIES[index % CITIES.length];
+  const suffix = BRANCH_SUFFIXES[index % BRANCH_SUFFIXES.length];
+  const closed = index % 17 === 0 && index !== 0;
+  const openedDaysAgo = between(random, 400, 5200);
+  return {
+    code: `BR-${pad(index, 4)}`,
+    name: `${city} ${suffix} ${pad(index, 3)}`,
+    address: `${between(random, 100, 9800)} ${pick(random, STREETS)}, ${city}, ${region} ${zip}`,
+    phone: phoneFor(40_000 + index),
+    email: `branch${pad(index, 4)}@demo-pest-services.example`,
+    timeZone: ZONE_BY_REGION[region] ?? "America/Los_Angeles",
+    openedDaysAgo,
+    ...(closed ? { closedDaysAgo: Math.max(1, openedDaysAgo - between(random, 100, 380)) } : {}),
+    active: !closed,
+    notes: `${pick(random, ["Two bays and a chemical store", "Shares a yard with the fleet", "Leased through the term", "Owned outright"])}.`,
+  };
+}
+
+/**
+ * The org chart. Index 0 is the owner and reports to nobody; everyone else
+ * reports to someone earlier in the list, so the graph is acyclic by
+ * construction rather than by luck. Roles repeat on a fixed cycle so every
+ * one of the seven is represented however small the scale.
+ */
+function generateEmployee(random: Random, index: number, branchCount: number): SeedEmployee {
+  const roles: SeedEmployee["role"][] = [
+    "branch_manager", "sales_rep", "sales_rep", "csr", "sales_rep",
+    "dispatcher", "sales_manager", "sales_rep", "admin", "csr",
+  ];
+  const role: SeedEmployee["role"] = index === 0 ? "owner" : roles[index % roles.length];
+  const firstName = GIVEN_NAMES[(index * 5) % GIVEN_NAMES.length];
+  const lastName = FAMILY_NAMES[(index * 7) % FAMILY_NAMES.length];
+  const selling = role === "sales_rep" || role === "sales_manager" || role === "branch_manager" || role === "owner";
+  const hiredDaysAgo = between(random, 60, 4200);
+  // A minority have moved on; their commissions and signatures stay.
+  const ended = index % 23 === 0 && index !== 0;
+  return {
+    employeeCode: `EMP-${pad(index, 5)}`,
+    firstName,
+    lastName,
+    email: `${slug(firstName)}.${slug(lastName)}${index}@demo-pest-services.example`,
+    phone: phoneFor(50_000 + index),
+    role,
+    title: EMPLOYEE_TITLES[role],
+    ...(branchCount > 0 && index !== 0 ? { branchIndex: index % branchCount } : {}),
+    // Everyone but the owner reports to somebody already in the list.
+    ...(index === 0 ? {} : { reportsToIndex: Math.floor(index / 4) === index ? 0 : Math.floor(index / 4) }),
+    hiredDaysAgo,
+    ...(ended ? { endedDaysAgo: Math.max(1, hiredDaysAgo - between(random, 30, 900)) } : {}),
+    active: !ended,
+    ...(selling ? { commissionBps: [500, 650, 750, 850, 1000][index % 5] } : {}),
+    ...(role === "sales_rep" || role === "sales_manager"
+      ? { monthlyQuotaCents: between(random, 15, 90) * 100_000 }
+      : {}),
+    notes: `${pick(random, ["Covers the north side", "Runs the commercial book", "Handles renewals", "Backs up dispatch", "Trains new hires"])}.`,
+  };
+}
+
+/**
+ * A territory is a branch's slice of the map, worked by one rep, defined by
+ * the postal codes it covers. The codes are derived from the branch's own
+ * city so a territory never spans two states by accident.
+ */
+function generateTerritory(
+  random: Random,
+  index: number,
+  branchCount: number,
+  salesRepIndices: number[],
+): SeedTerritory {
+  const branchIndex = index % Math.max(1, branchCount);
+  const [city, region, zip] = CITIES[branchIndex % CITIES.length];
+  const base = Number.parseInt(zip, 10);
+  const span = between(random, 2, 8);
+  return {
+    code: `TR-${pad(index, 4)}`,
+    name: `${city} ${TERRITORY_DIRECTIONS[index % TERRITORY_DIRECTIONS.length]} ${pad(index, 3)}`,
+    branchIndex,
+    // A tenth of the map is unworked, which is the number a sales manager
+    // opens this page to find.
+    ...(salesRepIndices.length > 0 && index % 10 !== 0
+      ? { repIndex: salesRepIndices[index % salesRepIndices.length] }
+      : {}),
+    city,
+    region,
+    postalCodes: Array.from({ length: span }, (_, step) => pad(base + step * 3, 5)),
+    active: index % 14 !== 0,
+    notes: `${pick(random, ["Dense residential", "Mixed commercial and residential", "Rural route, long drives", "Downtown core"])}.`,
+  };
+}

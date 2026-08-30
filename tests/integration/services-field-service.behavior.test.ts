@@ -9,7 +9,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const migrationsDirectory = resolve(repositoryRoot, "supabase/migrations");
-const latestMigration = "20260830001300_billing_contracts.sql";
+const latestMigration = "20260830001400_branches_org_sales.sql";
 
 /**
  * Field service (ADR-189) against the real migration chain: completing a

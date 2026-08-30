@@ -43,9 +43,20 @@ that refuses a credit larger than the payment it refunds. Every payment
 writes a `payment` timeline event, so all three system kinds now have
 real database writers; nothing in billing is deletable, and a void
 invoice keeps its reason. /Services/billing reads the four books and the
-ledger behind them. A workspace can populate itself two ways (ADR-192): the curated Demo Data
-book for presenting the product, or the full corpus — 23,375 rows across
-all twenty-two tables, every optional field populated, spanning years —
+ledger behind them. The company arrived with ADR-194: crm_branches (code, address, IANA time
+zone, open/close dates), crm_employees as the org chart (seven roles, a
+branch, a supervisor, a commission rate in basis points, a quota),
+crm_territories (a branch's slice of the map, worked by one rep, defined
+by the postal codes it covers) and crm_commissions, whose payout is
+DERIVED from its basis and rate by trigger — the API has no amount field
+at all. Accounts gained a branch, a territory and an owning rep;
+opportunities gained an owner; technicians gained a branch and a
+supervisor. /Services/branches, /Services/team and /Services/sales read
+them, each naming the uncomfortable number rather than hiding it: the
+book no branch serves, the map nobody works, the deals nobody owns.
+A workspace can populate itself two ways (ADR-192): the curated Demo Data
+book for presenting the product, or the full corpus — 24,688 rows across
+all twenty-six tables, every optional field populated, spanning years —
 for testing dashboards, reports and pagination at the size of a real book.
 GET /api/services/seed-report audits whichever is loaded, table by table,
 PASS or FAIL. Plan of record: AI/SERVICES_CRM_GAP_ANALYSIS.md — ten increments;

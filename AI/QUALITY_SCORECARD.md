@@ -2,6 +2,33 @@
 
 Last reviewed: 2026-08-30
 
+**Addendum, 2026-08-30 latest+16 - the company (ADR-194):**
+services-org-sales.behavior 9 on the real chain under hosted-style default
+privileges (the branch/manager/rep/book join holding together; a commission
+derived from basis and rate on insert AND still derived after the rate is
+raised; a paid commission refused without its approval and an accrued one
+refused with a stamp; a commission earned on nothing refused; closed-branch
+and ended-employee flags refused when they contradict their dates; a
+self-report refused; a free-text postal code refused while a real list of
+three is accepted, so the CHECK discriminates rather than merely blocks;
+cross-tenant invisibility and the impossibility of a cross-tenant reference;
+anon/service_role shut out and DELETE denied at the grant, not matched to
+zero rows). services-org-sales-routes 18 (per-branch counts tallied from the
+rows including the unassigned remainder, closure deactivating without a
+second instruction, duplicate codes as 409, a non-code refused before the
+database, role counts over the ACTIVE roster only, the login link reported
+as a fact and never as an identity, self-report refused at the boundary, the
+payout unsendable — the field does not exist in the schema — the ledger's
+computed amount reported back, approve-and-pay in one moment, moments taken
+back on return to accrued, postal codes upper-cased and de-duplicated, and a
+leaderboard reporting winRate null rather than 0 plus its own unowned
+denominator). Seed extended to 26 tables — 24,688 rows, 26/26 PASS, zero
+orphans, all seven employee roles and all four commission statuses present.
+RLS census 173; hosted service-role grants at 26 crm tables; runbook 192;
+workflow scope `branches-org-sales` postflight proves forced RLS, no DELETE
+anywhere, the anon/service_role shutout, the derive trigger and the three
+new columns on crm_accounts. Lint zero warnings, tsc clean.
+
 **Addendum, 2026-08-30 latest+15 - billing (ADR-193):**
 services-billing.behavior 6 on the real migration chain (settlement
 derived from the ledger and the invoice reopened by a refund; the refund

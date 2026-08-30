@@ -98,6 +98,9 @@ export type TechnicianView = {
   active: boolean;
   createdAt: string;
   updatedAt: string;
+  branchId: string | null;
+  reportsToId: string | null;
+  hireDate: string | null;
 };
 
 export type ServicePlanView = {
@@ -422,3 +425,133 @@ export type InvoicesPayload = {
 export type PaymentsPayload = { payments: PaymentView[]; receivedCents: number };
 
 export type RefundsPayload = { refunds: RefundView[]; refundedCents: number };
+
+export type BranchView = {
+  id: string;
+  managerId: string | null;
+  code: string;
+  name: string;
+  address: string | null;
+  phone: string | null;
+  email: string | null;
+  timeZone: string | null;
+  openedOn: string | null;
+  closedOn: string | null;
+  active: boolean;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+  accountCount: number;
+  staffCount: number;
+  technicianCount: number;
+};
+
+export type EmployeeView = {
+  id: string;
+  branchId: string | null;
+  reportsToId: string | null;
+  hasLogin: boolean;
+  employeeCode: string;
+  firstName: string;
+  lastName: string | null;
+  email: string | null;
+  phone: string | null;
+  role: string;
+  title: string | null;
+  hireDate: string | null;
+  endDate: string | null;
+  commissionBps: number | null;
+  monthlyQuotaCents: number | null;
+  active: boolean;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type TerritoryView = {
+  id: string;
+  branchId: string;
+  repId: string | null;
+  name: string;
+  code: string;
+  city: string | null;
+  region: string | null;
+  postalCodes: string[];
+  active: boolean;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+  accountCount: number;
+};
+
+export type CommissionView = {
+  id: string;
+  employeeId: string;
+  opportunityId: string | null;
+  contractId: string | null;
+  invoiceId: string | null;
+  basisCents: number;
+  rateBps: number;
+  amountCents: number;
+  status: string;
+  earnedOn: string;
+  approvedAt: string | null;
+  paidAt: string | null;
+  note: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type BranchesPayload = {
+  branches: BranchView[];
+  counts: { total: number; active: number; unassignedAccounts: number };
+};
+
+export type EmployeesPayload = {
+  employees: EmployeeView[];
+  counts: { total: number; active: number; byRole: Record<string, number> };
+};
+
+export type TerritoriesPayload = {
+  territories: TerritoryView[];
+  counts: { total: number; active: number; unworked: number };
+};
+
+export type CommissionsPayload = {
+  commissions: CommissionView[];
+  totals: {
+    accruedCents: number;
+    approvedCents: number;
+    paidCents: number;
+    voidCents: number;
+  };
+};
+
+export type LeaderboardRow = {
+  employeeId: string;
+  name: string;
+  role: string;
+  branchId: string | null;
+  active: boolean;
+  openCount: number;
+  openValueCents: number;
+  wonCount: number;
+  wonValueCents: number;
+  lostCount: number;
+  winRate: number | null;
+  quotaCents: number | null;
+  quotaAttainment: number | null;
+  commissionAccruedCents: number;
+  commissionPaidCents: number;
+};
+
+export type LeaderboardPayload = {
+  rows: LeaderboardRow[];
+  totals: {
+    reps: number;
+    wonValueCents: number;
+    openValueCents: number;
+    commissionPaidCents: number;
+    unownedOpportunities: number;
+  };
+};

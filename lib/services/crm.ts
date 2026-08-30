@@ -150,7 +150,7 @@ export const CRM_TIMELINE_COLUMNS =
 export const CRM_OPPORTUNITY_COLUMNS =
   "id, account_id, name, stage, value_cents, expected_close_date, notes, lost_reason, closed_at, created_at, updated_at";
 export const CRM_TECHNICIAN_COLUMNS =
-  "id, first_name, last_name, email, phone, license_number, active, created_at, updated_at";
+  "id, first_name, last_name, email, phone, license_number, active, branch_id, reports_to_id, hire_date, created_at, updated_at";
 export const CRM_SERVICE_PLAN_COLUMNS =
   "id, account_id, property_id, service_type, recurrence, next_due, technician_id, value_cents, active, notes, created_at, updated_at";
 export const CRM_WORK_ORDER_COLUMNS =
@@ -228,6 +228,10 @@ export type CrmTechnicianRow = {
   phone: string | null;
   license_number: string | null;
   active: boolean;
+  // Increment 7: a technician's place in the company.
+  branch_id: string | null;
+  reports_to_id: string | null;
+  hire_date: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -475,6 +479,9 @@ export function toTechnicianView(row: CrmTechnicianRow) {
     phone: row.phone,
     licenseNumber: row.license_number,
     active: row.active,
+    branchId: row.branch_id,
+    reportsToId: row.reports_to_id,
+    hireDate: row.hire_date,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -912,4 +919,205 @@ export function isInvoiceOverdue(
   if (invoice.status !== "open") return false;
   if (invoice.balanceCents <= 0) return false;
   return invoice.dueOn !== null && invoice.dueOn < today;
+}
+
+/* -------------------------------------------------------------------------
+ * The company: branches, the org chart, territories and commissions. Until
+ * increment 7 every row belonged to an organization and to nobody in
+ * particular; these are the columns a branch manager reports on.
+ * ---------------------------------------------------------------------- */
+
+export const CRM_EMPLOYEE_ROLES = [
+  "owner",
+  "branch_manager",
+  "sales_manager",
+  "sales_rep",
+  "csr",
+  "dispatcher",
+  "admin",
+] as const;
+export type CrmEmployeeRole = (typeof CRM_EMPLOYEE_ROLES)[number];
+
+/** The roles a deal or an account can be owned by — who carries a quota. */
+export const CRM_SELLING_ROLES = ["owner", "branch_manager", "sales_manager", "sales_rep"] as const;
+
+export const CRM_COMMISSION_STATUSES = ["accrued", "approved", "paid", "void"] as const;
+export type CrmCommissionStatus = (typeof CRM_COMMISSION_STATUSES)[number];
+
+/** The short identity a branch, territory or employee is known by. */
+export const CRM_CODE_PATTERN = /^[A-Z0-9][A-Z0-9-]{1,11}$/;
+export const CRM_EMPLOYEE_CODE_PATTERN = /^[A-Z0-9][A-Z0-9-]{1,15}$/;
+/** A US-style region code; the schema CHECKs the same two letters. */
+export const CRM_REGION_PATTERN = /^[A-Z]{2}$/;
+export const CRM_POSTAL_PATTERN = /^[A-Z0-9][A-Z0-9 -]{0,10}$/;
+/** An IANA zone name, matching the schema's CHECK. */
+export const CRM_TIME_ZONE_PATTERN =
+  /^[A-Za-z][A-Za-z_+-]{1,30}(\/[A-Za-z][A-Za-z_+-]{1,30}){0,2}$/;
+
+export const CRM_BRANCH_COLUMNS =
+  "id, manager_id, code, name, address, phone, email, time_zone, opened_on, closed_on, active, notes, created_at, updated_at";
+export const CRM_EMPLOYEE_COLUMNS =
+  "id, branch_id, reports_to_id, user_id, employee_code, first_name, last_name, email, phone, role, title, hire_date, end_date, commission_bps, monthly_quota_cents, active, notes, created_at, updated_at";
+export const CRM_TERRITORY_COLUMNS =
+  "id, branch_id, rep_id, name, code, city, region, postal_codes, active, notes, created_at, updated_at";
+export const CRM_COMMISSION_COLUMNS =
+  "id, employee_id, opportunity_id, contract_id, invoice_id, basis_cents, rate_bps, amount_cents, status, earned_on, approved_at, paid_at, note, created_at, updated_at";
+
+export type CrmBranchRow = {
+  id: string;
+  manager_id: string | null;
+  code: string;
+  name: string;
+  address: string | null;
+  phone: string | null;
+  email: string | null;
+  time_zone: string | null;
+  opened_on: string | null;
+  closed_on: string | null;
+  active: boolean;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CrmEmployeeRow = {
+  id: string;
+  branch_id: string | null;
+  reports_to_id: string | null;
+  user_id: string | null;
+  employee_code: string;
+  first_name: string;
+  last_name: string | null;
+  email: string | null;
+  phone: string | null;
+  role: CrmEmployeeRole;
+  title: string | null;
+  hire_date: string | null;
+  end_date: string | null;
+  commission_bps: number | null;
+  monthly_quota_cents: number | null;
+  active: boolean;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CrmTerritoryRow = {
+  id: string;
+  branch_id: string;
+  rep_id: string | null;
+  name: string;
+  code: string;
+  city: string | null;
+  region: string | null;
+  postal_codes: string[] | null;
+  active: boolean;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CrmCommissionRow = {
+  id: string;
+  employee_id: string;
+  opportunity_id: string | null;
+  contract_id: string | null;
+  invoice_id: string | null;
+  basis_cents: number;
+  rate_bps: number;
+  amount_cents: number;
+  status: CrmCommissionStatus;
+  earned_on: string;
+  approved_at: string | null;
+  paid_at: string | null;
+  note: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export function toBranchView(row: CrmBranchRow) {
+  return {
+    id: row.id,
+    managerId: row.manager_id,
+    code: row.code,
+    name: row.name,
+    address: row.address,
+    phone: row.phone,
+    email: row.email,
+    timeZone: row.time_zone,
+    openedOn: row.opened_on,
+    closedOn: row.closed_on,
+    active: row.active,
+    notes: row.notes,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function toEmployeeView(row: CrmEmployeeRow) {
+  return {
+    id: row.id,
+    branchId: row.branch_id,
+    reportsToId: row.reports_to_id,
+    // The login link is reported as a fact, never as an identity: a staff
+    // record is a person in the business, not an account.
+    hasLogin: row.user_id !== null,
+    employeeCode: row.employee_code,
+    firstName: row.first_name,
+    lastName: row.last_name,
+    email: row.email,
+    phone: row.phone,
+    role: row.role,
+    title: row.title,
+    hireDate: row.hire_date,
+    endDate: row.end_date,
+    commissionBps: row.commission_bps,
+    monthlyQuotaCents: row.monthly_quota_cents,
+    active: row.active,
+    notes: row.notes,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function toTerritoryView(row: CrmTerritoryRow) {
+  return {
+    id: row.id,
+    branchId: row.branch_id,
+    repId: row.rep_id,
+    name: row.name,
+    code: row.code,
+    city: row.city,
+    region: row.region,
+    postalCodes: row.postal_codes ?? [],
+    active: row.active,
+    notes: row.notes,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function toCommissionView(row: CrmCommissionRow) {
+  return {
+    id: row.id,
+    employeeId: row.employee_id,
+    opportunityId: row.opportunity_id,
+    contractId: row.contract_id,
+    invoiceId: row.invoice_id,
+    basisCents: row.basis_cents,
+    rateBps: row.rate_bps,
+    amountCents: row.amount_cents,
+    status: row.status,
+    earnedOn: row.earned_on,
+    approvedAt: row.approved_at,
+    paidAt: row.paid_at,
+    note: row.note,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+/** A person's display name, with the surname optional as the schema allows. */
+export function employeeName(row: { firstName: string; lastName: string | null }): string {
+  return `${row.firstName} ${row.lastName ?? ""}`.trim();
 }

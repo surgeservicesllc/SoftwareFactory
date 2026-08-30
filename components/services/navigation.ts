@@ -1,7 +1,10 @@
 import {
+  Building2,
   CalendarDays,
   Coins,
+  Trophy,
   HardHat,
+  IdCard,
   KanbanSquare,
   LayoutDashboard,
   Radar,
@@ -81,6 +84,24 @@ export const SERVICES_NAVIGATION: readonly ServicesNavItem[] = [
     label: "Billing",
     description: "Estimates, contracts, invoices, payments",
     icon: Coins,
+  },
+  {
+    href: `${SERVICES_ROOT}/sales`,
+    label: "Sales",
+    description: "Leaderboard, quota, commission ledger",
+    icon: Trophy,
+  },
+  {
+    href: `${SERVICES_ROOT}/branches`,
+    label: "Branches & Territories",
+    description: "Offices, managers, the map each one covers",
+    icon: Building2,
+  },
+  {
+    href: `${SERVICES_ROOT}/team`,
+    label: "Team",
+    description: "The org chart and the field roster",
+    icon: IdCard,
   },
 ];
 

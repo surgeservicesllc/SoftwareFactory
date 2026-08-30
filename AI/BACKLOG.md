@@ -63,9 +63,21 @@ the full seeded E2E journey passes — increment 10 of the plan.
   Stripe machinery. The ledger records money that moved; it does not yet
   move it, and /Services/billing says so rather than implying otherwise.
   Also open in this pillar: dunning schedules and PDF invoice rendering.
-- [ ] Increments 7-10 per the gap analysis: sales/canvassing, marketing
-  hub, AI copilot, and the seeded E2E acceptance journey — after which,
-  and only after which, PEST CRM: PRODUCTION READY may be declared.
+- [x] Increment 7 (ADR-194): the company — crm_branches (code, address,
+  IANA time zone, open/close dates), crm_employees as the org chart (seven
+  roles, branch, supervisor, commission basis points, quota),
+  crm_territories (postal-code coverage, one rep, one branch) and
+  crm_commissions whose payout is derived from basis × rate by trigger and
+  cannot be sent by a caller at all; accounts gained branch/territory/owner,
+  opportunities an owner, technicians a branch and a supervisor;
+  /Services/branches, /Services/team, /Services/sales. 20260830001400;
+  hosted apply: scope=branches-org-sales after merge.
+- [ ] Increment 7 follow-on (canvassing): door-to-door routes, knock
+  dispositions and per-rep canvassing stats. The territory map and the
+  leaderboard now exist to hang them on; the knocking itself does not.
+- [ ] Increments 8-10 per the gap analysis: marketing hub, AI copilot, and
+  the seeded E2E acceptance journey — after which, and only after which,
+  PEST CRM: PRODUCTION READY may be declared.
 - [ ] Queue-diagnosis honesty follow-up: `diagnose_graph_queue_as_worker_v2`
   predates withdrawal and pause, so a withdrawn or paused graph shows in
   the drain log as "looks claimable — an empty claim contradicts this

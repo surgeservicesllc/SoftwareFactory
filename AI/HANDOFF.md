@@ -2,6 +2,48 @@
 
 Last updated: 2026-08-30
 
+## Newest (2026-08-30, latest+16): the company arrives (ADR-194, task #64)
+
+Owner directive: locations, branches, managers, salesmen, world class,
+competitor-researched. `20260830001400_branches_org_sales.sql` adds
+crm_branches, crm_employees (the org chart), crm_territories and
+crm_commissions, plus branch/territory/owner columns on crm_accounts, an
+owner on crm_opportunities, and branch/supervisor/hire_date on
+crm_technicians.
+
+THREE INVARIANTS IN THE SCHEMA:
+1. `crm_derive_commission_amount` computes amount = basis x rate on INSERT
+   **and UPDATE**, so raising a rate later re-derives the payout. The route
+   schema has NO amountCents field — the number cannot be sent at all, and
+   services-org-sales-routes pins that (422, table never touched).
+2. "Active" never contradicts a date: a branch with closed_on cannot be
+   active, an employee with end_date cannot be active, closes cannot
+   precede opens, and nobody reports to themselves.
+3. A commission is earned on something: num_nonnulls(opportunity, contract,
+   invoice) >= 1, with approved/paid as ordered moments.
+
+THE POSTAL-CODE TRICK: a CHECK cannot hold a subquery, so per-element
+validation of `postal_codes text[]` is done by regexing the JOINED string —
+`array_to_string(postal_codes, ',') ~ '^CODE(,CODE)*$'`. Repetition counts
+stay under Postgres's 255 limit (the trap ADR-192 found), so it compiles.
+
+WHY TECHNICIANS KEPT THEIR TABLE: a technician takes work-order
+assignments and carries a licence; an employee is a person in the business.
+Merging would have meant repointing three FKs and dropping a table with
+live history for a naming preference. Both gained branch + supervisor, and
+/Services/team shows them side by side.
+
+TWO HONESTY RULES ON THE SURFACES, do not "simplify" them away: winRate is
+NULL, not 0, for a rep with nothing decided (0 reads as "loses
+everything"); and unowned deals / unassigned accounts / unworked
+territories are reported at the top of their pages rather than excluded.
+
+BASE-BRANCH NOTE: origin/main moved four commits mid-flight, one adding a
+migration at 20260830000900 that collided with pest-ipm. This branch's
+three unapplied migrations renumbered to 001100/001200/001300 (and this one
+to 001400); 33 files swept. Main also arrived red — see the commit
+"Withhold the typed-input boundary with the release it consumes".
+
 ## Newest (2026-08-30, latest+15): billing closes the chain (ADR-193, task #63)
 
 Increment 6. `20260830001300_billing_contracts.sql` adds crm_estimates

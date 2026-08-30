@@ -54,10 +54,45 @@ type Spec = {
 
 const SPECS: Spec[] = [
   {
-    table: "crm_accounts",
-    optional: ["email", "phone", "source", "billing_address", "notes"],
-    enumColumn: "status",
+    table: "crm_branches",
+    optional: ["manager_id", "address", "phone", "email", "time_zone", "opened_on", "closed_on", "notes"],
     parents: [],
+  },
+  {
+    table: "crm_employees",
+    optional: [
+      "branch_id", "reports_to_id", "last_name", "email", "phone", "title",
+      "hire_date", "end_date", "commission_bps", "monthly_quota_cents", "notes",
+    ],
+    enumColumn: "role",
+    parents: [{ column: "branch_id", table: "crm_branches" }],
+  },
+  {
+    table: "crm_territories",
+    optional: ["rep_id", "city", "region", "notes"],
+    parents: [
+      { column: "branch_id", table: "crm_branches" },
+      { column: "rep_id", table: "crm_employees" },
+    ],
+  },
+  {
+    table: "crm_commissions",
+    optional: ["opportunity_id", "contract_id", "invoice_id", "approved_at", "paid_at", "note"],
+    enumColumn: "status",
+    parents: [{ column: "employee_id", table: "crm_employees" }],
+  },
+  {
+    table: "crm_accounts",
+    optional: [
+      "email", "phone", "source", "billing_address", "notes",
+      "branch_id", "territory_id", "owner_employee_id",
+    ],
+    enumColumn: "status",
+    parents: [
+      { column: "branch_id", table: "crm_branches" },
+      { column: "territory_id", table: "crm_territories" },
+      { column: "owner_employee_id", table: "crm_employees" },
+    ],
   },
   {
     table: "crm_contacts",
@@ -71,9 +106,15 @@ const SPECS: Spec[] = [
   },
   {
     table: "crm_opportunities",
-    optional: ["value_cents", "expected_close_date", "notes", "lost_reason", "closed_at"],
+    optional: [
+      "value_cents", "expected_close_date", "notes", "lost_reason", "closed_at",
+      "owner_employee_id",
+    ],
     enumColumn: "stage",
-    parents: [{ column: "account_id", table: "crm_accounts" }],
+    parents: [
+      { column: "account_id", table: "crm_accounts" },
+      { column: "owner_employee_id", table: "crm_employees" },
+    ],
   },
   {
     table: "crm_timeline_events",
@@ -83,8 +124,11 @@ const SPECS: Spec[] = [
   },
   {
     table: "crm_technicians",
-    optional: ["last_name", "email", "phone", "license_number"],
-    parents: [],
+    optional: ["last_name", "email", "phone", "license_number", "branch_id", "reports_to_id", "hire_date"],
+    parents: [
+      { column: "branch_id", table: "crm_branches" },
+      { column: "reports_to_id", table: "crm_employees" },
+    ],
   },
   {
     table: "crm_service_plans",
