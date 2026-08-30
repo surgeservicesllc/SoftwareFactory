@@ -42,6 +42,14 @@ still the working plan of record.)
   Build links files-changed/diffs to the PR's files tab, shows each
   check's real conclusion, deployment state/URL, and production health.
   Open still: an inline preview.
+- [x] Increment 8 (ADR-182): measured attempt projected —
+  20260830000300 restates list_graph_runs with attempt >= 1 as itself
+  and the unmeasured 0 as null; Build Agents rows say "attempt N" for
+  N >= 2; graph-node-detail proves both projections on the chain.
+  Preview resolved by design: the app's own anti-framing headers fence
+  an inline iframe (weakening them is RED), so the deployment URL is
+  the preview, labeled as such. Hosted apply: dispatch
+  scope=node-attempt-projection after merge.
 - [x] Increment 7 (ADR-177): Activity log — GET
   /api/graphs/runs/[graphRunId]/events reads graph_events verbatim
   (RLS tenant client, newest-500 bound with admitted truncation, node

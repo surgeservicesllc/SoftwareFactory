@@ -23,6 +23,8 @@ export type DetailedNode = {
   readonly executor?: string | null;
   readonly lifecycle_stage?: string | null;
   readonly max_attempts?: number | null;
+  /** Measured tries (>= 1) since 20260830000300; null when never measured. */
+  readonly attempt?: number | null;
   readonly queued_at?: string | null;
   readonly node_started_at?: string | null;
   readonly node_completed_at?: string | null;

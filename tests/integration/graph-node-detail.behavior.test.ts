@@ -11,7 +11,7 @@ import { describeNode, type DetailedNode } from "@/lib/graph/node-detail";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const migrationsDirectory = resolve(repositoryRoot, "supabase/migrations");
-const latestMigration = "20260830000200_withdraw_graph_as_member.sql";
+const latestMigration = "20260830000300_project_node_attempt.sql";
 
 const ownerId = "00000000-0000-4000-8000-00000000ad01";
 const organizationId = "10000000-0000-4000-8000-00000000ad01";
@@ -194,22 +194,24 @@ describe("the node explains itself", () => {
     expect(nodes(read, "implement").max_attempts).toBe(3);
   });
 
-  it("does not project a retry count the recording never measured", async () => {
-    // `node_runs.attempt` has a writer since 20260830000100 — the worker
-    // passes each dispatch's attempt through `record_node_state_as_worker` —
-    // but this fixture's transitions never carried one, so its rows keep the
-    // insert default of 0. The projection deliberately omits the column until
-    // it is surfaced everywhere at once: a projected 0 under a heading like
-    // "attempt" would read as measured fact. When the projection gains it,
-    // assert the measured value here instead.
-    const read = await readNodes();
-    expect(nodes(read, "architecture")).not.toHaveProperty("attempt");
+  it("projects a measured attempt as itself and an unmeasured default as null", async () => {
+    // `node_runs.attempt` has a writer since 20260830000100, and since
+    // 20260830000300 the projection carries it — honestly: this fixture's
+    // rows keep their insert default of 0, which is not a measurement, so
+    // they project as null rather than a 0 that reads like data.
+    const before = await readNodes();
+    expect(nodes(before, "architecture")).toHaveProperty("attempt");
+    expect(nodes(before, "architecture").attempt).toBeNull();
 
-    const { rows } = await db.query<{ attempt: number }>(
-      `select attempt from public.node_runs where graph_run_id = $1::uuid`,
-      [runId],
+    // A row the writer actually measured projects its real count.
+    await db.query(
+      "update public.node_runs set attempt = 2 where id = '60000000-0000-4000-8000-00000000ad01'",
     );
-    expect(rows.every((row) => row.attempt === 0)).toBe(true);
+    const after = await readNodes();
+    expect(nodes(after, "architecture").attempt).toBe(2);
+    await db.query(
+      "update public.node_runs set attempt = 0 where id = '60000000-0000-4000-8000-00000000ad01'",
+    );
   });
 
   it("keeps every field the panel already relied on", async () => {

@@ -56,6 +56,7 @@ on:
           - job-seeker-result-marks
           - node-attempt-persistence
           - withdraw-graph
+          - node-attempt-projection
           - probe
 permissions:
   actions: read
@@ -1235,6 +1236,44 @@ jobs:
             end
             \$\$;"
           echo "Graph withdrawal applied; claim predicate and member boundary verified."
+
+      - name: Apply node attempt projection (scope=node-attempt-projection)
+        if: ${{ inputs.scope == 'node-attempt-projection' }}
+        run: |
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+          FILE=supabase/migrations/20260830000300_project_node_attempt.sql
+          sha256sum "$FILE"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied 20260830000300
+          else
+            npx supabase migration repair --status applied 20260830000300 --db-url "$DB_URL"
+          fi
+          psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
+          # Postflight: the projection carries the honest attempt and stays
+          # authenticated-only.
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
+            do \$\$
+            declare fn record;
+            begin
+              select p.oid into fn
+                from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+               where n.nspname = 'public' and p.proname = 'list_graph_runs';
+              if fn.oid is null
+                or pg_get_functiondef(fn.oid) not like '%when nr.attempt >= 1 then nr.attempt%'
+                or has_function_privilege('anon', fn.oid, 'execute')
+                or has_function_privilege('service_role', fn.oid, 'execute')
+                or not has_function_privilege('authenticated', fn.oid, 'execute') then
+                raise exception 'list_graph_runs attempt projection or ACL is wrong';
+              end if;
+            end
+            \$\$;"
+          echo "Attempt projection applied; member-only read verified."
 
       - name: Normalize exact legacy bot ACLs (scope=bot-legacy-acl-normalization)
         if: ${{ inputs.scope == 'bot-legacy-acl-normalization' }}

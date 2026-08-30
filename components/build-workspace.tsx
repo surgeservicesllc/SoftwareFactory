@@ -56,6 +56,8 @@ type RunNode = {
   capability: string | null;
   lifecycle_stage: string | null;
   latency_ms: number | null;
+  /** Measured tries (>= 1); null for rows recorded before the writer. */
+  attempt?: number | null;
   error_message: string | null;
   gate_id?: string | null;
   gate_kind: string | null;
@@ -913,6 +915,7 @@ export function BuildWorkspace() {
                         {node.node_key} · {(node.state ?? "planned").toLowerCase()}
                         {node.provider !== null ? ` · ${node.provider}${node.model !== null ? ` ${node.model}` : ""}` : ""}
                         {node.latency_ms !== null ? ` · ${(node.latency_ms / 1000).toFixed(1)}s` : ""}
+                        {typeof node.attempt === "number" && node.attempt >= 2 ? ` · attempt ${node.attempt}` : ""}
                       </span>
                       {node.error_message !== null ? (
                         <span className="basis-full text-xs text-[var(--danger)]">{node.error_message}</span>
@@ -1028,7 +1031,7 @@ export function BuildWorkspace() {
                             <>
                               {" · "}
                               <a href={release.deployment.url} className="underline underline-offset-2" target="_blank" rel="noreferrer">
-                                open
+                                Preview
                               </a>
                             </>
                           ) : null}

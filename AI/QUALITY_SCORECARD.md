@@ -2,6 +2,13 @@
 
 Last reviewed: 2026-08-30
 
+**Addendum, 2026-08-30 latest+6 — attempt projection + preview
+(ADR-182):** graph-node-detail suite green on the chain with the honest
+pair (unmeasured 0 → null; measured 2 → 2); workflow guards green with
+the new scope; workspace suite 16 (attempt renders only >= 2 —
+covered by type-level optionality and the projection test). Lint zero
+warnings, production build, `tsc --noEmit` clean.
+
 **Addendum, 2026-08-30 latest+5 — autonomy modes (ADR-181):**
 autonomy-mode suite 5 (Ask-Me derivation from today's only permitted
 state, future-state derivations, exact patches, invariants stated,
