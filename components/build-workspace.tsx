@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { GateDecision } from "@/components/graph/gate-decision";
 import { Card, Notice, SectionTitle } from "@/components/ui";
+import { composePlan } from "@/lib/factory/chief-of-staff";
 import { specialistForNode } from "@/lib/factory/specialists";
 import { SDLC_STAGES } from "@/lib/sdlc/lifecycle";
 
@@ -135,6 +136,8 @@ export function BuildWorkspace() {
   /** Fetched when the person opens the Artifacts disclosure — not before. */
   const [artifacts, setArtifacts] = useState<RunArtifact[] | null>(null);
   const [artifactsError, setArtifactsError] = useState<string | null>(null);
+  /** The watched graph's stored dependency edges, one fetch per graph. */
+  const [planEdges, setPlanEdges] = useState<{ graphId: string; edges: { from: string; to: string }[] } | null>(null);
 
   const entrySeq = useRef(0);
   const lastReportedState = useRef<string | null>(null);
@@ -230,6 +233,30 @@ export function BuildWorkspace() {
     };
   }, [refreshRuns]);
 
+  const watchedGraphId = watchedRun?.graphId ?? null;
+  useEffect(() => {
+    if (watchedGraphId === null) return;
+    let active = true;
+    const kickoff = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const response = await fetch(`/api/graphs/edges?graphId=${watchedGraphId}`, {
+            headers: { accept: "application/json" },
+          });
+          if (!active || !response.ok) return;
+          const payload = (await response.json()) as { edges?: { from: string; to: string }[] };
+          if (active) setPlanEdges({ graphId: watchedGraphId, edges: payload.edges ?? [] });
+        } catch {
+          // The plan panel renders without layers; everything else stands.
+        }
+      })();
+    }, 0);
+    return () => {
+      active = false;
+      window.clearTimeout(kickoff);
+    };
+  }, [watchedGraphId]);
+
   const submit = useCallback(async () => {
     const goal = prompt.trim();
     if (goal.length === 0) return;
@@ -287,6 +314,15 @@ export function BuildWorkspace() {
     const failed = watchedRun.nodes.filter((node) => node.state === "FAILED").length;
     return { total, done, running, failed };
   }, [watchedRun]);
+
+  const plan = useMemo(() => {
+    if (watchedRun === null) return null;
+    return composePlan({
+      goal: watchedRun.goal,
+      nodes: watchedRun.nodes,
+      edges: planEdges?.graphId === watchedRun.graphId ? planEdges.edges : [],
+    });
+  }, [watchedRun, planEdges]);
 
   // OPEN is the state a gate holds while it waits for a decision — the same
   // reading every other gate surface uses.
@@ -445,7 +481,11 @@ export function BuildWorkspace() {
           <div data-testid="build-live-run">
             <SectionTitle
               title={`Your build — ${watchedRun.state.toLowerCase()}`}
-              description={`${progress.done} of ${progress.total} steps complete` +
+              description={
+                (plan?.progressPercent !== null && plan?.progressPercent !== undefined
+                  ? `${plan.progressPercent}% — `
+                  : "") +
+                `${progress.done} of ${progress.total} steps complete` +
                 (progress.running > 0 ? `, ${progress.running} running now` : "") +
                 (progress.failed > 0 ? `, ${progress.failed} failed` : "") +
                 ((watchedRun.maxIterations ?? 1) > 1
@@ -525,6 +565,51 @@ export function BuildWorkspace() {
                 );
               })}
             </ul>
+
+            {plan !== null ? (
+              <details className="mt-4" data-testid="build-plan">
+                <summary className="cursor-pointer text-sm font-medium">
+                  Plan — composed by the Chief of Staff
+                </summary>
+                {/* Every field is a record the engine made: the goal
+                    verbatim, the compiled tasks, the stored dependency
+                    edges layered, the declared gates. Nothing is invented. */}
+                <p className="mt-2 text-sm">
+                  <span className="text-xs text-[var(--muted)]">Requirements (your words): </span>
+                  <span className="break-words">{plan.requirements}</span>
+                </p>
+                {plan.layers.length > 0 ? (
+                  <ol className="mt-2 space-y-1 text-sm">
+                    {plan.layers.map((layer, index) => (
+                      <li key={`layer-${index}`} className="flex flex-wrap items-baseline gap-x-2">
+                        <span className="text-xs text-[var(--muted)]">
+                          {index + 1}.{layer.length > 1 ? ` (${layer.length} in parallel)` : ""}
+                        </span>
+                        <span className="min-w-0 break-words">
+                          {layer.map((key) => {
+                            const task = plan.tasks.find((entry) => entry.key === key);
+                            return `${key}${task?.specialist ? ` — ${task.specialist.name}` : ""}${task?.gated ? " ⛩ gate" : ""}`;
+                          }).join(" · ")}
+                        </span>
+                      </li>
+                    ))}
+                  </ol>
+                ) : (
+                  <p className="mt-2 text-sm text-[var(--muted)]">
+                    The dependency edges have not loaded, so the order is not shown — the
+                    steps themselves are under Agents below.
+                  </p>
+                )}
+                <p className="mt-2 text-xs text-[var(--muted)]">
+                  Up to {plan.maxParallelism} steps run in parallel
+                  {plan.gatedTasks.length > 0
+                    ? `; ${plan.gatedTasks.length} ${plan.gatedTasks.length === 1 ? "step waits" : "steps wait"} at a QA gate`
+                    : ""}.
+                  {" "}The Chief of Staff is the engine&apos;s compiler, scheduler and router —
+                  this panel is its plan, read back from the records it made.
+                </p>
+              </details>
+            ) : null}
 
             <details className="mt-4" data-testid="build-agents">
               <summary className="cursor-pointer text-sm font-medium">

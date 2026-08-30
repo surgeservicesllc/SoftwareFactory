@@ -2,6 +2,14 @@
 
 Last updated: 2026-08-29
 
+## Newest (2026-08-30, night): Chief of Staff named + plan panel (ADR-173)
+
+`lib/factory/chief-of-staff.ts` composePlan: Kahn layers over stored
+edges, ADR-172 assignments, gate list, widest-layer parallelism, counted
+percent (null on empty). Build shows "Plan — composed by the Chief of
+Staff" + percent-led headline; edges fetched once per watched graph from
+/api/graphs/edges.
+
 ## Newest (2026-08-30, later still): specialists + evidence panels in Build (ADR-172)
 
 `lib/factory/specialists.ts` — eleven roles bound to real capabilities/

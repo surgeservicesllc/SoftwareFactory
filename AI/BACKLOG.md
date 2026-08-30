@@ -12,8 +12,12 @@ is armed — this section is the plan of record).
   door; prompt → full_lifecycle launch → live watched run (counted
   progress, SDLC-ordered stages, OPEN-gate call to decide, closure notes,
   resume list). Nav seat "Build" first after Overview.
-- [ ] Increment 2: draft acceptance criteria + plan approval in the
-  workspace before launch.
+- [x] Increment 5 (ADR-173): the Chief of Staff named over the real
+  compiler/scheduler/router; `composePlan` layers stored edges with
+  specialist assignments, gates and counted percent; Build gains the
+  Plan disclosure and a percent-led headline.
+- [ ] Increment 2 (open): draft acceptance criteria + plan approval in
+  the workspace before launch.
 - [x] Increment 3a (shipped with increment 1): inline gate decisions —
   every OPEN human gate on the watched run renders the shared
   GateDecision control (same wording, same route, same evidence rules as
