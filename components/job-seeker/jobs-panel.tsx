@@ -103,7 +103,7 @@ function SourceImportForm({
         />
       </label>
       {source.identifierHint ? (
-        <p className="mt-1 text-xs text-[var(--text-faint)]">{source.identifierHint}</p>
+        <p className="mt-1 break-words text-xs text-[var(--text-faint)]">{source.identifierHint}</p>
       ) : null}
       <button
         type="button"
@@ -267,9 +267,27 @@ export function JobSeekerJobsPanel() {
         {sources.length > 0 ? (
           <div className="mt-3 grid items-start gap-2 sm:grid-cols-3">
             {sources.map((adapter) => (
-              <div key={adapter.key} className="rounded-md border border-[var(--border)] p-3">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-sm font-medium text-[var(--text)]">{adapter.name}</p>
+              /*
+               * `min-w-0` is the fix, and it is not cosmetic. A grid item
+               * defaults to `min-width: auto`, so its widest unbreakable run
+               * sets the track width — and these cards carry identifier hints
+               * full of them ("boards.greenhouse.io/{token}",
+               * "jobs.smartrecruiters.com/{company}"). At 320px that pushed
+               * the whole column past the viewport. `break-words` below lets
+               * those hints wrap rather than merely be clipped.
+               */
+              <div key={adapter.key} className="min-w-0 rounded-md border border-[var(--border)] p-3">
+                {/*
+                  * Wraps, and the name may shrink. A board card is one column
+                  * at 320px, several board names are long ("SmartRecruiters
+                  * company pages"), and a badge cannot shrink — so a single
+                  * non-wrapping row pushed the card past the viewport. Found
+                  * by putting this panel into the layout sweep, which it had
+                  * never been in: the console renders it only on the discovery
+                  * section, so no width ever measured it.
+                  */}
+                <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+                  <p className="min-w-0 break-words text-sm font-medium text-[var(--text)]">{adapter.name}</p>
                   {adapter.mode === "public" ? (
                     <StatusBadge tone="safe">Public API</StatusBadge>
                   ) : adapter.configured ? (
@@ -278,7 +296,7 @@ export function JobSeekerJobsPanel() {
                     <NotConnectedBadge />
                   )}
                 </div>
-                <p className="mt-1 text-xs text-[var(--text-muted)]">{adapter.summary}</p>
+                <p className="mt-1 break-words text-xs text-[var(--text-muted)]">{adapter.summary}</p>
                 {adapter.mode === "public" ? (
                   <SourceImportForm
                     source={adapter}
