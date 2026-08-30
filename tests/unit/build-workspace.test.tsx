@@ -524,6 +524,79 @@ describe("the build workspace", () => {
     expect(within(log).queryByText(/Showing the newest 500 events/)).not.toBeInTheDocument();
   });
 
+  it("stops a just-launched build through the real withdrawal route", async () => {
+    respond({});
+    fetchMock.mockImplementation((url: string, init?: RequestInit) => {
+      if (typeof url === "string" && url.includes("/withdraw")) {
+        return Promise.resolve(json({
+          graphId: LAUNCH.graphId,
+          withdrawnAt: "2026-08-30T07:00:00Z",
+          note: "The graph is withdrawn: no worker will claim it again. Nothing already running was interrupted.",
+        }));
+      }
+      if (typeof url === "string" && url.includes("/api/graphs/runs")) {
+        return Promise.resolve(json({ runs: [] }));
+      }
+      if (typeof url === "string" && url.includes("/api/graphs") && init?.method === "POST") {
+        return Promise.resolve(json(LAUNCH));
+      }
+      return Promise.resolve(json(PROJECTS));
+    });
+    const user = userEvent.setup();
+    render(<BuildWorkspace />);
+    await launch(user);
+
+    const waiting = await screen.findByTestId("build-awaiting-run");
+    expect(waiting).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Stop" }));
+
+    const call = fetchMock.mock.calls.find(([url]) =>
+      typeof url === "string" && url.includes(`/api/graphs/${LAUNCH.graphId}/withdraw`));
+    expect(call).toBeDefined();
+    // The server's own sentence lands in the transcript, and the waiting
+    // card leaves with the launch it described.
+    const transcript = await screen.findByTestId("build-transcript");
+    expect(within(transcript).getByText(/no worker will claim it again/)).toBeInTheDocument();
+    expect(screen.queryByTestId("build-awaiting-run")).not.toBeInTheDocument();
+  });
+
+  it("offers Stop only where it is true: never on a RUNNING claim", async () => {
+    respond({
+      runs: [
+        {
+          graphRunId: "66666666-6666-4666-8666-666666666666",
+          graphId: "77777777-7777-4777-8777-777777777777",
+          goal: "Live claim",
+          state: "RUNNING",
+          projectId: "22222222-2222-4222-8222-222222222222",
+          isLifecycle: true,
+          startedAt: "2026-08-30T00:00:00Z",
+          completedAt: null,
+          nodes: [node("goal", "GOAL", "RUNNING")],
+        },
+        {
+          graphRunId: "88888888-8888-4888-8888-888888888889",
+          graphId: "99999999-9999-4999-8999-999999999998",
+          goal: "Voided run, graph still claimable",
+          state: "CANCELLED",
+          projectId: "22222222-2222-4222-8222-222222222222",
+          isLifecycle: true,
+          startedAt: "2026-08-30T00:00:00Z",
+          completedAt: null,
+          nodes: [node("goal", "GOAL", "CANCELLED")],
+        },
+      ],
+    });
+    render(<BuildWorkspace />);
+
+    const active = await screen.findByTestId("build-active-runs");
+    const rows = within(active).getAllByRole("listitem");
+    const liveRow = rows.find((row) => within(row).queryByText("Live claim") !== null)!;
+    const voidedRow = rows.find((row) => within(row).queryByText(/Voided run/) !== null)!;
+    expect(within(liveRow).queryByRole("button", { name: "Stop" })).not.toBeInTheDocument();
+    expect(within(voidedRow).getByRole("button", { name: "Stop" })).toBeInTheDocument();
+  });
+
   it("lists unfinished lifecycle runs on arrival, so watching resumes across visits", async () => {
     respond({
       runs: [

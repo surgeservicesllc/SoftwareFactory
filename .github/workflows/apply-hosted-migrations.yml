@@ -55,6 +55,7 @@ on:
           - job-seeker-alert-engine
           - job-seeker-result-marks
           - node-attempt-persistence
+          - withdraw-graph
           - probe
 permissions:
   actions: read
@@ -1187,6 +1188,53 @@ jobs:
             end
             \$\$;"
           echo "Attempt persistence applied; definer boundary verified."
+
+      - name: Apply graph withdrawal (scope=withdraw-graph)
+        if: ${{ inputs.scope == 'withdraw-graph' }}
+        run: |
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+          FILE=supabase/migrations/20260830000200_withdraw_graph_as_member.sql
+          sha256sum "$FILE"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied 20260830000200
+          else
+            npx supabase migration repair --status applied 20260830000200 --db-url "$DB_URL"
+          fi
+          psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
+          # Postflight: the withdrawal columns exist, the claim selector
+          # carries the predicate, and the definer is authenticated-only.
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
+            do \$\$
+            declare fn record;
+            begin
+              if (select count(*) from information_schema.columns
+                   where table_schema = 'public' and table_name = 'graphs'
+                     and column_name in ('withdrawn_at','withdrawn_by','withdrawal_reason')) <> 3 then
+                raise exception 'the graphs withdrawal columns are missing';
+              end if;
+              if pg_get_functiondef('public.claim_planned_graph_target_internal(text,text[],text,jsonb,uuid)'::regprocedure)
+                 not like '%withdrawn_at is null%' then
+                raise exception 'the claim selector does not skip withdrawn graphs';
+              end if;
+              select p.oid, p.prosecdef, p.proconfig into fn
+                from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+               where n.nspname = 'public' and p.proname = 'withdraw_graph_as_member';
+              if fn.oid is null or not fn.prosecdef
+                or not (fn.proconfig::text like '%search_path=pg_catalog%')
+                or has_function_privilege('anon', fn.oid, 'execute')
+                or has_function_privilege('service_role', fn.oid, 'execute')
+                or not has_function_privilege('authenticated', fn.oid, 'execute') then
+                raise exception 'withdraw_graph_as_member boundary is wrong';
+              end if;
+            end
+            \$\$;"
+          echo "Graph withdrawal applied; claim predicate and member boundary verified."
 
       - name: Normalize exact legacy bot ACLs (scope=bot-legacy-acl-normalization)
         if: ${{ inputs.scope == 'bot-legacy-acl-normalization' }}

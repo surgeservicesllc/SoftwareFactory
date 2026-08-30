@@ -2,7 +2,23 @@
 
 Last updated: 2026-08-30
 
-## Newest (2026-08-30, latest+3): probe extraction corrected (ADR-179)
+## Newest (2026-08-30, latest+4): Stop as withdrawal (ADR-180)
+
+20260830000200: graphs.withdrawn_at/by/reason + ONE predicate added to
+the verbatim-restated claim_planned_graph_target_internal (both v2
+claims route through it); withdraw_graph_as_member authenticated
+definer (membership, secret scan, idempotent, RUNNING refusal
+'graph_run_in_flight', 'graph.withdrawn' activity event — enum value
+added). Route maps in-flight to 409 in plain words. Build: Stop on the
+waiting card + non-RUNNING active rows only. Sentinels swept to
+20260830000200 (22), runbook 181, workflow scope withdraw-graph (step +
+options, postflight checks columns + claim predicate +
+authenticated-only ACL). Dispatch the hosted apply right after merge —
+before it lands the route answers PGRST202 as an honest failure.
+TRAP: pg_catalog.coalesce()/nullif() do not exist — they are SQL
+constructs; write them bare even under search_path=pg_catalog.
+
+## Older (2026-08-30, latest+3): probe extraction corrected (ADR-179)
 
 ADR-178's parser mis-terminated on blocks whose closing line carries a
 shell suffix (`|| echo`, `|| true`, `\` continuations): 40 real blocks,
@@ -11,7 +27,9 @@ re-extraction carries two machine proofs (byte-exact step surgery;
 every file == the bash-unescaped text psql received) and the guard that
 was missing: hosted-scope-replay now EXECUTES all 40 probe files
 against the migrated chain (supabase_migrations stubbed). Lifecycle pin
-is 08.sql now. Do not trust an extraction any test does not execute.
+is 08.sql now. Do not trust an extraction any test does not execute. CLOSED: the
+re-dispatched scope=probe run 33297796528 completed green on the
+fixed extraction — live evidence for ADR-178/179.
 
 ## Older (2026-08-30, latest+2): workflow headroom (ADR-178)
 

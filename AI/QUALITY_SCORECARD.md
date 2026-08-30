@@ -2,6 +2,15 @@
 
 Last reviewed: 2026-08-30
 
+**Addendum, 2026-08-30 latest+4 — Stop as withdrawal (ADR-180):**
+worker-execution suite 36 green incl. the withdrawal pair (unclaimable
+after withdrawal, idempotent single audit event, RUNNING/secret/
+non-member refusals, Stop ends the failed-run retry loop); withdraw
+route 4 (exact rpc args, honest 409, non-UUID and cross-origin refused
+pre-database); workspace 15 (Stop through the real route with the
+server's words, no Stop on a RUNNING row). Lint zero warnings,
+production build lists the route, `tsc --noEmit` clean.
+
 **Addendum, 2026-08-30 latest+3 — probe extraction corrected
 (ADR-179):** the ADR-178 addendum's "byte-honest" claim was wrong for
 seven suffix-closed blocks; the live scope=probe dispatch caught it

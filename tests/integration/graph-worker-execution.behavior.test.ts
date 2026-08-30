@@ -2302,6 +2302,85 @@ describe("the graph executor boundary", { timeout: 180_000 }, () => {
     ]);
   });
 
+  it("withdraws a graph: Stop removes it from every future claim, audited", async () => {
+    const graphId = await createDiamondGraph("Withdraw me before any worker spends me");
+    await asOwner(db);
+    await db.query(
+      "select public.withdraw_graph_as_member($1::uuid, $2::uuid, 'changed my mind')",
+      [organizationId, graphId],
+    );
+    await reset(db);
+
+    const row = await db.query<{ withdrawal_reason: string | null; withdrawn_at: string | null; withdrawn_by: string | null }>(
+      "select withdrawn_at, withdrawn_by, withdrawal_reason from public.graphs where id = $1",
+      [graphId],
+    );
+    expect(row.rows[0].withdrawn_at).not.toBeNull();
+    expect(row.rows[0].withdrawn_by).toBe(ownerId);
+    expect(row.rows[0].withdrawal_reason).toBe("changed my mind");
+
+    // No claim selects a withdrawn graph.
+    expect(await claim()).toBeNull();
+
+    // A second withdrawal is agreement, not an error — and not a second event.
+    await asOwner(db);
+    await db.query(
+      "select public.withdraw_graph_as_member($1::uuid, $2::uuid, null)",
+      [organizationId, graphId],
+    );
+    await reset(db);
+    const audit = await db.query<{ count: number }>(
+      `select count(*)::integer as count from public.activity_events
+        where entity_id = $1 and event_type = 'graph.withdrawn'`,
+      [graphId],
+    );
+    expect(audit.rows[0].count).toBe(1);
+  });
+
+  it("never pretends to stop live work, and holds its own boundary", async () => {
+    const graphId = await createDiamondGraph("Hold the live claim");
+    const store = pgliteStore(db, "graph-worker-test");
+    const claimed = await claimGraphById(store, graphId);
+    expect(claimed.ok).toBe(true);
+    if (!claimed.ok) return;
+
+    // The run is RUNNING: a withdrawal would be a lie, so it is refused.
+    await asOwner(db);
+    await expect(db.query(
+      "select public.withdraw_graph_as_member($1::uuid, $2::uuid, null)",
+      [organizationId, graphId],
+    )).rejects.toThrow(/graph_run_in_flight/);
+
+    // A secret-shaped reason never becomes a stored row or an audit line.
+    await expect(db.query(
+      "select public.withdraw_graph_as_member($1::uuid, $2::uuid, $3)",
+      [organizationId, graphId, `sk-${"a".repeat(30)}`],
+    )).rejects.toThrow(/secret-shaped/);
+
+    // Someone who is not a member of the organization is refused outright.
+    await db.query("select set_config('request.jwt.claim.sub', $1, false)", [
+      "00000000-0000-4000-8000-00000000beef",
+    ]);
+    await db.exec("set role authenticated");
+    await expect(db.query(
+      "select public.withdraw_graph_as_member($1::uuid, $2::uuid, null)",
+      [organizationId, graphId],
+    )).rejects.toThrow(/member of the owning organization/);
+    await reset(db);
+
+    // Close the run as FAILED — normally that leaves the graph re-claimable —
+    // then withdraw: Stop is exactly the control that ends that loop.
+    await skipFreshClaimNodes(store, claimed.graph.nodes);
+    await store.completeRun(claimed.graph.graph_run_id, "FAILED", true);
+    await asOwner(db);
+    await db.query(
+      "select public.withdraw_graph_as_member($1::uuid, $2::uuid, 'stop retrying this')",
+      [organizationId, graphId],
+    );
+    await reset(db);
+    expect(await claim()).toBeNull();
+  });
+
   it("refuses attempt regressions and nonsense, and keeps the old caller shape whole", async () => {
     const graphId = await createDiamondGraph("Hold the attempt counter's one direction");
     const store = pgliteStore(db, "graph-worker-test");

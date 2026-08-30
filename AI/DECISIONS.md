@@ -3416,3 +3416,36 @@ migrated PGlite chain (hosted ledger schema stubbed), so a mangled
 extraction fails a unit run instead of a production dispatch. The
 lifecycle pin moved 07.sql -> 08.sql with the renumbering. A green
 re-dispatch of scope=probe is the closing evidence.
+
+
+## ADR-180 - Stop is withdrawal: honest run control over derived claimability
+
+Date: 2026-08-30
+
+The directive's command center lists Stop. Graphs had no way to be
+stopped: claimability is DERIVED (no state column - a graph is claimable
+while its run history says so), so a planned or re-claimable graph
+stayed in the queue until a worker spent it, and the one stranded graph
+in the backlog had no owner control at all.
+
+Migration 20260830000200: `graphs` gains withdrawn_at / withdrawn_by /
+withdrawal_reason (paired by constraint); the claim selector
+(claim_planned_graph_target_internal, the single function both v2 entry
+points route through) is restated verbatim from 20260828000200 plus
+exactly one predicate - `and g.withdrawn_at is null`;
+`withdraw_graph_as_member` (SECURITY DEFINER, authenticated-only,
+pinned search_path) enforces membership, refuses a secret-shaped
+reason, is idempotent on an already-withdrawn graph, REFUSES while a
+run is RUNNING (a live claim belongs to its worker - pretending to stop
+it would be a dead button wearing a label), and writes one immutable
+'graph.withdrawn' activity event.
+
+Route POST /api/graphs/[graphId]/withdraw maps the in-flight refusal to
+an honest 409 in plain words. Build shows Stop where it is true: on the
+just-launched waiting card and on active rows that are not RUNNING;
+a RUNNING row carries no Stop, with the reason in a comment beside it.
+Pause/Resume still need engine support and stay unbuilt rather than
+dead. The behavior suite proves the whole loop on the migrated chain:
+withdrawn graphs unclaimable, idempotence without a second audit event,
+the RUNNING/secret/non-member refusals, and Stop ending the
+failed-run-retry loop that used to be unstoppable.
