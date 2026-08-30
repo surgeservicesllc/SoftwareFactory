@@ -447,109 +447,28 @@ jobs:
       - name: Report what the database already has (scope=probe)
         if: ${{ inputs.scope == 'probe' }}
         run: |
+          # Read-only probe SQL lives in .github/hosted-apply/probe/ —
+          # extracted verbatim so the workflow stays under GitHub's 500KB
+          # planning ceiling. Order and output are unchanged.
           if [ "$MODE" != "dburl" ]; then
             ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
             echo "::add-mask::$ENC"
             DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
             echo "::add-mask::$DB_URL"
           fi
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
-            with expected(version, kind, object, marker) as (values
-              ('20260814002500', 'table',    'provider_credentials',                 null),
-              ('20260814002600', 'function', 'store_provider_credential',            null),
-              ('20260815000200', 'table',    'scheduling_decisions',                 null),
-              ('20260815000300', 'function', 'portfolio_capacity_verdict',           null),
-              ('20260815000400', 'body',     'plan_phase1c_task_and_run',            'agent.project_id = new.project_id'),
-              ('20260815000500', 'function', 'breaker_cooldown_seconds',             null),
-              ('20260815000600', 'function', 'portfolio_scheduling_queue',           null),
-              ('20260815000800', 'body',     'generate_operations_report',           'phase1e-operations-v2'),
-              ('20260815000900', 'function', 'refuse_project_deletion',              null),
-              ('20260815001000', 'function', 'declare_cross_project_dependency',     null),
-              ('20260815001100', 'table',    'connection_routing_decisions',         null),
-              ('20260815001200', 'table',    'improvement_ledger',                   null),
-              ('20260815001300', 'function', 'capture_improvement_baseline',         null),
-              ('20260815001400', 'function', 'audit_factory_health',                 null),
-              ('20260815001500', 'function', 'detect_factory_improvements',          null),
-              ('20260815001600', 'function', 'propose_improvements_from_detections', null),
-              ('20260816000100', 'table',    'ai_accounts',                          null),
-              ('20260816000200', 'function', 'list_ai_accounts_for_verification',    null),
-              ('20260816000300', 'function', 'find_open_ai_auth_session',            null),
-              -- The command path itself, and the two migrations either side of it.
-              -- Their history rows are blank on the remote, and a blank row means
-              -- nothing on its own: every Phase 2E object below reads blank in the
-              -- ledger and `t` here. Issue a Command runs through
-              -- `list_factory_command_routing_candidates` and `submit_factory_command`,
-              -- so leaving them unprobed left the one surface an owner actually uses
-              -- as the only thing this report could not answer for.
-              ('20260816001600', 'table',    'resource_reservations',                null),
-              ('20260821000200', 'table',    'graph_gates',                          null),
-              ('20260821000400', 'table',    'factory_command_routes',               null),
-              ('20260821000400', 'function', 'list_factory_command_routing_candidates', null),
-              ('20260821000400', 'function', 'submit_factory_command',               null),
-              ('20260822000600', 'body',     'normalize_phase1c_command',            'gpt-5.3-codex'),
-              -- Presence only: the migration is a pure ACL contraction, and the
-              -- containment report below prints the guard's actual privileges.
-              ('20260822001300', 'function', 'reject_activity_event_mutation',       null)
-            )
-            select expected.version,
-                   expected.kind,
-                   expected.object,
-                   case expected.kind
-                     when 'table' then exists (
-                       select 1 from pg_class relation
-                         join pg_namespace space on space.oid = relation.relnamespace
-                        where space.nspname = 'public'
-                          and relation.relkind = 'r'
-                          and relation.relname = expected.object)
-                     when 'function' then exists (
-                       select 1 from pg_proc routine
-                         join pg_namespace space on space.oid = routine.pronamespace
-                        where space.nspname = 'public'
-                          and routine.proname = expected.object)
-                     else exists (
-                       select 1 from pg_proc routine
-                         join pg_namespace space on space.oid = routine.pronamespace
-                        where space.nspname = 'public'
-                          and routine.proname = expected.object
-                          and strpos(pg_get_functiondef(routine.oid), expected.marker) > 0)
-                   end as present
-              from expected
-             order by expected.version;"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/01.sql
           echo "present = t: the DDL is live, so repair the history row rather than re-running the file."
           echo "present = f: that migration has genuinely not run."
           echo ""
           echo "Frozen pre-EXPAND register_bot identity (read-only catalog evidence)."
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
-            set search_path = pg_catalog;
-            select routine.oid::regprocedure::text as signature,
-                   md5(replace(replace(routine.prosrc, E'\r\n', E'\n'), E'\r', E'\n')) as source_md5,
-                   pg_get_userbyid(routine.proowner) as owner,
-                   routine_language.lanname as language,
-                   routine.prokind,
-                   routine.provolatile,
-                   routine.prosecdef as security_definer,
-                   routine.proconfig,
-                   routine.proacl
-              from (values (
-                'public.register_bot(uuid,text,public.bot_provider,text,text,text,text)'
-              )) expected(signature)
-              left join pg_proc routine on routine.oid = to_regprocedure(expected.signature)
-              left join pg_language routine_language on routine_language.oid = routine.prolang;"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/02.sql
           echo "Expected source_md5 before EXPAND: 797dcd842e22e5f0ae6b8299f744b0b4."
           echo ""
           echo "The ADR-036 credential denylist, checked directly rather than through the ledger."
           echo "Version 20260819000700 was recorded once while a DIFFERENT file's DDL ran under"
           echo "that number (see AI/HOSTED_APPLY_RUNBOOK.md), so its history row proves nothing."
           echo "This asks the constraint itself, and names every privileged reference it covers."
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
-            select conname,
-                   (strpos(pg_get_constraintdef(oid), 'SUPABASE_SECRET_KEY') > 0
-                    and strpos(pg_get_constraintdef(oid), 'SUPABASE_ACCESS_TOKEN') > 0
-                    and strpos(pg_get_constraintdef(oid), 'VERCEL_OIDC_TOKEN') > 0
-                    and strpos(pg_get_constraintdef(oid), 'POSTGRES_URL') > 0
-                    and strpos(pg_get_constraintdef(oid), 'GITHUB_CLIENT_ID') > 0) as covers_all_five_added
-              from pg_constraint
-             where conname = 'bots_credential_ref_not_privileged';"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/03.sql
           echo "no row = the constraint is absent; covers_all_five_added = f means the parity fix has not run."
           echo ""
           echo "The last five usage observations, newest first — the measured evidence behind"
@@ -557,42 +476,7 @@ jobs:
           echo "secret-free (<=400 chars, text_has_likely_secret refused), so printing it in a"
           echo "log is safe, and it is the only way to read WHY a probe failed without a"
           echo "database console: the counts in the auth-broker log say only that it failed."
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
-            select observed_at, status, left(coalesce(detail, ''), 200) as detail
-              from public.ai_account_usage_observations
-             order by observed_at desc
-             limit 5;" || echo "usage observations table absent: migration 20260816001500 has not run here."
-          echo ""
-          echo "Ownership and grants for the AI-account section, which is where a 42501 comes from."
-          echo "A SECURITY DEFINER function runs as its owner: if the function and the tables it"
-          echo "writes were applied by different roles, the function can lack privileges on them"
-          echo "and the console reports 'permission denied for table ...' as a bare 42501."
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
-            select 'function' as kind,
-                   routine.proname as name,
-                   pg_get_userbyid(routine.proowner) as owner,
-                   routine.prosecdef as security_definer,
-                   has_function_privilege('authenticated', routine.oid, 'EXECUTE') as authenticated_may_execute
-              from pg_proc routine
-              join pg_namespace space on space.oid = routine.pronamespace
-             where space.nspname = 'public'
-               and routine.proname in (
-                 'remove_ai_account','disconnect_ai_account','rename_ai_account',
-                 'create_ai_account','can_manage_organization','has_organization_role')
-            union all
-            select 'table',
-                   relation.relname,
-                   pg_get_userbyid(relation.relowner),
-                   relation.relrowsecurity and relation.relforcerowsecurity,
-                   null
-              from pg_class relation
-              join pg_namespace space on space.oid = relation.relnamespace
-             where space.nspname = 'public'
-               and relation.relkind = 'r'
-               and relation.relname in (
-                 'ai_accounts','ai_auth_sessions','provider_credentials',
-                 'activity_events','bots')
-            order by 1, 2;"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/04.sql
           echo "For a table row the boolean column is FORCE row level security, not execute."
           echo "Every function above should share one owner with every table above."
           echo ""
@@ -601,11 +485,7 @@ jobs:
           echo "superuser or a BYPASSRLS role escapes that. activity_events carries exactly one"
           echo "policy and it is SELECT, so an owner that does not bypass cannot insert an audit"
           echo "row - which is the last statement of remove_ai_account, and a 42501."
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
-            select rolname, rolsuper, rolbypassrls
-              from pg_roles
-             where rolname in ('postgres', 'authenticated', 'service_role')
-             order by rolname;"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/05.sql
           cat > /tmp/audit-write-probe.sql <<'PROBE_SQL'
           do $probe$
           declare
@@ -822,31 +702,7 @@ jobs:
           rollback;
           AGENT_SQL
           psql "$DB_URL" -q -f /tmp/agent-assignment-probe.sql
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
-            select 'column' as kind, table_name || '.' || column_name as object
-              from information_schema.columns
-             where table_schema = 'public'
-               and (table_name, column_name) in (
-                 ('projects','engineering_priority'), ('projects','strategic_focus'),
-                 ('projects','engineering_paused'), ('projects','engineering_pause_reason'),
-                 ('projects','maximum_concurrent_runs'),
-                 ('organizations','maximum_concurrent_runs'),
-                 ('agent_runs','review_status'), ('agent_runs','review_note'))
-            union all
-            select 'table', c.relname from pg_class c
-              join pg_namespace n on n.oid = c.relnamespace
-             where n.nspname = 'public' and c.relkind = 'r'
-               and c.relname in ('scheduling_decisions','provider_capacity_limits')
-            union all
-            select 'function', p.proname from pg_proc p
-              join pg_namespace n on n.oid = p.pronamespace
-             where n.nspname = 'public'
-               and p.proname in (
-                 'archive_project','unarchive_project','update_project_details',
-                 'set_project_engineering_priority','set_project_engineering_pause',
-                 'focus_portfolio_engineering','set_portfolio_capacity_limits',
-                 'update_agent_run_review','delete_agent_run')
-            order by 1, 2;"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/06.sql
           echo ""
           echo "The Agentic SDLC lifecycle (20260821000100 and 20260821000200), asked about"
           echo "directly. These two files are newer than the measured ledger table in"
@@ -854,74 +710,14 @@ jobs:
           echo "above: that one reports a measurement, and appending an unmeasured version"
           echo "to it would turn evidence into assertion. present = f for every row is the"
           echo "expected reading before scope=lifecycle runs, and t for every row after."
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
-            with lifecycle(kind, object, marker) as (values
-              ('enum',     'sdlc_stage',                  'MONITORING'),
-              ('enum',     'gate_kind',                   'HUMAN'),
-              ('enum',     'gate_state',                  'APPROVED'),
-              ('enum',     'activity_event_type',         'lifecycle.gate_approved'),
-              ('table',    'graph_gates',                 null),
-              ('column',   'graph_nodes.lifecycle_stage', null),
-              ('column',   'graphs.max_iterations',       null),
-              ('column',   'graph_edges.is_feedback',     null),
-              ('column',   'node_runs.confidence',        null),
-              ('function', 'open_node_gate_as_worker',    null),
-              ('function', 'decide_node_gate',            null),
-              ('function', 'advance_graph_iteration',     null),
-              ('body',     'claim_planned_graph_v2',      'protocol version 2 is required'),
-              ('body',     'list_graph_runs',             'gate_anchor_count')
-            )
-            select lifecycle.kind,
-                   lifecycle.object,
-                   case lifecycle.kind
-                     when 'enum' then exists (
-                       select 1 from pg_type kind_type
-                         join pg_namespace space on space.oid = kind_type.typnamespace
-                         join pg_enum label on label.enumtypid = kind_type.oid
-                        where space.nspname = 'public'
-                          and kind_type.typname = lifecycle.object
-                          and label.enumlabel = lifecycle.marker)
-                     when 'table' then exists (
-                       select 1 from pg_class relation
-                         join pg_namespace space on space.oid = relation.relnamespace
-                        where space.nspname = 'public'
-                          and relation.relkind = 'r'
-                          and relation.relname = lifecycle.object)
-                     when 'column' then exists (
-                       select 1 from information_schema.columns
-                        where table_schema = 'public'
-                          and table_name = split_part(lifecycle.object, '.', 1)
-                          and column_name = split_part(lifecycle.object, '.', 2))
-                     when 'function' then exists (
-                       select 1 from pg_proc routine
-                         join pg_namespace space on space.oid = routine.pronamespace
-                        where space.nspname = 'public'
-                          and routine.proname = lifecycle.object)
-                     else exists (
-                       select 1 from pg_proc routine
-                         join pg_namespace space on space.oid = routine.pronamespace
-                        where space.nspname = 'public'
-                          and routine.proname = lifecycle.object
-                          and strpos(pg_get_functiondef(routine.oid), lifecycle.marker) > 0)
-                   end as present
-              from lifecycle;"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/07.sql
           echo "The last two rows matter most: both files only REPLACE claim_planned_graph and"
           echo "list_graph_runs, so their existence proves nothing. Those rows ask whether the"
           echo "replacement body is the lifecycle-aware one."
           echo ""
           echo "And whether graph_gates is protected, if it exists at all. A new table without"
           echo "row level security is an exposed table, and the ledger cannot say either way."
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
-            select relation.relname,
-                   relation.relrowsecurity as rls_enabled,
-                   relation.relforcerowsecurity as rls_forced,
-                   (select count(*) from pg_policy where polrelid = relation.oid) as policies,
-                   has_table_privilege('anon', relation.oid, 'SELECT') as anon_may_select,
-                   has_table_privilege('service_role', relation.oid, 'INSERT') as service_role_may_insert
-              from pg_class relation
-              join pg_namespace space on space.oid = relation.relnamespace
-             where space.nspname = 'public'
-               and relation.relname = 'graph_gates';"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/08.sql
           echo "No row at all means the table is absent and 20260821000200 has not run here —"
           echo "this asks pg_class, so a missing table is zero rows rather than an error."
           echo "Expected once applied: rls_enabled t, rls_forced t, one SELECT policy,"
@@ -932,126 +728,11 @@ jobs:
           echo "The job-seeker resume extraction table's actual privileges, clause by"
           echo "clause. The apply step asserts these as one AND, which tells you it"
           echo "failed but not which part — this prints each separately."
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
-            select
-              (select c.relrowsecurity from pg_class c join pg_namespace n on n.oid = c.relnamespace
-                where n.nspname = 'public' and c.relname = 'job_seeker_resume_extractions') as rls_enabled,
-              (select c.relforcerowsecurity from pg_class c join pg_namespace n on n.oid = c.relnamespace
-                where n.nspname = 'public' and c.relname = 'job_seeker_resume_extractions') as rls_forced,
-              (select count(*) from pg_policy p join pg_class c on c.oid = p.polrelid
-                where c.relname = 'job_seeker_resume_extractions') as policies,
-              has_table_privilege('authenticated', 'public.job_seeker_resume_extractions', 'SELECT') as auth_select,
-              has_table_privilege('authenticated', 'public.job_seeker_resume_extractions', 'UPDATE') as auth_update,
-              has_table_privilege('anon', 'public.job_seeker_resume_extractions', 'SELECT') as anon_select,
-              has_table_privilege('service_role', 'public.job_seeker_resume_extractions', 'UPDATE') as service_update,
-              (select p.prosecdef from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-                where n.nspname = 'public' and p.proname = 'apply_resume_extraction') as definer,
-              has_function_privilege('authenticated', 'public.apply_resume_extraction(uuid,text[])', 'EXECUTE') as auth_execute,
-              has_function_privilege('anon', 'public.apply_resume_extraction(uuid,text[])', 'EXECUTE') as anon_execute,
-              has_function_privilege('service_role', 'public.apply_resume_extraction(uuid,text[])', 'EXECUTE') as service_execute,
-              (select p.proacl::text from pg_proc p
-                where p.oid = to_regprocedure('public.apply_resume_extraction(uuid,text[])')) as function_acl;" \
-            || echo "the table does not exist yet"
-          echo "Expected: rls t, forced t, policies 3, auth_select t, auth_update f,"
-          echo "anon_select f, service_update f, definer t, auth_execute t, anon_execute f,"
-          echo "service_execute f, and function_acl owner plus authenticated only."
-          echo "A true auth_update or service_update means Supabase default privileges"
-          echo "granted the table to those roles at CREATE TABLE time and the migration"
-          echo "revoked only anon — a hole PGlite cannot reproduce, because it has no"
-          echo "default privileges configured for these roles."
-          echo ""
-          echo "The two clear controls, read from a fresh run rather than from the apply"
-          echo "that installed them. An apply grading its own work is the weaker evidence:"
-          echo "the same step that ran the DDL also decides whether the DDL is correct, so"
-          echo "a mistake in the assertion and a mistake in the migration cancel out. This"
-          echo "is the independent read, asking the catalogue the same questions."
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
-            select routine.proname,
-                   routine.prosecdef as security_definer,
-                   pg_get_userbyid(routine.proowner) as owner,
-                   has_function_privilege('authenticated', routine.oid, 'EXECUTE') as member_may_execute,
-                   has_function_privilege('anon', routine.oid, 'EXECUTE') as anon_may_execute,
-                   has_function_privilege('service_role', routine.oid, 'EXECUTE') as service_may_execute
-              from pg_proc routine
-              join pg_namespace space on space.oid = routine.pronamespace
-             where space.nspname = 'public'
-               and routine.proname in ('clear_backlog_tasks', 'clear_all_pipelines')
-             order by routine.proname;" \
-            || echo "neither clear function exists yet"
-          echo "Expected: two rows, security_definer t, member_may_execute t, anon_may_execute f."
-          echo "No row for a name means scope=clear-controls has not run against this database."
-          echo ""
-          echo "The exact sixteen-function protected pre-repair catalog, row by row."
-          echo "Every actual field is printed beside its frozen expectation so a fail-closed"
-          echo "release gate identifies drift without changing the database."
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -x -c "
-            set search_path = pg_catalog;
-            with expected(signature, source_md5, volatility, contract_md5, execute_role) as (values
-              ('public.agentos_apply_project_config(uuid,uuid,jsonb,boolean)', 'cfc8efe543fbebebda8a2e643f91e487', 'v', 'f75cd9cd32d176e36c7255f121387c97', 'authenticated'),
-              ('public.agentos_export_project_config(uuid,uuid)', '863ca595c22d6e036032161e2b447315', 's', '49af7f5da1f63fbb12c52e89c81ae446', 'authenticated'),
-              ('public.agentos_list_agent_grants(uuid,integer)', 'ad0721957db42e486c2dab484cc8260c', 's', 'c7bdcbf48e76a11da39b5dde14eba14f', 'authenticated'),
-              ('public.agentos_record_trigger_delivery(uuid,text,jsonb,boolean)', '9aa2f2f83beb0b28e29f2b37e1a91d4e', 'v', 'c6f6df3c444a98bb57f77d0052da44cb', 'service_role'),
-              ('public.assign_bots_to_project_checked(uuid,uuid,jsonb)', '5ff06f065e241ad2baf5d7d5f576743a', 'v', '972ba462e06d56885860d179ad59706f', 'authenticated'),
-              ('public.audit_factory_health(uuid)', '18bbb7f45cb5fe4b9d9d3b45f06076c2', 's', 'fda3d299611d1adf37527279f0ba6e1e', 'authenticated'),
-              ('public.capture_improvement_baseline(uuid)', '2c7693b411e87f73433dcf0b5d117c9c', 's', 'fda3d299611d1adf37527279f0ba6e1e', 'authenticated'),
-              ('public.claim_provider_connect_session(text,text)', '9961e16bbe95da08903caac340633bca', 'v', 'a7ca5a02b1faa50ebba452c4a4f46195', 'service_role'),
-              ('public.list_factory_command_routing_candidates(uuid,uuid,text)', '20f9edba1651974ca0ef256293269d81', 's', '17919dac57b41b75fe0793ad660063cc', 'authenticated'),
-              ('public.normalize_bot_assignment_configuration(jsonb)', '643e307fdd9f98479bbe54d6f29c3623', 'i', '451c6919550f1ebe87eb5ec83b50366b', 'none'),
-              ('public.record_claim_anchoring(uuid,public.anchored_claim,uuid[])', '5c78babb546ecec96e81878a3c02ac0f', 'v', '8d7877b6de24358edd3e75981eb5411f', 'authenticated'),
-              ('public.set_bot_assignment_execution_checked(uuid,uuid,uuid,bigint,text,text)', 'd0c11a5c1e57878c9b1b5d8753ecb1fd', 'v', '813ab274df60a32d50ddeeb5b1d0ca01', 'authenticated'),
-              ('public.submit_factory_command(uuid,uuid,uuid,uuid,text,public.risk_level,jsonb,text)', 'aea5da3473dd612f066e0e6fa3a76dd0', 'v', 'b779f9c2f2c4d0cf086f6d67b85a457c', 'authenticated'),
-              ('public.update_bot_assignment_checked(uuid,uuid,uuid,bigint,public.bot_assignment_status)', '5323b0adb327f3d3a19c9bdca220922e', 'v', '7aae20f9ed9251fe3e32530baaf32ddb', 'authenticated'),
-              ('public.update_bot_assignment_configuration_checked(uuid,uuid,uuid,bigint,jsonb,uuid,public.bot_assignment_status)', 'eabefae63edf3d957ed8a0ad5e10d1bd', 'v', '61cbc7ff7cb5a849b6021cdca5012449', 'authenticated'),
-              ('public.validate_pipeline_template_areas(jsonb)', 'd10799c81d59269ae5cd6bcd2a5e5d27', 'i', '0d286e56441a0a9e377719309b75a912', 'none')
-            ), state as (
-              select expected.*, routine.oid, routine.proowner, routine.proacl,
-                     routine.prokind, routine.provolatile, routine.prosecdef, routine.proconfig,
-                     routine_schema.nspname, routine_language.lanname,
-                     md5(replace(replace(routine.prosrc, E'\\r\\n', E'\\n'), E'\\r', E'\\n')) as actual_source_md5,
-                     md5(jsonb_build_array(
-                       routine_schema.nspname, routine_language.lanname,
-                       pg_get_userbyid(routine.proowner), routine.prokind::text,
-                       format_type(routine.prorettype, null), routine.proretset,
-                       routine.pronargs, routine.pronargdefaults,
-                       coalesce(array_to_string(routine.proargnames, ','), ''),
-                       coalesce(array_to_string(routine.proargmodes, ','), ''),
-                       coalesce((select string_agg(format_type(arg.type_oid, null), ',' order by arg.ordinality) from unnest(routine.proallargtypes) with ordinality arg(type_oid, ordinality)), ''),
-                       coalesce(pg_get_expr(routine.proargdefaults, 0), ''),
-                       routine.proisstrict, routine.proleakproof, routine.prosecdef,
-                       routine.proparallel::text, routine.provariadic = 0,
-                       routine.procost::text, routine.prorows::text,
-                       routine.prosupport = 0, routine.probin is null,
-                       routine.prosqlbody is null, routine.protrftypes is null,
-                       routine.proconfig, routine.proacl is null
-                     )::text) as actual_contract_md5
-                from expected
-                left join pg_proc routine on routine.oid = to_regprocedure(expected.signature)
-                left join pg_namespace routine_schema on routine_schema.oid = routine.pronamespace
-                left join pg_language routine_language on routine_language.oid = routine.prolang
-            )
-            select signature, oid is not null as present,
-                   actual_source_md5, source_md5 as expected_source_md5,
-                   provolatile as actual_volatility, volatility as expected_volatility,
-                   actual_contract_md5, contract_md5 as expected_contract_md5,
-                   nspname, lanname, pg_get_userbyid(proowner) as owner,
-                   prokind, prosecdef, proconfig,
-                   (select count(*) from aclexplode(proacl)) as acl_entries,
-                   has_function_privilege('authenticated', oid, 'EXECUTE') as authenticated_execute,
-                   has_function_privilege('anon', oid, 'EXECUTE') as anon_execute,
-                   has_function_privilege('service_role', oid, 'EXECUTE') as service_role_execute,
-                   execute_role, proacl
-              from state
-             order by signature;"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/09.sql
           echo ""
           echo "The audit labels those functions write. A clear that cannot record itself is"
           echo "a silent deletion, so the enum values are as load-bearing as the functions."
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
-            select enumlabel
-              from pg_enum
-              join pg_type on pg_type.oid = pg_enum.enumtypid
-             where pg_type.typname = 'activity_event_type'
-               and enumlabel in ('task.backlog_cleared', 'command.pipelines_cleared')
-             order by enumlabel;"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/10.sql
           echo "Expected: both labels present. A missing label means 20260822000700 has not run,"
           echo "and the function above would fail at its audit insert rather than at its delete."
 
@@ -1060,76 +741,7 @@ jobs:
           echo "protected chain's containment gate, which asserts all of this as one AND,"
           echo "so its refusal said the posture is wrong without saying which part."
           echo "Read-only: the same rows the gate reads, printed one verdict per clause."
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -x -c "
-            with expected_projects(organization_id, project_id, project_name) as (values
-              ('2614f3b2-ac24-4353-bda6-320a8c254d3b'::uuid,
-               'b1f23696-437e-4d89-b55f-d7a949980e8f'::uuid, 'SoftwareFactory'),
-              ('96be00cc-6bf9-42a3-9931-97f9595bda0b'::uuid,
-               'bd90348c-41f4-487c-9681-6b4a4ca911e4'::uuid, 'SoftwareFactory'),
-              ('96be00cc-6bf9-42a3-9931-97f9595bda0b'::uuid,
-               'f8de941d-dc9e-4c66-9d3a-00cd61c2d794'::uuid, 'SoftwareFactory_08.17.2026'),
-              ('96be00cc-6bf9-42a3-9931-97f9595bda0b'::uuid,
-               '34afd05b-6550-41ae-a397-913b9f44966a'::uuid, 'SoftwareFactory_08.21.2026')
-            ), target_projects as (
-              select expected.project_name, expected.project_id, p.organization_id,
-                     p.id is not null as project_present,
-                     o.autonomous_mode as org_autonomous_mode,
-                     o.maximum_autonomous_risk::text as org_max_risk,
-                     (o.auto_plan or o.auto_code or o.auto_test or o.auto_repair
-                      or o.auto_review or o.auto_approve or o.auto_merge
-                      or o.auto_deploy or o.auto_rollback) as org_any_auto_action,
-                     o.autonomy_kill_switch_active as org_kill_switch_active,
-                     p.autonomous_mode as project_autonomous_mode,
-                     p.maximum_autonomous_risk::text as project_max_risk,
-                     (p.auto_plan or p.auto_code or p.auto_test or p.auto_repair
-                      or p.auto_review or p.auto_approve or p.auto_merge
-                      or p.auto_deploy or p.auto_rollback) as project_any_auto_action
-              from expected_projects expected
-              left join public.projects p
-                on p.id = expected.project_id
-               and p.organization_id = expected.organization_id
-               and p.name = expected.project_name
-              left join public.organizations o on o.id = p.organization_id
-            )
-            select project_name, project_id, project_present,
-                   org_kill_switch_active, org_autonomous_mode, org_max_risk,
-                   org_any_auto_action, project_autonomous_mode, project_max_risk,
-                   project_any_auto_action,
-                   (select controls.kill_switch_active
-                      from public.resolved_autonomy_controls(target_projects.project_id) controls
-                     ) as resolved_kill_switch_active,
-                   (select controls.executor_connected
-                      from public.resolved_autonomy_controls(target_projects.project_id) controls
-                     ) as resolved_executor_connected,
-                   (
-                     select event.metadata ->> 'active'
-                     from public.activity_events event
-                     where event.organization_id = target_projects.organization_id
-                       and event.event_type::text = 'autonomy.kill_switch_changed'
-                       and event.entity_type = 'organization'
-                       and event.entity_id = target_projects.organization_id
-                     order by event.created_at desc, event.id desc
-                     limit 1
-                   ) as newest_kill_switch_event_active,
-                   (
-                     select case
-                       when event.event_type::text = 'project.autonomous_mode_changed'
-                         then event.metadata ->> 'to'
-                       else event.metadata ->> 'autonomousMode'
-                     end
-                     from public.activity_events event
-                     where event.organization_id = target_projects.organization_id
-                       and (event.project_id = target_projects.project_id
-                            or event.entity_id = target_projects.project_id)
-                       and (
-                         event.event_type::text = 'project.autonomous_mode_changed'
-                         or event.event_type::text = 'autonomy.controls_changed'
-                       )
-                     order by event.created_at desc, event.id desc
-                     limit 1
-                   ) as newest_project_autonomy_event
-              from target_projects
-             order by project_name, project_id;"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -x -f .github/hosted-apply/probe/11.sql
           echo "Gate requires per row: project_present t, org_kill_switch_active t,"
           echo "org/project autonomous_mode f, both max risks green, no auto action t,"
           echo "resolved_kill_switch_active t, resolved_executor_connected f,"
@@ -1138,145 +750,24 @@ jobs:
           echo ""
           echo "The gate's remaining clauses, which the per-project report above cannot"
           echo "show: the exact named-project census and the append-only audit posture."
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -x -c "
-            set search_path = pg_catalog;
-            select
-              (select count(*) from public.projects
-                where name in (
-                  'SoftwareFactory', 'SoftwareFactory_08.17.2026',
-                  'SoftwareFactory_08.21.2026'
-                )) as named_projects_total_gate_requires_exactly_4,
-              (select relation.relrowsecurity and relation.relforcerowsecurity
-                      and pg_get_userbyid(relation.relowner) = 'postgres'
-                      and not has_table_privilege('anon', relation.oid, 'UPDATE,DELETE,TRUNCATE')
-                      and not has_table_privilege('authenticated', relation.oid, 'UPDATE,DELETE,TRUNCATE')
-                      and not has_table_privilege('service_role', relation.oid, 'UPDATE,DELETE,TRUNCATE')
-                 from pg_class relation
-                where relation.oid = 'public.activity_events'::regclass)
-                as activity_events_table_posture,
-              (select routine_language.lanname = 'plpgsql'
-                      and routine.prokind = 'f' and routine.provolatile = 'v'
-                      and routine.prorettype = 'trigger'::regtype
-                      and not routine.prosecdef
-                      and routine.proconfig = array['search_path=pg_catalog']::text[]
-                      and pg_get_userbyid(routine.proowner) = 'postgres'
-                      and btrim(replace(replace(routine.prosrc, E'\r\n', E'\n'), E'\r', E'\n'), E' \n') =
-                        E'begin\n  raise exception using errcode = ''55000'', message = ''activity events are append-only'';\nend;'
-                      and not has_function_privilege('anon', routine.oid, 'EXECUTE')
-                      and not has_function_privilege('authenticated', routine.oid, 'EXECUTE')
-                      and not has_function_privilege('service_role', routine.oid, 'EXECUTE')
-                 from pg_proc routine
-                 join pg_language routine_language on routine_language.oid = routine.prolang
-                where routine.oid = 'public.reject_activity_event_mutation()'::regprocedure)
-                as reject_mutation_function_posture,
-              (select (select count(*) from aclexplode(routine.proacl))
-                 from pg_proc routine
-                where routine.oid = 'public.reject_activity_event_mutation()'::regprocedure)
-                as reject_mutation_acl_entries,
-              has_function_privilege('service_role',
-                'public.reject_activity_event_mutation()'::regprocedure, 'EXECUTE')
-                as reject_mutation_service_role_execute,
-              has_function_privilege('authenticated',
-                'public.reject_activity_event_mutation()'::regprocedure, 'EXECUTE')
-                as reject_mutation_authenticated_execute,
-              has_function_privilege('anon',
-                'public.reject_activity_event_mutation()'::regprocedure, 'EXECUTE')
-                as reject_mutation_anon_execute,
-              exists (
-                select 1 from pg_trigger trigger_row
-                where trigger_row.tgrelid = 'public.activity_events'::regclass
-                  and trigger_row.tgname = 'activity_events_append_only'
-                  and not trigger_row.tgisinternal and trigger_row.tgenabled = 'O'
-                  and trigger_row.tgtype = 27
-                  and trigger_row.tgfoid = 'public.reject_activity_event_mutation()'::regprocedure
-                  and trigger_row.tgconstraint = 0 and trigger_row.tgparentid = 0
-                  and trigger_row.tgqual is null
-              ) as append_only_trigger_posture;"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -x -f .github/hosted-apply/probe/12.sql
           echo "The AgentOS foundation census: which of 20260822000900's 32 named"
           echo "objects exist. The chain's first in-file guard refuses anything"
           echo "between 0 and 32 (run 32600709789 found 4), and a cleanup needs to"
           echo "know exactly which remnants a partial 20260814000300 apply left."
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
-            set search_path = pg_catalog;
-            select 'enum ' || expected.name as object, to_regtype('public.' || expected.name) is not null as present
-              from (values ('agentos_network_mode'), ('agentos_skill_kind'), ('agentos_repo_permission')) expected(name)
-            union all
-            select 'table ' || expected.name, to_regclass('public.' || expected.name) is not null
-              from (values ('agentos_environments'), ('agentos_mcp_connections'), ('agentos_skills'),
-                           ('agentos_agent_grants'), ('agentos_agent_mcp_grants'), ('agentos_agent_skill_grants'),
-                           ('agentos_agent_repo_grants'), ('agentos_agent_filesystem_grants'),
-                           ('agentos_agent_collaborators')) expected(name)
-            union all
-            select 'index ' || expected.name, to_regclass('public.' || expected.name) is not null
-              from (values ('agentos_environments_org_idx'), ('agentos_mcp_org_idx'), ('agentos_skills_org_idx'),
-                           ('agentos_agent_grants_org_idx'), ('agentos_agent_mcp_agent_idx'),
-                           ('agentos_agent_skill_agent_idx'), ('agentos_agent_repo_agent_idx'),
-                           ('agentos_agent_fs_agent_idx'), ('agentos_agent_collaborator_agent_idx')) expected(name)
-            union all
-            select 'function ' || expected.name, exists (
-                     select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-                     where n.nspname = 'public' and p.proname = expected.name)
-              from (values ('agentos_hosts_are_bare_hostnames'), ('agentos_resolved_agent_grants')) expected(name)
-            union all
-            select 'policy ' || expected.name, exists (
-                     select 1 from pg_policy p where p.polname = expected.name
-                       and p.polrelid = coalesce(to_regclass(expected.rel), 0))
-              from (values ('agentos_environments_select_members', 'public.agentos_environments'),
-                           ('agentos_mcp_select_members', 'public.agentos_mcp_connections'),
-                           ('agentos_skills_select_members', 'public.agentos_skills'),
-                           ('agentos_agent_grants_select_members', 'public.agentos_agent_grants'),
-                           ('agentos_agent_mcp_select_members', 'public.agentos_agent_mcp_grants'),
-                           ('agentos_agent_skill_select_members', 'public.agentos_agent_skill_grants'),
-                           ('agentos_agent_repo_select_members', 'public.agentos_agent_repo_grants'),
-                           ('agentos_agent_fs_select_members', 'public.agentos_agent_filesystem_grants'),
-                           ('agentos_agent_collaborator_select_members', 'public.agentos_agent_collaborators')) expected(name, rel)
-             order by 2 desc, 1;"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/13.sql
           echo "Row counts for whichever roster tables exist (a cleanup may only ever"
           echo "drop empty remnants)."
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
-            set search_path = pg_catalog;
-            select relation.relname, (select count(*) from pg_stat_user_tables stat where stat.relid = relation.oid) as has_stats,
-                   pg_catalog.pg_relation_size(relation.oid) as size_bytes
-              from pg_class relation
-              join pg_namespace space on space.oid = relation.relnamespace
-             where space.nspname = 'public' and relation.relkind = 'r'
-               and relation.relname in (
-                 'agentos_environments', 'agentos_mcp_connections', 'agentos_skills',
-                 'agentos_agent_grants', 'agentos_agent_mcp_grants', 'agentos_agent_skill_grants',
-                 'agentos_agent_repo_grants', 'agentos_agent_filesystem_grants',
-                 'agentos_agent_collaborators')
-             order by relation.relname;"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/14.sql
 
           echo "Every row of the named-project census, so a duplicate name is visible"
           echo "instead of inferred from a count."
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
-            select project.id, project.organization_id, project.name,
-                   project.status, project.created_at
-              from public.projects project
-             where project.name in (
-               'SoftwareFactory', 'SoftwareFactory_08.17.2026',
-               'SoftwareFactory_08.21.2026'
-             )
-             order by project.created_at;"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/15.sql
           echo ""
           echo "Worker rows the gate reads. Any heartbeat in the future or inside ten"
           echo "minutes, or any held run, refuses the chain."
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
-            select count(*) as worker_rows,
-                   count(*) filter (where last_heartbeat_at > now() + interval '1 minute')
-                     as heartbeats_in_future,
-                   count(*) filter (where last_heartbeat_at > now() - interval '10 minutes')
-                     as heartbeats_last_10_minutes,
-                   count(*) filter (where current_run_id is not null) as holding_a_run,
-                   max(last_heartbeat_at) as newest_heartbeat
-              from public.phase1c_workers;"
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
-            select worker_id, status, last_heartbeat_at, current_run_id
-              from public.phase1c_workers
-             where current_run_id is not null
-                or last_heartbeat_at > now() - interval '10 minutes'
-             order by last_heartbeat_at desc
-             limit 10;"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/16.sql
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/17.sql
           echo "Expected: heartbeats_in_future 0, heartbeats_last_10_minutes 0, holding_a_run 0."
 
           echo ""
@@ -1312,87 +803,20 @@ jobs:
                  group by expected.signature
                  order by expected.signature;" \
             -c "rollback;"
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
-            select count(*) filter (where extension_row.oid is not null) as extension_rows,
-                   count(*) filter (where routine.oid is not null) as function_rows
-              from (values (1)) seed(value)
-              left join pg_extension extension_row on extension_row.extname = 'plpgsql_check'
-              left join pg_proc routine on routine.proname like 'plpgsql_check_function%';"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/18.sql
           echo "Expected after rollback: extension_rows 0, function_rows 0."
 
           echo ""
           echo "Post-apply record-only posture, clause by clause. The chain committed in"
           echo "run 32607123713 and the step then refused at the RECORD_ONLY_READY"
           echo "postflight; these rows show exactly which wrapper drifted and how."
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
-            select count(*) filter (where version in ('20260822000300','20260822000850','20260822000900',
-                                                      '20260822001000','20260822001100','20260822001200')) as protected_rows_recorded
-              from supabase_migrations.schema_migrations;"
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
-            set search_path = pg_catalog;
-            with expected(signature, source_md5, execute_role) as (values
-              ('public.list_factory_command_routing_candidates(uuid,uuid,text)', '203f54d969fbc699304e780c1ad68a85', 'authenticated'),
-              ('public.list_factory_commands(uuid,integer,uuid)', 'ba62f4f5357cec647d3ff582107710a7', 'authenticated'),
-              ('public.normalize_phase1c_command()', 'cd28d70a40e860660461700926e97830', 'none'),
-              ('public.plan_phase1c_task_and_run()', '2de7070bb9359ce7ad45516da2956a4b', 'none'),
-              ('public.queue_phase1c_run_for_task()', '4737eba3e8490632fdd89c6d06fece82', 'none'),
-              ('public.submit_command_phase1c_normalized_internal(uuid,text,public.risk_level,jsonb,text)', 'adb50eb74e1721274f23d0d69b79e2e8', 'none'),
-              ('public.submit_command(uuid,text,public.risk_level,jsonb,text)', '024c3aa1f74d976fb7a8a6d7138cd9fb', 'authenticated'),
-              ('public.submit_factory_command_routing_internal(uuid,uuid,uuid,uuid,text,public.risk_level,jsonb,text)', '8418fd26e9b1783315a93ffbf4543838', 'none'),
-              ('public.submit_factory_command(uuid,uuid,uuid,uuid,text,public.risk_level,jsonb,text)', '6008476137a77db33d220be4b14a9c8d', 'authenticated'),
-              ('public.record_provider_run_phase1c_compatibility_internal(uuid,uuid,uuid,uuid,text,public.risk_level,text,text,text,text,text,text,jsonb,jsonb,text,public.run_status,text,jsonb,jsonb,jsonb,integer,text,jsonb)', 'c450eac6987cdd603d2d2511a9fa8833', 'none'),
-              ('public.record_provider_run(uuid,uuid,uuid,uuid,text,public.risk_level,text,text,text,text,text,text,jsonb,jsonb,text,public.run_status,text,jsonb,jsonb,jsonb,integer,text,jsonb)', '9dfdfc57f4f8b0965a89fefd927beb26', 'authenticated'),
-              ('public.record_provider_run_phase2a_internal(uuid,uuid,uuid,uuid,text,public.risk_level,text,text,text,text,text,text,jsonb,jsonb,text,public.run_status,text,jsonb,jsonb,jsonb,integer,text,jsonb)', '46cee8bec5e12fd4f087ecbeea0c9844', 'none')
-            )
-            select left(expected.signature, 60) as wrapper,
-                   expected.execute_role as want_role,
-                   routine.oid is not null as present,
-                   md5(replace(replace(routine.prosrc, E'\r\n', E'\n'), E'\r', E'\n')) = expected.source_md5 as source_ok,
-                   routine.provolatile::text as vol, routine.prosecdef as secdef,
-                   routine.proconfig = array['search_path=pg_catalog']::text[] as config_ok,
-                   coalesce(routine.proacl::text, '<null>') as acl,
-                   has_function_privilege('anon', routine.oid, 'EXECUTE') as anon_x,
-                   has_function_privilege('service_role', routine.oid, 'EXECUTE') as service_x,
-                   has_function_privilege('authenticated', routine.oid, 'EXECUTE') as auth_x
-            from expected
-            left join pg_proc routine on routine.oid = to_regprocedure(expected.signature)
-            order by expected.signature;"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/19.sql
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/20.sql
           echo ""
           echo "Guard table and AgentOS foundation posture the two later postflights pin."
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
-            set search_path = pg_catalog;
-            select relation.relname, relation.relrowsecurity as rls, relation.relforcerowsecurity as force_rls,
-                   coalesce(relation.relacl::text, '<null>') as relacl,
-                   has_table_privilege('anon', relation.oid, 'SELECT') as anon_sel,
-                   has_table_privilege('service_role', relation.oid, 'SELECT') as service_sel,
-                   has_table_privilege('authenticated', relation.oid, 'SELECT') as auth_sel,
-                   has_table_privilege('authenticated', relation.oid, 'INSERT') as auth_ins
-              from pg_class relation
-             where relation.relnamespace = 'public'::regnamespace
-               and relation.relname in (
-                 'factory_record_only_submission_guards',
-                 'agentos_environments', 'agentos_mcp_connections', 'agentos_skills',
-                 'agentos_agent_grants', 'agentos_agent_mcp_grants',
-                 'agentos_agent_skill_grants', 'agentos_agent_repo_grants',
-                 'agentos_agent_filesystem_grants', 'agentos_agent_collaborators')
-             order by relation.relname;"
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
-            set search_path = pg_catalog;
-            select routine.proname, coalesce(routine.proacl::text, '<null>') as proacl,
-                   has_function_privilege('anon', routine.oid, 'EXECUTE') as anon_x,
-                   has_function_privilege('service_role', routine.oid, 'EXECUTE') as service_x,
-                   has_function_privilege('authenticated', routine.oid, 'EXECUTE') as auth_x
-              from pg_proc routine
-             where routine.oid in (
-               to_regprocedure('public.agentos_hosts_are_bare_hostnames(text[])'),
-               to_regprocedure('public.agentos_resolved_agent_grants(uuid)'))
-             order by routine.proname;"
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
-            select count(*) as record_only_agent_runs
-              from public.agent_runs run
-              join public.tasks task on task.id = run.task_id
-              join public.commands command on command.id = task.command_id
-             where command.parameters ->> 'executionMode' = 'record_only';"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/21.sql
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/22.sql
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/23.sql
           echo "Expected: record_only_agent_runs 0 (the record-only boundary produced no run)."
 
           echo ""
@@ -1401,144 +825,26 @@ jobs:
           echo "exists - which is why the Supabase Preview branch replays it and"
           echo "dies with 42P07. Finishing it needs to know precisely which"
           echo "pieces landed, because NOT VISIBLE is not absent."
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
-            select object_name, object_kind, present from (
-              values
-                ('provider_credentials', 'table', to_regclass('public.provider_credentials') is not null),
-                ('provider_connect_sessions', 'table', to_regclass('public.provider_connect_sessions') is not null),
-                ('provider_connect_sessions_expiry_idx', 'index', to_regclass('public.provider_connect_sessions_expiry_idx') is not null),
-                ('list_provider_credentials', 'function', to_regprocedure('public.list_provider_credentials(uuid)') is not null),
-                ('open_provider_connect_session', 'function', to_regprocedure('public.open_provider_connect_session(uuid,text,text,integer)') is not null),
-                ('resolve_provider_connect_session', 'function', to_regprocedure('public.resolve_provider_connect_session(text)') is not null),
-                ('claim_provider_connect_session', 'function', to_regprocedure('public.claim_provider_connect_session(text,text)') is not null),
-                ('read_provider_credential', 'function', to_regprocedure('public.read_provider_credential(uuid,text)') is not null),
-                ('forget_provider_credential', 'function', to_regprocedure('public.forget_provider_credential(uuid,text)') is not null)
-            ) as inventory(object_name, object_kind, present)
-            order by object_kind, object_name;"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/24.sql
 
           echo ""
           echo "And the columns those two tables actually carry, because a table"
           echo "that exists is not the same as a table that is complete."
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
-            select table_name, column_name, data_type, is_nullable
-              from information_schema.columns
-             where table_schema = 'public'
-               and table_name in ('provider_credentials', 'provider_connect_sessions')
-             order by table_name, ordinal_position;" || true
-
-          echo ""
-          echo "RLS posture and client grants on those tables - the part a"
-          echo "migration that died before its grants would have skipped."
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
-            select relation.relname,
-                   relation.relrowsecurity as rls,
-                   relation.relforcerowsecurity as force_rls,
-                   (select count(*) from pg_policy policy where policy.polrelid = relation.oid) as policies,
-                   has_table_privilege('authenticated', relation.oid, 'SELECT') as authenticated_select,
-                   has_table_privilege('service_role', relation.oid, 'SELECT') as service_role_select
-              from pg_class relation
-              join pg_namespace space on space.oid = relation.relnamespace
-             where space.nspname = 'public'
-               and relation.relname in ('provider_credentials', 'provider_connect_sessions')
-             order by relation.relname;" || true
-
-          echo ""
-          echo "The Pipelines page's selection delete, as the database actually"
-          echo "declares it: which output columns it returns tells you whether a"
-          echo "selected pipeline is stopped before removal (stopped_count) or"
-          echo "merely skipped (kept_running). Tolerant of either era."
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
-            select coalesce(
-              (select array_to_string(proargnames, ', ')
-                 from pg_proc
-                where oid = to_regprocedure('public.delete_selected_pipelines(uuid,uuid[],text,boolean)')),
-              'delete_selected_pipelines absent (pre-20260823000200 database)'
-            ) as selection_delete_arguments;" || true
-
-          echo ""
-          echo "Analysis graphs and their command links - the record-only execution"
-          echo "surface. Tolerant of a database that predates the link migration."
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
-            select graph.id, left(graph.goal, 60) as goal, graph.risk_level,
-                   graph.requires_owner_approval, graph.created_at,
-                   (select count(*) from public.graph_nodes node where node.graph_id = graph.id) as nodes,
-                   (select count(*) from public.graph_runs run where run.graph_id = graph.id) as runs
-              from public.graphs graph
-             order by graph.created_at desc
-             limit 5;"
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
-            select case when to_regclass('public.command_analysis_graphs') is null
-                        then 'link table absent (pre-20260823000100 database)'
-                        else 'link rows: ' || (select count(*)::text from public.command_analysis_graphs)
-                   end as command_analysis_links;"
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
-            select link.command_id, link.graph_id, link.created_at
-              from public.command_analysis_graphs link
-             order by link.created_at desc
-             limit 5;" || true
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
-            select run.id, run.graph_id, run.state, run.started_at, run.completed_at,
-                   (select count(*) from public.graph_artifacts artifact where artifact.graph_run_id = run.id) as artifacts
-              from public.graph_runs run
-             order by run.created_at desc
-             limit 5;"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/25.sql
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/26.sql
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/27.sql
 
           echo ""
           echo "Execution-path readiness for a real manual Codex run: which bots carry"
           echo "the one executable identity, whether their accounts read connected,"
           echo "how their project assignments are configured, and what the recent"
           echo "commands, tasks, and runs actually did. Metadata only - never secrets."
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
-            select bot.id, bot.name, bot.provider, bot.model, bot.readiness,
-                   left(coalesce(bot.readiness_detail, ''), 60) as readiness_detail,
-                   bot.ai_account_id is not null as has_account,
-                   account.provider as account_provider, account.auth_method,
-                   account.status as account_status, account.last_verified_at
-              from public.bots bot
-              left join public.ai_accounts account on account.id = bot.ai_account_id
-             order by bot.created_at;"
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
-            select assignment.id, project.name as project, bot.name as bot,
-                   assignment.model as assignment_model, assignment.repository_access,
-                   assignment.can_open_pull_request, assignment.pipeline_access,
-                   assignment.requires_human_approval, assignment.max_concurrent_tasks,
-                   assignment.work_effort
-              from public.bot_assignments assignment
-              join public.bots bot on bot.id = assignment.bot_id
-              join public.projects project on project.id = assignment.project_id
-             order by project.name, bot.name;"
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
-            select command.id, command.status, command.requested_risk, command.command_type,
-                   command.parameters ->> 'executionMode' as execution_mode,
-                   command.parameters ->> 'provider' as provider,
-                   command.parameters ->> 'model' as model,
-                   command.created_at
-              from public.commands command
-             order by command.created_at desc
-             limit 5;"
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
-            select task.id, task.command_id, task.status, task.assigned_agent_id is not null as has_agent,
-                   task.created_at
-              from public.tasks task
-             order by task.created_at desc
-             limit 5;"
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
-            select run.id, run.status, run.provider, run.model, run.attempt_number,
-                   run.lease_worker_id, run.error_code, left(coalesce(run.error_message,''), 80) as error_message,
-                   run.head_branch, run.created_at
-              from public.agent_runs run
-             order by run.created_at desc
-             limit 5;"
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
-            select project.name, project.github_repository, project.default_branch,
-                   connection.status as connection_status, installation.status as installation_status,
-                   repository.selected, repository.default_branch as repo_default_branch
-              from public.projects project
-              left join public.project_connections link on link.project_id = project.id and link.is_primary
-              left join public.connections connection on connection.id = link.connection_id
-              left join public.github_installations installation on installation.connection_id = connection.id
-              left join public.github_repositories repository on repository.id = link.github_repository_id
-             order by project.name;"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/28.sql
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/29.sql
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/30.sql
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/31.sql
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/32.sql
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/33.sql
 
       - name: Apply the project control migrations surgically (scope=project-controls)
         if: ${{ inputs.scope == 'project-controls' }}

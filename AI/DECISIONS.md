@@ -3356,3 +3356,36 @@ time, event type, node key, detail - with the ADR-174 attempt suffixes
 now visible to a person. The panel's caption says what it is: the
 engine's recorded events, not console output the browser invents.
 Inline preview remains the one open command-center panel.
+
+
+## ADR-178 - The hosted-apply workflow sheds its probe SQL to stay plannable
+
+Date: 2026-08-30
+
+GitHub refuses to plan jobs for a workflow file over 500KB, and
+apply-hosted-migrations.yml had grown to 44 bytes under its own 490KB
+guard (the ADR-174 scope was compacted just to fit). The next migration
+scope could not be appended - the production release path itself was
+one addition from stranding.
+
+The probe step (scope=probe, 72KB, read-only) carried 33 inline SQL
+blocks. They now live in `.github/hosted-apply/probe/01.sql` ..
+`33.sql`, extracted verbatim (bash double-quote unescaping applied;
+none was needed) and dedented; the step runs `psql -f` on each file in
+the same order with the same flags, so the dispatch output is
+unchanged. The workflow drops from 489,956 to 440,708 bytes - 49KB of
+headroom against the guard.
+
+Three pinning suites were re-pointed, none weakened: the runbook-counts
+probe-set parity now reads 01.sql and additionally asserts the workflow
+runs that exact file; the bot-account-binding register_bot pin scans
+the step plus every extracted probe file, so the read-only contract
+(no repair, no push, no ledger insert) now covers the files too; the
+scope-replay suite executes 07.sql against the fully migrated PGlite
+database exactly as it executed the inline query, plus the same
+runs-this-file drift guard.
+
+The three remaining giants (factory-any-model-record-only 82KB,
+scope=all 65KB, bot-account-binding 41KB) are mutating release-path
+steps and deliberately not extracted in the same change; they are the
+recorded follow-up if headroom runs low again.

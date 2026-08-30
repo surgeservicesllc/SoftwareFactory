@@ -184,16 +184,23 @@ describe("the workflow's post-cutover surgical-scope fence", () => {
      * against a database where every migration has just been applied: every
      * row must come back present.
      */
-    const query = /psql "\$DB_URL" -v ON_ERROR_STOP=1 -q -c "\r?\n(\s*with lifecycle\(kind[\s\S]*?);"/
-      .exec(workflow);
-    expect(query, "the scope=probe step no longer carries the lifecycle query").not.toBeNull();
-    expect(query![1]).toContain(
+    // The probe's SQL lives in .github/hosted-apply/probe/ (extracted to keep
+    // the workflow under GitHub's 500KB ceiling); the workflow must still run
+    // the exact file this test executes, or the two could drift apart.
+    expect(workflow, "the scope=probe step no longer runs the lifecycle query file")
+      .toContain("-f .github/hosted-apply/probe/07.sql");
+    const lifecycleSql = await readFile(
+      resolve(repositoryRoot, ".github/hosted-apply/probe/07.sql"),
+      "utf8",
+    );
+    expect(lifecycleSql).toContain("with lifecycle(kind");
+    expect(lifecycleSql).toContain(
       "('body',     'claim_planned_graph_v2',      'protocol version 2 is required')",
     );
-    expect(query![1]).not.toContain("('body',     'claim_planned_graph',");
+    expect(lifecycleSql).not.toContain("('body',     'claim_planned_graph',");
 
     const rows = (await db.query<{ kind: string; object: string; present: boolean }>(
-      query![1].replace(/^ {12}/gm, ""),
+      lifecycleSql,
     )).rows;
     expect(rows.length).toBe(14);
     expect(
