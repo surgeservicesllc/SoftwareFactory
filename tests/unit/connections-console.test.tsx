@@ -194,7 +194,10 @@ describe("ConnectionsConsole", () => {
     const user = userEvent.setup();
 
     render(<ConnectionsConsole />);
-    const connect = await screen.findByRole("button", { name: /Connect GitHub/ });
+    // "Connect Existing GitHub" since the owner's design paired it with
+    // "Create New GitHub"; both are in this empty state, so the name must be
+    // the specific one rather than a prefix that matches either.
+    const connect = await screen.findByRole("button", { name: /Connect Existing GitHub/ });
     await user.click(connect);
 
     // The button reflects the pending navigation, and no POST to /start is made.

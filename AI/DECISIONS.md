@@ -3600,3 +3600,42 @@ ambiguous reference. Both duplicates are worth resolving in a change of their
 own. An earlier draft of the roster decision was numbered ADR-150, which
 collided the same way; it is ADR-183 above, and the commit that introduced it
 still names 150.
+
+## ADR-185 - Creating a repository is owner-directed, organization-only, and says what it could not do
+
+- Date: 2026-08-30
+- Status: Accepted
+- Context: the owner asked for a **Create New GitHub** button beside Connect
+  Existing GitHub on the Connect Repository step, wired end to end. Every other
+  route in the GitHub surface reads what already exists; this one makes
+  something exist on a third party's system, which is the category AGENTS.md
+  defaults to off.
+- Decision: `POST /api/github/repositories/create` is same-origin and
+  organization-manager only, with no automatic caller — a person presses it.
+  The owner comes from `github_installations.account_login`, never the request
+  body, so the route cannot be aimed at an organization the connection does not
+  cover; a test asserts an `owner` field in the payload is rejected rather than
+  honoured. The installation token is minted asking for exactly
+  `administration: write` and nothing else. The new repository is recorded by
+  re-running the existing installation snapshot rather than by a second insert
+  path, so there is one shape for a repository row.
+- Bounds: **GitHub provides no way for an installed app to create a repository
+  inside a personal account.** `POST /user/repos` is a user-token endpoint and
+  no `POST /users/{user}/repos` exists. A `User` installation is therefore
+  refused with the reason and the manual step (github.com/new, then add it to
+  the installation), and the button is *absent* rather than disabled on such a
+  connection — a control that can never succeed should not be rendered as
+  though it might. This is a constraint of the provider, not a gap to fill
+  later.
+- Evidence: three outcomes are distinguished rather than collapsed into
+  "created". `selected` is read back from the snapshot, not assumed, because an
+  installation limited to selected repositories does not gain the new one — the
+  surface says "created, but this installation does not include it yet" instead
+  of reporting success the factory cannot act on. A snapshot failure reports
+  `syncFailed` with the repository still named, since it exists either way.
+  403 and 422 from GitHub become "the app lacks the Administration permission"
+  and "that name is taken", not a bare error. Private is preselected: a public
+  repository is a disclosure a person chooses, never a default they are handed.
+  The control renders in both places the owner's design shows it, because the
+  AI Factory's Connect Repository dialog embeds `ConnectionsConsole` itself.
+  Gates: lint, typecheck, full suite, production build.
