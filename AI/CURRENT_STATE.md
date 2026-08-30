@@ -34,7 +34,12 @@ catalogue with EPA identity and SDS/label links, lots drawn down by
 trigger, an append-only application log that copies the applicator's
 license and writes its own timeline event, jurisdiction rules configured
 as rows and enforced at the boundary, and an audit report served as JSON
-or injection-guarded CSV. Plan of record: AI/SERVICES_CRM_GAP_ANALYSIS.md — ten increments;
+or injection-guarded CSV. A workspace can populate itself two ways (ADR-192): the curated Demo Data
+book for presenting the product, or the full corpus — 15,943 rows across
+all fifteen tables, every optional field populated, spanning years — for
+testing dashboards, reports and pagination at the size of a real book.
+GET /api/services/seed-report audits whichever is loaded, table by table,
+PASS or FAIL. Plan of record: AI/SERVICES_CRM_GAP_ANALYSIS.md — ten increments;
 PEST CRM: PRODUCTION READY is declared only after the seeded E2E
 journey (increment 10).
 

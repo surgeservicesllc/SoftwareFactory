@@ -2,7 +2,45 @@
 
 Last updated: 2026-08-30
 
-## Newest (2026-08-30, latest+13): chemicals & compliance (ADR-191, task #63)
+## Newest (2026-08-30, latest+14): the full-scale seed corpus (ADR-192, task #63)
+
+New owner /goal: populate the CRM so every feature can be tested end to
+end, 250+ rows per applicable table, every optional field populated,
+audited table by table. Three modules: seed-generator (deterministic
+mulberry32; fictional by construction; idempotent by identity — every
+unique value derives from its index, so a re-run collides with the
+database's constraints instead of doubling the book), seed-runner
+(dependency-ordered, batched, through the caller's RLS client; statuses
+and stages walk one step so triggers write the history; corrections are
+a SECOND pass because a supersede must reference an existing row), and
+seed-validation (reads the rows BACK: counts vs a 250 floor, optional
+coverage, enum spread, orphans, PASS/FAIL per table).
+
+VERIFICATION IS THE DELIVERABLE: services-crm-seed.behavior runs the
+production seeder and validator unmodified against the real chain in
+PGlite, through tests/support/pglite-supabase-client.ts — a shim
+implementing the slice of the supabase-js builder those modules use, and
+translating Postgres errors into Supabase's shapes (23505/23503/23514/
+42501) so the code takes the same branches it would live. Result:
+15/15 PASS, 15,943 rows, zero orphans. Set SEED_REPORT_PATH to capture
+the report; a passing vitest run swallows console output.
+
+BUG THIS FOUND (would have hit production): crm_products.sds_url and
+label_url used `~ '^https://[^[:space:]]{4,500}$'`. Postgres refuses a
+regex repetition count above 255, so the CHECK compiled only when a row
+carried a URL — every prior test left it null. Fixed in
+20260830001000 (NOT yet applied to hosted, so edited in place; shape and
+length are separate checks now) and pinned by a chain test that inserts
+a linked product.
+
+Surfaces: POST /api/services/demo-seed takes { scale: "book" | "full" }
+(book is the default, so the existing caller is unchanged);
+GET /api/services/seed-report returns the audit, ?format=text for a
+plain table. VALIDATOR TRAP: sample ordered by uuid PK, not insert order
+— insert order clusters by kind and the first page of a timeline is all
+trigger-written status changes, which would fail a fully-populated table.
+
+## Older (2026-08-30, latest+13): chemicals & compliance (ADR-191, task #63)
 
 Increment 5, the regulated pillar. 20260830001000 adds crm_products /
 crm_product_lots / crm_applications / crm_compliance_rules. Five schema

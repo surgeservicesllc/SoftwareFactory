@@ -3846,3 +3846,54 @@ undeclared until the goal's full seeded E2E passes.
   two contrasting jurisdictions, replayed against the chain. RLS census
   162; hosted-grants fifteen crm tables; runbook 189; workflow scope
   `chemicals-compliance`.
+
+## ADR-192 - The full-scale seed: a generated corpus, audited by its own report
+
+- **Date**: 2026-08-30
+- **Status**: Accepted (task #63, owner /goal: populate the CRM with
+  realistic test data so every feature can be tested end to end)
+- **Decision**: three modules, each with one job.
+  - `lib/services/seed-generator.ts` builds the dataset from a seeded
+    mulberry32 PRNG. Deterministic (same seed, byte-identical output),
+    fictional by construction (syllable-assembled names, `.example`
+    domains, 555 phones, 90000-series EPA registrations no real
+    registration carries), and **idempotent by identity**: every naturally
+    unique value — account name, barcode, lot number, EPA number,
+    jurisdiction — derives from its index, so a re-run collides with the
+    database's own unique constraints instead of silently doubling the
+    book.
+  - `lib/services/seed-runner.ts` walks it into a workspace in dependency
+    order through the caller's RLS-scoped client, batched. Statuses and
+    stages move one step at a time so the triggers author the history;
+    applications draw down real lots; stations earn their ledgers.
+    Corrections are a second pass, because a superseding record must
+    reference a row that already exists.
+  - `lib/services/seed-validation.ts` audits the result by reading the
+    real rows back: per-table counts against a 250-row floor,
+    optional-field coverage, enum spread, relationship integrity and
+    orphan counts, each PASS/FAIL. It samples ordered by uuid primary key
+    rather than insert order — insert order clusters by kind, and judging
+    coverage on the first page would fail a table that is fully populated
+    further in.
+- **Verification is the point**: `services-crm-seed.behavior` runs the
+  production seeder and the production validator, unmodified, against real
+  PostgreSQL carrying the real migration chain, through a PGlite-backed
+  client shim (`tests/support/pglite-supabase-client.ts`) that surfaces the
+  database's own errors as Supabase shapes them. The suite asserts the
+  report is all-PASS, that history was trigger-written rather than forged,
+  that lots really moved, that every lifecycle status and pipeline stage is
+  represented, and that a re-seed is refused rather than duplicated.
+- **A bug this found**: `crm_products.sds_url` and `label_url` used
+  `~ '^https://[^[:space:]]{4,500}$'`. PostgreSQL refuses a regex
+  repetition count above 255, so the CHECK compiled only when a row
+  actually carried a URL — every earlier test left the column null, and
+  the first real product with an SDS link would have failed in production
+  with "invalid repetition count(s)". Shape and length are now separate
+  checks, and the chain suite inserts a linked product so the constraint is
+  actually evaluated.
+- **Surfaces**: `POST /api/services/demo-seed` takes `{ scale }` —
+  `book` (curated narrative, the default, unchanged for existing callers)
+  or `full` (the corpus). `GET /api/services/seed-report` returns the
+  audit for the live workspace as JSON or `format=text`.
+- **Result**: 15/15 tables PASS — 15,943 rows, every table over the floor,
+  every optional column populated, zero orphans.

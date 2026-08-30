@@ -226,6 +226,42 @@ describe("chemicals and compliance", { timeout: 240_000 }, () => {
     await reset();
   });
 
+  it("accepts a published SDS and label reference, and refuses a bare one", async () => {
+    /*
+     * The regression this pins: PostgreSQL refuses a regex repetition count
+     * above 255, so a `{4,500}` bound compiles only when a row actually
+     * carries a URL. Every earlier test left these columns null, so the
+     * constraint was never evaluated and the first real product would have
+     * failed in production. Insert one with both links.
+     */
+    await as(acmeOwner);
+    const stored = await db.query<{ sds_url: string; label_url: string }>(
+      `insert into public.crm_products
+         (organization_id, name, sds_url, label_url, created_by)
+       values ($1, 'Linked Product', $2, $3, $4)
+       returning sds_url, label_url`,
+      [acmeOrg,
+       `https://sds.example/${"a".repeat(180)}.pdf`,
+       "https://labels.example/short.pdf",
+       acmeOwner],
+    );
+    expect(stored.rows[0].label_url).toBe("https://labels.example/short.pdf");
+
+    // http, whitespace and an over-long reference are all still refused.
+    for (const bad of [
+      "http://insecure.example/sds.pdf",
+      "https://has space.example/sds.pdf",
+      `https://sds.example/${"a".repeat(520)}.pdf`,
+    ]) {
+      await expect(db.query(
+        `insert into public.crm_products (organization_id, name, sds_url, created_by)
+         values ($1, 'Bad link', $2, $3)`,
+        [acmeOrg, bad, acmeOwner],
+      )).rejects.toThrow(/violates check constraint/);
+    }
+    await reset();
+  });
+
   it("holds products and lots to their own integrity, and never lets them be deleted", async () => {
     await as(acmeOwner);
     // A lot cannot hold more remaining than it received.

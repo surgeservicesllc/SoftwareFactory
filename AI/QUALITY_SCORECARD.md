@@ -2,6 +2,23 @@
 
 Last reviewed: 2026-08-30
 
+**Addendum, 2026-08-30 latest+14 - the full-scale seed (ADR-192):**
+services-crm-seed.behavior 5 against the real migration chain, running the
+production seeder and the production validator unmodified through a
+PGlite-backed supabase client shim: the whole book seeds (every table over
+the 250 floor); the audit passes 15/15 with zero orphans and every optional
+column populated; history is trigger-written (status_change and both
+'service' writers present, lots genuinely drawn down, one install scan per
+station); the lifecycle spread covers all four account statuses, all seven
+pipeline stages, four work-order statuses, both account kinds and more than
+a year of history; and a re-seed is refused by the barcode constraint
+rather than duplicated. Report: 15,943 rows across 15 tables — PASS.
+The run surfaced a real production defect: the sds_url/label_url CHECK
+regexes used a repetition count above PostgreSQL's 255 limit and would have
+failed the first product carrying a link; fixed and pinned. Route suite
+extended to 22 (scale routing, unknown scale refused). Lint zero warnings,
+tsc clean.
+
 **Addendum, 2026-08-30 latest+13 - chemicals & compliance (ADR-191):**
 services-chemicals-compliance.behavior 6 on the real chain under
 hosted-style default privileges (lot drawn down exactly, an over-draw and

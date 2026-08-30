@@ -1,10 +1,15 @@
+import { z } from "zod";
+
 import {
   ApiRequestError,
   databaseErrorResponse,
   jsonNoStore,
+  readBoundedJson,
   requestErrorResponse,
 } from "@/lib/server/http";
 import { seedDemoData } from "@/lib/services/demo-seed";
+import { SEED_SCALES } from "@/lib/services/seed-generator";
+import { runSeed } from "@/lib/services/seed-runner";
 import { supabaseBoundaryErrorResponse } from "@/lib/supabase/http";
 import { assertSameOriginRequest } from "@/lib/supabase/request";
 import { requireActiveOrganization } from "@/lib/supabase/tenant";
@@ -18,11 +23,31 @@ export const runtime = "nodejs";
  * clientele, and the accounts table deliberately has no DELETE, so there is
  * no quiet way back out. Every insert goes through the caller's own
  * RLS-scoped session — the same live Supabase path every real record takes.
+ *
+ * Two shapes. The default `book` is the curated narrative clientele: small
+ * enough to read end to end, written to present the product. `full` is the
+ * test corpus — hundreds of rows in every table, spanning years, covering
+ * every status and stage, for exercising dashboards, reports and pagination
+ * against something the size of a real book of business.
  */
+
+const requestSchema = z
+  .object({ scale: z.enum(["book", ...SEED_SCALES]).default("book") })
+  .strict();
 
 export async function POST(request: Request) {
   try {
     assertSameOriginRequest(request);
+    // An empty body means the curated book, so the existing caller is
+    // unchanged and a scale is opt-in.
+    const raw = await readBoundedJson(request, 2_000).catch(() => ({}));
+    const parsed = requestSchema.safeParse(raw ?? {});
+    if (!parsed.success) {
+      return jsonNoStore(
+        { error: { code: "invalid_seed_scale", message: "Unknown seed scale." } },
+        { status: 422 },
+      );
+    }
     const { client, user, activeOrganization } = await requireActiveOrganization();
 
     const existing = await client
@@ -43,9 +68,12 @@ export async function POST(request: Request) {
       );
     }
 
-    const outcome = await seedDemoData(client, activeOrganization.id, user.id);
+    const outcome =
+      parsed.data.scale === "book"
+        ? await seedDemoData(client, activeOrganization.id, user.id)
+        : await runSeed(client, activeOrganization.id, user.id, parsed.data.scale);
     if ("error" in outcome) return databaseErrorResponse(outcome.error);
-    return jsonNoStore({ seeded: outcome.seeded }, { status: 201 });
+    return jsonNoStore({ scale: parsed.data.scale, seeded: outcome.seeded }, { status: 201 });
   } catch (error) {
     if (error instanceof ApiRequestError) return requestErrorResponse(error);
     const boundary = supabaseBoundaryErrorResponse(error);

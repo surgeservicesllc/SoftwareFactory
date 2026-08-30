@@ -51,8 +51,20 @@ create table if not exists public.crm_products (
   signal_word text check (signal_word is null or signal_word in ('CAUTION', 'WARNING', 'DANGER')),
   -- SDS and label live where the manufacturer publishes them; the workspace
   -- records the reference so an audit can follow it.
-  sds_url text check (sds_url is null or sds_url ~ '^https://[^[:space:]]{4,500}$'),
-  label_url text check (label_url is null or label_url ~ '^https://[^[:space:]]{4,500}$'),
+  --
+  -- Shape and length are separate checks on purpose: PostgreSQL refuses a
+  -- regex repetition count above 255, so `{4,500}` compiles to "invalid
+  -- repetition count(s)" the first time a row actually carries a URL — a
+  -- constraint that looks right and fails only in production. The pattern
+  -- states the shape; char_length states the bound.
+  sds_url text check (
+    sds_url is null
+    or (sds_url ~ '^https://[^[:space:]]+$' and char_length(sds_url) between 12 and 500)
+  ),
+  label_url text check (
+    label_url is null
+    or (label_url ~ '^https://[^[:space:]]+$' and char_length(label_url) between 12 and 500)
+  ),
   restricted_use boolean not null default false,
   default_unit public.crm_measure_unit,
   active boolean not null default true,
