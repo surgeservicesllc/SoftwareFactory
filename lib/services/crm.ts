@@ -47,6 +47,53 @@ export const CRM_OPEN_OPPORTUNITY_STAGES = [
   "negotiation",
 ] as const;
 
+export const CRM_WORK_ORDER_STATUSES = [
+  "scheduled",
+  "dispatched",
+  "in_progress",
+  "completed",
+  "cancelled",
+] as const;
+export type CrmWorkOrderStatus = (typeof CRM_WORK_ORDER_STATUSES)[number];
+
+export const CRM_SERVICE_RECURRENCES = [
+  "weekly",
+  "biweekly",
+  "monthly",
+  "bimonthly",
+  "quarterly",
+  "semiannual",
+  "annual",
+] as const;
+export type CrmServiceRecurrence = (typeof CRM_SERVICE_RECURRENCES)[number];
+
+/**
+ * The next due date after one visit is generated, in plan-date terms
+ * (YYYY-MM-DD, no timezone). Month arithmetic clamps to the target month's
+ * last day — a plan due January 31st recurs at the end of February, never
+ * on March 2nd/3rd via rollover.
+ */
+export function advanceServiceDate(date: string, recurrence: CrmServiceRecurrence): string {
+  const [year, month, day] = date.split("-").map(Number);
+  const addDays = recurrence === "weekly" ? 7 : recurrence === "biweekly" ? 14 : 0;
+  if (addDays > 0) {
+    const advanced = new Date(Date.UTC(year, month - 1, day + addDays));
+    return advanced.toISOString().slice(0, 10);
+  }
+  const addMonths =
+    recurrence === "monthly" ? 1
+    : recurrence === "bimonthly" ? 2
+    : recurrence === "quarterly" ? 3
+    : recurrence === "semiannual" ? 6
+    : 12;
+  const targetMonthIndex = month - 1 + addMonths;
+  const targetYear = year + Math.floor(targetMonthIndex / 12);
+  const targetMonth = targetMonthIndex % 12;
+  const lastDay = new Date(Date.UTC(targetYear, targetMonth + 1, 0)).getUTCDate();
+  const advanced = new Date(Date.UTC(targetYear, targetMonth, Math.min(day, lastDay)));
+  return advanced.toISOString().slice(0, 10);
+}
+
 export const CRM_ACCOUNT_COLUMNS =
   "id, name, kind, status, email, phone, source, billing_address, notes, created_at, updated_at";
 export const CRM_CONTACT_COLUMNS =
@@ -57,6 +104,12 @@ export const CRM_TIMELINE_COLUMNS =
   "id, account_id, kind, summary, detail, occurred_at, recorded_at, actor_user_id";
 export const CRM_OPPORTUNITY_COLUMNS =
   "id, account_id, name, stage, value_cents, expected_close_date, notes, lost_reason, closed_at, created_at, updated_at";
+export const CRM_TECHNICIAN_COLUMNS =
+  "id, first_name, last_name, email, phone, license_number, active, created_at, updated_at";
+export const CRM_SERVICE_PLAN_COLUMNS =
+  "id, account_id, property_id, service_type, recurrence, next_due, technician_id, value_cents, active, notes, created_at, updated_at";
+export const CRM_WORK_ORDER_COLUMNS =
+  "id, account_id, property_id, technician_id, plan_id, status, service_type, scheduled_start, scheduled_end, instructions, completion_notes, completed_at, created_at, updated_at";
 
 export type CrmAccountRow = {
   id: string;
@@ -104,6 +157,50 @@ export type CrmOpportunityRow = {
   notes: string | null;
   lost_reason: string | null;
   closed_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CrmTechnicianRow = {
+  id: string;
+  first_name: string;
+  last_name: string | null;
+  email: string | null;
+  phone: string | null;
+  license_number: string | null;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CrmServicePlanRow = {
+  id: string;
+  account_id: string;
+  property_id: string;
+  service_type: string;
+  recurrence: string;
+  next_due: string;
+  technician_id: string | null;
+  value_cents: number | null;
+  active: boolean;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CrmWorkOrderRow = {
+  id: string;
+  account_id: string;
+  property_id: string;
+  technician_id: string | null;
+  plan_id: string | null;
+  status: string;
+  service_type: string;
+  scheduled_start: string;
+  scheduled_end: string;
+  instructions: string | null;
+  completion_notes: string | null;
+  completed_at: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -194,6 +291,56 @@ export function toOpportunityView(row: CrmOpportunityRow) {
     notes: row.notes,
     lostReason: row.lost_reason,
     closedAt: row.closed_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function toTechnicianView(row: CrmTechnicianRow) {
+  return {
+    id: row.id,
+    firstName: row.first_name,
+    lastName: row.last_name,
+    email: row.email,
+    phone: row.phone,
+    licenseNumber: row.license_number,
+    active: row.active,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function toServicePlanView(row: CrmServicePlanRow) {
+  return {
+    id: row.id,
+    accountId: row.account_id,
+    propertyId: row.property_id,
+    serviceType: row.service_type,
+    recurrence: row.recurrence,
+    nextDue: row.next_due,
+    technicianId: row.technician_id,
+    valueCents: row.value_cents,
+    active: row.active,
+    notes: row.notes,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function toWorkOrderView(row: CrmWorkOrderRow) {
+  return {
+    id: row.id,
+    accountId: row.account_id,
+    propertyId: row.property_id,
+    technicianId: row.technician_id,
+    planId: row.plan_id,
+    status: row.status,
+    serviceType: row.service_type,
+    scheduledStart: row.scheduled_start,
+    scheduledEnd: row.scheduled_end,
+    instructions: row.instructions,
+    completionNotes: row.completion_notes,
+    completedAt: row.completed_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

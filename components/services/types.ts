@@ -88,6 +88,59 @@ export type SearchPayload = {
   opportunities: OpportunityView[];
 };
 
+export type TechnicianView = {
+  id: string;
+  firstName: string;
+  lastName: string | null;
+  email: string | null;
+  phone: string | null;
+  licenseNumber: string | null;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ServicePlanView = {
+  id: string;
+  accountId: string;
+  propertyId: string;
+  serviceType: string;
+  recurrence: string;
+  nextDue: string;
+  technicianId: string | null;
+  valueCents: number | null;
+  active: boolean;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type WorkOrderView = {
+  id: string;
+  accountId: string;
+  propertyId: string;
+  technicianId: string | null;
+  planId: string | null;
+  status: string;
+  serviceType: string;
+  scheduledStart: string;
+  scheduledEnd: string;
+  instructions: string | null;
+  completionNotes: string | null;
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type TechniciansPayload = { technicians: TechnicianView[] };
+
+export type ServicePlansPayload = { plans: ServicePlanView[]; dueCount: number };
+
+export type WorkOrdersPayload = {
+  workOrders: WorkOrderView[];
+  counts: { byStatus: Record<string, number>; total: number };
+};
+
 export type AccountsPayload = {
   accounts: AccountView[];
   counts: {

@@ -1,0 +1,245 @@
+import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { ServicesSchedulePanel } from "@/components/services/schedule-panel";
+import { ServicesTechniciansPanel } from "@/components/services/technicians-panel";
+
+/**
+ * The schedule and roster as a person works them: the board and its counts
+ * render from the live payload, a due plan generates through the real
+ * route, completing a visit asks for the field notes before anything is
+ * sent, and the roster's additions post the real body.
+ */
+
+const accountId = "20000000-0000-4000-8000-0000000c0001";
+const technicianId = "70000000-0000-4000-8000-0000000c0001";
+const workOrderId = "80000000-0000-4000-8000-0000000c0001";
+const planId = "90000000-0000-4000-8000-0000000c0001";
+
+const workOrder = {
+  id: workOrderId,
+  accountId,
+  propertyId: "60000000-0000-4000-8000-0000000c0001",
+  technicianId,
+  planId: null,
+  status: "scheduled",
+  serviceType: "Monthly IPM service",
+  scheduledStart: "2026-09-02T09:00:00Z",
+  scheduledEnd: "2026-09-02T11:00:00Z",
+  instructions: null,
+  completionNotes: null,
+  completedAt: null,
+  createdAt: "2026-08-30T10:00:00Z",
+  updatedAt: "2026-08-30T10:00:00Z",
+};
+
+const workOrdersPayload = {
+  workOrders: [workOrder],
+  counts: {
+    byStatus: { scheduled: 1, dispatched: 0, in_progress: 0, completed: 4, cancelled: 1 },
+    total: 6,
+  },
+};
+
+const plansPayload = {
+  plans: [
+    {
+      id: planId,
+      accountId,
+      propertyId: "60000000-0000-4000-8000-0000000c0001",
+      serviceType: "Quarterly deep inspection",
+      recurrence: "quarterly",
+      nextDue: "2020-01-01",
+      technicianId,
+      valueCents: 89_000,
+      active: true,
+      notes: null,
+      createdAt: "2026-08-30T10:00:00Z",
+      updatedAt: "2026-08-30T10:00:00Z",
+    },
+  ],
+  dueCount: 1,
+};
+
+const techniciansPayload = {
+  technicians: [
+    {
+      id: technicianId,
+      firstName: "Miguel",
+      lastName: "Santos",
+      email: null,
+      phone: "(555) 016-0001",
+      licenseNumber: "DEMO-APP-10482",
+      active: true,
+      createdAt: "2026-08-30T10:00:00Z",
+      updatedAt: "2026-08-30T10:00:00Z",
+    },
+  ],
+};
+
+const accountsPayload = {
+  accounts: [
+    {
+      id: accountId,
+      name: "Harborlight Foods Distribution",
+      kind: "commercial",
+      status: "customer",
+      email: null,
+      phone: null,
+      source: "Demo Data",
+      billingAddress: null,
+      notes: null,
+      createdAt: "2026-08-30T10:00:00Z",
+      updatedAt: "2026-08-30T10:00:00Z",
+    },
+  ],
+  counts: { byStatus: { customer: 1 }, byKind: { commercial: 1 }, total: 1 },
+};
+
+function json(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+let fetchMock: ReturnType<typeof vi.fn>;
+
+function serve(overrides: {
+  workOrders?: unknown;
+  plans?: unknown;
+  onWrite?: (url: string, init: RequestInit) => Response | null;
+}) {
+  fetchMock.mockImplementation((url: string, init?: RequestInit) => {
+    if (init?.method && init.method !== "GET" && overrides.onWrite) {
+      const handled = overrides.onWrite(url, init);
+      if (handled) return Promise.resolve(handled);
+    }
+    if (url.startsWith("/api/services/work-orders")) {
+      return Promise.resolve(json(overrides.workOrders ?? workOrdersPayload));
+    }
+    if (url.startsWith("/api/services/service-plans")) {
+      return Promise.resolve(json(overrides.plans ?? plansPayload));
+    }
+    if (url.startsWith("/api/services/technicians")) {
+      return Promise.resolve(json(techniciansPayload));
+    }
+    return Promise.resolve(json(accountsPayload));
+  });
+}
+
+beforeEach(() => {
+  fetchMock = vi.fn();
+  vi.stubGlobal("fetch", fetchMock);
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.clearAllMocks();
+});
+
+describe("the schedule panel", () => {
+  it("renders the board, its status counts, and the due-plan lane from live payloads", async () => {
+    serve({});
+    render(<ServicesSchedulePanel />);
+
+    const board = await screen.findByTestId("services-schedule-board");
+    expect(within(board).getByText("Monthly IPM service")).toBeInTheDocument();
+    expect(within(board).getByText("Harborlight Foods Distribution")).toBeInTheDocument();
+    const counts = screen.getByTestId("services-schedule-counts");
+    expect(counts.textContent).toContain("Completed 4");
+    const due = screen.getByTestId("services-due-plans");
+    expect(within(due).getByText(/Quarterly deep inspection/)).toBeInTheDocument();
+  });
+
+  it("an empty schedule names its next step", async () => {
+    serve({
+      workOrders: { workOrders: [], counts: { byStatus: {}, total: 0 } },
+      plans: { plans: [], dueCount: 0 },
+    });
+    render(<ServicesSchedulePanel />);
+
+    const empty = await screen.findByTestId("services-schedule-empty");
+    expect(empty.textContent).toContain("New work order");
+  });
+
+  it("generates a due plan's visit through the real route", async () => {
+    const posts: string[] = [];
+    serve({
+      onWrite: (url, init) => {
+        if (init.method === "POST") {
+          posts.push(url);
+          return json({ workOrder, plan: plansPayload.plans[0] }, 201);
+        }
+        return null;
+      },
+    });
+    const user = userEvent.setup();
+    render(<ServicesSchedulePanel />);
+    await screen.findByTestId("services-due-plans");
+
+    await user.click(screen.getAllByRole("button", { name: "Generate visit" })[0]);
+    expect(posts).toEqual([`/api/services/service-plans/${planId}/generate`]);
+  });
+
+  it("completing a visit asks for the field notes before anything is sent", async () => {
+    const patches: { url: string; body: unknown }[] = [];
+    serve({
+      onWrite: (url, init) => {
+        if (init.method === "PATCH") {
+          patches.push({ url, body: JSON.parse(init.body as string) });
+          return json({ workOrder: { ...workOrder, status: "completed" } });
+        }
+        return null;
+      },
+    });
+    const user = userEvent.setup();
+    render(<ServicesSchedulePanel />);
+    await screen.findByTestId("services-schedule-board");
+
+    await user.selectOptions(
+      screen.getByLabelText(`Status for ${workOrder.serviceType}`),
+      "completed",
+    );
+    expect(patches).toHaveLength(0);
+    await user.type(
+      screen.getByPlaceholderText("Field notes for the record…"),
+      "Stations serviced; two rebaited.",
+    );
+    await user.click(screen.getByRole("button", { name: "Complete visit" }));
+    expect(patches).toEqual([
+      {
+        url: `/api/services/work-orders/${workOrderId}`,
+        body: { status: "completed", completionNotes: "Stations serviced; two rebaited." },
+      },
+    ]);
+  });
+});
+
+describe("the technicians panel", () => {
+  it("renders the roster and adds through the real route", async () => {
+    let posted: unknown = null;
+    serve({
+      onWrite: (url, init) => {
+        if (init.method === "POST" && url === "/api/services/technicians") {
+          posted = JSON.parse(init.body as string);
+          return json({ technician: techniciansPayload.technicians[0] }, 201);
+        }
+        return null;
+      },
+    });
+    const user = userEvent.setup();
+    render(<ServicesTechniciansPanel />);
+
+    const roster = await screen.findByTestId("services-technicians");
+    expect(within(roster).getByText("Miguel Santos")).toBeInTheDocument();
+    expect(within(roster).getByText("DEMO-APP-10482")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Add technician" }));
+    const dialogButtons = screen.getAllByRole("button", { name: "Add technician" });
+    await user.type(screen.getAllByRole("textbox")[0], "Aisha");
+    await user.click(dialogButtons[dialogButtons.length - 1]);
+    expect(posted).toEqual({ firstName: "Aisha" });
+  });
+});

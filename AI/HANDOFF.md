@@ -2,7 +2,35 @@
 
 Last updated: 2026-08-30
 
-## Newest (2026-08-30, latest+10): CRM pipeline, duplicates, global search (ADR-186, task #63)
+## Newest (2026-08-30, latest+11): field service core (ADR-189, task #63)
+
+Increment 3 on main-bound work: crm_technicians / crm_service_plans /
+crm_work_orders (20260830000800), all revoke-then-grant, NO DELETE
+anywhere (inactive/cancelled are the verbs; history hangs off
+everything). First real 'service' timeline writer: work-order completion
+→ definer trigger writes summary "Service completed: {type}." with
+"Property: {label}." + field notes in detail; cancellation → the
+status_change it is; dispatch progress deliberately silent.
+completed_at trigger+CHECK like closed_at. Three-column FK
+(org, account, property) makes cross-account scheduling impossible.
+Plans: guarded generate (advance eq'd on prior next_due → concurrent
+double-click = one visit + 409 plan_already_generated) with
+compensating rollback if the visit insert fails; advanceServiceDate
+clamps month ends. UI: /Services/schedule (counts chips, due-plans
+lane, day-grouped board, per-visit technician/status selects,
+notes-first completion) + /Services/technicians roster; nav 5 entries.
+Demo Data now fields the operation (3 technicians, 8 plans incl. one
+due at seed, 9 visits incl. cancellation; replay suite counts 'service'
+events = completions, each naming its property). Census: RLS 155,
+hosted-grants 8 crm tables, sentinels → 20260830000800, runbook 187,
+workflow scope field-service (~462KB of 490KB — the scope-step budget
+is tightening; consider extracting scope SQL like the probe's 01.sql
+within the next two scopes). TRAP hit twice now: the shared ui Card
+drops unknown props — data-testid goes on an INNER element, never on
+Card. Dispatch scope=field-service right after merge. Next: increment
+4, pest/IPM devices + stations.
+
+## Older (2026-08-30, latest+10): CRM pipeline, duplicates, global search (ADR-186, task #63)
 
 Increment 2 of the CRM plan: crm_opportunities (20260830000700) on the
 ADR-185 posture — org-scoped forced RLS, composite same-org FK,

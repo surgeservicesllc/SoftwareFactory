@@ -3717,3 +3717,40 @@ undeclared until the goal's full seeded E2E passes.
   hero header (avatar, badges, contact chips, notes) and an icon-railed
   timeline. No behavior changed: every testid, string and wire the unit
   suites pin is intact, and the suites prove it.
+
+## ADR-189 - Field service core: technicians, work orders, recurring plans
+
+- **Date**: 2026-08-30
+- **Status**: Accepted (task #63, owner /goal — increment 3 of
+  AI/SERVICES_CRM_GAP_ANALYSIS.md)
+- **Decision**: three tables (migration 20260830000800) on the CRM
+  posture — org-scoped forced RLS, revoke-then-grant against hosted
+  defaults, anon/service_role shut out, **no DELETE anywhere**: a
+  departed technician is inactive (history and future applicator records
+  hang off them), a visit that did not happen is cancelled, and the
+  cancellation is itself history. The audit spine gains its first real
+  'service' writer: a SECURITY DEFINER AFTER UPDATE trigger records
+  completion (property named in detail with the field notes) and
+  cancellation on the account timeline; dispatch progress is deliberately
+  not history. completed_at is trigger-maintained and CHECKed against the
+  status. A work order's property must belong to its account — a
+  three-column composite FK, so a route bug cannot schedule service at
+  another customer's site. Recurring plans carry recurrence + next_due;
+  generating a visit is guarded on the exact prior next_due (concurrent
+  double-generate = one visit + one 409) with a compensating rollback if
+  the visit insert fails. Recurrence arithmetic clamps month ends
+  (Jan 31 + 1mo = Feb 28/29), pinned by tests.
+- **Surfaces**: /Services/schedule (status counts, due-plans lane with
+  Generate visit, day-grouped board with per-visit technician assignment
+  and a notes-first completion flow, work-order and plan forms with
+  account→property cascading selects) and /Services/technicians (roster
+  with license badges, add/deactivate). The Demo Data book fields the
+  operation: 3 technicians, 8 plans (one due on seed day), 9 visits
+  including completed-with-notes history and a cancellation — statuses
+  walked so the triggers write every outcome.
+- **Verification**: services-field-service behavior 5 on the real chain;
+  demo-book replay extended (counts exact incl. one 'service' event per
+  completion, each naming its property); field-service routes 10 incl.
+  the generate guard, compensation, and clamped date math; schedule and
+  roster panels 5. RLS census 155; hosted-grants +3; runbook 187;
+  workflow scope field-service with full postflight.

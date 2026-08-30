@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { DEMO_BOOK, DEMO_SOURCE, demoBookTotals } from "@/lib/services/demo-data";
+import { DEMO_BOOK, DEMO_SOURCE, DEMO_TECHNICIANS, demoBookTotals } from "@/lib/services/demo-data";
 
 /**
  * Seed the Demo Data book of business into one organization, through the
@@ -23,12 +23,20 @@ export type SeedOutcome =
         contacts: number;
         properties: number;
         opportunities: number;
+        technicians: number;
+        servicePlans: number;
+        workOrders: number;
         timelineEvents: number;
       };
     };
 
 function isoDaysAgo(days: number): string {
   return new Date(Date.now() - days * 86_400_000).toISOString();
+}
+
+function isoAtHour(daysFromNow: number, hour: number): string {
+  const day = new Date(Date.now() + daysFromNow * 86_400_000).toISOString().slice(0, 10);
+  return `${day}T${String(hour).padStart(2, "0")}:00:00Z`;
 }
 
 function isoDateInDays(days: number): string {
@@ -92,19 +100,28 @@ export async function seedDemoData(
   );
   if (contacts.error) return { error: contacts.error };
 
-  const properties = await client.from("crm_properties").insert(
-    DEMO_BOOK.flatMap((account) =>
-      account.properties.map((property) => ({
-        organization_id: organizationId,
-        account_id: accountIds.get(account.name),
-        label: property.label,
-        address: property.address,
-        property_type: property.propertyType ?? null,
-        access_notes: property.accessNotes ?? null,
-      })),
-    ),
-  );
+  const properties = await client
+    .from("crm_properties")
+    .insert(
+      DEMO_BOOK.flatMap((account) =>
+        account.properties.map((property) => ({
+          organization_id: organizationId,
+          account_id: accountIds.get(account.name),
+          label: property.label,
+          address: property.address,
+          property_type: property.propertyType ?? null,
+          access_notes: property.accessNotes ?? null,
+        })),
+      ),
+    )
+    .select("id, account_id, label");
   if (properties.error) return { error: properties.error };
+  const propertyIds = new Map(
+    ((properties.data ?? []) as { id: string; account_id: string; label: string }[]).map((row) => [
+      `${row.account_id}:${row.label}`,
+      row.id,
+    ]),
+  );
 
   const opportunities = await client
     .from("crm_opportunities")
@@ -151,6 +168,85 @@ export async function seedDemoData(
     }
   }
 
+  // The field-service layer: roster, recurring plans, and visits whose
+  // completions the database itself writes onto the timeline.
+  const technicians = await client
+    .from("crm_technicians")
+    .insert(
+      DEMO_TECHNICIANS.map((technician) => ({
+        organization_id: organizationId,
+        first_name: technician.firstName,
+        last_name: technician.lastName,
+        phone: technician.phone,
+        license_number: technician.licenseNumber,
+        created_by: userId,
+      })),
+    )
+    .select("id, license_number");
+  if (technicians.error) return { error: technicians.error };
+  const technicianIds = new Map(
+    ((technicians.data ?? []) as { id: string; license_number: string }[]).map((row) => [
+      row.license_number,
+      row.id,
+    ]),
+  );
+  const technicianByIndex = (index: number | undefined) =>
+    index === undefined ? null : technicianIds.get(DEMO_TECHNICIANS[index].licenseNumber) ?? null;
+
+  const planRows = DEMO_BOOK.flatMap((account) =>
+    (account.plans ?? []).map((plan) => ({
+      organization_id: organizationId,
+      account_id: accountIds.get(account.name),
+      property_id: propertyIds.get(`${accountIds.get(account.name)}:${plan.propertyLabel}`),
+      service_type: plan.serviceType,
+      recurrence: plan.recurrence,
+      next_due: new Date(Date.now() + plan.dueInDays * 86_400_000).toISOString().slice(0, 10),
+      technician_id: technicianByIndex(plan.technicianIndex),
+      value_cents: plan.valueCents ?? null,
+      created_by: userId,
+    })),
+  );
+  if (planRows.length > 0) {
+    const plans = await client.from("crm_service_plans").insert(planRows);
+    if (plans.error) return { error: plans.error };
+  }
+
+  for (const account of DEMO_BOOK) {
+    const accountId = accountIds.get(account.name);
+    for (const visit of account.visits ?? []) {
+      const propertyId = propertyIds.get(`${accountId}:${visit.propertyLabel}`);
+      if (!propertyId) return { error: { message: `Seeded property missing: ${visit.propertyLabel}` } };
+      const inserted = await client
+        .from("crm_work_orders")
+        .insert({
+          organization_id: organizationId,
+          account_id: accountId,
+          property_id: propertyId,
+          technician_id: technicianByIndex(visit.technicianIndex),
+          service_type: visit.serviceType,
+          scheduled_start: isoAtHour(visit.inDays, 9),
+          scheduled_end: isoAtHour(visit.inDays, 9 + visit.durationHours),
+          created_by: userId,
+        })
+        .select("id")
+        .single();
+      if (inserted.error) return { error: inserted.error };
+      for (const status of visit.statusPath) {
+        const moved = await client
+          .from("crm_work_orders")
+          .update({
+            status,
+            ...(status === "completed" && visit.completionNotes
+              ? { completion_notes: visit.completionNotes }
+              : {}),
+          })
+          .eq("organization_id", organizationId)
+          .eq("id", (inserted.data as { id: string }).id);
+        if (moved.error) return { error: moved.error };
+      }
+    }
+  }
+
   const events = await client.from("crm_timeline_events").insert(
     DEMO_BOOK.flatMap((account) =>
       account.events.map((event) => ({
@@ -173,8 +269,13 @@ export async function seedDemoData(
       contacts: totals.contacts,
       properties: totals.properties,
       opportunities: totals.opportunities,
-      // Hand-recorded events plus every trigger-written status and stage move.
-      timelineEvents: totals.manualEvents + totals.statusMoves + totals.stageMoves,
+      technicians: DEMO_TECHNICIANS.length,
+      servicePlans: totals.plans,
+      workOrders: totals.workOrders,
+      // Hand-recorded events plus every trigger-written status move, stage
+      // move, and visit outcome (completion or cancellation).
+      timelineEvents:
+        totals.manualEvents + totals.statusMoves + totals.stageMoves + totals.visitOutcomes,
     },
   };
 }
