@@ -54,6 +54,7 @@ on:
           - budget-tracker
           - job-seeker-alert-engine
           - job-seeker-result-marks
+          - node-attempt-persistence
           - probe
 permissions:
   actions: read
@@ -1792,6 +1793,46 @@ jobs:
             end
             \$\$;"
           echo "Result marks table applied and recorded; RLS forced; own-row-only boundary verified."
+
+      - name: Apply node attempt persistence (scope=node-attempt-persistence)
+        if: ${{ inputs.scope == 'node-attempt-persistence' }}
+        run: |
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+          FILE=supabase/migrations/20260830000100_node_attempt_persistence.sql
+          sha256sum "$FILE"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied 20260830000100
+          else
+            npx supabase migration repair --status applied 20260830000100 --db-url "$DB_URL"
+          fi
+          psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
+          # Postflight: one signature only — the p_attempt definer, pinned
+          # search_path, service_role-only execute.
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
+            do \$\$
+            declare fn record;
+            begin
+              select count(*)::int as n, bool_and(p.prosecdef) as definer,
+                bool_and(pg_get_function_identity_arguments(p.oid) like '%p_attempt integer%') as carries,
+                bool_and(p.proconfig::text like '%search_path=pg_catalog%') as pinned,
+                bool_or(has_function_privilege('anon', p.oid, 'execute')
+                  or has_function_privilege('authenticated', p.oid, 'execute')) as person,
+                bool_and(has_function_privilege('service_role', p.oid, 'execute')) as worker
+              into fn from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+              where n.nspname = 'public' and p.proname = 'record_node_state_as_worker';
+              if fn.n <> 1 or not fn.definer or not fn.carries or not fn.pinned
+                or fn.person or not fn.worker then
+                raise exception 'record_node_state_as_worker boundary is wrong: %', fn;
+              end if;
+            end
+            \$\$;"
+          echo "Attempt persistence applied; definer boundary verified."
 
       - name: Normalize exact legacy bot ACLs (scope=bot-legacy-acl-normalization)
         if: ${{ inputs.scope == 'bot-legacy-acl-normalization' }}

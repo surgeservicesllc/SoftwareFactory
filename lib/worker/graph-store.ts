@@ -109,8 +109,9 @@ export class SupabaseGraphStore implements GraphRunStore {
     state: "RUNNING" | "COMPLETED" | "VERIFYING" | "FAILED" | "CANCELLED" | "SKIPPED",
     detail?: string | null,
     execution?: { provider?: string; model?: string; latencyMs?: number },
+    attempt?: number,
   ): Promise<void> {
-    const { error } = await this.client.rpc("record_node_state_as_worker", {
+    const request = {
       p_worker_id: this.workerId,
       p_node_run_id: nodeRunId,
       p_state: state,
@@ -118,7 +119,16 @@ export class SupabaseGraphStore implements GraphRunStore {
       p_provider: execution?.provider ?? null,
       p_model: execution?.model ?? null,
       p_latency_ms: execution?.latencyMs ?? null,
-    });
+    };
+    let { error } = await this.client.rpc("record_node_state_as_worker",
+      attempt !== undefined ? { ...request, p_attempt: attempt } : request);
+    // A database that predates 20260830000100 cannot resolve p_attempt
+    // (PGRST202) — exactly the window between app deploy and hosted apply.
+    // The transition itself must still land, so retry without the attempt:
+    // the counter goes unpersisted for that call, the run stays honest.
+    if (error && error.code === "PGRST202" && attempt !== undefined) {
+      ({ error } = await this.client.rpc("record_node_state_as_worker", request));
+    }
     if (error) throw new Error(`Recording a node transition failed: ${error.message ?? "unknown error"}`);
   }
 

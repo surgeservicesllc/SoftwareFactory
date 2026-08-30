@@ -1,6 +1,29 @@
 # Handoff
 
-Last updated: 2026-08-29
+Last updated: 2026-08-30
+
+## Newest (2026-08-30, late night): node_runs.attempt persisted (ADR-174, task #56)
+
+`20260830000100_node_attempt_persistence.sql` replaces
+`record_node_state_as_worker` with the eight-parameter definer
+(`p_attempt integer default null`; body otherwise the 20260827000200
+text verbatim; ACLs restated service_role-only). Semantics: ordinary
+transitions coalesce the attempt in; RUNNING→RUNNING with a HIGHER
+attempt is the retry branch (counter moves + its own `node_running`
+event, "attempt N" detail suffix); lower = `node_attempt_regression`,
+zero/negative = `node_attempt_must_be_positive`; exact replays stay
+idempotent. Worker: `graph-run.ts` records RUNNING on EVERY dispatch
+(the old `attempt === 1` guard is gone) and passes the attempt on all
+terminal transitions (SKIPPED stays attempt-less — never dispatched);
+`graph-store.ts` retries once without `p_attempt` on PGRST202 so the
+deploy window degrades to unpersisted, not failed. Chain integration:
+22 test sentinels swept to `20260830000100…`, runbook total 180,
+workflow scope `node-attempt-persistence` (step + options entry — the
+#440 lesson) with a single-signature/definer/ACL postflight.
+Projection stays deliberately deferred (graph-node-detail test states
+why). **Hosted apply for this scope must be dispatched immediately
+after merge** — it is safe before the app deploys (old callers
+resolve), and the PGRST202 fallback covers the other ordering.
 
 ## Newest (2026-08-30, night): Chief of Staff named + plan panel (ADR-173)
 

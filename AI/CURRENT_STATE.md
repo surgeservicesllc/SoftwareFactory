@@ -805,10 +805,14 @@ whenever a duration is not knowable — never started, not yet finished, or
 clocks out of order — with the row omitted rather than dashed.
 
 Two things stated so they are not later mistaken for defects:
-`node_runs.attempt` is a stored column **nothing writes**, so it is
-deliberately not projected (a permanent 0 under an "attempt" heading would read
-as measured fact); and `latency_ms` is the executor's call time, not the node's
-wall time, so the table and the detail show different figures on purpose.
+`node_runs.attempt` gained its writer on 2026-08-30 (ADR-174,
+20260830000100 — the worker records each dispatch's attempt and a retry
+re-enters RUNNING with its own event), but the column is still deliberately
+not projected: historical rows keep their insert default of 0, and a 0 under
+an "attempt" heading would read as measured fact, so it surfaces nowhere
+until it can be surfaced honestly everywhere. And `latency_ms` is the
+executor's call time, not the node's wall time, so the table and the detail
+show different figures on purpose.
 
 ## 2026-08-23: the lifecycle stages have pages, and the browser suite got its workers back
 

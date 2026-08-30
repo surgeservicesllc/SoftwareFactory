@@ -11,7 +11,7 @@ import { describeNode, type DetailedNode } from "@/lib/graph/node-detail";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const migrationsDirectory = resolve(repositoryRoot, "supabase/migrations");
-const latestMigration = "20260829000400_job_seeker_result_marks.sql";
+const latestMigration = "20260830000100_node_attempt_persistence.sql";
 
 const ownerId = "00000000-0000-4000-8000-00000000ad01";
 const organizationId = "10000000-0000-4000-8000-00000000ad01";
@@ -194,11 +194,14 @@ describe("the node explains itself", () => {
     expect(nodes(read, "implement").max_attempts).toBe(3);
   });
 
-  it("does not project a retry count, because nothing writes one", async () => {
-    // `node_runs.attempt` exists and stays 0 for the life of every run: the
-    // claim inserts it at its default and `record_node_state_as_worker` never
-    // touches it. A projected 0 under a heading like "attempt" would read as
-    // measured fact. If a writer is ever added, project it and delete this.
+  it("does not project a retry count the recording never measured", async () => {
+    // `node_runs.attempt` has a writer since 20260830000100 — the worker
+    // passes each dispatch's attempt through `record_node_state_as_worker` —
+    // but this fixture's transitions never carried one, so its rows keep the
+    // insert default of 0. The projection deliberately omits the column until
+    // it is surfaced everywhere at once: a projected 0 under a heading like
+    // "attempt" would read as measured fact. When the projection gains it,
+    // assert the measured value here instead.
     const read = await readNodes();
     expect(nodes(read, "architecture")).not.toHaveProperty("attempt");
 
