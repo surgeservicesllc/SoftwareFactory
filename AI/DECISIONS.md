@@ -3481,3 +3481,27 @@ the trigger refuses too) is rendered verbatim as the honest answer.
 No fake toggle, no dead button, no paraphrase: the modes are named,
 the machinery is wired, and the guardrail visibly holds until an owner
 authorizes the RED change through governance, not through this panel.
+
+
+## ADR-182 - The measured attempt is projected; preview stays a link by design
+
+Date: 2026-08-30
+
+Two closures. First: 20260825000300 deliberately omitted
+`node_runs.attempt` from list_graph_runs because nothing wrote it.
+ADR-174 added the writer, so the omission became the dishonesty.
+20260830000300 restates the projection verbatim with one change:
+attempt >= 1 projects as itself; the pre-writer insert default of 0 is
+not a measurement and projects as null, so no heading ever reads an
+unmeasured default as data. Build's Agents rows say "attempt N" only
+for N >= 2 - attempt 1 adds nothing a reader needs.
+
+Second: the command center's "preview". The application sends
+X-Frame-Options: DENY and frame-ancestors 'none' - its own security
+headers correctly refuse framing, and weakening a security control is
+RED. So the inline-iframe preview is fenced by design, and the honest
+preview is the deployment URL the release evidence already carries,
+now labeled Preview. The command-center list is thereby complete for
+Phase 1A: every panel exists, and the two things not built inline
+(iframe preview, Pause/Resume) are fenced by named policy or missing
+engine support, recorded rather than faked.

@@ -2,7 +2,21 @@
 
 Last updated: 2026-08-30
 
-## Newest (2026-08-30, latest+5): autonomy modes derived, fence intact (ADR-181)
+## Newest (2026-08-30, latest+6): attempt projected; preview is the deploy URL (ADR-182)
+
+20260830000300 restates list_graph_runs (from 20260825000300, verbatim
++ one change): 'attempt', case when nr.attempt >= 1 then nr.attempt end
+— measured values project, the pre-writer 0 projects as null.
+DetailedNode + RunNode gain optional attempt; Build Agents rows append
+"· attempt N" only when N >= 2. graph-node-detail's old
+"nothing writes one" test replaced per its own instruction (null on
+0-rows, 2 after a measured update). Preview: X-Frame-Options DENY +
+frame-ancestors 'none' fence an inline iframe (weakening = RED); the
+release panel's deployment link is now labeled Preview. Workflow scope
+node-attempt-projection added (runbook 182; sentinels swept to
+20260830000300). Dispatch the hosted apply right after merge.
+
+## Older (2026-08-30, latest+5): autonomy modes derived, fence intact (ADR-181)
 
 lib/factory/autonomy-mode.ts (deriveAutonomyMode + AUTONOMY_MODES with
 exact control patches). Build panel build-autonomy: derives from
