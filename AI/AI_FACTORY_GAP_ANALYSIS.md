@@ -40,8 +40,8 @@ and to reuse it. This file is that inspection.
    out to the deep pages instead of replacing them. *(Increment 1 starts
    this; ADR-176 adds Changes & release — files changed/diffs on the
    PR's files tab, per-check test results, deployment, production
-   health, all from ANCHOR observations. Still open: logs
-   (graph_events) and an inline preview.)*
+   health, all from ANCHOR observations; ADR-177 adds the Activity log
+   read verbatim from graph_events. Still open: an inline preview.)*
 3. **Chief-of-Staff completion.** The analysis graph derives type,
    plan and stages, but structured *requirements + acceptance criteria*
    from free text are only as good as what the person typed; command

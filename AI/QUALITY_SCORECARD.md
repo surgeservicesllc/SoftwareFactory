@@ -2,6 +2,14 @@
 
 Last reviewed: 2026-08-30
 
+**Addendum, 2026-08-30 latest+1 — Activity log (ADR-177):** events
+route suite 4 (verbatim chronological rows with node keys resolved,
+run-level events honestly node-less, non-UUID refused pre-database,
+database refusal undressed); workspace suite 13 (lazy log: no fetch
+until open, recorded line rendered verbatim, truncation footer absent
+when not truncated). Lint zero warnings, production build lists the
+route, `tsc --noEmit` clean.
+
 **Addendum, 2026-08-30 latest — Changes & release (ADR-176):**
 release-evidence suite 4 (all-null before observations, lineage read
 back, checks keep real conclusions incl. failures, full four-observation
