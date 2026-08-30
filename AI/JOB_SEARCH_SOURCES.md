@@ -6,13 +6,14 @@ The catalogue is the runtime truth — an integrity test
 to the adapter registry, so this document cannot honestly drift far: when
 they disagree, the catalogue file wins and this file needs regenerating.
 
-**52 sources** (27 general, 25 marketing):
-13 connected live adapters, 6 official APIs awaiting owner
-credentials, 33 honest link-outs, 0 documented refusals.
+**53 sources** (28 general, 25 marketing):
+13 always-on live adapters, 7 official APIs credential-gated (the
+JSearch aggregator among them flips to live the moment its key is set),
+33 honest link-outs, 0 documented refusals.
 No source is listed as searchable unless searching it is real; scraping
 prohibited surfaces (LinkedIn, Indeed, Glassdoor) is refused by policy.
 
-## General sources (27)
+## General sources (28)
 
 | Source | Standing | The honest sentence the UI carries |
 | --- | --- | --- |
@@ -26,14 +27,15 @@ prohibited surfaces (LinkedIn, Indeed, Glassdoor) is refused by policy.
 | Jobindex (Denmark) | **Connected** (live adapter) | Denmark's largest job board, searched over its published surface. |
 | JobDanmark | **Connected** (live adapter) | Danish job board searched over its published surface. |
 | Freehire | **Connected** (live adapter) | Searched over the board's public API; the one connected board that states salary and work arrangement as data. |
+| JSearch (aggregator) | Keyed — **Not Connected** until `JSEARCH_RAPIDAPI_KEY` is set, then **Connected** automatically | JSearch reads Google's job index over an official keyed API; its results carry LinkedIn, Indeed, Glassdoor and ZipRecruiter postings inline, each naming its publisher. The owner turns it on with one free RapidAPI subscription and one Vercel env var — no code change. |
 | USAJOBS | Requires owner credentials — **Not Connected** | The U.S. federal government's job API is official and free but requires a registered API key and user agent from developer.usajobs.gov. Not connected until the owner supplies one; the link opens USAJOBS search directly. |
 | Adzuna | Requires owner credentials — **Not Connected** | Adzuna aggregates millions of listings behind an official API that requires a free app_id/app_key pair from developer.adzuna.com. Not connected until the owner registers; the link opens Adzuna search directly. |
 | Jooble | Requires owner credentials — **Not Connected** | Jooble's aggregation API is official and free but issues per-site keys on request. Not connected until the owner obtains one; the link opens Jooble search directly. |
 | Careerjet | Requires owner credentials — **Not Connected** | Careerjet's search API requires an affiliate ID. Not connected until the owner registers; the link opens Careerjet search directly. |
 | Reed.co.uk | Requires owner credentials — **Not Connected** | Reed's Jobseeker API (the UK's largest board) requires a free API key from reed.co.uk/developers. Not connected until the owner registers; the link opens Reed search directly. |
 | ZipRecruiter | Requires owner credentials — **Not Connected** | ZipRecruiter's job search API is partner-only. Not connected without a partner key; the link opens ZipRecruiter search directly. |
-| LinkedIn Jobs | Deep link-out (person's own browser) | LinkedIn's terms prohibit automated collection, and this repository has twice declined to scrape it; that decision stands. The link opens LinkedIn's own job search in your browser — the permitted path — carrying your search AND your filters (place, radius, posted date, work model, seniority, salary floor) in LinkedIn's own URL parameters. |
-| Indeed | Deep link-out (person's own browser) | Indeed's publisher API is closed to new partners and scraping is prohibited, so the link opens Indeed's own search in your browser — carrying your search, place, radius and posted date in Indeed's own URL parameters (salary floor and remote travel in the query text, per Indeed's search tips). |
+| LinkedIn Jobs | Deep link-out (person's own browser) | LinkedIn's terms prohibit automated collection, and this repository has twice declined to scrape it; that decision stands. The link opens LinkedIn's own job search in your browser — the permitted path — carrying your search AND your filters (place, radius, posted date, work model, seniority, salary floor) in LinkedIn's own URL parameters. LinkedIn postings ALSO appear inline through the JSearch aggregator once its key is connected — labeled LinkedIn, via Google's job index, never by scraping. |
+| Indeed | Deep link-out (person's own browser) | Indeed's publisher API is closed to new partners and scraping is prohibited, so the link opens Indeed's own search in your browser — carrying your search, place, radius and posted date in Indeed's own URL parameters (salary floor and remote travel in the query text, per Indeed's search tips). Indeed postings ALSO appear inline through the JSearch aggregator once its key is connected — labeled Indeed, via Google's job index, never by scraping. |
 | Glassdoor | Link-out (person's own browser) | Glassdoor retired its public API, so the link opens Glassdoor's own search in your browser. |
 | Monster | Link-out (person's own browser) | Monster has no open API; the link opens Monster's own search in your browser. |
 | Google for Jobs | Link-out (person's own browser) | Google's job surface is a search feature without a public API; the link runs the search in your browser, where Google's job panel appears. |

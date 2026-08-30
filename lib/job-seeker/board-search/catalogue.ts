@@ -138,6 +138,21 @@ export const SOURCE_CATALOGUE: readonly CatalogueSource[] = Object.freeze([
 
   // ── General: official APIs awaiting credentials ─────────────────────────
   {
+    /*
+     * The aggregator that carries LinkedIn and Indeed postings inline. Its
+     * static standing is needs_credentials — the truth of a deployment
+     * without the key. `resolvedSourceCatalogue()` flips this one row to
+     * live the moment JSEARCH_RAPIDAPI_KEY is configured, in lockstep with
+     * the registry's `availableBoardSearchAdapters()`.
+     */
+    key: "jsearch",
+    name: "JSearch",
+    focus: "general",
+    status: "needs_credentials",
+    searchUrl: "https://www.google.com/search?q={query}+jobs",
+    note: "JSearch reads Google's job index over an official keyed API, and its results carry LinkedIn, Indeed, Glassdoor and ZipRecruiter postings inline, each naming its publisher. Not connected until the owner sets JSEARCH_RAPIDAPI_KEY (a free RapidAPI subscription); until then the link runs the search on Google, where the same job panel appears.",
+  },
+  {
     key: "usajobs",
     name: "USAJOBS",
     focus: "general",
@@ -193,7 +208,7 @@ export const SOURCE_CATALOGUE: readonly CatalogueSource[] = Object.freeze([
     focus: "general",
     status: "external_link",
     searchUrl: "https://www.linkedin.com/jobs/search/?keywords={query}&location={location}",
-    note: "LinkedIn's terms prohibit automated collection, and this repository has twice declined to scrape it; that decision stands. The link opens LinkedIn's own job search in your browser — the permitted path — carrying your search AND your filters (place, radius, posted date, work model, seniority, salary floor) in LinkedIn's own URL parameters.",
+    note: "LinkedIn's terms prohibit automated collection, and this repository has twice declined to scrape it; that decision stands. The link opens LinkedIn's own job search in your browser — the permitted path — carrying your search AND your filters (place, radius, posted date, work model, seniority, salary floor) in LinkedIn's own URL parameters. LinkedIn postings ALSO appear inline in the unified results through the JSearch aggregator once its key is connected — labeled LinkedIn, via Google's job index, never by scraping.",
   },
   {
     key: "indeed",
@@ -201,7 +216,7 @@ export const SOURCE_CATALOGUE: readonly CatalogueSource[] = Object.freeze([
     focus: "general",
     status: "external_link",
     searchUrl: "https://www.indeed.com/jobs?q={query}&l={location}",
-    note: "Indeed's publisher API is closed to new partners and scraping is prohibited, so the link opens Indeed's own search in your browser — carrying your search, place, radius and posted date in Indeed's own URL parameters (salary floor and remote travel in the query text, per Indeed's search tips).",
+    note: "Indeed's publisher API is closed to new partners and scraping is prohibited, so the link opens Indeed's own search in your browser — carrying your search, place, radius and posted date in Indeed's own URL parameters (salary floor and remote travel in the query text, per Indeed's search tips). Indeed postings ALSO appear inline in the unified results through the JSearch aggregator once its key is connected — labeled Indeed, via Google's job index, never by scraping.",
   },
   {
     key: "glassdoor",
@@ -481,6 +496,28 @@ export const SOURCE_CATALOGUE: readonly CatalogueSource[] = Object.freeze([
 
 export function catalogueSource(key: string): CatalogueSource | null {
   return SOURCE_CATALOGUE.find((source) => source.key === key) ?? null;
+}
+
+/**
+ * The catalogue as this deployment stands right now.
+ *
+ * The static rows above describe an unconfigured deployment — the safe
+ * default that never advertises a connection nobody made. Credential-gated
+ * sources whose keys ARE configured flip to live here, in lockstep with the
+ * registry's `availableBoardSearchAdapters()`: the same call-time check on
+ * both sides, so the picker can never offer a board the search will refuse,
+ * nor hide one it serves. Today the one gated adapter is JSearch.
+ */
+export function resolvedSourceCatalogue(): readonly CatalogueSource[] {
+  return SOURCE_CATALOGUE.map((source) => {
+    if (source.key !== "jsearch" || boardSearchAdapter("jsearch") === null) return source;
+    return {
+      ...source,
+      status: "live" as const,
+      adapterKey: "jsearch",
+      note: "Connected: Google's job index searched over JSearch's official keyed API. LinkedIn, Indeed, Glassdoor and ZipRecruiter postings appear inline, each labeled with the site that hosts it.",
+    };
+  });
 }
 
 /** The catalogue rows that resolve to a working registry adapter. */

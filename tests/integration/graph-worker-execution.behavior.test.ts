@@ -138,6 +138,18 @@ function pgliteStore(db: PGlite, workerId: string): GraphRunStore {
         await reset(db);
       }
     },
+    async readPauseRequested(graphRunId) {
+      await asServiceRole(db);
+      try {
+        const result = await db.query<{ paused: boolean }>(
+          "select public.read_graph_pause_as_worker($1, $2::uuid) as paused",
+          [workerId, graphRunId],
+        );
+        return result.rows[0]?.paused === true;
+      } finally {
+        await reset(db);
+      }
+    },
     async completeReviewerWithVerifications(verifierNodeRunId, artifactPayload, execution, verifications) {
       await asServiceRole(db);
       try {
@@ -2456,5 +2468,202 @@ describe("the graph executor boundary", { timeout: 180_000 }, () => {
     }
     await store.completeRun(claimed.graph.graph_run_id, "PARTIAL", true);
     expect(await claim()).toBeNull();
+  });
+
+  it("pauses between waves, holds the queue while paused, and resume reuses the finished work", async () => {
+    // The whole journey Pause promises: a person pauses mid-run, the wave in
+    // flight lands, nothing new starts, the run closes void with its work
+    // recorded, no claim touches the graph while the hold stands, and after
+    // resume the next run picks up from the completed steps instead of
+    // re-buying them.
+    const graphId = await createDiamondGraph("Pause me between steps");
+    await db.query(`update public.graphs set is_lifecycle = true where id = $1`, [graphId]);
+    const store = pgliteStore(db, "graph-worker-test");
+    const claimed = await claimGraphById(store, graphId);
+    expect(claimed.ok).toBe(true);
+    if (!claimed.ok) return;
+    const compiled = compileClaimedGraph(claimed.graph);
+    expect(compiled.ok).toBe(true);
+    if (!compiled.ok) return;
+
+    /*
+     * A person pauses while the run is in flight. The owner's write lands at
+     * the first wave boundary — deliberately not from inside an executor:
+     * this suite shares ONE PGlite session, and a member-role write
+     * interleaved with the wave's concurrent worker-role traffic wedges the
+     * session's role dance (three pending queries, none ever settling).
+     * Production has no such seam — the member writes over their own HTTP
+     * connection — and the engine only reads the flag between waves either
+     * way, so the boundary is exactly when the pause becomes real to it.
+     */
+    let pausePolls = 0;
+    const pausingStore: GraphRunStore = {
+      ...store,
+      readPauseRequested: async (graphRunId) => {
+        pausePolls += 1;
+        if (pausePolls === 2) {
+          await asOwner(db);
+          await db.query(
+            "select public.set_graph_pause_as_member($1::uuid, $2::uuid, true)",
+            [organizationId, graphId],
+          );
+          await reset(db);
+        }
+        return store.readPauseRequested!(graphRunId);
+      },
+    };
+    const executed: string[] = [];
+    const summary = await runClaimedGraph(
+      claimed.graph, compiled.graph, pausingStore,
+      async (node): Promise<NodeExecutionResult> => {
+        executed.push(node.nodeKey);
+        return {
+          status: "SUCCEEDED",
+          output: { note: `${node.nodeKey} finished` },
+          provider: "anthropic",
+          model: "claude-sonnet",
+          latencyMs: 5,
+          tokensUsed: 10,
+        };
+      },
+    );
+
+    // The wave in flight finished; the dependent stage never started.
+    expect([...executed].sort()).toEqual(["inspect_a", "inspect_b", "inspect_c"]);
+    expect(summary.paused).toBe(true);
+    expect(summary.finalState).toBe("CANCELLED");
+
+    const nodeStates = await db.query<{ node_key: string; state: string }>(
+      `select gn.node_key, nr.state::text
+         from public.node_runs nr join public.graph_nodes gn on gn.id = nr.node_id
+        where nr.graph_run_id = $1 order by gn.node_key`,
+      [claimed.graph.graph_run_id],
+    );
+    expect(nodeStates.rows).toEqual([
+      { node_key: "inspect_a", state: "COMPLETED" },
+      { node_key: "inspect_b", state: "COMPLETED" },
+      { node_key: "inspect_c", state: "COMPLETED" },
+      { node_key: "synthesize", state: "SKIPPED" },
+    ]);
+    const skipped = await db.query<{ detail: string | null }>(
+      `select detail from public.graph_events
+        where graph_run_id = $1 and event_type = 'node_skipped'`,
+      [claimed.graph.graph_run_id],
+    );
+    expect(skipped.rows[0]?.detail).toContain("paused before this step started");
+    const closed = await db.query<{ closure_note: string | null; state: string }>(
+      "select state::text, closure_note from public.graph_runs where id = $1",
+      [claimed.graph.graph_run_id],
+    );
+    expect(closed.rows[0]?.state).toBe("CANCELLED");
+    expect(closed.rows[0]?.closure_note).toContain("Paused by request");
+
+    // The hold outlives the closed run: a CANCELLED close normally leaves a
+    // graph re-claimable, and this claim answering empty is the whole reason
+    // pause lives on the graph rather than the run.
+    expect(await claim()).toBeNull();
+
+    // Resume. The second run must not re-buy the inspectors it already has.
+    await asOwner(db);
+    await db.query(
+      "select public.set_graph_pause_as_member($1::uuid, $2::uuid, false)",
+      [organizationId, graphId],
+    );
+    await reset(db);
+    const resumed = await claimGraphById(store, graphId);
+    expect(resumed.ok).toBe(true);
+    if (!resumed.ok) return;
+    const recompiled = compileClaimedGraph(resumed.graph);
+    expect(recompiled.ok).toBe(true);
+    if (!recompiled.ok) return;
+    const executedAfterResume: string[] = [];
+    const second = await runClaimedGraph(
+      resumed.graph, recompiled.graph, store,
+      async (node): Promise<NodeExecutionResult> => {
+        executedAfterResume.push(node.nodeKey);
+        return {
+          status: "SUCCEEDED",
+          output: { note: "synthesis over reused inspections" },
+          provider: "anthropic",
+          model: "claude-sonnet",
+          latencyMs: 5,
+          tokensUsed: 10,
+        };
+      },
+    );
+    expect(executedAfterResume).toEqual(["synthesize"]);
+    expect([...second.reusedNodes].sort()).toEqual(["inspect_a", "inspect_b", "inspect_c"]);
+    expect(second.finalState).toBe("COMPLETED");
+
+    // Both changes are immutable audit lines, and both directions are
+    // idempotent — a repeated click is agreement, not a second event.
+    await asOwner(db);
+    await db.query(
+      "select public.set_graph_pause_as_member($1::uuid, $2::uuid, false)",
+      [organizationId, graphId],
+    );
+    await reset(db);
+    const audit = await db.query<{ count: number }>(
+      `select count(*)::integer as count from public.activity_events
+        where entity_id = $1 and event_type = 'graph.pause_changed'`,
+      [graphId],
+    );
+    expect(audit.rows[0].count).toBe(2);
+  });
+
+  it("holds the pause boundary: withdrawn graphs, strangers, and role fences all refuse", async () => {
+    const graphId = await createDiamondGraph("Fence the pause control");
+
+    // A withdrawn graph is finished for good; pausing it would imply a
+    // resume that can never come.
+    await asOwner(db);
+    await db.query(
+      "select public.withdraw_graph_as_member($1::uuid, $2::uuid, null)",
+      [organizationId, graphId],
+    );
+    await expect(db.query(
+      "select public.set_graph_pause_as_member($1::uuid, $2::uuid, true)",
+      [organizationId, graphId],
+    )).rejects.toThrow(/graph_withdrawn/);
+
+    // The direction is required — null is not a decision.
+    await expect(db.query(
+      "select public.set_graph_pause_as_member($1::uuid, $2::uuid, null)",
+      [organizationId, graphId],
+    )).rejects.toThrow(/paused or resumed/);
+    await reset(db);
+
+    // Someone who is not a member of the organization is refused outright.
+    await db.query("select set_config('request.jwt.claim.sub', $1, false)", [
+      "00000000-0000-4000-8000-00000000beef",
+    ]);
+    await db.exec("set role authenticated");
+    await expect(db.query(
+      "select public.set_graph_pause_as_member($1::uuid, $2::uuid, true)",
+      [organizationId, graphId],
+    )).rejects.toThrow(/member of the owning organization/);
+    await reset(db);
+
+    // The role fences: members cannot use the worker's read, the worker's
+    // key cannot flip a member control.
+    await asOwner(db);
+    await expect(db.query(
+      "select public.read_graph_pause_as_worker($1, $2::uuid)",
+      ["graph-worker-test", graphId],
+    )).rejects.toThrow(/permission denied/);
+    await reset(db);
+    await asServiceRole(db);
+    await expect(db.query(
+      "select public.set_graph_pause_as_member($1::uuid, $2::uuid, true)",
+      [organizationId, graphId],
+    )).rejects.toThrow(/permission denied/);
+
+    // A run id that resolves to nothing has no pause to honor.
+    const unknown = await db.query<{ paused: boolean }>(
+      "select public.read_graph_pause_as_worker($1, $2::uuid) as paused",
+      ["graph-worker-test", "00000000-0000-4000-8000-00000000dead"],
+    );
+    expect(unknown.rows[0].paused).toBe(false);
+    await reset(db);
   });
 });

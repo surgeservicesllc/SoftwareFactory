@@ -36,6 +36,29 @@ still the working plan of record.)
   rows). Pause/Resume still need engine support — deliberately unbuilt
   rather than dead. Hosted apply: dispatch scope=withdraw-graph after
   merge.
+- [x] Increment 3b, Pause/Resume half (ADR-183): the run-controls list
+  is now complete. 20260830000400 adds graphs.pause_requested_* + the
+  one claim predicate (graph-level on purpose — a run-level flag would
+  let the next drain resume the graph unasked), set_graph_pause_as_member
+  (authenticated definer, withdrawn refusal, idempotent both ways,
+  audited 'graph.pause_changed') and read_graph_pause_as_worker
+  (service-role boolean). The engine polls checkPause at wave
+  boundaries: in-flight work lands, nothing new starts, undispatched
+  nodes SKIP with a pause detail, the run closes CANCELLED spending no
+  chance. Resume = unpause + the launch route's worker wake; the
+  lifecycle reuse path makes the next claim continue from the completed
+  steps (proved end-to-end on the chain). Retry needs no new control: a
+  re-claim IS the retry. Build shows Pause on RUNNING, Resume + a
+  paused label on held builds, server notes verbatim; the runs feed
+  carries pausedAt/withdrawnAt with a 42703 deploy-window fallback.
+  Hosted apply: dispatch scope=pause-graph after merge.
+- [ ] Queue-diagnosis honesty follow-up: `diagnose_graph_queue_as_worker_v2`
+  predates withdrawal and pause, so a withdrawn or paused graph shows in
+  the drain log as "looks claimable — an empty claim contradicts this
+  listing" (the contradiction line is the honest cover, not a wrong
+  claim). Extend the diagnostic projection with withdrawn_at +
+  pause_requested_at and teach explainEmptyQueue the two reasons — a
+  read-only restatement, safe to ship alone.
 - [x] Increment 6 (ADR-176): Changes & release panel —
   `lib/factory/release-evidence.ts` derives the release trail from the
   ANCHOR observations (lineage/review/ci_check_runs/deployment/probe);
@@ -177,6 +200,21 @@ still the working plan of record.)
   production state is **Not Connected** (503 fail-closed probe). Verify
   one real Resend delivery after the env vars exist before any
   unqualified "production ready" claim for alerts in production.
+- [x] Owner directive (2026-08-30, ADR-184): LinkedIn/Indeed results
+  INLINE — built as the env-gated JSearch aggregator adapter (Google's
+  job index, official keyed API, per-result publisher). Registry
+  (`availableBoardSearchAdapters`), resolved catalogue, search route,
+  board picker, save path and alert runner all follow the key in
+  lockstep; unified badges read "via LinkedIn (JSearch)"; the panel's
+  hint states Connected/Not Connected honestly. Scraping stays refused.
+- [ ] **OWNER ACTION to light up inline LinkedIn/Indeed**: create a free
+  RapidAPI account, subscribe to the JSearch API (free plan, ~200
+  requests/month, rapidapi.com → search "JSearch" by OpenWeb Ninja),
+  copy the app key, set `JSEARCH_RAPIDAPI_KEY` in Vercel, redeploy.
+  The board, the inline results and the Connected copy appear on their
+  own — no code change. Then verify one live search shows "via
+  LinkedIn (JSearch)" badges; the first live search is the parser's
+  probe (ADR-184 records why a keyed board cannot be probed sooner).
 - [ ] Owner-supplied credentials would light up: USAJOBS, Adzuna, Jooble,
   Careerjet, Reed, ZipRecruiter (see catalogue notes). All keyless
   general boards worth adapting are live (13); the rest are honest

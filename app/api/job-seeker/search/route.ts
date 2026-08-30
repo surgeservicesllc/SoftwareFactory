@@ -6,8 +6,8 @@ import {
   readBoundedJson,
   requestErrorResponse,
 } from "@/lib/server/http";
-import { SOURCE_CATALOGUE } from "@/lib/job-seeker/board-search/catalogue";
-import { BOARD_SEARCH_ADAPTERS, boardSearchAdapter } from "@/lib/job-seeker/board-search/registry";
+import { resolvedSourceCatalogue } from "@/lib/job-seeker/board-search/catalogue";
+import { availableBoardSearchAdapters, boardSearchAdapter } from "@/lib/job-seeker/board-search/registry";
 import { BoardSearchError, type BoardSearchQuery } from "@/lib/job-seeker/board-search/types";
 import { applyRadius, resolvePlace } from "@/lib/job-seeker/board-search/geo";
 import {
@@ -121,7 +121,10 @@ export async function GET() {
   try {
     await requireActiveOrganization();
     return jsonNoStore({
-      boards: BOARD_SEARCH_ADAPTERS.map((adapter) => ({
+      // The always-on registry plus every credential-gated adapter whose key
+      // this deployment holds — read at request time, so setting the key is
+      // all it takes for the board to appear.
+      boards: availableBoardSearchAdapters().map((adapter) => ({
         key: adapter.key,
         name: adapter.name,
         summary: adapter.summary,
@@ -131,10 +134,12 @@ export async function GET() {
       /*
        * The full researched catalogue: connected boards plus every source
        * that is credential-gated, link-out only, or refused — each with the
-       * honest reason. The picker renders this so nobody has to wonder why
-       * a famous board is not a checkbox.
+       * honest reason, resolved against this deployment's configuration so
+       * a gated source whose key exists reads as connected. The picker
+       * renders this so nobody has to wonder why a famous board is not a
+       * checkbox.
        */
-      sources: SOURCE_CATALOGUE,
+      sources: resolvedSourceCatalogue(),
     });
   } catch (error) {
     const boundary = supabaseBoundaryErrorResponse(error);
@@ -161,7 +166,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const requested = parsed.data.boards ?? BOARD_SEARCH_ADAPTERS.map((adapter) => adapter.key);
+    const requested = parsed.data.boards ?? availableBoardSearchAdapters().map((adapter) => adapter.key);
     const adapters = requested.map((key) => {
       const adapter = boardSearchAdapter(key);
       if (adapter === null) {
@@ -203,7 +208,16 @@ export async function POST(request: Request) {
         for (const hit of withTokens) {
           taggedForUnify.push({
             board: adapter.key,
-            boardName: adapter.name,
+            /*
+             * An aggregator hit names the site that actually hosts the
+             * posting, so the unified card's source badge reads
+             * "LinkedIn — via JSearch" rather than hiding the publisher
+             * behind the aggregator's name. Boards that host their own
+             * postings keep their own name — the board IS the publisher.
+             */
+            boardName: hit.publisher != null && hit.publisher.length > 0
+              ? `${hit.publisher} (${adapter.name})`
+              : adapter.name,
             hit: { job: hit.job, publishedOn: hit.publishedOn, closesOn: hit.closesOn },
             saveToken: hit.saveToken,
           });

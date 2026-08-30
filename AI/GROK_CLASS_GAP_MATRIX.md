@@ -95,19 +95,23 @@ Database and Integration all collapsed into `implementation`, and Deployment
 had no value at all — the DEPLOYMENT stage borrowed `implementation`, so a
 release step was tiered and prompted as though it were writing a feature.
 
-Closed by `lib/sdlc/agent-roster.ts` (ADR-165), which separates two ideas the
-audit had itself conflated. A capability is the kind of thinking a node needs;
-a role is a job with a bounded slice of context and a privilege posture. All
-eleven roles are now named, each with explicit `reads`/`writes` resource
-kinds, a default risk and an approval flag.
+**Closed on `main` by `lib/factory/specialists.ts` (#453).** All eleven roles
+are named there, each mapping to the engine capabilities and lifecycle stages
+it owns, derived only from facts the engine already records. This branch built
+a parallel roster before that landed and removed it rather than leave two
+vocabularies for one idea.
 
-Only `database` and `deployment` became capabilities, because only they behave
-differently — schema work runs STRONG, and a release asks for a verdict rather
-than a proposal. Frontend, Backend and Integration deliberately share
-`implementation`: same reasoning, same tier, same task kind, so a capability
-each would have been a label. What separates them is reach, enforced as data —
-no role but Database may write a migration, and no role but Deployment may
-write a deployment environment.
+What survived is the layer underneath, because `main`'s role system named a
+**Deployment** role over a capability that did not exist. ADR-185 adds
+`database` and `deployment` to `NODE_CAPABILITIES` and gives the DEPLOYMENT
+stage its own, so a release node is no longer tiered and prompted as a feature
+edit. Only those two were added: schema work runs STRONG and a release asks a
+provider for a verdict rather than a proposal, whereas frontend, backend and
+integration are the same reasoning at the same tier against the same task
+kind — a capability each would have been a label that changed nothing, and the
+tests assert those three are absent so the next specialist clears the same
+bar. A further test asserts every capability `main`'s specialists claim is one
+the engine really defines.
 
 ### 3.3 No worktree isolation
 
@@ -146,7 +150,7 @@ begins, and no amount of code moves it.
 1. **Chief of Staff: intent → plan.** The one gap that makes the headline
    promise false today.
 2. ~~**Widen the agent roster** so routing can tell a frontend task from a
-   backend one.~~ Done 2026-08-29 — ADR-165.
+   backend one.~~ Done 2026-08-29 — ADR-185.
 3. **Command centre** as one surface over the run that already exists.
 4. **Autonomy modes** bound to the existing risk policy.
 5. **Worktree isolation** for parallel agents.

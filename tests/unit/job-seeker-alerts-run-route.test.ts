@@ -28,6 +28,7 @@ vi.mock("@/lib/job-seeker/board-search/registry", () => {
   };
   return {
     BOARD_SEARCH_ADAPTERS: [adapter],
+    availableBoardSearchAdapters: () => [adapter],
     boardSearchAdapter: (key: string) => (key === "remotive" ? adapter : null),
     boardSearchKeys: () => ["remotive"],
   };

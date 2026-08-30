@@ -49,6 +49,13 @@ export type BoardSearchHit = Readonly<{
   publishedOn: string | null;
   /** ISO date applications close, when it says. */
   closesOn: string | null;
+  /**
+   * For aggregator boards: the site that actually hosts this posting
+   * ("LinkedIn", "Indeed", …), as the aggregator states it. Absent for
+   * boards that host their own postings — the board IS the publisher there,
+   * and repeating its name would say nothing.
+   */
+  publisher?: string | null;
 }>;
 
 /**

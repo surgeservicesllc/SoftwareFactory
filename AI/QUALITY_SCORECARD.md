@@ -2,6 +2,36 @@
 
 Last reviewed: 2026-08-30
 
+**Addendum, 2026-08-30 latest+8 — inline LinkedIn/Indeed aggregator
+(ADR-184):** board-search-jsearch suite 10 (lockstep gate across
+registry/lookup/catalogue, always-on registry untouched, static row
+names the exact var, keyless direct call refuses without fetching,
+request contract incl. num_pages=1 frugality, publisher/salary/remote
+parsing, limit cap, loud refusal + unknown shape); search-route 26
+(aggregator absent-until-keyed incl. named-board 400, joins the
+fan-out with per-hit publishers and "LinkedIn (JSearch)" unified
+badges); panel 37 (Not Connected hint names JSEARCH_RAPIDAPI_KEY,
+connected hint, badge rendering); catalogue counts 53/28; alerts-run 7
+(registry mock extended). Lint zero warnings, `tsc --noEmit` clean.
+Production build + full vitest run with the Pause/Resume increment's
+combined gates before shipping.
+
+**Addendum, 2026-08-30 latest+7 — Pause/Resume (ADR-183):** runner
+suite 20 (pause finishes the wave in flight and starts nothing, a
+pre-start pause holds everything, absence of the control changes
+nothing); worker-execution suite 36 incl. the full journey on the real
+chain (pause landing at the wave boundary → CANCELLED with pause
+closure note + pause-detailed SKIP, claim empty while held, resume
+claim reuses the three finished inspectors and executes exactly one
+node) and the boundary case (withdrawn/null/non-member refusals, both role fences, unknown
+run answers false); pause route 7 (exact rpc args, pause never
+dispatches, resume wakes through the real binding, wake failure still
+reports the resume, honest 409, non-UUID and cross-origin refused
+pre-database); runs route 9 (controls projected, 42703 deploy-window
+fallback pins both select shapes); workspace 17 (Pause on RUNNING,
+Resume + paused label on held builds, server notes verbatim). Lint
+zero warnings, production build lists the route, `tsc --noEmit` clean.
+
 **Addendum, 2026-08-30 latest+6 — attempt projection + preview
 (ADR-182):** graph-node-detail suite green on the chain with the honest
 pair (unmeasured 0 → null; measured 2 → 2); workflow guards green with

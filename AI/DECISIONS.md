@@ -3506,7 +3506,88 @@ Phase 1A: every panel exists, and the two things not built inline
 (iframe preview, Pause/Resume) are fenced by named policy or missing
 engine support, recorded rather than faked.
 
-## ADR-183 - A role is not a capability, and only two specialists earned capabilities
+
+## ADR-183 - Pause is a graph-level hold; Resume is a re-claim with reuse
+
+Date: 2026-08-30
+
+ADR-182 named Pause/Resume as the last unbuilt run control, blocked on
+missing engine support. This closes it, and the central choice is where
+the pause lives: on the GRAPH, not the run. A run-level flag fails on
+its own success - the paused run closes CANCELLED (void, re-claimable
+by design since ADR-166), so the very next drain would claim the graph
+and resume it unasked. On the graph, the pause is one predicate in
+claim_planned_graph_target_internal (`and g.pause_requested_at is
+null`, 20260830000400 restating the 20260830000200 selector verbatim
+plus that line), and the hold stands until a person lifts it.
+
+Mid-run, the engine polls read_graph_pause_as_worker (service-role,
+boolean only) at each wave boundary: work in flight finishes - nothing
+is killed mid-execution, the paid-for result lands - nothing new
+starts, undispatched nodes close SKIPPED with a pause-specific detail,
+and the run closes CANCELLED with a closure note saying it was paused,
+spending none of the graph's chances. Resume is deliberately NOT new
+machinery: set_graph_pause_as_member(false) plus the launch route's
+existing best-effort worker wake, and the lifecycle result-reuse path
+(ADR-172) makes the next claim pick up from the completed steps
+instead of re-buying them. The behavior suite proves the full journey:
+pause mid-wave, honest close, claim() answering empty while held,
+resume, and a second run that executes only the one node the first run
+never reached. Retry needed no button at all: a re-claim IS the retry,
+and the existing Stop/gate/budget controls already bound it.
+
+The member control is authenticated-only and refuses withdrawn graphs
+(withdrawal is permanent; a pause on it would imply a resume that can
+never come); both directions are idempotent and audited as
+'graph.pause_changed' activity events. The workspace shows Pause on a
+RUNNING claim, Resume plus a "paused" label on a held build, and the
+server's own note or refusal verbatim. The runs listing carries
+pausedAt/withdrawnAt from the same RLS identity read it already made,
+with a 42703 fallback for the deploy window, and the store's pause
+poll answers false on any read failure - a failed poll must not kill
+every organization's drain; the claim predicate still holds the next
+run. Known accepted gap, recorded in BACKLOG: the worker queue
+diagnosis does not yet name "paused"/"withdrawn" as exclusion reasons;
+its own contradiction line covers the window honestly.
+
+
+## ADR-184 - Inline LinkedIn/Indeed results through a keyed aggregator, never a scraper
+
+Date: 2026-08-30
+
+The owner asked for LinkedIn and Indeed results inside the site rather
+than link-outs ("find a way to do it"). The way that exists without
+breaking anything: neither site offers this product a lawful direct
+feed (LinkedIn's search API is partner-only; Indeed closed its
+publisher API; both prohibit scraping, which this repository has twice
+refused and still refuses), but both publish structured job data into
+Google's index, and JSearch (OpenWeb Ninja, RapidAPI) exposes that
+Google for Jobs index over an official keyed API with each result
+naming its publisher. That is exactly the "credentialed integration"
+the registry's LinkedIn paragraph reserved as the one acceptable route.
+
+Design: the adapter (board-search/jsearch.ts) exists to the product
+only while JSEARCH_RAPIDAPI_KEY is configured. The always-on registry
+constant is untouched; `availableBoardSearchAdapters()` adds the gated
+adapter at call time, `resolvedSourceCatalogue()` flips its catalogue
+row from needs_credentials to live in lockstep, and the search route,
+board picker, save path and alert runner all read the available set —
+so an unkeyed deployment never offers a board that would fail (the
+Jobbank lesson), and a keyed one offers it everywhere at once. Each
+aggregator hit carries `publisher`, the per-board rows say "on
+LinkedIn", and the unified badge reads "via LinkedIn (JSearch)" — the
+hosting site is a visible word, not an implication. One request per
+search (num_pages=1), because the free plan is ~200/month.
+
+The parser is pinned to the documented v2 envelope with a fixture; a
+keyed board cannot be probed without the owner's credential, so the
+first live search is the probe and drift surfaces through the same
+per-board failure channel every board uses. What remains owner-only,
+recorded in BACKLOG: create the free RapidAPI subscription and set
+JSEARCH_RAPIDAPI_KEY in Vercel. The catalogue grew to 53 (28 general);
+LinkedIn/Indeed deep link-outs stay — the two paths are complements.
+
+## ADR-185 - A role is not a capability, and only two specialists earned capabilities
 
 - Date: 2026-08-29
 - Status: Accepted
@@ -3544,7 +3625,7 @@ engine support, recorded rather than faked.
   once in SQL, and `tests/unit/graph-stage-mapping-agreement.test.ts` holds
   them to each other over the union of the replayable chain. That test caught
   this change: the two new capabilities had no SQL branch. Migration
-  `20260830000400_specialist_capability_stage_map.sql` adds them in a new file
+  `20260830000500_specialist_capability_stage_map.sql` adds them in a new file
   rather than editing either applied predecessor. It needs no companion enum
   migration — IMPLEMENTATION and DEPLOYMENT have been in `public.sdlc_stage`
   since 20260821000200 — and it changes zero rows today, since both
@@ -3552,7 +3633,7 @@ engine support, recorded rather than faked.
   explicitly. **Not yet applied to hosted.** Gates: lint, typecheck, 5214
   tests, production build.
 
-## ADR-184 - Autonomy is three named modes over the existing controls, and no mode may release
+## ADR-186 - Autonomy is three named modes over the existing controls, and no mode may release
 
 - Date: 2026-08-29
 - Status: Accepted
@@ -3601,7 +3682,7 @@ own. An earlier draft of the roster decision was numbered ADR-150, which
 collided the same way; it is ADR-183 above, and the commit that introduced it
 still names 150.
 
-## ADR-185 - Creating a repository is owner-directed, organization-only, and says what it could not do
+## ADR-187 - Creating a repository is owner-directed, organization-only, and says what it could not do
 
 - Date: 2026-08-30
 - Status: Accepted
