@@ -374,6 +374,13 @@ facets labeled as derived, with unstated postings kept under "Any".
 Increment 4's marks migration was applied to hosted (run 33273330183)
 and production probes verified the deploy of #448.
 
+## 2026-08-30 (night): the Chief of Staff named; the plan read back (ADR-173)
+
+The orchestrator is the engine, named: Build renders its plan — intent
+verbatim, dependency layers from stored edges, specialist assignments,
+QA gates, real parallelism, counted percent — composed read-only from
+the records the engine made.
+
 ## 2026-08-30 (later still): the eleven specialists + command-center evidence (ADR-172)
 
 Roles derived from recorded facts only; Build shows agents beside their

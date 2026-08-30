@@ -300,6 +300,9 @@ describe("the build workspace", () => {
           artifacts: [{ artifactId: "a1", nodeRunId: "n1", nodeKey: "scout", kind: "scout_report", payload: {}, createdAt: "2026-08-30T03:05:00Z" }],
         }));
       }
+      if (typeof url === "string" && url.includes("/api/graphs/edges")) {
+        return Promise.resolve(json({ edges: [{ from: "scout", to: "build-ui-page", reason: "SEQUENCE", detail: "" }] }));
+      }
       if (typeof url === "string" && url.includes("/api/graphs/runs")) {
         return Promise.resolve(json({ runs: [evidenced] }));
       }
@@ -311,6 +314,15 @@ describe("the build workspace", () => {
     const user = userEvent.setup();
     render(<BuildWorkspace />);
     await launch(user);
+
+    // The Chief of Staff plan: intent verbatim, dependency layers from the
+    // stored edges, assignments and the counted percent in the headline.
+    const planPanel = await screen.findByTestId("build-plan");
+    await user.click(within(planPanel).getByText(/Plan — composed by the Chief of Staff/));
+    expect(within(planPanel).getByText("Build me a bakery site")).toBeInTheDocument();
+    expect(within(planPanel).getByText(/scout — Research/)).toBeInTheDocument();
+    expect(within(planPanel).getByText(/build-ui-page — Frontend/)).toBeInTheDocument();
+    expect(screen.getByText(/50% — 1 of 2 steps complete/)).toBeInTheDocument();
 
     // Agents: the specialist role beside the real executor evidence.
     const agents = await screen.findByTestId("build-agents");

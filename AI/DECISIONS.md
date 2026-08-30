@@ -3218,3 +3218,27 @@ from the run's artifacts route only when the disclosure opens), spend
 (the run's own tokens/cost accounting, absent when unmeasured), and a
 Build history card listing finished lifecycle runs with the engine's
 closure notes and links to their evidence.
+
+
+## ADR-173 - The Chief of Staff, named; the plan read back from its records
+
+Date: 2026-08-30
+
+The orchestrator the directive names already existed as machinery: the
+graph engine's compiler converts intent into typed tasks and dependency
+edges, the scheduler executes them dependency-aware and parallel under
+claims, the router assigns providers/models under policy, and the gate +
+verification + iteration loop is the verifier. `lib/factory/chief-of-staff.ts`
+names that orchestrator and gives it one composed, read-only view:
+`composePlan` layers the run's stored edges (Kahn), attaches the ADR-172
+specialists, lists the declared QA gates, counts real parallelism as the
+widest layer, and derives a whole-number percent from counted node states
+(null for an empty plan — never a fake zero of nothing). Edges naming
+nodes the run does not carry are ignored, and a cycle — impossible from
+the compiler — lands in one honest final layer rather than vanishing.
+
+Build's live run card gains the "Plan — composed by the Chief of Staff"
+disclosure (requirements verbatim, numbered dependency layers with
+assignments and gate markers, parallelism and gate counts) and the
+headline now leads with the counted percent. Everything is read back from
+records the engine made; the panel says so in its own caption.

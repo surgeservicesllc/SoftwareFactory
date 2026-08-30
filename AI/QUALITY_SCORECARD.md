@@ -2,6 +2,13 @@
 
 Last reviewed: 2026-08-29
 
+**Addendum, 2026-08-30 night — Chief of Staff plan (ADR-173):**
+chief-of-staff suite 5 tests (diamond layering, verbatim intent +
+assignments + gates + 25% counted, ghost-edge immunity, cycle fallback,
+null-on-empty percent); workspace suite 9 green with the plan-panel flow
+(layers with assignments, 50% headline). Lint zero warnings, production
+build, `tsc --noEmit` clean.
+
 **Addendum, 2026-08-30 later still — specialists + evidence panels
 (ADR-172):** specialists suite 7 tests (catalogue pinned to real
 NODE_CAPABILITIES/SDLC_STAGES, capability precedence, bench-by-key,
