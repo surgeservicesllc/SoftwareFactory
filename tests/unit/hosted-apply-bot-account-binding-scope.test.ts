@@ -1,7 +1,7 @@
 // @vitest-environment node
 
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { parse } from "yaml";
@@ -145,8 +145,19 @@ describe("the hosted bot-account-binding apply scope", () => {
     const probe = steps.find((step) =>
       step.name === "Report what the database already has (scope=probe)"
     );
-    const command = probe?.run ?? "";
+    // The probe's SQL lives in .github/hosted-apply/probe/ (extracted to keep
+    // the workflow under GitHub's 500KB ceiling). The read-only contract
+    // covers the step AND every file it runs, so nothing mutating can hide
+    // in an extracted script.
+    const probeDirectory = resolve(import.meta.dirname, "../../.github/hosted-apply/probe");
+    const probeSql = readdirSync(probeDirectory)
+      .filter((name) => name.endsWith(".sql"))
+      .sort()
+      .map((name) => readFileSync(resolve(probeDirectory, name), "utf8"))
+      .join("\n");
+    const command = `${probe?.run ?? ""}\n${probeSql}`;
     expect(probe?.if).toBe("${{ inputs.scope == 'probe' }}");
+    expect(probe?.run ?? "").toContain(".github/hosted-apply/probe/02.sql");
     expect(command).toContain(
       "public.register_bot(uuid,text,public.bot_provider,text,text,text,text)",
     );

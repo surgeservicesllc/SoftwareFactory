@@ -2,7 +2,21 @@
 
 Last updated: 2026-08-30
 
-## Newest (2026-08-30, latest+1): Activity log (ADR-177)
+## Newest (2026-08-30, latest+2): workflow headroom (ADR-178)
+
+apply-hosted-migrations.yml was 44 bytes under its 490KB guard (GitHub
+hard-refuses at 500KB) — no new scope could be appended. The probe
+step's 33 inline SQL blocks now live in .github/hosted-apply/probe/
+NN.sql (verbatim, dedented; step runs psql -f in the same order):
+489,956 → 440,708 bytes. Re-pointed pins: runbook-counts probedVersions
+reads 01.sql + asserts the workflow runs it; bot-account-binding's
+register_bot/read-only pin scans step + all probe files;
+scope-replay executes 07.sql against the migrated chain. TRAP for the
+next scope author: extraction of the three mutating giants
+(factory-any-model 82KB, all 65KB, bot-account-binding 41KB) is the
+recorded follow-up — never combined with a new scope in one change.
+
+## Older (2026-08-30, latest+1): Activity log (ADR-177)
 
 GET /api/graphs/runs/[graphRunId]/events — graph_events verbatim via
 the RLS tenant client (org filter restated; policies from

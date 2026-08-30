@@ -2,6 +2,14 @@
 
 Last reviewed: 2026-08-30
 
+**Addendum, 2026-08-30 latest+2 — workflow headroom (ADR-178):** probe
+SQL extracted byte-honest (33 files, psql -f, order preserved);
+workflow 49KB under its guard; all 14 workflow-reading suites green
+after re-pointing three pins without weakening (probe-set parity +
+drift guards, read-only scan extended over the extracted files,
+scope-replay still executing 07.sql on the migrated chain). Lint and
+`tsc --noEmit` clean, full vitest green.
+
 **Addendum, 2026-08-30 latest+1 — Activity log (ADR-177):** events
 route suite 4 (verbatim chronological rows with node keys resolved,
 run-level events honestly node-less, non-UUID refused pre-database,

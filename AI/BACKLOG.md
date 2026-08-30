@@ -62,14 +62,18 @@ still the working plan of record.)
   scope `node-attempt-persistence` with signature postflight. Projection
   into the runs feed stays deliberately deferred (a surfaced 0 on
   historical rows would read as measured fact).
-- [ ] **apply-hosted-migrations.yml is 44 bytes under its 490KB guard**
-  (GitHub refuses workflows over 500KB). The next scope CANNOT be added
-  by appending another boilerplate step: factor the repeated
-  DB_URL/apply/repair/postflight scaffolding into a script the steps
-  call, or retire scopes whose migrations are confirmed hosted, before
-  adding one more. The ceiling test in
-  `tests/unit/hosted-apply-graph-protocol-cutover-scope.test.ts` is the
-  guard that catches this — do not raise it.
+- [x] **Workflow headroom** (ADR-178): the probe step's 33 inline SQL
+  blocks extracted verbatim to `.github/hosted-apply/probe/*.sql`
+  (step runs them with `psql -f`, same order, same output); workflow
+  489,956 → 440,708 bytes — 49KB under the 490KB guard. Three pinning
+  suites re-pointed without weakening (probe-set parity + runs-the-file
+  drift guards; the read-only contract now scans the extracted files;
+  scope-replay still executes 07.sql against the migrated chain).
+  Follow-up if headroom runs low again: the three mutating giants
+  (factory-any-model-record-only 82KB, scope=all 65KB,
+  bot-account-binding 41KB) — extract with the same verbatim+re-point
+  discipline, never in the same change as a new scope. The ceiling test
+  stays; do not raise it.
 
 ## Job Search 50-source engine (active owner goal, ADR-163)
 
