@@ -2,7 +2,20 @@
 
 Last updated: 2026-08-30
 
-## Newest (2026-08-30, latest+4): Stop as withdrawal (ADR-180)
+## Newest (2026-08-30, latest+5): autonomy modes derived, fence intact (ADR-181)
+
+lib/factory/autonomy-mode.ts (deriveAutonomyMode + AUTONOMY_MODES with
+exact control patches). Build panel build-autonomy: derives from
+GET /api/projects/[id]/controls; selecting Balanced/Autonomous PATCHes
+the real route ({autonomousMode, maximumAutonomousRisk,
+expectedUpdatedAt}) and the refusal renders verbatim — the route schema
+pins autonomousMode to literal false and enforce_safe_project_controls
+refuses beneath it. DO NOT loosen either: enabling/widening autonomous
+authority is RED (RISK_CLASSIFICATION) and outside the owner-directed
+release rule. The controls effect uses the kickoff-setTimeout pattern
+(react-hooks/set-state-in-effect refuses sync setState in effects).
+
+## Older (2026-08-30, latest+4): Stop as withdrawal (ADR-180)
 
 20260830000200: graphs.withdrawn_at/by/reason + ONE predicate added to
 the verbatim-restated claim_planned_graph_target_internal (both v2
