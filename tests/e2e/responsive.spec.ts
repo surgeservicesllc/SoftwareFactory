@@ -33,6 +33,7 @@ const ROUTES = [
   "/solutions/ai-factory",
   "/solutions/autonomy",
   "/solutions/backlog",
+  "/solutions/build",
   "/solutions/billing",
   "/solutions/bot-manager",
   "/solutions/bot-usage",
@@ -203,6 +204,19 @@ test("/BudgetTracker is gated server-side, and by its own call", async ({ page }
    */
   await page.goto("/BudgetTracker");
   await expect(page).toHaveURL(/\/auth\/sign-in\?next=%2FBudgetTracker/);
+});
+
+test("every Budget Tracker section inherits that gate", async ({ page }) => {
+  /*
+   * The gate moved into `(budget)/BudgetTracker/layout.tsx` when the section
+   * grew its own left navigation and four more routes. This is the test that
+   * proves the inheritance actually reaches a page added later — the same
+   * reason the job-seeker section has one.
+   */
+  for (const section of ["accounts", "transactions", "bills", "import"]) {
+    await page.goto(`/BudgetTracker/${section}`);
+    await expect(page).toHaveURL(/\/auth\/sign-in\?next=%2FBudgetTracker/);
+  }
 });
 
 test("/Job-Search is gated server-side, and by its own call", async ({ page }) => {

@@ -97,17 +97,17 @@ describe("BudgetTrackerConsole", () => {
       "fetch",
       vi.fn(() => new Promise(() => {})),
     );
-    render(<BudgetTrackerConsole />);
-    expect(screen.getByRole("heading", { level: 1, name: "Budget Tracker" })).toBeInTheDocument();
+    render(<BudgetTrackerConsole section="overview" />);
+    expect(screen.getByRole("heading", { level: 1, name: "Overview" })).toBeInTheDocument();
   });
 
   it("keeps the page heading when the load fails", async () => {
     // A blocked state that replaces the whole page removes its h1 along with
     // everything else, exactly when a person most needs to know where they are.
     vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({}, 500)));
-    render(<BudgetTrackerConsole />);
+    render(<BudgetTrackerConsole section="overview" />);
     await screen.findByRole("alert");
-    expect(screen.getByRole("heading", { level: 1, name: "Budget Tracker" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "Overview" })).toBeInTheDocument();
   });
 
   it("names workspace onboarding as a next step rather than a failure", async () => {
@@ -117,14 +117,14 @@ describe("BudgetTrackerConsole", () => {
         jsonResponse({ error: { code: "organization_onboarding_required" } }, 409),
       ),
     );
-    render(<BudgetTrackerConsole />);
+    render(<BudgetTrackerConsole section="overview" />);
     expect(await screen.findByText(/do not have one yet/i)).toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
   it("shows the derived figures once the overview loads", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => jsonResponse(overview)));
-    render(<BudgetTrackerConsole />);
+    render(<BudgetTrackerConsole section="overview" />);
 
     // Assets 10,000.00 less liabilities 3,200.00 is 6,800.00.
     expect(await screen.findByText("$6,800")).toBeInTheDocument();
@@ -134,7 +134,7 @@ describe("BudgetTrackerConsole", () => {
   it("states that nothing refreshes on its own", async () => {
     // There is no bank connection, and the page must not imply one.
     vi.stubGlobal("fetch", vi.fn(async () => jsonResponse(overview)));
-    render(<BudgetTrackerConsole />);
+    render(<BudgetTrackerConsole section="overview" />);
     expect(
       await screen.findByText(/no bank connection, so nothing\s+refreshes on its own/i),
     ).toBeInTheDocument();
@@ -142,7 +142,7 @@ describe("BudgetTrackerConsole", () => {
 
   it("reports credit used against the recorded limit", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => jsonResponse(overview)));
-    render(<BudgetTrackerConsole />);
+    render(<BudgetTrackerConsole section="overview" />);
     // 3,200.00 of a 5,000.00 limit.
     expect(await screen.findByText("64% of limit used")).toBeInTheDocument();
   });
@@ -154,7 +154,7 @@ describe("BudgetTrackerConsole", () => {
       accounts: [{ ...overview.accounts[1], creditLimitCents: null }],
     };
     vi.stubGlobal("fetch", vi.fn(async () => jsonResponse(withoutLimit)));
-    render(<BudgetTrackerConsole />);
+    render(<BudgetTrackerConsole section="overview" />);
     expect(await screen.findByText("No credit limit recorded")).toBeInTheDocument();
     expect(screen.queryByText(/% of limit used/)).not.toBeInTheDocument();
   });
@@ -173,7 +173,7 @@ describe("BudgetTrackerConsole", () => {
       ],
     };
     vi.stubGlobal("fetch", vi.fn(async () => jsonResponse(twoDebts)));
-    render(<BudgetTrackerConsole />);
+    render(<BudgetTrackerConsole section="overview" />);
 
     const firstRanked = () =>
       screen
@@ -189,14 +189,17 @@ describe("BudgetTrackerConsole", () => {
     await waitFor(() => expect(firstRanked()).toContain("Small loan"));
   });
 
-  it("switches sections without losing the heading", async () => {
+  it("titles each section from its own route rather than a tab", async () => {
+    // The section is now decided by the URL and rendered by the left rail's
+    // destination, so the console takes it as a prop instead of owning tab
+    // state. Each section still keeps the page heading.
     vi.stubGlobal("fetch", vi.fn(async () => jsonResponse(overview)));
-    render(<BudgetTrackerConsole />);
-    await screen.findByText("Cash flow");
+    render(<BudgetTrackerConsole section="accounts" />);
 
-    await userEvent.click(screen.getByRole("button", { name: "Accounts" }));
     expect(await screen.findByText("Add an account")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { level: 1, name: "Budget Tracker" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "Accounts" })).toBeInTheDocument();
+    // The old in-page tab strip is gone; the rail is the only section control.
+    expect(screen.queryByRole("button", { name: "Transactions" })).not.toBeInTheDocument();
   });
 
   it("tells someone with no accounts what to do first", async () => {
@@ -206,7 +209,7 @@ describe("BudgetTrackerConsole", () => {
         jsonResponse({ accounts: [], obligations: [], flows: [], recent: [], imports: [] }),
       ),
     );
-    render(<BudgetTrackerConsole />);
+    render(<BudgetTrackerConsole section="overview" />);
     expect(await screen.findByText("No accounts yet")).toBeInTheDocument();
   });
 });

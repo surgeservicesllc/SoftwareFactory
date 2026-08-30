@@ -11,7 +11,7 @@ const root = resolve(import.meta.dirname, "../..");
 const migrationPath =
   "supabase/migrations/20260827000210_contain_legacy_graph_artifact_payloads.sql";
 const exactMigrationHash =
-  "c37a55efe74e9a9b4118924e1b2cbd0378a76f0d98c9747c6c66fffda9697de1";
+  "7697eda24fef53b89ee3c3dbc9b7f7bc0c60ec2f8f0d23c73a7cf607652a1bfc";
 const lineageMigrationPath =
   "supabase/migrations/20260827000200_graph_phase1c_release_lineage.sql";
 const exactLineageMigrationHash =

@@ -2,6 +2,96 @@
 
 Last triaged: 2026-08-29
 
+## AI Factory → autonomous build platform (task #61, owner directive 2026-08-30)
+
+The audit and increment plan live in `AI/AI_FACTORY_GAP_ANALYSIS.md`.
+(The first /goal registration exceeded the 4,000-char limit; a trimmed
+/goal was later registered and its evaluator is armed. This section is
+still the working plan of record.)
+
+- [x] Increment 1 (ADR-171): `/solutions/build` — conversational front
+  door; prompt → full_lifecycle launch → live watched run (counted
+  progress, SDLC-ordered stages, OPEN-gate call to decide, closure notes,
+  resume list). Nav seat "Build" first after Overview.
+- [x] Increment 5 (ADR-173): the Chief of Staff named over the real
+  compiler/scheduler/router; `composePlan` layers stored edges with
+  specialist assignments, gates and counted percent; Build gains the
+  Plan disclosure and a percent-led headline.
+- [x] Increment 2 (ADR-175): plan approval before launch —
+  `composeLaunchProposal` reads the full_lifecycle template back through
+  composePlan; submitting drafts the proposal (goal verbatim, layers
+  with specialists, the three HUMAN gates named, template jobs under a
+  disclosure) and POSTs nothing; Approve & launch is the old submit;
+  Edit withdraws keeping the words. Acceptance criteria stay the run's
+  own first-stage artifacts, never invented client-side.
+- [x] Increment 3a (shipped with increment 1): inline gate decisions —
+  every OPEN human gate on the watched run renders the shared
+  GateDecision control (same wording, same route, same evidence rules as
+  the runs panel); a decision re-reads the live feed.
+- [x] Increment 3b, Stop half (ADR-180): withdrawal —
+  20260830000200 adds graphs.withdrawn_* + the one claim predicate;
+  withdraw_graph_as_member (authenticated definer, RUNNING refusal,
+  idempotent, audited); POST /api/graphs/[graphId]/withdraw; Build
+  shows Stop only where it is true (waiting card + non-RUNNING active
+  rows). Pause/Resume still need engine support — deliberately unbuilt
+  rather than dead. Hosted apply: dispatch scope=withdraw-graph after
+  merge.
+- [x] Increment 6 (ADR-176): Changes & release panel —
+  `lib/factory/release-evidence.ts` derives the release trail from the
+  ANCHOR observations (lineage/review/ci_check_runs/deployment/probe);
+  Build links files-changed/diffs to the PR's files tab, shows each
+  check's real conclusion, deployment state/URL, and production health.
+  Open still: an inline preview.
+- [x] Increment 8 (ADR-182): measured attempt projected —
+  20260830000300 restates list_graph_runs with attempt >= 1 as itself
+  and the unmeasured 0 as null; Build Agents rows say "attempt N" for
+  N >= 2; graph-node-detail proves both projections on the chain.
+  Preview resolved by design: the app's own anti-framing headers fence
+  an inline iframe (weakening them is RED), so the deployment URL is
+  the preview, labeled as such. Hosted apply: dispatch
+  scope=node-attempt-projection after merge.
+- [x] Increment 7 (ADR-177): Activity log — GET
+  /api/graphs/runs/[graphRunId]/events reads graph_events verbatim
+  (RLS tenant client, newest-500 bound with admitted truncation, node
+  keys resolved via node_runs→graph_nodes); Build's lazy log panel
+  renders time/type/node/detail monospace. "Terminal/logs" =
+  the engine's recorded events, never invented console output.
+- [x] Increment 4 (ADR-172): the eleven specialists as a first-class
+  catalogue (`lib/factory/specialists.ts`) bound to real engine
+  capabilities/stages, the engineering bench told apart by the node's
+  own key; Build gains the command-center evidence panels — Agents
+  (specialist beside real executor/provider/model/latency), Independent
+  QA (graph_verifications verdicts), lazy Artifacts (real route), spend
+  accounting, and Build history with closure notes and evidence links.
+- [x] Increment 5 (ADR-181): autonomy modes over the real Phase 1D
+  controls — deriveAutonomyMode + AUTONOMY_MODES (exact patches +
+  invariants); Build's Autonomy panel derives from GET controls and a
+  stronger-mode selection is a real PATCH whose refusal (schema pins
+  autonomousMode:false; the trigger refuses beneath) renders verbatim.
+  Opening the fence itself is RED and stays with the owner; nothing
+  here widens autonomous authority.
+- [x] Task #56 (ADR-174): node_runs.attempt persisted —
+  20260830000100 replaces `record_node_state_as_worker` with the
+  attempt-carrying eight-parameter definer (retry = real second RUNNING
+  with its own event; regressions refused; old callers resolve; ACLs
+  restated service_role-only); the worker passes the measured attempt on
+  every transition with a PGRST202 deploy-window fallback; hosted-apply
+  scope `node-attempt-persistence` with signature postflight. Projection
+  into the runs feed stays deliberately deferred (a surfaced 0 on
+  historical rows would read as measured fact).
+- [x] **Workflow headroom** (ADR-178): the probe step's 33 inline SQL
+  blocks extracted verbatim to `.github/hosted-apply/probe/*.sql`
+  (step runs them with `psql -f`, same order, same output); workflow
+  489,956 → 440,708 bytes — 49KB under the 490KB guard. Three pinning
+  suites re-pointed without weakening (probe-set parity + runs-the-file
+  drift guards; the read-only contract now scans the extracted files;
+  scope-replay still executes 07.sql against the migrated chain).
+  Follow-up if headroom runs low again: the three mutating giants
+  (factory-any-model-record-only 82KB, scope=all 65KB,
+  bot-account-binding 41KB) — extract with the same verbatim+re-point
+  discipline, never in the same change as a new scope. The ceiling test
+  stays; do not raise it.
+
 ## Job Search 50-source engine (active owner goal, ADR-163)
 
 - [x] Increment 1: six probed adapters (Remotive, Remote OK, Jobicy,
@@ -11,21 +101,98 @@ Last triaged: 2026-08-29
   honest statuses; route `unified` block + filter params; panel rework
   (unified cards with source badges, filter chips + Clear All + AND/OR,
   grouped source picker, sort, NEW badge).
-- [ ] Increment 2: `job_seeker_saved_searches` (+ alert preferences,
-  seen-jobs ledger, delivery ledger) migration with forced RLS and audit
-  events; CRUD routes; Save/Edit/Duplicate/Delete/Run Now/Pause UI; AI
-  match score display on result cards from the verified Career Profile via
-  the existing scoring chain.
-- [ ] Increment 3: alerts engine on supported scheduled infrastructure
-  (dedupe → filter → score → save → email), env-gated email adapter that
-  shows **Not Connected** without credentials, delivery tracking, and the
-  never-repeat-per-user/job/search guarantee enforced by the ledger.
-- [ ] E2E acceptance: real end-to-end pass over auth/RLS, search, filters,
-  saved searches, dedup, alerts, email, mobile UX before any
-  "production ready" claim.
+- [x] Increment 2 (schema landed via ADR-141's 20260828000400, applied to
+  hosted 2026-08-29): saved-search CRUD route + panel section
+  (Save/Update-to-current/Duplicate/Delete/Run Now); AI match scores on
+  every unified card from the recorded-facts evaluator with reasons, gaps,
+  qualified accent, best-match sort, and a minimum-score filter; per-board
+  search metering events feeding the discovery credit meter.
+- [x] Increment 2 remainder (superseded by increment 3): the cadence UI
+  shipped with the delivery engine, gated behind the connected check;
+  the seen-jobs/delivery ledger arrived in 20260829000300.
+- [x] Increment 3 (code merged #437, schema applied to hosted 2026-08-29
+  run 33263020948 with green postflight): alert engine as a Vercel Cron
+  route over two service_role-only definer functions; pure dedupe →
+  saved filters → score → never-repeat → email-composition core;
+  env-gated Resend adapter; delivery ledger with the never-repeat UNIQUE
+  constraint, append-only by trigger; ASAP/Daily/Weekly cadence controls
+  that render **Not Connected** and refuse writes until RESEND_API_KEY,
+  JOB_ALERT_EMAIL_FROM and CRON_SECRET exist (ADR-164). Remaining to
+  light it up: the owner sets those three env vars in Vercel and
+  redeploys — nothing else.
+- [x] E2E acceptance (everything automatable): journey workflow run
+  `33266060493` on main `3cd6150` — full 178-migration chain on a real
+  local Supabase stack (real Postgres/PostgREST/GoTrue), production Next
+  build, real-browser fake-data journey (sign-in → onboarding → every
+  section → live board search → save → found again after reload) —
+  **success**, the lane's first green since 08-22 (unblocked by
+  ADR-165). CI browser/accessibility shards green on every merged head;
+  layout suites 1,387 passed locally.
+- [x] E2E acceptance, email leg (ADR-166): the journey lane now proves
+  the send itself — the mailer gained a dev-stack SMTP transport, the
+  lane wires the local Mailpit sink, and the spec's alert test walks
+  save-search → cadence → engine run as the scheduler → a real SMTP
+  delivery read back from Mailpit (facts + never-repeat promise in the
+  body) → second run leaves exactly one message. Below the send,
+  `job-seeker-alert-engine.behavior.test.ts` (11 real-SQL tests) plus a
+  service_role drive on the Docker stack cover due-ness, the ledger, and
+  the definer boundary.
+- [x] Increment 4 (ADR-167): personal marks — favorite, hide, viewed —
+  on `job_seeker_result_marks` (20260829000400, forced RLS, own-row
+  policies, service_role revoked, no update path) via
+  `/api/job-seeker/search/marks`; panel star/Hide/Viewed controls that
+  render only after the person's real marks load, "hidden by you"
+  counted apart from "hidden by your filters", Show hidden, Favorites
+  only; plus the title-derived seniority facet (`deriveSeniority`,
+  seven levels, most-senior-wins, labeled "from the job title") wired
+  through route, panel, saved-search schema and the alert engine.
+  Hosted apply scope `job-seeker-result-marks` added to the workflow
+  (step + options entry) — applied to hosted (run 33273330183, postflight
+  green) after #448 merged.
+- [x] Increment 5 (ADR-168): the last three filter gaps closed without a
+  fake — location + radius over an offline GeoNames-derived city index
+  (`geo.ts` + `data/cities.json`, CC BY 4.0 attribution; server-side
+  haversine; remote/unresolvable kept and counted; unknown centre =
+  "distance not applied" with the reason; saved radius honored by the
+  alert engine via an injected refinement); title-derived marketing
+  specialty (12 disciplines) and posting-text-derived industry (11
+  industries), both labeled as derived, wired through route, panel,
+  saved-search schema and alerts.
+- [x] Owner request (2026-08-29 night, ADR-169): LinkedIn and Indeed
+  wired as deep link-outs — the current search, place, radius, posted
+  date, work model, seniority and salary floor translated into each
+  site's own URL parameters; the two chips sort first and say "· your
+  filters". A live adapter stays impossible without violating their
+  terms (LinkedIn API partner-only; Indeed publisher API closed), which
+  the goal forbids; partner credentials would enable one behind env
+  vars like the keyed boards.
+- [x] Owner request (2026-08-30, ADR-170): LinkedIn + Indeed primary —
+  "Search directly on" row beside the Search button, deep links live as
+  the person types; US ZIP codes resolve in the radius filter via the
+  GeoNames postal set (41,488 ZIPs, server-only index), shown as
+  "City, ST 78701" in the radius report. Journey acceptance re-proved
+  green on main 9a73e12 (run 33285610004).
+- [ ] Production email delivery: owner-gated on RESEND_API_KEY,
+  JOB_ALERT_EMAIL_FROM, CRON_SECRET in Vercel — the alert path's honest
+  production state is **Not Connected** (503 fail-closed probe). Verify
+  one real Resend delivery after the env vars exist before any
+  unqualified "production ready" claim for alerts in production.
 - [ ] Owner-supplied credentials would light up: USAJOBS, Adzuna, Jooble,
-  Careerjet, Reed, ZipRecruiter (see catalogue notes). The Muse is the
-  strongest next live-adapter candidate (public API, no key needed).
+  Careerjet, Reed, ZipRecruiter (see catalogue notes). All keyless
+  general boards worth adapting are live (13); the rest are honest
+  link-outs.
+
+## Migration chain under Supabase CLI ≥ 2.116 (2026-08-29, ADR-165)
+
+- [x] Root cause of the journey lanes failing since 08-23: CLI 2.116.0's
+  local stack (postgres 17.6.1.165) seeds hosted-style default function
+  privileges, and no CLI wraps a migration file in one transaction.
+  Fixed in the chain itself: `supabase/roles.sql` collapses the default
+  ACLs before migrations (no-op on older CLIs), 20260822000850 accepts
+  the hosted-defaults clean-replay input (sha pins moved with it), and
+  20260827000210 opens its transaction explicitly. Full 178-migration
+  chain replayed end to end in Docker on 17.6.1.165. Lanes stay on
+  floating `supabase@2` so the daily run doubles as drift detection.
 
 ## Exact Blackstone Supabase Auth bootstrap (2026-08-28, ADR-160)
 
@@ -191,8 +358,8 @@ deferrals, in the order they become worth doing once money moves:
   the month's launch usage but is gated by command budgets, not the plan
   quota. Pricing the command surface needs a decision about whether a
   command's implicit graph is a launch or an overhead.
-- **`node_runs.attempt` bridge** (task #56) is unrelated to billing but
-  queued behind the same release for migration-ordering reasons.
+- **`node_runs.attempt` bridge** (task #56): shipped 2026-08-30 as
+  20260830000100 (ADR-174); no longer queued here.
 
 ## One graph stranded behind an undecidable gate (2026-08-25, needs an owner call)
 

@@ -7,7 +7,6 @@ import {
   readBoundedJson,
   requestErrorResponse,
 } from "@/lib/server/http";
-import { AUTONOMY_MODES, controlsForMode, modeForControls } from "@/lib/autonomy/modes";
 import { supabaseBoundaryErrorResponse } from "@/lib/supabase/http";
 import { assertSameOriginRequest } from "@/lib/supabase/request";
 import { requireActiveOrganization } from "@/lib/supabase/tenant";
@@ -47,23 +46,7 @@ const autonomySchema = z.object({
   reason: z.string().trim().max(400).optional(),
 }).strict();
 
-/*
- * One named choice instead of eleven fields. The preset is expanded here
- * rather than in the browser so a client cannot compose a combination no mode
- * produces and have it stored under a mode's name; the expansion then goes
- * through the same owner-only, reason-carrying RPC as any other change.
- */
-const modeSchema = z.object({
-  control: z.literal("mode"),
-  mode: z.enum(AUTONOMY_MODES),
-  reason: z.string().trim().max(400).optional(),
-}).strict();
-
-const controlsSchema = z.discriminatedUnion("control", [
-  killSwitchSchema,
-  autonomySchema,
-  modeSchema,
-]);
+const controlsSchema = z.discriminatedUnion("control", [killSwitchSchema, autonomySchema]);
 
 type ControlsRow = {
   organization_id: string;
@@ -76,35 +59,20 @@ type ControlsRow = {
 };
 
 function shapeControls(row: ControlsRow) {
-  const actions = {
-    plan: row.auto_plan,
-    code: row.auto_code,
-    test: row.auto_test,
-    repair: row.auto_repair,
-    review: row.auto_review,
-    approve: row.auto_approve,
-    merge: row.auto_merge,
-    deploy: row.auto_deploy,
-    rollback: row.auto_rollback,
-  };
   return {
     autonomousMode: row.autonomous_mode,
     maximumAutonomousRisk: row.maximum_autonomous_risk.toUpperCase(),
-    /*
-     * Null where the stored combination matches no preset. The interface shows
-     * that as Custom — telling an operator who hand-enabled `deploy` that they
-     * are in "Autonomous" would claim a safety story they stepped outside of.
-     */
-    mode: modeForControls({
-      autonomousMode: row.autonomous_mode,
-      maximumAutonomousRisk: (row.maximum_autonomous_risk.toUpperCase() === "YELLOW"
-        ? "YELLOW"
-        : row.maximum_autonomous_risk.toUpperCase() === "RED"
-          ? "RED"
-          : "GREEN"),
-      actions,
-    }),
-    actions,
+    actions: {
+      plan: row.auto_plan,
+      code: row.auto_code,
+      test: row.auto_test,
+      repair: row.auto_repair,
+      review: row.auto_review,
+      approve: row.auto_approve,
+      merge: row.auto_merge,
+      deploy: row.auto_deploy,
+      rollback: row.auto_rollback,
+    },
   };
 }
 
@@ -158,31 +126,7 @@ export async function POST(request: Request) {
       return jsonNoStore({ killSwitchActive: row.kill_switch_active });
     }
 
-    /*
-     * A mode resolves to the same eleven values an explicit change sends, so
-     * both paths land in one RPC call and one audit row.
-     */
-    const body =
-      parsed.data.control === "mode"
-        ? (() => {
-            const preset = controlsForMode(parsed.data.mode);
-            return {
-              autonomousMode: preset.autonomousMode,
-              maximumAutonomousRisk: preset.maximumAutonomousRisk.toLowerCase(),
-              autoPlan: preset.actions.plan,
-              autoCode: preset.actions.code,
-              autoTest: preset.actions.test,
-              autoRepair: preset.actions.repair,
-              autoReview: preset.actions.review,
-              autoApprove: preset.actions.approve,
-              autoMerge: preset.actions.merge,
-              autoDeploy: preset.actions.deploy,
-              autoRollback: preset.actions.rollback,
-              reason: parsed.data.reason,
-            };
-          })()
-        : parsed.data;
-
+    const body = parsed.data;
     const { data, error } = await client
       .rpc("set_organization_autonomy_controls", {
         p_organization_id: activeOrganization.id,

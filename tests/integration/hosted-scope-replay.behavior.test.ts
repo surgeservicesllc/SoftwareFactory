@@ -184,16 +184,23 @@ describe("the workflow's post-cutover surgical-scope fence", () => {
      * against a database where every migration has just been applied: every
      * row must come back present.
      */
-    const query = /psql "\$DB_URL" -v ON_ERROR_STOP=1 -q -c "\r?\n(\s*with lifecycle\(kind[\s\S]*?);"/
-      .exec(workflow);
-    expect(query, "the scope=probe step no longer carries the lifecycle query").not.toBeNull();
-    expect(query![1]).toContain(
+    // The probe's SQL lives in .github/hosted-apply/probe/ (extracted to keep
+    // the workflow under GitHub's 500KB ceiling); the workflow must still run
+    // the exact file this test executes, or the two could drift apart.
+    expect(workflow, "the scope=probe step no longer runs the lifecycle query file")
+      .toContain("-f .github/hosted-apply/probe/08.sql");
+    const lifecycleSql = await readFile(
+      resolve(repositoryRoot, ".github/hosted-apply/probe/08.sql"),
+      "utf8",
+    );
+    expect(lifecycleSql).toContain("with lifecycle(kind");
+    expect(lifecycleSql).toContain(
       "('body',     'claim_planned_graph_v2',      'protocol version 2 is required')",
     );
-    expect(query![1]).not.toContain("('body',     'claim_planned_graph',");
+    expect(lifecycleSql).not.toContain("('body',     'claim_planned_graph',");
 
     const rows = (await db.query<{ kind: string; object: string; present: boolean }>(
-      query![1].replace(/^ {12}/gm, ""),
+      lifecycleSql,
     )).rows;
     expect(rows.length).toBe(14);
     expect(
@@ -201,6 +208,35 @@ describe("the workflow's post-cutover surgical-scope fence", () => {
       "every migration has been applied, so the probe reporting any of these absent means the "
         + "probe is asking the wrong question — and an owner reading it would apply DDL twice.",
     ).toEqual([]);
+  });
+
+  it("executes every extracted probe file against the migrated database", async () => {
+    /*
+     * Run 33297041401 is why this exists: an extraction that mangles even one
+     * probe file fails only at a production dispatch, because nothing else
+     * ever executes the files. So every file runs here, against the fully
+     * migrated chain — a syntax error, a swallowed shell fragment, or a
+     * reference to an object the chain does not create fails this test
+     * instead of a dispatch. The hosted ledger schema is stubbed because the
+     * chain applies migrations directly rather than through the supabase CLI.
+     */
+    await db.exec(`
+      create schema if not exists supabase_migrations;
+      create table if not exists supabase_migrations.schema_migrations (version text primary key);
+    `);
+    const probeDirectory = resolve(repositoryRoot, ".github/hosted-apply/probe");
+    const files = (await readdir(probeDirectory)).filter((name) => name.endsWith(".sql")).sort();
+    expect(files.length).toBe(40);
+    for (const file of files) {
+      // The workflow must run the exact file this test proves executable.
+      expect(workflow).toContain(`-f .github/hosted-apply/probe/${file}`);
+      const sql = await readFile(resolve(probeDirectory, file), "utf8");
+      try {
+        await db.exec(sql);
+      } catch (error) {
+        throw new Error(`probe file ${file} does not execute: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
   });
 
 });

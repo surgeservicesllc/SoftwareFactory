@@ -476,6 +476,7 @@ describe("a factory step page", () => {
     const artifactId = "b0000000-0000-4000-8000-000000000009";
     const note = "The gate is approved. The executor is Not Connected, so no worker was woken.";
     const intervalSpy = vi.spyOn(window, "setInterval");
+    const clearSpy = vi.spyOn(window, "clearInterval");
     stubFetch({
       runs: [held],
       runsAfterGate: [approvedHeld],
@@ -502,15 +503,25 @@ describe("a factory step page", () => {
     );
 
     const approve = await screen.findByRole("button", { name: "Approve" });
-    const intervalCallsBeforeGate = intervalSpy.mock.calls.filter(([, delay]) => delay === 15_000).length;
     await user.click(approve);
 
     expect(await screen.findByText("Gate approved — executor Not Connected")).toBeInTheDocument();
     expect(screen.getByText(note)).toBeInTheDocument();
     expect(screen.getByText(/Automatic continuation polling is off/i)).toBeInTheDocument();
     expect(screen.queryByText("Gate approved — waiting for continuation")).not.toBeInTheDocument();
-    expect(intervalSpy.mock.calls.filter(([, delay]) => delay === 15_000))
-      .toHaveLength(intervalCallsBeforeGate);
+    // The invariant is that no live-refresh poll is left RUNNING once the
+    // notice shows. The effect legitimately re-registers its interval when a
+    // dependency's identity changes mid-flight, so counting setInterval calls
+    // races React's scheduling; every registered handle being cleared again
+    // is the scheduling-independent form of "polling is off".
+    const registeredPolls = intervalSpy.mock.results
+      .filter((_, index) => intervalSpy.mock.calls[index][1] === 15_000)
+      .map((result) => result.value);
+    const clearedHandles = clearSpy.mock.calls.map(([handle]) => handle);
+    for (const handle of registeredPolls) {
+      expect(clearedHandles).toContain(handle);
+    }
+    clearSpy.mockRestore();
     intervalSpy.mockRestore();
   });
 

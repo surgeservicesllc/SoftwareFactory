@@ -15,31 +15,30 @@ type QueryClient = Awaited<ReturnType<typeof import("@/lib/supabase/server").cre
 export type EvaluationInputs = Readonly<{
   profile: Parameters<typeof evaluateJob>[0];
   preferences: Parameters<typeof evaluateJob>[1];
+  /**
+   * Whether a profile row actually exists. The facts above default to empty
+   * when it does not, which scores honestly (all gaps) — but a caller that
+   * would present scores computed over nothing can use this to say
+   * "no profile recorded" instead.
+   */
+  profileRecorded: boolean;
 }>;
 
-/** One load per request; every posting is evaluated against the same facts. */
-export async function loadEvaluationInputs(
-  client: QueryClient,
-  organizationId: string,
-): Promise<EvaluationInputs> {
-  const [{ data: profileRow }, { data: preferencesRow }] = await Promise.all([
-    client
-      .from("job_seeker_profiles")
-      .select("skills, technologies, industries, employment_history, salary_target, location, work_arrangement, open_to_relocation")
-      .eq("organization_id", organizationId)
-      .maybeSingle(),
-    client
-      .from("job_seeker_preferences")
-      .select("target_titles, compensation_minimum, locations, work_arrangements, industries, exclusions, qualification_threshold")
-      .eq("organization_id", organizationId)
-      .maybeSingle(),
-  ]);
-
+/**
+ * Column-shaped rows to evaluator facts, shared by every caller that reads
+ * the profile through a different transport (the RLS client here, the alert
+ * engine's definer boundary elsewhere). One mapping, or the facts drift.
+ */
+export function toEvaluationInputs(
+  profileRow: Record<string, unknown> | null,
+  preferencesRow: Record<string, unknown> | null,
+): EvaluationInputs {
   const profile = (profileRow ?? {}) as Record<string, unknown>;
   const preferences = (preferencesRow ?? {}) as Record<string, unknown>;
   const history = (profile.employment_history ?? []) as Array<{ title: string; summary?: string; highlights?: string[] }>;
 
   return {
+    profileRecorded: profileRow !== null,
     profile: {
       skills: (profile.skills ?? []) as string[],
       technologies: (profile.technologies ?? []) as string[],
@@ -61,6 +60,29 @@ export async function loadEvaluationInputs(
       qualificationThreshold: (preferences.qualification_threshold ?? 80) as number,
     },
   };
+}
+
+/** One load per request; every posting is evaluated against the same facts. */
+export async function loadEvaluationInputs(
+  client: QueryClient,
+  organizationId: string,
+): Promise<EvaluationInputs> {
+  const [{ data: profileRow }, { data: preferencesRow }] = await Promise.all([
+    client
+      .from("job_seeker_profiles")
+      .select("skills, technologies, industries, employment_history, salary_target, location, work_arrangement, open_to_relocation")
+      .eq("organization_id", organizationId)
+      .maybeSingle(),
+    client
+      .from("job_seeker_preferences")
+      .select("target_titles, compensation_minimum, locations, work_arrangements, industries, exclusions, qualification_threshold")
+      .eq("organization_id", organizationId)
+      .maybeSingle(),
+  ]);
+  return toEvaluationInputs(
+    profileRow as Record<string, unknown> | null,
+    preferencesRow as Record<string, unknown> | null,
+  );
 }
 
 export type RecordableJob = Readonly<{

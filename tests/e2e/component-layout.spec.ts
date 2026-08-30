@@ -213,6 +213,7 @@ const CASES = [
   "bot-usage",
   "billing",
   "trail",
+  "build",
   "job-seeker",
   "budget-tracker",
   "job-search",
@@ -582,7 +583,7 @@ for (const layoutCase of CASES) {
  * The global header, signed in.
  *
  * The rest of the browser suite browses signed out, so the owner's specified
- * header — the three products, then the account controls — had no coverage in a
+ * header — the two products, then the account controls — had no coverage in a
  * real browser at all. This reads the rendered entries rather than the module
  * that supplies them, which is the point: the wiring is the instruction, and a
  * unit test importing the same constant cannot catch a header that stops
@@ -598,6 +599,9 @@ test("the signed-in header names the three products and nothing else", async ({ 
   const primary = page.getByRole("navigation", { name: "Primary" });
   await expect(primary).toBeVisible();
 
+  // Budget Tracker joined the header as the third product on 2026-08-29;
+  // its addition shipped without this expectation moving, which made the
+  // base branch red. The claim stays exact: these products, nothing else.
   await expect(primary.getByRole("link")).toHaveText([
     "Software Factory",
     "Job Search",
@@ -612,11 +616,6 @@ test("the signed-in header names the three products and nothing else", async ({ 
     "href",
     "/JobSearch",
   );
-  /*
-   * The capitalised path is the assertion, not a detail. Next routes are
-   * case-sensitive, so `/budgettracker` is a 404 — a header link spelled the
-   * lowercase way would look right and go nowhere.
-   */
   await expect(primary.getByRole("link", { name: "Budget Tracker" })).toHaveAttribute(
     "href",
     "/BudgetTracker",

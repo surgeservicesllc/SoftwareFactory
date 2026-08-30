@@ -2876,7 +2876,637 @@ Use this append-only log for decisions that constrain future implementation. Cha
   "Company<br>⚲ Place" convention split honestly). Thirteen live boards;
   the catalogue grew to 52 with the goal's 25+25 floor intact.
 
-## ADR-165 - A role is not a capability, and only two specialists earned capabilities
+## ADR-149 - An undated trailing block is a plan, not history
+
+- Date: 2026-08-29
+- Status: Accepted
+- Decision: The spreadsheet importer carries a date forward only for a row
+  that sits *between* dated rows. Every row after the last dated row is
+  counted, reported and left out.
+- Consequence: A household ledger kept as posted-history-then-forward-plan
+  imports as history only. In the workbook this was built against, the previous
+  behaviour dated 914 planned rows to one day and invented $1.07M of activity in
+  a single month, which then dominated every chart drawn from it — while every
+  individual row looked plausible.
+- Consequence: "No date" is reported rather than guessed, consistent with the
+  rest of the importer: a row it cannot read is a counted skip, never a $0.00
+  row that looks like data.
+
+## ADR-150 - The Budget Tracker owns its navigation, in its own route group
+
+- Date: 2026-08-29
+- Status: Accepted
+- Decision: `/BudgetTracker` lives in a `(budget)` route group with its own
+  layout and shell. It does not reuse `AppShell`, `lib/navigation` or the Job
+  Seeker's navigation, and a test asserts that against the import lines.
+- Consequence: The route group changes no URL — `/BudgetTracker` is unchanged —
+  but the section no longer inherits `(portal)`'s chrome, whose sidebar lists
+  control-plane destinations. Before this, the rail beside a household's
+  finances was wayfinding for a different product.
+- Consequence: The global header stays above the shell. It moves a person
+  *between* products; the left rail moves them inside one. Dropping it would
+  strand anyone who arrived here and wanted the factory next.
+
+
+- Addendum (same day, increment 2): every unified card is now scored
+  server-side by the existing recorded-facts evaluator — one profile load
+  per search, reasons and gaps attached to every number, `match: null`
+  with a stated basis when no Career Profile exists, and a minimum-score
+  filter that is refused (422) rather than silently ignored in that state.
+  Saved searches became real on ADR-141's table: bounded-jsonb CRUD under
+  double ownership filtering plus forced RLS, run-now recording
+  `last_run_at` as an observation, duplicate names answered 409, and
+  credential-shaped values refused before persistence. The search route
+  now writes one metering event per board queried into
+  `job_seeker_search_events` — the write that makes ADR-141's credit
+  meter a measurement — and its "results are never stored" doctrine
+  paragraph was rewritten to say exactly that. Alert cadence stays
+  deliberately unexposed until a delivery engine exists.
+
+## ADR-164 - The alert engine crosses one definer boundary and fails closed everywhere else
+
+- Context: saved-search alerts need a system actor — something no signed-in
+  request drives — that reads every active alert, runs its search, scores
+  against the owner's recorded profile, emails what is new, and never emails
+  the same person the same job for the same search twice. The pinned
+  service-role grants contract forbids handing that actor table access, and
+  the repository forbids controls wired to nothing.
+- Decision: the engine's data path is two SECURITY DEFINER functions
+  (20260829000300), executable by service_role and revoked from anon and
+  authenticated: `list_due_job_seeker_alerts` returns due alerts with the
+  stored query, the recipient, exactly the evaluator's profile/preference
+  facts (never whole rows), and the search's already-delivered URLs;
+  `record_job_seeker_alert_scan` bumps `last_scanned_at` and inserts ledger
+  rows with ON CONFLICT DO NOTHING against the UNIQUE
+  (organization, person, search, job URL) constraint — the never-repeat rule
+  as schema, enforced even against engine bugs. The ledger is append-only by
+  trigger and readable by its owner under forced RLS. Due-ness lives in SQL
+  (asap ~ hourly, daily ~ 23h, weekly ~ 6d18h from last_scanned_at), so an
+  empty scan still spends the window and cadence cannot drift from data.
+  The runner is a Vercel Cron route guarded by the platform's own
+  CRON_SECRET bearer (timing-safe compare, 503 while unset), its decisions
+  are the pure `lib/job-seeker/alerts.ts` core (dedupe → saved filters →
+  score → minimum-score → delivered-set exclusion → email composition),
+  and mail goes through a raw-REST Resend adapter gated on RESEND_API_KEY +
+  JOB_ALERT_EMAIL_FROM. Until email AND scheduler are configured, the UI
+  shows **Not Connected**, cadence writes answer 409 naming the missing
+  pieces, and the runner declines to scan rather than burn cadence windows
+  on mail that cannot exist. A saved minimum score with no recorded profile
+  sends nothing — no scores exist, so nothing can clear the bar.
+- Bounds: the engine emails only people who turned an alert on, only about
+  their own saved search, only jobs it can link directly, and processes a
+  bounded batch per invocation. The migration ships behind the scope-gated
+  hosted-apply workflow (`job-seeker-alert-engine`) with a postflight that
+  proves the ledger forces RLS and the definer pair is service_role-only.
+
+
+## ADR-165 - The migration chain replays under both Supabase CLI generations
+
+Date: 2026-08-29
+
+Context: every scheduled local-stack run of the job-seeker journey lane had
+failed since 2026-08-23 at `20260822000850`'s preflight ("hosted function
+identity, catalog, ACL cohort, or overload drifted"). Reproduction in a
+local Docker stack isolated the variable: supabase CLI 2.115.0 pins
+supabase/postgres 17.6.1.159 and initializes a local database with no
+`postgres` default ACLs in `public` (objects carry exactly the grants
+migrations state); CLI 2.116.0 — released between the last green run
+(08-22, 2.115.0 in its log) and the first failure — pins 17.6.1.165, whose
+bootstrap seeds hosted-style default privileges (functions created by
+`postgres` in `public` default-grant EXECUTE to anon, authenticated, and
+service_role). Separately, neither CLI wraps a migration file in one
+transaction, so `20260827000210`'s top-of-file `LOCK TABLE` (from 08-27,
+never yet replayed by any journey-lane CLI) failed with 25P01 under both.
+Hosted is unaffected throughout: it was never rebuilt, its own state
+matched 000850's hosted branch when the migration ran there, and 000210
+was applied through psql's single-transaction wrap.
+
+Decision — make the chain itself robust rather than pinning the lane:
+
+1. **`supabase/roles.sql`** (new; the CLI seeds it before migrations, local
+   stacks only) collapses the new image's default ACLs back to
+   PostgreSQL's implicit default, so objects created by the chain carry
+   exactly the grants the migrations state — the environment the chain
+   contract was written and verified against. Under the older CLI every
+   statement is a no-op. With it, the unedited 20260822000900 applies on
+   both CLI generations.
+2. **`20260822000850` accepts a third input state** — the hosted-defaults
+   clean replay (canonical claim contract plus the extra default
+   service_role entries) — normalized by the same revokes as the hosted
+   input to the same postflight target. This keeps the migration correct
+   even where roles.sql has not run. The frozen sha pins in
+   `apply-hosted-migrations.yml` and the lint-repair scope test moved with
+   the file, the same procedure ADR-126 used for 000900. Hosted semantics
+   are unchanged: the hosted branch and the already-normalized branch are
+   byte-for-byte the checks they were.
+3. **`20260827000210` opens its transaction explicitly** (begin/commit
+   around the whole containment), which locks correctly under the CLI's
+   statement-by-statement execution, psql's wrap, and PGlite alike.
+
+The journey lanes stay on floating `supabase@2` deliberately: the daily
+scheduled run is now also the early-warning signal for the next CLI or
+image drift, and this ADR is the diagnostic playbook (reproduce in Docker,
+introspect at the failing migration's own search_path, compare against the
+expected md5/ACL values in the file).
+
+Evidence: full 178-migration chain replayed end to end in Docker on
+supabase/postgres 17.6.1.165 via CLI 2.116.0 with all three parts in
+place (alert-engine functions present, ledger count 178); 000850 verified
+taking the fresh-defaults branch on .165 and the already-normalized branch
+in the PGlite harness (19 harness tests across the 000850 suites, plus the
+full-chain behavior tests, all green).
+
+## ADR-166 - The alert mailer gains a dev-stack SMTP transport so the email leg is testable end to end
+
+Date: 2026-08-29
+
+The alert engine's email step was the one part of the Job Search goal no
+automated lane could verify: Resend is the production transport and its key
+is the owner's. Rather than mock a provider (forbidden) or leave the step
+untested, the mailer gains a second transport — a deliberately minimal
+plain-SMTP conversation (EHLO, MAIL FROM, RCPT TO, DATA with RFC 5321 dot
+transparency, QUIT) over `JOB_ALERT_SMTP_URL`. It exists for exactly one
+consumer: the local Supabase stack's Mailpit sink, published on the host by
+`smtp_port = 54325` under config.toml's `[local_smtp]`. TLS or credentials
+in the URL are refused outright rather than half-implemented; Resend wins
+whenever both transports are configured; `alertEmailConnected()` treats
+either transport plus JOB_ALERT_EMAIL_FROM as connected, so the panel's
+cadence controls light up in the lane exactly as they will in production.
+
+The journey lane now proves the goal's full alert chain from outside the
+process: save a search in the browser, set its cadence through the panel's
+own control, invoke `/api/job-seeker/alerts/run` with the lane's throwaway
+CRON_SECRET exactly as Vercel Cron would, read the message back from
+Mailpit's API (direct link and the never-repeat promise asserted in the
+body), run the engine again, and count exactly one message still in the
+sink. The lane's wiring (service key, cron bearer, SMTP URL) is all local
+development material; production email remains Resend-gated and honestly
+**Not Connected** until the owner's key exists.
+
+## ADR-167 - Personal result marks and a title-derived seniority filter
+
+Date: 2026-08-29
+
+Search results live on other people's websites, so the only durable identity
+a personal mark can attach to is the posting's URL — the same URL the result
+card links to. `job_seeker_result_marks` (20260829000400) stores one row per
+(workspace, person, URL, mark) for `favorite`, `hidden` and `viewed`, with
+the mark inside the row's identity: marking is an idempotent
+insert-or-ignore, unmarking is a plain delete, and no UPDATE path exists or
+is granted. Unlike the alert delivery ledger these rows are reversible
+personal state, not evidence, so the person may delete their own; like the
+Budget Tracker and the ledger, service_role is explicitly revoked because
+hosted default privileges would otherwise hand it the table. Access is
+forced-RLS own-row only (`is_organization_member` + `auth.uid()`), and the
+route (`/api/job-seeker/search/marks`) filters on both tenant and person
+above that. The panel renders the star/Hide/Viewed controls only after the
+person's real marks have loaded — a star that would silently forget
+yesterday's favorites is worse than no star — and counts "hidden by you"
+separately from "hidden by your filters" so both numbers stay true.
+
+The seniority filter is derived from the job title and only the job title
+(`deriveSeniority` in `unify.ts`), because none of the connected boards
+exposes seniority as structured data and inventing a level from salary or
+description length is exactly the kind of fabrication this repository
+refuses. Seven levels, most-senior-wins in composed titles ("Senior
+Engineering Manager" is a manager), "lead generation" excluded by name as
+the marketing discipline it is, and titles that state nothing derive null —
+which the filter drops while set, with the UI labeling the facet "from the
+job title" and "Any (unstated kept)". The filter lives in the shared
+`UnifiedFilters` so the route, the panel and the alert engine agree; the
+saved-search schema takes it as `nullish`, so queries stored before it
+existed still parse. Location radius and industry facets remain unoffered
+for the same honesty reason: the upstream boards expose neither.
+
+## ADR-168 - Radius from a real place index; specialty and industry derived from the posting
+
+Date: 2026-08-29
+
+The three remaining filter gaps closed without a fake. Location + radius
+uses an offline gazetteer: `board-search/data/cities.json`, derived from
+GeoNames' cities15000 dataset (every city of 15,000+ people; CC BY 4.0,
+geonames.org) — folded key, English name, country, coordinates,
+population; larger cities also carry their latin alternate names, so
+"København", "München" and "NYC" resolve. The fold in `geo.ts` mirrors
+the dataset build's exactly. Resolution is deterministic: one folded key,
+the most populous claimant wins, and the resolved city + country are
+always displayed so the choice is visible. The module is server-only —
+the index belongs in the server bundle, never the browser — so the panel
+sends `radiusKm` with the search request and renders the server's
+account: a centre the index does not know reports "distance not applied"
+with the reason (never a failure, never a silent narrowing); a remote
+posting is kept because it has no distance; a posting whose place text
+cannot be resolved is kept and counted, because "we could not locate it"
+is not "it is far away". The alert engine honors a saved radius through
+a caller-injected refinement hook so the planner stays pure.
+
+Marketing specialty derives from the job title alone (`deriveSpecialty`,
+twelve disciplines — SEO, paid media, content, social, email, brand,
+product marketing, growth/demand gen, PR/comms, events, analytics/ops,
+influencer/affiliate): titles announce disciplines; a description's
+"familiarity with SEO" is a skill wish, not the role. Industry derives
+from the posting's own text (`deriveIndustry`, eleven industries,
+keyword families counted, most evidence wins, declaration order breaks
+ties), because boards expose no industry field and a company directory
+does not exist here. Both label themselves as derived in the UI, keep
+unstated postings under "Any", and reach the saved-search schema as
+`nullish` so stored queries parse. Nothing anywhere invents a fact about
+a job.
+
+## ADR-169 - LinkedIn and Indeed wired as deep link-outs, in their own URL parameters
+
+Date: 2026-08-29
+
+The owner asked for LinkedIn and Indeed wired to the job search. Neither
+site permits the wiring a live adapter needs: LinkedIn's job-search API is
+partner-only, Indeed closed its publisher search API to new partners, and
+both prohibit automated collection — which this repository has twice
+declined to do and still declines. What their terms permit is what a person
+does by hand: open the site's own search. So the wiring goes outward, as
+deep as their URLs allow. `lib/job-seeker/board-search/linkout.ts`
+translates the current search into the exact parameters each site's own UI
+reads — LinkedIn: `keywords`, `location`, `distance` (km converted to
+miles), `f_TPR` (posted-within as seconds), `f_WT` (work model), `f_E`
+(seniority, only faithful equivalents — "lead" and "manager" have no
+LinkedIn level and stay off the URL), `f_SB2` (salary floor bucket, the
+highest bucket not exceeding the request); Indeed: `q`, `l`, `radius`
+(snapped upward through Indeed's own choices so the link never quietly
+narrows), `fromage`, with the salary floor and "remote" appended to the
+query text per Indeed's own search tips, visibly.
+
+The two deep links sort first in the "Also search on" strip, are accented,
+and say "· your filters" — and every other link-out keeps its plain
+query+location template, because a parameter mapping that has not been
+verified against the target site would be an invented integration. If the
+owner ever obtains LinkedIn partner or Indeed publisher credentials, a real
+adapter goes behind env vars like the six keyed boards; until then this is
+the whole of what those sites allow, and the catalogue notes say so.
+
+## ADR-170 - LinkedIn/Indeed made primary; ZIP codes join the place index
+
+Date: 2026-08-30
+
+Two owner asks in one increment. First, the deeply wired pair moved from
+the below-results strip to the search form itself: a "Search directly on"
+row renders LinkedIn and Indeed beside the Search button before any board
+is queried, with the same deep-link builder (ADR-169) recomputing each
+site's URL live as the person types — one click from query to that site's
+own filtered results, which is the most primary these sites permit.
+Deselecting a site under Sources removes it there too. The strip stays for
+the other link-out sites.
+
+Second, the radius filter's place index learned US ZIP codes:
+`data/postal-codes-us.json` is derived from GeoNames' US postal set (same
+CC BY 4.0 source as cities15000), 41,488 five-digit ZIPs with place name
+and centroid. `resolvePlace` tries city lookups first, then any
+`\b\d{5}\b` in the text — so "78701", "Austin, TX 78701" and "78701-1234"
+all centre the radius, and the resolved name keeps the ZIP visible
+("Austin, TX 78701") so the person sees exactly what was used. Six digits
+never match; an unassigned ZIP resolves to nothing rather than a guess.
+The index is server-only alongside the city index. Journey acceptance run
+33285610004 re-proved the goal's full E2E list on the pre-increment tree
+the same evening.
+
+## ADR-171 - Build: the conversational front door over the existing engine
+
+Date: 2026-08-30
+
+The owner's directive (task #61 — its /goal text exceeded the 4,000-char
+registration limit, so `AI/AI_FACTORY_GAP_ANALYSIS.md` carries the audit
+and plan) centers the factory on one conversational command. Increment 1
+is `/solutions/build`: a person types what they want, and the page
+launches the existing `full_lifecycle` workflow through `POST /api/graphs`
+— the same call the Workflows page makes — then watches the run through
+`GET /api/graphs/runs`, the same feed Agent Trail polls. Nothing new
+executes anything; the page is composition.
+
+Its honesty rules are the factory's: the transcript's factory entries are
+recorded state transitions (plan recorded with the compiler's real node
+count, the server's own worker-wake note verbatim, completion with the
+run's closure note), progress is a count of real node states rendered as
+"n of m steps", stages group by the engine's `lifecycle_stage` in SDLC
+order, an OPEN human gate renders the shared GateDecision control inline —
+the same wording, route and evidence rules as every other gate surface,
+with the run page linked for the full evidence — and a launch refusal is
+shown in the server's words with no run view pretending otherwise. Unfinished lifecycle runs list on arrival, so
+watching resumes across visits — persistence is the database's, not the
+tab's. Deep surfaces (run detail, Agent Trail, factory steps) remain the
+detail views; Build links into them. "Hide complexity" never means hide
+state.
+
+
+## ADR-172 - The eleven specialists, derived not invented; Build becomes evidence-bearing
+
+Date: 2026-08-30
+
+The directive's eleven agents exist as `lib/factory/specialists.ts`: a
+catalogue bound to the engine's REAL vocabulary — each specialist owns
+exact NODE_CAPABILITIES entries and SDLC stage defaults, with bounded
+receives/produces text restating (never widening) what a node's contract
+already demands. `specialistForNode` assigns a role only from recorded
+facts: the implementation bench (Frontend/Backend/Database) is told apart
+by the words in the node's own key, the capability match comes next, the
+stage default after that, and a node nothing matches gets NO role — the
+surface shows the executor alone rather than a guessed persona. A shown
+specialist never replaces the executor/provider/model evidence beside it.
+
+Build's live run card gains the command-center panels, all from data the
+engine already serves: Agents (per-node specialist + executor evidence +
+latency + errors), Independent QA (graph_verifications verdicts with the
+verifier named — agent says done ≠ done, rendered), Artifacts (fetched
+from the run's artifacts route only when the disclosure opens), spend
+(the run's own tokens/cost accounting, absent when unmeasured), and a
+Build history card listing finished lifecycle runs with the engine's
+closure notes and links to their evidence.
+
+
+## ADR-173 - The Chief of Staff, named; the plan read back from its records
+
+Date: 2026-08-30
+
+The orchestrator the directive names already existed as machinery: the
+graph engine's compiler converts intent into typed tasks and dependency
+edges, the scheduler executes them dependency-aware and parallel under
+claims, the router assigns providers/models under policy, and the gate +
+verification + iteration loop is the verifier. `lib/factory/chief-of-staff.ts`
+names that orchestrator and gives it one composed, read-only view:
+`composePlan` layers the run's stored edges (Kahn), attaches the ADR-172
+specialists, lists the declared QA gates, counts real parallelism as the
+widest layer, and derives a whole-number percent from counted node states
+(null for an empty plan — never a fake zero of nothing). Edges naming
+nodes the run does not carry are ignored, and a cycle — impossible from
+the compiler — lands in one honest final layer rather than vanishing.
+
+Build's live run card gains the "Plan — composed by the Chief of Staff"
+disclosure (requirements verbatim, numbered dependency layers with
+assignments and gate markers, parallelism and gate counts) and the
+headline now leads with the counted percent. Everything is read back from
+records the engine made; the panel says so in its own caption.
+
+
+## ADR-174 - node_runs.attempt gets its writer; retries become visible
+
+Date: 2026-08-30
+
+`node_runs.attempt` has carried a default of 0 and a unique
+`(graph_run_id, node_id, attempt)` key since 20260814000100, but nothing
+ever wrote it: the runner counted attempts in memory and the counter died
+with the process, so an audited run could not say how many tries a node
+took, and a retry's second dispatch was swallowed by the recording
+function's replay branch as if it had never happened.
+
+Migration `20260830000100_node_attempt_persistence.sql` replaces
+`record_node_state_as_worker` with an eight-parameter definer adding
+`p_attempt integer default null` (old seven-argument callers resolve
+unchanged; ACLs restated service_role-only; search_path pinned):
+
+- an ordinary transition persists the attempt (`coalesce` keeps
+  attempt-less callers whole);
+- RUNNING again with a HIGHER attempt is a retry — a real second start
+  that moves the counter and appends its own `node_running` event with
+  an "attempt N" suffix, where before it was swallowed;
+- a LOWER attempt is refused (`node_attempt_regression`) and a
+  non-positive one as nonsense (`node_attempt_must_be_positive`);
+- an exact replay (same state, same attempt, same evidence) keeps the
+  established idempotent no-second-event behavior.
+
+The worker passes each dispatch's measured attempt on every transition
+(`lib/worker/graph-run.ts`), and the production store retries once
+without `p_attempt` on PGRST202 so the deploy window between app release
+and hosted apply degrades to the old unpersisted behavior instead of
+failing nodes. Projection into the runs feed stays deliberately deferred:
+a surfaced 0 would read as measured fact for historical rows, so the
+column is exposed nowhere until it is surfaced everywhere at once.
+
+
+## ADR-175 - Plan approval before launch: the proposal is the template read back
+
+Date: 2026-08-30
+
+The directive's flow is Prompt → Plan → approval → Build. Until now the
+Build workspace launched on submit; the plan appeared only after the run
+existed. The graph-level `requires_owner_approval` flag was not the
+answer: the claim path skips flagged graphs and nothing ever flips the
+flag, so pre-launch approval through it would strand graphs, and
+approval after creation would still have woken the worker first.
+
+Instead the approval happens before anything is recorded.
+`composeLaunchProposal` (lib/factory/chief-of-staff.ts) reads the
+`full_lifecycle` template — the identical nodes, jobs, gates and
+proposed edges the launch route hands the compiler — through the same
+`composePlan` used for live runs. Submitting the Build form now drafts
+that proposal (goal verbatim, dependency layers with specialist
+assignments, the three HUMAN gates named, template jobs verbatim under a
+disclosure) and POSTs nothing; "Approve & launch" performs exactly the
+launch that used to happen on submit, and "Edit the request" withdraws
+the proposal keeping the words. The caption states the two honesty
+boundaries: the compiler still applies its own scrutiny after launch
+(the run view shows the compiled truth), and approving the launch never
+approves the in-run gates — architecture, merge and deployment still
+wait for their own decisions. Acceptance criteria are not invented
+client-side: the proposal names the template's own first two steps as
+the place where checkable acceptance criteria and requirements are
+written as recorded artifacts.
+
+
+## ADR-176 - Changes & release: the command center reads the anchors
+
+Date: 2026-08-30
+
+The directive's command center lists files changed, diffs, test results
+and deployments. Those records already exist: the full_lifecycle ANCHOR
+nodes write real observations - `phase1c_change_lineage` (repository,
+base/head SHAs, pull request), `phase1c_pull_request_review`,
+`ci_check_runs` (every required check at its latest attempt, successes
+and failures apart), `github_production_deployment` (state,
+environment, URL) and `production_http_probe` (healthy, post-deploy
+validation). `lib/factory/release-evidence.ts` derives one composed
+view from those payloads, null per section until its observation
+exists.
+
+Build gains the "Changes & release" disclosure (lazy, sharing the
+artifacts fetch): files changed and diffs link to the pull request's
+own files tab - the diff is never re-rendered client-side, because
+GitHub's is the authoritative one and re-implementing it would invite
+divergence; the produced commit and base branch sit beside the link;
+test results show each check's real conclusion (failure stays red);
+deployment state/environment/URL and production health complete the
+trail. Logs and an inline preview remain open gaps - graph_events are
+not yet surfaced in Build, and preview is today the deployment URL.
+
+
+## ADR-177 - The activity log is graph_events read back, never console output
+
+Date: 2026-08-30
+
+The directive's command center lists "terminal/logs". This platform's
+honest equivalent is the engine's own append-only record:
+`graph_events` has held every durable transition since 20260814000100
+(node_running/node_completed/..., verification_recorded, gate and run
+events) behind member-scoped RLS with a (graph_run_id, created_at)
+index - and no member-facing read ever surfaced it.
+
+`GET /api/graphs/runs/[graphRunId]/events` reads it verbatim through
+the RLS-scoped tenant client (organization filter restated), bounded to
+the newest 500 rows with an admitted `truncated` flag, returned
+chronological, with each event's node named by two bounded lookups
+(node_runs -> graph_nodes) rather than a projection change. Build gains
+the lazy "Activity log" disclosure rendering the lines monospace -
+time, event type, node key, detail - with the ADR-174 attempt suffixes
+now visible to a person. The panel's caption says what it is: the
+engine's recorded events, not console output the browser invents.
+Inline preview remains the one open command-center panel.
+
+
+## ADR-178 - The hosted-apply workflow sheds its probe SQL to stay plannable
+
+Date: 2026-08-30
+
+GitHub refuses to plan jobs for a workflow file over 500KB, and
+apply-hosted-migrations.yml had grown to 44 bytes under its own 490KB
+guard (the ADR-174 scope was compacted just to fit). The next migration
+scope could not be appended - the production release path itself was
+one addition from stranding.
+
+The probe step (scope=probe, 72KB, read-only) carried 33 inline SQL
+blocks. They now live in `.github/hosted-apply/probe/01.sql` ..
+`33.sql`, extracted verbatim (bash double-quote unescaping applied;
+none was needed) and dedented; the step runs `psql -f` on each file in
+the same order with the same flags, so the dispatch output is
+unchanged. The workflow drops from 489,956 to 440,708 bytes - 49KB of
+headroom against the guard.
+
+Three pinning suites were re-pointed, none weakened: the runbook-counts
+probe-set parity now reads 01.sql and additionally asserts the workflow
+runs that exact file; the bot-account-binding register_bot pin scans
+the step plus every extracted probe file, so the read-only contract
+(no repair, no push, no ledger insert) now covers the files too; the
+scope-replay suite executes 07.sql against the fully migrated PGlite
+database exactly as it executed the inline query, plus the same
+runs-this-file drift guard.
+
+The three remaining giants (factory-any-model-record-only 82KB,
+scope=all 65KB, bot-account-binding 41KB) are mutating release-path
+steps and deliberately not extracted in the same change; they are the
+recorded follow-up if headroom runs low again.
+
+
+## ADR-179 - The probe extraction was wrong once, and now a test executes it
+
+Date: 2026-08-30
+
+ADR-178's extraction claimed verbatim and was not: the parser required
+the closing `;"` at end-of-line, but seven probe blocks close with a
+shell suffix on the same line (`|| echo …`, `|| true`, pipeline `\`
+continuations), so the lazy match ran past the real terminator and
+swallowed shell fragments into the SQL files - the original had 40
+multi-line blocks, not 33. CI could not catch it (the YAML stayed
+valid and only 07.sql was ever executed by a test); the live
+`scope=probe` dispatch this session ran to verify ADR-178 caught it:
+run 33297041401 failed with a syntax error at probe/04.sql:35.
+
+The fix re-extracts all 40 blocks from the pre-change original with a
+correct parser (capture to the first unescaped `"`, preserve the
+closing line's shell suffix exactly) and ships two machine-checked
+proofs: rebuilding the step with the original bodies reproduces the
+pre-change step byte-for-byte, and every file equals the
+bash-unescaped text psql previously received. The lesson is now a
+test: hosted-scope-replay executes EVERY probe file against the fully
+migrated PGlite chain (hosted ledger schema stubbed), so a mangled
+extraction fails a unit run instead of a production dispatch. The
+lifecycle pin moved 07.sql -> 08.sql with the renumbering. A green
+re-dispatch of scope=probe is the closing evidence.
+
+
+## ADR-180 - Stop is withdrawal: honest run control over derived claimability
+
+Date: 2026-08-30
+
+The directive's command center lists Stop. Graphs had no way to be
+stopped: claimability is DERIVED (no state column - a graph is claimable
+while its run history says so), so a planned or re-claimable graph
+stayed in the queue until a worker spent it, and the one stranded graph
+in the backlog had no owner control at all.
+
+Migration 20260830000200: `graphs` gains withdrawn_at / withdrawn_by /
+withdrawal_reason (paired by constraint); the claim selector
+(claim_planned_graph_target_internal, the single function both v2 entry
+points route through) is restated verbatim from 20260828000200 plus
+exactly one predicate - `and g.withdrawn_at is null`;
+`withdraw_graph_as_member` (SECURITY DEFINER, authenticated-only,
+pinned search_path) enforces membership, refuses a secret-shaped
+reason, is idempotent on an already-withdrawn graph, REFUSES while a
+run is RUNNING (a live claim belongs to its worker - pretending to stop
+it would be a dead button wearing a label), and writes one immutable
+'graph.withdrawn' activity event.
+
+Route POST /api/graphs/[graphId]/withdraw maps the in-flight refusal to
+an honest 409 in plain words. Build shows Stop where it is true: on the
+just-launched waiting card and on active rows that are not RUNNING;
+a RUNNING row carries no Stop, with the reason in a comment beside it.
+Pause/Resume still need engine support and stay unbuilt rather than
+dead. The behavior suite proves the whole loop on the migrated chain:
+withdrawn graphs unclaimable, idempotence without a second audit event,
+the RUNNING/secret/non-member refusals, and Stop ending the
+failed-run-retry loop that used to be unstoppable.
+
+
+## ADR-181 - Autonomy modes derive from the real controls; the fence keeps the last word
+
+Date: 2026-08-30
+
+The directive names three modes - Ask Me, Balanced, Autonomous. The
+controls they parameterize have existed on `projects` since Phase 1D
+(autonomous_mode, maximum_autonomous_risk, the four auto_* switches),
+owner-writable through update_project_controls and fenced by
+enforce_safe_project_controls, which in this phase refuses any state
+but everything-off-with-a-GREEN-ceiling. RISK_CLASSIFICATION.md
+classifies enabling or widening autonomous approval authority as RED,
+and the owner-directed release rule explicitly does not cover it - so
+no increment of mine may open that fence, and none does.
+
+lib/factory/autonomy-mode.ts maps the three modes onto those records:
+deriveAutonomyMode reads the stored controls (today every project
+derives Ask Me, because the fence admits nothing else; the day policy
+opens, the same read reports the new truth), and AUTONOMY_MODES carries
+each mode's exact controls patch plus its invariant - RED is never
+autonomous, merges and deployments stay owner-approved in every mode.
+
+Build's Autonomy disclosure shows the derived mode from the project's
+real controls (GET /api/projects/[id]/controls). Selecting a stronger
+mode is a REAL PATCH to the real route with the exact patch and
+optimistic-concurrency timestamp - and the refusal that comes back
+(the route's schema pins autonomousMode to literal false; beneath it
+the trigger refuses too) is rendered verbatim as the honest answer.
+No fake toggle, no dead button, no paraphrase: the modes are named,
+the machinery is wired, and the guardrail visibly holds until an owner
+authorizes the RED change through governance, not through this panel.
+
+
+## ADR-182 - The measured attempt is projected; preview stays a link by design
+
+Date: 2026-08-30
+
+Two closures. First: 20260825000300 deliberately omitted
+`node_runs.attempt` from list_graph_runs because nothing wrote it.
+ADR-174 added the writer, so the omission became the dishonesty.
+20260830000300 restates the projection verbatim with one change:
+attempt >= 1 projects as itself; the pre-writer insert default of 0 is
+not a measurement and projects as null, so no heading ever reads an
+unmeasured default as data. Build's Agents rows say "attempt N" only
+for N >= 2 - attempt 1 adds nothing a reader needs.
+
+Second: the command center's "preview". The application sends
+X-Frame-Options: DENY and frame-ancestors 'none' - its own security
+headers correctly refuse framing, and weakening a security control is
+RED. So the inline-iframe preview is fenced by design, and the honest
+preview is the deployment URL the release evidence already carries,
+now labeled Preview. The command-center list is thereby complete for
+Phase 1A: every panel exists, and the two things not built inline
+(iframe preview, Pause/Resume) are fenced by named policy or missing
+engine support, recorded rather than faked.
+
+## ADR-183 - A role is not a capability, and only two specialists earned capabilities
 
 - Date: 2026-08-29
 - Status: Accepted
@@ -2914,7 +3544,7 @@ Use this append-only log for decisions that constrain future implementation. Cha
   once in SQL, and `tests/unit/graph-stage-mapping-agreement.test.ts` holds
   them to each other over the union of the replayable chain. That test caught
   this change: the two new capabilities had no SQL branch. Migration
-  `20260829000300_specialist_capability_stage_map.sql` adds them in a new file
+  `20260830000400_specialist_capability_stage_map.sql` adds them in a new file
   rather than editing either applied predecessor. It needs no companion enum
   migration — IMPLEMENTATION and DEPLOYMENT have been in `public.sdlc_stage`
   since 20260821000200 — and it changes zero rows today, since both
@@ -2922,7 +3552,7 @@ Use this append-only log for decisions that constrain future implementation. Cha
   explicitly. **Not yet applied to hosted.** Gates: lint, typecheck, 5214
   tests, production build.
 
-## ADR-166 - Autonomy is three named modes over the existing controls, and no mode may release
+## ADR-184 - Autonomy is three named modes over the existing controls, and no mode may release
 
 - Date: 2026-08-29
 - Status: Accepted
@@ -2968,5 +3598,5 @@ and was kept verbatim through this merge rather than renumbered, because
 rewriting a record that was already reviewed and merged is worse than an
 ambiguous reference. Both duplicates are worth resolving in a change of their
 own. An earlier draft of the roster decision was numbered ADR-150, which
-collided the same way; it is ADR-165 above, and the commit that introduced it
+collided the same way; it is ADR-183 above, and the commit that introduced it
 still names 150.

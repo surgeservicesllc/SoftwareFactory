@@ -303,6 +303,7 @@ export type GraphRunStore = {
     state: "RUNNING" | "COMPLETED" | "VERIFYING" | "FAILED" | "CANCELLED" | "SKIPPED",
     detail?: string | null,
     execution?: { provider?: string; model?: string; latencyMs?: number },
+    attempt?: number,
   ) => Promise<void>;
   readonly recordArtifact: (
     graphRunId: string,
@@ -447,8 +448,11 @@ export async function runClaimedGraph(
   const result = await runGraph(compiled, budgetFromClaim(claim), {
     executeNode: async (node, attempt) => {
       const nodeRunId = nodeRunIds.get(node.nodeKey);
-      if (nodeRunId && attempt === 1) {
-        await store.recordNodeState(nodeRunId, "RUNNING");
+      if (nodeRunId) {
+        // Every dispatch is recorded, not just the first: a retry re-enters
+        // RUNNING with its attempt number, so the row and its event trail
+        // show how many times the node actually cost an execution.
+        await store.recordNodeState(nodeRunId, "RUNNING", null, undefined, attempt);
       }
       const outputs: Record<string, unknown> = {};
       const missing: string[] = [];
@@ -571,7 +575,7 @@ export async function runClaimedGraph(
               const refusal = artifactGuardRefusal(error);
               if (refusal === null) throw error;
               finalFailures += 1;
-              await store.recordNodeState(nodeRunId, "FAILED", refusal);
+              await store.recordNodeState(nodeRunId, "FAILED", refusal, undefined, attempt);
               return { status: "FAILED", error: refusal, retryable: false };
             }
 
@@ -581,6 +585,8 @@ export async function runClaimedGraph(
                 nodeRunId,
                 "FAILED",
                 `${claimed?.lifecycle_stage ?? "This stage"} was rejected at its gate.`,
+                undefined,
+                attempt,
               );
               return {
                 status: "FAILED",
@@ -593,7 +599,7 @@ export async function runClaimedGraph(
               provider: outcome.provider,
               model: outcome.model,
               latencyMs: outcome.latencyMs,
-            });
+            }, attempt);
             if (claimed?.node_id && store.openGate) {
               await store.openGate(
                 claimed.node_id,
@@ -644,7 +650,7 @@ export async function runClaimedGraph(
                 provider: outcome.provider,
                 model: outcome.model,
                 latencyMs: outcome.latencyMs,
-              });
+              }, attempt);
               return { status: "FAILED", error: refusal, retryable: false };
             }
             await store.completeReviewerWithVerifications(
@@ -676,14 +682,14 @@ export async function runClaimedGraph(
               const refusal = artifactGuardRefusal(error);
               if (refusal === null) throw error;
               finalFailures += 1;
-              await store.recordNodeState(nodeRunId, "FAILED", refusal);
+              await store.recordNodeState(nodeRunId, "FAILED", refusal, undefined, attempt);
               return { status: "FAILED", error: refusal, retryable: false };
             }
             await store.recordNodeState(nodeRunId, "COMPLETED", null, {
               provider: outcome.provider,
               model: outcome.model,
               latencyMs: outcome.latencyMs,
-            });
+            }, attempt);
           }
         } else if (
           !outcome.retryable
@@ -703,7 +709,7 @@ export async function runClaimedGraph(
             provider: outcome.provider,
             model: outcome.model,
             latencyMs: outcome.latencyMs,
-          });
+          }, attempt);
         }
       }
       return outcome;

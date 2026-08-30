@@ -65,10 +65,23 @@ function runbookLedgerAbsent(): string[] {
   return [...table[1].matchAll(/^\| `(\d{14})` \|/gm)].map((match) => match[1]);
 }
 
-/** The versions the workflow's read-only probe asks about, one row each. */
+/**
+ * The versions the workflow's read-only probe asks about, one row each. The
+ * probe's SQL lives in .github/hosted-apply/probe/01.sql (extracted to keep
+ * the workflow under GitHub's 500KB ceiling); the assertion below that the
+ * workflow actually runs that file is what stops the pair drifting apart.
+ */
+let probeSql = "";
+beforeAll(async () => {
+  probeSql = await readFile(
+    resolve(repositoryRoot, ".github/hosted-apply/probe/01.sql"),
+    "utf8",
+  );
+});
+
 function probedVersions(): string[] {
   const block = /with expected\(version, kind, object, marker\) as \(values([\s\S]*?)\r?\n\s*\)\r?\n/
-    .exec(workflow);
+    .exec(probeSql);
   if (!block) return [];
   return [...block[1].matchAll(/\('(\d{14})',/g)].map((match) => match[1]);
 }
@@ -118,10 +131,12 @@ describe("the hosted apply runbook", () => {
     // is not an answer to the question the runbook poses.
     expect(
       probedVersions(),
-      "The scope=probe step in .github/workflows/apply-hosted-migrations.yml asks about a "
+      "The probe SQL in .github/hosted-apply/probe/01.sql asks about a "
         + "different set of versions than AI/HOSTED_APPLY_RUNBOOK.md names as ledger-absent. "
         + "Bring the two into line.",
     ).toEqual(runbookLedgerAbsent());
+    // The extracted file is only the probe if the workflow actually runs it.
+    expect(workflow).toContain("-f .github/hosted-apply/probe/01.sql");
   });
 
   it("still records the run the measurement came from", () => {

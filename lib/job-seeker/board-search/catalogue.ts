@@ -193,7 +193,7 @@ export const SOURCE_CATALOGUE: readonly CatalogueSource[] = Object.freeze([
     focus: "general",
     status: "external_link",
     searchUrl: "https://www.linkedin.com/jobs/search/?keywords={query}&location={location}",
-    note: "LinkedIn's terms prohibit automated collection, and this repository has twice declined to scrape it; that decision stands. The link opens LinkedIn's own job search in your browser, which is the permitted path.",
+    note: "LinkedIn's terms prohibit automated collection, and this repository has twice declined to scrape it; that decision stands. The link opens LinkedIn's own job search in your browser — the permitted path — carrying your search AND your filters (place, radius, posted date, work model, seniority, salary floor) in LinkedIn's own URL parameters.",
   },
   {
     key: "indeed",
@@ -201,7 +201,7 @@ export const SOURCE_CATALOGUE: readonly CatalogueSource[] = Object.freeze([
     focus: "general",
     status: "external_link",
     searchUrl: "https://www.indeed.com/jobs?q={query}&l={location}",
-    note: "Indeed's publisher API is closed to new partners and scraping is prohibited, so the link opens Indeed's own search in your browser.",
+    note: "Indeed's publisher API is closed to new partners and scraping is prohibited, so the link opens Indeed's own search in your browser — carrying your search, place, radius and posted date in Indeed's own URL parameters (salary floor and remote travel in the query text, per Indeed's search tips).",
   },
   {
     key: "glassdoor",

@@ -9,7 +9,6 @@ import {
   type AutomaticAction,
   type AutomaticActionFlags,
 } from "@/lib/autonomy/controls";
-import { AUTONOMY_MODE_DEFINITIONS, type AutonomyMode } from "@/lib/autonomy/modes";
 import { cn } from "@/lib/cn";
 
 /**
@@ -39,8 +38,6 @@ const CAPABILITY_MISSING: ReadonlySet<AutomaticAction> = new Set(["merge", "depl
 type ControlsView = {
   autonomousMode: boolean;
   maximumAutonomousRisk: string;
-  /** Null when the stored combination matches no preset — shown as Custom. */
-  mode: AutonomyMode | null;
   actions: AutomaticActionFlags;
 };
 
@@ -148,54 +145,6 @@ export function SafetyControls({ compact = false }: { compact?: boolean }) {
         busy={busyKey === "kill_switch"}
         onChange={(active, reason) => void change("kill_switch", { control: "kill_switch", active, reason })}
       />
-
-      <section className="mt-6">
-        <h3 className="label">How much to do without asking you</h3>
-        <p className="mt-1 text-sm text-muted">
-          One choice that sets everything below. You can still change any
-          individual switch afterwards — doing so puts you in Custom.
-        </p>
-        <div className={cn("mt-2 grid gap-2", compact ? "grid-cols-1" : "md:grid-cols-3")}>
-          {AUTONOMY_MODE_DEFINITIONS.map((definition) => {
-            const selected = controls.mode === definition.mode;
-            return (
-              <button
-                key={definition.mode}
-                type="button"
-                disabled={!canOperate || busyKey === "mode"}
-                aria-pressed={selected}
-                onClick={() => {
-                  if (!selected) {
-                    void change("mode", { control: "mode", mode: definition.mode });
-                  }
-                }}
-                className={cn(
-                  "rounded-lg border p-3 text-left",
-                  selected ? "border-[var(--accent-border)] bg-[var(--accent-surface)]" : "border-line",
-                  canOperate ? "transition-colors hover:border-line-strong" : "cursor-default",
-                )}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-sm font-semibold text-foreground">{definition.label}</span>
-                  <StatusBadge tone={selected ? "safe" : "neutral"} dot={false}>
-                    {selected ? "Selected" : "Available"}
-                  </StatusBadge>
-                </div>
-                <p className="mt-2 text-sm text-muted">{definition.summary}</p>
-                <p className="mt-1.5 text-xs text-muted">
-                  <span className="font-medium">Always asks:</span> {definition.asksAbout}
-                </p>
-              </button>
-            );
-          })}
-        </div>
-        {controls.mode === null ? (
-          <p className="mt-2 text-sm text-muted">
-            Custom — the switches below do not match any of the three. Choosing
-            one above will replace them.
-          </p>
-        ) : null}
-      </section>
 
       <div
         className={cn(

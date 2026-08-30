@@ -197,7 +197,10 @@ test.describe("job seeker live journey", () => {
     await expect(page.getByLabel("Open to travel")).toBeChecked();
 
     // ── Preferences: every field ───────────────────────────────────────────
-    await page.getByRole("link", { name: "Job Preferences" }).click();
+    // The sidebar can render this link twice (the section entry plus the
+    // expanded subnav child); both point at the same page, so the first is
+    // the click.
+    await page.getByRole("link", { name: "Job Preferences" }).first().click();
     await expect(page.getByRole("button", { name: /save preferences/i })).toBeVisible({ timeout: 20_000 });
     await page.getByLabel(/Target titles/).fill("Staff Engineer\nPlatform Lead");
     await page.getByLabel(/^Locations/).fill("Remote — US\nAustin");
@@ -555,5 +558,110 @@ test.describe("job seeker live journey", () => {
     await expect(
       page.getByText(/via (jobnet|jobindex|freehire)/).first(),
     ).toBeVisible({ timeout: 30_000 });
+  });
+
+  test("saves a search, turns on an alert, and a real email lands in the local sink exactly once", async ({ page }) => {
+    /*
+     * The alert workflow end to end, email included: the saved search is
+     * created in the browser, its cadence set through the panel's own
+     * control, the engine run exactly as Vercel Cron would run it, and the
+     * message read back from the local stack's Mailpit sink — a real SMTP
+     * delivery, not a mock. A second engine run proves the never-repeat
+     * rule from the outside: the sink still holds exactly one message.
+     *
+     * Guarded separately from JOB_SEEKER_E2E because it needs the lane's
+     * alert wiring (CRON_SECRET, the Mailpit sink, the SMTP transport).
+     */
+    test.skip(
+      !process.env.JOB_SEEKER_E2E_ALERTS,
+      "needs the lane's alert wiring (JOB_SEEKER_E2E_ALERTS=1)",
+    );
+    test.setTimeout(300_000);
+    const cronSecret = process.env.JOB_SEEKER_E2E_CRON_SECRET ?? "";
+    const mailpitUrl = process.env.JOB_SEEKER_E2E_MAILPIT_URL ?? "http://127.0.0.1:54324";
+    const searchName = `Alert journey ${Date.now()}`;
+
+    await page.goto("/JobSearch");
+    await page.getByLabel("Email").fill(email);
+    await page.getByLabel("Password").fill(password);
+    await page.getByRole("button", { name: /^sign in$/i }).click();
+    await expect(page.getByRole("heading", { name: "Job Search", level: 1 })).toBeVisible();
+
+    // A broad live search, so the engine has something genuinely new to
+    // deliver when it re-runs this saved search server-side.
+    await expect(page.getByText(/Searching \d+ boards?:/)).toBeVisible({ timeout: 20_000 });
+    await page.getByPlaceholder("Job title, skill or keyword").fill("manager");
+    await page.getByRole("button", { name: /^search$/i }).click();
+    await expect(
+      page.locator("[data-testid='unified-results'], [role='alert']").first(),
+    ).toBeVisible({ timeout: 90_000 });
+
+    await page
+      .getByPlaceholder("Name this search, e.g. Senior marketing, remote, 90k+")
+      .fill(searchName);
+    await page.getByRole("button", { name: "Save this search" }).click();
+
+    // The cadence control renders only when the channel is genuinely
+    // connected — its presence is itself an assertion about the wiring.
+    const cadence = page.getByLabel(`Email alert for ${searchName}`);
+    await expect(cadence).toBeVisible({ timeout: 20_000 });
+    await cadence.selectOption("asap");
+    // Scoped to this run's own row: local stacks accumulate saved searches
+    // across reruns, and another row's cadence must not satisfy this.
+    await expect(
+      page.locator("li").filter({ hasText: searchName }).getByText(/alert as soon as possible/),
+    ).toBeVisible();
+
+    // Run the engine exactly as the scheduler does.
+    // The engine searches up to thirteen live boards inside this request;
+    // Playwright's 10s API default is far too tight for it.
+    const run = await page.request.post("/api/job-seeker/alerts/run", {
+      headers: { authorization: `Bearer ${cronSecret}` },
+      timeout: 180_000,
+    });
+    expect(run.ok()).toBeTruthy();
+    const outcome = await run.json() as {
+      ran: boolean; due: number; scanned: number; emailed: number;
+      failures: Array<{ alertId: string; detail: string }>;
+    };
+    console.log(`alert engine run outcome: ${JSON.stringify(outcome)}`);
+    expect(outcome.ran).toBe(true);
+    expect(outcome.scanned).toBeGreaterThanOrEqual(1);
+    expect(outcome.failures).toEqual([]);
+    // The boards are live; a run where every board answered empty is a
+    // legitimate day, not a failure of this repository.
+    test.skip(outcome.emailed === 0, "no board returned a new posting to deliver on this run");
+
+    type MailpitMessage = { ID: string; Subject: string; To: Array<{ Address: string }> };
+    const listResponse = await page.request.get(`${mailpitUrl}/api/v1/messages?limit=50`);
+    expect(listResponse.ok()).toBeTruthy();
+    const list = await listResponse.json() as { messages: MailpitMessage[] };
+    const mine = list.messages.filter(
+      (message) => message.Subject.includes(searchName)
+        && message.To.some((to) => to.Address === email),
+    );
+    expect(mine).toHaveLength(1);
+
+    // The message carries what the goal promises: jobs with direct links,
+    // and the never-repeat promise in writing.
+    const detailResponse = await page.request.get(`${mailpitUrl}/api/v1/message/${mine[0]!.ID}`);
+    expect(detailResponse.ok()).toBeTruthy();
+    const detail = await detailResponse.json() as { Text: string };
+    expect(detail.Text).toContain("Apply: http");
+    expect(detail.Text).toContain("never sent again");
+    expect(detail.Text).toMatch(/via /);
+
+    // Never-repeat, observed from outside: the alert was just scanned, so a
+    // second engine run owes this search nothing — and sends nothing.
+    const secondRun = await page.request.post("/api/job-seeker/alerts/run", {
+      headers: { authorization: `Bearer ${cronSecret}` },
+      timeout: 180_000,
+    });
+    expect(secondRun.ok()).toBeTruthy();
+    const afterResponse = await page.request.get(`${mailpitUrl}/api/v1/messages?limit=50`);
+    const after = await afterResponse.json() as { messages: MailpitMessage[] };
+    expect(
+      after.messages.filter((message) => message.Subject.includes(searchName)),
+    ).toHaveLength(1);
   });
 });

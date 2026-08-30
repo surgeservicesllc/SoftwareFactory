@@ -36,6 +36,8 @@ export function BudgetImportPanel({
 }) {
   const [accountId, setAccountId] = useState("");
   const [sheet, setSheet] = useState("");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
   const [sheetChoices, setSheetChoices] = useState<readonly string[]>([]);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -61,6 +63,8 @@ export function BudgetImportPanel({
     body.set("file", file);
     body.set("accountId", accountId);
     if (sheet) body.set("sheet", sheet);
+    if (from) body.set("from", from);
+    if (to) body.set("to", to);
 
     setBusy(true);
     try {
@@ -150,6 +154,62 @@ export function BudgetImportPanel({
                 </select>
               </label>
             ) : null}
+
+            <fieldset className="sm:col-span-2 rounded-md border border-line-strong p-4">
+              <legend className="px-1.5 text-sm font-medium text-foreground">
+                Dates to import
+              </legend>
+              <p className="text-xs text-faint">
+                Leave both blank to import everything the sheet holds. A window is applied after
+                each row&rsquo;s date is worked out, so a row that takes its date from the line
+                above is judged on the date it actually lands on.
+              </p>
+              <div className="mt-3 flex flex-wrap items-end gap-3">
+                <label className="text-sm">
+                  <span className="mb-1.5 block font-medium text-foreground">From</span>
+                  <input
+                    type="date"
+                    value={from}
+                    onChange={(event) => setFrom(event.target.value)}
+                    className="rounded-md border border-line-strong bg-surface-raised px-3 py-2 text-foreground"
+                  />
+                </label>
+                <label className="text-sm">
+                  <span className="mb-1.5 block font-medium text-foreground">To</span>
+                  <input
+                    type="date"
+                    value={to}
+                    onChange={(event) => setTo(event.target.value)}
+                    className="rounded-md border border-line-strong bg-surface-raised px-3 py-2 text-foreground"
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => {
+                    const today = new Date();
+                    const start = new Date(today);
+                    start.setFullYear(start.getFullYear() - 1);
+                    setFrom(start.toISOString().slice(0, 10));
+                    setTo(today.toISOString().slice(0, 10));
+                  }}
+                >
+                  Last 12 months
+                </button>
+                {from || to ? (
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => {
+                      setFrom("");
+                      setTo("");
+                    }}
+                  >
+                    Clear
+                  </button>
+                ) : null}
+              </div>
+            </fieldset>
 
             <div className="flex items-end gap-3 sm:col-span-2">
               <button type="submit" disabled={busy} className="btn btn-primary">

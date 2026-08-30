@@ -12,7 +12,7 @@ const migrationsDirectory = resolve(repositoryRoot, "supabase/migrations");
 const grantsMigration =
   "20260812002600_narrow_hosted_service_role_table_grants.sql";
 const latestMigration =
-  "20260829000300_specialist_capability_stage_map.sql";
+  "20260830000400_specialist_capability_stage_map.sql";
 
 const publicTables = [
   // Sorted alphabetically to match the catalogue query. Keep it sorted when
@@ -99,6 +99,10 @@ const publicTables = [
   "graphs",
   "improvement_ledger",
   "incidents",
+  // The alert engine's delivery ledger (20260829000300, ADR-164): owner
+  // SELECT under forced RLS, append-only by trigger, writes only through the
+  // record_job_seeker_alert_scan definer — service_role explicitly revoked.
+  "job_seeker_alert_deliveries",
   "job_seeker_applications",
   "job_seeker_contacts",
   "job_seeker_documents",
@@ -107,6 +111,9 @@ const publicTables = [
   "job_seeker_outreach",
   "job_seeker_preferences",
   "job_seeker_profiles",
+  // Personal favorite/hidden/viewed marks (20260829000400): forced RLS,
+  // own-row policies only, service_role explicitly revoked in the migration.
+  "job_seeker_result_marks",
   "job_seeker_resume_extractions",
   "job_seeker_saved_searches",
   "job_seeker_search_alerts",

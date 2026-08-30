@@ -1,6 +1,200 @@
 # Quality scorecard
 
-Last reviewed: 2026-08-29
+Last reviewed: 2026-08-30
+
+**Addendum, 2026-08-30 latest+6 — attempt projection + preview
+(ADR-182):** graph-node-detail suite green on the chain with the honest
+pair (unmeasured 0 → null; measured 2 → 2); workflow guards green with
+the new scope; workspace suite 16 (attempt renders only >= 2 —
+covered by type-level optionality and the projection test). Lint zero
+warnings, production build, `tsc --noEmit` clean.
+
+**Addendum, 2026-08-30 latest+5 — autonomy modes (ADR-181):**
+autonomy-mode suite 5 (Ask-Me derivation from today's only permitted
+state, future-state derivations, exact patches, invariants stated,
+patch round-trips); workspace 16 (mode derived from real GET controls,
+exact PATCH body with concurrency timestamp, the fence's refusal
+verbatim). Lint zero warnings, production build, `tsc --noEmit` clean.
+
+**Addendum, 2026-08-30 latest+4 — Stop as withdrawal (ADR-180):**
+worker-execution suite 36 green incl. the withdrawal pair (unclaimable
+after withdrawal, idempotent single audit event, RUNNING/secret/
+non-member refusals, Stop ends the failed-run retry loop); withdraw
+route 4 (exact rpc args, honest 409, non-UUID and cross-origin refused
+pre-database); workspace 15 (Stop through the real route with the
+server's words, no Stop on a RUNNING row). Lint zero warnings,
+production build lists the route, `tsc --noEmit` clean.
+
+**Addendum, 2026-08-30 latest+3 — probe extraction corrected
+(ADR-179):** the ADR-178 addendum's "byte-honest" claim was wrong for
+seven suffix-closed blocks; the live scope=probe dispatch caught it
+(run 33297041401, syntax error in probe/04.sql). Corrected extraction
+carries dual machine proofs and the missing guard: all 40 probe files
+now EXECUTE against the migrated chain in hosted-scope-replay. 36
+tests green across the five workflow guard suites.
+
+**Addendum, 2026-08-30 latest+2 — workflow headroom (ADR-178):** probe
+SQL extracted byte-honest (33 files, psql -f, order preserved);
+workflow 49KB under its guard; all 14 workflow-reading suites green
+after re-pointing three pins without weakening (probe-set parity +
+drift guards, read-only scan extended over the extracted files,
+scope-replay still executing 07.sql on the migrated chain). Lint and
+`tsc --noEmit` clean, full vitest green.
+
+**Addendum, 2026-08-30 latest+1 — Activity log (ADR-177):** events
+route suite 4 (verbatim chronological rows with node keys resolved,
+run-level events honestly node-less, non-UUID refused pre-database,
+database refusal undressed); workspace suite 13 (lazy log: no fetch
+until open, recorded line rendered verbatim, truncation footer absent
+when not truncated). Lint zero warnings, production build lists the
+route, `tsc --noEmit` clean.
+
+**Addendum, 2026-08-30 latest — Changes & release (ADR-176):**
+release-evidence suite 4 (all-null before observations, lineage read
+back, checks keep real conclusions incl. failures, full four-observation
+trail); workspace suite 12 (lazy release panel: no artifacts fetch until
+open, PR files-tab link, real check conclusion rendered). Lint zero
+warnings, production build, `tsc --noEmit` clean.
+
+**Addendum, 2026-08-30 later still — plan approval before launch
+(ADR-175):** chief-of-staff suite 6 (proposal pinned to the real
+template: 14 steps, goal-first layering, widest layer 3, gates exactly
+architecture/test/deploy, 0% honestly planned, jobs verbatim);
+workspace suite 11 (submit drafts and POSTs nothing until Approve &
+launch; Edit withdraws keeping the words; every launch path re-proven
+through the approval step). Lint zero warnings, production build,
+`tsc --noEmit` clean.
+
+**Addendum, 2026-08-30 late night — attempt persistence (ADR-174, task
+#56):** graph-worker-execution suite 32 green against the full migrated
+chain including two new cases — a real retry persisting attempt 2 with
+its own second `node_running` event and the completion carrying the
+suffix; regression/nonsense refusals, exact-replay idempotence, the
+higher-attempt retry branch, and the seven-argument legacy caller still
+resolving with attempt honestly left at its insert default. Node-detail
+suite updated to state the new truth (writer exists, projection
+deliberately deferred). Runbook count 180 auto-guarded. Lint zero
+warnings, production build, `tsc --noEmit` clean, full vitest suite
+green.
+
+**Addendum, 2026-08-30 night — Chief of Staff plan (ADR-173):**
+chief-of-staff suite 5 tests (diamond layering, verbatim intent +
+assignments + gates + 25% counted, ghost-edge immunity, cycle fallback,
+null-on-empty percent); workspace suite 9 green with the plan-panel flow
+(layers with assignments, 50% headline). Lint zero warnings, production
+build, `tsc --noEmit` clean.
+
+**Addendum, 2026-08-30 later still — specialists + evidence panels
+(ADR-172):** specialists suite 7 tests (catalogue pinned to real
+NODE_CAPABILITIES/SDLC_STAGES, capability precedence, bench-by-key,
+stage fallback, null when nothing matches, all stages covered);
+workspace suite 10 (adds the evidence-panel flow: specialist beside
+executor, QA verdicts with verifier, artifacts fetched only on open,
+spend line, history card with evidence links). Lint zero warnings,
+production build, `tsc --noEmit` clean.
+
+**Addendum, 2026-08-30 later — Build front door (ADR-171):** workspace
+suite 7 tests (nothing-before-anything, projects-empty next step, exact
+launch payload, refusal in the server's words, counted progress + OPEN
+gate + stage states, closure note in transcript, resume list excluding
+finished runs); app-shell nav 25 tests; e2e nav/pages/responsive lists
+seated. Lint zero warnings, production build lists /solutions/build,
+`tsc --noEmit` clean.
+
+**Addendum, 2026-08-30 — primary link-outs + ZIP radius (ADR-170):**
+geo suite 9 tests (ZIP resolution against the real index, six-digit and
+unassigned-ZIP nulls, ZIP-centred radius), search-route 24 (ZIP centre
+end-to-end with exact counts and "Austin, TX 78701" center), panel 35
+(primary row present pre-search, live-updating hrefs, deselection).
+Journey acceptance run 33285610004 green on main 9a73e12. Lint zero
+warnings, production build, `tsc --noEmit` clean.
+
+**Addendum, 2026-08-29 late night — Job Search increment 5: the filter
+vocabulary complete (ADR-168):** location + radius over a real offline
+GeoNames-derived city index (server-side, honest not-applied reporting,
+remote/unresolvable kept and counted, saved radius honored by the alert
+engine), plus title-derived marketing specialty and posting-text-derived
+industry facets labeled as derived. Gates on the tree: unit 317 files /
+4,037 tests before the increment's last additions (geo 6, unify 26 total,
+route radius 3, panel 32, alerts pass-through), eslint zero warnings,
+production build with the index in the server bundle only, `tsc --noEmit`
+clean. Increment 4's marks migration applied to hosted (run 33273330183,
+postflight green); production probes on #448's deploy verified (marks
+401 anonymous, /JobSearch 200, alerts 503 fail-closed).
+
+**Addendum, 2026-08-29 late night — LinkedIn/Indeed deep link-outs
+(ADR-169):** the two sites' chips now carry the whole current search in
+their own URL parameters, verified by 7 builder unit tests (exact URLs,
+km→mile conversion, upward radius snapping, salary bucketing,
+unmappable-filter omission) and a panel test (deep chips sort first, both
+labeled, LinkedIn/Indeed hrefs asserted parameter by parameter, Glassdoor
+stays template-only). Gates: lint zero warnings, production build,
+`tsc --noEmit` clean, panel suite 33 tests green.
+
+**Addendum, 2026-08-29 night — Job Search increment 4: marks + seniority
+(ADR-167):** favorites/hide/viewed are persisted per person in
+`job_seeker_result_marks` (forced RLS, own-row policies, service_role
+revoked, no update path) behind `/api/job-seeker/search/marks`, with panel
+controls that render only after the real marks load and separate "hidden by
+you" / "hidden by your filters" counts; the seniority facet is derived from
+the job title alone and labeled that way, shared by route, panel,
+saved-search schema and alert engine. Gates on the tree: unit 316 files /
+4,017 tests, integration 142 files / 1,431 tests (marks migration replayed
+through the full chain; RLS count 147), lint zero warnings, production
+build, `tsc --noEmit` clean. Marks route tests 6; panel tests 29 including
+optimistic-revert-on-failure and controls-stay-unrendered-when-unknown.
+
+**Addendum, 2026-08-29 final — the goal's full acceptance, email included
+(ADR-166):** journey workflow run `33269486606` on main `71060d0` passed all
+three serial tests on a fresh stack: the complete fake-data journey, the
+live board search-save-persist walk, and the new alert-email leg — a saved
+search created in the browser, its cadence set through the panel's own
+control, the engine run exactly as Vercel Cron runs it, a **real SMTP
+delivery** read back from the local Mailpit sink (direct links and the
+never-repeat promise in the body), and exactly one message still in the
+sink after a second engine run. Local pre-verification of the same leg:
+`{"ran":true,"due":1,"scanned":1,"emailed":1,"failures":[]}`. Production
+delivery remains Resend-gated on the owner's env vars and honestly **Not
+Connected** until then. Verdict: **EVERY STEP OF THE GOAL'S TEST LIST NOW
+PASSES IN THE AUTOMATED LANE; PRODUCTION EMAIL AWAITS ONLY THE OWNER'S
+CREDENTIALS.**
+
+**Addendum, 2026-08-29 late — Job Search E2E acceptance + journey lane
+recovered (ADR-165):** journey workflow run `33266060493` on main
+`3cd6150` passed end to end: the full 178-migration chain applied on a
+real local Supabase stack, the production build served, and the
+real-browser fake-data journey (sign-in → onboarding → every job-seeker
+section → live board search → save a result → find it again after
+reload) completed — the lane's first green since 08-22. The six-day
+blackout was environment drift (supabase CLI 2.116.0's new postgres
+image seeds hosted-style default function privileges; no CLI wraps a
+migration file in a transaction), root-caused by Docker reproduction
+against both images and fixed in the chain itself (#442: roles.sql,
+000850's third accepted input, 000210's explicit transaction; sha pins
+moved at all four sites). Full local suite on the merged tree 5,412
+passed / 2 skipped; Vercel deploy of `3cd6150` success. Verdict:
+**E2E ACCEPTANCE PASSES FOR EVERYTHING AUTOMATABLE; THE EMAIL LEG
+REMAINS "NOT CONNECTED" UNTIL THE OWNER'S THREE ENV VARS EXIST.**
+
+**Addendum, 2026-08-29 evening — Job Search increments 2–3: match scores,
+saved searches, metering, alert engine (ADR-163 addendum, ADR-164):** merged
+as #437 squash `2319970` after four real completed CI checks on the exact
+head; local suite on the merged tree **5,412 tests passed / 2 skipped across
+455 files**, lint zero-warning, typecheck clean, production build green.
+Vercel deploy of `2319970` verified `success` and production probed: the new
+alert runner answers **503 `alerts_not_configured`** (designed fail-closed
+while `CRON_SECRET` is unset), saved-searches refuses anonymous callers 401,
+`/job-seeker/search` serves 200. Hosted schema applied the same hour via
+scope `job-seeker-alert-engine` (#440 added the missing dispatch option;
+apply run `33263020948` success with in-step postflight: deliveries ledger
+exists with forced RLS, `last_scanned_at` present, both alert functions
+SECURITY DEFINER and not executable by anon/authenticated). New tests this
+increment: 10 alert-planning, 7 runner-route, 13 saved-searches-route
+(3 alert cases), 20 search-route, 21 panel. Verdict: **INCREMENT GATES PASS;
+EMAIL ALERTS ARE HONESTLY "NOT CONNECTED" IN PRODUCTION UNTIL THE OWNER SETS
+RESEND_API_KEY, JOB_ALERT_EMAIL_FROM AND CRON_SECRET; NO UNQUALIFIED
+"PRODUCTION READY" CLAIM FOR THE EMAIL LEG BEFORE A REAL DELIVERY IS
+OBSERVED.**
 
 **Addendum, 2026-08-29 — Job Search increments 1–2: thirteen live boards,
 unified dedupe, honest 52-source catalogue (ADR-163):** on the branch merged

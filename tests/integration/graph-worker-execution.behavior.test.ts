@@ -73,13 +73,23 @@ async function reset(db: PGlite) {
 /** The production store's shape, over PGlite instead of supabase-js. */
 function pgliteStore(db: PGlite, workerId: string): GraphRunStore {
   return {
-    async recordNodeState(nodeRunId, state, detail, execution) {
+    async recordNodeState(nodeRunId, state, detail, execution, attempt) {
       await asServiceRole(db);
       try {
-        await db.query(
-          "select public.record_node_state_as_worker($1, $2::uuid, $3::public.graph_node_state, $4, $5, $6, $7)",
-          [workerId, nodeRunId, state, detail ?? null, execution?.provider ?? null, execution?.model ?? null, execution?.latencyMs ?? null],
-        );
+        // Mirrors the production store: the attempt travels only when the
+        // caller measured one, so the seven-argument shape every pre-attempt
+        // caller uses keeps being exercised by the tests that omit it.
+        if (attempt === undefined) {
+          await db.query(
+            "select public.record_node_state_as_worker($1, $2::uuid, $3::public.graph_node_state, $4, $5, $6, $7)",
+            [workerId, nodeRunId, state, detail ?? null, execution?.provider ?? null, execution?.model ?? null, execution?.latencyMs ?? null],
+          );
+        } else {
+          await db.query(
+            "select public.record_node_state_as_worker($1, $2::uuid, $3::public.graph_node_state, $4, $5, $6, $7, $8)",
+            [workerId, nodeRunId, state, detail ?? null, execution?.provider ?? null, execution?.model ?? null, execution?.latencyMs ?? null, attempt],
+          );
+        }
       } finally {
         await reset(db);
       }
@@ -2199,5 +2209,252 @@ describe("the graph executor boundary", { timeout: 180_000 }, () => {
     await secondStore.completeRun(second.graph.graph_run_id, "PARTIAL", true, "   ");
 
     expect(await read(second.graph.graph_run_id)).toBeNull();
+  });
+
+  /**
+   * Claim until the target graph comes up, spending leftovers from earlier
+   * cases with a PARTIAL close. The suite shares one database and a claim
+   * returns whatever is oldest and claimable — including graphs earlier
+   * cases deliberately left re-claimable (CANCELLED closes).
+   */
+  async function claimGraphById(
+    store: GraphRunStore,
+    targetGraphId: string,
+  ): Promise<ReturnType<typeof parseClaimedGraph>> {
+    for (;;) {
+      const candidate = parseClaimedGraph(await claim());
+      if (!candidate.ok || candidate.graph.graph_id === targetGraphId) return candidate;
+      await skipFreshClaimNodes(store, candidate.graph.nodes);
+      await store.completeRun(candidate.graph.graph_run_id, "PARTIAL", true);
+    }
+  }
+
+  it("persists each node's attempt, and a retry re-enters RUNNING with its own event", async () => {
+    // Before 20260830000100 the runner counted attempts in memory and the
+    // database never saw them: node_runs.attempt stayed at its insert default
+    // and a second dispatch was swallowed by the replay branch. A resumed or
+    // audited run could not say how many tries a node took.
+    const retryCapableNodes = JSON.stringify(
+      (JSON.parse(DIAMOND_NODES) as Array<Record<string, unknown>>)
+        .map((node) => ({ ...node, max_attempts: 2 })),
+    );
+    const graphId = await createDiamondGraph(
+      "Count the tries a node really took", false, retryCapableNodes,
+    );
+    const store = pgliteStore(db, "graph-worker-test");
+
+    const claimed = await claimGraphById(store, graphId);
+    expect(claimed.ok).toBe(true);
+    if (!claimed.ok) return;
+    const compiled = compileClaimedGraph(claimed.graph);
+    expect(compiled.ok).toBe(true);
+    if (!compiled.ok) return;
+
+    // inspect_b fails its first attempt retryably and succeeds on the second;
+    // its siblings succeed at once.
+    const summary = await runClaimedGraph(
+      claimed.graph, compiled.graph, store,
+      async (node, attempt): Promise<NodeExecutionResult> => {
+        if (node.nodeKey === "inspect_b" && attempt === 1) {
+          return { status: "FAILED", error: "a transient provider fault", retryable: true };
+        }
+        return {
+          status: "SUCCEEDED",
+          output: { note: `${node.nodeKey} settled on attempt ${attempt}` },
+          provider: "anthropic",
+          model: "claude-sonnet",
+          latencyMs: 5,
+          tokensUsed: 10,
+        };
+      },
+    );
+    expect(summary.finalState).toBe("COMPLETED");
+
+    const attempts = await db.query<{ attempt: number; node_key: string; state: string }>(
+      `select gn.node_key, nr.attempt, nr.state::text
+         from public.node_runs nr
+         join public.graph_nodes gn on gn.id = nr.node_id
+        where nr.graph_run_id = $1
+        order by gn.node_key`,
+      [claimed.graph.graph_run_id],
+    );
+    expect(attempts.rows).toEqual([
+      { node_key: "inspect_a", attempt: 1, state: "COMPLETED" },
+      { node_key: "inspect_b", attempt: 2, state: "COMPLETED" },
+      { node_key: "inspect_c", attempt: 1, state: "COMPLETED" },
+      { node_key: "synthesize", attempt: 1, state: "COMPLETED" },
+    ]);
+
+    // The retry is its own event, not a swallowed replay: two node_running
+    // rows, the second naming the attempt, and the completion carrying it too.
+    const retried = claimed.graph.nodes.find((node) => node.node_key === "inspect_b");
+    expect(retried).toBeDefined();
+    const trail = await db.query<{ detail: string | null; event_type: string }>(
+      `select event_type, detail from public.graph_events
+        where node_run_id = $1 and event_type in ('node_running', 'node_completed')
+        order by event_type, detail`,
+      [retried?.node_run_id],
+    );
+    expect(trail.rows).toEqual([
+      { event_type: "node_completed", detail: "worker graph-worker-test attempt 2" },
+      { event_type: "node_running", detail: "worker graph-worker-test" },
+      { event_type: "node_running", detail: "worker graph-worker-test attempt 2" },
+    ]);
+  });
+
+  it("withdraws a graph: Stop removes it from every future claim, audited", async () => {
+    const graphId = await createDiamondGraph("Withdraw me before any worker spends me");
+    await asOwner(db);
+    await db.query(
+      "select public.withdraw_graph_as_member($1::uuid, $2::uuid, 'changed my mind')",
+      [organizationId, graphId],
+    );
+    await reset(db);
+
+    const row = await db.query<{ withdrawal_reason: string | null; withdrawn_at: string | null; withdrawn_by: string | null }>(
+      "select withdrawn_at, withdrawn_by, withdrawal_reason from public.graphs where id = $1",
+      [graphId],
+    );
+    expect(row.rows[0].withdrawn_at).not.toBeNull();
+    expect(row.rows[0].withdrawn_by).toBe(ownerId);
+    expect(row.rows[0].withdrawal_reason).toBe("changed my mind");
+
+    // No claim selects a withdrawn graph.
+    expect(await claim()).toBeNull();
+
+    // A second withdrawal is agreement, not an error — and not a second event.
+    await asOwner(db);
+    await db.query(
+      "select public.withdraw_graph_as_member($1::uuid, $2::uuid, null)",
+      [organizationId, graphId],
+    );
+    await reset(db);
+    const audit = await db.query<{ count: number }>(
+      `select count(*)::integer as count from public.activity_events
+        where entity_id = $1 and event_type = 'graph.withdrawn'`,
+      [graphId],
+    );
+    expect(audit.rows[0].count).toBe(1);
+  });
+
+  it("never pretends to stop live work, and holds its own boundary", async () => {
+    const graphId = await createDiamondGraph("Hold the live claim");
+    const store = pgliteStore(db, "graph-worker-test");
+    const claimed = await claimGraphById(store, graphId);
+    expect(claimed.ok).toBe(true);
+    if (!claimed.ok) return;
+
+    // The run is RUNNING: a withdrawal would be a lie, so it is refused.
+    await asOwner(db);
+    await expect(db.query(
+      "select public.withdraw_graph_as_member($1::uuid, $2::uuid, null)",
+      [organizationId, graphId],
+    )).rejects.toThrow(/graph_run_in_flight/);
+
+    // A secret-shaped reason never becomes a stored row or an audit line.
+    await expect(db.query(
+      "select public.withdraw_graph_as_member($1::uuid, $2::uuid, $3)",
+      [organizationId, graphId, `sk-${"a".repeat(30)}`],
+    )).rejects.toThrow(/secret-shaped/);
+
+    // Someone who is not a member of the organization is refused outright.
+    await db.query("select set_config('request.jwt.claim.sub', $1, false)", [
+      "00000000-0000-4000-8000-00000000beef",
+    ]);
+    await db.exec("set role authenticated");
+    await expect(db.query(
+      "select public.withdraw_graph_as_member($1::uuid, $2::uuid, null)",
+      [organizationId, graphId],
+    )).rejects.toThrow(/member of the owning organization/);
+    await reset(db);
+
+    // Close the run as FAILED — normally that leaves the graph re-claimable —
+    // then withdraw: Stop is exactly the control that ends that loop.
+    await skipFreshClaimNodes(store, claimed.graph.nodes);
+    await store.completeRun(claimed.graph.graph_run_id, "FAILED", true);
+    await asOwner(db);
+    await db.query(
+      "select public.withdraw_graph_as_member($1::uuid, $2::uuid, 'stop retrying this')",
+      [organizationId, graphId],
+    );
+    await reset(db);
+    expect(await claim()).toBeNull();
+  });
+
+  it("refuses attempt regressions and nonsense, and keeps the old caller shape whole", async () => {
+    const graphId = await createDiamondGraph("Hold the attempt counter's one direction");
+    const store = pgliteStore(db, "graph-worker-test");
+    const claimed = await claimGraphById(store, graphId);
+    expect(claimed.ok).toBe(true);
+    if (!claimed.ok) return;
+    const subject = claimed.graph.nodes.find((node) => node.node_key === "inspect_a");
+    const legacy = claimed.graph.nodes.find((node) => node.node_key === "inspect_b");
+    expect(subject).toBeDefined();
+    expect(legacy).toBeDefined();
+
+    await store.recordNodeState(subject!.node_run_id, "RUNNING", null, undefined, 2);
+
+    // The counter runs one way: a lower attempt is a stale or forged report
+    // and zero is nonsense; both are refused without touching the row.
+    await asServiceRole(db);
+    await expect(db.query(
+      "select public.record_node_state_as_worker($1, $2::uuid, 'RUNNING', null, null, null, null, 1)",
+      ["graph-worker-test", subject!.node_run_id],
+    )).rejects.toThrow(/node_attempt_regression/);
+    await expect(db.query(
+      "select public.record_node_state_as_worker($1, $2::uuid, 'RUNNING', null, null, null, null, 0)",
+      ["graph-worker-test", subject!.node_run_id],
+    )).rejects.toThrow(/node_attempt_must_be_positive/);
+    await reset(db);
+
+    // An exact replay of the recorded attempt stays idempotent: same row,
+    // no second event.
+    await store.recordNodeState(subject!.node_run_id, "RUNNING", null, undefined, 2);
+    const runningEvents = async (): Promise<number> => {
+      const counted = await db.query<{ count: number }>(
+        `select count(*)::integer as count from public.graph_events
+          where node_run_id = $1 and event_type = 'node_running'`,
+        [subject?.node_run_id],
+      );
+      return counted.rows[0].count;
+    };
+    expect(await runningEvents()).toBe(1);
+
+    // A higher attempt is a real second start: the counter moves and the
+    // trail gains its own event.
+    await store.recordNodeState(subject!.node_run_id, "RUNNING", null, undefined, 3);
+    expect(await runningEvents()).toBe(2);
+    const row = await db.query<{ attempt: number; state: string }>(
+      "select attempt, state::text from public.node_runs where id = $1",
+      [subject?.node_run_id],
+    );
+    expect(row.rows[0]).toEqual({ attempt: 3, state: "RUNNING" });
+
+    // A caller from before the migration — seven arguments, no attempt —
+    // still resolves and still transitions; the counter simply keeps its
+    // insert default, honest about never having been measured.
+    await asServiceRole(db);
+    await db.query(
+      "select public.record_node_state_as_worker($1, $2::uuid, 'RUNNING', null, null, null, null)",
+      ["graph-worker-test", legacy!.node_run_id],
+    );
+    await reset(db);
+    const legacyRow = await db.query<{ attempt: number; state: string }>(
+      "select attempt, state::text from public.node_runs where id = $1",
+      [legacy?.node_run_id],
+    );
+    expect(legacyRow.rows[0]).toEqual({ attempt: 0, state: "RUNNING" });
+
+    // Close the run so the queue ends this test empty.
+    await store.recordNodeState(subject!.node_run_id, "FAILED", "settled for the fixture", undefined, 3);
+    await store.recordNodeState(legacy!.node_run_id, "FAILED", "settled for the fixture");
+    for (const node of claimed.graph.nodes) {
+      if (node.node_key === "inspect_a" || node.node_key === "inspect_b") continue;
+      await store.recordNodeState(
+        node.node_run_id, "SKIPPED", "test fixture intentionally did not execute this node",
+      );
+    }
+    await store.completeRun(claimed.graph.graph_run_id, "PARTIAL", true);
+    expect(await claim()).toBeNull();
   });
 });

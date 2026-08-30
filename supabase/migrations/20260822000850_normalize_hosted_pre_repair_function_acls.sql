@@ -6,12 +6,22 @@
 -- This migration changes ACLs only.  A clean replay, whose four ACLs are
 -- already normalized and whose claim result uses the canonical output names,
 -- is an exact no-op.
+--
+-- A third input state exists since supabase/postgres 17.6.1.16x: the image
+-- restored the hosted default privileges (postgres's functions in public
+-- default-grant EXECUTE to anon, authenticated, and service_role), so a
+-- clean replay now arrives with the canonical claim contract but an extra
+-- service_role EXECUTE entry on the three functions that never revoked it
+-- explicitly.  That state takes the same normalization as the hosted input
+-- and converges to the same postflight target.  Earlier images without the
+-- default grant still match the already-normalized branch unchanged.
 
 do $normalize_hosted_pre_repair_function_acls$
 declare
   v_common_ready boolean;
   v_hosted_input boolean;
   v_target_input boolean;
+  v_fresh_default_input boolean;
   v_before_oids oid[];
   v_before_sources text[];
   v_before_contracts text[];
@@ -207,22 +217,48 @@ begin
         and not has_function_privilege('service_role', oid, 'EXECUTE')
       else false
     end),
+    bool_and(case signature
+      when 'public.claim_provider_connect_session(text,text)' then
+        actual_result_md5 = alternate_result_md5
+        and actual_contract_md5 = alternate_contract_md5
+        and acl_entries = 2
+        and not authenticated_direct and service_role_direct
+        and not has_function_privilege('authenticated', oid, 'EXECUTE')
+        and has_function_privilege('service_role', oid, 'EXECUTE')
+      when 'public.normalize_bot_assignment_configuration(jsonb)' then
+        acl_entries = 2
+        and not authenticated_direct and service_role_direct
+        and not has_function_privilege('authenticated', oid, 'EXECUTE')
+        and has_function_privilege('service_role', oid, 'EXECUTE')
+      when 'public.record_claim_anchoring(uuid,public.anchored_claim,uuid[])' then
+        acl_entries = 3
+        and authenticated_direct and service_role_direct
+        and has_function_privilege('authenticated', oid, 'EXECUTE')
+        and has_function_privilege('service_role', oid, 'EXECUTE')
+      when 'public.validate_pipeline_template_areas(jsonb)' then
+        acl_entries = 2
+        and not authenticated_direct and service_role_direct
+        and not has_function_privilege('authenticated', oid, 'EXECUTE')
+        and has_function_privilege('service_role', oid, 'EXECUTE')
+      else false
+    end),
     array_agg(oid order by signature),
     array_agg(actual_source_md5 order by signature),
     array_agg(actual_contract_md5 order by signature)
-  into v_common_ready, v_hosted_input, v_target_input,
+  into v_common_ready, v_hosted_input, v_target_input, v_fresh_default_input,
        v_before_oids, v_before_sources, v_before_contracts
   from state;
 
   if v_common_ready is distinct from true
      or not coalesce(v_hosted_input, false)
         and not coalesce(v_target_input, false)
+        and not coalesce(v_fresh_default_input, false)
   then
     raise exception using errcode = '55000',
       message = '20260822000850 preflight: hosted function identity, catalog, ACL cohort, or overload drifted';
   end if;
 
-  if v_hosted_input then
+  if v_hosted_input or v_fresh_default_input then
     execute 'revoke all on function public.claim_provider_connect_session(text,text) from public, anon, authenticated, service_role';
     execute 'grant execute on function public.claim_provider_connect_session(text,text) to service_role';
 

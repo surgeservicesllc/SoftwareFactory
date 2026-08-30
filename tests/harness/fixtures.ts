@@ -1324,3 +1324,120 @@ export const JOB_SEEKER_PREFERENCES = {
   qualificationThreshold: 80,
   updatedAt: "2026-08-20T00:00:00.000Z",
 };
+
+/**
+ * The Budget Tracker overview, shaped exactly like `/api/budget/overview`'s
+ * response. Populated rather than empty, because the sweep exists to measure
+ * the layout rows produce — an account with a limit and APR, an obligation
+ * with a due day, six months of flow, and a recent-transactions list are the
+ * shapes that can overflow.
+ */
+export const BUDGET_OVERVIEW = {
+  accounts: [
+    {
+      id: "acct-checking",
+      name: "Everyday Checking",
+      institution: "Harborline Credit Union",
+      kind: "checking",
+      last4: "4471",
+      currentBalanceCents: 342_518,
+      creditLimitCents: null,
+      aprBps: null,
+      promoAprEndsOn: null,
+      isActive: true,
+    },
+    {
+      id: "acct-card",
+      name: "Travel Rewards Card With A Deliberately Long Name",
+      institution: "Meridian Bank",
+      kind: "credit_card",
+      last4: "0092",
+      currentBalanceCents: -187_264,
+      creditLimitCents: 1_200_000,
+      aprBps: 2_499,
+      promoAprEndsOn: "2026-11-01",
+      isActive: true,
+    },
+  ],
+  obligations: [
+    {
+      id: "obl-rent",
+      accountId: "acct-checking",
+      name: "Rent",
+      dueDay: 1,
+      amountCents: 215_000,
+      balanceCents: null,
+      creditLimitCents: null,
+      aprBps: null,
+      status: "current",
+      paidFrom: "Everyday Checking",
+      ownerLabel: "Household",
+      payoffRank: null,
+      autopay: true,
+    },
+    {
+      id: "obl-card",
+      accountId: "acct-card",
+      name: "Travel Rewards Card",
+      dueDay: 17,
+      amountCents: 25_000,
+      balanceCents: 187_264,
+      creditLimitCents: 1_200_000,
+      aprBps: 2_499,
+      status: "current",
+      paidFrom: "Everyday Checking",
+      ownerLabel: "Household",
+      payoffRank: 1,
+      autopay: false,
+    },
+  ],
+  flows: [
+    { month: "2026-03", incomeCents: 612_000, expenseCents: 505_400, netCents: 106_600, transactionCount: 41 },
+    { month: "2026-04", incomeCents: 612_000, expenseCents: 548_900, netCents: 63_100, transactionCount: 44 },
+    { month: "2026-05", incomeCents: 641_500, expenseCents: 530_200, netCents: 111_300, transactionCount: 39 },
+    { month: "2026-06", incomeCents: 612_000, expenseCents: 587_100, netCents: 24_900, transactionCount: 47 },
+    { month: "2026-07", incomeCents: 612_000, expenseCents: 512_800, netCents: 99_200, transactionCount: 42 },
+    { month: "2026-08", incomeCents: 612_000, expenseCents: 431_600, netCents: 180_400, transactionCount: 35 },
+  ],
+  recent: [
+    {
+      id: "txn-1",
+      accountId: "acct-checking",
+      categoryId: null,
+      postedOn: "2026-08-28",
+      kind: "expense",
+      description: "Nordisk Grocers — weekly shop",
+      amountCents: -8_742,
+    },
+    {
+      id: "txn-2",
+      accountId: "acct-card",
+      categoryId: null,
+      postedOn: "2026-08-27",
+      kind: "expense",
+      description: "Rail card renewal",
+      amountCents: -4_500,
+    },
+    {
+      id: "txn-3",
+      accountId: "acct-checking",
+      categoryId: null,
+      postedOn: "2026-08-26",
+      kind: "income",
+      description: "Salary",
+      amountCents: 306_000,
+    },
+  ],
+  imports: [
+    {
+      id: "imp-1",
+      sourceName: "statements.xlsx",
+      sheetName: "August",
+      rowsRead: 44,
+      rowsImported: 41,
+      rowsSkipped: 3,
+      notice: "3 duplicate rows skipped.",
+      createdAt: "2026-08-28T09:00:00.000Z",
+    },
+  ],
+};

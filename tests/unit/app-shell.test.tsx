@@ -26,6 +26,8 @@ describe("AppShell navigation", () => {
     // linked to nothing.
     expect(links).toEqual([
       "Overview",
+      // The conversational front door (ADR-171): one prompt, one live run.
+      "Build",
       // The owner's 2026-08-24 design: the guided setup journey first, then
       // the running factory's ten steps as their own numbered group.
       "01. Factory Setup",

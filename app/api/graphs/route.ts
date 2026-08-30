@@ -14,7 +14,6 @@ import {
   phase1CTargetSchema,
 } from "@/lib/graph/phase1c-gate-bridge";
 import { budgetForTemplate, findTemplate, type GraphTemplate } from "@/lib/graph/templates";
-import { planForGoal } from "@/lib/sdlc/chief-of-staff";
 import { createGitHubInstallationToken, GitHubApiError } from "@/lib/github/client";
 import {
   getGitHubAppConfigurationForAppId,
@@ -75,24 +74,14 @@ export const runtime = "nodejs";
 const launchSchema = z
   .object({
     projectId: z.string().uuid(),
-    /*
-     * Optional now, because a person typing "Build me a booking app" has not
-     * chosen a template and should not have to. When it is absent the Chief of
-     * Staff picks one from the goal and the response says which and why.
-     * Supplying it still wins outright — an explicit choice is never
-     * overridden by a classifier.
-     */
-    templateKey: z.string().trim().min(1).max(64).optional(),
-    // The Factory launch control always supplies a real user goal; when this
-    // field is present it, rather than the template summary, is the graph's
-    // durable goal and the context every worker node receives.
+    templateKey: z.string().trim().min(1).max(64),
+    // Optional only for rolling compatibility with the older template-planning
+    // dialog. The Factory launch control always supplies a real user goal;
+    // when this field is present it, rather than the template summary, is the
+    // graph's durable goal and the context every worker node receives.
     goal: z.string().trim().min(1).max(4_000).optional(),
   })
-  .strict()
-  .refine((value) => value.templateKey !== undefined || value.goal !== undefined, {
-    message: "Give a goal to build, or a templateKey to run.",
-    path: ["goal"],
-  });
+  .strict();
 
 export async function POST(request: Request) {
   try {
@@ -102,7 +91,7 @@ export async function POST(request: Request) {
     // bytes. Bound both the semantic field and the transport envelope.
     const parsed = launchSchema.safeParse(await readBoundedJson(request, 20 * 1024));
     if (!parsed.success) {
-      return invalidRequest("Provide a projectId, and either a goal to build or a templateKey to run.");
+      return invalidRequest("Provide a projectId and a templateKey.");
     }
 
     const context = await operationsContext();
@@ -130,24 +119,13 @@ export async function POST(request: Request) {
     // Built-in templates come from code; custom ones from the organization's
     // graph_templates rows, rebuilt through the same builder so both launch
     // through the identical compile path.
-    /*
-     * No template named means the goal decides. `planForGoal` classifies the
-     * request and routes it — including to `full_lifecycle`, which no keyword
-     * previously reached, so the repository's ten-phase path was only runnable
-     * by someone who knew its key.
-     */
-    const chiefPlan = parsed.data.templateKey === undefined && parsed.data.goal !== undefined
-      ? planForGoal(parsed.data.goal)
-      : null;
-    const resolvedTemplateKey = parsed.data.templateKey ?? chiefPlan?.templateKey ?? "";
-
-    let template: GraphTemplate | null = findTemplate(resolvedTemplateKey) ?? null;
+    let template: GraphTemplate | null = findTemplate(parsed.data.templateKey) ?? null;
     if (!template) {
       const { data: customRow, error: customError } = await context.client
         .from("graph_templates")
         .select("slug,name,description,definition,is_archived")
         .eq("organization_id", context.activeOrganization.id)
-        .eq("slug", resolvedTemplateKey)
+        .eq("slug", parsed.data.templateKey)
         .eq("is_archived", false)
         .maybeSingle();
       if (customError) return databaseErrorResponse(customError);
@@ -160,7 +138,7 @@ export async function POST(request: Request) {
         );
         if (!input) {
           return invalidRequest(
-            `The custom template \`${resolvedTemplateKey}\` has a stored definition this route cannot build.`,
+            `The custom template \`${parsed.data.templateKey}\` has a stored definition this route cannot build.`,
           );
         }
         template = buildCustomTemplate(input);
@@ -171,7 +149,7 @@ export async function POST(request: Request) {
       // Named rather than generic: a caller sending an unknown key has a typo
       // or a stale client, and "not found" alone distinguishes neither.
       return invalidRequest(
-        `No graph template is registered under \`${resolvedTemplateKey}\`.`,
+        `No graph template is registered under \`${parsed.data.templateKey}\`.`,
       );
     }
 
@@ -388,19 +366,6 @@ export async function POST(request: Request) {
     return jsonNoStore({
       graphId: data,
       template: { key: template.key, name: template.name, version: template.version },
-      /*
-       * Present only when the Chief of Staff chose the template, so a person
-       * who typed a sentence can see what was decided on their behalf and on
-       * what evidence. Absent when they named a template themselves — there is
-       * no decision to explain.
-       */
-      chiefOfStaff: chiefPlan === null ? null : {
-        intent: chiefPlan.intent,
-        shape: chiefPlan.shape,
-        rationale: chiefPlan.rationale,
-        statedConstraints: chiefPlan.statedConstraints,
-        signals: chiefPlan.signals,
-      },
       topology: plan.topology,
       nodeCount: plan.nodes.length,
       edgeCount: plan.edges.length,

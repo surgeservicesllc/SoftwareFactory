@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -417,6 +417,162 @@ describe("the search panel", () => {
     expect(links.every((link) => (link.getAttribute("rel") ?? "").includes("noopener"))).toBe(true);
   });
 
+  it("renders the server's match score with its evidence, and offers match sort", async () => {
+    const card = {
+      job: hit("Platform Engineer").job,
+      publishedOn: "2026-08-27",
+      closesOn: null,
+      sources: [{ board: "jobnet", boardName: "Jobnet", url: "https://example.org/jobs/jobnet-1", externalId: "id-1", saveToken: "t-1" }],
+      primarySourceIndex: 0,
+      match: {
+        score: 84,
+        reasons: ["The role's title aligns with your recorded \"Platform Engineer\"."],
+        gaps: ["The posting names none of your recorded industries."],
+        threshold: 80,
+        qualified: true,
+        excluded: null,
+      },
+    };
+    respond({
+      results: [{ board: "jobnet", boardName: "Jobnet", totalAvailable: 1, hits: [hit("Platform Engineer")], locationApplied: true }],
+      failures: [],
+      unified: {
+        hits: [card],
+        dedupedFrom: 1,
+        beforeFilters: 1,
+        matchBasis: { computed: true, method: "Rule-based match computed from your recorded profile and preferences." },
+      },
+    });
+    const user = userEvent.setup();
+    render(<JobSearchPanel />);
+    await screen.findByText(/Searching 2 boards:/);
+
+    await search(user);
+
+    expect(await screen.findByText("Match 84")).toBeInTheDocument();
+    expect(screen.getByText(/Rule-based match computed from your recorded profile/)).toBeInTheDocument();
+    await user.click(screen.getByText("Why this match score"));
+    expect(screen.getByText(/aligns with your recorded/)).toBeInTheDocument();
+    expect(screen.getByText(/Gap: The posting names none of your recorded industries/)).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Best match" })).toBeInTheDocument();
+  });
+
+  it("says why scores are absent rather than inventing them", async () => {
+    const card = {
+      job: hit("Platform Engineer").job,
+      publishedOn: null,
+      closesOn: null,
+      sources: [{ board: "jobnet", boardName: "Jobnet", url: null, externalId: "id-1", saveToken: "t-1" }],
+      primarySourceIndex: 0,
+      match: null,
+    };
+    respond({
+      results: [{ board: "jobnet", boardName: "Jobnet", totalAvailable: 1, hits: [hit("Platform Engineer")], locationApplied: true }],
+      failures: [],
+      unified: {
+        hits: [card],
+        dedupedFrom: 1,
+        beforeFilters: 1,
+        matchBasis: { computed: false, reason: "No Career Profile is recorded yet." },
+      },
+    });
+    const user = userEvent.setup();
+    render(<JobSearchPanel />);
+    await screen.findByText(/Searching 2 boards:/);
+
+    await search(user);
+
+    expect(await screen.findByText(/No Career Profile is recorded yet/)).toBeInTheDocument();
+    expect(screen.queryByText(/^Match \d+$/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "Best match" })).not.toBeInTheDocument();
+    // The min-score filter cannot act without scores, so it says why.
+    expect(screen.getByLabelText(/Match score at least/)).toBeDisabled();
+  });
+
+  it("saves the current search, runs it back, and deletes it", async () => {
+    const savedRow = {
+      id: "11111111-2222-4333-8444-555555555555",
+      name: "Remote marketing",
+      query: { text: "marketing manager", location: null, sort: "newest", filters: { keywords: ["remote"] } },
+      lastRunAt: null,
+      createdAt: "2026-08-29T14:00:00Z",
+      updatedAt: "2026-08-29T14:00:00Z",
+    };
+    const calls: Array<{ method: string; url: string; body: unknown }> = [];
+    fetchMock.mockImplementation((url: string, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      calls.push({ method, url, body: init?.body ? JSON.parse(init.body as string) : null });
+      if (url.includes("/api/job-seeker/saved-searches")) {
+        if (method === "GET") return Promise.resolve(json({ savedSearches: [] }));
+        if (method === "POST") return Promise.resolve(json({ savedSearch: savedRow }, 201));
+        if (method === "PATCH") {
+          return Promise.resolve(json({ savedSearch: { ...savedRow, lastRunAt: "2026-08-29T14:05:00Z" } }));
+        }
+        return Promise.resolve(json({ deleted: savedRow.id }));
+      }
+      if (method === "POST") return Promise.resolve(json({ results: [], failures: [] }));
+      return Promise.resolve(json(BOARDS));
+    });
+    const user = userEvent.setup();
+    render(<JobSearchPanel />);
+    await screen.findByText(/Searching 2 boards:/);
+
+    await user.type(screen.getByPlaceholderText("Job title, skill or keyword"), "marketing manager");
+    await user.type(screen.getByPlaceholderText(/Name this search/), "Remote marketing");
+    await user.click(screen.getByRole("button", { name: "Save this search" }));
+
+    expect(await screen.findByText("Remote marketing")).toBeInTheDocument();
+    const createCall = calls.find((c) => c.method === "POST" && c.url.includes("saved-searches"));
+    expect((createCall?.body as { query: { text: string } }).query.text).toBe("marketing manager");
+
+    // Run: records the run and executes the stored query as a real search.
+    await user.click(screen.getByRole("button", { name: "Run" }));
+    expect(await screen.findByText(/Never run|Last run/)).toBeInTheDocument();
+    const patchCall = calls.find((c) => c.method === "PATCH");
+    expect((patchCall?.body as { markRun?: boolean }).markRun).toBe(true);
+    const searchCall = calls.filter((c) => c.method === "POST" && !c.url.includes("saved-searches")).at(-1);
+    expect((searchCall?.body as { text: string }).text).toBe("marketing manager");
+
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+    await waitFor(() => expect(screen.queryByText("Remote marketing")).not.toBeInTheDocument());
+  });
+
+  it("offers alert cadences only when the pipeline can deliver, else says Not Connected", async () => {
+    const savedRow = {
+      id: "11111111-2222-4333-8444-555555555555",
+      name: "Remote marketing",
+      query: { text: "marketing" },
+      lastRunAt: null,
+      alert: null,
+    };
+    const renderWith = (channel: { emailConnected: boolean; schedulerConfigured: boolean }) => {
+      fetchMock.mockImplementation((url: string, init?: RequestInit) => {
+        if (url.includes("/api/job-seeker/saved-searches")) {
+          if ((init?.method ?? "GET") === "PATCH") {
+            return Promise.resolve(json({
+              savedSearch: { ...savedRow, alert: { cadence: "daily", lastScannedAt: null } },
+            }));
+          }
+          return Promise.resolve(json({ savedSearches: [savedRow], alertsChannel: channel }));
+        }
+        if (init?.method === "POST") return Promise.resolve(json({ results: [], failures: [] }));
+        return Promise.resolve(json(BOARDS));
+      });
+      return render(<JobSearchPanel />);
+    };
+
+    const user = userEvent.setup();
+    const { unmount } = renderWith({ emailConnected: false, schedulerConfigured: false });
+    expect(await screen.findByText("Alerts: Not Connected")).toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: /Email alert/ })).not.toBeInTheDocument();
+    unmount();
+
+    renderWith({ emailConnected: true, schedulerConfigured: true });
+    const select = await screen.findByRole("combobox", { name: /Email alert for Remote marketing/ });
+    await user.selectOptions(select, "daily");
+    expect(await screen.findByText(/alert daily/)).toBeInTheDocument();
+  });
+
   it("searches only the boards left ticked", async () => {
     respond({ results: [], failures: [] });
     const user = userEvent.setup();
@@ -434,5 +590,511 @@ describe("the search panel", () => {
     );
     const body = JSON.parse((searchCall?.[1] as RequestInit).body as string) as { boards?: string[] };
     expect(body.boards).toEqual(["jobnet"]);
+  });
+
+  it("renders a long unified list incrementally, with the counts staying the whole truth", async () => {
+    const many = Array.from({ length: 30 }, (_, index) =>
+      hit(`Engineer ${String(index + 1).padStart(2, "0")}`));
+    respond({
+      results: [{ board: "jobnet", boardName: "Jobnet", totalAvailable: 30, hits: many, locationApplied: true }],
+      failures: [],
+    });
+    const user = userEvent.setup();
+    render(<JobSearchPanel />);
+    await screen.findByText(/Searching 2 boards:/);
+
+    await search(user);
+
+    // The headline counts every unique posting; the list renders a page of
+    // them, and the remainder waits behind an honest "Showing X of Y".
+    expect(await screen.findByText("30 unique postings")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Save" })).toHaveLength(25);
+    expect(screen.getByText("Showing 25 of 30")).toBeInTheDocument();
+
+    await user.click(screen.getByTestId("unified-show-more"));
+
+    expect(screen.getAllByRole("button", { name: "Save" })).toHaveLength(30);
+    expect(screen.queryByTestId("unified-show-more")).not.toBeInTheDocument();
+  });
+
+  it("offers LinkedIn, Indeed and company as pre-filled link-outs a person can deselect", async () => {
+    const boardsWithSources = {
+      ...BOARDS,
+      sources: [
+        {
+          key: "linkedin", name: "LinkedIn Jobs", focus: "general", status: "external_link",
+          searchUrl: "https://www.linkedin.com/jobs/search/?keywords={query}&location={location}",
+          note: "Opens LinkedIn's own job search.",
+        },
+        {
+          key: "indeed", name: "Indeed", focus: "general", status: "external_link",
+          searchUrl: "https://www.indeed.com/jobs?q={query}&l={location}",
+          note: "Opens Indeed's own search.",
+        },
+      ],
+    };
+    fetchMock.mockImplementation((_url: string, init?: RequestInit) => {
+      if (init?.method === "POST") {
+        return Promise.resolve(json({
+          results: [{ board: "jobnet", boardName: "Jobnet", totalAvailable: 0, hits: [], locationApplied: true }],
+          failures: [],
+        }));
+      }
+      return Promise.resolve(json(boardsWithSources));
+    });
+    const user = userEvent.setup();
+    render(<JobSearchPanel />);
+    await screen.findByText(/Searching 2 boards:/);
+
+    // Not part of the results claim before a search has run.
+    expect(screen.queryByTestId("linkout-strip")).not.toBeInTheDocument();
+
+    await search(user);
+
+    // The strip appears even when the connected boards found nothing — that
+    // is exactly when the person most wants the big boards one click away —
+    // and each chip carries the query into the site's own search.
+    const strip = await screen.findByTestId("linkout-strip");
+    const linkedin = within(strip).getByRole("link", { name: /LinkedIn Jobs/ });
+    expect(linkedin).toHaveAttribute(
+      "href",
+      "https://www.linkedin.com/jobs/search/?keywords=engineer&location=",
+    );
+    expect(within(strip).getByRole("link", { name: /Indeed/ })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("checkbox", { name: "Include Indeed in the link-out row" }));
+    expect(within(strip).queryByRole("link", { name: /Indeed/ })).not.toBeInTheDocument();
+    expect(within(strip).getByRole("link", { name: /LinkedIn Jobs/ })).toBeInTheDocument();
+  });
+
+  it("makes LinkedIn and Indeed primary: one click from the search form, before any search runs", async () => {
+    const boardsWithSources = {
+      ...BOARDS,
+      sources: [
+        {
+          key: "linkedin_jobs", name: "LinkedIn Jobs", focus: "general", status: "external_link",
+          searchUrl: "https://www.linkedin.com/jobs/search/?keywords={query}&location={location}",
+          note: "Opens LinkedIn's own job search.",
+        },
+        {
+          key: "indeed", name: "Indeed", focus: "general", status: "external_link",
+          searchUrl: "https://www.indeed.com/jobs?q={query}&l={location}",
+          note: "Opens Indeed's own search.",
+        },
+        {
+          key: "glassdoor", name: "Glassdoor", focus: "general", status: "external_link",
+          searchUrl: "https://www.glassdoor.com/Job/jobs.htm?sc.keyword={query}&locKeyword={location}",
+          note: "Opens Glassdoor's own search.",
+        },
+      ],
+    };
+    fetchMock.mockImplementation((_url: string, init?: RequestInit) => {
+      if (init?.method === "POST") return Promise.resolve(json({ results: [], failures: [] }));
+      return Promise.resolve(json(boardsWithSources));
+    });
+    const user = userEvent.setup();
+    render(<JobSearchPanel />);
+    await screen.findByText(/Searching 2 boards:/);
+
+    // Primary means primary: the two sites sit beside the search button
+    // before our boards have been asked anything — only the deeply wired
+    // pair, not every link-out site.
+    const primary = await screen.findByTestId("primary-linkouts");
+    expect(within(primary).getByRole("link", { name: /LinkedIn Jobs/ })).toBeInTheDocument();
+    expect(within(primary).getByRole("link", { name: /Indeed/ })).toBeInTheDocument();
+    expect(within(primary).queryByRole("link", { name: /Glassdoor/ })).not.toBeInTheDocument();
+
+    // The links live-update with what the person types, filters included.
+    await user.type(screen.getByPlaceholderText("Job title, skill or keyword"), "designer");
+    await user.type(screen.getByPlaceholderText("Place or postcode"), "78701");
+    const linkedin = new URL(
+      within(primary).getByRole("link", { name: /LinkedIn Jobs/ }).getAttribute("href")!,
+    );
+    expect(linkedin.searchParams.get("keywords")).toBe("designer");
+    expect(linkedin.searchParams.get("location")).toBe("78701");
+
+    // Deselecting a site under Sources removes it here too.
+    await user.click(screen.getByText(/Sources \(2 searched live/));
+    await user.click(screen.getByRole("checkbox", { name: "Include Indeed in the link-out row" }));
+    expect(within(primary).queryByRole("link", { name: /Indeed/ })).not.toBeInTheDocument();
+  });
+
+  it("wires LinkedIn and Indeed deeply: their links carry the filters and sort first", async () => {
+    const boardsWithSources = {
+      ...BOARDS,
+      sources: [
+        {
+          key: "glassdoor", name: "Glassdoor", focus: "general", status: "external_link",
+          searchUrl: "https://www.glassdoor.com/Job/jobs.htm?sc.keyword={query}&locKeyword={location}",
+          note: "Opens Glassdoor's own search.",
+        },
+        {
+          key: "linkedin_jobs", name: "LinkedIn Jobs", focus: "general", status: "external_link",
+          searchUrl: "https://www.linkedin.com/jobs/search/?keywords={query}&location={location}",
+          note: "Opens LinkedIn's own job search.",
+        },
+        {
+          key: "indeed", name: "Indeed", focus: "general", status: "external_link",
+          searchUrl: "https://www.indeed.com/jobs?q={query}&l={location}",
+          note: "Opens Indeed's own search.",
+        },
+      ],
+    };
+    fetchMock.mockImplementation((_url: string, init?: RequestInit) => {
+      if (init?.method === "POST") {
+        return Promise.resolve(json({
+          results: [{ board: "jobnet", boardName: "Jobnet", totalAvailable: 0, hits: [], locationApplied: true }],
+          failures: [],
+        }));
+      }
+      return Promise.resolve(json(boardsWithSources));
+    });
+    const user = userEvent.setup();
+    render(<JobSearchPanel />);
+    await screen.findByText(/Searching 2 boards:/);
+
+    await user.type(screen.getByPlaceholderText("Job title, skill or keyword"), "engineer");
+    await user.type(screen.getByPlaceholderText("Place or postcode"), "Copenhagen");
+    await user.selectOptions(screen.getByRole("combobox", { name: "Within distance" }), "50");
+    await user.selectOptions(screen.getByRole("combobox", { name: /Work model/ }), "remote");
+    await user.selectOptions(screen.getByRole("combobox", { name: /Posted within/ }), "7");
+    await user.type(screen.getByRole("spinbutton", { name: /Salary at least/ }), "90000");
+    await user.click(screen.getByRole("button", { name: /^search$/i }));
+
+    const strip = await screen.findByTestId("linkout-strip");
+
+    // The two deeply wired sites sort ahead of template-only Glassdoor and
+    // say visibly that the filters travel with them.
+    const chips = within(strip).getAllByRole("link");
+    expect(chips.map((chip) => chip.textContent)).toEqual([
+      expect.stringContaining("LinkedIn Jobs"),
+      expect.stringContaining("Indeed"),
+      expect.stringContaining("Glassdoor"),
+    ]);
+    expect(within(strip).getAllByText("· your filters")).toHaveLength(2);
+
+    // LinkedIn's link speaks LinkedIn's own parameters.
+    const linkedin = new URL(
+      within(strip).getByRole("link", { name: /LinkedIn Jobs/ }).getAttribute("href")!,
+    );
+    expect(linkedin.searchParams.get("keywords")).toBe("engineer");
+    expect(linkedin.searchParams.get("location")).toBe("Copenhagen");
+    expect(linkedin.searchParams.get("distance")).toBe("31");
+    expect(linkedin.searchParams.get("f_TPR")).toBe("r604800");
+    expect(linkedin.searchParams.get("f_WT")).toBe("2");
+    expect(linkedin.searchParams.get("f_SB2")).toBe("3");
+
+    // Indeed's link speaks Indeed's: radius/fromage as parameters, salary
+    // and remote in the query text per Indeed's own search tips.
+    const indeed = new URL(
+      within(strip).getByRole("link", { name: /Indeed/ }).getAttribute("href")!,
+    );
+    expect(indeed.searchParams.get("q")).toBe("engineer $90,000 remote");
+    expect(indeed.searchParams.get("l")).toBe("Copenhagen");
+    expect(indeed.searchParams.get("radius")).toBe("35");
+    expect(indeed.searchParams.get("fromage")).toBe("7");
+
+    // Glassdoor has no verified parameter mapping, so its link stays the
+    // plain query+location template — no invented filters.
+    const glassdoor = within(strip).getByRole("link", { name: /Glassdoor/ }).getAttribute("href")!;
+    expect(glassdoor).toBe(
+      "https://www.glassdoor.com/Job/jobs.htm?sc.keyword=engineer&locKeyword=Copenhagen",
+    );
+  });
+
+  it("filters by the seniority the title states, chips it, and saves it with the search", async () => {
+    respond({
+      results: [{
+        board: "jobnet",
+        boardName: "Jobnet",
+        totalAvailable: 3,
+        hits: [hit("Senior Platform Engineer"), hit("Platform Engineer"), hit("Engineering Manager")],
+        locationApplied: true,
+      }],
+      failures: [],
+    });
+    const user = userEvent.setup();
+    render(<JobSearchPanel />);
+    await screen.findByText(/Searching 2 boards:/);
+
+    await search(user);
+    expect(await screen.findByText("3 unique postings")).toBeInTheDocument();
+
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: /Seniority \(from the job title\)/ }),
+      "senior",
+    );
+
+    // Only the title that says "senior" stays; the untitled and the manager
+    // are counted as hidden by filters, and the chip names the derivation.
+    expect(screen.getByText("1 unique posting")).toBeInTheDocument();
+    expect(screen.getByText(/2 postings are hidden by\s+your filters/)).toBeInTheDocument();
+    expect(screen.getByText("title: senior")).toBeInTheDocument();
+
+    // The seniority travels into a saved search like every other filter.
+    await user.type(screen.getByPlaceholderText(/Name this search/), "Senior only");
+    await user.click(screen.getByRole("button", { name: "Save this search" }));
+    const savedCall = fetchMock.mock.calls.find(([url, init]) =>
+      typeof url === "string" && url.includes("/saved-searches") &&
+      (init as RequestInit | undefined)?.method === "POST");
+    const body = JSON.parse((savedCall?.[1] as RequestInit).body as string) as {
+      query: { filters?: { seniority?: string } };
+    };
+    expect(body.query.filters?.seniority).toBe("senior");
+  });
+
+  it("filters by title-named specialty and posting-text industry, chipped and honest", async () => {
+    const seoHit = { ...hit("SEO Manager"), job: { ...hit("SEO Manager").job, description: "Own organic search." } };
+    const genericHit = {
+      ...hit("Marketing Manager"),
+      job: { ...hit("Marketing Manager").job, description: "Join our fast-growing SaaS platform." },
+    };
+    respond({
+      results: [{ board: "jobnet", boardName: "Jobnet", totalAvailable: 2, hits: [seoHit, genericHit], locationApplied: true }],
+      failures: [],
+    });
+    const user = userEvent.setup();
+    render(<JobSearchPanel />);
+    await screen.findByText(/Searching 2 boards:/);
+
+    await search(user);
+    expect(await screen.findByText("2 unique postings")).toBeInTheDocument();
+
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: /Marketing specialty \(from the job title\)/ }),
+      "seo",
+    );
+    expect(screen.getByText("1 unique posting")).toBeInTheDocument();
+    expect(screen.getByText("specialty: SEO")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Remove filter specialty: SEO" }));
+
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: /Industry \(from the posting text\)/ }),
+      "technology",
+    );
+    // Only the posting whose own text evidences SaaS/technology stays.
+    expect(screen.getByText("1 unique posting")).toBeInTheDocument();
+    expect(screen.getByText("Marketing Manager")).toBeInTheDocument();
+    expect(screen.getByText("industry: Technology / SaaS")).toBeInTheDocument();
+  });
+
+  it("sends the radius only alongside a place, and renders the server's honest account", async () => {
+    fetchMock.mockImplementation((_url: string, init?: RequestInit) => {
+      if (init?.method === "POST") {
+        return Promise.resolve(json({
+          results: [{ board: "jobnet", boardName: "Jobnet", totalAvailable: 1, hits: [hit("Close Role")], locationApplied: true }],
+          failures: [],
+          unified: {
+            radius: {
+              applied: true,
+              radiusKm: 50,
+              center: { name: "Copenhagen", country: "DK" },
+              excluded: 3,
+              unresolvedKept: 2,
+              remoteKept: 1,
+            },
+          },
+        }));
+      }
+      return Promise.resolve(json(BOARDS));
+    });
+    const user = userEvent.setup();
+    render(<JobSearchPanel />);
+    await screen.findByText(/Searching 2 boards:/);
+
+    // No place, no distance: the select waits rather than pretending.
+    const radiusSelect = screen.getByRole("combobox", { name: "Within distance" });
+    expect(radiusSelect).toBeDisabled();
+
+    await user.type(screen.getByPlaceholderText("Place or postcode"), "Copenhagen");
+    expect(radiusSelect).toBeEnabled();
+    await user.selectOptions(radiusSelect, "50");
+    await search(user);
+
+    const searchCall = fetchMock.mock.calls.find(
+      ([, init]) => (init as RequestInit | undefined)?.method === "POST",
+    );
+    const body = JSON.parse((searchCall?.[1] as RequestInit).body as string) as { radiusKm?: number };
+    expect(body.radiusKm).toBe(50);
+
+    const report = await screen.findByTestId("radius-report");
+    expect(report.textContent).toContain("Within 50 km of Copenhagen (DK)");
+    expect(report.textContent).toContain("3 excluded by distance");
+    expect(report.textContent).toContain("1 remote kept");
+    expect(report.textContent).toContain("2 kept whose stated place is not in the city index");
+  });
+
+  it("shows why a distance was not applied instead of quietly ignoring it", async () => {
+    fetchMock.mockImplementation((_url: string, init?: RequestInit) => {
+      if (init?.method === "POST") {
+        return Promise.resolve(json({
+          results: [{ board: "jobnet", boardName: "Jobnet", totalAvailable: 1, hits: [hit("Some Role")], locationApplied: true }],
+          failures: [],
+          unified: {
+            radius: { applied: false, reason: '"Anywhere" is not in the place index (cities of 15,000+ people), so distance was not applied.' },
+          },
+        }));
+      }
+      return Promise.resolve(json(BOARDS));
+    });
+    const user = userEvent.setup();
+    render(<JobSearchPanel />);
+    await screen.findByText(/Searching 2 boards:/);
+
+    await user.type(screen.getByPlaceholderText("Place or postcode"), "Anywhere");
+    await user.selectOptions(screen.getByRole("combobox", { name: "Within distance" }), "25");
+    await search(user);
+
+    const report = await screen.findByTestId("radius-report");
+    expect(report.textContent).toContain("Distance not applied:");
+    expect(report.textContent).toContain("not in the place index");
+  });
+
+  /** Board list + marks on mount, search results on POST, marks writes OK. */
+  function respondWithMarks(
+    searchBody: unknown,
+    stored: { favorite?: string[]; hidden?: string[]; viewed?: string[] } = {},
+    markWriteStatus = 200,
+  ) {
+    fetchMock.mockImplementation((url: string, init?: RequestInit) => {
+      if (typeof url === "string" && url.includes("/search/marks")) {
+        if (init?.method === "POST" || init?.method === "DELETE") {
+          return Promise.resolve(json(
+            markWriteStatus < 300 ? { marked: {} } : { error: { message: "no" } },
+            markWriteStatus,
+          ));
+        }
+        return Promise.resolve(json({
+          marks: {
+            favorite: stored.favorite ?? [],
+            hidden: stored.hidden ?? [],
+            viewed: stored.viewed ?? [],
+          },
+        }));
+      }
+      if (init?.method === "POST") return Promise.resolve(json(searchBody));
+      return Promise.resolve(json(BOARDS));
+    });
+  }
+
+  function markableHit(title: string, url: string) {
+    return { ...hit(title), job: { ...hit(title).job, url } };
+  }
+
+  const twoPostings = {
+    results: [{
+      board: "jobnet",
+      boardName: "Jobnet",
+      totalAvailable: 2,
+      hits: [
+        markableHit("Growth Engineer", "https://jobnet.dk/find-job/growth"),
+        markableHit("Data Engineer", "https://jobnet.dk/find-job/data"),
+      ],
+      locationApplied: true,
+    }],
+    failures: [],
+  };
+
+  it("favorites persist through the marks API and can narrow the list to favorites only", async () => {
+    respondWithMarks(twoPostings);
+    const user = userEvent.setup();
+    render(<JobSearchPanel />);
+    await screen.findByText(/Searching 2 boards:/);
+
+    await search(user);
+    expect(await screen.findByText("2 unique postings")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Favorite Growth Engineer" }));
+
+    // The star flips and the write is the real API call, not local decor.
+    expect(screen.getByRole("button", { name: "Unfavorite Growth Engineer" })).toBeInTheDocument();
+    const write = fetchMock.mock.calls.find(([url, init]) =>
+      typeof url === "string" && url.includes("/search/marks") &&
+      (init as RequestInit | undefined)?.method === "POST");
+    expect(JSON.parse((write?.[1] as RequestInit).body as string)).toEqual({
+      jobUrl: "https://jobnet.dk/find-job/growth",
+      mark: "favorite",
+    });
+
+    await user.click(screen.getByRole("checkbox", { name: "Favorites only" }));
+    expect(screen.getByText("1 unique posting")).toBeInTheDocument();
+    expect(screen.queryByText("Data Engineer")).not.toBeInTheDocument();
+  });
+
+  it("hides a posting, counts it honestly, and brings it back on request", async () => {
+    respondWithMarks(twoPostings);
+    const user = userEvent.setup();
+    render(<JobSearchPanel />);
+    await screen.findByText(/Searching 2 boards:/);
+
+    await search(user);
+    expect(await screen.findByText("2 unique postings")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Hide Data Engineer" }));
+
+    // Hidden-by-you is its own count, separate from hidden-by-filters.
+    expect(screen.getByText("1 unique posting")).toBeInTheDocument();
+    expect(screen.queryByText("Data Engineer")).not.toBeInTheDocument();
+    expect(screen.getByText(/1 posting hidden by you/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Show hidden" }));
+    expect(screen.getByText("Data Engineer")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Unhide Data Engineer" }));
+    expect(screen.queryByText(/hidden by you/)).not.toBeInTheDocument();
+  });
+
+  it("records viewed when a posting is opened and badges it, without ceremony", async () => {
+    respondWithMarks(twoPostings);
+    const user = userEvent.setup();
+    render(<JobSearchPanel />);
+    await screen.findByText(/Searching 2 boards:/);
+
+    await search(user);
+    expect(await screen.findByText("2 unique postings")).toBeInTheDocument();
+    expect(screen.queryByText("Viewed")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("link", { name: "Growth Engineer" }));
+
+    expect(await screen.findByText("Viewed")).toBeInTheDocument();
+    const write = fetchMock.mock.calls.find(([url, init]) =>
+      typeof url === "string" && url.includes("/search/marks") &&
+      (init as RequestInit | undefined)?.method === "POST");
+    expect(JSON.parse((write?.[1] as RequestInit).body as string)).toEqual({
+      jobUrl: "https://jobnet.dk/find-job/growth",
+      mark: "viewed",
+    });
+  });
+
+  it("reverts a failed favorite and says the save did not happen", async () => {
+    respondWithMarks(twoPostings, {}, 500);
+    const user = userEvent.setup();
+    render(<JobSearchPanel />);
+    await screen.findByText(/Searching 2 boards:/);
+
+    await search(user);
+    await screen.findByText("2 unique postings");
+
+    await user.click(screen.getByRole("button", { name: "Favorite Growth Engineer" }));
+
+    expect(await screen.findByText("The favorite could not be saved. Try again.")).toBeInTheDocument();
+    // The optimistic star is taken back rather than left lying.
+    expect(screen.getByRole("button", { name: "Favorite Growth Engineer" })).toBeInTheDocument();
+  });
+
+  it("keeps the mark controls unrendered while the person's marks are unknown", async () => {
+    // respond() answers the marks load with a body that has no marks in it.
+    respond(twoPostings);
+    const user = userEvent.setup();
+    render(<JobSearchPanel />);
+    await screen.findByText(/Searching 2 boards:/);
+
+    await search(user);
+    await screen.findByText("2 unique postings");
+
+    // A star that would forget yesterday's favorites is worse than no star.
+    expect(screen.queryByRole("button", { name: /Favorite/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Hide/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: "Favorites only" })).not.toBeInTheDocument();
   });
 });

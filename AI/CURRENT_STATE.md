@@ -2,6 +2,45 @@
 
 Last reviewed: 2026-08-29
 
+## 2026-08-29: Budget Tracker — own navigation, dated import, and a plan/history fix
+
+Three changes after the first release, all from loading the owner's real
+workbook and looking at what came out.
+
+**The forward plan was being imported as history.** A household ledger is kept
+with posted rows on top and a forward plan underneath — payee, amount, no date,
+because it has not happened. The importer carried the previous row's date down
+into all of it: 914 rows became one day, inventing $1.07M of activity in
+September 2026 that then dominated every chart. Now a date is carried forward
+only for a row *between* dated rows, where it means "same day as the line
+above"; everything after the last dated row is counted and reported as planned,
+not posted. With that fixed the last twelve months read sanely — September 2026
+is 20 transactions and -$5,235.96 — and reconcile against their own stated
+running totals with **zero breaks**. The 36 discontinuities are all in older
+history.
+
+**Its own left navigation.** `/BudgetTracker` moved from `(portal)` to a new
+`(budget)` route group. It had been inheriting `AppShell`, so the rail beside a
+household's finances was the control plane's own navigation. It now has five
+routes (Overview, Accounts, Transactions, Bills & Debt, Import), one gate in
+`(budget)/BudgetTracker/layout.tsx`, and a self-contained shell that imports
+nothing from `lib/navigation`, `AppShell` or the Job Seeker's navigation —
+asserted in `tests/unit/budget-navigation.test.tsx` against the import lines.
+
+**Import takes a date window,** with a "Last 12 months" preset. The window is
+applied after each row's date is resolved, so a continuation row is judged on
+the date it inherits rather than on its blank cell.
+
+Also hardened: the overview route derives its `YYYY-MM` key from whatever shape
+the driver returns for a `date`. PostgREST returns an ISO string, so slicing
+seven characters was right; a driver returning a `Date` turned the same slice
+into "Mon Sep", which would have labelled every bar on the cash-flow chart with
+a weekday. Found by running the real pipeline against PGlite.
+
+Verified end to end against real PostgreSQL with the owner's workbook: 866 rows
+for the twelve-month window, a second import of the same window adding zero,
+and thirteen months of cash flow read back through `budget_monthly_flow`.
+
 ## 2026-08-29: Budget Tracker
 
 `/BudgetTracker`, reached from a third global navigation tab for signed-in
@@ -318,6 +357,123 @@ production, but the tenant has zero connected AI accounts, ready bots, or
 assignments; one Codex connection is unfinished and Claude OAuth is not
 complete. Provider OAuth and route setup must finish before a fresh command
 and persisted Step 9 correlation can be measured.
+
+## 2026-08-29 (late night): Job Search increment 5 — radius, specialty and industry facets (ADR-168)
+
+The filter vocabulary is complete. Location + radius runs against a real
+offline place index (`board-search/data/cities.json`, from GeoNames
+cities15000, CC BY 4.0): server-side resolution and haversine, native
+names and exonyms both resolving, the most populous claimant of an
+ambiguous name winning visibly, remote and unresolvable-place postings
+kept and counted, an unknown centre reported as "distance not applied"
+with the reason — never a failure or a silent narrowing. The saved
+radius reaches the alert engine through an injected refinement so the
+planner stays pure. Marketing specialty (12 disciplines, from the job
+title) and industry (11 industries, from the posting text) are derived
+facets labeled as derived, with unstated postings kept under "Any".
+Increment 4's marks migration was applied to hosted (run 33273330183)
+and production probes verified the deploy of #448.
+
+## 2026-08-30 (night): the Chief of Staff named; the plan read back (ADR-173)
+
+The orchestrator is the engine, named: Build renders its plan — intent
+verbatim, dependency layers from stored edges, specialist assignments,
+QA gates, real parallelism, counted percent — composed read-only from
+the records the engine made.
+
+## 2026-08-30 (later still): the eleven specialists + command-center evidence (ADR-172)
+
+Roles derived from recorded facts only; Build shows agents beside their
+real executor evidence, independent QA verdicts, lazily fetched
+artifacts, the run's own spend, and finished-run history with closure
+notes.
+
+## 2026-08-30 (later): Build — the conversational front door (ADR-171)
+
+One prompt launches the existing full_lifecycle workflow and the page
+watches the real run: counted progress, SDLC-ordered stage states, gate
+calls-to-decide, closure notes, and a resume list of unfinished runs.
+Composition over existing endpoints only; audit and increment plan in
+`AI/AI_FACTORY_GAP_ANALYSIS.md` (task #61).
+
+## 2026-08-30: LinkedIn/Indeed primary; ZIP codes centre the radius (ADR-170)
+
+The deep pair is one click from the Search button before any board is
+asked, links recomputed live; US ZIP codes ("78701", "Austin, TX 78701",
+"78701-1234") resolve to GeoNames postal centroids in the radius filter,
+reported with the ZIP visible. Journey acceptance run 33285610004 (main
+9a73e12): the goal's full E2E list green after all increments.
+
+## 2026-08-29 (late night): LinkedIn and Indeed wired as deep link-outs (ADR-169)
+
+The permitted wiring, made real: LinkedIn and Indeed open their own search
+with the person's query AND filters translated into each site's own URL
+parameters (`board-search/linkout.ts`), sorted first in the "Also search
+on" strip and labeled "· your filters". Filters map faithfully or stay off
+the URL; other link-out sites keep the plain query+location template. A
+results-feed adapter for either site remains impossible without violating
+their terms, which this repository refuses; partner credentials would
+change that.
+
+## 2026-08-29 (night): Job Search increment 4 — personal marks + title-derived seniority (ADR-167)
+
+Favorites, hide-job and viewed/unviewed are real: `job_seeker_result_marks`
+(20260829000400) keys them on the posting URL under forced RLS with own-row
+policies, service_role revoked, and no update path (mark = row identity;
+both directions idempotent), served by `/api/job-seeker/search/marks` and
+rendered as star/Hide/Viewed controls that appear only after the person's
+actual marks load. "Hidden by you" and "hidden by your filters" are two
+separate honest counts; Show hidden and Favorites-only exist. The seniority
+facet is derived from the job title alone (`deriveSeniority`: seven levels,
+most-senior-wins, "lead generation" excluded by name, unstated = null) and
+flows through the search route, the panel select + chip, the saved-search
+schema (`nullish`, so stored queries parse) and the alert engine. Location
+radius and industry facets remain unoffered because no connected board
+exposes that data — recorded, not faked. The migration is chain-integrated
+(22 sentinels swept, grants seat, RLS count 147, runbook 179, workflow scope
+step + options entry both added).
+
+## 2026-08-29 (later): Job Search increments 2–3 — match scores, saved searches, alert engine (ADR-163 addendum, ADR-164)
+
+Merged to `main` as #437 (squash `2319970`), Vercel deploy verified, and the
+alert-engine schema applied to hosted the same hour (workflow run
+`33263020948`, scope `job-seeker-alert-engine`, postflight green: forced RLS
+on the deliveries ledger, `last_scanned_at` present, both definer functions
+SECURITY DEFINER and executable by service_role only). #440 added the
+dispatch option the apply step guarded on.
+
+- **AI match scores on results**: the search route scores every unified card
+  server-side from the recorded Career Profile facts (one profile load per
+  request, deterministic evaluator, reasons + gaps carried). No profile row →
+  `match: null` with a stated basis, and `filters.minimumScore` refuses with
+  422 rather than silently ignoring. Panel: score badge, "Why this match
+  score" evidence expansion, best-match sort offered only when scores exist,
+  minimum-score filter + chip.
+- **Saved searches**: `/api/job-seeker/saved-searches` CRUD over the ADR-141
+  table (strict bounded jsonb query documents, double ownership filtering
+  above forced RLS, 409 on duplicate names, credential-shaped values
+  refused). Panel card: Save / Run / Update-to-current / Duplicate / Delete;
+  running one restores the full builder state and executes.
+- **Search metering**: one immutable `job_seeker_search_events` row per board
+  queried (failure-tolerant — a missed tick never fails a search that
+  answered), making the discovery credit meter a measurement.
+- **Alert engine (ADR-164)**: migration `20260829000300` — cadence check +
+  `last_scanned_at` on `job_seeker_search_alerts`; append-only
+  `job_seeker_alert_deliveries` ledger with the never-repeat UNIQUE
+  constraint; `list_due_job_seeker_alerts` / `record_job_seeker_alert_scan`
+  as service_role-only SECURITY DEFINER functions (zero service_role table
+  grants — the billing-boundary pattern). Runner `/api/job-seeker/alerts/run`
+  on Vercel Cron hourly: fail-closed 503 while `CRON_SECRET` is unset
+  (verified live in production), timing-safe bearer, honest "Email is Not
+  Connected" short-circuit, per-alert search → dedupe → saved filters →
+  score → drop-delivered → email → record. Cadence controls render **Not
+  Connected** and writes 409 until `RESEND_API_KEY`, `JOB_ALERT_EMAIL_FROM`
+  and `CRON_SECRET` exist; the owner setting those three in Vercel and
+  redeploying is the only remaining step to live email alerts.
+
+Full suite at merge: 455 files / 5,412 tests green, lint zero-warning,
+typecheck clean, production build green, four real CI checks on the exact
+merged head.
 
 ## 2026-08-29: Job Search increment 1 — ten live boards, unified dedupe, 50-source catalogue (ADR-163)
 
@@ -649,10 +805,14 @@ whenever a duration is not knowable — never started, not yet finished, or
 clocks out of order — with the row omitted rather than dashed.
 
 Two things stated so they are not later mistaken for defects:
-`node_runs.attempt` is a stored column **nothing writes**, so it is
-deliberately not projected (a permanent 0 under an "attempt" heading would read
-as measured fact); and `latency_ms` is the executor's call time, not the node's
-wall time, so the table and the detail show different figures on purpose.
+`node_runs.attempt` gained its writer on 2026-08-30 (ADR-174,
+20260830000100 — the worker records each dispatch's attempt and a retry
+re-enters RUNNING with its own event), but the column is still deliberately
+not projected: historical rows keep their insert default of 0, and a 0 under
+an "attempt" heading would read as measured fact, so it surfaces nowhere
+until it can be surfaced honestly everywhere. And `latency_ms` is the
+executor's call time, not the node's wall time, so the table and the detail
+show different figures on purpose.
 
 ## 2026-08-23: the lifecycle stages have pages, and the browser suite got its workers back
 

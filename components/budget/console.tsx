@@ -10,7 +10,6 @@ import { BudgetTransactionsPanel } from "@/components/budget/transactions-panel"
 import type { BudgetOverview } from "@/components/budget/types";
 import { Card, PageHeader } from "@/components/ui";
 import type { PayoffStrategy } from "@/lib/budget/analytics";
-import { cn } from "@/lib/cn";
 
 /**
  * The Budget Tracker.
@@ -26,18 +25,30 @@ import { cn } from "@/lib/cn";
  * exactly when a person most needs to know where they are.
  */
 
-const PAGE_DESCRIPTION =
-  "Your accounts, bills and ledger in one place — every figure computed from rows you own.";
-
 export type BudgetSection = "overview" | "accounts" | "transactions" | "bills" | "import";
 
-const SECTIONS: ReadonlyArray<{ key: BudgetSection; label: string }> = [
-  { key: "overview", label: "Overview" },
-  { key: "accounts", label: "Accounts" },
-  { key: "transactions", label: "Transactions" },
-  { key: "bills", label: "Bills & Debt" },
-  { key: "import", label: "Import" },
-];
+const SECTION_HEADING: Readonly<Record<BudgetSection, { title: string; description: string }>> = {
+  overview: {
+    title: "Overview",
+    description: "Your position, your month, and what is due next — every figure computed from rows you own.",
+  },
+  accounts: {
+    title: "Accounts",
+    description: "What your money sits in, and what it is owed on.",
+  },
+  transactions: {
+    title: "Transactions",
+    description: "The ledger, searchable and paged.",
+  },
+  bills: {
+    title: "Bills & Debt",
+    description: "What repeats, what it costs to carry, and which balance to clear next.",
+  },
+  import: {
+    title: "Import",
+    description: "Bring in a statement or spreadsheet. Nothing is stored but the rows.",
+  },
+};
 
 type State = "loading" | "ready" | "error" | "onboarding";
 
@@ -49,8 +60,7 @@ const EMPTY: BudgetOverview = {
   imports: [],
 };
 
-export function BudgetTrackerConsole() {
-  const [section, setSection] = useState<BudgetSection>("overview");
+export function BudgetTrackerConsole({ section }: { section: BudgetSection }) {
   const [state, setState] = useState<State>("loading");
   const [data, setData] = useState<BudgetOverview>(EMPTY);
   const [strategy, setStrategy] = useState<PayoffStrategy>("avalanche");
@@ -102,27 +112,19 @@ export function BudgetTrackerConsole() {
     return () => window.clearTimeout(kickoff);
   }, [load]);
 
+  /*
+   * Every state keeps the page heading, including the failed and empty ones.
+   * A blocked state that replaces the whole page removes its `h1` along with
+   * everything else, exactly when a person most needs to know where they are.
+   *
+   * There is no tab strip here any more: the left rail in `BudgetShell` is
+   * the navigation, and a second row of section links directly under it was
+   * two controls for one job.
+   */
+  const heading = SECTION_HEADING[section];
   const framed = (children: React.ReactNode) => (
     <div className="space-y-6">
-      <PageHeader title="Budget Tracker" description={PAGE_DESCRIPTION} />
-      <nav aria-label="Budget Tracker sections" className="flex flex-wrap gap-1.5">
-        {SECTIONS.map((entry) => (
-          <button
-            key={entry.key}
-            type="button"
-            onClick={() => setSection(entry.key)}
-            aria-current={section === entry.key ? "page" : undefined}
-            className={cn(
-              "rounded-full border px-3 py-1.5 text-sm",
-              section === entry.key
-                ? "border-[var(--accent)] bg-[var(--accent-soft)] font-medium text-foreground"
-                : "border-line-strong text-muted hover:text-foreground",
-            )}
-          >
-            {entry.label}
-          </button>
-        ))}
-      </nav>
+      <PageHeader title={heading.title} description={heading.description} />
       {children}
     </div>
   );

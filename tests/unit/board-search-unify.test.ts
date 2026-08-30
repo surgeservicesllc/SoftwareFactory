@@ -6,6 +6,9 @@ import {
   EMPTY_FILTERS,
   applyUnifiedFilters,
   dedupeAcrossBoards,
+  deriveIndustry,
+  deriveSeniority,
+  deriveSpecialty,
   normalizeIdentity,
   salaryCeiling,
   type UnifiedHit,
@@ -202,5 +205,110 @@ describe("applyUnifiedFilters", () => {
     // 2026-07-01 is out; the undated Wordsmith posting stays — absence of a
     // date is not evidence of staleness.
     expect(recent.map((h) => h.job.company)).toEqual(["Contra", "Wordsmith Co"]);
+  });
+
+  it("keeps only titles that state the requested seniority — no level is invented", () => {
+    const managers = applyUnifiedFilters(hits, { ...EMPTY_FILTERS, seniority: "manager" }, now);
+    expect(managers.map((h) => h.job.title)).toEqual(["Growth Marketing Manager"]);
+
+    // "Content Strategist" states no level; while the filter is set it is
+    // dropped, because "the title says senior" is what the filter means.
+    const seniors = applyUnifiedFilters(hits, { ...EMPTY_FILTERS, seniority: "senior" }, now);
+    expect(seniors.map((h) => h.job.title)).toEqual(["Senior Accountant"]);
+  });
+});
+
+describe("deriveSeniority", () => {
+  it("reads the level the title states", () => {
+    expect(deriveSeniority("Senior Marketing Manager")).toBe("manager");
+    expect(deriveSeniority("Sr. Backend Engineer")).toBe("senior");
+    expect(deriveSeniority("Junior Designer")).toBe("entry");
+    expect(deriveSeniority("Entry-Level Analyst")).toBe("entry");
+    expect(deriveSeniority("Marketing Intern")).toBe("intern");
+    expect(deriveSeniority("Staff Software Engineer")).toBe("lead");
+    expect(deriveSeniority("Tech Lead, Platform")).toBe("lead");
+    expect(deriveSeniority("Head of Growth")).toBe("director");
+    expect(deriveSeniority("Director of Communications")).toBe("director");
+    expect(deriveSeniority("VP Marketing")).toBe("executive");
+    expect(deriveSeniority("Chief Marketing Officer")).toBe("executive");
+  });
+
+  it("says nothing when the title states nothing", () => {
+    expect(deriveSeniority("Content Strategist")).toBeNull();
+    expect(deriveSeniority("Software Engineer")).toBeNull();
+    // "internal" is not "intern", and international is neither.
+    expect(deriveSeniority("Internal Communications Specialist")).toBeNull();
+    expect(deriveSeniority("International Sales Representative")).toBeNull();
+  });
+
+  it("treats lead generation as the marketing discipline, not the level", () => {
+    expect(deriveSeniority("Lead Generation Specialist")).toBeNull();
+    expect(deriveSeniority("Lead Gen Marketer")).toBeNull();
+    // …while an actual lead with the word elsewhere still counts.
+    expect(deriveSeniority("Demand Generation Lead")).toBe("lead");
+  });
+
+  it("lets the most senior stated level win a composed title", () => {
+    expect(deriveSeniority("Senior Engineering Manager")).toBe("manager");
+    expect(deriveSeniority("Lead Senior Engineer")).toBe("lead");
+    expect(deriveSeniority("Senior Vice President, Product")).toBe("executive");
+  });
+});
+
+describe("deriveSpecialty", () => {
+  it("reads the discipline the title names", () => {
+    expect(deriveSpecialty("SEO Manager")).toBe("seo");
+    expect(deriveSpecialty("PPC Specialist")).toBe("paid_media");
+    expect(deriveSpecialty("Performance Marketing Lead")).toBe("paid_media");
+    expect(deriveSpecialty("Content Marketing Manager")).toBe("content");
+    expect(deriveSpecialty("Senior Copywriter")).toBe("content");
+    expect(deriveSpecialty("Social Media Coordinator")).toBe("social");
+    expect(deriveSpecialty("Email Marketing Specialist")).toBe("email");
+    expect(deriveSpecialty("Brand Manager")).toBe("brand");
+    expect(deriveSpecialty("Product Marketing Manager")).toBe("product_marketing");
+    expect(deriveSpecialty("Demand Generation Manager")).toBe("growth");
+    expect(deriveSpecialty("Head of Public Relations")).toBe("pr_comms");
+    expect(deriveSpecialty("Field Marketing Manager")).toBe("events");
+    expect(deriveSpecialty("Marketing Operations Analyst")).toBe("analytics_ops");
+    expect(deriveSpecialty("Influencer Marketing Lead")).toBe("influencer_affiliate");
+  });
+
+  it("derives nothing from a generic title — a skill wish is not a discipline", () => {
+    expect(deriveSpecialty("Marketing Manager")).toBeNull();
+    expect(deriveSpecialty("Digital Marketing Manager")).toBeNull();
+    expect(deriveSpecialty("Software Engineer")).toBeNull();
+  });
+
+  it("reads multi-word disciplines before their generic containing words", () => {
+    // "Product Marketing" must not fall through to some generic bucket.
+    expect(deriveSpecialty("Senior Product Marketing Manager")).toBe("product_marketing");
+    expect(deriveSpecialty("Growth Marketing Manager")).toBe("growth");
+  });
+});
+
+describe("deriveIndustry", () => {
+  it("reads the industry the posting text evidences", () => {
+    expect(deriveIndustry("Marketing Manager at a fast-growing SaaS platform")).toBe("technology");
+    expect(deriveIndustry("Content lead for our hospital network serving patients daily")).toBe("healthcare");
+    expect(deriveIndustry("Join a leading fintech disrupting payments")).toBe("finance");
+    expect(deriveIndustry("Brand role at an e-commerce marketplace")).toBe("retail_ecommerce");
+    expect(deriveIndustry("Producer at a game studio with a streaming arm")).toBe("media_entertainment");
+    expect(deriveIndustry("Communications for a university")).toBe("education");
+    expect(deriveIndustry("Marketing for a hotel group in tourism")).toBe("travel_hospitality");
+    expect(deriveIndustry("Supply chain marketing at an automotive manufacturer")).toBe("manufacturing_industrial");
+    expect(deriveIndustry("Campaigns for a solar energy provider")).toBe("energy");
+    expect(deriveIndustry("Outreach for a non-profit foundation")).toBe("government_nonprofit");
+    expect(deriveIndustry("Account manager at a digital agency handling client accounts")).toBe("agency_consulting");
+  });
+
+  it("derives nothing when the text evidences nothing", () => {
+    expect(deriveIndustry("Marketing Manager Acme Great role, hybrid, apply now")).toBeNull();
+    expect(deriveIndustry("")).toBeNull();
+  });
+
+  it("more evidence wins over less when texts mention two industries", () => {
+    expect(
+      deriveIndustry("Hospital marketing: clinical audiences, patients, and pharma partners at our biotech arm"),
+    ).toBe("healthcare");
   });
 });

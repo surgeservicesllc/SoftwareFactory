@@ -27,6 +27,7 @@ import { AutonomyConsole } from "@/components/autonomy-console";
 import { BotFabricConsole } from "@/components/bot-fabric-console";
 import { BotManagerHome } from "@/components/bot-manager/home";
 import { AgentTrailConsole } from "@/components/agent-trail-console";
+import { BuildWorkspace } from "@/components/build-workspace";
 import { BillingConsole } from "@/components/billing-console";
 import { BotUsageConsole } from "@/components/bot-usage-console";
 import { JobSeekerConsole } from "@/components/job-seeker/console";
@@ -63,6 +64,7 @@ import { JobSeekerOverview } from "@/components/job-seeker/overview";
 
 import {
   ACTIVITY,
+  BUDGET_OVERVIEW,
   AGENTOS_CHAINS,
   AGENTOS_GOALS,
   AGENTOS_GRANTS,
@@ -170,6 +172,8 @@ function serveFixtures() {
     }
     if (url.includes("/api/job-seeker/profile")) return json({ profile: JOB_SEEKER_PROFILE });
     if (url.includes("/api/job-seeker/preferences")) return json({ preferences: JOB_SEEKER_PREFERENCES });
+    if (url.includes("/api/budget/overview")) return json(BUDGET_OVERVIEW);
+    if (url.includes("/api/job-seeker/saved-searches")) return json({ savedSearches: [] });
     if (url.includes("/api/job-seeker/search/save")) return json({ saved: true });
     if (url.includes("/api/job-seeker/search")) {
       return method === "POST"
@@ -324,6 +328,7 @@ const CASES: Record<string, () => React.ReactElement> = {
   "bot-usage": () => <InShell><BotUsageConsole /></InShell>,
   billing: () => <InShell><BillingConsole /></InShell>,
   trail: () => <InShell><AgentTrailConsole /></InShell>,
+  build: () => <InShell><BuildWorkspace /></InShell>,
   "job-seeker": () => <InShell><JobSeekerConsole /></InShell>,
   "job-search": () => <InShell><JobSearchPanel /></InShell>,
   /*
@@ -333,7 +338,7 @@ const CASES: Record<string, () => React.ReactElement> = {
    * all eight widths. Its widest content (the payoff table and the ledger) is
    * what the horizontal-overflow assertion is really aimed at.
    */
-  "budget-tracker": () => <InShell><BudgetTrackerConsole /></InShell>,
+  "budget-tracker": () => <InShell><BudgetTrackerConsole section="overview" /></InShell>,
   /*
    * The resume review panel only exists after an upload, so the job-seeker
    * case above never renders it and it had no width coverage at all. Its
