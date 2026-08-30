@@ -33,6 +33,7 @@ import {
   Search,
   Settings,
   ShieldCheck,
+  Sparkles,
   Split,
   Workflow,
   X,
@@ -87,6 +88,11 @@ type NavigationEntry = NavigationItem & { subpages?: readonly NavigationItem[] }
 
 const navigationEntries: readonly NavigationEntry[] = [
   { label: "Overview", href: "/solutions", icon: CircleGauge },
+  // The conversational front door (ADR-171): one prompt launches the
+  // full_lifecycle workflow and the page watches its real run. First after
+  // Overview because it is the directive's center of gravity — everything
+  // below it is the same machinery, opened up.
+  { label: "Build", href: "/solutions/build", icon: Sparkles },
   // The guided end-to-end journey over the live flows: renamed to the
   // owner's 2026-08-24 design — setup first, then the running factory.
   { label: "01. Factory Setup", href: "/solutions/ai-factory", icon: Workflow },

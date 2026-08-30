@@ -2,6 +2,16 @@
 
 Last updated: 2026-08-29
 
+## Newest (2026-08-30, later): Build — conversational front door (ADR-171, task #61)
+
+`/solutions/build` launches full_lifecycle via POST /api/graphs and
+watches via GET /api/graphs/runs (Agent Trail's feed). Transcript = real
+state transitions only; progress = counted node states; OPEN human gates
+surface with a link to decide; unfinished lifecycle runs list on arrival.
+Audit/plan: `AI/AI_FACTORY_GAP_ANALYSIS.md`. Nav pins updated in THREE
+places: app-shell test, e2e console.spec nav list, pages.spec +
+responsive.spec route lists — a new console page must seat in all of them.
+
 ## Newest (2026-08-30): LinkedIn/Indeed primary + ZIP-code radius (ADR-170)
 
 "Search directly on LinkedIn / Indeed" row now sits beside the Search
