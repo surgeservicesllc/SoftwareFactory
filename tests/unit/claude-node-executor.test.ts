@@ -61,6 +61,11 @@ function capturedSystem(): string {
   return (call?.[1] as { system: string }).system;
 }
 
+function capturedRequest(): { model: string; maxOutputTokens: number } {
+  const call = executeMock.mock.calls.at(-1);
+  return call?.[0] as { model: string; maxOutputTokens: number };
+}
+
 beforeEach(() => {
   executeMock.mockReset();
 });
@@ -120,6 +125,10 @@ describe("buildClaudeNodeExecutor", () => {
     });
     expect(capturedSystem()).toContain("this exact JSON Schema");
     expect(capturedSystem()).toContain('"required":["ok"]');
+    expect(capturedRequest()).toMatchObject({
+      model: "claude-opus-5",
+      maxOutputTokens: 16_000,
+    });
     const task = capturedTask();
     expect(task).toContain("Synthesize the three inspections");
     expect(task).toContain('Input from upstream node "inspect_a"');
@@ -246,6 +255,7 @@ describe("defaultModelForNode", () => {
   it("tiers models by declared complexity", () => {
     expect(defaultModelForNode({ ...node, modelTier: "ECONOMY" } as unknown as CompiledNode)).toBe("claude-haiku-4-5");
     expect(defaultModelForNode({ ...node, modelTier: "STANDARD", capability: "extraction" } as unknown as CompiledNode)).toBe("claude-sonnet-5");
+    expect(defaultModelForNode({ ...node, modelTier: "STANDARD", capability: "qa" } as unknown as CompiledNode)).toBe("claude-sonnet-5");
     expect(defaultModelForNode(node)).toBe("claude-opus-5");
   });
 });

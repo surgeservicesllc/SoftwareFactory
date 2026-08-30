@@ -63,6 +63,24 @@ describe("the graph budget", () => {
     expect(built.plan.budget.max_duration_ms).toBeGreaterThan(DEFAULT_GRAPH_BUDGET.maxDurationMs);
   });
 
+  it("carries declared token and real-cost ceilings through the durable launch plan", () => {
+    const template = GRAPH_TEMPLATES.find((candidate) => candidate.key === "security_audit");
+    expect(template).toBeDefined();
+
+    const built = buildLaunchPlan(template!, {
+      ...budgetForTemplate(template!),
+      maxTokens: 250_000,
+      maxCostMicros: 7_500_000,
+    });
+    expect(built.ok).toBe(true);
+    if (!built.ok) return;
+
+    expect(built.plan.budget).toMatchObject({
+      max_tokens: 250_000,
+      max_cost_micros: 7_500_000,
+    });
+  });
+
   it("derives the requirement from the critical path, not the node count", () => {
     // Ten parallel nodes cost one node's time; three in a chain cost three.
     const node = { timeoutMs: 60_000, maxAttempts: 2, backoffMs: 0 };
