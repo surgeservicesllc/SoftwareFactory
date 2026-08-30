@@ -402,6 +402,79 @@ describe("the build workspace", () => {
     expect(screen.getByText(/12,345 tokens · \$0\.2500/)).toBeInTheDocument();
   });
 
+  it("shows the release trail from recorded anchor observations, diffs linked on the PR", async () => {
+    const releasing = {
+      graphRunId: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+      graphId: LAUNCH.graphId,
+      goal: "Build me a bakery site",
+      state: "RUNNING",
+      projectId: "11111111-1111-4111-8111-111111111111",
+      startedAt: "2026-08-30T05:00:00Z",
+      completedAt: null,
+      isLifecycle: true,
+      nodes: [node("implement", "IMPLEMENTATION", "COMPLETED", { executor: "ANCHOR" })],
+    };
+    respond({ runs: [releasing] });
+    fetchMock.mockImplementation((url: string, init?: RequestInit) => {
+      if (typeof url === "string" && url.includes("/artifacts")) {
+        return Promise.resolve(json({
+          artifacts: [
+            {
+              artifactId: "r1", nodeRunId: "n1", nodeKey: "implement", kind: "ANCHOR",
+              createdAt: "2026-08-30T05:01:00Z",
+              payload: {
+                observation: "phase1c_change_lineage",
+                repository: "factory/storefront",
+                baseBranch: "main",
+                baseSha: "a".repeat(40),
+                headSha: "b".repeat(40),
+                pullRequestNumber: 41,
+                pullRequestUrl: "https://github.com/factory/storefront/pull/41",
+                bridgeState: "PULL_REQUEST_RECORDED",
+              },
+            },
+            {
+              artifactId: "r2", nodeRunId: "n2", nodeKey: "test", kind: "ANCHOR",
+              createdAt: "2026-08-30T05:02:00Z",
+              payload: {
+                observation: "ci_check_runs",
+                sha: "b".repeat(40),
+                repository: "factory/storefront",
+                total: 1,
+                checks: [{ name: "Lint, typecheck, test, and build", conclusion: "success", url: "https://github.com/x/1" }],
+                failing: [],
+              },
+            },
+          ],
+        }));
+      }
+      if (typeof url === "string" && url.includes("/api/graphs/runs")) {
+        return Promise.resolve(json({ runs: [releasing] }));
+      }
+      if (typeof url === "string" && url.includes("/api/graphs") && init?.method === "POST") {
+        return Promise.resolve(json(LAUNCH));
+      }
+      return Promise.resolve(json(PROJECTS));
+    });
+    const user = userEvent.setup();
+    render(<BuildWorkspace />);
+    await launch(user);
+
+    // The panel is lazy like Artifacts: nothing fetched until it opens.
+    const release = await screen.findByTestId("build-release");
+    expect(fetchMock.mock.calls.some(([url]) =>
+      typeof url === "string" && url.includes("/artifacts"))).toBe(false);
+    await user.click(within(release).getByText("Changes & release"));
+
+    // The diffs live on the pull request — linked, never re-invented.
+    const prLink = await within(release).findByRole("link", { name: "pull request #41" });
+    expect(prLink).toHaveAttribute("href", "https://github.com/factory/storefront/pull/41/files");
+    expect(within(release).getByText(/commit bbbbbbbb/)).toBeInTheDocument();
+    // Test results carry each check's real conclusion.
+    expect(within(release).getByRole("link", { name: "Lint, typecheck, test, and build" })).toBeInTheDocument();
+    expect(within(release).getByText("success")).toBeInTheDocument();
+  });
+
   it("lists unfinished lifecycle runs on arrival, so watching resumes across visits", async () => {
     respond({
       runs: [

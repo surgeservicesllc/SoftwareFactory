@@ -2,6 +2,13 @@
 
 Last reviewed: 2026-08-30
 
+**Addendum, 2026-08-30 latest — Changes & release (ADR-176):**
+release-evidence suite 4 (all-null before observations, lineage read
+back, checks keep real conclusions incl. failures, full four-observation
+trail); workspace suite 12 (lazy release panel: no artifacts fetch until
+open, PR files-tab link, real check conclusion rendered). Lint zero
+warnings, production build, `tsc --noEmit` clean.
+
 **Addendum, 2026-08-30 later still — plan approval before launch
 (ADR-175):** chief-of-staff suite 6 (proposal pinned to the real
 template: 14 steps, goal-first layering, widest layer 3, gates exactly
