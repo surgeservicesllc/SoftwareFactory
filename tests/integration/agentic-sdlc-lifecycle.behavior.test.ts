@@ -42,6 +42,33 @@ const memberId = "00000000-0000-4000-8000-0000000007a2";
 const organizationId = "10000000-0000-4000-8000-0000000007a1";
 const projectId = "40000000-0000-4000-8000-0000000007a1";
 
+const NODE_OUTPUT_SCHEMA = {
+  type: "object",
+  properties: { node: { type: "string" } },
+  required: ["node"],
+  additionalProperties: false,
+} as const;
+
+function inboundNodeSchema(dependency: string) {
+  return {
+    type: "object",
+    properties: {
+      outputs: {
+        type: "object",
+        properties: { [dependency]: NODE_OUTPUT_SCHEMA },
+        additionalProperties: false,
+      },
+      missing: {
+        type: "array",
+        items: { type: "string", enum: [dependency] },
+        maxItems: 1,
+      },
+    },
+    required: ["outputs", "missing"],
+    additionalProperties: false,
+  } as const;
+}
+
 type ClaimedNode = {
   node_key: string;
   node_id: string;
@@ -617,20 +644,13 @@ describe("the Agentic SDLC on the graph worker", () => {
         organizationId, projectId,
         JSON.stringify([
           { node_key: "goal", job: "State it.", executor: "MODEL", capability: "planning",
-            lifecycle_stage: "GOAL", input_schema: {}, output_schema: {
-              type: "object", properties: { node: { type: "string" } },
-              required: ["node"], additionalProperties: false,
-            } },
+            lifecycle_stage: "GOAL", input_schema: {}, output_schema: NODE_OUTPUT_SCHEMA },
           { node_key: "prd", job: "Write it.", executor: "MODEL", capability: "planning",
-            lifecycle_stage: "PRD", gate_kind: "AUTOMATIC", input_schema: {}, output_schema: {
-              type: "object", properties: { node: { type: "string" } },
-              required: ["node"], additionalProperties: false,
-            } },
+            lifecycle_stage: "PRD", gate_kind: "AUTOMATIC",
+            input_schema: inboundNodeSchema("goal"), output_schema: NODE_OUTPUT_SCHEMA },
           { node_key: "architecture", job: "Design it.", executor: "MODEL", capability: "architecture",
-            lifecycle_stage: "ARCHITECTURE", input_schema: {}, output_schema: {
-              type: "object", properties: { node: { type: "string" } },
-              required: ["node"], additionalProperties: false,
-            } },
+            lifecycle_stage: "ARCHITECTURE",
+            input_schema: inboundNodeSchema("prd"), output_schema: NODE_OUTPUT_SCHEMA },
         ]),
         JSON.stringify([
           { from_node_key: "goal", to_node_key: "prd", reason: "DATA", detail: "d", is_feedback: false },

@@ -1,6 +1,6 @@
 import type { CompiledNode } from "@/lib/graph/compiler";
 import type { NodeExecutionResult } from "@/lib/graph/runner";
-import { FULL_LIFECYCLE_V2_POSTDEPLOY_PLAN_SHA256 } from "@/lib/graph/templates";
+import { isFullLifecycleV2PostdeployPlanSha256 } from "@/lib/graph/templates";
 import { probeHttpTarget } from "@/lib/operations/probe-core";
 
 /**
@@ -576,7 +576,7 @@ export function buildAnchorNodeExecutor(options: AnchorExecutorOptions) {
     const requireFullValidation =
       options.templateKey === "full_lifecycle"
       && options.templateVersion === 2
-      && options.templatePlanSha256 === FULL_LIFECYCLE_V2_POSTDEPLOY_PLAN_SHA256;
+      && isFullLifecycleV2PostdeployPlanSha256(options.templatePlanSha256);
     const publicUrl = requireFullValidation
       ? options.projectProductionUrl?.trim().replace(/\/$/, "") ?? ""
       : deploymentUrl;

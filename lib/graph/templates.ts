@@ -36,16 +36,25 @@ export const TEMPLATE_CATEGORIES = ["AUDIT", "BUILD", "REVIEW", "INVESTIGATION"]
 export type TemplateCategory = (typeof TEMPLATE_CATEGORIES)[number];
 
 /**
- * Exact canonical JSONB digest admitted by the Full Lifecycle v2 launch
- * boundary after release-bound post-deploy validation was introduced.
- *
- * This identity is also carried in every worker claim. It is intentionally a
- * digest, not a template-version shortcut: graphs launched before this plan
- * revision retain their stored schemas and must finish through the legacy
- * one-shot monitor contract.
+ * The immediately preceding post-deploy plan remains a valid runtime identity
+ * for graphs launched before typed dependency envelopes were introduced. It is
+ * not launchable after the forward admission migration, but its stored output
+ * contracts still require the same strong production validation.
  */
-export const FULL_LIFECYCLE_V2_POSTDEPLOY_PLAN_SHA256 =
+export const FULL_LIFECYCLE_V2_PRE_TYPED_INPUT_PLAN_SHA256 =
   "0ec1e97b80dc8696872d88162c5271f9ea822e7dea79556c5470730a025d3b49";
+
+/** Exact canonical JSONB digest admitted by the current v2 launch boundary. */
+export const FULL_LIFECYCLE_V2_POSTDEPLOY_PLAN_SHA256 =
+  "02bb1e7b35782fad9f6024c080bd149f7ade4edb9d68326fd3b04ff94ba589ad";
+
+/** Whether a stored v2 graph owns the strong five-stage post-deploy contract. */
+export function isFullLifecycleV2PostdeployPlanSha256(
+  value: string | null | undefined,
+): boolean {
+  return value === FULL_LIFECYCLE_V2_POSTDEPLOY_PLAN_SHA256
+    || value === FULL_LIFECYCLE_V2_PRE_TYPED_INPUT_PLAN_SHA256;
+}
 
 export type TemplateNode = {
   readonly nodeId: string;
@@ -385,16 +394,35 @@ const AGGREGATING_CAPABILITIES: ReadonlySet<NodeCapability> = new Set([
 
 /** Turn a template's declarative nodes into full contracts the compiler accepts. */
 export function templateNodeContracts(template: GraphTemplate): readonly NodeContract[] {
+  const outputSchemas = new Map(
+    template.nodes.map((node) => [node.nodeId, schemaFor(node)] as const),
+  );
+
   return template.nodes.map((node) =>
     defineNode({
       nodeId: node.nodeId,
       job: node.job,
       executor: node.executor,
       capability: node.capability,
-      // A node's input is whatever its dependencies handed it. An entry node
-      // receives the goal, which is legitimately a string.
-      inputSchema: (node.dependsOn ?? []).length === 0 ? z.string() : z.unknown(),
-      outputSchema: schemaFor(node),
+      // Entry nodes receive the goal. Every other node receives the worker's
+      // explicit handoff envelope, with each dependency value checked against
+      // the exact output contract that produced it. Fields are optional so a
+      // tolerant fan-in can name a failed dependency in `missing` instead.
+      inputSchema: (() => {
+        const dependencies = node.dependsOn ?? [];
+        if (dependencies.length === 0) return z.string();
+
+        const outputs: Record<string, z.ZodTypeAny> = {};
+        for (const dependency of dependencies) {
+          outputs[dependency] = (outputSchemas.get(dependency) ?? z.never()).optional();
+        }
+        const dependencyNames = dependencies as readonly [string, ...string[]];
+        return z.object({
+          outputs: z.object(outputs).strict(),
+          missing: z.array(z.enum(dependencyNames)).max(dependencies.length),
+        }).strict();
+      })(),
+      outputSchema: outputSchemas.get(node.nodeId) ?? z.never(),
       dependsOn: node.dependsOn ?? [],
       reads: node.reads ?? [],
       writes: node.writes ?? [],

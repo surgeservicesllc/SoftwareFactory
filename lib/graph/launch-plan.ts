@@ -252,6 +252,14 @@ export function buildLaunchPlan(
         max_duration_ms: budget.maxDurationMs,
         max_retries: budget.maxRetries,
         max_discovery_rounds: budget.maxDiscoveryRounds,
+        // These two ceilings were accepted by the database and rehydrated by
+        // the production worker, but the launch seam silently dropped them.
+        // Preserve absence (unknown spend is not zero) and carry a real owner
+        // ceiling whenever one was declared.
+        ...(budget.maxTokens === undefined ? {} : { max_tokens: budget.maxTokens }),
+        ...(budget.maxCostMicros === undefined
+          ? {}
+          : { max_cost_micros: budget.maxCostMicros }),
       },
       isLifecycle,
       compiled: graph,

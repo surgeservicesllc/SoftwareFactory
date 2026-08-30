@@ -1,5 +1,8 @@
 import type { CompiledNode } from "@/lib/graph/compiler";
-import { taskKindForNode } from "@/lib/graph/provider-bridge";
+import {
+  maxOutputTokensForNode,
+  taskKindForNode,
+} from "@/lib/graph/provider-bridge";
 import { storeZodSchema } from "@/lib/graph/stored-schema";
 import type { NodeExecutionResult } from "@/lib/graph/runner";
 import type { NodeInputs } from "@/lib/worker/graph-run";
@@ -58,7 +61,7 @@ export function turnsForNode(node: Pick<CompiledNode, "capability">): number {
 /** Cheaper models for repetitive extraction; the strongest for synthesis. */
 export function defaultModelForNode(node: CompiledNode): string {
   if (node.modelTier === "ECONOMY") return "claude-haiku-4-5";
-  if (node.modelTier === "STANDARD" && node.capability === "extraction") return "claude-sonnet-5";
+  if (node.modelTier === "STANDARD") return "claude-sonnet-5";
   return DEFAULT_MODEL;
 }
 
@@ -164,7 +167,10 @@ export function buildClaudeNodeExecutor(
         memoryExcerpts: [],
       },
       model,
-      maxOutputTokens: 4_000,
+      // The tier owns the completion ceiling. A hard-coded 4,000 made the
+      // declared ECONOMY/STANDARD/STRONG contract decorative and could cut a
+      // strong synthesis to one quarter of its approved envelope.
+      maxOutputTokens: maxOutputTokensForNode(node),
       timeoutMs: node.timeoutMs,
     };
 

@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -39,6 +39,19 @@ afterEach(() => {
 });
 
 describe("the graph launch control", () => {
+  it("shows a loading state before the project read settles, not a false outage", async () => {
+    let finish!: (response: Response) => void;
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>((resolve) => { finish = resolve; })));
+
+    render(<GraphLaunchControl templateKey="feature_build" templateName="Feature build" />);
+
+    expect(screen.getByRole("status")).toHaveTextContent("Loading projects");
+    expect(screen.queryByText("Projects could not be read")).not.toBeInTheDocument();
+
+    await act(async () => finish(jsonResponse({ projects })));
+    expect(await screen.findByLabelText("Project")).toBeInTheDocument();
+  });
+
   it("records a graph and renders the server's own sentence about the wake", async () => {
     const onLaunched = vi.fn();
     const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {

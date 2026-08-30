@@ -32,8 +32,9 @@ export function storeZodSchema(schema: z.ZodType): StoredJsonSchema {
  * Does a stored schema constrain a value, rather than merely describe it?
  *
  * `{}` is valid JSON Schema, but accepts everything. It is useful for an
- * intentionally unknown input and is unsafe for a node output: accepting it
- * would recreate the exact production bypass this module closes.
+ * intentionally unknown root input and is unsafe for either a node output or
+ * a non-root input: accepting it there would recreate the exact production
+ * bypass this module closes.
  */
 function hasValidationKeyword(schema: StoredJsonSchema): boolean {
   return [
@@ -50,7 +51,7 @@ function hasValidationKeyword(schema: StoredJsonSchema): boolean {
 }
 
 /**
- * Rehydrate a stored JSON Schema. Invalid or unconstrained output contracts
+ * Rehydrate a stored JSON Schema. Invalid or unconstrained required contracts
  * are returned as explicit failures; callers must never widen them to
  * `z.unknown()` as a fallback.
  */
@@ -65,7 +66,7 @@ export function rehydrateStoredSchema(
   if (options.requireConstraint === true && !hasValidationKeyword(value)) {
     return {
       ok: false,
-      detail: `${label} is unconstrained; refusing to execute without a real output contract.`,
+      detail: `${label} is unconstrained; refusing to execute without a real contract.`,
     };
   }
 

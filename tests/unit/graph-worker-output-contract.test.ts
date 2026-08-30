@@ -26,11 +26,46 @@ const FACTS_SCHEMA = {
   additionalProperties: false,
 } as const;
 
+const NUMBER_FACTS_SCHEMA = {
+  type: "object",
+  properties: {
+    facts: { type: "array", items: { type: "number" } },
+  },
+  required: ["facts"],
+  additionalProperties: false,
+} as const;
+
+function inboundSchema(
+  dependencies: readonly string[],
+  outputs: Readonly<Record<string, unknown>> = Object.fromEntries(
+    dependencies.map((dependency) => [dependency, FACTS_SCHEMA]),
+  ),
+) {
+  return {
+    type: "object",
+    properties: {
+      outputs: {
+        type: "object",
+        properties: outputs,
+        additionalProperties: false,
+      },
+      missing: {
+        type: "array",
+        items: { type: "string", enum: dependencies },
+        maxItems: dependencies.length,
+      },
+    },
+    required: ["outputs", "missing"],
+    additionalProperties: false,
+  } as const;
+}
+
 function node(
   key: string,
   nodeRunId: string,
   dependsOn: readonly string[] = [],
   outputSchema: unknown = FACTS_SCHEMA,
+  inputSchema: unknown = inboundSchema(dependsOn),
 ) {
   return {
     node_run_id: nodeRunId,
@@ -48,7 +83,7 @@ function node(
     lifecycle_stage: null,
     gate_kind: null,
     gate_state: null,
-    input_schema: dependsOn.length === 0 ? { type: "string" } : {},
+    input_schema: dependsOn.length === 0 ? { type: "string" } : inputSchema,
     output_schema: outputSchema,
     reads: [],
     writes: [],
@@ -183,6 +218,56 @@ describe("claimed graph output contracts", () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.detail).toContain("producer's output contract is unconstrained");
+  });
+
+  it("refuses a legacy unconstrained non-root input contract before execution", () => {
+    const result = compileClaimedGraph(claim(FACTS_SCHEMA, {
+      nodes: [
+        node("producer", "50000000-0000-4000-8000-000000000001"),
+        node("consumer", "50000000-0000-4000-8000-000000000002", ["producer"], FACTS_SCHEMA, {}),
+      ],
+    }));
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.detail).toContain("consumer's input contract is unconstrained");
+  });
+
+  it("does not execute a non-root node when its inbound envelope violates the input contract", async () => {
+    const input = claim(FACTS_SCHEMA, {
+      nodes: [
+        node("producer", "50000000-0000-4000-8000-000000000001"),
+        node(
+          "consumer",
+          "50000000-0000-4000-8000-000000000002",
+          ["producer"],
+          FACTS_SCHEMA,
+          inboundSchema(["producer"], { producer: NUMBER_FACTS_SCHEMA }),
+        ),
+      ],
+    });
+    const persistence = store();
+    const executed: string[] = [];
+
+    const result = await runClaimedGraph(
+      input,
+      compile(input),
+      persistence.implementation,
+      async (target): Promise<NodeExecutionResult> => {
+        executed.push(target.nodeKey);
+        return { status: "SUCCEEDED", output: { facts: ["stored"] } };
+      },
+    );
+
+    expect(executed).toEqual(["producer"]);
+    expect(persistence.artifacts.map((artifact) => artifact.payload)).toEqual([
+      { facts: ["stored"] },
+    ]);
+    expect(persistence.states).toContainEqual(expect.objectContaining({
+      state: "FAILED",
+      detail: expect.stringContaining("input contract"),
+    }));
+    expect(result.finalState).toBe("PARTIAL");
   });
 
   it.each([

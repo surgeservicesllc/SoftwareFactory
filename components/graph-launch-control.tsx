@@ -165,7 +165,9 @@ export function GraphLaunchControl({
         description="Writes the compiled plan — its nodes, its edges and its budget — against a project, then wakes the executor worker to claim it. The result below states whether the wake happened; the run itself appears on the Pipelines page."
       />
 
-      {projects === null ? (
+      {projects === null && projectsError === null ? (
+        <p className="mt-4 text-sm text-faint" role="status">Loading projects…</p>
+      ) : projects === null ? (
         <div className="mt-4">
           <EmptyState
             title="Projects could not be read"
