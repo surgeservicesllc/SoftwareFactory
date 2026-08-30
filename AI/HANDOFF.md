@@ -2,7 +2,61 @@
 
 Last updated: 2026-08-30
 
-## Newest (2026-08-30, latest+6): attempt projected; preview is the deploy URL (ADR-182)
+## Newest (2026-08-30, latest+8): inline LinkedIn/Indeed via the keyed JSearch aggregator (ADR-184)
+
+Owner screenshot directive: LinkedIn/Indeed results inside the site.
+Scraping stays refused; the built path is board-search/jsearch.ts —
+JSearch (RapidAPI) over the Google for Jobs index, per-result
+`publisher` on BoardSearchHit (optional field), env-gated on
+JSEARCH_RAPIDAPI_KEY. Lockstep gating: `availableBoardSearchAdapters()`
+(registry) + `resolvedSourceCatalogue()` (catalogue) are call-time
+reads; search route GET/POST, save route (via boardSearchKeys), alert
+runner and the panel all follow. Route badges aggregator sources
+"LinkedIn (JSearch)"; per-board rows say "on LinkedIn"; the linkout
+hint says Connected or Not Connected + the exact var. One request per
+search (num_pages=1; free plan ~200/mo). Catalogue 52→53 (28 general) —
+counts pinned in board-search-catalogue.test. TRAP: the alerts-run
+route test mocks the registry with an explicit export list — a new
+registry export must be added there. NOT live until the owner sets
+JSEARCH_RAPIDAPI_KEY (recorded as an OWNER ACTION in BACKLOG); the
+parser is fixture-pinned to the documented v2 envelope and the first
+keyed search is its live probe.
+
+## Older (2026-08-30, latest+7): Pause/Resume — the run controls are complete (ADR-183)
+
+Pause is GRAPH-level (graphs.pause_requested_at/by, 20260830000400) —
+run-level would self-defeat: the paused run closes CANCELLED (void, re-
+claimable), so the next drain would resume it unasked. The claim
+selector is the 20260830000200 definition verbatim + exactly
+`and g.pause_requested_at is null`. Engine: RunnerDependencies.checkPause
+polled at each wave boundary → outcome PAUSED; worker maps it to
+CANCELLED with a pause closure note, SKIPs undispatched nodes with a
+pause detail, and GraphRunSummary.paused tells the drain log. Store
+poll read_graph_pause_as_worker answers false on ANY failure
+(PGRST202 pre-apply included) — a pause poll must never kill the
+drain; the claim predicate still holds the next run. Resume =
+set_graph_pause_as_member(false) + the launch route's worker wake
+(route POST /api/graphs/[graphId]/pause, {paused:boolean}); lifecycle
+reuse continues from completed steps — proved end-to-end in
+graph-worker-execution.behavior. Member definer refuses withdrawn
+graphs ('graph_withdrawn' → 409). Runs feed projects
+pausedAt/withdrawnAt off the existing RLS identity read with a 42703
+deploy-window fallback (test pins both select shapes). Sentinels swept
+to 20260830000400 (22), runbook 183, workflow scope pause-graph
+(options + step; postflight: 2 columns, claim predicate, member fence
+authenticated-only, worker read service_role-only). Dispatch the
+hosted apply right after merge. Follow-up recorded: queue diagnosis
+doesn't yet name paused/withdrawn as exclusion reasons.
+TRAP (cost 3 wall-clock hours): in the PGlite behavior suite, never
+issue a member-role write from INSIDE a concurrently-executing wave —
+the single shared session's set role/reset role dances interleave and
+the session wedges at 100% CPU with every pending query unresolved,
+past any vitest timeout. Owner-side writes in these tests belong at
+wave boundaries (e.g. wrapped into a readPauseRequested poll) or
+outside runs entirely. Production is unaffected (separate HTTP
+connections).
+
+## Older (2026-08-30, latest+6): attempt projected; preview is the deploy URL (ADR-182)
 
 20260830000300 restates list_graph_runs (from 20260825000300, verbatim
 + one change): 'attempt', case when nr.attempt >= 1 then nr.attempt end

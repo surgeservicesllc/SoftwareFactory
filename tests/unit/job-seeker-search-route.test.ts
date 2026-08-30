@@ -17,6 +17,7 @@ const harness = vi.hoisted(() => ({
   searchThemuse: vi.fn(),
   searchWorkingnomads: vi.fn(),
   searchJobspresso: vi.fn(),
+  searchJSearch: vi.fn(),
   sealSearchResult: vi.fn(),
   loadEvaluationInputs: vi.fn(),
 }));
@@ -91,6 +92,10 @@ vi.mock("@/lib/job-seeker/board-search/jobspresso", async (importOriginal) => {
   const original = await importOriginal<typeof import("@/lib/job-seeker/board-search/jobspresso")>();
   return { ...original, jobspressoAdapter: { ...original.jobspressoAdapter, search: harness.searchJobspresso } };
 });
+vi.mock("@/lib/job-seeker/board-search/jsearch", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@/lib/job-seeker/board-search/jsearch")>();
+  return { ...original, jsearchAdapter: { ...original.jsearchAdapter, search: harness.searchJSearch } };
+});
 vi.mock("@/lib/job-seeker/search-result-token", () => ({
   sealSearchResult: harness.sealSearchResult,
 }));
@@ -162,6 +167,9 @@ const RECORDED_PROFILE = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // The aggregator's key gate: tests that turn it on stub the env; every
+  // other test runs unconfigured, exactly like a deployment without the key.
+  vi.unstubAllEnvs();
   harness.requireActiveOrganization.mockResolvedValue({
     activeOrganization: { id: activeOrganizationId },
     user: { id: "user-1" },
@@ -567,5 +575,64 @@ describe("the unified view", () => {
     );
     expect(response.status).toBe(400);
     expect(harness.searchJobnet).not.toHaveBeenCalled();
+  });
+});
+
+describe("the credential-gated aggregator", () => {
+  it("does not exist to the search until its key does", async () => {
+    const listed = (await (await GET()).json()) as {
+      boards: Array<{ key: string }>;
+      sources: Array<{ key: string; status: string }>;
+    };
+    expect(listed.boards.map((board) => board.key)).not.toContain("jsearch");
+    expect(listed.sources.find((source) => source.key === "jsearch")?.status)
+      .toBe("needs_credentials");
+
+    const response = await POST(searchRequest({ text: "engineer" }));
+    expect(response.status).toBe(200);
+    expect(harness.searchJSearch).not.toHaveBeenCalled();
+
+    // Asking for it by name is an unknown board, not a silent skip.
+    const named = await POST(searchRequest({ text: "engineer", boards: ["jsearch"] }));
+    expect(named.status).toBe(400);
+  });
+
+  it("joins the fan-out when the key exists, each hit naming the site that hosts it", async () => {
+    vi.stubEnv("JSEARCH_RAPIDAPI_KEY", "test-key");
+    harness.searchJSearch.mockResolvedValue({
+      board: "jsearch",
+      hits: [
+        { ...hit("Marketing Manager (LI)"), publisher: "LinkedIn" },
+        { ...hit("Marketing Manager (IN)"), publisher: "Indeed" },
+      ],
+      totalAvailable: null,
+    });
+
+    const listed = (await (await GET()).json()) as {
+      boards: Array<{ key: string }>;
+      sources: Array<{ key: string; status: string; note: string }>;
+    };
+    expect(listed.boards.map((board) => board.key)).toContain("jsearch");
+    const resolved = listed.sources.find((source) => source.key === "jsearch");
+    expect(resolved?.status).toBe("live");
+    expect(resolved?.note).toContain("Connected");
+
+    const response = await POST(searchRequest({ text: "marketing manager" }));
+    const payload = (await response.json()) as {
+      results: Array<{ board: string; hits: Array<{ publisher?: string | null }> }>;
+      unified: { hits: Array<{ sources: Array<{ board: string; boardName: string }> }> };
+    };
+    expect(response.status).toBe(200);
+    const aggregated = payload.results.find((result) => result.board === "jsearch");
+    expect(aggregated?.hits.map((entry) => entry.publisher)).toEqual(["LinkedIn", "Indeed"]);
+
+    // The unified badge says which site hosts the posting, not just which
+    // door it came through: "LinkedIn (JSearch)", never a bare aggregator.
+    const badges = payload.unified.hits
+      .flatMap((card) => card.sources)
+      .filter((source) => source.board === "jsearch")
+      .map((source) => source.boardName)
+      .sort();
+    expect(badges).toEqual(["Indeed (JSearch)", "LinkedIn (JSearch)"]);
   });
 });

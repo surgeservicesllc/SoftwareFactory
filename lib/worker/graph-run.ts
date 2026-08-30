@@ -352,6 +352,13 @@ export type GraphRunStore = {
    * the same reason as `openGate`). The database scopes it to lifecycles.
    */
   readonly readPriorNodeResults?: (graphId: string) => Promise<ReadonlyMap<string, PriorNodeResult>>;
+  /**
+   * Whether a person has asked this graph to pause. Polled by the engine at
+   * each wave boundary; optional so a store from before the control existed
+   * still satisfies the contract, which simply means its runs cannot be
+   * paused mid-flight.
+   */
+  readonly readPauseRequested?: (graphRunId: string) => Promise<boolean>;
 };
 
 export type PriorNodeResult = Readonly<{
@@ -384,6 +391,12 @@ export type GraphRunSummary = {
    * in the drain log so nothing reads as fresher than it is.
    */
   readonly reusedNodes: readonly string[];
+  /**
+   * True when a person's pause request stopped the run between waves. The
+   * run closed CANCELLED — void, its completed work recorded — and the graph
+   * holds off the queue until the person resumes it.
+   */
+  readonly paused: boolean;
 };
 
 /**
@@ -715,11 +728,16 @@ export async function runClaimedGraph(
       return outcome;
     },
     elapsedMs: () => Date.now() - started,
+    checkPause: store.readPauseRequested
+      ? () => store.readPauseRequested!(claim.graph_run_id)
+      : undefined,
   });
 
+  const paused = result.outcome === "PAUSED";
+
   // Nodes the engine never dispatched (blocked by failed dependencies,
-  // budget stops) are closed as SKIPPED so the run accounts for every node —
-  // fan-in honesty made durable.
+  // budget stops, a pause) are closed as SKIPPED so the run accounts for
+  // every node — fan-in honesty made durable.
   for (const [nodeKey, nodeState] of result.states) {
     const nodeRunId = nodeRunIds.get(nodeKey);
     if (!nodeRunId) continue;
@@ -727,7 +745,9 @@ export async function runClaimedGraph(
       await store.recordNodeState(
         nodeRunId,
         "SKIPPED",
-        "Never dispatched: an upstream dependency failed or the budget stopped the run.",
+        paused
+          ? "Never dispatched: the run was paused before this step started."
+          : "Never dispatched: an upstream dependency failed or the budget stopped the run.",
       );
     }
   }
@@ -761,7 +781,11 @@ export async function runClaimedGraph(
     && finalFailures > 0
     && capacityFinalFailures === finalFailures;
 
-  const finalState: GraphRunSummary["finalState"] = capacityVoided
+  // A paused run closes CANCELLED for the same reason a capacity-voided one
+  // does: it answered nothing and must not spend one of the graph's chances.
+  // Its completed work is recorded, and the claim selector's pause predicate
+  // is what holds the graph off the queue until the person resumes it.
+  const finalState: GraphRunSummary["finalState"] = paused || capacityVoided
     ? "CANCELLED"
     : result.outcome === "COMPLETED"
       ? "COMPLETED"
@@ -785,9 +809,11 @@ export async function runClaimedGraph(
     claim.graph_run_id,
     finalState,
     incompleteness !== null,
-    capacityVoided
-      ? `The provider withheld capacity (session or rate limit) for every attempt; the run is void. ${incompleteness ?? ""}`.trim()
-      : incompleteness,
+    paused
+      ? `Paused by request between steps; completed work is recorded and the run resumes when the graph is resumed. ${incompleteness ?? ""}`.trim()
+      : capacityVoided
+        ? `The provider withheld capacity (session or rate limit) for every attempt; the run is void. ${incompleteness ?? ""}`.trim()
+        : incompleteness,
     { tokensUsed: result.spend.tokensUsed, costMicros: result.spend.costMicros },
   );
 
@@ -800,6 +826,7 @@ export async function runClaimedGraph(
     capacityWithheld: capacityVoided,
     awaitingGate,
     reusedNodes: [...reusedNodes],
+    paused,
   };
 }
 

@@ -367,6 +367,11 @@ describe("SECURITY DEFINER functions", () => {
       // Status only, never the sealed code: a worker mid-drive can notice a
       // cancel and stop instead of blind-waiting out the relay window.
       "read_ai_auth_session_status",
+      // The engine's wave-boundary pause poll (20260830000400): boolean
+      // only — whether a person asked this run's graph to hold. The member
+      // control that SETS the pause is authenticated-only; the worker can
+      // read the flag and nothing else about the graph.
+      "read_graph_pause_as_worker",
       // The lifecycle resume read (20260824000200): the most recently
       // completed recorded result per node from a lifecycle graph's own
       // earlier non-answering runs. Read-only; scoped to lifecycles in SQL.

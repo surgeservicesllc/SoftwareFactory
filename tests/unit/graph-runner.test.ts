@@ -328,3 +328,69 @@ describe("node runner", () => {
     expect(contendedResources(nodes as never)).toEqual(["file:app/page.tsx"]);
   });
 });
+
+/**
+ * Pause, honored at the wave boundary.
+ *
+ * A person's pause request must stop new work without interrupting work in
+ * flight: the engine polls before each scheduling round, finishes whatever
+ * the previous round started, and closes PAUSED with everything completed
+ * kept. The alternative designs both lie — killing in-flight work discards
+ * paid-for results, and waiting for the run to finish makes Pause a label
+ * on a button that does nothing.
+ */
+describe("pause between waves", () => {
+  it("finishes the wave in flight, starts nothing new, and reports PAUSED", async () => {
+    const graph = compile(
+      [node("first"), node("second", { dependsOn: ["first"] })],
+      [{ from: "first", to: "second" }],
+    );
+
+    // False for the round that starts `first`, true ever after.
+    let polls = 0;
+    const executed: string[] = [];
+    const result = await runGraph(graph, DEFAULT_GRAPH_BUDGET, {
+      executeNode: async (n) => {
+        executed.push(n.nodeKey);
+        return succeed();
+      },
+      checkPause: () => {
+        polls += 1;
+        return polls > 1;
+      },
+    });
+
+    expect(executed).toEqual(["first"]);
+    expect(result.outcome).toBe("PAUSED");
+    // The finished work is kept, not discarded with the pause.
+    expect(result.states.get("first")).toBe("COMPLETED");
+    expect(result.outputs.get("first")).toEqual(["finding"]);
+    // The undispatched node never entered a terminal state.
+    expect(["PENDING", "READY"]).toContain(result.states.get("second"));
+    expect(result.events.some((event) => event.type === "pause_honored")).toBe(true);
+  });
+
+  it("a pause requested before anything starts holds the whole graph", async () => {
+    const graph = compile([node("a"), node("b")]);
+
+    const execute = vi.fn(async () => succeed());
+    const result = await runGraph(graph, DEFAULT_GRAPH_BUDGET, {
+      executeNode: execute,
+      checkPause: async () => true,
+    });
+
+    expect(execute).not.toHaveBeenCalled();
+    expect(result.outcome).toBe("PAUSED");
+    expect(result.spend.nodesStarted).toBe(0);
+  });
+
+  it("a run without the control behaves exactly as before", async () => {
+    // `checkPause` is optional so an isolated graph runs without a control
+    // plane; its absence must not change any outcome.
+    const graph = compile([node("a")]);
+    const result = await runGraph(graph, DEFAULT_GRAPH_BUDGET, {
+      executeNode: async () => succeed(),
+    });
+    expect(result.outcome).toBe("COMPLETED");
+  });
+});

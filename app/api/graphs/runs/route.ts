@@ -54,6 +54,10 @@ const graphTemplateIdentityRowsSchema = z.array(z.object({
   id: z.string().uuid(),
   template_key: z.string().min(1).nullable(),
   template_version: z.number().int().positive().nullable(),
+  // Run controls (20260830000200/000400). Absent — not null — when the
+  // database predates them; the fallback read below omits the columns.
+  withdrawn_at: z.string().nullish(),
+  pause_requested_at: z.string().nullish(),
 }).strict().superRefine((row, context) => {
   if ((row.template_key === null) !== (row.template_version === null)) {
     context.addIssue({
@@ -136,11 +140,19 @@ export async function GET(request: Request) {
     const graphIds = [...new Set(rows.map((row) => row.graph_id))];
     const identitiesByGraphId = new Map<string, GraphTemplateIdentity>();
     if (!briefing && graphIds.length > 0) {
-      const identityResult = await client
+      const readIdentities = (columns: string) => client
         .from("graphs")
-        .select("id,template_key,template_version")
+        .select(columns)
         .eq("organization_id", activeOrganization.id)
         .in("id", graphIds);
+      let identityResult: { data: unknown; error: { code?: string } | null } =
+        await readIdentities("id,template_key,template_version,withdrawn_at,pause_requested_at");
+      if (identityResult.error?.code === "42703") {
+        // The deploy window: this build shipped before the run-control
+        // columns were applied. The listing must still answer, so read the
+        // identity alone; the controls simply report null until the apply.
+        identityResult = await readIdentities("id,template_key,template_version");
+      }
       if (identityResult.error) return databaseErrorResponse(identityResult.error);
 
       const parsedIdentities = graphTemplateIdentityRowsSchema.safeParse(identityResult.data ?? []);
@@ -199,6 +211,10 @@ export async function GET(request: Request) {
         isLifecycle: row.is_lifecycle === true,
         templateKey: identitiesByGraphId.get(row.graph_id)?.template_key ?? null,
         templateVersion: identitiesByGraphId.get(row.graph_id)?.template_version ?? null,
+        // The graph's run controls, so the workspace can label a paused or
+        // withdrawn build honestly instead of calling it "waiting".
+        pausedAt: identitiesByGraphId.get(row.graph_id)?.pause_requested_at ?? null,
+        withdrawnAt: identitiesByGraphId.get(row.graph_id)?.withdrawn_at ?? null,
         iteration: row.iteration ?? 1,
         maxIterations: row.max_iterations ?? 1,
       })),

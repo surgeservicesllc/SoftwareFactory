@@ -106,7 +106,10 @@ trademarks are used.)
    is the launch boundary; acceptance criteria are the run's own
    first-stage artifacts)*.
 3. Gate decisions inline (approve/reject via existing endpoint) +
-   run controls where endpoints exist.
+   run controls where endpoints exist *(complete: gates ADR-171; Stop as
+   withdrawal ADR-180; Pause/Resume ADR-183 — graph-level hold honored
+   at the engine's wave boundary, resume rides the claim/reuse path;
+   Retry deliberately needs no button, a re-claim is the retry)*.
 4. Specialty-agent presentation over stages; bounded IO contracts.
 5. Autonomy modes as parameterization of existing gates (policy review
    first).

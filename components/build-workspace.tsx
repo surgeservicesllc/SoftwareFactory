@@ -90,6 +90,10 @@ type GraphRun = {
   isLifecycle?: boolean;
   iteration?: number;
   maxIterations?: number;
+  /** When set, a person paused this graph; nothing new starts until resume. */
+  pausedAt?: string | null;
+  /** When set, the graph was stopped for good; controls on it are dead words. */
+  withdrawnAt?: string | null;
 };
 
 type RunArtifact = {
@@ -158,6 +162,7 @@ export function BuildWorkspace() {
   const [events, setEvents] = useState<{ rows: RunEvent[]; truncated: boolean } | null>(null);
   const [eventsError, setEventsError] = useState<string | null>(null);
   const [stopping, setStopping] = useState<string | null>(null);
+  const [pausing, setPausing] = useState<string | null>(null);
   const [controls, setControls] = useState<(AutonomyControls & { updatedAt: string }) | null>(null);
   const [controlsError, setControlsError] = useState<string | null>(null);
   const [modeNotice, setModeNotice] = useState<string | null>(null);
@@ -388,11 +393,13 @@ export function BuildWorkspace() {
     (project) => project.connectionStatus === undefined || project.connectionStatus === "connected",
   );
 
+  // A withdrawn graph is finished by decision, whatever its last run's state:
+  // listing it under "Already building" would claim work nobody will do.
   const activeRuns = lifecycleRuns.filter(
-    (run) => run.state !== "COMPLETED" && run.state !== "FAILED",
+    (run) => run.state !== "COMPLETED" && run.state !== "FAILED" && (run.withdrawnAt ?? null) === null,
   );
   const finishedRuns = lifecycleRuns.filter(
-    (run) => run.state === "COMPLETED" || run.state === "FAILED",
+    (run) => run.state === "COMPLETED" || run.state === "FAILED" || (run.withdrawnAt ?? null) !== null,
   );
 
   const loadArtifacts = useCallback(async (graphRunId: string) => {
@@ -540,6 +547,37 @@ export function BuildWorkspace() {
       setStopping(null);
     }
   }, [launched, refreshRuns, say]);
+
+  /**
+   * Pause/Resume: the database flips the graph's hold and the engine honors
+   * it at its next wave boundary — running work finishes its current step,
+   * nothing new starts. The server's own note or refusal is what the person
+   * reads, never a paraphrase of a success the system did not deliver.
+   */
+  const setPause = useCallback(async (graphId: string, paused: boolean) => {
+    setPausing(graphId);
+    try {
+      const response = await fetch(`/api/graphs/${graphId}/pause`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ paused }),
+      });
+      const payload = (await response.json()) as {
+        note?: string;
+        error?: { message?: string };
+      };
+      if (!response.ok) {
+        say("factory", payload.error?.message ?? "The graph's pause state could not be changed.");
+        return;
+      }
+      say("factory", payload.note ?? (paused ? "The graph is paused." : "The graph is resumed."));
+      void refreshRuns();
+    } catch {
+      say("factory", "The pause request did not reach the server.");
+    } finally {
+      setPausing(null);
+    }
+  }, [refreshRuns, say]);
 
   return (
     <div className="space-y-6">
@@ -792,6 +830,36 @@ export function BuildWorkspace() {
                 style={{ width: progress.total === 0 ? "0%" : `${(progress.done / progress.total) * 100}%` }}
               />
             </div>
+
+            {(watchedRun.withdrawnAt ?? null) === null
+              && ((watchedRun.pausedAt ?? null) !== null || watchedRun.state === "RUNNING") ? (
+              <div className="mt-3 flex flex-wrap items-center gap-2" data-testid="build-pause-controls">
+                {(watchedRun.pausedAt ?? null) !== null ? (
+                  <>
+                    <span className="text-xs text-[var(--muted)]">
+                      Paused — running work finishes its current step, nothing new starts until you resume.
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => void setPause(watchedRun.graphId, false)}
+                      disabled={pausing !== null}
+                      className="rounded-md border border-[var(--border)] px-3 py-1.5 text-sm disabled:opacity-60"
+                    >
+                      {pausing === watchedRun.graphId ? "Resuming…" : "Resume"}
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => void setPause(watchedRun.graphId, true)}
+                    disabled={pausing !== null}
+                    className="rounded-md border border-[var(--border)] px-3 py-1.5 text-sm disabled:opacity-60"
+                  >
+                    {pausing === watchedRun.graphId ? "Pausing…" : "Pause"}
+                  </button>
+                )}
+              </div>
+            ) : null}
 
             {waitingGates.length > 0 ? (
               <div className="mt-3 space-y-2" data-testid="build-gates">
@@ -1167,6 +1235,7 @@ export function BuildWorkspace() {
                     <li key={run.graphRunId} className="flex flex-wrap items-center justify-between gap-2 text-sm">
                       <span className="min-w-0 break-words">{run.goal}</span>
                       <span className="flex shrink-0 items-center gap-3 text-xs text-[var(--muted)]">
+                        {(run.pausedAt ?? null) !== null ? "paused · " : ""}
                         {run.state.toLowerCase()} · {done}/{run.nodes.length} steps
                         <Link
                           href={`/solutions/lifecycle/run/${run.graphRunId}`}
@@ -1174,6 +1243,27 @@ export function BuildWorkspace() {
                         >
                           Watch
                         </Link>
+                        {/* Pause holds new work honestly: the engine finishes the
+                            step in flight and stops at its next wave boundary. */}
+                        {(run.pausedAt ?? null) !== null ? (
+                          <button
+                            type="button"
+                            onClick={() => void setPause(run.graphId, false)}
+                            disabled={pausing !== null}
+                            className="rounded-md border border-[var(--border)] px-2 py-1 disabled:opacity-60"
+                          >
+                            {pausing === run.graphId ? "Resuming…" : "Resume"}
+                          </button>
+                        ) : run.state === "RUNNING" ? (
+                          <button
+                            type="button"
+                            onClick={() => void setPause(run.graphId, true)}
+                            disabled={pausing !== null}
+                            className="rounded-md border border-[var(--border)] px-2 py-1 disabled:opacity-60"
+                          >
+                            {pausing === run.graphId ? "Pausing…" : "Pause"}
+                          </button>
+                        ) : null}
                         {/* A RUNNING claim belongs to its worker — its own budget
                             and failure paths stop it, so no button pretends to. */}
                         {run.state !== "RUNNING" ? (
@@ -1210,6 +1300,7 @@ export function BuildWorkspace() {
                     <span className="flex shrink-0 items-center gap-3 text-xs text-[var(--muted)]">
                       <span className={run.state === "FAILED" ? "text-[var(--danger)]" : ""}>
                         {run.state.toLowerCase()}
+                        {(run.withdrawnAt ?? null) !== null ? " · stopped for good" : ""}
                       </span>
                       {run.completedAt !== null ? run.completedAt.slice(0, 10) : ""}
                       <Link

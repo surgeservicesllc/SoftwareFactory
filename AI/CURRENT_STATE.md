@@ -501,13 +501,18 @@ it:
   returns a `unified` block (hits + dedupedFrom + beforeFilters) beside the
   untouched per-board `results`, and the panel applies the same module
   client-side for instant filtering without refetching.
-- **52-source catalogue** (`board-search/catalogue.ts`): 27 general + 25
+- **53-source catalogue** (`board-search/catalogue.ts`): 28 general + 25
   marketing sources, each `live` (integrity-tested equal to the registry) |
-  `needs_credentials` (official API named — USAJOBS, Adzuna, Jooble,
-  Careerjet, Reed, ZipRecruiter — shown **Not Connected**) |
-  `external_link` (probed URL the person's own browser opens) |
-  `not_supported`. Every non-live URL was probed 2026-08-29; four dead
-  domains found during research were replaced with probed live ones.
+  `needs_credentials` (official API named — the JSearch aggregator,
+  USAJOBS, Adzuna, Jooble, Careerjet, Reed, ZipRecruiter — shown
+  **Not Connected**) | `external_link` (probed URL the person's own
+  browser opens) | `not_supported`. Every non-live URL was probed
+  2026-08-29; four dead domains found during research were replaced with
+  probed live ones. The JSearch row (ADR-184) flips to `live` at call
+  time via `resolvedSourceCatalogue()` once `JSEARCH_RAPIDAPI_KEY` is
+  set, in lockstep with `availableBoardSearchAdapters()` — the door
+  through which LinkedIn/Indeed postings appear inline, each labeled
+  with its publisher.
   `GET /api/job-seeker/search` now serves the catalogue to the picker.
 - **Panel rework**: unified view default (source badges per card, NEW badge
   ≤3 days, sort by recency/stated salary), by-board view preserved, filter
