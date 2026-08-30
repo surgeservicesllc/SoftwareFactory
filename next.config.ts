@@ -22,6 +22,7 @@ const nextConfig: NextConfig = {
       "billing",
       "bot-manager",
       "bot-usage",
+      "build",
       "connections",
       "factory",
       "files",

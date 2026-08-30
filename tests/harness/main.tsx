@@ -27,6 +27,7 @@ import { AutonomyConsole } from "@/components/autonomy-console";
 import { BotFabricConsole } from "@/components/bot-fabric-console";
 import { BotManagerHome } from "@/components/bot-manager/home";
 import { AgentTrailConsole } from "@/components/agent-trail-console";
+import { BuildWorkspace } from "@/components/build-workspace";
 import { BillingConsole } from "@/components/billing-console";
 import { BotUsageConsole } from "@/components/bot-usage-console";
 import { JobSeekerConsole } from "@/components/job-seeker/console";
@@ -327,6 +328,7 @@ const CASES: Record<string, () => React.ReactElement> = {
   "bot-usage": () => <InShell><BotUsageConsole /></InShell>,
   billing: () => <InShell><BillingConsole /></InShell>,
   trail: () => <InShell><AgentTrailConsole /></InShell>,
+  build: () => <InShell><BuildWorkspace /></InShell>,
   "job-seeker": () => <InShell><JobSeekerConsole /></InShell>,
   "job-search": () => <InShell><JobSearchPanel /></InShell>,
   /*
