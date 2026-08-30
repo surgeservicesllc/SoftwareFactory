@@ -219,6 +219,20 @@ test("every Budget Tracker section inherits that gate", async ({ page }) => {
   }
 });
 
+test("every Services CRM section is gated server-side through its layout", async ({ page }) => {
+  /*
+   * The pest-services CRM (ADR-185): an organization's whole book of
+   * business. The gate lives in `(services)/Services/layout.tsx`, so every
+   * destination — including ones added by later increments — inherits it.
+   * Asking for the URLs directly while signed out is the only way to tell a
+   * real server gate from a link merely left out of the navigation.
+   */
+  for (const path of ["/Services", "/Services/customers"]) {
+    await page.goto(path);
+    await expect(page).toHaveURL(/\/auth\/sign-in\?next=%2FServices/);
+  }
+});
+
 test("/Job-Search is gated server-side, and by its own call", async ({ page }) => {
   /*
    * The named entry point to the board search. Unlike /job-seeker/search it

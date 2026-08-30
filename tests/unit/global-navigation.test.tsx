@@ -73,6 +73,8 @@ describe("globalNavigation", () => {
     // Owner request, 2026-08-23: the header entry reads "Software Factory".
     expect(SIGNED_IN_NAV.map((item) => item.label)).toEqual([
       "Software Factory",
+      // Owner /goal, 2026-08-30 (ADR-185): the pest-services CRM.
+      "Services",
       "Job Search",
       // Owner request, 2026-08-29.
       "Budget Tracker",
@@ -138,6 +140,7 @@ describe("SiteHeader", () => {
 
     expect(primaryNav().getAllByRole("link").map((link) => link.textContent)).toEqual([
       "Software Factory",
+      "Services",
       "Job Search",
       "Budget Tracker",
     ]);

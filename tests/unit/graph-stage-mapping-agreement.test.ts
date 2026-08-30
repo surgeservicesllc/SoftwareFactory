@@ -36,7 +36,7 @@ const migration = readFileSync(
  */
 const extensions = [
   "20260823000900_discovery_capability_stage_map.sql",
-  "20260830000500_specialist_capability_stage_map.sql",
+  "20260830000600_specialist_capability_stage_map.sql",
 ].map((file) =>
   readFileSync(resolve(import.meta.dirname, `../../supabase/migrations/${file}`), "utf8"),
 );

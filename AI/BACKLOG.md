@@ -1,5 +1,26 @@
 # Backlog
 
+## Services CRM → pest-services platform (task #63, owner /goal 2026-08-30)
+
+The audit + pillar-to-increment map is `AI/SERVICES_CRM_GAP_ANALYSIS.md`
+(the /goal registration hit the 4,000-char limit; a trimmed re-issue was
+handed to the owner). PEST CRM: PRODUCTION READY is declared only after
+the full seeded E2E journey passes — increment 10 of the plan.
+
+- [x] Increment 1 (ADR-185): the foundation — "Services" global nav +
+  product shell (own route group, Budget Tracker pattern);
+  20260830000500 crm_accounts/contacts/properties + immutable
+  crm_timeline_events (append-only grants, trigger-written status
+  history, same-org composite FKs, secret guards, forced member RLS);
+  five routes (list+counts, detail, patch, contacts, properties,
+  timeline with system-kind refusal); Overview + Customers & Leads +
+  360° account pages live-wired. Hosted apply: dispatch
+  scope=services-crm after merge.
+- [ ] Increment 2: pipeline & opportunities, duplicate detection,
+  global search. Then increments 3–10 per the gap analysis (field
+  service, IPM, chemicals/compliance, invoicing, sales, marketing,
+  AI copilot, seeded E2E acceptance).
+
 Last triaged: 2026-08-29
 
 ## AI Factory → autonomous build platform (task #61, owner directive 2026-08-30)
