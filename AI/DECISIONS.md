@@ -3277,3 +3277,33 @@ and hosted apply degrades to the old unpersisted behavior instead of
 failing nodes. Projection into the runs feed stays deliberately deferred:
 a surfaced 0 would read as measured fact for historical rows, so the
 column is exposed nowhere until it is surfaced everywhere at once.
+
+
+## ADR-175 - Plan approval before launch: the proposal is the template read back
+
+Date: 2026-08-30
+
+The directive's flow is Prompt → Plan → approval → Build. Until now the
+Build workspace launched on submit; the plan appeared only after the run
+existed. The graph-level `requires_owner_approval` flag was not the
+answer: the claim path skips flagged graphs and nothing ever flips the
+flag, so pre-launch approval through it would strand graphs, and
+approval after creation would still have woken the worker first.
+
+Instead the approval happens before anything is recorded.
+`composeLaunchProposal` (lib/factory/chief-of-staff.ts) reads the
+`full_lifecycle` template — the identical nodes, jobs, gates and
+proposed edges the launch route hands the compiler — through the same
+`composePlan` used for live runs. Submitting the Build form now drafts
+that proposal (goal verbatim, dependency layers with specialist
+assignments, the three HUMAN gates named, template jobs verbatim under a
+disclosure) and POSTs nothing; "Approve & launch" performs exactly the
+launch that used to happen on submit, and "Edit the request" withdraws
+the proposal keeping the words. The caption states the two honesty
+boundaries: the compiler still applies its own scrutiny after launch
+(the run view shows the compiled truth), and approving the launch never
+approves the in-run gates — architecture, merge and deployment still
+wait for their own decisions. Acceptance criteria are not invented
+client-side: the proposal names the template's own first two steps as
+the place where checkable acceptance criteria and requirements are
+written as recorded artifacts.

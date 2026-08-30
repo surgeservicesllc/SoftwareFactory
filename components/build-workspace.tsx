@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { GateDecision } from "@/components/graph/gate-decision";
 import { Card, Notice, SectionTitle } from "@/components/ui";
-import { composePlan } from "@/lib/factory/chief-of-staff";
+import { composeLaunchProposal, composePlan, type LaunchProposal } from "@/lib/factory/chief-of-staff";
 import { specialistForNode } from "@/lib/factory/specialists";
 import { SDLC_STAGES } from "@/lib/sdlc/lifecycle";
 
@@ -126,6 +126,7 @@ export function BuildWorkspace() {
   const [projectId, setProjectId] = useState("");
 
   const [prompt, setPrompt] = useState("");
+  const [proposal, setProposal] = useState<{ goal: string; composed: LaunchProposal } | null>(null);
   const [launching, setLaunching] = useState(false);
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
   const [launched, setLaunched] = useState<(LaunchResult & { projectId: string }) | null>(null);
@@ -257,15 +258,37 @@ export function BuildWorkspace() {
     };
   }, [watchedGraphId]);
 
-  const submit = useCallback(async () => {
+  /**
+   * Submitting drafts the plan; nothing launches until it is approved. The
+   * proposal is composed from the same template the launch route compiles,
+   * so the approval covers the plan the factory will actually run.
+   */
+  const propose = useCallback(() => {
     const goal = prompt.trim();
     if (goal.length === 0) return;
     if (projectId === "") {
       say("factory", "Pick a project first — a build needs a repository to land in.");
       return;
     }
-    setLaunching(true);
+    const composed = composeLaunchProposal(goal);
+    if (composed === null) {
+      say("factory", "The full_lifecycle plan is unavailable in this build.");
+      return;
+    }
     say("you", goal);
+    say(
+      "factory",
+      `Here is the plan for your approval: ${composed.plan.tasks.length} steps, up to `
+        + `${composed.plan.maxParallelism} in parallel, ${composed.plan.gatedTasks.length} human `
+        + "gates inside the run. Nothing launches until you approve it.",
+    );
+    setProposal({ goal, composed });
+  }, [prompt, projectId, say]);
+
+  const launch = useCallback(async () => {
+    if (proposal === null) return;
+    const goal = proposal.goal;
+    setLaunching(true);
     try {
       const response = await fetch("/api/graphs", {
         method: "POST",
@@ -288,6 +311,7 @@ export function BuildWorkspace() {
       setLaunched({ ...result, projectId });
       lastReportedState.current = null;
       setPrompt("");
+      setProposal(null);
       say(
         "factory",
         `Plan recorded: ${result.nodeCount} steps across the full lifecycle`
@@ -304,7 +328,7 @@ export function BuildWorkspace() {
     } finally {
       setLaunching(false);
     }
-  }, [prompt, projectId, say]);
+  }, [proposal, projectId, say]);
 
   const progress = useMemo(() => {
     if (watchedRun === null) return null;
@@ -372,11 +396,11 @@ export function BuildWorkspace() {
       <Card>
         <SectionTitle
           title="Build something"
-          description="Describe what you want. The factory plans it, runs its stages with the bots you connected, and shows every step here — nothing runs invisibly."
+          description="Describe what you want. The Chief of Staff drafts the plan for your approval, then the factory runs its stages with the bots you connected and shows every step here — nothing runs invisibly, nothing launches unapproved."
         />
         <form
           className="mt-4 space-y-3"
-          onSubmit={(event) => { event.preventDefault(); void submit(); }}
+          onSubmit={(event) => { event.preventDefault(); propose(); }}
         >
           <label className="block">
             <span className="sr-only">What to build</span>
@@ -434,6 +458,72 @@ export function BuildWorkspace() {
           </div>
         </form>
       </Card>
+
+      {proposal !== null && launched === null ? (
+        <Card>
+          <div data-testid="build-proposal">
+            <SectionTitle
+              title="Plan — for your approval"
+              description={`Composed by the Chief of Staff from the ${proposal.composed.templateName} template — the identical nodes, gates and dependencies the factory compiles at launch. Nothing has launched yet.`}
+            />
+            <p className="mt-3 text-sm">
+              <span className="text-xs text-[var(--muted)]">Your request, verbatim: </span>
+              <span className="break-words">{proposal.composed.plan.requirements}</span>
+            </p>
+            <ol className="mt-2 space-y-1 text-sm">
+              {proposal.composed.plan.layers.map((layer, index) => (
+                <li key={`proposal-layer-${index}`} className="flex flex-wrap items-baseline gap-x-2">
+                  <span className="text-xs text-[var(--muted)]">
+                    {index + 1}.{layer.length > 1 ? ` (${layer.length} in parallel)` : ""}
+                  </span>
+                  <span className="min-w-0 break-words">
+                    {layer.map((key) => {
+                      const task = proposal.composed.plan.tasks.find((entry) => entry.key === key);
+                      return `${key}${task?.specialist ? ` — ${task.specialist.name}` : ""}${task?.gated ? " ⛩ gate" : ""}`;
+                    }).join(" · ")}
+                  </span>
+                </li>
+              ))}
+            </ol>
+            <p className="mt-2 text-xs text-[var(--muted)]">
+              Up to {proposal.composed.plan.maxParallelism} steps run in parallel. The first two
+              steps write checkable acceptance criteria and requirements as recorded artifacts,
+              and {proposal.composed.plan.gatedTasks.length} steps
+              ({proposal.composed.plan.gatedTasks.join(", ")}) wait for your decision inside the
+              run — approving the launch never approves those.
+            </p>
+            <details className="mt-2 text-xs text-[var(--muted)]">
+              <summary className="cursor-pointer">What each step does</summary>
+              <ul className="mt-1 space-y-1">
+                {proposal.composed.plan.tasks.map((task) => (
+                  <li key={`proposal-job-${task.key}`} className="break-words">
+                    <span className="font-medium text-[var(--foreground)]">{task.key}</span>
+                    {" — "}{proposal.composed.jobs.get(task.key) ?? ""}
+                  </li>
+                ))}
+              </ul>
+            </details>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => void launch()}
+                disabled={launching}
+                className="rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-contrast)] disabled:opacity-60"
+              >
+                {launching ? "Launching…" : "Approve & launch"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setProposal(null)}
+                disabled={launching}
+                className="rounded-md border border-[var(--border)] px-4 py-2 text-sm disabled:opacity-60"
+              >
+                Edit the request
+              </button>
+            </div>
+          </div>
+        </Card>
+      ) : null}
 
       {transcript.length > 0 ? (
         <Card>

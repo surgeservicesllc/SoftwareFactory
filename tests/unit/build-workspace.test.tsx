@@ -85,10 +85,16 @@ function respond(options: {
   });
 }
 
-async function launch(user: ReturnType<typeof userEvent.setup>, goal = "Build me a bakery site") {
+async function propose(user: ReturnType<typeof userEvent.setup>, goal = "Build me a bakery site") {
   await user.type(screen.getByPlaceholderText("Build me…"), goal);
   await user.selectOptions(await screen.findByRole("combobox"), "11111111-1111-4111-8111-111111111111");
   await user.click(screen.getByRole("button", { name: "Build it" }));
+}
+
+async function launch(user: ReturnType<typeof userEvent.setup>, goal = "Build me a bakery site") {
+  await propose(user, goal);
+  // The Chief of Staff's proposal stands between the request and the launch.
+  await user.click(await screen.findByRole("button", { name: "Approve & launch" }));
 }
 
 describe("the build workspace", () => {
@@ -113,6 +119,53 @@ describe("the build workspace", () => {
 
     const link = await screen.findByRole("link", { name: /Create a project first/ });
     expect(link).toHaveAttribute("href", "/solutions/projects");
+  });
+
+  it("drafts the plan for approval and launches nothing until it is approved", async () => {
+    respond({});
+    const user = userEvent.setup();
+    render(<BuildWorkspace />);
+    await propose(user);
+
+    // The proposal is the real template read back: the request verbatim, the
+    // dependency layers with assignments, and the human gates named.
+    const proposal = await screen.findByTestId("build-proposal");
+    expect(within(proposal).getByText("Build me a bakery site")).toBeInTheDocument();
+    expect(within(proposal).getByText(/scan_internal — Research/)).toBeInTheDocument();
+    expect(within(proposal).getByText(/architecture — Architecture ⛩ gate/)).toBeInTheDocument();
+    expect(within(proposal).getByText(/3 steps \(architecture, test, deploy\) wait for your decision/)).toBeInTheDocument();
+    expect(within(proposal).getByText(/Up to 3 steps run in parallel/)).toBeInTheDocument();
+
+    // Approval is the launch boundary: no POST has happened yet.
+    expect(fetchMock.mock.calls.some(([url, init]) =>
+      typeof url === "string" && url.endsWith("/api/graphs")
+      && (init as RequestInit | undefined)?.method === "POST")).toBe(false);
+
+    await user.click(within(proposal).getByRole("button", { name: "Approve & launch" }));
+    const call = fetchMock.mock.calls.find(([url, init]) =>
+      typeof url === "string" && url.endsWith("/api/graphs") &&
+      (init as RequestInit | undefined)?.method === "POST");
+    expect(JSON.parse((call?.[1] as RequestInit).body as string)).toEqual({
+      projectId: "11111111-1111-4111-8111-111111111111",
+      templateKey: "full_lifecycle",
+      goal: "Build me a bakery site",
+    });
+  });
+
+  it("withdraws the proposal on edit, keeping the words and launching nothing", async () => {
+    respond({});
+    const user = userEvent.setup();
+    render(<BuildWorkspace />);
+    await propose(user);
+
+    const proposal = await screen.findByTestId("build-proposal");
+    await user.click(within(proposal).getByRole("button", { name: "Edit the request" }));
+
+    expect(screen.queryByTestId("build-proposal")).not.toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Build me…")).toHaveValue("Build me a bakery site");
+    expect(fetchMock.mock.calls.some(([url, init]) =>
+      typeof url === "string" && url.endsWith("/api/graphs")
+      && (init as RequestInit | undefined)?.method === "POST")).toBe(false);
   });
 
   it("launches the real full_lifecycle workflow and reports the recorded plan", async () => {
