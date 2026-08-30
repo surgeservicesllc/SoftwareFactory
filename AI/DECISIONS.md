@@ -3665,7 +3665,7 @@ undeclared until the goal's full seeded E2E passes.
   once in SQL, and `tests/unit/graph-stage-mapping-agreement.test.ts` holds
   them to each other over the union of the replayable chain. That test caught
   this change: the two new capabilities had no SQL branch. Migration
-  `20260830000600_specialist_capability_stage_map.sql` adds them in a new file
+  `20260830000700_specialist_capability_stage_map.sql` adds them in a new file
   rather than editing either applied predecessor. It needs no companion enum
   migration — IMPLEMENTATION and DEPLOYMENT have been in `public.sdlc_stage`
   since 20260821000200 — and it changes zero rows today, since both
