@@ -6,11 +6,10 @@ import { CalendarClock, Repeat } from "lucide-react";
 
 import { Card, Notice, PageHeader, SectionTitle } from "@/components/ui";
 import { AccountAvatar, dollars } from "@/components/services/ui";
+import { useAccountProperties } from "@/components/services/use-account-properties";
 import { cn } from "@/lib/cn";
 import type {
-  AccountDetailPayload,
   AccountsPayload,
-  PropertyView,
   ServicePlansPayload,
   TechniciansPayload,
   WorkOrdersPayload,
@@ -440,37 +439,6 @@ export function ServicesSchedulePanel() {
       ) : null}
     </div>
   );
-}
-
-/**
- * Fetches the chosen account's properties so a visit lands on a real site.
- * The list is keyed to the account it was loaded for, so switching accounts
- * shows an empty select until the right list arrives — never a stale one.
- */
-function useAccountProperties(accountId: string): PropertyView[] {
-  const [loaded, setLoaded] = useState<{ forAccount: string; list: PropertyView[] }>({
-    forAccount: "",
-    list: [],
-  });
-  useEffect(() => {
-    if (accountId === "") return;
-    const controller = new AbortController();
-    void (async () => {
-      try {
-        const response = await fetch(`/api/services/accounts/${accountId}`, {
-          headers: { accept: "application/json" },
-          signal: controller.signal,
-        });
-        if (!response.ok) return;
-        const body = (await response.json()) as AccountDetailPayload;
-        setLoaded({ forAccount: accountId, list: body.properties });
-      } catch {
-        /* the select simply stays empty; the submit will say why */
-      }
-    })();
-    return () => controller.abort();
-  }, [accountId]);
-  return loaded.forAccount === accountId ? loaded.list : [];
 }
 
 function WorkOrderForm({

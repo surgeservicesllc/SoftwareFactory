@@ -3,6 +3,8 @@ import {
   HardHat,
   KanbanSquare,
   LayoutDashboard,
+  Radar,
+  ShieldCheck,
   Users,
   type LucideIcon,
 } from "lucide-react";
@@ -60,6 +62,18 @@ export const SERVICES_NAVIGATION: readonly ServicesNavItem[] = [
     label: "Technicians",
     description: "The roster that performs service",
     icon: HardHat,
+  },
+  {
+    href: `${SERVICES_ROOT}/ipm`,
+    label: "IPM & Devices",
+    description: "Stations, scans, sightings, thresholds",
+    icon: Radar,
+  },
+  {
+    href: `${SERVICES_ROOT}/compliance`,
+    label: "Chemicals & Compliance",
+    description: "Products, lots, applications, audit reports",
+    icon: ShieldCheck,
   },
 ];
 

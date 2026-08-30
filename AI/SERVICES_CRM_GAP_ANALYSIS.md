@@ -69,15 +69,29 @@ is a mockup commitment.
    /Services/schedule dispatch board + /Services/technicians roster;
    Demo Data fields the whole operation. Migration 20260830000800,
    hosted-apply scope `field-service`.
-4. **Pest/IPM differentiator**: devices/stations with QR/barcode
-   identity, install/service/move/remove scans, station history and
-   conditions, captures/consumption, thresholds and trends, pest
-   sighting logs, corrective actions; multi-site commercial dashboards.
-5. **Chemicals & compliance**: product/lot inventory, application logs
-   (rate/quantity/location/applicator), license tracking, SDS/label
-   references, jurisdiction-configurable rule records (never one
-   hardcoded state), audit-ready PDF/CSV export per
-   customer/site/date/pest/device/chemical/technician.
+4. **Pest/IPM (SHIPPED with ADR-190)**: crm_devices with per-organization
+   barcode identity and IPM activity thresholds; the append-only
+   crm_device_events scan ledger (install/service/move/remove) whose
+   install is written at birth and from which device state is projected
+   by trigger; crm_pest_sightings with the corrective-action CHECK that
+   makes "resolved" mean something. The /Services/ipm command center:
+   scan box, per-site station tables, over-threshold flags, and the
+   sighting loop. Nothing deletable anywhere — a pulled station is a
+   remove scan. Migration 20260830000900, hosted-apply scope `pest-ipm`.
+   Still ahead in this pillar: device/site MAPS (coordinates and floor
+   plans), QR label generation, and long-run trend charts.
+5. **Chemicals & compliance (SHIPPED with ADR-191)**: crm_products (EPA
+   registration identity, https-checked SDS/label references, restricted-use
+   flag), crm_product_lots (trigger drawdown, expiry, remaining ≤ received),
+   the APPEND-ONLY crm_applications log (applicator license copied at
+   recording, rate/quantity/area/target pest, supersede-not-edit
+   corrections, its own 'service' timeline event), and crm_compliance_rules
+   as configurable per-jurisdiction rows enforced at the application
+   boundary. Audit-ready report by customer/site/date/product/technician,
+   as JSON or injection-guarded CSV. /Services/compliance. Migration
+   20260830001000, hosted-apply scope `chemicals-compliance`. Still ahead
+   in this pillar: PDF rendering (CSV ships now) and retention-window
+   reporting driven by each rule's configured years.
 6. **Invoicing & payments**: estimates/proposals → invoice → payment on
    the existing Stripe machinery; `payment` timeline events.
 7. **Sales**: territories, canvassing routes, dispositions, leaderboards,

@@ -61,6 +61,8 @@ on:
           - services-crm
           - crm-pipeline
           - field-service
+          - pest-ipm
+          - chemicals-compliance
           - probe
 permissions:
   actions: read
@@ -1497,6 +1499,127 @@ jobs:
             end
             \$\$;"
           echo "Field service applied; RLS, grants and work-order triggers verified."
+
+      - name: Apply the pest/IPM core (scope=pest-ipm)
+        if: ${{ inputs.scope == 'pest-ipm' }}
+        run: |
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+          VERSION=20260830000900_pest_ipm_core
+          FILE="supabase/migrations/${VERSION}.sql"
+          sha256sum "$FILE"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied "${VERSION%%_*}"
+          else
+            npx supabase migration repair --status applied "${VERSION%%_*}" --db-url "$DB_URL"
+          fi
+          psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
+          # Postflight: three tables under forced RLS; the scan ledger holds
+          # select+insert ONLY (its immutability is the absence of every other
+          # grant, and hosted default privileges granted ALL at creation);
+          # devices and sightings are never deletable; anon and service_role
+          # hold nothing; both device triggers and the barcode uniqueness the
+          # scanner depends on exist.
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
+            do \$\$
+            declare
+              v_table text;
+            begin
+              if (select count(*) from pg_class c
+                   join pg_namespace n on n.oid = c.relnamespace
+                  where n.nspname = 'public' and c.relrowsecurity and c.relforcerowsecurity
+                    and c.relname in ('crm_devices','crm_device_events','crm_pest_sightings')) <> 3 then
+                raise exception 'the pest/IPM tables are missing or not under forced RLS';
+              end if;
+              if has_table_privilege('authenticated', 'public.crm_device_events', 'update')
+                or has_table_privilege('authenticated', 'public.crm_device_events', 'delete')
+                or has_table_privilege('authenticated', 'public.crm_devices', 'delete')
+                or has_table_privilege('authenticated', 'public.crm_pest_sightings', 'delete') then
+                raise exception 'the pest/IPM immutability grants are wrong';
+              end if;
+              foreach v_table in array array['crm_devices','crm_device_events','crm_pest_sightings'] loop
+                if has_table_privilege('anon', 'public.' || v_table, 'select')
+                  or has_table_privilege('service_role', 'public.' || v_table, 'select') then
+                  raise exception 'anon or service_role can reach %', v_table;
+                end if;
+              end loop;
+              if (select count(*) from pg_trigger t join pg_class c on c.oid = t.tgrelid
+                  where (c.relname = 'crm_devices' and t.tgname = 'crm_devices_record_install')
+                     or (c.relname = 'crm_device_events' and t.tgname = 'crm_device_events_apply')) <> 2 then
+                raise exception 'a device ledger trigger is missing';
+              end if;
+              if not exists (
+                select 1 from pg_indexes
+                where schemaname = 'public' and indexname = 'crm_devices_org_barcode_key'
+              ) then
+                raise exception 'the per-organization barcode uniqueness is missing';
+              end if;
+            end
+            \$\$;"
+          echo "Pest/IPM applied; RLS, ledger immutability, triggers and barcode uniqueness verified."
+
+      - name: Apply chemicals and compliance (scope=chemicals-compliance)
+        if: ${{ inputs.scope == 'chemicals-compliance' }}
+        run: |
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+          VERSION=20260830001000_chemicals_compliance
+          FILE="supabase/migrations/${VERSION}.sql"
+          sha256sum "$FILE"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied "${VERSION%%_*}"
+          else
+            npx supabase migration repair --status applied "${VERSION%%_*}" --db-url "$DB_URL"
+          fi
+          psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
+          # Postflight: four tables under forced RLS; the application log
+          # holds select+insert ONLY (a pesticide application is a legal
+          # record — hosted default privileges granted ALL at creation, so
+          # the absence of update/delete is what must be proven); nothing
+          # deletable anywhere; anon and service_role hold nothing; both
+          # application triggers exist.
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
+            do \$\$
+            declare
+              v_table text;
+            begin
+              if (select count(*) from pg_class c
+                   join pg_namespace n on n.oid = c.relnamespace
+                  where n.nspname = 'public' and c.relrowsecurity and c.relforcerowsecurity
+                    and c.relname in ('crm_products','crm_product_lots','crm_applications','crm_compliance_rules')) <> 4 then
+                raise exception 'the compliance tables are missing or not under forced RLS';
+              end if;
+              if has_table_privilege('authenticated', 'public.crm_applications', 'update')
+                or has_table_privilege('authenticated', 'public.crm_applications', 'delete') then
+                raise exception 'the application log is not append-only';
+              end if;
+              foreach v_table in array array['crm_products','crm_product_lots','crm_applications','crm_compliance_rules'] loop
+                if has_table_privilege('authenticated', 'public.' || v_table, 'delete') then
+                  raise exception 'compliance records are deletable on %', v_table;
+                end if;
+                if has_table_privilege('anon', 'public.' || v_table, 'select')
+                  or has_table_privilege('service_role', 'public.' || v_table, 'select') then
+                  raise exception 'anon or service_role can reach %', v_table;
+                end if;
+              end loop;
+              if (select count(*) from pg_trigger t join pg_class c on c.oid = t.tgrelid
+                  where c.relname = 'crm_applications'
+                    and t.tgname in ('crm_applications_draw_lot','crm_applications_record_event')) <> 2 then
+                raise exception 'an application trigger is missing';
+              end if;
+            end
+            \$\$;"
+          echo "Chemicals and compliance applied; RLS, append-only log, triggers verified."
 
       - name: Normalize exact legacy bot ACLs (scope=bot-legacy-acl-normalization)
         if: ${{ inputs.scope == 'bot-legacy-acl-normalization' }}

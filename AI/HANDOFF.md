@@ -2,7 +2,81 @@
 
 Last updated: 2026-08-30
 
-## Newest (2026-08-30, latest+11): field service core (ADR-189, task #63)
+## Newest (2026-08-30, latest+13): chemicals & compliance (ADR-191, task #63)
+
+Increment 5, the regulated pillar. 20260830001000 adds crm_products /
+crm_product_lots / crm_applications / crm_compliance_rules. Five schema
+invariants: applications are APPEND-ONLY at the grant level (a
+correction is a superseding record naming the original, never an edit);
+the applicator's license is COPIED onto the record by the route from the
+roster (renewals must not rewrite history); the lot drawdown is a
+`for update`-locked trigger refusing over-draws and unit mismatches;
+every application writes its own 'service' timeline event (the second
+real writer of that system kind); and jurisdiction rules are configurable
+rows, enforced at the application boundary with the missing fields named
+— no state hardcoded anywhere. TRAP: a self-referencing composite FK
+cannot be inline (the unique index it targets is the table's own) —
+`supersedes_id` is added as a separate constraint after the table;
+PGlite caught it with "no unique constraint matching given keys".
+
+Surfaces: products GET/POST (https-only SDS/label, EPA 409),
+products/[id]/lots POST, applications GET/POST, compliance/rules
+GET/POST, compliance/report (JSON or CSV; the CSV is RFC-4180 quoted and
+prefixes =,+,-,@ cells so a regulator's spreadsheet reads text, never a
+formula). /Services/compliance panel: catalogue with lot lines and
+inline receive, jurisdiction rules, recent applications, and the audit
+report with its matching CSV link. Demo Data gained a fictional
+catalogue (90000-series EPA numbers no real registration uses), lots,
+applications drawing them down, and two contrasting jurisdictions.
+
+Suites: services-chemicals-compliance.behavior 6, compliance routes 9,
+compliance panel 3, demo hygiene +1, demo-book replay extended (the two
+'service' writers counted apart). Census: RLS 162, hosted-grants fifteen
+crm tables, sentinels swept to 20260830001000 (28), runbook 189,
+workflow scope chemicals-compliance. Dispatch after merge. Next:
+increment 6, invoicing on the existing Stripe machinery.
+
+## Older (2026-08-30, latest+12): pest/IPM core (ADR-190, task #63)
+
+Increment 4, the goal's differentiator pillar. 20260830000900 adds
+crm_devices / crm_device_events / crm_pest_sightings on the established
+posture (org-scoped forced RLS, revoke-then-grant against hosted
+defaults, anon+service_role revoked, three-column composite keys to the
+account's own property). Four schema-held invariants: the scan ledger is
+APPEND-ONLY at the grant level (select+insert, nothing else); a station
+is born with its install scan (AFTER INSERT definer trigger — no device
+predates its ledger); device state is a PROJECTION of the ledger
+(install reactivates, remove closes with removed_at CHECKed against
+status, move relocates — all by trigger); and corrected_at is CHECKed
+against corrective_action so a resolved sighting always says what was
+done. Nothing is deletable anywhere. Barcode = field identity: unique
+per organization (a scan resolves to exactly one station), reusable
+across organizations, grammar-CHECKed. NOTE: this migration also adds
+crm_work_orders_org_id_key — the ledger's work-order FK needed a
+composite target that field service never created; PGlite caught it
+("no unique constraint matching given keys").
+
+Surfaces: /api/services/ipm (one org-scoped dashboard read),
+devices POST/PATCH, devices/scan (barcode → 404 or append; device
+re-read after the trigger moves it), sightings POST + PATCH (the
+corrective-action close). /Services/ipm panel: scan box, per-site
+station tables with threshold flags, sighting loop; nav entry "IPM &
+Devices". useAccountProperties extracted from the schedule panel to
+components/services/use-account-properties.ts and reused by both IPM
+forms. Demo Data now runs a real IPM program (8 stations across 5
+sites, scan histories with an over-threshold station, one open and one
+closed sighting), replayed against the chain.
+
+Suites: services-pest-ipm.behavior 4 (chain), pest-ipm routes 7, IPM
+panel 4, demo-data hygiene +1, demo-book replay extended. Census: RLS
+158, hosted-grants eleven crm tables, sentinels swept to
+20260830000900 (26), runbook 188, workflow scope pest-ipm (postflight:
+forced RLS x3, ledger immutability, no-DELETE, anon/service_role
+shutout, both device triggers, barcode uniqueness). Dispatch
+scope=pest-ipm right after merge. Next: increment 5, chemicals and
+compliance.
+
+## Older (2026-08-30, latest+11): field service core (ADR-189, task #63)
 
 Increment 3 on main-bound work: crm_technicians / crm_service_plans /
 crm_work_orders (20260830000800), all revoke-then-grant, NO DELETE

@@ -99,7 +99,7 @@ describe("project agent selection", () => {
     const migrationFiles = (await readdir(migrationsDirectory))
       .filter((file) => file.endsWith(".sql"))
       .sort();
-    expect(migrationFiles.at(-1)).toBe("20260830000800_field_service_core.sql");
+    expect(migrationFiles.at(-1)).toBe("20260830001000_chemicals_compliance.sql");
     for (const migrationFile of migrationFiles) {
       await db.exec(await readFile(resolve(migrationsDirectory, migrationFile), "utf8"));
     }

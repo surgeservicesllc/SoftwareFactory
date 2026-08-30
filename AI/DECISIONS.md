@@ -3754,3 +3754,95 @@ undeclared until the goal's full seeded E2E passes.
   the generate guard, compensation, and clamped date math; schedule and
   roster panels 5. RLS census 155; hosted-grants +3; runbook 187;
   workflow scope field-service with full postflight.
+
+## ADR-190 - Pest/IPM: barcoded stations over an append-only scan ledger
+
+- **Date**: 2026-08-30
+- **Status**: Accepted (task #63, owner /goal — increment 4 of
+  AI/SERVICES_CRM_GAP_ANALYSIS.md, the differentiator pillar)
+- **Decision**: `crm_devices`, `crm_device_events` and
+  `crm_pest_sightings` (migration 20260830000900) on the established
+  posture — org-scoped forced RLS, revoke-then-grant against hosted
+  default privileges, anon/service_role shut out, three-column composite
+  keys so a station or sighting can only land on its own account's
+  property. Four things live in the schema because a route cannot be
+  trusted with them:
+  1. **The scan ledger is append-only at the grant level** — authenticated
+     holds SELECT and INSERT and nothing else. A station's history can be
+     added to, never rewritten: an auditor reads what the technician
+     scanned, not what someone later wished they had.
+  2. **A station is born with its install scan.** An AFTER INSERT definer
+     trigger writes it, so no device can predate its own ledger.
+  3. **Device state is a projection of the ledger.** install reactivates,
+     remove closes (with `removed_at`, CHECKed against status), move
+     relocates — all by trigger from the event, never written around it.
+     State cannot contradict the history that produced it.
+  4. **A corrective action arrives with its timestamp.** A CHECK ties
+     `corrected_at` to `corrective_action`, so a "resolved" sighting can
+     never be a claim with no content.
+  Nothing here is deletable: a pulled station is a `remove` scan, and a
+  sighting is closed by recording what was done about it.
+- **Identity**: the barcode is the field identity — unique per
+  organization (so a scan resolves to exactly one station), reusable
+  across organizations, and grammar-CHECKed to a scanable string.
+  `activity_threshold` is the IPM trigger point; the dashboard flags a
+  station whose newest counted scan reaches it.
+- **Verification**: services-pest-ipm.behavior on the real chain under
+  hosted-style default privileges (install-at-birth, ledger-driven state
+  through move/remove/reinstall, grant-level immutability, per-org
+  barcode uniqueness with cross-org reuse, the corrective-action CHECK,
+  tenant isolation, anon/service_role shutout); route and panel suites;
+  the Demo Data book now runs a real IPM program (barcoded stations,
+  scan histories, an over-threshold station, an open and a closed
+  sighting), replayed against the chain. RLS census 158; hosted-grants
+  eleven crm tables; runbook 188; workflow scope `pest-ipm`.
+
+## ADR-191 - Chemicals & compliance: an append-only application log with configurable jurisdictions
+
+- **Date**: 2026-08-30
+- **Status**: Accepted (task #63, owner /goal — increment 5 of
+  AI/SERVICES_CRM_GAP_ANALYSIS.md, the regulated pillar)
+- **Decision**: `crm_products`, `crm_product_lots`, `crm_applications`
+  and `crm_compliance_rules` (migration 20260830001000) on the
+  established posture. Five things live in the schema:
+  1. **Applications are append-only at the grant level** —
+     select+insert, nothing else. A pesticide application is a legal
+     record: a mistake is corrected by a superseding record that names
+     the one it replaces (`supersedes_id`), exactly as a paper log is
+     corrected by a later entry. Nothing in this increment is deletable.
+  2. **The license is copied, not referenced.** The route reads the
+     technician's `license_number` at the moment of recording and writes
+     it onto the application. A license may be renewed or corrected
+     later; the record must still say what was true that day.
+  3. **The lot drawdown is a trigger**, `for update`-locked, refusing an
+     over-draw or a unit mismatch (an ounce is not a litre, and silently
+     converting would falsify the record). The shelf and the log cannot
+     disagree.
+  4. **Every application writes its own `service` timeline event**, so
+     the compliance record and the customer's history are one
+     transaction — the second real writer of that system kind.
+  5. **Jurisdiction rules are rows, never code.** A workspace configures
+     `US-OR`, `CA-ON` or anything matching the code grammar, with its own
+     retention window and required fields; the application boundary holds
+     a record to whichever jurisdiction it names and refuses an
+     incomplete one with the missing fields named. No state's
+     requirements are privileged anywhere in the schema or the routes.
+- **The audit report** resolves ids into the names an inspector reads
+  (customer, site, product + EPA number, lot, device, technician +
+  the license held that day) and serves the same rows as JSON or CSV.
+  The CSV is RFC-4180 quoted and guards against spreadsheet injection: a
+  cell beginning `=`, `+`, `-` or `@` is prefixed with a quote, so a
+  regulator opening the export reads text, never a formula.
+- **Note**: the self-referencing composite FK for `supersedes_id` is
+  added after the table, because the unique index it targets is the
+  table's own — PGlite proved it cannot be inline.
+- **Verification**: services-chemicals-compliance.behavior 6 on the real
+  chain (lot drawdown with over-draw and unit-mismatch refusals leaving
+  the shelf untouched; the timeline event exact; append-only with a
+  working supersede; lot/EPA integrity and undeletability; per-org
+  jurisdictions with cross-org reuse; anon/service_role shutout);
+  compliance routes 9; compliance panel 3; the Demo Data book gained a
+  fictional catalogue (90000-series EPA numbers), lots, applications and
+  two contrasting jurisdictions, replayed against the chain. RLS census
+  162; hosted-grants fifteen crm tables; runbook 189; workflow scope
+  `chemicals-compliance`.

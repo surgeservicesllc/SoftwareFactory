@@ -2,6 +2,55 @@
 
 Last reviewed: 2026-08-30
 
+**Addendum, 2026-08-30 latest+13 - chemicals & compliance (ADR-191):**
+services-chemicals-compliance.behavior 6 on the real chain under
+hosted-style default privileges (lot drawn down exactly, an over-draw and
+a unit mismatch both refused with the shelf left untouched; the
+application's timeline event exact in summary, detail and actor;
+append-only proven by refused update/delete plus a working supersede that
+leaves the original standing; remaining-within-received and per-org EPA
+uniqueness; products undeletable; per-org jurisdictions with cross-org
+reuse; anon/service_role shut out of all four tables).
+services-compliance-routes 9 (license copied from the roster onto the
+record; a named jurisdiction's requirements enforced with the missing
+fields listed and nothing written; an unconfigured jurisdiction answered
+honestly; the lot's refusal returned as the caller's 422; unknown
+technician refused pre-write; non-https SDS refused pre-database;
+duplicate EPA as 409; the report resolving every id into an inspector's
+name; the CSV quoted and formula-guarded).
+services-compliance-panel 3 (catalogue with lot lines and rules from the
+live payload, the report table and its matching CSV window, the
+application body exact including its jurisdiction). Demo hygiene +1
+(fictional 90000-series registrations, DEMO-LOT numbers, applications
+landing on their own account's property in the product's own unit and
+never drawing more than a lot holds). RLS census 162; hosted-grants
+fifteen crm tables; runbook 189; workflow scope chemicals-compliance
+postflight. Lint zero warnings, tsc clean; full vitest + production
+build before shipping.
+
+**Addendum, 2026-08-30 latest+12 - pest/IPM core (ADR-190):**
+services-pest-ipm.behavior 4 on the real chain under hosted-style
+default privileges (a station born with its install scan carrying its
+actor and location; state driven through move/remove/reinstall by the
+ledger alone; grant-level ledger immutability plus undeletable devices
+and sightings; one barcode per organization with free cross-org reuse;
+the corrected_at/corrective_action CHECK; tenant isolation incl.
+cross-org property attachment refusal; anon/service_role shut out of all
+three tables). services-pest-ipm-routes 7 (exact tenant install, taken
+barcode as 409, barcode resolved inside the org with the actor recorded
+and the device re-read after the trigger, unknown barcode 404 appending
+nothing, a move without a destination refused pre-database, the
+corrective action landing with its timestamp, the org-scoped dashboard
+read). services-ipm-panel 4 (sites/stations/threshold flags from the
+live payload, empty state naming its next step, the scan body exact,
+the sighting loop closed through the real PATCH). Demo hygiene +1 (a
+real IPM program: unique DEMO-ST barcodes on the account's own
+properties, scans ordered after their install, an over-threshold
+station, both an open and a closed sighting). RLS census 158;
+hosted-grants eleven crm tables; runbook 188; workflow scope pest-ipm
+postflight. Lint zero warnings, tsc clean; full vitest + production
+build before shipping.
+
 **Addendum, 2026-08-30 latest+11 — field service core (ADR-189):**
 services-field-service behavior 5 on the real chain under hosted-style
 defaults (completion writes exactly one 'service' event with property

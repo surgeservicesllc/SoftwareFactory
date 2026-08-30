@@ -94,6 +94,51 @@ export function advanceServiceDate(date: string, recurrence: CrmServiceRecurrenc
   return advanced.toISOString().slice(0, 10);
 }
 
+export const CRM_DEVICE_TYPES = [
+  "bait_station",
+  "snap_trap",
+  "multi_catch",
+  "insect_light_trap",
+  "pheromone_trap",
+  "other",
+] as const;
+export type CrmDeviceType = (typeof CRM_DEVICE_TYPES)[number];
+
+export const CRM_DEVICE_EVENT_KINDS = ["install", "service", "move", "remove"] as const;
+export type CrmDeviceEventKind = (typeof CRM_DEVICE_EVENT_KINDS)[number];
+
+export const CRM_DEVICE_CONDITIONS = ["ok", "needs_service", "damaged", "missing"] as const;
+export type CrmDeviceCondition = (typeof CRM_DEVICE_CONDITIONS)[number];
+
+export const CRM_SIGHTING_SEVERITIES = ["low", "moderate", "high"] as const;
+export type CrmSightingSeverity = (typeof CRM_SIGHTING_SEVERITIES)[number];
+
+/** The barcode grammar the schema CHECKs: scanable, no whitespace, 4-64. */
+export const CRM_BARCODE_PATTERN = /^[A-Za-z0-9._\-]{4,64}$/;
+
+export const CRM_APPLICATION_METHODS = [
+  "bait",
+  "crack_and_crevice",
+  "spot",
+  "perimeter",
+  "broadcast",
+  "void",
+  "dust",
+  "fumigation",
+  "other",
+] as const;
+export type CrmApplicationMethod = (typeof CRM_APPLICATION_METHODS)[number];
+
+export const CRM_MEASURE_UNITS = ["oz", "fl_oz", "lb", "g", "kg", "ml", "l", "gal", "each"] as const;
+export type CrmMeasureUnit = (typeof CRM_MEASURE_UNITS)[number];
+
+export const CRM_SIGNAL_WORDS = ["CAUTION", "WARNING", "DANGER"] as const;
+
+/** The EPA registration grammar the schema CHECKs. */
+export const CRM_EPA_PATTERN = /^[0-9]{2,7}-[0-9]{1,7}(-[0-9]{1,7})?$/;
+/** A jurisdiction code: "US-OR", "CA-ON", "US". Never a fixed list. */
+export const CRM_JURISDICTION_PATTERN = /^[A-Z]{2}(-[A-Z0-9]{1,10})?$/;
+
 export const CRM_ACCOUNT_COLUMNS =
   "id, name, kind, status, email, phone, source, billing_address, notes, created_at, updated_at";
 export const CRM_CONTACT_COLUMNS =
@@ -110,6 +155,20 @@ export const CRM_SERVICE_PLAN_COLUMNS =
   "id, account_id, property_id, service_type, recurrence, next_due, technician_id, value_cents, active, notes, created_at, updated_at";
 export const CRM_WORK_ORDER_COLUMNS =
   "id, account_id, property_id, technician_id, plan_id, status, service_type, scheduled_start, scheduled_end, instructions, completion_notes, completed_at, created_at, updated_at";
+export const CRM_PRODUCT_COLUMNS =
+  "id, name, epa_registration_number, active_ingredient, signal_word, sds_url, label_url, restricted_use, default_unit, active, created_at, updated_at";
+export const CRM_LOT_COLUMNS =
+  "id, product_id, lot_number, unit, quantity_received, quantity_remaining, received_on, expires_on, created_at, updated_at";
+export const CRM_APPLICATION_COLUMNS =
+  "id, account_id, property_id, work_order_id, product_id, lot_id, device_id, technician_id, applicator_license, method, target_pest, quantity, unit, application_rate, treated_area, location_note, note, applied_at, recorded_at, supersedes_id";
+export const CRM_COMPLIANCE_RULE_COLUMNS =
+  "id, jurisdiction, label, retention_years, requires_applicator_license, requires_target_pest, requires_application_rate, requires_treated_area, notes, active, created_at, updated_at";
+export const CRM_DEVICE_COLUMNS =
+  "id, account_id, property_id, label, device_type, barcode, status, location_note, activity_threshold, installed_at, removed_at, created_at, updated_at";
+export const CRM_DEVICE_EVENT_COLUMNS =
+  "id, device_id, event, condition, activity_count, pest_observed, location_note, note, work_order_id, recorded_at, actor_user_id";
+export const CRM_SIGHTING_COLUMNS =
+  "id, account_id, property_id, pest, severity, location_note, note, sighted_at, corrective_action, corrected_at, created_at, updated_at";
 
 export type CrmAccountRow = {
   id: string;
@@ -201,6 +260,117 @@ export type CrmWorkOrderRow = {
   instructions: string | null;
   completion_notes: string | null;
   completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CrmDeviceRow = {
+  id: string;
+  account_id: string;
+  property_id: string;
+  label: string;
+  device_type: string;
+  barcode: string;
+  status: string;
+  location_note: string | null;
+  activity_threshold: number | null;
+  installed_at: string;
+  removed_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CrmDeviceEventRow = {
+  id: string;
+  device_id: string;
+  event: string;
+  condition: string | null;
+  activity_count: number | null;
+  pest_observed: string | null;
+  location_note: string | null;
+  note: string | null;
+  work_order_id: string | null;
+  recorded_at: string;
+  actor_user_id: string | null;
+};
+
+export type CrmSightingRow = {
+  id: string;
+  account_id: string;
+  property_id: string;
+  pest: string;
+  severity: string;
+  location_note: string | null;
+  note: string | null;
+  sighted_at: string;
+  corrective_action: string | null;
+  corrected_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CrmProductRow = {
+  id: string;
+  name: string;
+  epa_registration_number: string | null;
+  active_ingredient: string | null;
+  signal_word: string | null;
+  sds_url: string | null;
+  label_url: string | null;
+  restricted_use: boolean;
+  default_unit: string | null;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CrmLotRow = {
+  id: string;
+  product_id: string;
+  lot_number: string;
+  unit: string;
+  quantity_received: string | number;
+  quantity_remaining: string | number;
+  received_on: string;
+  expires_on: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CrmApplicationRow = {
+  id: string;
+  account_id: string;
+  property_id: string;
+  work_order_id: string | null;
+  product_id: string;
+  lot_id: string | null;
+  device_id: string | null;
+  technician_id: string;
+  applicator_license: string | null;
+  method: string;
+  target_pest: string | null;
+  quantity: string | number;
+  unit: string;
+  application_rate: string | null;
+  treated_area: string | null;
+  location_note: string | null;
+  note: string | null;
+  applied_at: string;
+  recorded_at: string;
+  supersedes_id: string | null;
+};
+
+export type CrmComplianceRuleRow = {
+  id: string;
+  jurisdiction: string;
+  label: string;
+  retention_years: number;
+  requires_applicator_license: boolean;
+  requires_target_pest: boolean;
+  requires_application_rate: boolean;
+  requires_treated_area: boolean;
+  notes: string | null;
+  active: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -341,6 +511,136 @@ export function toWorkOrderView(row: CrmWorkOrderRow) {
     instructions: row.instructions,
     completionNotes: row.completion_notes,
     completedAt: row.completed_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function toDeviceView(row: CrmDeviceRow) {
+  return {
+    id: row.id,
+    accountId: row.account_id,
+    propertyId: row.property_id,
+    label: row.label,
+    deviceType: row.device_type,
+    barcode: row.barcode,
+    status: row.status,
+    locationNote: row.location_note,
+    activityThreshold: row.activity_threshold,
+    installedAt: row.installed_at,
+    removedAt: row.removed_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function toDeviceEventView(row: CrmDeviceEventRow) {
+  return {
+    id: row.id,
+    deviceId: row.device_id,
+    event: row.event,
+    condition: row.condition,
+    activityCount: row.activity_count,
+    pestObserved: row.pest_observed,
+    locationNote: row.location_note,
+    note: row.note,
+    workOrderId: row.work_order_id,
+    recordedAt: row.recorded_at,
+    recordedBySystem: row.actor_user_id === null,
+  };
+}
+
+export function toSightingView(row: CrmSightingRow) {
+  return {
+    id: row.id,
+    accountId: row.account_id,
+    propertyId: row.property_id,
+    pest: row.pest,
+    severity: row.severity,
+    locationNote: row.location_note,
+    note: row.note,
+    sightedAt: row.sighted_at,
+    correctiveAction: row.corrective_action,
+    correctedAt: row.corrected_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+/** numeric(14,3) arrives as a string over the wire; the product speaks numbers. */
+function decimal(value: string | number): number {
+  return typeof value === "number" ? value : Number(value);
+}
+
+export function toProductView(row: CrmProductRow) {
+  return {
+    id: row.id,
+    name: row.name,
+    epaRegistrationNumber: row.epa_registration_number,
+    activeIngredient: row.active_ingredient,
+    signalWord: row.signal_word,
+    sdsUrl: row.sds_url,
+    labelUrl: row.label_url,
+    restrictedUse: row.restricted_use,
+    defaultUnit: row.default_unit,
+    active: row.active,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function toLotView(row: CrmLotRow) {
+  return {
+    id: row.id,
+    productId: row.product_id,
+    lotNumber: row.lot_number,
+    unit: row.unit,
+    quantityReceived: decimal(row.quantity_received),
+    quantityRemaining: decimal(row.quantity_remaining),
+    receivedOn: row.received_on,
+    expiresOn: row.expires_on,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function toApplicationView(row: CrmApplicationRow) {
+  return {
+    id: row.id,
+    accountId: row.account_id,
+    propertyId: row.property_id,
+    workOrderId: row.work_order_id,
+    productId: row.product_id,
+    lotId: row.lot_id,
+    deviceId: row.device_id,
+    technicianId: row.technician_id,
+    applicatorLicense: row.applicator_license,
+    method: row.method,
+    targetPest: row.target_pest,
+    quantity: decimal(row.quantity),
+    unit: row.unit,
+    applicationRate: row.application_rate,
+    treatedArea: row.treated_area,
+    locationNote: row.location_note,
+    note: row.note,
+    appliedAt: row.applied_at,
+    recordedAt: row.recorded_at,
+    supersedesId: row.supersedes_id,
+  };
+}
+
+export function toComplianceRuleView(row: CrmComplianceRuleRow) {
+  return {
+    id: row.id,
+    jurisdiction: row.jurisdiction,
+    label: row.label,
+    retentionYears: row.retention_years,
+    requiresApplicatorLicense: row.requires_applicator_license,
+    requiresTargetPest: row.requires_target_pest,
+    requiresApplicationRate: row.requires_application_rate,
+    requiresTreatedArea: row.requires_treated_area,
+    notes: row.notes,
+    active: row.active,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

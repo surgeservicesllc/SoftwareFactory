@@ -24,7 +24,17 @@ The Demo Data book
 can seed a 14-account fictional clientele through the real machinery —
 every record source-labeled "Demo Data", history written by the
 triggers, loader + DemoNotice + pipeline headline on the Overview.
-Plan of record: AI/SERVICES_CRM_GAP_ANALYSIS.md — ten increments;
+Pest/IPM (ADR-190) is live: barcoded stations over an append-only scan
+ledger (install written at birth, device state projected from the ledger
+by trigger, per-organization barcode uniqueness), sightings closed only
+by recording a corrective action, and the /Services/ipm command center
+with a scan box, per-site station tables, threshold flags and the
+sighting loop. Chemicals and compliance (ADR-191) close the regulated half: a product
+catalogue with EPA identity and SDS/label links, lots drawn down by
+trigger, an append-only application log that copies the applicator's
+license and writes its own timeline event, jurisdiction rules configured
+as rows and enforced at the boundary, and an audit report served as JSON
+or injection-guarded CSV. Plan of record: AI/SERVICES_CRM_GAP_ANALYSIS.md — ten increments;
 PEST CRM: PRODUCTION READY is declared only after the seeded E2E
 journey (increment 10).
 

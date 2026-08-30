@@ -35,65 +35,25 @@ the full seeded E2E journey passes — increment 10 of the plan.
   /Services/schedule board + /Services/technicians roster; Demo Data
   fields the operation. 20260830000800; hosted apply: dispatch
   scope=field-service after merge.
-- [ ] Increment 4: pest/IPM differentiator — devices/stations with
-  QR/barcode identity, scans, station history/conditions,
-  captures/thresholds/trends, sighting logs, corrective actions,
-  multi-site commercial dashboards. Then increments 5–10 per the gap
-  analysis (chemicals/compliance, invoicing, sales, marketing, AI
-  copilot, seeded E2E acceptance).
-
-Last triaged: 2026-08-29
-
-## AI Factory → autonomous build platform (task #61, owner directive 2026-08-30)
-
-The audit and increment plan live in `AI/AI_FACTORY_GAP_ANALYSIS.md`.
-(The first /goal registration exceeded the 4,000-char limit; a trimmed
-/goal was later registered and its evaluator is armed. This section is
-still the working plan of record.)
-
-- [x] Increment 1 (ADR-171): `/solutions/build` — conversational front
-  door; prompt → full_lifecycle launch → live watched run (counted
-  progress, SDLC-ordered stages, OPEN-gate call to decide, closure notes,
-  resume list). Nav seat "Build" first after Overview.
-- [x] Increment 5 (ADR-173): the Chief of Staff named over the real
-  compiler/scheduler/router; `composePlan` layers stored edges with
-  specialist assignments, gates and counted percent; Build gains the
-  Plan disclosure and a percent-led headline.
-- [x] Increment 2 (ADR-175): plan approval before launch —
-  `composeLaunchProposal` reads the full_lifecycle template back through
-  composePlan; submitting drafts the proposal (goal verbatim, layers
-  with specialists, the three HUMAN gates named, template jobs under a
-  disclosure) and POSTs nothing; Approve & launch is the old submit;
-  Edit withdraws keeping the words. Acceptance criteria stay the run's
-  own first-stage artifacts, never invented client-side.
-- [x] Increment 3a (shipped with increment 1): inline gate decisions —
-  every OPEN human gate on the watched run renders the shared
-  GateDecision control (same wording, same route, same evidence rules as
-  the runs panel); a decision re-reads the live feed.
-- [x] Increment 3b, Stop half (ADR-180): withdrawal —
-  20260830000200 adds graphs.withdrawn_* + the one claim predicate;
-  withdraw_graph_as_member (authenticated definer, RUNNING refusal,
-  idempotent, audited); POST /api/graphs/[graphId]/withdraw; Build
-  shows Stop only where it is true (waiting card + non-RUNNING active
-  rows). Pause/Resume still need engine support — deliberately unbuilt
-  rather than dead. Hosted apply: dispatch scope=withdraw-graph after
-  merge.
-- [x] Increment 3b, Pause/Resume half (ADR-183): the run-controls list
-  is now complete. 20260830000400 adds graphs.pause_requested_* + the
-  one claim predicate (graph-level on purpose — a run-level flag would
-  let the next drain resume the graph unasked), set_graph_pause_as_member
-  (authenticated definer, withdrawn refusal, idempotent both ways,
-  audited 'graph.pause_changed') and read_graph_pause_as_worker
-  (service-role boolean). The engine polls checkPause at wave
-  boundaries: in-flight work lands, nothing new starts, undispatched
-  nodes SKIP with a pause detail, the run closes CANCELLED spending no
-  chance. Resume = unpause + the launch route's worker wake; the
-  lifecycle reuse path makes the next claim continue from the completed
-  steps (proved end-to-end on the chain). Retry needs no new control: a
-  re-claim IS the retry. Build shows Pause on RUNNING, Resume + a
-  paused label on held builds, server notes verbatim; the runs feed
-  carries pausedAt/withdrawnAt with a 42703 deploy-window fallback.
-  Hosted apply: dispatch scope=pause-graph after merge.
+- [x] Increment 4 (ADR-190): pest/IPM core — crm_devices with per-org
+  barcode identity, the append-only crm_device_events scan ledger
+  (install written at birth; device state projected from the ledger by
+  trigger), crm_pest_sightings with the corrective-action CHECK; the
+  /Services/ipm command center (scan box, per-site station tables,
+  threshold flags, sighting loop); Demo Data now runs a real IPM
+  program. 20260830000900; hosted apply: scope=pest-ipm after merge.
+- [x] Increment 5 (ADR-191): chemicals & compliance — crm_products with
+  EPA identity and https-checked SDS/label references, crm_product_lots
+  with trigger drawdown, the APPEND-ONLY crm_applications log (license
+  copied at recording, supersede-not-edit corrections, its own timeline
+  event), and crm_compliance_rules as configurable per-jurisdiction rows
+  enforced at the application boundary; the audit report as JSON or
+  injection-guarded CSV; /Services/compliance. 20260830001000; hosted
+  apply: scope=chemicals-compliance after merge.
+- [ ] Increment 6: invoicing & payments — estimates/proposals → invoice →
+  payment on the existing Stripe machinery, with `payment` timeline
+  events. Then 7-10 per the gap analysis (sales/canvassing, marketing
+  hub, AI copilot, seeded E2E acceptance).
 - [ ] Queue-diagnosis honesty follow-up: `diagnose_graph_queue_as_worker_v2`
   predates withdrawal and pause, so a withdrawn or paused graph shows in
   the drain log as "looks claimable — an empty claim contradicts this

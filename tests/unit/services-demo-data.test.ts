@@ -2,7 +2,14 @@
 
 import { describe, expect, it } from "vitest";
 
-import { DEMO_BOOK, DEMO_SOURCE, DEMO_TECHNICIANS, demoBookTotals } from "@/lib/services/demo-data";
+import {
+  DEMO_BOOK,
+  DEMO_COMPLIANCE_RULES,
+  DEMO_PRODUCTS,
+  DEMO_SOURCE,
+  DEMO_TECHNICIANS,
+  demoBookTotals,
+} from "@/lib/services/demo-data";
 
 /**
  * The Demo Data book's honesty and shape, pinned. The seeded book must be
@@ -123,6 +130,119 @@ describe("the Demo Data book", () => {
         }
       }
     }
+  });
+
+  it("runs a real IPM program: barcoded stations, scans, sightings with the loop closed", () => {
+    const totals = demoBookTotals();
+    expect(totals.devices).toBeGreaterThanOrEqual(6);
+    expect(totals.deviceScans).toBeGreaterThanOrEqual(10);
+    expect(totals.sightings).toBeGreaterThanOrEqual(2);
+
+    const barcodes: string[] = [];
+    let overThreshold = 0;
+    for (const account of DEMO_BOOK) {
+      const propertyLabels = new Set(account.properties.map((property) => property.label));
+      for (const device of account.devices ?? []) {
+        expect(propertyLabels.has(device.propertyLabel), `${account.name}: ${device.propertyLabel}`).toBe(true);
+        expect(device.barcode).toMatch(/^DEMO-ST-\d{4}$/);
+        barcodes.push(device.barcode);
+        let lastDaysAgo = device.installedDaysAgo;
+        let latestCount: number | null = null;
+        for (const scan of device.scans) {
+          // Scans postdate the install and run oldest-first, so the seeded
+          // ledger reads in the order it claims to have happened.
+          expect(scan.daysAgo, `${device.barcode}`).toBeLessThan(lastDaysAgo);
+          lastDaysAgo = scan.daysAgo;
+          if (scan.activityCount !== undefined) latestCount = scan.activityCount;
+          if (scan.note) expect(scan.note.length).toBeLessThanOrEqual(1000);
+        }
+        if (
+          device.activityThreshold !== undefined
+          && latestCount !== null
+          && latestCount >= device.activityThreshold
+        ) {
+          overThreshold += 1;
+        }
+      }
+      for (const sighting of account.sightings ?? []) {
+        expect(propertyLabels.has(sighting.propertyLabel), `${account.name}: ${sighting.propertyLabel}`).toBe(true);
+        expect(sighting.pest.length).toBeLessThanOrEqual(120);
+        if (sighting.correctiveAction) {
+          expect(sighting.correctiveAction.length).toBeLessThanOrEqual(1000);
+          // The action postdates the sighting.
+          expect(sighting.correctedDaysAgo ?? sighting.daysAgo).toBeLessThanOrEqual(sighting.daysAgo);
+        }
+      }
+    }
+    // The dashboard has something to flag, one barcode names one station,
+    // and both an open and a corrected sighting are on the board.
+    expect(overThreshold).toBeGreaterThanOrEqual(1);
+    expect(new Set(barcodes).size).toBe(barcodes.length);
+    const sightings = DEMO_BOOK.flatMap((account) => account.sightings ?? []);
+    expect(sightings.some((sighting) => sighting.correctiveAction === undefined)).toBe(true);
+    expect(sightings.some((sighting) => sighting.correctiveAction !== undefined)).toBe(true);
+  });
+
+  it("keeps the chemical record honest: fictional registrations, real grammar, drawable lots", () => {
+    const totals = demoBookTotals();
+    expect(DEMO_PRODUCTS.length).toBeGreaterThanOrEqual(3);
+    expect(totals.applications).toBeGreaterThanOrEqual(4);
+    expect(DEMO_COMPLIANCE_RULES.length).toBeGreaterThanOrEqual(2);
+
+    const registrations: string[] = [];
+    for (const product of DEMO_PRODUCTS) {
+      // The regulator's grammar, in a 90000-series prefix no real EPA
+      // registration uses — the report renders truthfully and still
+      // names nothing that exists.
+      expect(product.epaRegistrationNumber).toMatch(/^9000\d-\d{1,7}$/);
+      registrations.push(product.epaRegistrationNumber);
+      expect(product.name).toMatch(/^Demo /);
+      expect(product.lots.length).toBeGreaterThanOrEqual(1);
+      for (const lot of product.lots) {
+        expect(lot.lotNumber).toMatch(/^DEMO-LOT-/);
+        expect(lot.quantity).toBeGreaterThan(0);
+        expect(lot.receivedDaysAgo).toBeGreaterThan(0);
+      }
+    }
+    expect(new Set(registrations).size).toBe(registrations.length);
+
+    // Every jurisdiction rule is a code, not a hardcoded regulator; and
+    // both a lenient and a demanding one are present, so the mechanism is
+    // visible rather than merely configured.
+    for (const rule of DEMO_COMPLIANCE_RULES) {
+      expect(rule.jurisdiction).toMatch(/^[A-Z]{2}(-[A-Z0-9]{1,10})?$/);
+      expect(rule.label).toContain("Demo Data");
+      expect(rule.retentionYears).toBeGreaterThanOrEqual(1);
+    }
+    expect(DEMO_COMPLIANCE_RULES.some((rule) => rule.requiresApplicationRate)).toBe(true);
+    expect(DEMO_COMPLIANCE_RULES.some((rule) => !rule.requiresApplicationRate)).toBe(true);
+
+    // Applications land on their own account's property, name a product and
+    // a technician the roster holds, and never draw more from a lot than it
+    // received — the database would refuse, and a demo that 500s is worse
+    // than no demo.
+    const drawn = new Map<string, number>();
+    for (const account of DEMO_BOOK) {
+      const propertyLabels = new Set(account.properties.map((property) => property.label));
+      for (const application of account.applications ?? []) {
+        expect(propertyLabels.has(application.propertyLabel), account.name).toBe(true);
+        const product = DEMO_PRODUCTS[application.productIndex];
+        expect(product, `${account.name} product index`).toBeDefined();
+        // A lot draw must match the lot's unit, exactly as the trigger demands.
+        expect(application.unit).toBe(product.defaultUnit);
+        expect(application.quantity).toBeGreaterThan(0);
+        if (application.lotIndex !== undefined) {
+          const lot = product.lots[application.lotIndex];
+          expect(lot, `${account.name} lot index`).toBeDefined();
+          const key = `${application.productIndex}:${application.lotIndex}`;
+          const used = (drawn.get(key) ?? 0) + application.quantity;
+          drawn.set(key, used);
+          expect(used, `${product.name} ${lot.lotNumber}`).toBeLessThanOrEqual(lot.quantity);
+        }
+      }
+    }
+    // At least one lot is genuinely drawn down, so the shelf reads as used.
+    expect([...drawn.values()].some((quantity) => quantity > 0)).toBe(true);
   });
 
   it("keeps the seeder's lookup keys unambiguous", () => {

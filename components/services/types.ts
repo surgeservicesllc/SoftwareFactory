@@ -132,6 +132,157 @@ export type WorkOrderView = {
   updatedAt: string;
 };
 
+export type DeviceView = {
+  id: string;
+  accountId: string;
+  propertyId: string;
+  label: string;
+  deviceType: string;
+  barcode: string;
+  status: string;
+  locationNote: string | null;
+  activityThreshold: number | null;
+  installedAt: string;
+  removedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type DeviceEventView = {
+  id: string;
+  deviceId: string;
+  event: string;
+  condition: string | null;
+  activityCount: number | null;
+  pestObserved: string | null;
+  locationNote: string | null;
+  note: string | null;
+  workOrderId: string | null;
+  recordedAt: string;
+  recordedBySystem: boolean;
+};
+
+export type SightingView = {
+  id: string;
+  accountId: string;
+  propertyId: string;
+  pest: string;
+  severity: string;
+  locationNote: string | null;
+  note: string | null;
+  sightedAt: string;
+  correctiveAction: string | null;
+  correctedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ProductView = {
+  id: string;
+  name: string;
+  epaRegistrationNumber: string | null;
+  activeIngredient: string | null;
+  signalWord: string | null;
+  sdsUrl: string | null;
+  labelUrl: string | null;
+  restrictedUse: boolean;
+  defaultUnit: string | null;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type LotView = {
+  id: string;
+  productId: string;
+  lotNumber: string;
+  unit: string;
+  quantityReceived: number;
+  quantityRemaining: number;
+  receivedOn: string;
+  expiresOn: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ApplicationView = {
+  id: string;
+  accountId: string;
+  propertyId: string;
+  workOrderId: string | null;
+  productId: string;
+  lotId: string | null;
+  deviceId: string | null;
+  technicianId: string;
+  applicatorLicense: string | null;
+  method: string;
+  targetPest: string | null;
+  quantity: number;
+  unit: string;
+  applicationRate: string | null;
+  treatedArea: string | null;
+  locationNote: string | null;
+  note: string | null;
+  appliedAt: string;
+  recordedAt: string;
+  supersedesId: string | null;
+};
+
+export type ComplianceRuleView = {
+  id: string;
+  jurisdiction: string;
+  label: string;
+  retentionYears: number;
+  requiresApplicatorLicense: boolean;
+  requiresTargetPest: boolean;
+  requiresApplicationRate: boolean;
+  requiresTreatedArea: boolean;
+  notes: string | null;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ProductsPayload = { products: ProductView[]; lots: LotView[] };
+export type ApplicationsPayload = { applications: ApplicationView[] };
+export type ComplianceRulesPayload = { rules: ComplianceRuleView[] };
+
+export type ComplianceReportRow = {
+  applied_at: string;
+  customer: string | null;
+  site: string | null;
+  address: string | null;
+  product: string | null;
+  epa_registration_number: string | null;
+  lot_number: string | null;
+  device: string | null;
+  device_barcode: string | null;
+  technician: string | null;
+  applicator_license: string | null;
+  method: string;
+  target_pest: string | null;
+  quantity: number;
+  unit: string;
+  application_rate: string | null;
+  treated_area: string | null;
+  location: string | null;
+  note: string | null;
+  supersedes: string | null;
+};
+
+export type ComplianceReportPayload = {
+  rows: ComplianceReportRow[];
+  count: number;
+  truncated: boolean;
+};
+
+export type IpmPayload = {
+  devices: DeviceView[];
+  recentEvents: DeviceEventView[];
+  sightings: SightingView[];
+  properties: { id: string; accountId: string; label: string }[];
+};
+
 export type TechniciansPayload = { technicians: TechnicianView[] };
 
 export type ServicePlansPayload = { plans: ServicePlanView[]; dueCount: number };
