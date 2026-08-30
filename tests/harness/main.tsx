@@ -31,6 +31,7 @@ import { BuildWorkspace } from "@/components/build-workspace";
 import { BillingConsole } from "@/components/billing-console";
 import { BotUsageConsole } from "@/components/bot-usage-console";
 import { JobSeekerConsole } from "@/components/job-seeker/console";
+import { listImportAdapters } from "@/lib/job-seeker/import-adapters";
 import { JobSearchPanel } from "@/components/job-seeker/search-panel";
 import { ResumeReviewPanel } from "@/components/job-seeker/resume-review-panel";
 import { GitHubFileManager } from "@/components/github-file-manager";
@@ -60,6 +61,7 @@ import { buildPortfolio } from "@/lib/portfolio/aggregate";
 import { JobSeekerContactsPanel } from "@/components/job-seeker/contacts-panel";
 import { JobSeekerDocumentsPanel } from "@/components/job-seeker/documents-panel";
 import { JobSeekerInterviewsPanel } from "@/components/job-seeker/interviews-panel";
+import { JobSeekerJobsPanel } from "@/components/job-seeker/jobs-panel";
 import { JobSeekerOverview } from "@/components/job-seeker/overview";
 
 import {
@@ -220,6 +222,28 @@ function serveFixtures() {
     }
     if (url.includes("/api/graphs/runs")) return json({ runs: GRAPH_RUNS_STAGED });
     if (url.includes("/api/runs?limit=100")) return json({ runs: FACTORY_BRIEFING_RUNS });
+    /*
+     * From the real registry rather than a copied list. The route projects
+     * exactly these fields off `listImportAdapters()`, and the module is pure
+     * — no fetch runs by listing it — so a board added there appears in the
+     * sweep automatically instead of waiting for someone to remember a
+     * fixture.
+     */
+    if (url.includes("/api/job-seeker/import-sources")) {
+      return json({
+        sources: listImportAdapters({} as NodeJS.ProcessEnv).map((adapter) => ({
+          key: adapter.key,
+          name: adapter.name,
+          summary: adapter.summary,
+          mode: adapter.mode,
+          identifierLabel: adapter.identifierLabel ?? null,
+          identifierHint: adapter.identifierHint ?? null,
+          configured: adapter.configured,
+          requiredConfiguration: adapter.requiredConfiguration,
+        })),
+      });
+    }
+    if (url.includes("/api/job-seeker/import")) return json({ imported: 0, skipped: 0, totalAvailable: 0 });
     if (url.includes("/api/job-seeker/jobs")) return json({ jobs: JOB_SEEKER_JOBS });
     if (url.includes("/api/job-seeker/documents")) return json({ documents: JOB_SEEKER_DOCUMENTS });
     if (url.includes("/api/job-seeker/contacts")) return json({ contacts: JOB_SEEKER_CONTACTS });
@@ -330,6 +354,13 @@ const CASES: Record<string, () => React.ReactElement> = {
   trail: () => <InShell><AgentTrailConsole /></InShell>,
   build: () => <InShell><BuildWorkspace /></InShell>,
   "job-seeker": () => <InShell><JobSeekerConsole /></InShell>,
+  /*
+   * Mounted directly, because JobSeekerConsole renders this panel only when
+   * its section is "discovery" — so the board picker, the widest control the
+   * job seeker has, was in no layout sweep at any width. Eleven boards is a
+   * different layout problem from two.
+   */
+  "job-seeker-discovery": () => <InShell><JobSeekerJobsPanel /></InShell>,
   "job-search": () => <InShell><JobSearchPanel /></InShell>,
   /*
    * The Budget Tracker's populated layout. The route itself redirects when

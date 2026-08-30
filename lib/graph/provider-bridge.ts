@@ -39,6 +39,16 @@ export const CAPABILITY_TASK_KIND: Readonly<Record<NodeCapability, ProviderTaskK
     discovery: "plan",
     evaluation: "plan",
     decision: "plan",
+    // Schema work proposes a change to code, so it makes the same demand of a
+    // provider that implementation does.
+    database: "implementation_proposal",
+    /*
+     * A deploy step does not propose a change — the change already exists and
+     * was reviewed. What it does is judge whether the preconditions to release
+     * it hold, which is the shape `qa_assessment` already asks for: examine
+     * evidence, answer pass or fail, say why.
+     */
+    deployment: "qa_assessment",
   });
 
 export function taskKindForNode(node: CompiledNode): ProviderTaskKind {

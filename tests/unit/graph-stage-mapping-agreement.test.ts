@@ -26,21 +26,21 @@ const migration = readFileSync(
 );
 
 /*
- * The mapping now lives in two files, because the first is applied and
- * recorded on hosted and must never change under its ledger row. 000700
- * carries the original nine capabilities; 000900 carries the three the
- * DISCOVERY/EVALUATION/DECISION growth added. The invariant is over the
- * union: every capability the application defines has exactly one SQL branch
+ * The mapping now lives in three files, because each earlier one is applied
+ * and recorded on hosted and must never change under its ledger row. 000700
+ * carries the original nine capabilities; 20260823000900 carries the three the
+ * DISCOVERY/EVALUATION/DECISION growth added; 20260829000100 carries the
+ * `database` and `deployment` specialists. The invariant is over the union:
+ * every capability the application defines has exactly one SQL branch
  * somewhere in the replayable chain.
  */
-const extension = readFileSync(
-  resolve(
-    import.meta.dirname,
-    "../../supabase/migrations/20260823000900_discovery_capability_stage_map.sql",
-  ),
-  "utf8",
+const extensions = [
+  "20260823000900_discovery_capability_stage_map.sql",
+  "20260830000700_specialist_capability_stage_map.sql",
+].map((file) =>
+  readFileSync(resolve(import.meta.dirname, `../../supabase/migrations/${file}`), "utf8"),
 );
-const mappingSql = `${migration}\n${extension}`;
+const mappingSql = [migration, ...extensions].join("\n");
 
 function stageInMigration(capability: string): string | null {
   const match = mappingSql.match(
@@ -61,7 +61,9 @@ describe("the backfill agrees with the application", () => {
     // Idempotence is the whole reason this is safe to re-run, and an
     // explicitly declared stage must never be overwritten by a derived one.
     expect(migration).toContain("where lifecycle_stage is null");
-    expect(extension).toContain("where lifecycle_stage is null");
+    for (const extension of extensions) {
+      expect(extension).toContain("where lifecycle_stage is null");
+    }
   });
 
   it("leaves a capability it does not recognise alone", () => {

@@ -215,6 +215,7 @@ const CASES = [
   "trail",
   "build",
   "job-seeker",
+  "job-seeker-discovery",
   "budget-tracker",
   "job-search",
   "resume-review",

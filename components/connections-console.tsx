@@ -7,6 +7,7 @@ import {
   GitFork,
   Loader2,
   PlugZap,
+  Plus,
   RefreshCw,
 } from "lucide-react";
 import Link from "next/link";
@@ -83,7 +84,16 @@ export function ConnectionsConsole() {
   const [repositoryChoice, setRepositoryChoice] = useState<Record<string, string>>({});
   const [handoffIntent, setHandoffIntent] = useState<HandoffIntent | null>(null);
   const [message, setMessage] = useState("");
-  const [pending, setPending] = useState<"onboarding" | "connect" | "sync" | "disconnect" | "handoff" | "link" | "unlink" | null>(null);
+  const [pending, setPending] = useState<"onboarding" | "connect" | "sync" | "disconnect" | "handoff" | "link" | "unlink" | "create" | null>(null);
+  /*
+   * Which connection's create form is open, if any. Held by id rather than as
+   * a boolean so two connected accounts cannot share one form and create the
+   * repository under whichever happened to render last.
+   */
+  const [createFor, setCreateFor] = useState<string | null>(null);
+  const [createName, setCreateName] = useState("");
+  const [createDescription, setCreateDescription] = useState("");
+  const [createVisibility, setCreateVisibility] = useState<"private" | "public">("private");
 
   const load = useCallback(async () => {
     setLoadState("loading");
@@ -207,10 +217,12 @@ export function ConnectionsConsole() {
     }
   }
 
-  function connectGithub(appSlot: "candidate" | "primary" = "primary") {
+  function connectGithub(appSlot: "candidate" | "primary" = "primary", notice = "") {
     if (!organization) return;
     setPending("connect");
-    setMessage("");
+    // The notice, not a blank: a caller that has something to explain about
+    // why this authorization is happening would otherwise have it wiped here.
+    setMessage(notice);
     // A single top-level navigation to the launcher, which sets the anti-forgery
     // state cookie on its own redirect response and forwards the browser to
     // GitHub. This deliberately does not POST-then-redirect: a cookie set on a
@@ -227,6 +239,52 @@ export function ConnectionsConsole() {
     // redirect.
     // eslint-disable-next-line @next/next/no-location-assign-relative-destination
     window.location.assign(`/api/github/install/launch?${params.toString()}`);
+  }
+
+  /**
+   * Create a repository inside a connected organization.
+   *
+   * The server decides the owner from the installation, so nothing here sends
+   * one. What this does own is telling the truth about the three answers the
+   * route can give: usable now, created but outside the installation's
+   * selection, or created with our records briefly behind.
+   */
+  async function createRepository(
+    event: React.FormEvent<HTMLFormElement>,
+    connection: GithubConnection,
+  ) {
+    event.preventDefault();
+    setPending("create");
+    setMessage("");
+    try {
+      const response = await fetch("/api/github/repositories/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          connectionId: connection.id,
+          name: createName.trim(),
+          description: createDescription.trim() || undefined,
+          visibility: createVisibility,
+        }),
+      });
+      const body = (await response.json().catch(() => ({}))) as {
+        message?: string;
+        error?: { message?: string };
+      };
+      if (!response.ok) {
+        throw new Error(body.error?.message ?? "The repository could not be created.");
+      }
+      setMessage(body.message ?? "The repository was created.");
+      setCreateFor(null);
+      setCreateName("");
+      setCreateDescription("");
+      setCreateVisibility("private");
+      await load();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "The repository could not be created.");
+    } finally {
+      setPending(null);
+    }
   }
 
   async function handoffProject(
@@ -397,6 +455,19 @@ export function ConnectionsConsole() {
   const connectedConnections = connections.filter(
     (connection) => connection.status === "connected" && connection.installation,
   );
+  /*
+   * The first connected organization, or null. Personal accounts are excluded
+   * deliberately rather than filtered by accident: GitHub exposes no endpoint
+   * that lets an installed app create a repository inside a User account, so
+   * offering the control there would be a button that always fails.
+   */
+  const creatableConnection = connections.find(
+    (connection) => connection.status === "connected" && connection.account?.type === "Organization",
+  ) ?? null;
+  const onlyPersonalAccounts = connections.length > 0
+    && !creatableConnection
+    && connections.some((connection) => connection.account?.type === "User");
+
   const connectedRepositoryOptions = {
     hasConnection: connectedConnections.length > 0,
     options: connectedConnections.flatMap((connection) =>
@@ -728,10 +799,31 @@ export function ConnectionsConsole() {
               You will authorize the app on GitHub, then choose exactly which repositories it may read.
               You can change or remove that access at any time.
             </p>
-            <button type="button" onClick={() => void connectGithub("primary")} disabled={pending !== null} className="btn btn-primary mt-5">
-              {pending === "connect" ? <Loader2 className="size-4 animate-spin" /> : <GitFork className="size-4" />}
-              Connect GitHub
-            </button>
+            <div className="mt-5 flex flex-wrap justify-center gap-2">
+              <button type="button" onClick={() => void connectGithub("primary")} disabled={pending !== null} className="btn btn-primary">
+                {pending === "connect" ? <Loader2 className="size-4 animate-spin" /> : <GitFork className="size-4" />}
+                Connect Existing GitHub
+              </button>
+              {/*
+                * Both buttons start the same authorization, because they have
+                * to: a repository is created *inside* an account this factory
+                * has been installed on, so there is nothing to create into
+                * until that exists. Saying so is better than a third button
+                * that looks available and cannot work.
+                */}
+              <button
+                type="button"
+                onClick={() => void connectGithub(
+                  "primary",
+                  "Authorize GitHub first — a new repository is created inside the organization you install this factory on.",
+                )}
+                disabled={pending !== null}
+                className="btn btn-secondary"
+              >
+                {pending === "connect" ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
+                Create New GitHub
+              </button>
+            </div>
           </div>
         </Card>
       )}
@@ -742,6 +834,24 @@ export function ConnectionsConsole() {
             {pending === "connect" ? <Loader2 className="size-4 animate-spin" /> : <GitFork className="size-4" />}
             Connect another account
           </button>
+          {/*
+            * Offered once, against the first connected organization. GitHub has
+            * no endpoint that creates a repository inside a personal account
+            * from an installed app, so a User-type connection genuinely cannot
+            * do this and the button is not shown pretending otherwise.
+            */}
+          {creatableConnection ? (
+            <button
+              type="button"
+              onClick={() => setCreateFor(createFor ? null : creatableConnection.id)}
+              disabled={pending !== null}
+              className="btn btn-primary"
+              aria-expanded={createFor === creatableConnection.id}
+            >
+              <Plus className="size-4" aria-hidden="true" />
+              Create New GitHub
+            </button>
+          ) : null}
           {candidateApp && !hasCandidateInstallation ? (
             <button type="button" onClick={() => void connectGithub("candidate")} disabled={pending !== null} className="btn btn-primary">
               {pending === "connect" ? <Loader2 className="size-4 animate-spin" /> : <GitFork className="size-4" />}
@@ -749,6 +859,92 @@ export function ConnectionsConsole() {
             </button>
           ) : null}
         </div>
+      ) : null}
+
+      {onlyPersonalAccounts ? (
+        <p className="text-sm text-muted">
+          New repositories are created inside an organization. GitHub does not let an
+          installed app create one in a personal account, so make it at{" "}
+          <a className="link" href="https://github.com/new" target="_blank" rel="noreferrer">
+            github.com/new
+          </a>
+          , then add it to this installation and press Refresh.
+        </p>
+      ) : null}
+
+      {creatableConnection && createFor === creatableConnection.id ? (
+        <Card className="p-5">
+          <p className="label">New repository in {creatableConnection.account?.login}</p>
+          <p className="mt-1 text-sm text-muted">
+            This creates a real repository on GitHub, in the organization this factory is
+            installed on. It starts with an initial commit so a branch exists to work from.
+          </p>
+          <form className="mt-4 grid gap-4" onSubmit={(event) => void createRepository(event, creatableConnection)}>
+            <div className="grid gap-1.5">
+              <label className="label" htmlFor="new-repository-name">Repository name</label>
+              <input
+                id="new-repository-name"
+                name="name"
+                className="input"
+                value={createName}
+                onChange={(event) => setCreateName(event.target.value)}
+                placeholder="storefront"
+                maxLength={100}
+                required
+                pattern="[A-Za-z0-9][A-Za-z0-9._\-]*"
+                title="Start with a letter or digit, then letters, digits, hyphens, underscores or dots."
+              />
+            </div>
+            <div className="grid gap-1.5">
+              <label className="label" htmlFor="new-repository-description">Description (optional)</label>
+              <input
+                id="new-repository-description"
+                name="description"
+                className="input"
+                value={createDescription}
+                onChange={(event) => setCreateDescription(event.target.value)}
+                maxLength={350}
+              />
+            </div>
+            <fieldset className="grid gap-2">
+              <legend className="label">Who can see it</legend>
+              {/*
+                * Private is preselected. A public repository is a disclosure,
+                * so it is something a person chooses rather than something a
+                * default hands them.
+                */}
+              {(["private", "public"] as const).map((choice) => (
+                <label key={choice} className="flex items-start gap-2 text-sm text-foreground">
+                  <input
+                    type="radio"
+                    name="visibility"
+                    value={choice}
+                    checked={createVisibility === choice}
+                    onChange={() => setCreateVisibility(choice)}
+                    className="mt-1"
+                  />
+                  <span>
+                    <span className="font-medium capitalize">{choice}</span>
+                    <span className="block text-sm text-muted">
+                      {choice === "private"
+                        ? "Only the organization and this factory can read it."
+                        : "Anyone on the internet can read it."}
+                    </span>
+                  </span>
+                </label>
+              ))}
+            </fieldset>
+            <div className="flex flex-wrap gap-2">
+              <button type="submit" className="btn btn-primary" disabled={pending !== null || !createName.trim()}>
+                {pending === "create" ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
+                Create repository
+              </button>
+              <button type="button" className="btn btn-secondary" onClick={() => setCreateFor(null)} disabled={pending !== null}>
+                Cancel
+              </button>
+            </div>
+          </form>
+        </Card>
       ) : null}
 
       <Card className="p-5">

@@ -9,7 +9,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const migrationsDirectory = resolve(repositoryRoot, "supabase/migrations");
-const latestMigration = "20260830000600_crm_grant_narrowing.sql";
+const latestMigration = "20260830000700_specialist_capability_stage_map.sql";
 
 /**
  * The Services CRM foundation, exercised against the real migration chain
@@ -74,7 +74,7 @@ describe("the Services CRM foundation", { timeout: 240_000 }, () => {
        * them. An immutability claim that relies on the ABSENCE of a grant
        * now fails locally, like production.
        */
-      if (file === "20260830000500_services_crm_foundation.sql") {
+      if (file === "20260830000700_specialist_capability_stage_map.sql") {
         await db.exec(`
           alter default privileges in schema public grant all privileges on tables to authenticated;
           alter default privileges in schema public grant all privileges on tables to service_role;

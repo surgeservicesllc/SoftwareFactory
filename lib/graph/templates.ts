@@ -472,6 +472,12 @@ export function stageForCapability(capability: NodeCapability): SdlcStage {
       return "EVALUATION";
     case "decision":
       return "DECISION";
+    case "deployment":
+      return "DEPLOYMENT";
+    // Schema work is building, and belongs in the stage that builds. Only the
+    // release itself is a separate stage.
+    case "database":
+      return "IMPLEMENTATION";
     default:
       // review, security_review, extraction, synthesis, reporting.
       return "REVIEW";

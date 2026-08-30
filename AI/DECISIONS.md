@@ -3626,3 +3626,137 @@ history exactly once, grant-level immutability, the secret guard — and
 the routes/panels are pinned separately. Hosted-apply scope
 services-crm (runbook 184). PEST CRM: PRODUCTION READY remains
 undeclared until the goal's full seeded E2E passes.
+
+## ADR-188 - A role is not a capability, and only two specialists earned capabilities
+
+- Date: 2026-08-29
+- Status: Accepted
+- Context: the owner's goal names eleven agents — Research,
+  Product/Requirements, Architecture, Frontend, Backend, Database, Security,
+  Integration, Testing/QA, Code Review, Deployment — each receiving "bounded
+  context and structured inputs/outputs" and able to run in parallel. The
+  engine had twelve `NodeCapability` values covering roughly seven of those
+  eleven. Four (Frontend, Backend, Database, Integration) collapsed into a
+  single `implementation`, and Deployment had no value at all: the DEPLOYMENT
+  stage borrowed `implementation`, so the one stage that changes what users
+  are running was tiered, prompted and risk-scored as if it were writing a
+  feature.
+- Decision: separate the two ideas that had been conflated. A **capability**
+  is the kind of thinking a node needs, and it exists to pick a model tier and
+  a provider task kind. A **role** is a job on a team: a name, a bounded slice
+  of context, and a privilege posture. `lib/sdlc/agent-roster.ts` names all
+  eleven roles with explicit `reads`/`writes` resource kinds, a default risk,
+  and an approval flag. Only `database` and `deployment` became capabilities,
+  because only they behave differently — schema work runs STRONG rather than
+  STANDARD, and a release asks a provider for a verdict (`qa_assessment`)
+  rather than a proposal.
+- Bounds: Frontend, Backend and Integration deliberately share the
+  `implementation` capability. Writing a React component, a route handler and
+  a third-party client are the same reasoning at the same tier against the
+  same task kind; a capability each would have been a label that changed no
+  behaviour, and the roster's own tests assert those three values are absent
+  from `NODE_CAPABILITIES` so the next specialist has to clear the same bar.
+  What actually separates them is reach, and that is enforced as data:
+  `roleMayWrite` refuses a migration to every role but Database, and only
+  Deployment may write a `deployment_environment`. `database` and `deployment`
+  are the two approval-bound roles, at YELLOW and RED — an autonomy mode does
+  not get to waive either, per AGENTS.md.
+- Evidence: the capability→stage rule is written twice, once in TypeScript and
+  once in SQL, and `tests/unit/graph-stage-mapping-agreement.test.ts` holds
+  them to each other over the union of the replayable chain. That test caught
+  this change: the two new capabilities had no SQL branch. Migration
+  `20260830000700_specialist_capability_stage_map.sql` adds them in a new file
+  rather than editing either applied predecessor. It needs no companion enum
+  migration — IMPLEMENTATION and DEPLOYMENT have been in `public.sdlc_stage`
+  since 20260821000200 — and it changes zero rows today, since both
+  capabilities are new and every node the launch plan writes carries its stage
+  explicitly. **Not yet applied to hosted.** Gates: lint, typecheck, 5214
+  tests, production build.
+
+## ADR-186 - Autonomy is three named modes over the existing controls, and no mode may release
+
+- Date: 2026-08-29
+- Status: Accepted
+- Context: the owner's goal names three autonomy modes — Ask Me, Balanced,
+  Autonomous — and adds "never bypass destructive/security/deployment
+  approvals unless explicitly configured". The Phase 1D control model was
+  already correct and already enforced: nine per-action flags, a risk ceiling,
+  two scopes that intersect, and an envelope (kill switch, emergency stop,
+  release freeze, executor presence) applied last and unconditionally. What it
+  lacked was a way to *choose*. An operator wanting "build it but ask me before
+  anything risky" had to derive that from nine booleans, and an incoherent set
+  was easy to assemble.
+- Decision: a mode is a **preset** producing an `AutonomyControls` value that
+  then goes through `resolveEffectiveControls` like any other, exactly as a
+  role preset sits over an assignment config. `lib/autonomy/modes.ts` defines
+  the three with plain-English `summary` and `asksAbout` copy. The expansion
+  happens server-side in `POST /api/autonomy/controls` under a new `mode`
+  control, so a client sends one word rather than eleven booleans and cannot
+  store a combination no preset produces under a preset's name; it lands in
+  the same owner-only, reason-carrying RPC and the same audit row.
+- Bounds: **no mode enables merge, deploy or rollback**, Autonomous included.
+  AGENTS.md forbids introducing an auto-merge or production deployment
+  workflow in this phase, and a preset is a default rather than the explicit
+  configuration the goal's exception requires. `NEVER_PRESET_ENABLED` states
+  the three as data so one test holds every mode to the rule instead of three
+  omissions drifting apart. Balanced deliberately leaves `approve` off — a run
+  that writes the code and approves it has no independent check, and "agent
+  says done ≠ done" is the goal's own rule. Autonomous adds `approve` and
+  raises the ceiling to YELLOW; that is the entire difference in this phase.
+  A mode is not a second path around the envelope, and a test asserts a kill
+  switch still forces every action off in Autonomous.
+- Evidence: `modeForControls` returns null for any configuration outside every
+  preset, and the panel renders that as Custom rather than naming a mode —
+  telling an operator who hand-enabled `deploy` that they are in "Autonomous"
+  would claim a safety story they deliberately stepped outside of. Gates: lint,
+  typecheck, 5243 tests, production build.
+
+### Numbering note
+
+`AI/DECISIONS.md` currently carries duplicate headings at **ADR-140** and
+**ADR-141**. The second ADR-141 arrived with the Job Discovery work on `main`
+and was kept verbatim through this merge rather than renumbered, because
+rewriting a record that was already reviewed and merged is worse than an
+ambiguous reference. Both duplicates are worth resolving in a change of their
+own. An earlier draft of the roster decision was numbered ADR-150, which
+collided the same way; it is ADR-183 above, and the commit that introduced it
+still names 150.
+
+## ADR-187 - Creating a repository is owner-directed, organization-only, and says what it could not do
+
+- Date: 2026-08-30
+- Status: Accepted
+- Context: the owner asked for a **Create New GitHub** button beside Connect
+  Existing GitHub on the Connect Repository step, wired end to end. Every other
+  route in the GitHub surface reads what already exists; this one makes
+  something exist on a third party's system, which is the category AGENTS.md
+  defaults to off.
+- Decision: `POST /api/github/repositories/create` is same-origin and
+  organization-manager only, with no automatic caller — a person presses it.
+  The owner comes from `github_installations.account_login`, never the request
+  body, so the route cannot be aimed at an organization the connection does not
+  cover; a test asserts an `owner` field in the payload is rejected rather than
+  honoured. The installation token is minted asking for exactly
+  `administration: write` and nothing else. The new repository is recorded by
+  re-running the existing installation snapshot rather than by a second insert
+  path, so there is one shape for a repository row.
+- Bounds: **GitHub provides no way for an installed app to create a repository
+  inside a personal account.** `POST /user/repos` is a user-token endpoint and
+  no `POST /users/{user}/repos` exists. A `User` installation is therefore
+  refused with the reason and the manual step (github.com/new, then add it to
+  the installation), and the button is *absent* rather than disabled on such a
+  connection — a control that can never succeed should not be rendered as
+  though it might. This is a constraint of the provider, not a gap to fill
+  later.
+- Evidence: three outcomes are distinguished rather than collapsed into
+  "created". `selected` is read back from the snapshot, not assumed, because an
+  installation limited to selected repositories does not gain the new one — the
+  surface says "created, but this installation does not include it yet" instead
+  of reporting success the factory cannot act on. A snapshot failure reports
+  `syncFailed` with the repository still named, since it exists either way.
+  403 and 422 from GitHub become "the app lacks the Administration permission"
+  and "that name is taken", not a bare error. Private is preselected: a public
+  repository is a disclosure a person chooses, never a default they are handed.
+  The control renders in both places the owner's design shows it, because the
+  AI Factory's Connect Repository dialog embeds `ConnectionsConsole` itself.
+  Gates: lint, typecheck, full suite, production build.
