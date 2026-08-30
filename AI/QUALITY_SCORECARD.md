@@ -2,6 +2,21 @@
 
 Last reviewed: 2026-08-30
 
+**Addendum, 2026-08-30 latest+9 — Services CRM foundation (ADR-185):**
+services-crm-foundation behavior 6 on the real chain (360° record held
+together; tenant isolation both directions incl. composite-FK
+attachment refusal; trigger-written status history exactly once with
+its actor; grant-level timeline immutability + undeletable accounts;
+secret-shaped notes refused; anon/service_role shutout);
+services-crm-routes 8 (org-scoped list with counts from the same
+authority, exact tenant identity on insert, cross-origin and unknown
+shapes refused pre-database, honest 404, manual timeline refusing all
+three system kinds, non-UUID refused); services-customers-panel 4
+(live table, empty state naming the next step, real POST body, refusal
+verbatim; overview counts from the live read). Workflow guards 15
+green with the new scope; runbook 184. Lint zero warnings, tsc clean;
+full vitest + production build before shipping.
+
 **Addendum, 2026-08-30 latest+8 — inline LinkedIn/Indeed aggregator
 (ADR-184):** board-search-jsearch suite 10 (lockstep gate across
 registry/lookup/catalogue, always-on registry untouched, static row

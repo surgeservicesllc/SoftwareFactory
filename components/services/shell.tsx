@@ -1,0 +1,154 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { useState } from "react";
+import { Bug, Menu, X } from "lucide-react";
+
+import {
+  SERVICES_NAVIGATION,
+  SERVICES_ROOT,
+  isCurrentServicesPath,
+} from "@/components/services/navigation";
+import { cn } from "@/lib/cn";
+
+/**
+ * The Services CRM's own chrome, on the Budget Tracker's pattern: a product
+ * in its own route group with its own rail, never the console's sidebar. A
+ * labelled left rail on large screens, a drawer under them, and a heading
+ * that names the product once. The global header above (rendered by the
+ * route group's layout) moves a person between products; this moves them
+ * inside one.
+ */
+export function ServicesShell({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const [drawerOpen, setDrawerOpen] = useState(false);
+
+  const items = SERVICES_NAVIGATION.map((item) => ({
+    ...item,
+    current: isCurrentServicesPath(item.href, pathname),
+  }));
+
+  return (
+    <div className="min-h-screen">
+      <div className="flex items-center gap-3 border-b border-line px-4 py-3 lg:hidden">
+        <button
+          type="button"
+          onClick={() => setDrawerOpen(true)}
+          aria-expanded={drawerOpen}
+          aria-controls="services-nav-drawer"
+          className="btn btn-secondary px-2.5 py-1.5"
+        >
+          <Menu className="size-4" aria-hidden="true" />
+          <span className="sr-only">Open Services sections</span>
+        </button>
+        <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
+          <Bug className="size-4 text-[var(--accent)]" aria-hidden="true" />
+          Services
+        </span>
+      </div>
+
+      {drawerOpen ? (
+        <div className="fixed inset-0 z-40 lg:hidden">
+          <button
+            type="button"
+            aria-label="Close Services sections"
+            onClick={() => setDrawerOpen(false)}
+            className="absolute inset-0 bg-black/50"
+          />
+          <aside
+            id="services-nav-drawer"
+            className="safe-area-bottom absolute inset-y-0 left-0 w-[min(88vw,300px)] overflow-y-auto border-r border-line bg-surface p-4"
+          >
+            <div className="mb-4 flex items-center justify-between">
+              <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                <Bug className="size-4 text-[var(--accent)]" aria-hidden="true" />
+                Services
+              </span>
+              <button
+                type="button"
+                onClick={() => setDrawerOpen(false)}
+                className="btn btn-secondary px-2 py-1"
+              >
+                <X className="size-4" aria-hidden="true" />
+                <span className="sr-only">Close</span>
+              </button>
+            </div>
+            <ServicesNavList
+              items={items}
+              label="Services sections"
+              onNavigate={() => setDrawerOpen(false)}
+            />
+          </aside>
+        </div>
+      ) : null}
+
+      <aside
+        className="fixed inset-y-0 left-0 z-30 hidden w-64 overflow-y-auto border-r border-line bg-surface p-4 lg:block"
+        style={{ top: "var(--shell-top, 0px)" }}
+      >
+        <Link
+          href={SERVICES_ROOT}
+          className="mb-5 flex items-center gap-2 px-2 text-sm font-semibold text-foreground"
+        >
+          <Bug className="size-4 text-[var(--accent)]" aria-hidden="true" />
+          Services
+        </Link>
+        <ServicesNavList items={items} label="Services sections" />
+        <p className="mt-6 px-2 text-xs leading-relaxed text-faint">
+          The pest-services CRM. Every figure comes from records this workspace
+          made; sections appear here as they are built and wired, never before.
+        </p>
+      </aside>
+
+      <main className="px-4 py-6 sm:px-6 lg:pl-[calc(16rem+1.5rem)] lg:pr-6">{children}</main>
+    </div>
+  );
+}
+
+type ServicesNavEntry = (typeof SERVICES_NAVIGATION)[number] & { readonly current: boolean };
+
+function ServicesNavList({
+  items,
+  label,
+  onNavigate,
+}: {
+  items: readonly ServicesNavEntry[];
+  label: string;
+  onNavigate?: () => void;
+}) {
+  return (
+    <nav aria-label={label}>
+      <ul className="space-y-1">
+        {items.map((item) => {
+          const Icon = item.icon;
+          const current = item.current;
+          return (
+            <li key={item.href}>
+              <Link
+                href={item.href}
+                onClick={onNavigate}
+                aria-current={current ? "page" : undefined}
+                className={cn(
+                  "flex items-start gap-3 rounded-md px-2.5 py-2 text-sm",
+                  current
+                    ? "bg-[var(--accent-soft)] font-medium text-foreground"
+                    : "text-muted hover:bg-surface-raised hover:text-foreground",
+                )}
+              >
+                <Icon
+                  className={cn("mt-0.5 size-4 shrink-0", current && "text-[var(--accent)]")}
+                  aria-hidden="true"
+                />
+                <span className="min-w-0">
+                  <span className="block">{item.label}</span>
+                  <span className="mt-0.5 block text-xs text-faint">{item.description}</span>
+                </span>
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+    </nav>
+  );
+}

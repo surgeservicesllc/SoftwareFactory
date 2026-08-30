@@ -58,6 +58,7 @@ on:
           - withdraw-graph
           - node-attempt-projection
           - pause-graph
+          - services-crm
           - probe
 permissions:
   actions: read
@@ -1333,6 +1334,55 @@ jobs:
             end
             \$\$;"
           echo "Graph pause/resume applied; claim predicate and both role boundaries verified."
+
+      - name: Apply the Services CRM foundation (scope=services-crm)
+        if: ${{ inputs.scope == 'services-crm' }}
+        run: |
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+          FILE=supabase/migrations/20260830000500_services_crm_foundation.sql
+          sha256sum "$FILE"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied 20260830000500
+          else
+            npx supabase migration repair --status applied 20260830000500 --db-url "$DB_URL"
+          fi
+          psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
+          # Postflight: all four tables exist with forced RLS, the timeline is
+          # append-only at the grant level, the status-change trigger exists,
+          # and anon/service_role hold nothing.
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
+            do \$\$
+            begin
+              if (select count(*) from pg_class c
+                   join pg_namespace n on n.oid = c.relnamespace
+                  where n.nspname = 'public' and c.relrowsecurity and c.relforcerowsecurity
+                    and c.relname in ('crm_accounts','crm_contacts','crm_properties','crm_timeline_events')) <> 4 then
+                raise exception 'the CRM tables are missing or not under forced RLS';
+              end if;
+              if has_table_privilege('authenticated', 'public.crm_timeline_events', 'update')
+                or has_table_privilege('authenticated', 'public.crm_timeline_events', 'delete')
+                or has_table_privilege('authenticated', 'public.crm_accounts', 'delete') then
+                raise exception 'the CRM immutability grants are wrong';
+              end if;
+              if has_table_privilege('anon', 'public.crm_accounts', 'select')
+                or has_table_privilege('service_role', 'public.crm_accounts', 'select') then
+                raise exception 'anon or service_role can reach the CRM';
+              end if;
+              if not exists (
+                select 1 from pg_trigger t join pg_class c on c.oid = t.tgrelid
+                where c.relname = 'crm_accounts' and t.tgname = 'crm_accounts_status_change'
+              ) then
+                raise exception 'the status-change history trigger is missing';
+              end if;
+            end
+            \$\$;"
+          echo "Services CRM foundation applied; RLS, immutability grants and history trigger verified."
 
       - name: Normalize exact legacy bot ACLs (scope=bot-legacy-acl-normalization)
         if: ${{ inputs.scope == 'bot-legacy-acl-normalization' }}

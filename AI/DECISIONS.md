@@ -3586,3 +3586,43 @@ per-board failure channel every board uses. What remains owner-only,
 recorded in BACKLOG: create the free RapidAPI subscription and set
 JSEARCH_RAPIDAPI_KEY in Vercel. The catalogue grew to 53 (28 general);
 LinkedIn/Indeed deep link-outs stay — the two paths are complements.
+
+
+## ADR-185 - The Services CRM foundation: an org-scoped product with an immutable timeline
+
+Date: 2026-08-30
+
+The owner's Pest Services CRM /goal (task #63; trimmed re-issue after
+the 4,000-char limit) begins audit-first: the full pillar map lives in
+AI/SERVICES_CRM_GAP_ANALYSIS.md, and increment 1 ships the foundation
+the rest builds on rather than a mockup of the whole.
+
+Three architectural choices. First, "Services" is a PRODUCT, not a
+console page: its own route group and shell on the Budget Tracker
+pattern, a global-nav entry at /Services, the shared
+requirePortalViewer gate — and unlike the two person-scoped verticals,
+its tables are ORGANIZATION-scoped (member-policy RLS, forced), because
+a CRM is the org's shared book of business: dispatcher, technician and
+owner read the same customer.
+
+Second, the 360-degree record is four tables, not one: crm_accounts
+(lifecycle status lead→prospect→customer→inactive; no DELETE grant —
+a customer with history deactivates, never vanishes from the audit
+trail), crm_contacts and crm_properties (composite same-org foreign
+keys, so cross-tenant attachment is impossible at the schema), and
+crm_timeline_events — the compliance pillar's spine, append-only AT THE
+GRANT LEVEL (authenticated holds select+insert and nothing else), with
+occurred_at distinguished from recorded_at. Status changes write their
+own history line by AFTER UPDATE trigger in the same transaction; the
+manual route refuses the system kinds (status_change/service/payment)
+so nobody types a payment into an audit trail; those kinds get their
+first real writers in the field-service and billing increments.
+
+Third, honesty about scope: the Services navigation lists exactly the
+two destinations that work (Overview, Customers & Leads); sections join
+as they become real. The behavior suite proves the four invariants on
+the real chain — tenant isolation both directions, trigger-written
+history exactly once, grant-level immutability, the secret guard — and
+the routes/panels are pinned separately. Hosted-apply scope
+services-crm (runbook 184). PEST CRM: PRODUCTION READY remains
+undeclared until the goal's full seeded E2E passes.

@@ -63,6 +63,12 @@ export const PUBLIC_NAV: readonly NavItem[] = [
  */
 export const SIGNED_IN_NAV: readonly NavItem[] = [
   { label: "Software Factory", href: "/solutions" },
+  /*
+   * The pest-services CRM (owner directive 2026-08-30, ADR-185). The
+   * capitalised path is load-bearing like `/JobSearch`: routes are
+   * case-sensitive, so this is the exact spelling the page answers to.
+   */
+  { label: "Services", href: "/Services" },
   { label: "Job Search", href: "/JobSearch" },
   /*
    * `Budget Tracker`'s capitalised path is load-bearing, the same way
