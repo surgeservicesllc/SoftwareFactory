@@ -257,7 +257,7 @@ describe("the provider integration registry", { timeout: 240_000 }, () => {
      * least likely place somebody pastes a key, which makes it the worst
      * one to leave unguarded.
      *
-     * And the guard only catches it as of ADR-208 — it held OpenAI's
+     * And the guard only catches it as of ADR-209 — it held OpenAI's
      * `sk-` with a hyphen and had no Stripe pattern at all, so this
      * assertion failed for the right reason only after that fix.
      */

@@ -20,7 +20,10 @@ const likelySecretPatterns = [
   /gh[pousr]_[A-Za-z0-9_]{20,}/,
   /github_pat_[A-Za-z0-9_]{20,}/i,
   /sk-[A-Za-z0-9_-]{20,}/,
-  /sk_(?:live|test)_[A-Za-z0-9]{16,}/i,
+  // Secret and restricted alike; `pk_` is publishable and deliberately not
+  // here. lib/billing accepts an rk_ key as a valid secret, so leaving it
+  // out made this detector disagree with the code that consumes the key.
+  /[sr]k_(?:live|test)_[A-Za-z0-9]{16,}/i,
   /sb_secret_[A-Za-z0-9_-]{20,}/i,
   /vercel_[A-Za-z0-9_-]{20,}/i,
   /AKIA[0-9A-Z]{16}/,

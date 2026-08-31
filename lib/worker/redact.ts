@@ -8,7 +8,11 @@ const credentialPatterns = [
   // `policy-scan.ts` consults before letting a worker commit a file, and what
   // `redactText` uses to sanitise worker output. A key shape the server
   // refuses to store could be committed and logged in the clear.
-  /\bsk_(?:live|test)_[A-Za-z0-9]{16,}\b/gi,
+  // `rk_` is Stripe's RESTRICTED key, and lib/billing accepts one as a
+  // valid STRIPE_SECRET_KEY — so the system called it a credential in one
+  // place and not a credential here, which is the layer that decides
+  // whether it gets committed or logged in the clear.
+  /\b[sr]k_(?:live|test)_[A-Za-z0-9]{16,}\b/gi,
   /\bAKIA[0-9A-Z]{16}\b/g,
   /\bsb_secret_[A-Za-z0-9_-]{20,}\b/gi,
   /\bvercel_[A-Za-z0-9_-]{20,}\b/gi,
