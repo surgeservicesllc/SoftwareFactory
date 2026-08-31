@@ -932,3 +932,56 @@ export type DashboardsPayload = {
     optimization: { available: boolean; label: string };
   };
 };
+
+/* --- recurring billing and collections (increment 12) ------------------- */
+
+export type BillingRunView = {
+  id: string;
+  throughOn: string;
+  plansConsidered: number;
+  invoicesCreated: number;
+  plansAlreadyBilled: number;
+  totalCents: number;
+  note: string | null;
+  ranAt: string;
+};
+
+export type DunningNoticeView = {
+  id: string;
+  invoiceId: string;
+  accountId: string;
+  action: string;
+  daysOverdue: number;
+  balanceCents: number;
+  outcome: string | null;
+  actedAt: string;
+};
+
+export type CollectionsInvoiceView = {
+  invoiceId: string;
+  accountId: string;
+  accountName: string;
+  number: string;
+  balanceCents: number;
+  dueOn: string;
+  daysOverdue: number;
+  bucket: string;
+  notices: number;
+  lastAction: string | null;
+  lastActedAt: string | null;
+  untouched: boolean;
+};
+
+export type BillingRunsPayload = {
+  runs: BillingRunView[];
+  counts: { total: number; invoicesCreated: number; billedCents: number; alreadyBilled: number };
+  automatic: { available: boolean; label: string };
+};
+
+export type CollectionsPayload = {
+  minDays: number;
+  invoices: CollectionsInvoiceView[];
+  notices: DunningNoticeView[];
+  counts: { total: number; balanceCents: number; untouched: number; over90: number };
+  delivery: { available: boolean; label: string };
+};

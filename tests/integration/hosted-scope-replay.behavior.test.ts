@@ -264,6 +264,7 @@ describe("the workflow's post-cutover surgical-scope fence", () => {
       "forms-timesheets-licences.sql",
       "operating-dashboards.sql",
       "pest-ipm.sql",
+      "recurring-billing.sql",
     ]);
 
     for (const file of files) {

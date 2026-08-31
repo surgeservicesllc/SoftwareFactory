@@ -1,4 +1,5 @@
 import {
+  BanknoteArrowDown,
   Building2,
   CalendarDays,
   Coins,
@@ -137,6 +138,12 @@ export const SERVICES_NAVIGATION: readonly ServicesNavItem[] = [
     label: "Dashboards",
     description: "Revenue, receivable, productivity, route density",
     icon: TrendingUp,
+  },
+  {
+    href: `${SERVICES_ROOT}/collections`,
+    label: "Billing & Collections",
+    description: "Raise what is due, work what went unpaid",
+    icon: BanknoteArrowDown,
   },
 ];
 

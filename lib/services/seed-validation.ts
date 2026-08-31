@@ -131,6 +131,24 @@ const SPECS: Spec[] = [
     parents: [{ column: "technician_id", table: "crm_technicians" }],
   },
   {
+    table: "crm_billing_runs",
+    /*
+     * A note is the only optional column. The counts are never null —
+     * a run that did nothing reports zeros, which is a measurement.
+     */
+    optional: ["note"],
+    parents: [],
+  },
+  {
+    table: "crm_dunning_notices",
+    optional: ["outcome"],
+    enumColumn: "action",
+    parents: [
+      { column: "invoice_id", table: "crm_invoices" },
+      { column: "account_id", table: "crm_accounts" },
+    ],
+  },
+  {
     table: "crm_portal_users",
     /*
      * `user_id`, `activated_at` and `last_seen_at` are deliberately NOT

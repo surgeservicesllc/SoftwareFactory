@@ -4344,3 +4344,83 @@ undeclared until the goal's full seeded E2E passes.
   `services-dashboards-routes` (8) pins the boundary: nulls surviving to
   JSON, windows bounded, overdue excluding not-yet-due and undated, and
   five aggregate calls with no table reads at all.
+
+## ADR-200 - Recurring billing: the second invoice is refused by an index
+
+- **Status**: accepted (increment 12 of task #66, owner /goal). PestPac,
+  Briostack, FieldRoutes and GorillaDesk all bill recurring service
+  automatically; `AI/PEST_CRM_COMPETITOR_MATRIX.md` has carried it as a gap
+  since the billing ledger landed.
+- **The one invariant this migration exists for: A SERVICE PLAN CANNOT BE
+  BILLED TWICE FOR THE SAME PERIOD.** Every other kind of duplicate in this
+  schema is recoverable — a duplicate note is noise, a duplicate scan is a
+  scan. A duplicate invoice is a customer charged twice, and the first they
+  hear of it is a statement.
+- **So the guarantee is `crm_invoices_plan_period_key`, a partial unique
+  index, and not a check the generator performs.** A generator that reads
+  then writes double-bills the moment two people press the button together,
+  and "we only ever run it once" is a habit rather than a constraint. The
+  index means the second attempt cannot land even while the first is still
+  in flight. The generator's whole re-run story is one `on conflict … do
+  nothing` clause riding on it.
+  - It is **partial** (`where plan_id is not null`) so the hand-raised
+    invoices that make up most of any book are untouched by it. A total
+    index over the same columns would refuse the second hand-raised invoice
+    of the day.
+  - `ON CONFLICT` against a partial index **must repeat the predicate**.
+    Postgres will not infer one from its columns, and the failure — "there
+    is no unique or exclusion constraint matching the ON CONFLICT
+    specification" — arrives at runtime on the first row that reaches it,
+    not at CREATE FUNCTION time. The migration applies clean and the defect
+    waits for a real user. This is the fourth trap of that shape in the
+    chain, and like the others it now has a test:
+    `tests/unit/migration-partial-index-conflict.test.ts`, which is
+    table-aware after its first draft mis-blamed the credential vault, and
+    which was checked by deleting the predicate and watching it fail.
+- **A generated invoice carries its whole provenance or none of it** — plan,
+  period, and the run that made it — enforced by
+  `num_nonnulls(...) in (0, 4)`. A partial set is a row nobody can audit.
+- **The generator is SECURITY INVOKER**, like the dashboards (ADR-199) and
+  for the same reason: it writes into the caller's own organization through
+  RLS, so naming somebody else's is refused at the first write rather than
+  quietly finding nothing. The behavior suite proves the refusal is loud.
+- **What this deliberately does not do:**
+  - **It does not run on a schedule.** Nothing in this product does — the
+    automation rules (ADR-197) have no executor either. Generating is an
+    action somebody takes, and the run is recorded with their name on it.
+    Unattended billing needs a scheduler, and that is the honest shape of
+    the gap; the page says **Not Connected**.
+  - **It does not send anything.** No email or SMS provider is connected, so
+    a dunning notice records what a person *did* — called, posted a letter,
+    agreed a plan — rather than what a machine sent. A queue of unsent
+    reminders rendered like sent ones would be worse than no dunning at all.
+- **A plan with no price is considered and skipped, never invoiced for
+  zero.** A zero invoice is a bill the customer has to ring up about.
+- **The plan advances either way.** A period already billed is a period done
+  with; leaving `next_due` behind would make every later run reconsider it
+  forever.
+- **`days_overdue` and `balance_cents` are copied onto a dunning notice.**
+  Read back next year it must say how overdue the invoice was *when somebody
+  acted*, not how overdue it is now.
+- **A notice is final; a run is not quite.** `crm_dunning_notices` grants
+  SELECT and INSERT only. `crm_billing_runs` also grants UPDATE, because the
+  generator writes its own totals back — and nothing else does.
+- **Surfaces**: `/Services/collections` over
+  `/api/services/{billing/recurring,collections}`. The page leads with
+  **untouched** — overdue invoices nobody has called about — because a long
+  worklist somebody is working and a long worklist nobody has opened look
+  identical without it.
+- **Verification**: `services-recurring-billing.behavior` (14) on the real
+  chain — the due plans billed and the future one left alone, each plan
+  advanced by its *own* recurrence rather than a fixed month, the button
+  pressed twice billing once and *saying* it skipped, a hand-written
+  duplicate refused by the index itself, two hand-raised invoices on one day
+  both landing, half a provenance refused, a rival's cross-tenant run
+  refused at the first write, the worklist ordered oldest-and-largest with a
+  threshold that excludes the barely-late, a note filed against the wrong
+  customer refused by name, and no definer among the writers.
+  `services-collections-routes` (9) pins the boundary. Seed covers both
+  tables — 44/44, 45,532 rows. RLS census 198; grants at 44 `crm_*` tables;
+  runbook 199. Hosted apply scope `recurring-billing` re-proves the index is
+  present **and partial**, that a notice is not editable, and that neither
+  writer is a definer.

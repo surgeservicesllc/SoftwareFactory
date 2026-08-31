@@ -278,7 +278,7 @@ the measured list, not today's total outstanding migration count. Later exact ev
 forward candidates.
 Do not add any of them to the 19-row measurement or
 infer a new overall missing count without another complete ledger probe. As of this release,
-the repository total is 198 migration files after integration with current `origin/main`. Those two numbers do not stand in a prefix relationship, and the reason
+the repository total is 199 migration files after integration with current `origin/main`. Those two numbers do not stand in a prefix relationship, and the reason
 matters: the
 hosted ledger is **not a contiguous prefix** of the local files. It has gaps in the middle and
 rows well past them. Any sentence of the form "everything after `X` is outstanding" is therefore
@@ -313,9 +313,17 @@ on confirmed present. The portal scope additionally proves its resolver is
 executable by no role at all and that its nine caller-scoped functions are
 definers reachable only by `authenticated`.
 
-`operating-dashboards` (`20260830001900`) is NOT yet applied — it is still
-on a branch. Its postflight asserts the inverse property: that none of its
-five functions is a definer.
+`operating-dashboards` (`20260830001900`) applied from `main` at
+`e3996aa`, run 33353775899. Its postflight asserts the inverse property to
+the portal's: that none of its five functions is a definer, because these
+aggregate across a whole book and a definer would aggregate across every
+tenant's at once.
+
+`recurring-billing` (`20260830002000`) is NOT yet applied — it is still on
+a branch. Its postflight asserts that
+`crm_invoices_plan_period_key` exists **and is partial**: a total index over
+the same columns would look right in a catalogue listing while refusing
+every hand-raised invoice.
 
 ## Historical release tail before ADR-115 — 2026-08-22 (superseded)
 

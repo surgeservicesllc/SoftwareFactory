@@ -112,8 +112,8 @@ built.
 | Invoices, payments, refunds, void | all | **HAVE** (ADR-194) |
 | Service details and chemical usage pulled onto the invoice | PestPac, FieldRoutes | **PARTIAL** — invoices reference a work order; lines are not generated from it |
 | **Autopay, stored payment methods, card + ACH** | PestPac, FieldRoutes, Briostack | **GAP** — the ledger records money that moved; it does not move money |
-| **Recurring/subscription auto-invoicing** | Briostack, FieldRoutes | **GAP** |
-| **AR aging, dunning, automated reminders** | Briostack, PestPac | **GAP** |
+| **Recurring/subscription auto-invoicing** | Briostack, FieldRoutes | **PARTIAL** (ADR-200) — invoices are raised from due service plans, idempotently, and a plan cannot be billed twice for a period. Running it on a SCHEDULE is the gap: nothing in this product runs on a timer, so generation is operator-triggered and the page says **Not Connected** about the rest. |
+| **AR aging, dunning, automated reminders** | Briostack, PestPac | **PARTIAL** — aging by bucket (ADR-199) and a collections worklist with recorded actions (ADR-200) both ship. AUTOMATED reminders are the gap: no email/SMS provider is connected, so a notice records what a person did rather than what a machine sent. |
 | **QuickBooks sync** | Briostack, GorillaDesk, Jobber | **GAP** |
 
 ### G. Sales and marketing
@@ -136,7 +136,7 @@ built.
 |---|---|---|
 | Pipeline conversion report | Briostack | **HAVE** (ADR-186) |
 | Compliance/application report with CSV | PestPac | **HAVE** (ADR-192) |
-| **Operating dashboards: revenue, retention/churn, tech productivity, route density** | all | **GAP** |
+| **Operating dashboards: revenue, retention/churn, tech productivity, route density** | all | **HAVE** (ADR-199) — all four, aggregated over the whole book in the database rather than over a bounded fetch. |
 | **Commercial trend reports with heat maps** | PestPac | **GAP** |
 | **Revenue forecasting** | Briostack | **GAP** |
 
@@ -164,8 +164,41 @@ first, and tracked in `AI/BACKLOG.md`:
 4. ~~Operating dashboards~~ — **SHIPPED** as ADR-199 (revenue, receivable
    aging, retention, technician productivity, route density). Route
    OPTIMIZATION by drive time is still open and needs a mapping provider.
-5. **Recurring auto-invoicing, AR aging and dunning** (increment 12).
+5. ~~Recurring invoicing, AR aging and dunning~~ — **SHIPPED** as ADR-200
+   (aging shipped with ADR-199). Generation is operator-triggered and
+   idempotent; running it on a schedule needs a scheduler this product
+   does not have, and sending a reminder needs an email provider.
 
-Three capabilities need an external provider and will ship labelled **Not
-Connected** until an owner supplies credentials, never implied as working:
-card/ACH processing, SMS/email delivery, and GPS/fleet telemetry.
+## What is genuinely left, sorted by whether we can finish it
+
+**Buildable now — no provider, no external account:**
+
+1. **Commercial portal view** — open conditions, device summary, trend heat
+   maps, sighting tickets, an SDS/compliance library and inspection
+   history. Every input already exists (`crm_devices`, the append-only
+   `crm_device_events`, `crm_pest_sightings`, `crm_documents`,
+   `crm_form_instances`); this is projection work over the portal's
+   existing definer pattern.
+2. **Equipment and fleet/asset management** — vehicles, sprayers and
+   meters, assignment to a technician or branch, service intervals and
+   inspection records. ServSuite and FieldRoutes both sell it.
+3. **Revenue forecasting** — Briostack sells it, and the contract and
+   service-plan tables already carry everything it needs.
+4. **WDO/termite graphs and diagrams** — a drawing surface, not a form.
+   Large, and honestly the least certain of these four.
+5. **Offline mode for technicians** — a service worker and a write queue.
+   Large, and the correctness bar is high: a queue that silently drops a
+   completed visit is worse than no offline mode.
+
+**Needs an external provider, and will ship labelled Not Connected until an
+owner supplies credentials — never implied as working:** card/ACH
+processing and in-field payment, autopay and stored payment methods,
+SMS/email delivery (which also gates automated reminders and campaign
+sending), GPS/fleet telemetry, QuickBooks sync, call-centre/telephony
+integration, and reviews/reputation platforms.
+
+**A note on what "parity" can mean here.** Of the twenty-one rows still
+short of HAVE, roughly half cannot be closed by writing code at all — they
+are accounts somebody has to open and pay for. The honest target is every
+buildable row shipped and every provider-gated row wired to the point where
+supplying a credential is the only remaining step.

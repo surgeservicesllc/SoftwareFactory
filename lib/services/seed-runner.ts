@@ -54,6 +54,8 @@ export type SeedCounts = {
   documents: number;
   portalUsers: number;
   portalRequests: number;
+  billingRuns: number;
+  dunningNotices: number;
   canvassRoutes: number;
   knocks: number;
   marketingLists: number;
@@ -996,6 +998,66 @@ export async function runSeed(
   const documents = await insertAll(client, "crm_documents", documentRows, "id");
   if ("error" in documents) return documents;
 
+  /* --------------------------- recurring billing and collections (12) */
+
+  /*
+   * Billing runs are historical records of batches somebody performed.
+   * They are seeded directly rather than by calling the generator: the
+   * generator would advance every plan's next_due as a side effect, which
+   * would leave the corpus with nothing due and a dispatch board that
+   * reads as finished work.
+   */
+  const billingRunRows = dataset.billingRuns.map((run) => ({
+    organization_id: org,
+    through_on: dateInDays(-run.throughDaysAgo),
+    plans_considered: run.plansConsidered,
+    invoices_created: run.invoicesCreated,
+    plans_already_billed: run.plansAlreadyBilled,
+    total_cents: run.totalCents,
+    note: run.note,
+    ran_at: daysAgoIso(run.throughDaysAgo),
+    created_by: userId,
+  }));
+  const billingRuns = await insertAll(client, "crm_billing_runs", billingRunRows, "id");
+  if ("error" in billingRuns) return billingRuns;
+
+  /*
+   * What somebody did about an overdue invoice. The account is carried on
+   * the row and a trigger checks it against the invoice's own account, so
+   * these are built from each account's own invoices rather than from a
+   * flat list — a note filed against the wrong customer is refused, and
+   * rightly.
+   */
+  const dunningRows = dataset.accounts.flatMap((account) => {
+    const accountId = accountIdByName.get(account.name);
+    if (accountId === undefined) return [];
+    const numbers = (operations.get(account.name)?.billing.invoices ?? [])
+      .filter((invoice) => invoice.status === "open")
+      .map((invoice) => invoice.number);
+    if (numbers.length === 0) return [];
+    return (account.dunning ?? []).flatMap((notice) => {
+      const number = numbers[notice.invoiceSeat % numbers.length];
+      const invoiceId = invoiceIdByNumber.get(number);
+      if (invoiceId === undefined) return [];
+      return [{
+        organization_id: org,
+        invoice_id: invoiceId,
+        account_id: accountId,
+        action: notice.action,
+        days_overdue: notice.daysOverdue,
+        // Derived from the account's own index rather than drawn from a
+        // generator this module does not own: the runner stays a pure
+        // shaper of rows, and a re-run reproduces the same figure.
+        balance_cents: (5 + ((account.index * 37 + notice.invoiceSeat * 11) % 896)) * 1000,
+        outcome: notice.outcome ?? null,
+        acted_at: daysAgoIso(notice.actedDaysAgo),
+        created_by: userId,
+      }];
+    });
+  });
+  const dunningNotices = await insertAll(client, "crm_dunning_notices", dunningRows, "id");
+  if ("error" in dunningNotices) return dunningNotices;
+
   /* ------------------------------------------- the customer portal (10) */
 
   /*
@@ -1588,6 +1650,8 @@ export async function runSeed(
       documents: documents.data.length,
       portalUsers: portalUsers.data.length,
       portalRequests: portalRequests.data.length,
+      billingRuns: billingRuns.data.length,
+      dunningNotices: dunningNotices.data.length,
       canvassRoutes: canvassRoutes.data.length,
       knocks: knocks.data.length,
       marketingLists: lists.data.length,

@@ -2,6 +2,41 @@
 
 Last reviewed: 2026-08-31
 
+**Addendum, 2026-08-31 latest+21 - recurring billing (ADR-200):**
+services-recurring-billing.behavior 14 on the real chain, most of them
+pressing on one invariant from a different angle: the due plans billed and
+the not-yet-due one left alone; the unpriced plan considered and skipped
+rather than invoiced for zero; each plan advanced by its OWN recurrence, so
+a quarterly moves three months and a monthly one; the button pressed twice
+billing once AND reporting the skip, so a re-run is distinguishable from a
+run with nothing to do; a hand-written duplicate refused by
+crm_invoices_plan_period_key itself, proving the guarantee does not depend
+on the generator's care; two hand-raised invoices on the same day both
+landing, proving the index is partial; half a provenance refused; a rival
+naming our organization refused at the first write rather than silently
+finding nothing; the worklist ordered oldest-and-largest with a threshold
+that excludes the barely-late; a collections note filed against the wrong
+customer refused by name; and no definer among the writers.
+services-collections-routes 9 pins the boundary: the organization taken
+from the workspace and never the body, a re-run's skipped count surviving
+to the response, both Not Connected labels, the age copied onto the record
+as sent, and the age filter bounded.
+A fourth latent-trap guard shipped with it —
+migration-partial-index-conflict — after the real clause was written wrong
+first: ON CONFLICT against a partial unique index must repeat the
+predicate, and the failure waits for a real user rather than the migration.
+Its first draft mis-blamed the credential vault (column names matched on a
+different table) and its second passed while the defect was live (an
+earlier INSERT in the same function swallowed the match); it is table-aware
+and scans backward now, and was verified by deleting the predicate and
+watching it fail. Seed extended to 44 tables — 45,532 rows, 44/44 PASS,
+zero orphans, and deliberately carrying overdue invoices nobody has
+touched, because that is the row the worklist exists to surface. RLS census
+198; service-role grants at 44 crm tables; runbook 199; workflow scope
+`recurring-billing` postflight re-proves the index is present and partial,
+that a notice cannot be edited after the fact, and that neither writer is a
+definer.
+
 **Addendum, 2026-08-31 latest+20 - the operating dashboards (ADR-199):**
 services-dashboards.behavior 13 on the real chain: a draft invoice excluded
 from revenue while the issued one counts; eleven months of null collection

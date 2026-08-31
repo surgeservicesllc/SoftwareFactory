@@ -2120,3 +2120,130 @@ export function bpsLabel(bps: number | null): string {
   if (bps === null) return "—";
   return `${(bps / 100).toFixed(1)}%`;
 }
+
+/* ---------------------------------------------------------------------------
+ * Recurring billing and collections (increment 12).
+ * ------------------------------------------------------------------------- */
+
+export type CrmDunningAction =
+  | "reminder_call"
+  | "reminder_letter"
+  | "reminder_email"
+  | "final_notice"
+  | "payment_plan"
+  | "sent_to_collections"
+  | "written_off";
+
+export const CRM_DUNNING_ACTIONS: readonly CrmDunningAction[] = [
+  "reminder_call",
+  "reminder_letter",
+  "reminder_email",
+  "final_notice",
+  "payment_plan",
+  "sent_to_collections",
+  "written_off",
+];
+
+export const CRM_BILLING_RUN_COLUMNS =
+  "id, through_on, plans_considered, invoices_created, plans_already_billed, total_cents, note, ran_at";
+export const CRM_DUNNING_NOTICE_COLUMNS =
+  "id, invoice_id, account_id, action, days_overdue, balance_cents, outcome, acted_at";
+
+export type CrmBillingRunRow = {
+  id: string;
+  through_on: string;
+  plans_considered: number;
+  invoices_created: number;
+  plans_already_billed: number;
+  total_cents: number | string;
+  note: string | null;
+  ran_at: string;
+};
+
+export type CrmDunningNoticeRow = {
+  id: string;
+  invoice_id: string;
+  account_id: string;
+  action: CrmDunningAction;
+  days_overdue: number;
+  balance_cents: number | string;
+  outcome: string | null;
+  acted_at: string;
+};
+
+export type CrmCollectionsRow = {
+  invoice_id: string;
+  account_id: string;
+  account_name: string;
+  number: string;
+  balance_cents: number | string;
+  due_on: string;
+  days_overdue: number;
+  notices: number;
+  last_action: CrmDunningAction | null;
+  last_acted_at: string | null;
+};
+
+export function toBillingRunView(row: CrmBillingRunRow) {
+  return {
+    id: row.id,
+    throughOn: row.through_on,
+    plansConsidered: row.plans_considered,
+    invoicesCreated: row.invoices_created,
+    /*
+     * Plans that were due but whose period was already invoiced. Reported
+     * on its own because a run that skipped forty and a run that found
+     * forty nothing to do are different events, and only one of them means
+     * somebody pressed the button twice.
+     */
+    plansAlreadyBilled: row.plans_already_billed,
+    totalCents: Number(row.total_cents),
+    note: row.note,
+    ranAt: row.ran_at,
+  };
+}
+
+export function toDunningNoticeView(row: CrmDunningNoticeRow) {
+  return {
+    id: row.id,
+    invoiceId: row.invoice_id,
+    accountId: row.account_id,
+    action: row.action,
+    /* The age when somebody acted, not the age now. */
+    daysOverdue: row.days_overdue,
+    balanceCents: Number(row.balance_cents),
+    outcome: row.outcome,
+    actedAt: row.acted_at,
+  };
+}
+
+/** Which aging bucket an overdue invoice sits in, by the same cuts the report uses. */
+export function agingBucket(daysOverdue: number): string {
+  if (daysOverdue <= 0) return "current";
+  if (daysOverdue <= 30) return "1-30";
+  if (daysOverdue <= 60) return "31-60";
+  if (daysOverdue <= 90) return "61-90";
+  return "90+";
+}
+
+export function toCollectionsView(row: CrmCollectionsRow) {
+  return {
+    invoiceId: row.invoice_id,
+    accountId: row.account_id,
+    accountName: row.account_name,
+    number: row.number,
+    balanceCents: Number(row.balance_cents),
+    dueOn: row.due_on,
+    daysOverdue: row.days_overdue,
+    bucket: agingBucket(row.days_overdue),
+    notices: row.notices,
+    /*
+     * Null when nobody has done anything yet — which is the row a
+     * collections desk most needs to see, so it is a real absence rather
+     * than a "none" that reads like an action.
+     */
+    lastAction: row.last_action,
+    lastActedAt: row.last_acted_at,
+    untouched: row.notices === 0,
+  };
+}

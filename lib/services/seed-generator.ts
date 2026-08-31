@@ -46,12 +46,13 @@ export const SEED_TARGETS: Record<
     campaigns: number;
     automations: number;
     formTemplates: number;
+    billingRuns: number;
   }
 > = {
   demo: {
     accounts: 40, technicians: 12, products: 14, jurisdictions: 8, branches: 4,
     employees: 14, territories: 8, canvassRoutes: 10, marketingLists: 6,
-    campaigns: 8, automations: 8, formTemplates: 6,
+    campaigns: 8, automations: 8, formTemplates: 6, billingRuns: 12,
   },
   full: {
     accounts: 320,
@@ -66,6 +67,7 @@ export const SEED_TARGETS: Record<
     campaigns: 280,
     automations: 260,
     formTemplates: 260,
+    billingRuns: 280,
   },
 };
 
@@ -331,6 +333,20 @@ export type SeedAccount = {
     submittedDaysAgo: number;
     resolvedDaysAgo?: number;
   }[];
+  /**
+   * Increment 12: what somebody DID about an overdue invoice. Not what a
+   * machine sent — nothing sends here — so every row is a call made, a
+   * letter posted, a plan agreed.
+   */
+  dunning?: {
+    invoiceSeat: number;
+    action:
+      | "reminder_call" | "reminder_letter" | "reminder_email" | "final_notice"
+      | "payment_plan" | "sent_to_collections" | "written_off";
+    daysOverdue: number;
+    actedDaysAgo: number;
+    outcome?: string;
+  }[];
   /** Increment 9: the inspections and reports filled out about this customer. */
   forms?: {
     templateIndex: number;
@@ -523,6 +539,21 @@ export type SeedDataset = {
   campaigns: SeedCampaign[];
   automations: SeedAutomation[];
   formTemplates: SeedFormTemplate[];
+  /**
+   * Increment 12: the batches that raised recurring invoices. Historical
+   * records of runs somebody performed, spread back over years so the
+   * billing page has a real history rather than one row.
+   */
+  billingRuns: SeedBillingRun[];
+};
+
+export type SeedBillingRun = {
+  throughDaysAgo: number;
+  plansConsidered: number;
+  invoicesCreated: number;
+  plansAlreadyBilled: number;
+  totalCents: number;
+  note: string;
 };
 
 /* ---------------------------------------------------------------- generators */
@@ -830,6 +861,32 @@ export function generateSeedDataset(scale: SeedScale, seed = 20260830): SeedData
   );
 
   /*
+   * Billing runs, oldest first. Most raise invoices; roughly one in seven
+   * finds every due plan already billed, which is what a second press of
+   * the button looks like and is worth having in the corpus.
+   */
+  const billingRuns: SeedBillingRun[] = Array.from({ length: targets.billingRuns }, (_, index) => {
+    const repeat = index % 7 === 3;
+    const considered = between(random, 4, 60);
+    const created = repeat ? 0 : between(random, 1, considered);
+    return {
+      throughDaysAgo: 3 + index * 4,
+      plansConsidered: considered,
+      invoicesCreated: created,
+      plansAlreadyBilled: repeat ? considered : Math.min(considered - created, between(random, 0, 4)),
+      totalCents: created * between(random, 18, 90) * 1000,
+      note: repeat
+        ? "Re-run after the first batch; every due period was already invoiced."
+        : pick(random, [
+            "Month-end recurring batch.",
+            "Weekly plans, run early for the holiday.",
+            "Quarterly programs.",
+            "Caught up after the outage.",
+          ]),
+    };
+  });
+
+  /*
    * The paper each customer carries, the lists they consented to, and how
    * they arrived. Attached in a second pass because a touch can name a
    * campaign, and campaigns did not exist when the accounts were built.
@@ -989,6 +1046,37 @@ export function generateSeedDataset(scale: SeedScale, seed = 20260830): SeedData
             };
           });
 
+    /*
+     * Collections work. Only on accounts that carry invoices at all, and
+     * deliberately NOT on every overdue one: an untouched overdue invoice
+     * is the row the worklist exists to surface, so the corpus has to
+     * contain some.
+     */
+    account.dunning =
+      !serviced || account.index % 3 === 0
+        ? []
+        : Array.from({ length: 1 + (account.index % 3) }, (_, seat) => {
+            const daysOverdue = between(random, 5, 240);
+            const action = DUNNING_ACTIONS[(account.index + seat) % DUNNING_ACTIONS.length];
+            return {
+              invoiceSeat: seat,
+              action,
+              daysOverdue,
+              actedDaysAgo: between(random, 1, 120),
+              // A closed-out action says what closed it; a reminder often
+              // has no outcome yet, which is the honest state.
+              ...(action === "payment_plan" || action === "written_off" || seat % 2 === 0
+                ? { outcome: pick(random, [
+                    "Left a message with the office.",
+                    "Agreed to pay in three instalments.",
+                    "Posted the final notice.",
+                    "Disputed; sent the service report.",
+                    "Written off after the business closed.",
+                  ]) }
+                : {}),
+            };
+          });
+
     account.touches = Array.from({ length: between(random, 1, 3) }, (_, seat) => ({
       source: pick(random, ["google", "referral", "door knock", "yard sign", "facebook", "repeat customer"]),
       medium: pick(random, ["organic", "paid", "canvassing", "word of mouth", "email"]),
@@ -1015,6 +1103,7 @@ export function generateSeedDataset(scale: SeedScale, seed = 20260830): SeedData
     campaigns,
     automations,
     formTemplates,
+    billingRuns,
   };
 }
 
@@ -1766,6 +1855,11 @@ function generateTerritory(
     notes: `${pick(random, ["Dense residential", "Mixed commercial and residential", "Rural route, long drives", "Downtown core"])}.`,
   };
 }
+
+const DUNNING_ACTIONS = [
+  "reminder_call", "reminder_letter", "reminder_email", "final_notice",
+  "payment_plan", "sent_to_collections", "written_off",
+] as const;
 
 const REQUEST_KINDS = [
   "service", "reschedule", "question", "complaint", "cancel", "quote",

@@ -2,6 +2,40 @@
 
 Last updated: 2026-08-31
 
+## Newest (2026-08-31, latest+21): recurring billing (ADR-200, task #66)
+
+`20260830002000` adds crm_billing_runs, crm_dunning_notices, four columns
+on crm_invoices, and the generator.
+
+THE ONE THING THAT MATTERS: `crm_invoices_plan_period_key` is what stops a
+customer being billed twice. It is a PARTIAL unique index, and the
+generator's `on conflict … do nothing` REPEATS THE PREDICATE because
+Postgres will not infer a partial index from its columns. Drop the `where
+plan_id is not null` from that clause and the function still creates, the
+chain still replays green, and the first real billing run raises "there is
+no unique or exclusion constraint matching the ON CONFLICT specification"
+in front of a user. `tests/unit/migration-partial-index-conflict.test.ts`
+catches it now; it was checked by deleting the predicate and watching it
+fail, because the first draft of that test passed while the defect was
+present.
+
+Do not "optimize" the generator into a read-then-write. The index is the
+guarantee; looking first is not, and two people pressing the button at once
+is exactly when it matters.
+
+Other things easy to undo:
+- The generator is SECURITY INVOKER. A definer would write into whatever
+  organization the caller named.
+- A plan with no price is skipped, not invoiced for zero.
+- The plan's next_due advances even when the period was already billed —
+  otherwise every later run reconsiders it forever.
+- days_overdue and balance_cents are COPIED onto a dunning notice, so it
+  reads back as the age when somebody acted.
+- crm_dunning_notices has no UPDATE by design. crm_billing_runs does, and
+  only because the generator writes its own totals back.
+- Scheduled billing and reminder delivery are both Not Connected. Nothing
+  here runs on a timer and nothing here sends.
+
 ## Newest (2026-08-31, latest+20): the operating dashboards (ADR-199, #65)
 
 `20260830001900` adds FIVE FUNCTIONS AND NO TABLES: crm_revenue_by_month,

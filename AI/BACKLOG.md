@@ -199,8 +199,20 @@ the full seeded E2E journey passes — increment 10 of the plan.
 - [ ] Increment 11 follow-on: route OPTIMIZATION, which needs a mapping
   provider for drive time. Density ships; sequencing by distance is
   labelled Not Connected until credentials are supplied.
-- [ ] Increment 12: recurring auto-invoicing from service plans, AR aging,
-  and dunning schedules.
+- [x] Increment 12 (ADR-200): recurring billing and dunning — invoices
+  raised from service plans that have come due, made safe by a PARTIAL
+  unique index rather than by the generator checking first; billing runs
+  recorded with the operator's name; a collections worklist ordered
+  oldest-and-largest; and dunning notices that record what a person did.
+  /Services/collections. 20260830002000; hosted apply:
+  scope=recurring-billing after merge.
+- [ ] Increment 12 follow-on: UNATTENDED billing. The generator is correct
+  and idempotent but nothing calls it on a schedule, because nothing in
+  this product runs on a timer. Needs a scheduler or a worker executor —
+  the same gap the automation rules have.
+- [ ] Increment 12 follow-on: actually SENDING a dunning reminder. The
+  notice records what a person did; delivery needs an email/SMS provider
+  and stays Not Connected until credentials are supplied.
 - [ ] Provider-gated, ship Not Connected until an owner supplies
   credentials, never implied as working: card/ACH processing (the ledger
   records money that moved; it does not move money), SMS/email delivery,
