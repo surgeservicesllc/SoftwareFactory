@@ -2,6 +2,33 @@
 
 Last updated: 2026-08-30
 
+## Newest (2026-08-30, latest+12): Grok Bot durable planning foundation (ADR-190)
+
+The local candidate now has the truthful backend foundation for Grok Bot.
+`Grok Bot` is a product/Chief-of-Staff label over the factory's configured
+Claude and Codex bots, not xAI. The planner deterministically records intent,
+requirements, acceptance criteria, task dependencies, routing intent and
+budget. Migration `20260830001000_grok_chief_of_staff_persistence.sql` adds
+owner-only durable sessions, append-only messages/events, immutable
+task/graph/artifact links and monotonic control intents under tenant/project
+forced RLS; the owner APIs create/list/read/control that state.
+
+The deliberately important stop: a generated custom DAG is planning data only.
+The POST saves it and returns `202` with
+`execution_bridge_not_connected`; `workerWoken=false`, no graph is launched,
+and planned provider/model/agent labels are not passed off as observed
+node/agent-run evidence. Focused Grok runtime suites are 43/43; the canonical
+lifecycle digest pin is 7/7.
+
+Next, integrate the workspace UI and bind the durable session to the exact
+canonical `full_lifecycle` v2 path: Claude planning -> HUMAN architecture gate
+-> Codex Phase 1C -> CI/Vercel/health. Project the resulting graph/node/run
+identities back as observed evidence, then prove pause/resume/stop/retry/cancel,
+reload, full gates, guarded hosted migration, exact deployment, and signed-in
+production acceptance. None of that bridge/UI/release work is claimed complete
+here. Workers, autonomy, and automatic actions remain OFF; the global kill
+switch remains ON. Do not declare `GROK BOT: PRODUCTION READY` yet.
+
 ## Newest (2026-08-30, latest+11): field service core (ADR-189, task #63)
 
 Increment 3 on main-bound work: crm_technicians / crm_service_plans /

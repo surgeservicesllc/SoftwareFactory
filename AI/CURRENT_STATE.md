@@ -1,5 +1,33 @@
 # Current state
 
+## 2026-08-30: Grok Bot durable planning foundation (ADR-190; local candidate)
+
+Grok Bot is a SoftwareFactory product label and Chief-of-Staff experience, not
+an xAI provider or model. The local candidate turns an owner prompt into a
+deterministic, JSON-safe Intent -> Requirements -> Plan -> Task Graph record
+using the project's configured Claude and Codex bot roster. The planned
+provider/model/agent fields are routing intent; they are never presented as
+observed execution evidence.
+
+Migration `20260830001000_grok_chief_of_staff_persistence.sql` adds the durable
+owner-only Supabase boundary: sessions, append-only messages and events,
+immutable task/graph/artifact links, and monotonic control intents, all tenant
+and project scoped under forced RLS with bounded definer functions. The owner
+session APIs create, list, read, and control that durable state. Until an exact
+execution bridge is connected, creation returns a truthful blocked workspace
+with `execution_bridge_not_connected`; the generated custom DAG is routing
+intent only and is never launched or handed to a worker.
+
+The intended truthful execution bridge is the existing canonical
+`full_lifecycle` v2: Claude planning -> the HUMAN architecture gate -> Codex
+Phase 1C execution -> exact CI, Vercel, and health evidence. That bridge, the
+Grok workspace UI, hosted migration/release, and signed-in production
+acceptance are still pending integration. Focused Grok runtime verification is
+43/43, and the canonical lifecycle digest regression is 7/7; these are not a
+full-suite or production-readiness claim. Workers, autonomy, and automatic
+actions remain OFF, and the global kill switch remains ON. **GROK BOT:
+PRODUCTION READY is not declared.**
+
 ## Services CRM (task #63, ADR-185 — newest product)
 
 `/Services` is the pest-services CRM's own product (route group, own

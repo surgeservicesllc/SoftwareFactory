@@ -1,5 +1,36 @@
 # Backlog
 
+## Grok Bot -> truthful Chief-of-Staff workspace (ADR-190, 2026-08-30)
+
+- [x] Deterministic Chief-of-Staff planner: owner prompt -> intent,
+  requirements, acceptance criteria, dependency graph, configured-agent
+  routing intent, and bounded budget. `Grok Bot` is the product name; no xAI
+  provider is introduced.
+- [x] Local durable boundary in
+  `20260830001000_grok_chief_of_staff_persistence.sql`: owner-only,
+  tenant/project-scoped sessions; append-only messages/events; immutable
+  task, graph, and artifact links; monotonic control intents; forced RLS and
+  narrow definer functions. Focused runtime suites: 43/43.
+- [x] Fail-closed planning API: save and reload the plan, return
+  `execution_bridge_not_connected`, wake no worker, and never launch the
+  custom provider-labelled DAG. Planned provider/model/agent identity is
+  routing intent, not observed run evidence.
+- [ ] Integrate and verify the Grok workspace UI: session history,
+  conversation, plan/tasks, agents, progress, files/diffs, tests, artifacts,
+  deployment, and honest blocked/control states across responsive and
+  accessibility acceptance.
+- [ ] Connect the session to the exact canonical `full_lifecycle` v2 bridge —
+  Claude planning -> HUMAN architecture approval -> Codex Phase 1C ->
+  CI/Vercel/health — while persisting planned identity separately from actual
+  graph/node/agent-run evidence. Canonical digest regression is 7/7; paused,
+  resumed, stopped, retry, and cancellation behavior still need end-to-end
+  bridge acceptance.
+- [ ] Run the complete release gates, publish the exact accepted identity,
+  apply the single forward migration under its guarded scope, and perform
+  signed-in production persistence/return/reload acceptance. Keep workers,
+  autonomy, and automatic actions OFF and the global kill switch ON; do not
+  declare `GROK BOT: PRODUCTION READY` before this evidence exists.
+
 ## Services CRM → pest-services platform (task #63, owner /goal 2026-08-30)
 
 The audit + pillar-to-increment map is `AI/SERVICES_CRM_GAP_ANALYSIS.md`

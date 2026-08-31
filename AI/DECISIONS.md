@@ -3754,3 +3754,33 @@ undeclared until the goal's full seeded E2E passes.
   the generate guard, compensation, and clamped date math; schedule and
   roster panels 5. RLS census 155; hosted-grants +3; runbook 187;
   workflow scope field-service with full postflight.
+
+## ADR-190 - Grok Bot is a factory Chief-of-Staff label over the canonical lifecycle
+
+- **Date**: 2026-08-30
+- **Status**: Accepted for the local durable-planning foundation; UI,
+  execution bridge, hosted apply, and production acceptance pending
+- **Decision**: `Grok Bot` names the SoftwareFactory Chief-of-Staff product; it
+  is not an xAI provider or model. An owner prompt is compiled
+  deterministically into intent, requirements, acceptance criteria, task
+  dependencies, configured-agent routing intent, and budget, then stored in
+  owner-only, tenant/project-scoped Supabase records. Sessions, append-only
+  messages/events, immutable task/graph/artifact links, and monotonic control
+  intents live behind forced RLS and bounded definer functions in
+  `20260830001000_grok_chief_of_staff_persistence.sql`.
+- **Execution boundary**: a custom provider-labelled DAG is a plan, not proof
+  of execution, and must never be launched by the current route. Until the
+  exact bridge exists, the durable session reports
+  `execution_bridge_not_connected`, wakes no worker, and retains the plan for
+  reload. The only intended truthful bridge is canonical `full_lifecycle` v2:
+  Claude planning -> HUMAN architecture approval -> Codex Phase 1C -> exact
+  CI, Vercel, and health evidence. Planned provider/model/agent identity stays
+  separate from the graph/node/agent-run identity later observed from that
+  execution chain.
+- **Consequence**: UI and control surfaces may render only durable plan or
+  observed execution state, never simulated progress. The canonical bridge,
+  pause/resume/stop/retry/cancel acceptance, full release gates, hosted
+  migration, exact deployment, and signed-in production E2E remain required
+  before `GROK BOT: PRODUCTION READY` can be declared. Workers, autonomy, and
+  automatic actions remain OFF and the global kill switch remains ON while
+  this increment is integrated.
