@@ -21,6 +21,13 @@ export type Phase1CDispatchResult = Readonly<{
   reason: "dispatched" | "worker_disabled";
 }>;
 
+type WorkerDispatchHost = Readonly<{
+  appId: number;
+  externalInstallationId: number;
+  externalRepositoryId: number;
+  repositoryFullName: string;
+}>;
+
 function repositoryCoordinates(fullName: string) {
   const parts = fullName.split("/");
   if (parts.length !== 2) {
@@ -30,6 +37,72 @@ function repositoryCoordinates(fullName: string) {
     owner: validateRepositoryCoordinate(parts[0]!, "Repository owner"),
     repository: validateRepositoryCoordinate(parts[1]!, "Repository name"),
   };
+}
+
+function positiveEnvironmentInteger(name: string) {
+  const raw = process.env[name]?.trim() ?? "";
+  if (!/^[1-9]\d*$/.test(raw)) {
+    throw new Error(`${name} must be a positive integer.`);
+  }
+  const value = Number(raw);
+  if (!Number.isSafeInteger(value)) {
+    throw new Error(`${name} must be a safe positive integer.`);
+  }
+  return value;
+}
+
+/**
+ * Repository-dispatch runs the workflow stored by the repository receiving
+ * the event. A project repository is therefore never a worker host merely
+ * because the Factory can clone it. The reviewed SoftwareFactory runtime has
+ * its own explicit, fail-closed installation/repository identity.
+ */
+function workerDispatchHost(): WorkerDispatchHost {
+  const repositoryFullName = process.env.SOFTWAREFACTORY_WORKER_HOST_REPOSITORY?.trim() ?? "";
+  repositoryCoordinates(repositoryFullName);
+  return Object.freeze({
+    appId: positiveEnvironmentInteger("SOFTWAREFACTORY_WORKER_HOST_APP_ID"),
+    externalInstallationId: positiveEnvironmentInteger(
+      "SOFTWAREFACTORY_WORKER_HOST_INSTALLATION_ID",
+    ),
+    externalRepositoryId: positiveEnvironmentInteger(
+      "SOFTWAREFACTORY_WORKER_HOST_REPOSITORY_ID",
+    ),
+    repositoryFullName,
+  });
+}
+
+function assertProjectTarget(target: Phase1CDispatchTarget) {
+  repositoryCoordinates(target.repositoryFullName);
+  if (
+    !Number.isSafeInteger(target.appId)
+    || target.appId <= 0
+    || !Number.isSafeInteger(target.externalInstallationId)
+    || target.externalInstallationId <= 0
+    || !Number.isSafeInteger(target.externalRepositoryId)
+    || target.externalRepositoryId <= 0
+  ) {
+    throw new Error("The queued project repository identity is invalid.");
+  }
+}
+
+async function sendWorkerDispatch(eventType: string, clientPayload: Record<string, string>) {
+  const host = workerDispatchHost();
+  const { owner, repository } = repositoryCoordinates(host.repositoryFullName);
+  const configuration = getGitHubAppConfigurationForAppId(host.appId);
+  const installationToken = await createGitHubInstallationToken(
+    configuration,
+    host.externalInstallationId,
+    {
+      permissions: { contents: "write", metadata: "read" },
+      repositoryIds: [host.externalRepositoryId],
+    },
+  );
+  await githubApiRequest(`/repos/${owner}/${repository}/dispatches`, {
+    body: { event_type: eventType, client_payload: clientPayload },
+    method: "POST",
+    token: installationToken.token,
+  });
 }
 
 /**
@@ -48,28 +121,8 @@ export async function dispatchPhase1CWorker(
   if (process.env.SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED !== "true") {
     return { dispatched: false, reason: "worker_disabled" };
   }
-  const { owner, repository } = repositoryCoordinates(target.repositoryFullName);
-  const configuration = getGitHubAppConfigurationForAppId(target.appId);
-  const installationToken = await createGitHubInstallationToken(
-    configuration,
-    target.externalInstallationId,
-    {
-      permissions: { contents: "write", metadata: "read" },
-      repositoryIds: [target.externalRepositoryId],
-    },
-  );
-
-  await githubApiRequest(
-    `/repos/${owner}/${repository}/dispatches`,
-    {
-      body: {
-        event_type: PHASE_1C_DISPATCH_EVENT,
-        client_payload: { command_id: commandId },
-      },
-      method: "POST",
-      token: installationToken.token,
-    },
-  );
+  assertProjectTarget(target);
+  await sendWorkerDispatch(PHASE_1C_DISPATCH_EVENT, { command_id: commandId });
   return { dispatched: true, reason: "dispatched" };
 }
 
@@ -96,28 +149,7 @@ export async function dispatchGraphWorker(
   if (process.env.SOFTWAREFACTORY_GRAPH_WORKER_ENABLED !== "true") {
     return { dispatched: false, reason: "worker_disabled" };
   }
-
-  const { owner, repository } = repositoryCoordinates(target.repositoryFullName);
-  const configuration = getGitHubAppConfigurationForAppId(target.appId);
-  const installationToken = await createGitHubInstallationToken(
-    configuration,
-    target.externalInstallationId,
-    {
-      permissions: { contents: "write", metadata: "read" },
-      repositoryIds: [target.externalRepositoryId],
-    },
-  );
-
-  await githubApiRequest(
-    `/repos/${owner}/${repository}/dispatches`,
-    {
-      body: {
-        event_type: GRAPH_DISPATCH_EVENT,
-        client_payload: { graph_id: graphId },
-      },
-      method: "POST",
-      token: installationToken.token,
-    },
-  );
+  assertProjectTarget(target);
+  await sendWorkerDispatch(GRAPH_DISPATCH_EVENT, { graph_id: graphId });
   return { dispatched: true, reason: "dispatched" };
 }

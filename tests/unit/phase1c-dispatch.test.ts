@@ -27,12 +27,16 @@ import {
 describe("Phase 1C worker dispatch", () => {
   beforeEach(() => {
     vi.unstubAllEnvs();
+    vi.stubEnv("SOFTWAREFACTORY_WORKER_HOST_APP_ID", "7654321");
+    vi.stubEnv("SOFTWAREFACTORY_WORKER_HOST_INSTALLATION_ID", "987654321");
+    vi.stubEnv("SOFTWAREFACTORY_WORKER_HOST_REPOSITORY_ID", "1234567890");
+    vi.stubEnv("SOFTWAREFACTORY_WORKER_HOST_REPOSITORY", "factory-runtime/SoftwareFactory");
     createGitHubInstallationToken.mockReset().mockResolvedValue({ token: "scoped-token" });
-    getGitHubAppConfigurationForAppId.mockReset().mockReturnValue({ appId: 4582606 });
+    getGitHubAppConfigurationForAppId.mockReset().mockReturnValue({ appId: 7654321 });
     githubApiRequest.mockReset().mockResolvedValue(null);
   });
 
-  it("uses an exact repository-scoped App token and sends only an opaque command id", async () => {
+  it("dispatches to the reviewed worker host while sending only the opaque target command id", async () => {
     vi.stubEnv("SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED", "true");
 
     await expect(dispatchPhase1CWorker({
@@ -46,15 +50,15 @@ describe("Phase 1C worker dispatch", () => {
     });
 
     expect(createGitHubInstallationToken).toHaveBeenCalledWith(
-      { appId: 4582606 },
-      153479019,
+      { appId: 7654321 },
+      987654321,
       {
         permissions: { contents: "write", metadata: "read" },
-        repositoryIds: [1332327462],
+        repositoryIds: [1234567890],
       },
     );
     expect(githubApiRequest).toHaveBeenCalledWith(
-      "/repos/surgeservicesllc/SoftwareFactory/dispatches",
+      "/repos/factory-runtime/SoftwareFactory/dispatches",
       {
         body: {
           event_type: PHASE_1C_DISPATCH_EVENT,
@@ -96,6 +100,20 @@ describe("Phase 1C worker dispatch", () => {
     },
   );
 
+  it("fails closed before provider access when the reviewed worker host is not configured", async () => {
+    vi.stubEnv("SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED", "true");
+    vi.stubEnv("SOFTWAREFACTORY_WORKER_HOST_REPOSITORY", "");
+
+    await expect(dispatchPhase1CWorker({
+      appId: 4582606,
+      externalInstallationId: 153479019,
+      externalRepositoryId: 1332327462,
+      repositoryFullName: "another-owner/target-project",
+    }, "22222222-2222-4222-8222-222222222222")).rejects.toThrow();
+    expect(createGitHubInstallationToken).not.toHaveBeenCalled();
+    expect(githubApiRequest).not.toHaveBeenCalled();
+  });
+
   it("keeps graph dispatch inert while the global worker gate is off", async () => {
     vi.stubEnv("SOFTWAREFACTORY_GRAPH_WORKER_ENABLED", "false");
 
@@ -112,20 +130,20 @@ describe("Phase 1C worker dispatch", () => {
     expect(githubApiRequest).not.toHaveBeenCalled();
   });
 
-  it("dispatches a target-bound graph only when the global gate is exactly true", async () => {
+  it("dispatches a target-bound graph to the central runtime even for another project repository", async () => {
     vi.stubEnv("SOFTWAREFACTORY_GRAPH_WORKER_ENABLED", "true");
 
     await expect(dispatchGraphWorker({
       appId: 4582606,
       externalInstallationId: 153479019,
       externalRepositoryId: 1332327462,
-      repositoryFullName: "surgeservicesllc/SoftwareFactory",
+      repositoryFullName: "another-owner/target-project",
     }, "33333333-3333-4333-8333-333333333333")).resolves.toEqual({
       dispatched: true,
       reason: "dispatched",
     });
     expect(githubApiRequest).toHaveBeenCalledWith(
-      "/repos/surgeservicesllc/SoftwareFactory/dispatches",
+      "/repos/factory-runtime/SoftwareFactory/dispatches",
       {
         body: {
           event_type: GRAPH_DISPATCH_EVENT,
