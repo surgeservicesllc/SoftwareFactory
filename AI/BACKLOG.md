@@ -113,13 +113,15 @@ the full seeded E2E journey passes — increment 10 of the plan.
   the accept flow works, but nothing emails a customer to tell them — no
   email provider is connected, so an invitation is delivered by whatever
   the office does today. Wire it when a provider is supplied.
-- [ ] Increment 10 follow-on: the workflow size ceiling. After
-  scope=customer-portal, `.github/workflows/apply-hosted-migrations.yml`
-  is ~488KB against a 490,000-byte guard — roughly one scope of headroom
-  left. Extract the per-scope postflight SQL into
-  `.github/hosted-apply/postflight/<scope>.sql` and run it with `psql -f`,
-  the way the probe SQL was extracted, BEFORE adding increment 11's
-  scope.
+- [x] Increment 10 follow-on: the workflow size ceiling. The seven CRM
+  scopes' postflight SQL now lives in
+  `.github/hosted-apply/postflight/<scope>.sql` and runs with `psql -f`,
+  the way the probe SQL was extracted. 488KB -> 473KB, and the guard
+  ratcheted down to 480,000 so the recovery is kept.
+  `hosted-scope-replay` executes every one of the seven against the fully
+  migrated chain and proves one of them actually RAISES on a broken
+  schema — a postflight that passes on a broken schema is worse than none,
+  because it is read as proof.
 - [ ] Increment 11: operating dashboards (revenue, retention/churn,
   technician productivity, route density) and route optimization —
   sequencing a day's stops by real geography, not a claim of it.

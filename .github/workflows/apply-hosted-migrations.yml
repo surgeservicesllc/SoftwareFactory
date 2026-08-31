@@ -1530,42 +1530,7 @@ jobs:
           # devices and sightings are never deletable; anon and service_role
           # hold nothing; both device triggers and the barcode uniqueness the
           # scanner depends on exist.
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
-            do \$\$
-            declare
-              v_table text;
-            begin
-              if (select count(*) from pg_class c
-                   join pg_namespace n on n.oid = c.relnamespace
-                  where n.nspname = 'public' and c.relrowsecurity and c.relforcerowsecurity
-                    and c.relname in ('crm_devices','crm_device_events','crm_pest_sightings')) <> 3 then
-                raise exception 'the pest/IPM tables are missing or not under forced RLS';
-              end if;
-              if has_table_privilege('authenticated', 'public.crm_device_events', 'update')
-                or has_table_privilege('authenticated', 'public.crm_device_events', 'delete')
-                or has_table_privilege('authenticated', 'public.crm_devices', 'delete')
-                or has_table_privilege('authenticated', 'public.crm_pest_sightings', 'delete') then
-                raise exception 'the pest/IPM immutability grants are wrong';
-              end if;
-              foreach v_table in array array['crm_devices','crm_device_events','crm_pest_sightings'] loop
-                if has_table_privilege('anon', 'public.' || v_table, 'select')
-                  or has_table_privilege('service_role', 'public.' || v_table, 'select') then
-                  raise exception 'anon or service_role can reach %', v_table;
-                end if;
-              end loop;
-              if (select count(*) from pg_trigger t join pg_class c on c.oid = t.tgrelid
-                  where (c.relname = 'crm_devices' and t.tgname = 'crm_devices_record_install')
-                     or (c.relname = 'crm_device_events' and t.tgname = 'crm_device_events_apply')) <> 2 then
-                raise exception 'a device ledger trigger is missing';
-              end if;
-              if not exists (
-                select 1 from pg_indexes
-                where schemaname = 'public' and indexname = 'crm_devices_org_barcode_key'
-              ) then
-                raise exception 'the per-organization barcode uniqueness is missing';
-              end if;
-            end
-            \$\$;"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/postflight/pest-ipm.sql
           echo "Pest/IPM applied; RLS, ledger immutability, triggers and barcode uniqueness verified."
 
       - name: Apply chemicals and compliance (scope=chemicals-compliance)
@@ -1593,37 +1558,7 @@ jobs:
           # the absence of update/delete is what must be proven); nothing
           # deletable anywhere; anon and service_role hold nothing; both
           # application triggers exist.
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
-            do \$\$
-            declare
-              v_table text;
-            begin
-              if (select count(*) from pg_class c
-                   join pg_namespace n on n.oid = c.relnamespace
-                  where n.nspname = 'public' and c.relrowsecurity and c.relforcerowsecurity
-                    and c.relname in ('crm_products','crm_product_lots','crm_applications','crm_compliance_rules')) <> 4 then
-                raise exception 'the compliance tables are missing or not under forced RLS';
-              end if;
-              if has_table_privilege('authenticated', 'public.crm_applications', 'update')
-                or has_table_privilege('authenticated', 'public.crm_applications', 'delete') then
-                raise exception 'the application log is not append-only';
-              end if;
-              foreach v_table in array array['crm_products','crm_product_lots','crm_applications','crm_compliance_rules'] loop
-                if has_table_privilege('authenticated', 'public.' || v_table, 'delete') then
-                  raise exception 'compliance records are deletable on %', v_table;
-                end if;
-                if has_table_privilege('anon', 'public.' || v_table, 'select')
-                  or has_table_privilege('service_role', 'public.' || v_table, 'select') then
-                  raise exception 'anon or service_role can reach %', v_table;
-                end if;
-              end loop;
-              if (select count(*) from pg_trigger t join pg_class c on c.oid = t.tgrelid
-                  where c.relname = 'crm_applications'
-                    and t.tgname in ('crm_applications_draw_lot','crm_applications_record_event')) <> 2 then
-                raise exception 'an application trigger is missing';
-              end if;
-            end
-            \$\$;"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/postflight/chemicals-compliance.sql
           echo "Chemicals and compliance applied; RLS, append-only log, triggers verified."
 
       - name: Apply billing and contracts (scope=billing-contracts)
@@ -1652,44 +1587,7 @@ jobs:
           # nothing deletable anywhere, because an invoice raised in error
           # is voided rather than removed; anon and service_role hold
           # nothing; the settlement and refund-guard triggers exist.
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
-            do \$\$
-            declare
-              v_table text;
-            begin
-              if (select count(*) from pg_class c
-                   join pg_namespace n on n.oid = c.relnamespace
-                  where n.nspname = 'public' and c.relrowsecurity and c.relforcerowsecurity
-                    and c.relname in (
-                      'crm_estimates','crm_estimate_lines','crm_contracts','crm_invoices',
-                      'crm_invoice_lines','crm_payments','crm_refunds')) <> 7 then
-                raise exception 'the billing tables are missing or not under forced RLS';
-              end if;
-              foreach v_table in array array['crm_payments','crm_refunds'] loop
-                if has_table_privilege('authenticated', 'public.' || v_table, 'update') then
-                  raise exception 'money that moved is rewritable on %', v_table;
-                end if;
-              end loop;
-              foreach v_table in array array[
-                'crm_estimates','crm_estimate_lines','crm_contracts','crm_invoices',
-                'crm_invoice_lines','crm_payments','crm_refunds'
-              ] loop
-                if has_table_privilege('authenticated', 'public.' || v_table, 'delete') then
-                  raise exception 'billing records are deletable on %', v_table;
-                end if;
-                if has_table_privilege('anon', 'public.' || v_table, 'select')
-                  or has_table_privilege('service_role', 'public.' || v_table, 'select') then
-                  raise exception 'anon or service_role can reach %', v_table;
-                end if;
-              end loop;
-              if (select count(*) from pg_trigger t join pg_class c on c.oid = t.tgrelid
-                  where c.relname in ('crm_payments','crm_refunds')
-                    and t.tgname in (
-                      'crm_payments_record','crm_refunds_guard_total','crm_refunds_resettle')) <> 3 then
-                raise exception 'a settlement trigger is missing';
-              end if;
-            end
-            \$\$;"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/postflight/billing-contracts.sql
           echo "Billing and contracts applied; RLS, append-only money, settlement triggers verified."
 
       - name: Apply branches, the org chart and the sales motion (scope=branches-org-sales)
@@ -1717,43 +1615,7 @@ jobs:
           # so the ABSENCE of delete is what must be proven); anon and
           # service_role hold nothing; the commission amount really is derived
           # by trigger rather than taken from a caller.
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
-            do \$\$
-            declare
-              v_table text;
-            begin
-              if (select count(*) from pg_class c
-                   join pg_namespace n on n.oid = c.relnamespace
-                  where n.nspname = 'public' and c.relrowsecurity and c.relforcerowsecurity
-                    and c.relname in (
-                      'crm_branches','crm_employees','crm_territories','crm_commissions')) <> 4 then
-                raise exception 'the company tables are missing or not under forced RLS';
-              end if;
-              foreach v_table in array array[
-                'crm_branches','crm_employees','crm_territories','crm_commissions'
-              ] loop
-                if has_table_privilege('authenticated', 'public.' || v_table, 'delete') then
-                  raise exception 'company records are deletable on %', v_table;
-                end if;
-                if has_table_privilege('anon', 'public.' || v_table, 'select')
-                  or has_table_privilege('service_role', 'public.' || v_table, 'select') then
-                  raise exception 'anon or service_role can reach %', v_table;
-                end if;
-              end loop;
-              if not exists (
-                select 1 from pg_trigger t join pg_class c on c.oid = t.tgrelid
-                 where c.relname = 'crm_commissions' and t.tgname = 'crm_commissions_derive_amount'
-              ) then
-                raise exception 'the commission amount is not derived by trigger';
-              end if;
-              -- The org chart's own columns, on the tables that gained them.
-              if (select count(*) from information_schema.columns
-                   where table_schema = 'public' and table_name = 'crm_accounts'
-                     and column_name in ('branch_id','territory_id','owner_employee_id')) <> 3 then
-                raise exception 'the book of business did not gain its place in the company';
-              end if;
-            end
-            \$\$;"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/postflight/branches-org-sales.sql
           echo "Branches, the org chart and the sales motion applied; RLS, no-delete, derived commissions verified."
 
       - name: Apply documents, canvassing and marketing (scope=documents-canvassing-marketing)
@@ -1782,48 +1644,7 @@ jobs:
           # granted ALL at creation, so the ABSENCE of update/delete is what
           # must be proven); nothing deletable anywhere; anon and service_role
           # hold nothing; and the storage path really refuses a URL.
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
-            do \$\$
-            declare
-              v_table text;
-              v_all text[] := array[
-                'crm_documents','crm_canvass_routes','crm_knocks','crm_marketing_lists',
-                'crm_list_members','crm_campaigns','crm_messages','crm_automations',
-                'crm_attributions'];
-            begin
-              if (select count(*) from pg_class c
-                   join pg_namespace n on n.oid = c.relnamespace
-                  where n.nspname = 'public' and c.relrowsecurity and c.relforcerowsecurity
-                    and c.relname = any(v_all)) <> 9 then
-                raise exception 'the marketing tables are missing or not under forced RLS';
-              end if;
-              foreach v_table in array array['crm_knocks','crm_messages','crm_attributions'] loop
-                if has_table_privilege('authenticated', 'public.' || v_table, 'update') then
-                  raise exception 'a recorded fact is rewritable on %', v_table;
-                end if;
-              end loop;
-              foreach v_table in array v_all loop
-                if has_table_privilege('authenticated', 'public.' || v_table, 'delete') then
-                  raise exception 'records are deletable on %', v_table;
-                end if;
-                if has_table_privilege('anon', 'public.' || v_table, 'select')
-                  or has_table_privilege('service_role', 'public.' || v_table, 'select') then
-                  raise exception 'anon or service_role can reach %', v_table;
-                end if;
-              end loop;
-              -- The document reference must be a path, not a link.
-              begin
-                insert into public.crm_documents
-                  (organization_id, account_id, title, kind, storage_path, created_by)
-                values (gen_random_uuid(), gen_random_uuid(), 'probe', 'other',
-                        'https://example.com/x.pdf', gen_random_uuid());
-                raise exception 'a URL was accepted as a document storage path';
-              exception
-                when check_violation then null;
-                when others then null;
-              end;
-            end
-            \$\$;"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/postflight/documents-canvassing-marketing.sql
           echo "Documents, canvassing and marketing applied; RLS, append-only facts, path-not-URL verified."
 
       - name: Apply the forms engine, timesheets and licences (scope=forms-timesheets-licences)
@@ -1850,45 +1671,7 @@ jobs:
           # ABSENCE of delete is what must be proven); anon and service_role
           # hold nothing; and all four guards that make a form's data
           # trustworthy are actually installed.
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
-            do \$\$
-            declare
-              v_table text;
-              v_all text[] := array[
-                'crm_form_templates','crm_form_fields','crm_form_instances',
-                'crm_form_answers','crm_timesheets'];
-            begin
-              if (select count(*) from pg_class c
-                   join pg_namespace n on n.oid = c.relnamespace
-                  where n.nspname = 'public' and c.relrowsecurity and c.relforcerowsecurity
-                    and c.relname = any(v_all)) <> 5 then
-                raise exception 'the forms tables are missing or not under forced RLS';
-              end if;
-              foreach v_table in array v_all loop
-                if has_table_privilege('authenticated', 'public.' || v_table, 'delete') then
-                  raise exception 'form records are deletable on %', v_table;
-                end if;
-                if has_table_privilege('anon', 'public.' || v_table, 'select')
-                  or has_table_privilege('service_role', 'public.' || v_table, 'select') then
-                  raise exception 'anon or service_role can reach %', v_table;
-                end if;
-              end loop;
-              if (select count(*) from pg_trigger t join pg_class c on c.oid = t.tgrelid
-                  where t.tgname in (
-                    'crm_form_answers_check_shape',
-                    'crm_form_instances_check_completeness',
-                    'crm_form_fields_guard_in_use',
-                    'crm_timesheets_guard_overlap')) <> 4 then
-                raise exception 'a forms guard is missing';
-              end if;
-              -- Licence expiry is a column the compliance report reads.
-              if (select count(*) from information_schema.columns
-                   where table_schema = 'public' and table_name = 'crm_technicians'
-                     and column_name in ('license_expires_on','license_state')) <> 2 then
-                raise exception 'the licence expiry columns are missing';
-              end if;
-            end
-            \$\$;"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/postflight/forms-timesheets-licences.sql
           echo "Forms, timesheets and licences applied; RLS, no-delete, and all four guards verified."
 
       - name: Apply the customer portal (scope=customer-portal)
@@ -1921,56 +1704,7 @@ jobs:
           #     login;
           #   * the seven caller-scoped functions reachable by authenticated
           #     and by no one else.
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
-            do \$\$
-            declare
-              v_table text;
-              v_role text;
-              v_all text[] := array['crm_portal_users','crm_portal_requests'];
-              v_callable text[] := array[
-                'crm_portal_me','crm_portal_touch','crm_portal_summary',
-                'crm_portal_invoices','crm_portal_visits','crm_portal_documents',
-                'crm_portal_requests_mine','crm_portal_submit_request',
-                'crm_portal_accept_invitation'];
-            begin
-              if (select count(*) from pg_class c
-                   join pg_namespace n on n.oid = c.relnamespace
-                  where n.nspname = 'public' and c.relrowsecurity and c.relforcerowsecurity
-                    and c.relname = any(v_all)) <> 2 then
-                raise exception 'the portal tables are missing or not under forced RLS';
-              end if;
-              foreach v_table in array v_all loop
-                if has_table_privilege('authenticated', 'public.' || v_table, 'delete') then
-                  raise exception 'portal records are deletable on %', v_table;
-                end if;
-                if has_table_privilege('anon', 'public.' || v_table, 'select')
-                  or has_table_privilege('service_role', 'public.' || v_table, 'select') then
-                  raise exception 'anon or service_role can reach %', v_table;
-                end if;
-              end loop;
-              foreach v_role in array array['anon','authenticated','service_role'] loop
-                if exists (
-                  select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-                   where n.nspname = 'public' and p.proname = 'crm_portal_account_for'
-                     and has_function_privilege(v_role, p.oid, 'execute')) then
-                  raise exception 'the portal resolver is executable by %', v_role;
-                end if;
-              end loop;
-              if (select count(*) from pg_trigger t
-                   where t.tgname = 'crm_portal_users_guard_activation') <> 1 then
-                raise exception 'the portal activation guard is missing';
-              end if;
-              if (select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-                   where n.nspname = 'public' and p.proname = any(v_callable)
-                     and p.prosecdef
-                     and has_function_privilege('authenticated', p.oid, 'execute')
-                     and not has_function_privilege('anon', p.oid, 'execute')
-                     and not has_function_privilege('service_role', p.oid, 'execute')
-                  ) <> 9 then
-                raise exception 'a portal function is missing, not a definer, or reachable by the wrong role';
-              end if;
-            end
-            \$\$;"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/postflight/customer-portal.sql
           echo "Customer portal applied; forced RLS, no-delete, sealed resolver and nine caller-scoped definers verified."
 
       - name: Normalize exact legacy bot ACLs (scope=bot-legacy-acl-normalization)
