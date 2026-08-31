@@ -2,6 +2,29 @@
 
 Last updated: 2026-08-31
 
+## Newest (2026-08-31, latest+47): Grok ACL verification follows the server's owner default (ADR-227)
+
+PR #487 merged as exact main `24a6313e98023bfc618a921fc563c9f4bde4cad2`.
+All four jobs passed in CI `33400336336`; READY Vercel deployment
+`dpl_49dFxebk4jpWEXUtfK2CbsQpBk1T` and public health matched that identity.
+Fresh read-only run `33401887942` skipped both apply and reload, passed exact
+identity/preflight, and failed closed only at `SPECIALIST_READY`.
+
+The hosted PostgreSQL version includes `MAINTAIN` in the owner table default,
+so one ACL item expands to eight privileges rather than ADR-226's fixed seven.
+The next workflow-only candidate compares actual privilege types against
+`acldefault('r', relowner)` with `EXCEPT` in both directions and requires the
+same dynamically derived expanded-row count. It still requires only
+owner-to-owner non-grantable rows, explicitly denies
+`anon`/`authenticated`/`service_role`, and retains the PostgreSQL 18 NOT NULL
+handling. Its focused workflow contract is 12/12. Do not apply, replay, reload,
+reset, repair, or down-migrate either hosted completion migration. After exact
+green CI and READY deployment, dispatch only fresh read-only `scope=verify`.
+
+Workers/autonomy/automatic actions remain OFF and the global kill switch
+remains ON. Signed-in acceptance and a real provider-backed E2E still remain;
+**GROK BOT: PRODUCTION READY is not declared.**
+
 ## Newest (2026-08-31, latest+46): Grok 009/010 hosted; verifier-only catalog containment (ADR-226)
 
 Exact main `85a7fed15ad876be4e56fd74903e41b68d4488b4` is green in all four

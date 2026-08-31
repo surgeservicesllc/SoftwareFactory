@@ -204,8 +204,12 @@ the algorithm needs exists.
   roster, normalizes `*` to the fixed canonical vocabulary in TypeScript and
   SQL, keeps v1/v2 readable, and blocks research/deploy before graph creation
   rather than inventing executable work. Protected run `33397811324` applied
-  and ledgered it once; never replay it. Final acceptance awaits the
-  verifier-only ADR-226 correction and fresh read-only verification.
+  and ledgered it once; never replay it. Exact main `24a6313e98023bfc618a921fc563c9f4bde4cad2`
+  passed four-job CI `33400336336` and READY deployment
+  `dpl_49dFxebk4jpWEXUtfK2CbsQpBk1T`; read-only verify `33401887942`
+  skipped apply/reload and isolated the remaining failure to ADR-227's
+  version-dependent ACL count. Final acceptance awaits that verifier-only
+  correction and another fresh read-only verification.
 - [x] Implement the repository worker-admission fence through
   `20260831000900`: every Grok Resume/wake and protocol-v3 graph or Phase 1C
   claim requires and revalidates the complete current admission identity;
@@ -224,8 +228,11 @@ the algorithm needs exists.
   Both one-file applies are complete and ledger is now `1|1`; 010 postflight
   stopped before acceptance because its verifier counted expanded table
   privileges as ACL items and PostgreSQL 18 NOT NULL constraints as named
-  business constraints. Ship ADR-226's verifier-only corrections, then run
-  only fresh read-only `verify`.
+  business constraints. ADR-226 fixed those two mistakes, but fresh read-only
+  verify `33401887942` proved the remaining hard-coded count of seven is also
+  version-dependent because PostgreSQL 17/18 includes `MAINTAIN`. Ship
+  ADR-227's semantic `acldefault` set comparison, then run only fresh read-only
+  `verify`.
 - [ ] Perform signed-in production create/return/reload acceptance with workers
   still OFF, proving the exact current roster and route persist without
   claiming that provider execution occurred.
