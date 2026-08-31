@@ -1,0 +1,497 @@
+name: Grok read-only research runtime protected migration
+
+# A manual, exact-release lane for one forward migration. Probe rehearses and
+# rolls back. Apply may persist only the hash-pinned 01700 file plus its ledger
+# row. Verify reads installed identity and runs rollback-only adverse probes.
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: "probe, apply, or verify the one Grok read-only research runtime migration."
+        required: true
+        type: choice
+        options:
+          - probe
+          - apply
+          - verify
+      confirm:
+        description: 'Type the exact "<operation>-grok-read-only-research" confirmation.'
+        required: true
+        default: ""
+        type: string
+      release_sha:
+        description: "Exact lowercase 40-character SoftwareFactory main SHA already green and READY in Production."
+        required: true
+        type: string
+      migration_sha256:
+        description: "Exact canonical-LF SHA-256 printed in the reviewed release contract."
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  checks: read
+  contents: read
+  deployments: read
+
+concurrency:
+  group: apply-hosted-migrations
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Protected read-only research runtime ${{ inputs.operation }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      PROJECT_REF: qpuofpmagrmyamahqwxw
+      PRODUCTION_ORIGIN: https://www.theagoras.com
+      PRODUCTION_HEALTH_URL: https://www.theagoras.com/api/health
+      VERCEL_PROJECT_ID: prj_pAsrhftaVWI4SyaqstgRVSWHJkdD
+      MIGRATION_VERSION: "20260831001700"
+      MIGRATION_FILE: supabase/migrations/20260831001700_grok_read_only_research_runtime.sql
+      MIGRATION_SHA256: 7482bdc7f3da16cc7ee3c5f9257fa0540d361bd0f653f13e48c36ce5ec213873
+    steps:
+      - name: Authorize one exact protected operation
+        env:
+          AUTHORIZED_ACTOR: ${{ vars.PRODUCTION_RELEASE_ACTOR }}
+          OPERATION: ${{ inputs.operation }}
+          CONFIRM: ${{ inputs.confirm }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          REQUESTED_MIGRATION_SHA256: ${{ inputs.migration_sha256 }}
+        run: |
+          set -euo pipefail
+          case "$OPERATION:$CONFIRM" in
+            probe:probe-grok-read-only-research|apply:apply-grok-read-only-research|verify:verify-grok-read-only-research) ;;
+            *) echo "::error::The exact operation-specific confirmation is required."; exit 1 ;;
+          esac
+          if [ -z "$AUTHORIZED_ACTOR" ] \
+            || [ "$GITHUB_ACTOR" != "$AUTHORIZED_ACTOR" ] \
+            || [ "$GITHUB_TRIGGERING_ACTOR" != "$AUTHORIZED_ACTOR" ] \
+            || [ "$GITHUB_RUN_ATTEMPT" != "1" ]; then
+            echo "::error::This first-attempt-only lane is restricted to the configured production release actor."
+            exit 1
+          fi
+          if [ "$GITHUB_REPOSITORY" != "surgeservicesllc/SoftwareFactory" ] \
+            || [ "$GITHUB_REF" != "refs/heads/main" ] \
+            || ! [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]] \
+            || ! [[ "$REQUESTED_MIGRATION_SHA256" =~ ^[0-9a-f]{64}$ ]] \
+            || [ "$REQUESTED_MIGRATION_SHA256" != "$MIGRATION_SHA256" ]; then
+            echo "::error::Repository, ref, release SHA, or migration SHA identity is not exact."
+            exit 1
+          fi
+
+      - name: Check out the exact release
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ inputs.release_sha }}
+          persist-credentials: false
+
+      - name: Verify exact green production and stopped execution workflows
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          PHASE1C_WORKER_ENABLED: ${{ vars.SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED }}
+          GRAPH_WORKER_ENABLED: ${{ vars.SOFTWAREFACTORY_GRAPH_WORKER_ENABLED }}
+          GRAPH_WORKER_SCHEDULED: ${{ vars.SOFTWAREFACTORY_GRAPH_WORKER_SCHEDULED }}
+          AUTH_BROKER_DISABLED: ${{ vars.SOFTWAREFACTORY_AUTH_BROKER_DISABLED }}
+        run: |
+          set -euo pipefail
+          SHA=$(git rev-parse HEAD)
+          if [ "$SHA" != "$RELEASE_SHA" ] || [ "$GITHUB_SHA" != "$SHA" ]; then
+            echo "::error::Checked-out, requested, and workflow SHA identities differ."
+            exit 1
+          fi
+          CURRENT_MAIN_SHA=$(curl --fail --silent --show-error \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/git/ref/heads/main" \
+            | jq -r '.object.sha // empty')
+          if [ "$CURRENT_MAIN_SHA" != "$SHA" ]; then
+            echo "::error::Current main moved away from the exact requested release."
+            exit 1
+          fi
+
+          CHECKS=$(curl --fail --silent --show-error \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/commits/${SHA}/check-runs?per_page=100")
+          for NAME in \
+            "Lint, typecheck, test, and build" \
+            "Browser and accessibility tests 1/3" \
+            "Browser and accessibility tests 2/3" \
+            "Browser and accessibility tests 3/3"; do
+            STATE=$(jq -r --arg name "$NAME" --arg sha "$SHA" '
+              [.check_runs[] | select(.name==$name and .head_sha==$sha and .app.slug=="github-actions")]
+              | sort_by(.completed_at // .started_at // "") | last
+              | if .==null then "missing|missing" else "\(.status)|\(.conclusion // "null")" end
+            ' <<<"$CHECKS")
+            if [ "$STATE" != "completed|success" ]; then
+              echo "::error::Exact-head check '$NAME' is not green ($STATE)."
+              exit 1
+            fi
+          done
+
+          DEPLOYMENT=$(curl --fail --silent --show-error \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/deployments?environment=Production&per_page=100" \
+            | jq -c '[.[] | select(.environment=="Production" and .task=="deploy" and .creator.login=="vercel[bot]")][0] // empty')
+          if [ -z "$DEPLOYMENT" ] \
+            || ! jq -e --arg sha "$SHA" '.sha==$sha and (.ref==$sha or .ref=="main")' <<<"$DEPLOYMENT" >/dev/null; then
+            echo "::error::Latest Vercel Production identity is not the exact checked-out SHA."
+            exit 1
+          fi
+          STATUS=$(curl --fail --silent --show-error \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "$(jq -r '.statuses_url' <<<"$DEPLOYMENT")?per_page=1")
+          if ! jq -e 'length==1 and .[0].state=="success" and .[0].creator.login=="vercel[bot]" and (.[0].environment_url | test("^https://softwarefactory-[a-z0-9]+-surgeservices-projects\\.vercel\\.app/?$"))' <<<"$STATUS" >/dev/null; then
+            echo "::error::Exact-SHA Vercel Production is not READY."
+            exit 1
+          fi
+          VERCEL_DEPLOYMENT_URL=$(jq -r '.[0].environment_url | rtrimstr("/")' <<<"$STATUS")
+          HEALTH=$(curl --fail --silent --show-error --max-time 20 --retry 2 "$PRODUCTION_HEALTH_URL")
+          if ! jq -e \
+            --arg sha "$SHA" --arg project "$PROJECT_REF" \
+            --arg deployment_url "$VERCEL_DEPLOYMENT_URL" \
+            --arg vercel_project "$VERCEL_PROJECT_ID" '
+              .status=="ok" and .service=="SoftwareFactory"
+              and .database=="reachable" and .databaseProject=="matched"
+              and .databaseProjectRef==$project and .deployment=="matched"
+              and .deploymentUrl==$deployment_url and .vercelProjectId==$vercel_project
+              and .release=="matched" and .releaseSha==$sha and .releaseRef=="main"
+            ' <<<"$HEALTH" >/dev/null; then
+            echo "::error::Production health identity does not match Git, Vercel, and Supabase."
+            exit 1
+          fi
+
+          for WORKFLOW in graph-worker.yml codex-worker.yml claude-worker.yml auth-broker.yml graph-live-canary.yml handoff-canary.yml graph-artifact-containment.yml e2e-test-data.yml journey-prod-user.yml; do
+            ACTIVE=$(curl --fail --silent --show-error \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/workflows/${WORKFLOW}/runs?per_page=100" \
+              | jq '[.workflow_runs[] | select(.status != "completed")] | length')
+            if [ "$ACTIVE" != "0" ]; then
+              echo "::error::${WORKFLOW} has ${ACTIVE} active run(s)."
+              exit 1
+            fi
+          done
+          if [ "${PHASE1C_WORKER_ENABLED,,}" = "true" ] \
+            || [ "${GRAPH_WORKER_ENABLED,,}" = "true" ] \
+            || [ "${GRAPH_WORKER_SCHEDULED,,}" = "true" ] \
+            || [ "${AUTH_BROKER_DISABLED,,}" != "true" ]; then
+            echo "::error::A worker switch, schedule, or auth broker is outside stopped containment."
+            exit 1
+          fi
+
+      - name: Stage exactly one canonical migration file
+        env:
+          REQUESTED_MIGRATION_SHA256: ${{ inputs.migration_sha256 }}
+        run: |
+          set -euo pipefail
+          git ls-files --error-unmatch "$MIGRATION_FILE" >/dev/null
+          git diff --exit-code -- "$MIGRATION_FILE"
+          if [ -L "$MIGRATION_FILE" ] || [ ! -f "$MIGRATION_FILE" ]; then
+            echo "::error::The migration path is missing, untracked, or a symbolic link."
+            exit 1
+          fi
+          STAGE_DIR="$RUNNER_TEMP/grok-read-only-research-${GITHUB_RUN_ID}"
+          mkdir -p "$STAGE_DIR"
+          if [ -n "$(find "$STAGE_DIR" -mindepth 1 -maxdepth 1 -print -quit)" ]; then
+            echo "::error::The one-file staging directory was not empty."
+            exit 1
+          fi
+          STAGED_MIGRATION="$STAGE_DIR/20260831001700_grok_read_only_research_runtime.sql"
+          python3 - "$MIGRATION_FILE" "$STAGED_MIGRATION" <<'PY'
+          import pathlib
+          import sys
+
+          source = pathlib.Path(sys.argv[1]).read_bytes()
+          pathlib.Path(sys.argv[2]).write_bytes(
+              source.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+          )
+          PY
+          ACTUAL=$(sha256sum "$STAGED_MIGRATION" | cut -d' ' -f1)
+          if [ "$ACTUAL" != "$MIGRATION_SHA256" ] \
+            || [ "$ACTUAL" != "$REQUESTED_MIGRATION_SHA256" ] \
+            || [ "$(find "$STAGE_DIR" -maxdepth 1 -type f | wc -l | tr -d ' ')" != "1" ]; then
+            echo "::error::Exact one-file LF-normalized staging or SHA-256 identity failed."
+            exit 1
+          fi
+          echo "STAGED_MIGRATION=$STAGED_MIGRATION" >> "$GITHUB_ENV"
+
+      - name: Connect to the exact Supabase project
+        env:
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "$SUPABASE_DB_PASSWORD" ]; then
+            echo "::error::SUPABASE_DB_PASSWORD is required."
+            exit 1
+          fi
+          ENC=$(python3 -c 'import os, urllib.parse; print(urllib.parse.quote(os.environ["SUPABASE_DB_PASSWORD"], safe=""))')
+          echo "::add-mask::$ENC"
+          for HOST in aws-0-us-west-2.pooler.supabase.com aws-1-us-west-2.pooler.supabase.com; do
+            URL="postgresql://postgres.${PROJECT_REF}:${ENC}@${HOST}:5432/postgres"
+            echo "::add-mask::$URL"
+            if psql "$URL" -v ON_ERROR_STOP=1 -X -Atqc \
+              "select current_database()='postgres' and current_user='postgres' and to_regnamespace('supabase_migrations') is not null" \
+              | grep -qx t; then
+              echo "DB_URL=$URL" >> "$GITHUB_ENV"
+              exit 0
+            fi
+          done
+          echo "::error::Could not connect to exact Supabase project ${PROJECT_REF}."
+          exit 1
+
+      - name: Verify ledger catalog prerequisites and stopped database state
+        env:
+          OPERATION: ${{ inputs.operation }}
+        run: |
+          set -euo pipefail
+          UNRELATED_LEDGER_SHA256=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atq -c "
+            select encode(sha256(convert_to(
+              coalesce(jsonb_agg(to_jsonb(migration) order by migration.version), '[]'::jsonb)::text,
+              'UTF8'
+            )), 'hex')
+              from supabase_migrations.schema_migrations migration
+             where migration.version <> '20260831001700';")
+          if ! [[ "$UNRELATED_LEDGER_SHA256" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "::error::Could not establish an exact unrelated-ledger baseline."
+            exit 1
+          fi
+          echo "UNRELATED_LEDGER_SHA256=$UNRELATED_LEDGER_SHA256" >> "$GITHUB_ENV"
+          RESULT=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atq \
+            -v operation="$OPERATION" \
+            -v unrelated_ledger_sha256="$UNRELATED_LEDGER_SHA256" \
+            -f .github/grok-release/grok-read-only-research-runtime-preflight.sql)
+          if [ "$RESULT" != "grok-read-only-research-release-preflight-ok" ]; then
+            echo "::error::The exact ledger/catalog/stopped-state preflight failed."
+            exit 1
+          fi
+
+      - name: Rehearse exact migration and linked-database lint
+        if: ${{ inputs.operation == 'probe' || inputs.operation == 'apply' }}
+        run: |
+          set -euo pipefail
+          BASELINE=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atq -F '|' -c "
+            select count(*) filter (where extension_row.oid is not null),
+                   count(*) filter (where routine.oid is not null)
+              from (values (1)) seed(value)
+              left join pg_extension extension_row on extension_row.extname='plpgsql_check'
+              left join pg_proc routine on routine.proname like 'plpgsql_check_function%';")
+          if [ "$BASELINE" != "0|0" ]; then
+            echo "::error::plpgsql_check residue existed before rehearsal."
+            exit 1
+          fi
+          FINDINGS=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atq \
+            -c "begin; set local statement_timeout='10min';" \
+            -f "$STAGED_MIGRATION" \
+            -c "create extension if not exists plpgsql_check with schema extensions;" \
+            -c "with expected(signature) as (values
+                  ('public.launch_grok_read_only_research_v1_as_server(uuid,uuid,uuid,uuid,uuid,text,text,public.graph_topology,jsonb,public.risk_level,boolean,jsonb,jsonb,jsonb,text,jsonb)')
+                ), available as (
+                  select expected.signature,routine.oid
+                    from expected join pg_proc routine on routine.oid=to_regprocedure(expected.signature)
+                    join pg_language language_row on language_row.oid=routine.prolang
+                   where language_row.lanname='plpgsql'
+                )
+                select 'LINTROW|'||available.signature||'|'||coalesce(finding.lineno::text,'')||'|'||coalesce(finding.level,'')||'|'||coalesce(finding.sqlstate,'')||'|'||coalesce(finding.message,'')
+                  from available cross join lateral extensions.plpgsql_check_function_tb(
+                    available.oid::regprocedure,0::oid::regclass,false,true,true,false,false,false
+                  ) finding
+                 where finding.level in ('error','warning','extra')
+                 order by available.signature,finding.lineno,finding.position;" \
+            -c "insert into supabase_migrations.schema_migrations(version) values ('20260831001700');" \
+            -f .github/grok-release/grok-read-only-research-runtime-postflight.sql)
+          if printf '%s\n' "$FINDINGS" | grep -q '^LINTROW|'; then
+            echo "::error::Transactional linked-database lint found migration findings."
+            printf '%s\n' "$FINDINGS" | grep '^LINTROW|'
+            exit 1
+          fi
+          if ! printf '%s\n' "$FINDINGS" | grep -qx 'grok-read-only-research-release-postflight-ok'; then
+            echo "::error::Transactional runtime and adverse rehearsal did not finish exactly."
+            exit 1
+          fi
+          RESIDUE=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atq -F '|' -c "
+            select count(*) filter (where extension_row.oid is not null),
+                   count(*) filter (where routine.oid is not null)
+              from (values (1)) seed(value)
+              left join pg_extension extension_row on extension_row.extname='plpgsql_check'
+              left join pg_proc routine on routine.proname like 'plpgsql_check_function%';")
+          if [ "$RESIDUE" != "0|0" ]; then
+            echo "::error::Transactional rehearsal left catalog residue."
+            exit 1
+          fi
+
+      - name: Apply only the exact forward migration
+        if: ${{ inputs.operation == 'apply' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          set -euo pipefail
+          CURRENT_MAIN_SHA=$(curl --fail --silent --show-error \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/git/ref/heads/main" \
+            | jq -r '.object.sha // empty')
+          HEALTH=$(curl --fail --silent --show-error --max-time 20 --retry 2 "$PRODUCTION_HEALTH_URL")
+          if [ "$CURRENT_MAIN_SHA" != "$RELEASE_SHA" ] \
+            || ! jq -e --arg sha "$RELEASE_SHA" --arg project "$PROJECT_REF" \
+              '.status=="ok" and .releaseSha==$sha and .releaseRef=="main" and .databaseProjectRef==$project' \
+              <<<"$HEALTH" >/dev/null; then
+            echo "::error::Main or production health identity changed before apply."
+            exit 1
+          fi
+
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -X --single-transaction -q \
+            -c "set local lock_timeout='15s'; set local statement_timeout='10min';
+                lock table supabase_migrations.schema_migrations in share row exclusive mode;
+                lock table public.organizations,public.projects,public.phase1c_workers,
+                  public.graph_runs,public.agent_runs,public.grok_phase1c_submission_guards in share mode;" \
+            -v operation="apply" \
+            -v unrelated_ledger_sha256="$UNRELATED_LEDGER_SHA256" \
+            -f .github/grok-release/grok-read-only-research-runtime-preflight.sql \
+            -f "$STAGED_MIGRATION" \
+            -c "insert into supabase_migrations.schema_migrations(version) values ('20260831001700');" \
+            -c "select pg_catalog.pg_notify('pgrst','reload schema');"
+
+      - name: Verify exact catalog runtime immutability tenant safety and installed lint
+        env:
+          OPERATION: ${{ inputs.operation }}
+        run: |
+          set -euo pipefail
+          EXPECTED_OPERATION="$OPERATION"
+          if [ "$OPERATION" = "apply" ]; then EXPECTED_OPERATION=verify; fi
+          RESULT=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atq \
+            -v operation="$EXPECTED_OPERATION" \
+            -v unrelated_ledger_sha256="$UNRELATED_LEDGER_SHA256" \
+            -f .github/grok-release/grok-read-only-research-runtime-preflight.sql)
+          if [ "$RESULT" != "grok-read-only-research-release-preflight-ok" ]; then
+            echo "::error::Post-operation ledger or stopped-state verification failed."
+            exit 1
+          fi
+          if [ "$EXPECTED_OPERATION" = "probe" ]; then
+            echo "::notice::Probe rehearsal rolled back with ledger and catalog still absent."
+            exit 0
+          fi
+
+          RESULT=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atq \
+            -f .github/grok-release/grok-read-only-research-runtime-postflight.sql)
+          if [ "$RESULT" != "grok-read-only-research-release-postflight-ok" ]; then
+            echo "::error::Catalog/runtime/immutability/tenant postflight failed."
+            exit 1
+          fi
+
+          BASELINE=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atq -F '|' -c "
+            select count(*) filter (where extension_row.oid is not null),
+                   count(*) filter (where routine.oid is not null)
+              from (values (1)) seed(value)
+              left join pg_extension extension_row on extension_row.extname='plpgsql_check'
+              left join pg_proc routine on routine.proname like 'plpgsql_check_function%';")
+          if [ "$BASELINE" != "0|0" ]; then
+            echo "::error::plpgsql_check residue existed before installed-function lint."
+            exit 1
+          fi
+          FINDINGS=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atq \
+            -c "begin; create extension if not exists plpgsql_check with schema extensions;" \
+            -c "with expected(signature) as (values
+                  ('public.launch_grok_read_only_research_v1_as_server(uuid,uuid,uuid,uuid,uuid,text,text,public.graph_topology,jsonb,public.risk_level,boolean,jsonb,jsonb,jsonb,text,jsonb)')
+                ), available as (
+                  select expected.signature,routine.oid from expected
+                    join pg_proc routine on routine.oid=to_regprocedure(expected.signature)
+                )
+                select 'LINTROW|'||available.signature||'|'||coalesce(finding.lineno::text,'')||'|'||coalesce(finding.level,'')||'|'||coalesce(finding.sqlstate,'')||'|'||coalesce(finding.message,'')
+                  from available cross join lateral extensions.plpgsql_check_function_tb(
+                    available.oid::regprocedure,0::oid::regclass,false,true,true,false,false,false
+                  ) finding
+                 where finding.level in ('error','warning','extra')
+                 order by available.signature,finding.lineno,finding.position;" \
+            -c "rollback;")
+          if printf '%s\n' "$FINDINGS" | grep -q '^LINTROW|'; then
+            echo "::error::Installed linked-database lint found findings."
+            printf '%s\n' "$FINDINGS" | grep '^LINTROW|'
+            exit 1
+          fi
+          RESIDUE=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atq -F '|' -c "
+            select count(*) filter (where extension_row.oid is not null),
+                   count(*) filter (where routine.oid is not null)
+              from (values (1)) seed(value)
+              left join pg_extension extension_row on extension_row.extname='plpgsql_check'
+              left join pg_proc routine on routine.proname like 'plpgsql_check_function%';")
+          if [ "$RESIDUE" != "0|0" ]; then
+            echo "::error::Installed-function lint left catalog residue."
+            exit 1
+          fi
+
+      - name: Reverify exact main health file identity and stopped workflows
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          OPERATION: ${{ inputs.operation }}
+          PHASE1C_WORKER_ENABLED: ${{ vars.SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED }}
+          GRAPH_WORKER_ENABLED: ${{ vars.SOFTWAREFACTORY_GRAPH_WORKER_ENABLED }}
+          GRAPH_WORKER_SCHEDULED: ${{ vars.SOFTWAREFACTORY_GRAPH_WORKER_SCHEDULED }}
+          AUTH_BROKER_DISABLED: ${{ vars.SOFTWAREFACTORY_AUTH_BROKER_DISABLED }}
+        run: |
+          set -euo pipefail
+          if [ "$(sha256sum "$STAGED_MIGRATION" | cut -d' ' -f1)" != "$MIGRATION_SHA256" ]; then
+            echo "::error::The staged migration identity changed during the release lane."
+            exit 1
+          fi
+          CURRENT_MAIN_SHA=$(curl --fail --silent --show-error \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/git/ref/heads/main" \
+            | jq -r '.object.sha // empty')
+          HEALTH=$(curl --fail --silent --show-error --max-time 20 --retry 2 "$PRODUCTION_HEALTH_URL")
+          if [ "$CURRENT_MAIN_SHA" != "$RELEASE_SHA" ] \
+            || ! jq -e --arg sha "$RELEASE_SHA" --arg project "$PROJECT_REF" \
+              '.status=="ok" and .service=="SoftwareFactory"
+               and .database=="reachable" and .databaseProject=="matched"
+               and .databaseProjectRef==$project and .deployment=="matched"
+               and .vercelProjectId==env.VERCEL_PROJECT_ID
+               and .release=="matched" and .releaseSha==$sha and .releaseRef=="main"' \
+              <<<"$HEALTH" >/dev/null; then
+            echo "::error::Final main or production health identity changed."
+            exit 1
+          fi
+          for WORKFLOW in graph-worker.yml codex-worker.yml claude-worker.yml auth-broker.yml graph-live-canary.yml handoff-canary.yml graph-artifact-containment.yml e2e-test-data.yml journey-prod-user.yml; do
+            ACTIVE=$(curl --fail --silent --show-error \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/workflows/${WORKFLOW}/runs?per_page=100" \
+              | jq '[.workflow_runs[] | select(.status != "completed")] | length')
+            if [ "$ACTIVE" != "0" ]; then
+              echo "::error::${WORKFLOW} became active during the release lane."
+              exit 1
+            fi
+          done
+          if [ "${PHASE1C_WORKER_ENABLED,,}" = "true" ] \
+            || [ "${GRAPH_WORKER_ENABLED,,}" = "true" ] \
+            || [ "${GRAPH_WORKER_SCHEDULED,,}" = "true" ] \
+            || [ "${AUTH_BROKER_DISABLED,,}" != "true" ]; then
+            echo "::error::A worker switch, schedule, or auth broker changed during the release lane."
+            exit 1
+          fi
+          EXPECTED_OPERATION="$OPERATION"
+          if [ "$OPERATION" = "apply" ]; then EXPECTED_OPERATION=verify; fi
+          RESULT=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atq \
+            -v operation="$EXPECTED_OPERATION" \
+            -v unrelated_ledger_sha256="$UNRELATED_LEDGER_SHA256" \
+            -f .github/grok-release/grok-read-only-research-runtime-preflight.sql)
+          if [ "$RESULT" != "grok-read-only-research-release-preflight-ok" ]; then
+            echo "::error::Final ledger or stopped-state verification failed."
+            exit 1
+          fi
+          echo "::notice::Grok read-only research runtime ${OPERATION} finished with exact identity and stopped execution."
