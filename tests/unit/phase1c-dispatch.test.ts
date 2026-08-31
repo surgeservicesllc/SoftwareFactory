@@ -114,6 +114,19 @@ describe("Phase 1C worker dispatch", () => {
     expect(githubApiRequest).not.toHaveBeenCalled();
   });
 
+  it("rejects a malformed target command before provider access", async () => {
+    vi.stubEnv("SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED", "true");
+
+    await expect(dispatchPhase1CWorker({
+      appId: 4582606,
+      externalInstallationId: 153479019,
+      externalRepositoryId: 1332327462,
+      repositoryFullName: "another-owner/target-project",
+    }, "not-a-command-uuid")).rejects.toThrow("command identity");
+    expect(createGitHubInstallationToken).not.toHaveBeenCalled();
+    expect(githubApiRequest).not.toHaveBeenCalled();
+  });
+
   it("keeps graph dispatch inert while the global worker gate is off", async () => {
     vi.stubEnv("SOFTWAREFACTORY_GRAPH_WORKER_ENABLED", "false");
 

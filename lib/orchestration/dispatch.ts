@@ -122,6 +122,9 @@ export async function dispatchPhase1CWorker(
     return { dispatched: false, reason: "worker_disabled" };
   }
   assertProjectTarget(target);
+  if (!UUID_PATTERN.test(commandId)) {
+    throw new Error("The target command identity is invalid.");
+  }
   await sendWorkerDispatch(PHASE_1C_DISPATCH_EVENT, { command_id: commandId });
   return { dispatched: true, reason: "dispatched" };
 }
