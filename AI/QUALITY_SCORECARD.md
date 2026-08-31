@@ -197,10 +197,16 @@ identity, ledger, catalog, and stopped containment, then failed before the
 rollback canary because its `psql -c` command could not interpolate three
 client variables; apply/reload were skipped and nothing durable changed. The
 workflow now routes that input through a checked-in `psql -f` script and pins
-the broken form with a regression test. Corrected exact-head read-only
-verification and signed-in production acceptance are still pending, and
-worker claim/wake is not admission-fenced, so this score does not declare
-production readiness.
+the broken form with a regression test. Forward fix
+`7bdbb5b7a5ef5466f7283ec66d09d3240fbc9311` was retained byte-for-byte by
+then-current main `f86062a616c3859d93569fb7edfe15d3025b0c26`, whose exact
+CI `33370961802`, READY deployment `dpl_7vXNrvijm5RrSpLLEnVCSxrrvgDc`, and
+read-only verify `33372115428` all passed. Verify apply/reload stayed skipped;
+ledger, catalog, ACL, rollback runtime, linked lint, health, and stopped safety
+were green. Signed-in reload retained the exact durable blocked session and
+both messages while showing no plan, graph, worker, or provider start. Launch
+admission is accepted, but worker claim/wake is not admission-fenced, so this
+score does not declare full production readiness.
 
 **Addendum, 2026-08-31 latest+25 - WDO reports (ADR-205):**
 services-wdo-inspections.behavior 14 on the real chain: an inspection

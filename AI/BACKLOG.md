@@ -67,7 +67,7 @@
   service-role execution from the legacy unadmitted launcher. The dedicated
   one-file workflow verifies exact ledger, forced RLS, ACL/catalog/source,
   linked lint, runtime/replay/immutability/rollback, health, and stopped safety.
-- [ ] Finish verifier-only containment for the hosted admission migration.
+- [x] Finish verifier-only containment for the hosted admission migration.
   Exact app commit `49b087e1044c157ea24271c81070a2c38b03c8da` passed all four
   CI jobs and exact READY production health. Apply run `33365674624` then
   applied and ledgered `20260831000100` once before a false-negative
@@ -78,9 +78,14 @@
   passed exact CI `33368051986` and READY production. Read-only verify
   `33369343687` then passed identity, ledger, catalog, and stopped containment
   before a second verifier-only defect: `psql -c` does not interpolate the
-  three canary input variables. Consume the checked-in runtime input through
-  `psql -f`, require exact-head CI/READY again, and run only `scope=verify`.
-  Never rerun, repair, replay, or down-migrate the already accepted migration.
+  three canary input variables. Commit
+  `7bdbb5b7a5ef5466f7283ec66d09d3240fbc9311` consumes the checked-in input
+  through `psql -f` and pins the broken form in 12/12 workflow tests.
+  Then-current main `f86062a616c3859d93569fb7edfe15d3025b0c26`
+  passed exact CI `33370961802`, READY production, and read-only verify
+  `33372115428`; signed-in reload retained the exact durable blocked session
+  without starting a graph, worker, or provider. Never rerun, repair, replay,
+  or down-migrate the already accepted migration.
 - [ ] Make admission cover every honest prompt/roster without inventing work:
   preserve research/deploy as durable plan-only sessions or add dedicated
   canonical templates; persist a deterministic immutable admission roster so
