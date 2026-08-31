@@ -9,7 +9,7 @@ import {
   type TransactionView,
 } from "@/components/budget/types";
 import { Card, EmptyState, SectionTitle } from "@/components/ui";
-import { formatCents } from "@/lib/budget/money";
+import { formatCents, parseMoneyToCents } from "@/lib/budget/money";
 
 /**
  * The ledger, paged.
@@ -29,6 +29,26 @@ export function BudgetTransactionsPanel({ accounts }: { accounts: readonly Accou
   const [search, setSearch] = useState("");
   const [applied, setApplied] = useState("");
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
+  const [editing, setEditing] = useState<string | null>(null);
+  const [draft, setDraft] = useState<{ description: string; amount: string }>({
+    description: "",
+    amount: "",
+  });
+  const [rowMessage, setRowMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [reconciliation, setReconciliation] = useState<{
+    checkedCount: number;
+    totalBreaks: number;
+    note?: string;
+    breaks: ReadonlyArray<{
+      postedOn: string;
+      description: string;
+      computedCents: number;
+      statedCents: number;
+      deltaCents: number;
+    }>;
+  } | null>(null);
+  const [reconciling, setReconciling] = useState(false);
 
   const load = useCallback(async () => {
     setState("loading");
@@ -57,6 +77,79 @@ export function BudgetTransactionsPanel({ accounts }: { accounts: readonly Accou
 
   const accountName = (id: string) => accounts.find((account) => account.id === id)?.name ?? "—";
   const lastPage = Math.max(0, Math.ceil(total / PAGE_SIZE) - 1);
+  async function saveRow(transaction: TransactionView) {
+    const parsed = parseMoneyToCents(draft.amount);
+    if (!parsed.ok) {
+      setRowMessage("That amount could not be read. Try a figure like -42.50.");
+      return;
+    }
+    setBusy(true);
+    setRowMessage("");
+    try {
+      const response = await fetch(`/api/budget/transactions/${transaction.id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ description: draft.description.trim(), amountCents: parsed.cents }),
+      });
+      if (!response.ok) {
+        const failure = (await response.json().catch(() => null)) as
+          | { error?: { message?: string } }
+          | null;
+        setRowMessage(failure?.error?.message ?? "The change could not be saved.");
+        return;
+      }
+      setEditing(null);
+      await load();
+    } catch {
+      setRowMessage("The change could not be saved.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removeRow(transaction: TransactionView) {
+    // A ledger delete is destructive and rare; one plain confirm is honest
+    // friction, not ceremony.
+    if (!window.confirm(`Delete "${transaction.description}" (${transaction.postedOn})? This cannot be undone.`)) {
+      return;
+    }
+    setBusy(true);
+    setRowMessage("");
+    try {
+      const response = await fetch(`/api/budget/transactions/${transaction.id}`, { method: "DELETE" });
+      if (!response.ok) {
+        const failure = (await response.json().catch(() => null)) as
+          | { error?: { message?: string } }
+          | null;
+        setRowMessage(failure?.error?.message ?? "The row could not be deleted.");
+        return;
+      }
+      await load();
+    } catch {
+      setRowMessage("The row could not be deleted.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function runReconciliation() {
+    if (!accountId) return;
+    setReconciling(true);
+    setReconciliation(null);
+    try {
+      const response = await fetch(`/api/budget/reconcile?accountId=${accountId}`, { cache: "no-store" });
+      if (!response.ok) {
+        setRowMessage("The reconciliation could not be run.");
+        return;
+      }
+      setReconciliation((await response.json()) as typeof reconciliation);
+    } catch {
+      setRowMessage("The reconciliation could not be run.");
+    } finally {
+      setReconciling(false);
+    }
+  }
+
   const page = Math.floor(offset / PAGE_SIZE);
 
   return (
@@ -137,6 +230,11 @@ export function BudgetTransactionsPanel({ accounts }: { accounts: readonly Accou
       ) : (
         <>
           <div className="mt-4 overflow-x-auto">
+            {rowMessage ? (
+              <p role="alert" className="mb-2 text-sm text-[var(--danger)]">
+                {rowMessage}
+              </p>
+            ) : null}
             <table className="w-full min-w-[44rem] text-sm">
               <caption className="sr-only">Recorded transactions, newest first</caption>
               <thead>
@@ -146,6 +244,9 @@ export function BudgetTransactionsPanel({ accounts }: { accounts: readonly Accou
                   <th scope="col" className="py-2 pr-3 font-medium">Account</th>
                   <th scope="col" className="py-2 pr-3 font-medium">Kind</th>
                   <th scope="col" className="py-2 text-right font-medium">Amount</th>
+                  <th scope="col" className="py-2 pl-3 text-right font-medium">
+                    <span className="sr-only">Row actions</span>
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
@@ -154,7 +255,18 @@ export function BudgetTransactionsPanel({ accounts }: { accounts: readonly Accou
                     <td className="tabular py-2.5 pr-3 whitespace-nowrap text-muted">
                       {transaction.postedOn}
                     </td>
-                    <td className="py-2.5 pr-3 text-foreground">{transaction.description}</td>
+                    <td className="py-2.5 pr-3 text-foreground">
+                      {editing === transaction.id ? (
+                        <input
+                          aria-label="Edit description"
+                          className="w-full rounded border border-[var(--border)] bg-transparent px-2 py-1 text-sm"
+                          value={draft.description}
+                          onChange={(event) => setDraft({ ...draft, description: event.target.value })}
+                        />
+                      ) : (
+                        transaction.description
+                      )}
+                    </td>
                     <td className="py-2.5 pr-3 text-muted">{accountName(transaction.accountId)}</td>
                     <td className="py-2.5 pr-3 text-muted">
                       {TRANSACTION_KIND_LABEL[transaction.kind] ?? transaction.kind}
@@ -166,9 +278,64 @@ export function BudgetTransactionsPanel({ accounts }: { accounts: readonly Accou
                           : "tabular py-2.5 text-right font-medium text-foreground"
                       }
                     >
-                      {formatCents(transaction.amountCents, {
-                        signed: transaction.amountCents > 0,
-                      })}
+                      {editing === transaction.id ? (
+                        <input
+                          aria-label="Edit amount"
+                          className="w-24 rounded border border-[var(--border)] bg-transparent px-2 py-1 text-right text-sm"
+                          value={draft.amount}
+                          onChange={(event) => setDraft({ ...draft, amount: event.target.value })}
+                        />
+                      ) : (
+                        formatCents(transaction.amountCents, {
+                          signed: transaction.amountCents > 0,
+                        })
+                      )}
+                    </td>
+                    <td className="py-2.5 pl-3 text-right whitespace-nowrap">
+                      {editing === transaction.id ? (
+                        <>
+                          <button
+                            type="button"
+                            disabled={busy}
+                            className="mr-2 text-sm underline disabled:opacity-50"
+                            onClick={() => void saveRow(transaction)}
+                          >
+                            Save
+                          </button>
+                          <button
+                            type="button"
+                            className="text-sm text-muted underline"
+                            onClick={() => setEditing(null)}
+                          >
+                            Cancel
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            className="mr-2 text-sm underline"
+                            onClick={() => {
+                              setEditing(transaction.id);
+                              setRowMessage("");
+                              setDraft({
+                                description: transaction.description,
+                                amount: (transaction.amountCents / 100).toFixed(2),
+                              });
+                            }}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            disabled={busy}
+                            className="text-sm text-muted underline disabled:opacity-50"
+                            onClick={() => void removeRow(transaction)}
+                          >
+                            Delete
+                          </button>
+                        </>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -200,6 +367,56 @@ export function BudgetTransactionsPanel({ accounts }: { accounts: readonly Accou
               Next
             </button>
           </nav>
+
+          {accountId ? (
+            <section className="mt-6 border-t border-line pt-4" data-testid="budget-reconciliation">
+              <h3 className="text-sm font-semibold">Reconciliation</h3>
+              <p className="mt-1 text-sm text-muted">
+                Walks this account&apos;s whole ledger and shows where the statement&apos;s own
+                running balance stops agreeing with its amounts. Breaks are the statement&apos;s
+                arithmetic, shown rather than papered over.
+              </p>
+              <button
+                type="button"
+                className="btn btn-secondary mt-2"
+                disabled={reconciling}
+                onClick={() => void runReconciliation()}
+              >
+                {reconciling ? "Checking…" : "Check this account"}
+              </button>
+              {reconciliation ? (
+                reconciliation.note ? (
+                  <p className="mt-3 text-sm text-muted">{reconciliation.note}</p>
+                ) : reconciliation.totalBreaks === 0 ? (
+                  <p className="mt-3 text-sm text-muted">
+                    The statement agrees with itself at every one of the {reconciliation.checkedCount}{" "}
+                    stated balances.
+                  </p>
+                ) : (
+                  <>
+                    <p className="mt-3 text-sm">
+                      {reconciliation.totalBreaks} break
+                      {reconciliation.totalBreaks === 1 ? "" : "s"} across{" "}
+                      {reconciliation.checkedCount} stated balances
+                      {reconciliation.breaks.length < reconciliation.totalBreaks
+                        ? ` (first ${reconciliation.breaks.length} shown)`
+                        : ""}
+                      .
+                    </p>
+                    <ul className="mt-2 space-y-1 text-sm text-muted">
+                      {reconciliation.breaks.map((entry, index) => (
+                        <li key={index}>
+                          {entry.postedOn} — {entry.description || "(no description)"}: statement says{" "}
+                          {formatCents(entry.statedCents)}, the amounts say{" "}
+                          {formatCents(entry.computedCents)} (off by {formatCents(entry.deltaCents)}).
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                )
+              ) : null}
+            </section>
+          ) : null}
         </>
       )}
     </Card>

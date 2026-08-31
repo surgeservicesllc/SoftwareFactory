@@ -1863,11 +1863,16 @@ outstanding:
 - [ ] Transfers get a `transfer_group_id` column and nothing populates it. Both
   sides of a move between the person's own accounts are typed correctly and
   excluded from spend, but they are not yet linked to each other.
-- [ ] `reconcile()` finds where a statement's running total stops agreeing with
-  its own amounts — 38 breaks in the owner's 8,040 rows — and nothing surfaces
-  it on the page yet.
-- [ ] Editing and deleting a transaction. The ledger is currently append-only
-  through the UI; the RLS policies already allow update and delete.
+- [x] `reconcile()` is on the page: /api/budget/reconcile walks one
+  account's whole ledger (anchored so the first stated balance reconciles
+  exactly) and the Transactions page shows the breaks — date, description,
+  stated vs computed, the delta — instead of papering over them.
+- [x] Editing and deleting a transaction: per-row Edit (description and
+  amount; the sign-matches-kind agreement is re-checked against the row's
+  FINAL state) and Delete behind a confirm. `balance_after_cents` is never
+  editable — it is the statement's claim, and reconciliation is where a
+  disagreement created by an edit shows up; rewriting it would erase the
+  evidence.
 
 ## No learning edge from accepted results (found 2026-08-29, design gap)
 
