@@ -2,6 +2,35 @@
 
 Last reviewed: 2026-08-30
 
+**Addendum, 2026-08-30 latest+14 — Grok database-first phase accepted
+(ADR-190):** exact commit `f6292c8ec359fd8e39c5463e4039b3388cf2056f`
+passed all four jobs in CI run `33348187052`; Vercel deployment
+`dpl_A35nZhbJQMJWLtUSroG9zXLWhXBw` is READY with matching public health.
+Guarded apply run `33348980504` and independent read-only verify run
+`33349033378` passed with required ledger `1|1|1|1` and exact catalog, ACL,
+atomic runtime/replay, linked lint, health, and stopped-safety evidence.
+Migration `20260830001100` is therefore hosted and accepted. Phase 2 remains
+pending: the API/store/UI caller still requires exact-head CI, matching
+deployment, and signed-in create/return/reload acceptance before its behavior
+is claimed live. Workers/autonomy/automatic actions remain OFF and the global
+kill switch ON; this is not a Grok Bot production-readiness declaration.
+
+**Addendum, 2026-08-30 latest+13 — Grok planning-failure durability
+candidate (ADR-190):** signed-in production acceptance against exact green/READY
+main `397798921ebda6a4f8e30d2c0d83af36a3dd73a0` found that a correct no-Codex
+planner refusal durably saved the owner request but left the session active and
+the workspace falsely claimed a saved plan. The local containment adds
+hash-pinned migration `20260830001100`: one service-only atomic function writes
+a fixed safe assistant response and immutable message/failure/blocked events,
+ending at a `blocked`, nonclosed session with no graph, run, dispatch, provider
+call, or worker wake. Focused migration/workflow contract evidence is green.
+The application candidate replays the durable bundle as a structured 409 and
+the workspace preserves/reloads its session identity while rendering no plan
+or routing claims. This is candidate evidence only: repository-wide final
+gates, the migration-first production phase, the subsequent application phase,
+exact deployments, and signed-in return/reload acceptance remain pending.
+Workers/autonomy/automatic actions remain OFF and the global kill switch ON.
+
 **Addendum, 2026-08-30 latest+12 — Grok Bot local release candidate
 (ADR-190):** deterministic Chief-of-Staff planning, the owner-only durable
 session/message/event/link/control boundary, and the responsive workspace are

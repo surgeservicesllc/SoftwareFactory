@@ -9,9 +9,11 @@ import { assignmentPostingIsConfigured } from "@/lib/bots/assignment-config";
 import { loadBotFabric } from "@/lib/bots/service";
 import type { BotFabricSnapshot, SerializedBotRole } from "@/lib/bots/types";
 import {
+  GROK_PLANNER_ERROR_CODES,
   GROK_PLAN_VERSION,
   type GrokChiefOfStaffPlan,
   type GrokConfiguredAgent,
+  type GrokPlannerErrorCode,
   type GrokProjectContext,
 } from "@/lib/factory/chief-of-staff";
 import type {
@@ -76,7 +78,7 @@ const sessionRowSchema = z.object({
   organization_id: z.string().uuid(),
   project_id: z.string().uuid(),
   title: z.string().min(1).max(160),
-  status: z.enum(["active", "completed", "cancelled", "archived"]),
+  status: z.enum(["active", "blocked", "completed", "cancelled", "archived"]),
   created_by: z.string().uuid(),
   idempotency_key: z.string().min(1).max(200),
   last_message_sequence: z.coerce.number().int().nonnegative(),
@@ -119,6 +121,12 @@ const eventRowSchema = z.object({
   occurred_at: z.string().datetime({ offset: true }),
   created_at: z.string().datetime({ offset: true }),
 }).passthrough();
+
+const planningFailureResultSchema = z.object({
+  session: sessionRowSchema,
+  message: messageRowSchema,
+  event: eventRowSchema,
+}).strict();
 
 const artifactLinkSchema = z.object({
   id: z.string().uuid(),
@@ -206,6 +214,7 @@ type SessionRow = z.infer<typeof sessionRowSchema>;
 type MessageRow = z.infer<typeof messageRowSchema>;
 type TaskLinkRow = z.infer<typeof taskLinkRowSchema>;
 type EventRow = z.infer<typeof eventRowSchema>;
+type PlanningFailureResult = z.infer<typeof planningFailureResultSchema>;
 
 const controlIntentSchema = z.object({
   id: z.string().uuid(),
@@ -462,6 +471,240 @@ export async function appendGrokAssistantPlan(
   return parsed.data;
 }
 
+const PLANNING_FAILURE_CONTENT: Readonly<Record<GrokPlannerErrorCode, string>> = Object.freeze({
+  INVALID_INPUT:
+    "Planning is blocked because the request does not satisfy the bounded Grok planning contract.",
+  SENSITIVE_DATA:
+    "Planning is blocked because the request contains secret-shaped data. Remove it and start a new goal.",
+  NO_CONFIGURED_AGENTS:
+    "Planning is blocked until this project has at least one Ready configured Claude or Codex agent.",
+  MISSING_CLAUDE_AGENT:
+    "Planning is blocked until a Ready configured Claude agent covers every required planning and verification task.",
+  MISSING_CODEX_AGENT:
+    "Planning is blocked until a Ready configured Codex agent covers the repository-writing task.",
+  GRAPH_INVALID:
+    "Planning is blocked because the deterministic task graph did not satisfy the graph contract.",
+});
+
+const plannerErrorCodeSchema = z.enum(GROK_PLANNER_ERROR_CODES);
+
+const planningFailureMetadataSchema = z.object({
+  schemaVersion: z.literal(1),
+  kind: z.literal("grok.planning_error"),
+  code: plannerErrorCodeSchema,
+  workerWoken: z.literal(false),
+  executionStarted: z.literal(false),
+}).strict();
+
+const planningFailureEventPayloadSchema = z.object({
+  schemaVersion: z.literal(1),
+  detail: z.literal("Planning was blocked before any graph or worker dispatch."),
+  code: plannerErrorCodeSchema,
+  messageId: z.string().uuid(),
+  workerWoken: z.literal(false),
+  executionStarted: z.literal(false),
+}).strict();
+
+const planningFailureMessageEvidenceSchema = z.object({
+  reply_to_message_id: z.string().uuid(),
+  actor_user_id: z.null(),
+}).passthrough();
+
+const planningFailureEventEvidenceSchema = z.object({
+  message_id: z.string().uuid(),
+  task_link_id: z.null(),
+  actor_user_id: z.null(),
+}).passthrough();
+
+const blockedEventEvidenceSchema = z.object({
+  message_id: z.null(),
+  task_link_id: z.null(),
+  actor_user_id: z.null(),
+}).passthrough();
+
+const messageAppendedPayloadSchema = z.object({
+  message_id: z.string().uuid(),
+  message_sequence: z.literal(2),
+  role: z.literal("assistant"),
+}).strict();
+
+const blockedEventPayloadSchema = z.object({ status: z.literal("blocked") }).strict();
+
+export type StoredGrokPlanningFailure = Readonly<{
+  code: GrokPlannerErrorCode;
+  message: string;
+  messageId: string;
+}>;
+
+/**
+ * Recover an already-recorded refusal before re-running the planner. This
+ * makes an idempotent replay stable even if the configured bot roster changes
+ * after the original request was blocked.
+ */
+export function storedGrokPlanningFailure(bundle: ReadBundle): StoredGrokPlanningFailure | null {
+  const message = bundle.messages.find(
+    (candidate) => candidate.sequence_no === 2 && candidate.role === "assistant",
+  );
+  if (!message) return null;
+  const marker = z.object({ kind: z.unknown() }).passthrough().safeParse(message.metadata);
+  if (!marker.success || marker.data.kind !== "grok.planning_error") return null;
+
+  const metadata = planningFailureMetadataSchema.safeParse(message.metadata);
+  if (!metadata.success || message.content !== PLANNING_FAILURE_CONTENT[metadata.data.code]) {
+    throw new GrokStoreProjectionError("The durable Grok planning-error message was malformed.");
+  }
+  const messageEvidence = planningFailureMessageEvidenceSchema.safeParse(message);
+  const userMessage = bundle.messages.find(
+    (candidate) => candidate.sequence_no === 1 && candidate.role === "user",
+  );
+  if (
+    bundle.session.status !== "blocked"
+    || bundle.session.closed_at !== null
+    || bundle.session.last_message_sequence !== 2
+    || bundle.session.last_event_sequence !== 5
+    || bundle.session.version !== 5
+    || bundle.next.message_sequence !== 2
+    || bundle.next.event_sequence !== 5
+    || bundle.messages.length !== 2
+    || !userMessage
+    || !messageEvidence.success
+    || messageEvidence.data.reply_to_message_id !== userMessage.id
+  ) {
+    throw new GrokStoreProjectionError("The durable Grok planning-error session was not blocked safely.");
+  }
+
+  const appendEvent = bundle.events.find(
+    (candidate) => candidate.sequence_no === 3 && candidate.event_type === "message.appended",
+  );
+  const appendEvidence = appendEvent
+    ? planningFailureEventEvidenceSchema.safeParse(appendEvent)
+    : null;
+  const appendPayload = appendEvent ? messageAppendedPayloadSchema.safeParse(appendEvent.payload) : null;
+  if (
+    !appendEvent
+    || appendEvent.session_id !== bundle.session.id
+    || appendEvent.correlation_id !== message.id
+    || !appendEvidence?.success
+    || appendEvidence.data.message_id !== message.id
+    || !appendPayload?.success
+    || appendPayload.data.message_id !== message.id
+  ) {
+    throw new GrokStoreProjectionError("The durable Grok planning-error append event was malformed.");
+  }
+
+  const event = bundle.events.find(
+    (candidate) => candidate.sequence_no === 4 && candidate.event_type === "session.planning_failed",
+  );
+  const eventEvidence = event ? planningFailureEventEvidenceSchema.safeParse(event) : null;
+  const payload = event ? planningFailureEventPayloadSchema.safeParse(event.payload) : null;
+  if (
+    !event
+    || event.correlation_id !== bundle.session.id
+    || !eventEvidence?.success
+    || eventEvidence.data.message_id !== message.id
+    || !payload?.success
+    || payload.data.code !== metadata.data.code
+    || payload.data.messageId !== message.id
+  ) {
+    throw new GrokStoreProjectionError("The durable Grok planning-failure event was malformed.");
+  }
+
+  const blockedEvent = bundle.events.find(
+    (candidate) => candidate.sequence_no === 5 && candidate.event_type === "session.blocked",
+  );
+  const blockedEvidence = blockedEvent ? blockedEventEvidenceSchema.safeParse(blockedEvent) : null;
+  const blockedPayload = blockedEvent ? blockedEventPayloadSchema.safeParse(blockedEvent.payload) : null;
+  if (
+    bundle.events.length !== 5
+    || bundle.task_links.length !== 0
+    || bundle.artifact_links.length !== 0
+    || !blockedEvent
+    || blockedEvent.session_id !== bundle.session.id
+    || blockedEvent.correlation_id !== bundle.session.id
+    || !blockedEvidence?.success
+    || !blockedPayload?.success
+  ) {
+    throw new GrokStoreProjectionError("The durable Grok session-blocked event was malformed.");
+  }
+  return { code: metadata.data.code, message: message.content, messageId: message.id };
+}
+
+/**
+ * Atomically persist the bounded assistant refusal, immutable failure event,
+ * and active -> blocked transition. The database replays the exact failure
+ * identity before applying its version CAS, so a retry cannot create partial
+ * or duplicate evidence even though its observed session version has moved.
+ *
+ * Only the stable planner code crosses this boundary; the database derives
+ * the fixed safe content, while the prompt, details, and provider errors are
+ * excluded.
+ */
+export async function recordGrokPlanningFailure(
+  client: SupabaseClient,
+  input: Readonly<{
+    organizationId: string;
+    sessionId: string;
+    userMessageId: string;
+    idempotencyKey: string;
+    code: GrokPlannerErrorCode;
+    expectedVersion: number;
+  }>,
+): Promise<PlanningFailureResult> {
+  const content = PLANNING_FAILURE_CONTENT[input.code];
+  const value = await rpc(client, "record_grok_planning_failure_as_server", {
+    p_organization_id: input.organizationId,
+    p_session_id: input.sessionId,
+    p_user_message_id: input.userMessageId,
+    p_error_code: input.code,
+    p_idempotency_key: childIdempotencyKey(input.idempotencyKey, "planning-failure"),
+    p_expected_version: input.expectedVersion,
+  });
+  const parsed = planningFailureResultSchema.safeParse(
+    oneRow(value, "record_grok_planning_failure_as_server"),
+  );
+  const metadata = parsed.success
+    ? planningFailureMetadataSchema.safeParse(parsed.data.message.metadata)
+    : null;
+  const messageEvidence = parsed.success
+    ? planningFailureMessageEvidenceSchema.safeParse(parsed.data.message)
+    : null;
+  const eventPayload = parsed.success
+    ? planningFailureEventPayloadSchema.safeParse(parsed.data.event.payload)
+    : null;
+  const eventEvidence = parsed.success
+    ? planningFailureEventEvidenceSchema.safeParse(parsed.data.event)
+    : null;
+  if (
+    !parsed.success
+    || parsed.data.session.id !== input.sessionId
+    || parsed.data.session.status !== "blocked"
+    || parsed.data.session.closed_at !== null
+    || parsed.data.session.last_message_sequence !== 2
+    || parsed.data.session.last_event_sequence !== 5
+    || parsed.data.session.version !== input.expectedVersion + 3
+    || parsed.data.message.session_id !== input.sessionId
+    || parsed.data.message.role !== "assistant"
+    || parsed.data.message.sequence_no !== 2
+    || parsed.data.message.content !== content
+    || !messageEvidence?.success
+    || messageEvidence.data.reply_to_message_id !== input.userMessageId
+    || !metadata?.success
+    || metadata.data.code !== input.code
+    || parsed.data.event.session_id !== input.sessionId
+    || parsed.data.event.sequence_no !== 4
+    || parsed.data.event.event_type !== "session.planning_failed"
+    || parsed.data.event.correlation_id !== input.sessionId
+    || !eventEvidence?.success
+    || eventEvidence.data.message_id !== parsed.data.message.id
+    || !eventPayload?.success
+    || eventPayload.data.code !== input.code
+    || eventPayload.data.messageId !== parsed.data.message.id
+  ) {
+    throw new GrokStoreProjectionError("The durable Grok planning-failure result was malformed.");
+  }
+  return parsed.data;
+}
+
 export async function recordGrokEvent(
   client: SupabaseClient,
   input: Readonly<{
@@ -690,6 +933,7 @@ function eventDetail(event: EventRow): string {
     .safeParse(event.payload);
   if (payload.success && payload.data.detail) return payload.data.detail;
   if (event.event_type === "session.planned") return "The deterministic chief-of-staff plan was recorded.";
+  if (event.event_type === "session.planning_failed") return "Planning was blocked before any graph or worker dispatch.";
   if (event.event_type === "graph.planned") return "The dependency graph was recorded in PLANNED state.";
   return event.event_type;
 }

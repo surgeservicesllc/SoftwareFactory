@@ -20,7 +20,9 @@ import {
   plannedGraphLink,
   readGrokBundle,
   readGrokProject,
+  recordGrokPlanningFailure,
   recordGrokEvent,
+  storedGrokPlanningFailure,
   storedGrokPlan,
 } from "@/lib/grok/session-store";
 import { GitHubApiError } from "@/lib/github/client";
@@ -58,6 +60,29 @@ function ownerRequired() {
   return jsonNoStore(
     { error: { code: "owner_required", message: "Only an organization owner can use Grok Bot." } },
     { status: 403 },
+  );
+}
+
+function planningFailureResponse(input: Readonly<{
+  sessionId: string;
+  status: "blocked";
+  version: number;
+  code: string;
+  message: string;
+}>) {
+  return jsonNoStore(
+    {
+      sessionId: input.sessionId,
+      session: {
+        id: input.sessionId,
+        status: input.status,
+        version: input.version,
+      },
+      workerWoken: false,
+      executionStarted: false,
+      error: { code: input.code, message: input.message },
+    },
+    { status: 409 },
   );
 }
 
@@ -152,6 +177,16 @@ export async function POST(request: Request) {
     });
 
     let bundle = await readGrokBundle(context.client, context.activeOrganization.id, session.id);
+    const durablePlanningFailure = storedGrokPlanningFailure(bundle);
+    if (durablePlanningFailure) {
+      return planningFailureResponse({
+        sessionId: session.id,
+        status: "blocked",
+        version: bundle.session.version,
+        code: durablePlanningFailure.code,
+        message: durablePlanningFailure.message,
+      });
+    }
     let plan = storedGrokPlan(bundle);
     if (plan && (
       plan.project.projectId !== project.projectId
@@ -191,17 +226,49 @@ export async function POST(request: Request) {
         ),
       });
       if (!result.ok) {
-        return jsonNoStore(
-          {
+        let failure: Awaited<ReturnType<typeof recordGrokPlanningFailure>>;
+        try {
+          failure = await recordGrokPlanningFailure(serviceClient, {
+            organizationId: context.activeOrganization.id,
             sessionId: session.id,
-            error: {
-              code: result.error.code,
-              message: result.error.message,
-              details: result.error.details,
-            },
-          },
-          { status: 409 },
-        );
+            userMessageId: userMessage.id,
+            idempotencyKey,
+            code: result.error.code,
+            expectedVersion: bundle.session.version,
+          });
+        } catch (failureError) {
+          // A concurrent request or timed-out database response may have
+          // committed a different planner refusal for this exact request.
+          // Suppress the error only when a fresh authenticated projection
+          // proves the complete immutable blocked bundle; otherwise preserve
+          // the original failure.
+          let replayBundle;
+          try {
+            replayBundle = await readGrokBundle(
+              context.client,
+              context.activeOrganization.id,
+              session.id,
+            );
+          } catch {
+            throw failureError;
+          }
+          const replayedFailure = storedGrokPlanningFailure(replayBundle);
+          if (!replayedFailure) throw failureError;
+          return planningFailureResponse({
+            sessionId: session.id,
+            status: "blocked",
+            version: replayBundle.session.version,
+            code: replayedFailure.code,
+            message: replayedFailure.message,
+          });
+        }
+        return planningFailureResponse({
+          sessionId: failure.session.id,
+          status: "blocked",
+          version: failure.session.version,
+          code: result.error.code,
+          message: failure.message.content,
+        });
       }
       plan = result.plan;
       assistantMessage = await appendGrokAssistantPlan(serviceClient, {
