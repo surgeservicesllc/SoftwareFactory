@@ -675,8 +675,12 @@ function allowedActions(evidence: GraphEvidence | null): readonly GrokControlAct
 function sessionStatus(session: SessionRow, evidence: GraphEvidence | null, hasPlan: boolean): string {
   if (session.status !== "active") return session.status;
   if (evidence?.withdrawnAt) return "stopped";
-  if (evidence?.runState) return evidence.runState.toLowerCase();
+  // A pause request is the current graph control-plane truth even while the
+  // last durable run still says RUNNING.  Keep detail projection aligned with
+  // list_grok_sessions (and with the Resume-only control set) so the workspace
+  // never presents a paused graph as actively executing.
   if (evidence?.pausedAt) return "paused";
+  if (evidence?.runState) return evidence.runState.toLowerCase();
   if (evidence) return "planned";
   return hasPlan ? "blocked" : "active";
 }

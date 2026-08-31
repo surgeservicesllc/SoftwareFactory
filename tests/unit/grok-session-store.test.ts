@@ -152,6 +152,71 @@ describe("Grok session graph persistence", () => {
     expect(plannedTask.model).toBe("claude-opus-5");
   });
 
+  it("projects a requested pause ahead of a still-running durable run", async () => {
+    const createdAt = "2026-08-30T20:00:00.000Z";
+    const plan = researchPlan();
+    const plannedTask = plan.dag.tasks[0];
+    const nodeId = "61000000-0000-4000-8000-000000000006";
+    const runId = "62000000-0000-4000-8000-000000000006";
+    const results: Record<string, { data: unknown; error: null }> = {
+      graphs: {
+        data: {
+          id: graphId,
+          goal: plan.intent.prompt,
+          pause_requested_at: createdAt,
+          withdrawn_at: null,
+        },
+        error: null,
+      },
+      graph_runs: { data: { id: runId, state: "RUNNING", created_at: createdAt }, error: null },
+      graph_nodes: { data: [{ id: nodeId, node_key: plannedTask.id, job: plannedTask.title }], error: null },
+      node_runs: {
+        data: [{ node_id: nodeId, state: "RUNNING", provider: "anthropic", model: "claude-opus-5" }],
+        error: null,
+      },
+    };
+    const client = {
+      from: vi.fn((table: string) => {
+        const result = results[table];
+        const query: Record<string, unknown> = {};
+        for (const method of ["select", "eq", "order", "limit"]) query[method] = vi.fn(() => query);
+        query.maybeSingle = vi.fn(async () => result);
+        query.then = (resolve: (value: typeof result) => unknown, reject: (reason: unknown) => unknown) =>
+          Promise.resolve(result).then(resolve, reject);
+        return query;
+      }),
+    } as never;
+    const bundle = {
+      session: {
+        id: sessionId, organization_id: organizationId, project_id: projectId,
+        title: "Research", status: "active",
+        created_by: "70000000-0000-4000-8000-000000000007",
+        idempotency_key: "request-key-123", last_message_sequence: 2,
+        last_event_sequence: 4, version: 3, created_at: createdAt,
+        updated_at: createdAt, closed_at: null,
+      },
+      messages: [{
+        id: messageId, session_id: sessionId, sequence_no: 1, role: "user",
+        content: plan.intent.prompt, metadata: {}, created_at: createdAt,
+      }, {
+        id: "41000000-0000-4000-8000-000000000004", session_id: sessionId,
+        sequence_no: 2, role: "assistant", content: "The plan is recorded.",
+        metadata: { kind: "grok.plan", plan }, created_at: createdAt,
+      }],
+      task_links: [{
+        id: "60000000-0000-4000-8000-000000000006",
+        session_id: sessionId, message_id: messageId, command_id: null, task_id: null,
+        graph_id: graphId, graph_run_id: runId, relation: "planned", created_at: createdAt,
+      }],
+      events: [], artifact_links: [], control_intents: [],
+      next: { message_sequence: 2, event_sequence: 4 },
+    };
+
+    const detail = await mapGrokSessionDetail(client, organizationId, "Factory", bundle as never);
+    expect(detail.session.status).toBe("paused");
+    expect(detail.session.allowedActions).toEqual(["resume", "cancel"]);
+  });
+
   it("maps the database's enriched artifact projection without dropping its URI", async () => {
     const createdAt = "2026-08-30T20:00:00.000Z";
     const rpc = vi.fn().mockResolvedValue({

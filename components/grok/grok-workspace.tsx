@@ -90,6 +90,17 @@ function clock(value: string) {
   return Number.isNaN(date.getTime()) ? "" : date.toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
 }
 
+function safeArtifactHref(value: string | null): string | null {
+  if (!value) return null;
+  if (value.startsWith("/") && !value.startsWith("//")) return value;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" || url.protocol === "http:" ? url.href : null;
+  } catch {
+    return null;
+  }
+}
+
 function statusTone(status: string): "safe" | "info" | "warning" | "danger" | "neutral" {
   const normalized = status.toLowerCase();
   if (normalized === "completed") return "safe";
@@ -162,11 +173,11 @@ function ArtifactList({ artifacts, emptyLabel }: { artifacts: readonly GrokArtif
         <li key={artifact.id} className="rounded-lg border border-[var(--border)] bg-[var(--surface-inset)] p-3">
           <p className="text-sm font-medium text-foreground">{artifact.label}</p>
           <p className="mt-1 text-xs text-muted">{artifact.kind} · {clock(artifact.createdAt)}</p>
-          {artifact.uri ? (
+          {safeArtifactHref(artifact.uri) ? (
             <a
               aria-label={`Open ${artifact.label}`}
               className="mt-2 inline-flex text-xs font-medium text-[var(--accent-text)] hover:underline"
-              href={artifact.uri}
+              href={safeArtifactHref(artifact.uri) ?? undefined}
             >
               Open artifact
             </a>
@@ -287,6 +298,12 @@ export function GrokWorkspace({
   const [submitting, setSubmitting] = useState(false);
   const [controlPending, setControlPending] = useState<GrokControlAction | null>(null);
   const detailRequest = useRef(0);
+  const submitAttempt = useRef<Readonly<{
+    projectId: string;
+    prompt: string;
+    idempotencyKey: string;
+  }> | null>(null);
+  const controlAttempts = useRef(new Map<string, string>());
 
   const loadDetail = useCallback(async (id: string) => {
     const requestId = ++detailRequest.current;
@@ -301,11 +318,19 @@ export function GrokWorkspace({
       const body = await readJson(response) as GrokSessionDetail;
       if (requestId !== detailRequest.current) return;
       setDetail(body);
+      setProjectId(body.session.projectId);
+      setSessionId(body.session.id);
       setSessions((current) => current.some((session) => session.id === body.session.id)
         ? current.map((session) => session.id === body.session.id ? body.session : session)
         : [body.session, ...current]);
       setNotice(executionNotice(body));
       setErrorMessage("");
+      updateUrl({
+        projectId: body.session.projectId,
+        sessionId: body.session.id,
+        graphId: body.session.graphId ?? undefined,
+        graphRunId: body.session.graphRunId ?? undefined,
+      });
     } catch (error) {
       if (requestId !== detailRequest.current) return;
       setDetail(null);
@@ -338,9 +363,10 @@ export function GrokWorkspace({
         ? nextSessions.find((session) => session.id === initialSelection.sessionId) ?? null
         : null;
       const selectedProject = initialSelection.projectId || requestedSession?.projectId || nextProjects[0]?.id || "";
-      const selectedSession = requestedSession?.projectId === selectedProject
-        ? requestedSession.id
-        : nextSessions.find((session) => !selectedProject || session.projectId === selectedProject)?.id ?? "";
+      const selectedSession = initialSelection.sessionId
+        ?? (requestedSession?.projectId === selectedProject
+          ? requestedSession.id
+          : nextSessions.find((session) => !selectedProject || session.projectId === selectedProject)?.id ?? "");
       setProjectId(selectedProject);
       setSessionId(selectedSession);
       setState("ready");
@@ -391,15 +417,26 @@ export function GrokWorkspace({
     const goal = prompt.trim();
     if (!goal || !projectId || submitting) return;
     setSubmitting(true);
+    detailRequest.current += 1;
     setErrorMessage("");
     setNotice("");
     try {
+      const attempt = submitAttempt.current?.projectId === projectId
+        && submitAttempt.current.prompt === goal
+        ? submitAttempt.current
+        : {
+            projectId,
+            prompt: goal,
+            idempotencyKey: `grok-submit:${globalThis.crypto.randomUUID()}`,
+          };
+      submitAttempt.current = attempt;
       const response = await fetch("/api/grok/sessions", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ projectId, prompt: goal }),
+        body: JSON.stringify({ projectId, prompt: goal, idempotencyKey: attempt.idempotencyKey }),
       });
       const body = await readJson(response) as GrokCreateResponse;
+      submitAttempt.current = null;
       setPrompt("");
       setDetail(body);
       setSessions((current) => [body.session, ...current.filter((session) => session.id !== body.session.id)]);
@@ -415,20 +452,28 @@ export function GrokWorkspace({
 
   async function controlSession(action: GrokControlAction) {
     if (!selectedSession || controlPending || !selectedSession.allowedActions.includes(action)) return;
+    const attemptKey = `${selectedSession.id}:${action}`;
+    let responseReceived = false;
     setControlPending(action);
+    detailRequest.current += 1;
     setErrorMessage("");
     setNotice("");
     try {
+      const idempotencyKey = controlAttempts.current.get(attemptKey)
+        ?? `grok-control:${globalThis.crypto.randomUUID()}`;
+      controlAttempts.current.set(attemptKey, idempotencyKey);
       const response = await fetch(`/api/grok/sessions/${selectedSession.id}/control`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           action,
-          idempotencyKey: `grok-control:${globalThis.crypto.randomUUID()}`,
+          idempotencyKey,
           reason: `${action} requested from the Grok Bot control center`,
         }),
       });
+      responseReceived = true;
       const body = await readJson(response) as GrokControlResponse;
+      controlAttempts.current.delete(attemptKey);
       setDetail(body);
       setSessions((current) => current.map((session) => (
         session.id === body.session.id ? body.session : session
@@ -437,6 +482,11 @@ export function GrokWorkspace({
         ? `The ${action} control was already applied; durable state was reloaded.`
         : executionNotice(body)));
     } catch (error) {
+      // Reuse the key only when no HTTP response arrived, because the server
+      // may have committed the intent before the connection failed. An
+      // explicit failed response is a completed attempt and a later retry
+      // needs its own intent identity.
+      if (responseReceived) controlAttempts.current.delete(attemptKey);
       setErrorMessage(error instanceof Error ? error.message : `The ${action} request could not be completed.`);
     } finally {
       setControlPending(null);
@@ -477,12 +527,12 @@ export function GrokWorkspace({
             <aside aria-label="Grok sessions" className="border-b border-[var(--border)] bg-[var(--surface-inset)] p-3 xl:border-b-0 xl:border-r">
               <div className="flex items-center justify-between gap-2">
                 <p className="label">Sessions</p>
-                <button type="button" className="grid size-8 place-items-center rounded-lg border border-[var(--border)] text-muted hover:text-foreground" aria-label="Start a new goal" onClick={() => { setSessionId(""); setDetail(null); setPrompt(""); setErrorMessage(""); setNotice(""); updateUrl({ projectId: projectId || undefined }); }}><MessageSquarePlus className="size-4" aria-hidden="true" /></button>
+                <button type="button" className="grid size-8 place-items-center rounded-lg border border-[var(--border)] text-muted hover:text-foreground" aria-label="Start a new goal" onClick={() => { detailRequest.current += 1; setSessionId(""); setDetail(null); setPrompt(""); setErrorMessage(""); setNotice(""); updateUrl({ projectId: projectId || undefined }); }}><MessageSquarePlus className="size-4" aria-hidden="true" /></button>
               </div>
-              <label className="mt-3 block"><span className="sr-only">Project</span><select className="input w-full text-sm" value={projectId} onChange={(event) => { setProjectId(event.target.value); setSessionId(""); setDetail(null); setErrorMessage(""); setNotice(""); updateUrl({ projectId: event.target.value || undefined }); }}><option value="">Choose project</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select></label>
+              <label className="mt-3 block"><span className="sr-only">Project</span><select className="input w-full text-sm" value={projectId} onChange={(event) => { detailRequest.current += 1; setProjectId(event.target.value); setSessionId(""); setDetail(null); setErrorMessage(""); setNotice(""); updateUrl({ projectId: event.target.value || undefined }); }}><option value="">Choose project</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select></label>
               <ul className="mt-3 max-h-52 space-y-1 overflow-y-auto xl:max-h-[calc(70vh-7rem)]">
                 {filteredSessions.map((session) => (
-                  <li key={session.id}><button type="button" className={cn("w-full rounded-lg px-3 py-2.5 text-left transition-colors", session.id === sessionId ? "bg-[var(--accent-surface)]" : "hover:bg-[var(--surface-raised)]")} onClick={() => void selectSession(session.id)}><span className="flex items-center gap-2"><span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{session.title}</span><ChevronRight className="size-3.5 shrink-0 text-faint" /></span><span className="mt-1 flex items-center justify-between gap-2 text-[11px] text-muted"><span>{session.status}</span><time>{clock(session.updatedAt)}</time></span></button></li>
+                  <li key={session.id}><button type="button" aria-current={session.id === sessionId ? "true" : undefined} className={cn("w-full rounded-lg px-3 py-2.5 text-left transition-colors", session.id === sessionId ? "bg-[var(--accent-surface)]" : "hover:bg-[var(--surface-raised)]")} onClick={() => void selectSession(session.id)}><span className="flex items-center gap-2"><span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{session.title}</span><ChevronRight className="size-3.5 shrink-0 text-faint" /></span><span className="mt-1 flex items-center justify-between gap-2 text-[11px] text-muted"><span>{session.status}</span><time>{clock(session.updatedAt)}</time></span></button></li>
                 ))}
                 {!filteredSessions.length ? <li className="rounded-lg border border-dashed border-[var(--border-strong)] p-3 text-xs text-muted">No persisted sessions for this project.</li> : null}
               </ul>

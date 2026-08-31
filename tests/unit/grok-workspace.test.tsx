@@ -56,20 +56,32 @@ function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 }
 
-function installFetch(detail: GrokSessionDetail | null = null) {
+function installFetch(
+  detail: GrokSessionDetail | null = null,
+  options: Readonly<{ includeDetailInList?: boolean; postFailures?: number }> = {},
+) {
+  let remainingPostFailures = options.postFailures ?? 0;
   const mock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input);
     if (url === "/api/projects") return json({ projects: [PROJECT] });
-    if (url === "/api/grok/sessions" && init?.method === "POST") return json({
-      ...BLOCKED_SESSION,
-      workerWoken: false,
-      executionStarted: false,
-      blocked: {
-        code: "execution_bridge_not_connected",
-        message: "The exact provider, model, and agent execution bridge is not connected. The plan is saved; no graph or worker was launched.",
-      },
-    }, 202);
-    if (url === "/api/grok/sessions") return json({ sessions: detail ? [detail.session] : [] });
+    if (url === "/api/grok/sessions" && init?.method === "POST") {
+      if (remainingPostFailures > 0) {
+        remainingPostFailures -= 1;
+        throw new TypeError("The network connection was interrupted.");
+      }
+      return json({
+        ...BLOCKED_SESSION,
+        workerWoken: false,
+        executionStarted: false,
+        blocked: {
+          code: "execution_bridge_not_connected",
+          message: "The exact provider, model, and agent execution bridge is not connected. The plan is saved; no graph or worker was launched.",
+        },
+      }, 202);
+    }
+    if (url === "/api/grok/sessions") {
+      return json({ sessions: detail && options.includeDetailInList !== false ? [detail.session] : [] });
+    }
     if (url.endsWith("/control") && init?.method === "POST") {
       const action = JSON.parse(String(init.body)).action as "pause" | "cancel";
       const cancelled = action === "cancel";
@@ -153,7 +165,9 @@ describe("GrokWorkspace", () => {
       "/api/grok/sessions",
       expect.objectContaining({
         method: "POST",
-        body: JSON.stringify({ projectId: PROJECT.id, prompt: "Fix checkout" }),
+        body: expect.stringMatching(new RegExp(
+          `^\\{"projectId":"${PROJECT.id}","prompt":"Fix checkout","idempotencyKey":"grok-submit:[^"]+"\\}$`,
+        )),
       }),
     ));
     expect(await screen.findByText("I recorded the plan.")).toBeInTheDocument();
@@ -163,6 +177,57 @@ describe("GrokWorkspace", () => {
     expect(screen.getByText("Durable session · plan saved; execution not linked")).toBeInTheDocument();
     expect(screen.getAllByText("blocked").length).toBeGreaterThan(0);
     expect(window.location.search).toContain(`sessionId=${SESSION.session.id}`);
+  });
+
+  it("restores a deep-linked session even when it is outside the first list page", async () => {
+    const fetchMock = installFetch(BLOCKED_SESSION, { includeDetailInList: false });
+    render(<GrokWorkspace initialSelection={{ sessionId: BLOCKED_SESSION.session.id }} />);
+
+    expect(await screen.findByText("I recorded the plan.")).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      `/api/grok/sessions/${BLOCKED_SESSION.session.id}`,
+      { cache: "no-store" },
+    );
+    expect(window.location.search).toContain(`projectId=${PROJECT.id}`);
+    expect(window.location.search).toContain(`sessionId=${BLOCKED_SESSION.session.id}`);
+  });
+
+  it("reuses the create idempotency key after an uncertain network failure", async () => {
+    const fetchMock = installFetch(null, { postFailures: 1 });
+    const user = userEvent.setup();
+    render(<GrokWorkspace initialSelection={{}} />);
+    await screen.findByRole("heading", { name: "Ask for the outcome" });
+
+    const prompt = screen.getByRole("textbox", { name: "Tell Grok Bot what you want done" });
+    await user.type(prompt, "Fix checkout");
+    await user.click(screen.getByRole("button", { name: "Start goal" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("network connection");
+    await user.click(screen.getByRole("button", { name: "Start goal" }));
+    expect(await screen.findByText("I recorded the plan.")).toBeInTheDocument();
+
+    const bodies = fetchMock.mock.calls
+      .filter(([url, init]) => String(url) === "/api/grok/sessions" && init?.method === "POST")
+      .map(([, init]) => JSON.parse(String(init?.body)) as { idempotencyKey: string });
+    expect(bodies).toHaveLength(2);
+    expect(bodies[0]?.idempotencyKey).toBe(bodies[1]?.idempotencyKey);
+  });
+
+  it("does not turn an unsafe durable artifact reference into a link", async () => {
+    installFetch({
+      ...SESSION,
+      artifacts: [{
+        id: "unsafe-artifact",
+        kind: "report",
+        label: "Unsafe report",
+        uri: "javascript:alert(document.domain)",
+        createdAt: "2026-08-30T12:00:03.000Z",
+      }],
+    });
+    render(<GrokWorkspace initialSelection={{ sessionId: SESSION.session.id }} />);
+    const inspector = await screen.findByRole("complementary", { name: "Session inspector" });
+    await userEvent.click(within(inspector).getByRole("tab", { name: "Artifacts" }));
+    expect(within(inspector).getByText("Unsafe report")).toBeInTheDocument();
+    expect(within(inspector).queryByRole("link", { name: "Open Unsafe report" })).not.toBeInTheDocument();
   });
 
   it("restores a durable blocked session truthfully after reload", async () => {
