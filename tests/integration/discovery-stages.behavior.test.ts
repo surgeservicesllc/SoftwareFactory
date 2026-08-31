@@ -50,7 +50,7 @@ beforeAll(async () => {
   const migrationFiles = (await readdir(migrationsRoot))
     .filter((name) => /^\d+.*\.sql$/.test(name))
     .sort();
-  expect(migrationFiles.at(-1)).toBe("20260830001600_forms_timesheets_licences.sql");
+  expect(migrationFiles.at(-1)).toBe("20260830001700_customer_portal.sql");
   for (const file of migrationFiles) {
     await db.exec(await readFile(resolve(migrationsRoot, file), "utf8"));
   }
