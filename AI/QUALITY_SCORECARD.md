@@ -2,6 +2,33 @@
 
 Last reviewed: 2026-08-31
 
+**Addendum, 2026-08-31 latest+37 - transactional notices (ADR-217):**
+services-notices.behavior 16 on the real chain, most of them about what
+CANNOT happen: a notice refused a dispatch while no provider is connected;
+no UPDATE or DELETE grant at all, so nothing can hand-write a send; a row
+inserted directly claiming `sent` refused by constraint; one notice per
+subject per day however many times Remind is pressed; a do-not-contact
+suppressing the notice while KEEPING it, with its reason and its body, so
+"was this customer told?" has an answer; the outstanding reader showing
+suppressed alongside composed; no state meaning "do not contact but
+marketing is fine"; a preference change and its later lifting both written
+into the account history; a kind that does not match what it points at
+refused; a subject line required for email and refused for SMS; one book's
+notices invisible to another; a sent notice unable to be cancelled. And the
+gate proved to OPEN, because a gate that never opens is a wall: with the
+owner's switch on AND a sealed credential present, a real dispatch lands
+and records the provider's reference; with either half missing it refuses;
+a second dispatch of the same notice refuses. notices unit 15: a template
+that would render a gap refuses instead of sending "Hi , your visit is on
+."; smsCost naming the one curly apostrophe that re-encodes a message as
+UCS-2 and collapses the limit from 160 to 70. Two defects caught in review
+rather than production: a CHECK constraint using the STABLE `at time zone`
+(constraints require immutable expressions) and a trigger reading OLD on
+INSERT behind an `and` SQL does not promise to short-circuit. RLS census
+209 -> 211; grants 54 -> 56 crm tables; runbook 213 -> 214; seed report
+53/53 -> 55/55 and 51,800 -> 54,331 rows, with 1,827 notices of which
+exactly zero are `sent`. Matrix: 12 GAP -> 11, 6 PARTIAL -> 7.
+
 **Addendum, 2026-08-31 latest+36 - filed service documents (ADR-216):**
 services-documents.behavior 9 on the real chain: bytes kept exactly as
 filed; the copy unable to be updated or deleted by anybody, which is the

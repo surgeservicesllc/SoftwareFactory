@@ -1,5 +1,30 @@
 # Backlog
 
+## Two competitor rows that are NOT provider-gated (found 2026-08-31)
+
+Checked while writing ADR-217, because "everything remaining is gated
+outside the code" had been wrong three times in two days and was worth
+testing rather than repeating. Of the eleven GAP rows, nine name a real
+external account nobody has opened. Two do not, and both carry a bare
+**GAP** with no gating reason attached — because there isn't one:
+
+- [ ] **Route optimization / visual route manager.** `crm_route_density`
+  (ADR-199) is an analytics read, not a sequencer. Optimising by DRIVE TIME
+  needs a mapping provider and is genuinely gated; sequencing a day's stops
+  by geographic distance is not — haversine plus nearest-neighbour and a
+  2-opt improvement pass is arithmetic this repository can do and test
+  offline. Shipping the distance-ordered planner would move the row to
+  PARTIAL with the honest remainder named: drive time, traffic and time
+  windows still need a provider.
+- [ ] **QuickBooks sync.** The API sync is gated on an Intuit account. A
+  QuickBooks-readable EXPORT FILE is not, and is what many small shops
+  actually use — the invoice and payment ledgers already hold everything it
+  needs. Would move the row to PARTIAL.
+
+Neither is started. They are recorded here rather than left as an
+unexamined "gated" so the next reader treats that word as a claim to check.
+
+
 ## Grok Bot -> truthful Chief-of-Staff workspace (ADR-190, 2026-08-30)
 
 - [x] Deterministic Chief-of-Staff planner: owner prompt -> intent,

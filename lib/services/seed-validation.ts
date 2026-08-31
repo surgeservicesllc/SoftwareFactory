@@ -501,6 +501,25 @@ const SPECS: Spec[] = [
     enumColumn: "kind",
     parents: [{ column: "account_id", table: "crm_accounts" }],
   },
+  {
+    table: "crm_contact_preferences",
+    optional: ["do_not_contact_at", "do_not_contact_reason"],
+    enumColumn: "channel",
+    parents: [{ column: "account_id", table: "crm_accounts" }],
+  },
+  {
+    // `dispatched_at` and `provider_reference` are absent from this list on
+    // purpose. They are populated only by a real dispatch through a
+    // connected provider, and a seeded value in either would be the one
+    // falsehood ADR-217 exists to make impossible.
+    table: "crm_notices",
+    optional: [
+      "work_order_id", "invoice_id", "subject_line",
+      "suppressed_at", "suppression_reason", "failure_reason", "cancelled_at",
+    ],
+    enumColumn: "state",
+    parents: [{ column: "account_id", table: "crm_accounts" }],
+  },
 ];
 
 /**

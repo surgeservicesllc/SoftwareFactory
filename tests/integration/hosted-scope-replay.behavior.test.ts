@@ -278,6 +278,7 @@ describe("the workflow's post-cutover surgical-scope fence", () => {
       "secret-guard-restricted-keys.sql",
       "service-documents.sql",
       "service-integrations.sql",
+      "transactional-notices.sql",
       "truck-stock.sql",
       "wdo-inspections.sql",
     ]);

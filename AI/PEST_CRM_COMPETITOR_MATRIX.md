@@ -78,7 +78,7 @@ built.
 | Account timeline / service history | all | **HAVE** (ADR-185) |
 | **Customer portal — residential**: balances, pay invoice, request service, service history | PestPac, GorillaDesk (Pro), Briostack, Jobber | **PARTIAL** — balances, invoices, visit history, documents and service requests ship (ADR-198). Paying online is **Not Connected**: no card processor is configured. |
 | **Customer portal — commercial**: open conditions, trend reports with heat maps, device summary, sighting tickets, SDS/compliance document library, inspection history | PestPac | **HAVE** (ADR-203) — open conditions unioning uncorrected sightings with failing stations; a station table read from the scan ledger; monthly activity by station type with the scan count beside it; a customer-filed sighting stamped with its portal seat; an SDS/label library covering only what was applied at the customer's own sites; completed-inspection history. Downloading a signed inspection copy is **Not Connected** — no object storage is configured. |
-| Customer communication: automated reminders, SMS/email notifications | Briostack, PestPac, FieldRoutes | **GAP** |
+| Customer communication: automated reminders, SMS/email notifications | Briostack, PestPac, FieldRoutes | **PARTIAL** — transactional notices (ADR-217) compose, address, deduplicate and suppress: a visit reminder, an en-route text, an overdue notice. Account-level do-not-contact is separate from marketing consent, and a suppressed notice is kept with its reason rather than dropped. What remains gated is only the send: `crm_notices` holds no UPDATE grant, so `sent` is reachable only through a dispatch that asks whether a provider is really connected. |
 
 ### B. Scheduling, routing, dispatch
 
@@ -135,7 +135,7 @@ built.
 | Service details and chemical usage pulled onto the invoice | PestPac, FieldRoutes | **HAVE** (ADR-212) — a draft invoice is built from the completed visit: the service at the plan's agreed value, then one line per current application naming product, amount, target pest and EPA number. Chemicals are priced at zero because the material is part of the service, and the exact amount is printed at the scale the compliance log recorded it. One visit bills once, across the whole book; a built invoice is voided and reissued rather than rebuilt. |
 | **Autopay, stored payment methods, card + ACH** | PestPac, FieldRoutes, Briostack | **GAP** — the ledger records money that moved; it does not move money |
 | **Recurring/subscription auto-invoicing** | Briostack, FieldRoutes | **PARTIAL** (ADR-200) — invoices are raised from due service plans, idempotently, and a plan cannot be billed twice for a period. Running it on a SCHEDULE is the gap: nothing in this product runs on a timer, so generation is operator-triggered and the page says **Not Connected** about the rest. |
-| **AR aging, dunning, automated reminders** | Briostack, PestPac | **PARTIAL** — aging by bucket (ADR-199) and a collections worklist with recorded actions (ADR-200) both ship. AUTOMATED reminders are the gap: no email/SMS provider is connected, so a notice records what a person did rather than what a machine sent. |
+| **AR aging, dunning, automated reminders** | Briostack, PestPac | **PARTIAL** — aging by bucket (ADR-199) and a collections worklist with recorded actions (ADR-200) both ship. The remaining gap is narrower than it was: overdue notices are now composed and addressed as transactional notices (ADR-217), and `crm_dunning_notices` still records what a person did. Only the send is gated. |
 | **QuickBooks sync** | Briostack, GorillaDesk, Jobber | **GAP** |
 
 ### G. Sales and marketing
@@ -239,7 +239,7 @@ implied, in the deepest-measured competitor on the board.
 | **Website builder** | PestPac (Website Builder) | **GAP** — PestPac sells one. This is outside what a CRM core is, and it is listed rather than quietly dropped so the count stays honest. |
 
 **A note on what "parity" can mean here.** 67 capability rows: **49 HAVE,
-6 PARTIAL, 12 GAP.**
+7 PARTIAL, 11 GAP.**
 
 (58 until PestBoss was measured in its own right, then 60, then 67 once
 PestPac's own feature index was checked against the board rather than

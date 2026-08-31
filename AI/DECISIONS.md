@@ -5408,3 +5408,82 @@ from "needs object storage" to "needs a sender" — which is the truthful
 version of a blocker I had overstated.
 
 Hosted apply scope `service-documents`.
+
+## ADR-217 - Composing is not sending, and the schema should know the difference
+
+Two rows on the competitor board — "customer communication: automated
+reminders" and the automated half of AR dunning — had sat at GAP and
+PARTIAL behind one stated reason: no email or SMS provider is connected.
+That reason is true. It is also the third time this week I have taken a
+real blocker and drawn too wide a conclusion from it, so this time I looked
+at what the blocker actually covers.
+
+It covers sending. It does not cover composing, addressing, deduplicating,
+or suppressing, and those are where the product is.
+
+**What was genuinely missing.** `crm_messages` (ADR-196) is already a real
+outbox — channel, a status funnel that only runs one way, the destination
+as it stood that day. But it requires `campaign_id NOT NULL`. A text
+saying a technician arrives tomorrow is not a campaign, and minting a
+campaign row to carry one would be a lie told to a foreign key.
+`crm_dunning_notices` (ADR-200) is not it either: that records what a
+PERSON did — rang, posted a letter — not what was composed. So a
+transactional notice had nowhere to live.
+
+**Nothing can claim to have been sent.** Not "the page won't show it as
+sent" — nothing can write it. `crm_notices` carries SELECT and INSERT and
+no UPDATE, for anybody; `sent` is reachable only through
+`crm_notice_mark_dispatched`, which asks `crm_integration_live()` first.
+With nothing connected the state is unreachable by construction rather than
+by convention. ADR-200 set this bar itself: "a queue of unsent reminders
+that looked like sent ones would be worse than no dunning at all." The
+state is called `composed`, not `queued`, because a queue implies a drainer
+and there is no drainer.
+
+The tests prove both directions. A gate that never opens is a wall, so one
+of them connects a provider — the owner's switch AND a sealed credential,
+because either alone is not live — and shows a real dispatch land.
+
+**A suppressed notice is still a row.** When a customer has asked not to be
+contacted, the notice is composed and then recorded as suppressed with its
+reason, rather than never existing. Dropping it silently would mean nobody
+can answer "was this customer told?", and "we have no record either way" is
+the answer that loses that argument.
+
+**Transactional consent is not marketing consent, and the separation is the
+feature.** `crm_list_members.unsubscribed_at` records leaving a mailing
+list. Somebody who leaves a newsletter has not asked to stop hearing that a
+technician is coming to their house tomorrow — they booked it. An explicit
+do-not-contact is different and stops both, which is why setting it forces
+both permissions false in the same row: there is no such state as "do not
+contact, but marketing is fine", and a schema that can express one will
+eventually hold one. Lifting a do-not-contact writes itself into the
+account's history, because that is the transition nobody can reconstruct
+from current state afterwards.
+
+**The deduplication lock.** One notice per subject per kind per day, as a
+unique index rather than a check the composer performs — the same reasoning
+ADR-200 used for double-billing. Two people pressing Remind, or one person
+pressing it twice on a slow connection, must not produce two texts.
+
+**Two things caught in review rather than in production.** A CHECK
+constraint using `at time zone` would have been rejected outright, because
+that function is STABLE and constraints require immutable expressions;
+`due_on` is now a supplied calendar day instead, which is also more correct
+— which day a 7pm reminder belongs to is a local business decision, not a
+UTC derivation. And a trigger read `OLD` on INSERT behind an `and` guard,
+which SQL does not promise to short-circuit.
+
+**The browser half** covers the two failures that look fine in code and
+wrong on a phone: a template that renders a gap ("Hi , your visit is on .")
+now refuses instead, and `smsCost` names the single character that
+re-encodes a whole message as UCS-2 and collapses the segment limit from
+160 to 70 — one curly apostrophe out of a word processor, invisible on
+screen, tripling the cost of every send from that template.
+
+The seed creates 1,827 notices and not one of them is `sent`.
+
+Row 81 moves GAP → PARTIAL for the same reason ADR-216 did: the substance
+ships, and only the send is gated.
+
+Hosted apply scope `transactional-notices`.
