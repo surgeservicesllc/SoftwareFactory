@@ -1,57 +1,50 @@
 # Current state
 
-## 2026-08-30: Grok Bot database containment accepted; application pending (ADR-190)
+## 2026-08-30: Grok Bot failure containment is production accepted (ADR-190)
 
 Grok Bot is a SoftwareFactory product label and Chief-of-Staff experience, not
-an xAI provider or model. Production currently serves exact database-first
-main `f6292c8ec359fd8e39c5463e4039b3388cf2056f`; all four jobs in CI run
+an xAI provider or model. Production now serves exact application commit
+`d4040fee445079e34b2e062bfc234b708f802d9b`; all four jobs in CI run
+`33349358778` passed, and Vercel deployment
+`dpl_9zKFCaitCUAidmEaDbE9vAgKv5fY` is READY at
+`https://softwarefactory-hiqx4fnbh-surgeservices-projects.vercel.app`. Public
+health matches the exact release on `main`, Vercel project
+`prj_pAsrhftaVWI4SyaqstgRVSWHJkdD`, and reachable Supabase project
+`qpuofpmagrmyamahqwxw`.
+
+The durable owner-only Supabase boundary remains tenant/project scoped under
+forced RLS, with append-only messages/events, immutable task/graph/artifact
+links, and monotonic controls. Planned provider/model/agent fields remain
+routing intent and are never presented as observed execution evidence. The
+service-only bridge can create only the canonical `full_lifecycle` v2 graph and
+pause it before visibility; the custom provider-labelled planning DAG is never
+launched.
+
+Database-first Phase 1 remains accepted at exact commit
+`f6292c8ec359fd8e39c5463e4039b3388cf2056f`. All four jobs in CI run
 `33348187052` passed, Vercel deployment
-`dpl_A35nZhbJQMJWLtUSroG9zXLWhXBw` is READY, and public health matches that
-identity. That
-baseline turns an owner prompt into a deterministic, JSON-safe Intent ->
-Requirements -> Plan -> Task Graph record using the project's configured
-Claude and Codex bot roster. Its responsive workspace restores durable
-sessions and renders conversation, goal, plan, agents, progress, files/diffs,
-tests, artifacts, and deployment evidence. Planned provider/model/agent fields
-remain routing intent and are never presented as observed execution evidence.
+`dpl_A35nZhbJQMJWLtUSroG9zXLWhXBw` was READY with matching health, migration
+apply run `33348980504` passed, and independent read-only verify run
+`33349033378` passed. The required ledger vector was `1|1|1|1`, with exact
+catalog, ACL, atomic runtime/replay, linked lint, health, and stopped safety.
+Do not rerun the mutation scope.
 
-Migration `20260830001000_grok_chief_of_staff_persistence.sql` adds the durable
-owner-only Supabase boundary: sessions, append-only messages and events,
-immutable task/graph/artifact links, and monotonic control intents, all tenant
-and project scoped under forced RLS with bounded definer functions. The owner
-session APIs create, list, read, and control that durable state. Replays are
-idempotent, and status/reload truth is projected from persisted state. The
-service-only execution bridge creates the exact canonical `full_lifecycle` v2
-graph — Claude planning -> HUMAN architecture gate -> Codex Phase 1C -> exact
-CI, Vercel, and health evidence — and pauses it in the same transaction before
-it becomes visible. The custom provider-labelled DAG remains planning data and
-is never launched; graph and node runs remain absent, and no worker is
-dispatched.
+Phase 2 containment is also production accepted. Signed-in acceptance on the
+Demo Data project submitted a harmless README wording request and created
+session `569325a5-5cd2-40c3-831e-0d90c89188ab`. Missing ready Claude coverage
+was refused truthfully into a durable `blocked`, nonclosed session with exactly
+two messages and five immutable events in order: `session.created`, user
+`message.appended`, assistant `message.appended`, `session.planning_failed`,
+and `session.blocked`. The URL retained the exact session through return and
+reload. No plan, routing identity, graph, run, artifact/deployment evidence,
+provider call, worker wake, or dispatch was created. Legacy active session
+`74d18263-37ba-4f7d-8230-dc5e41bdc86a` now reloads truthfully as request saved
+with no plan.
 
-Earlier signed-in production acceptance found one truthful failure-path defect. A
-legitimate connected Claude bot is ready, but no Codex bot is available, so
-the deterministic planner correctly refuses the roster. The existing route
-persisted the owner message while leaving the session active, and the UI then
-misreported that a plan had been saved. The forward-only database containment
-in `20260830001100_grok_planning_failure.sql` adds a service-role-only atomic
-boundary records a fixed safe assistant response and immutable failure events,
-then leaves the session `blocked` and nonclosed without creating a graph, run,
-or dispatch. The API candidate replays that durable failure as a structured
-409 carrying the session identity and stopped-execution flags. The workspace
-keeps that identity in the URL, reloads the recorded evidence, and explicitly
-shows that no plan, routing identity, provider call, or worker execution was
-created.
-
-Database-first Phase 1 is complete. Migration apply run `33348980504` and
-independent read-only verify run `33349033378` passed against the exact release:
-the required ledger vector is `1|1|1|1`, and catalog, ACL, atomic runtime and
-replay, linked lint, health, and stopped-safety checks are exact. Phase 2 remains
-pending: publish the API/store/UI caller, require exact-head CI and Vercel
-identity, then complete signed-in create/return/reload acceptance. The new
-application behavior is not yet claimed live. Workers, autonomy, and automatic
-actions remain OFF, and the global kill switch remains ON. This containment
-does not fabricate a missing Codex route or authorize execution. **GROK BOT:
-PRODUCTION READY is not declared.**
+Workers, autonomy, and automatic actions remain OFF, and the global kill switch
+remains ON; no safety state changed. The containment release is accepted, but
+the provider-backed loop still requires legitimate ready bot coverage and
+separately authorized execution. **GROK BOT: PRODUCTION READY is not declared.**
 
 ## Services CRM (task #63, ADR-185 — newest product)
 

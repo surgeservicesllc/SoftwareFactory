@@ -39,13 +39,23 @@
   apply run `33348980504` and read-only verify run `33349033378` passed. The
   required ledger vector is `1|1|1|1`, with exact catalog, ACL, atomic
   runtime/replay, linked lint, health, and stopped safety.
-- [ ] Release Phase 2 only now that the database capability is accepted:
-  publish the API/store/UI caller, require exact-head CI and Vercel identity,
-  then prove signed-in failure create/return/reload truth — durable `blocked`
-  nonclosed session, fixed safe assistant response and immutable events, no
-  invented plan or routing identity, and no graph/run/dispatch. Keep workers,
-  autonomy, and automatic actions OFF and the global kill switch ON; do not
-  declare `GROK BOT: PRODUCTION READY` before this evidence exists.
+- [x] Release and accept Phase 2 containment at exact app commit
+  `d4040fee445079e34b2e062bfc234b708f802d9b`: all four jobs in CI run
+  `33349358778` green; Vercel deployment
+  `dpl_9zKFCaitCUAidmEaDbE9vAgKv5fY` READY with exact release/main health,
+  project `prj_pAsrhftaVWI4SyaqstgRVSWHJkdD`, and reachable matched Supabase
+  `qpuofpmagrmyamahqwxw`. Signed-in Demo Data acceptance created durable session
+  `569325a5-5cd2-40c3-831e-0d90c89188ab`, truthfully refused missing ready
+  Claude coverage, and reloaded the exact `blocked`, nonclosed state with two
+  messages and five ordered immutable events. It created no plan, routing
+  identity, graph, run, artifact/deployment evidence, provider call, worker
+  wake, or dispatch. Legacy session `74d18263-37ba-4f7d-8230-dc5e41bdc86a`
+  now reloads as request saved/no plan.
+- [ ] Complete the separate provider-backed loop only after legitimate ready
+  bot coverage exists and execution receives its own authorization. Keep
+  workers, autonomy, and automatic actions OFF and the global kill switch ON;
+  Phase 2 containment acceptance alone does not declare `GROK BOT: PRODUCTION
+  READY`.
 
 ## Services CRM → pest-services platform (task #63, owner /goal 2026-08-30)
 

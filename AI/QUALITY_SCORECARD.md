@@ -2,6 +2,26 @@
 
 Last reviewed: 2026-08-30
 
+**Addendum, 2026-08-30 latest+15 — Grok Phase 2 containment production
+accepted (ADR-190):** exact app commit
+`d4040fee445079e34b2e062bfc234b708f802d9b` passed all four jobs in CI run
+`33349358778`; Vercel deployment `dpl_9zKFCaitCUAidmEaDbE9vAgKv5fY` is READY,
+and health matches exact release/main, Vercel project
+`prj_pAsrhftaVWI4SyaqstgRVSWHJkdD`, and reachable Supabase
+`qpuofpmagrmyamahqwxw`. Signed-in Demo Data acceptance created session
+`569325a5-5cd2-40c3-831e-0d90c89188ab` and truthfully refused missing ready
+Claude coverage into a durable `blocked`, nonclosed record: two messages and
+five immutable events ordered `session.created`, user `message.appended`,
+assistant `message.appended`, `session.planning_failed`, `session.blocked`.
+Return/reload retained the exact URL session and evidence; no plan, routing
+identity, graph, run, artifact/deployment evidence, provider call, worker wake,
+or dispatch exists. Legacy session `74d18263-37ba-4f7d-8230-dc5e41bdc86a`
+now reloads truthfully as request saved/no plan. Phase 1 evidence and its
+do-not-rerun mutation boundary remain preserved. Workers/autonomy/automatic
+actions stayed OFF and the kill switch ON. This accepts failure containment,
+not overall Grok Bot production readiness: the provider-backed loop still
+needs legitimate ready bot coverage and separately authorized execution.
+
 **Addendum, 2026-08-30 latest+14 — Grok database-first phase accepted
 (ADR-190):** exact commit `f6292c8ec359fd8e39c5463e4039b3388cf2056f`
 passed all four jobs in CI run `33348187052`; Vercel deployment
