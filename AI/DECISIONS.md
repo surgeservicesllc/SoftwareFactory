@@ -4631,8 +4631,8 @@ Hosted apply scope `commercial-portal`.
 ## ADR-204 - Grok graph control is atomic and Resume has a bounded wake boundary
 
 - **Date**: 2026-08-30
-- **Status**: Accepted for the local candidate; production execution remains
-  disabled and unverified
+- **Status**: Production accepted for the control/read boundary; provider
+  execution remains disabled and unverified
 - **Decision**: canonical graph creation remains paused and dispatch-free. One
   owner-authenticated database transaction serializes the scoped session,
   creates or replays the exact graph intent, appends `control.requested`,
@@ -4668,6 +4668,15 @@ Hosted apply scope `commercial-portal`.
   definer/search path, and orders supersession with immutable per-session event
   `sequence_no`, not transaction-stable timestamps. The bounded transcript is
   evidence, never an idempotency index.
+- **Release containment**: protected run `33357349773` applied the migration
+  exactly once and then stopped because its verifier hashed a trimmed body.
+  PostgreSQL's exact `prosrc` retains the delimiter-adjacent newlines, so
+  forward code commit `2c68e7c9a1ef5ee22a38f7272236d61ab1e11b04`
+  corrected the expected MD5 to `2b0ea737ac99b22570ddbfdd4c583eeb` and added
+  a delimiter-derived regression test. A new database migration would have
+  misstated the incident and expanded the ledger without changing catalog
+  truth; none was added and no migration was replayed. Read-only run
+  `33359633742` is the acceptance evidence.
 - **Control-target consequence**: direct Cancel/Retry are refused by this Grok
   endpoint and remain **Not Connected**. Existing Phase 1C action functions do
   not atomically correlate each transition with its Grok audit resolution, so

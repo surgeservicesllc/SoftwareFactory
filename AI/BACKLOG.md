@@ -6,7 +6,7 @@
   requirements, acceptance criteria, dependency graph, configured-agent
   routing intent, and bounded budget. `Grok Bot` is the product name; no xAI
   provider is introduced.
-- [x] Local durable boundary in
+- [x] Hosted durable boundary in
   `20260830001000_grok_chief_of_staff_persistence.sql`: owner-only,
   tenant/project-scoped sessions; append-only messages/events; immutable
   task, graph, and artifact links; monotonic control intents; forced RLS and
@@ -35,7 +35,7 @@
   interrupted idempotent action and service-role resolution. The graph's
   immutable repository id must match the resolved
   dispatch target, other controls never dispatch, and disabled, invalid,
-  conflicting, or failed wakes remain **Not Connected**. This local path does
+  conflicting, or failed wakes remain **Not Connected**. This path does
   not enable either worker or change autonomy/kill-switch state. Direct
   Cancel/Retry are refused by this endpoint and remain **Not Connected** until
   one forward database boundary can correlate each action with its audit
@@ -46,6 +46,13 @@
   table grant, pinned definer/search path, immutable event-sequence ordering,
   exact replay without duplicate evidence, and rollback without residue for
   unavailable fresh actions.
+- [x] Apply `20260830010000` exactly once through protected run `33357349773`.
+  The mutation and ledger insert succeeded; the run stopped only because its
+  postflight hashed a trimmed function body. Forward verifier containment
+  `2c68e7c9a1ef5ee22a38f7272236d61ab1e11b04` corrected the canonical
+  PostgreSQL `prosrc` fingerprint without replaying a migration or changing
+  history. Read-only run `33359633742` proved ledger `1|1|1|1|1`,
+  exact catalog/ACL/runtime/rollback, linked lint, health, and stopped safety.
 - [x] Project canonical linked graph-run and release evidence into the Grok
   workspace: observed node route/state/attempt, token/cost/closure, newest 500
   graph events and newest 200 session events with truncation truth, artifacts,

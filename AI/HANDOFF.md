@@ -500,8 +500,8 @@ compliance.
 ## Newest (2026-08-30, latest+15): Grok failure containment production accepted (ADR-190)
 ## Follow-on (2026-08-30, latest+20): atomic Grok control and bounded Resume wake/recovery (ADR-204)
 
-The local follow-on closes the graph-control and first Resume wake/recovery gaps
-without changing the safety envelope. One owner-authenticated database
+The production control/read release closes the graph-control and first Resume
+wake/recovery gaps without changing the safety envelope. One owner-authenticated database
 transaction locks the scoped session, creates or replays the exact intent,
 records the request, applies the graph transition, resolves the intent, and
 records immutable applied evidence. A refusal rolls back all of it. Once an
@@ -533,9 +533,24 @@ search. `20260830010000_atomic_grok_graph_control.sql` (SHA-256
 adds one authenticated, owner-only RPC, exactly tenant/session/project/launched-graph/
 key scoped with no table grant and pinned definer/search path. Replay does not
 duplicate events; a newer same-graph event or opposite generic graph state
-supersedes an older key; an unlinked graph is refused without residue; and a fresh
-unavailable action leaves no intent, graph mutation, or event. Hosted apply and
-exact catalog/ACL/runtime/rollback/lint/health verification remain release gates.
+supersedes an older key; an unlinked graph is refused without residue; and a
+fresh unavailable action leaves no intent, graph mutation, or event.
+
+Migration/workflow commit `6e85b8762c28552313d7de7726118a6d733b42ef`
+passed CI run `33356348578`. Protected run `33357349773` applied
+`20260830010000` exactly once and inserted its ledger row, then stopped only
+because the postflight expected trimmed-body MD5
+`55508f9dad0b6f307b02713057949895` instead of PostgreSQL's canonical `prosrc`
+MD5 `2b0ea737ac99b22570ddbfdd4c583eeb`. Forward verifier containment
+`2c68e7c9a1ef5ee22a38f7272236d61ab1e11b04` passed all four jobs in CI run
+`33357696796` and deployed READY as `dpl_67Amo2Hm9uRNpFUpxTYCz1H83ffY`.
+Read-only run `33359633742` proved ledger `1|1|1|1|1`, exact
+catalog/ACL/runtime/rollback, linked lint, health, and stopped safety. No
+migration was replayed, no ledger history was changed, and no no-op migration
+was added. Read-only attempt `33358635527` stopped before connecting to
+Supabase when `main` advanced to owner-merged PR #471; all database steps were
+skipped. The successful attestation ran after the application rebase and after
+the unrelated Services `20260830002200` and `20260830002300` applies completed.
 
 Direct Cancel/Retry are intentionally refused by this Grok endpoint. The
 existing Phase 1C functions do not atomically correlate every action with its
@@ -550,10 +565,14 @@ preview, deployment, and health. It does not manufacture bot/worker identity.
 Rollback and automatic continuation say **Not Connected**, and graph state
 alone no longer exposes Phase 1C Cancel/Retry.
 
-This is an uncommitted local candidate only. Both worker switches remain OFF,
-autonomy and automatic actions remain OFF, and the global kill switch remains
-ON. No hosted state or external provider was mutated; production acceptance
-and legitimate Ready bot coverage remain required. The downstream claim does
+Application commit `5bc8eea092c683bd53aa25867efe8ab29a32b93b` passed all
+four jobs in CI run `33358790065` and deployed READY as
+`dpl_ABMNZDEY6drqBP7YdMqrfmHaJrYi` at
+`https://softwarefactory-i7tikev82-surgeservices-projects.vercel.app`, with
+exact public health identity at application acceptance.
+Both worker switches remain OFF, autonomy and automatic actions remain OFF,
+and the global kill switch remains ON. Legitimate Ready bot coverage remains
+required. The downstream claim does
 not yet pin the selected bot/account/provider/model or immutable assignment
 revisions, and MODEL execution still uses ambient worker identity. Do not call
 this complete provider admission or declare `GROK BOT: PRODUCTION READY`.

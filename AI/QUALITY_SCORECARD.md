@@ -331,8 +331,8 @@ hosted-grants eleven crm tables; runbook 188; workflow scope pest-ipm
 postflight. Lint zero warnings, tsc clean; full vitest + production
 build before shipping.
 
-**Addendum, 2026-08-30 latest+20 — atomic Grok control and bounded Resume wake
-candidate (ADR-204):** one owner-authenticated transaction serializes the
+**Addendum, 2026-08-31 latest+20 — production-accepted atomic Grok control and
+bounded Resume wake (ADR-204):** one owner-authenticated transaction serializes the
 session, creates/replays the exact intent, records requested evidence, applies
 Pause/Resume/Withdraw, resolves the intent, and records applied evidence. After
 that transaction commits, only Resume resolves the exact project/repository
@@ -364,12 +364,26 @@ owner, and search path.
 The UI consumes canonical graph-run and shared release evidence, keeps planned
 identity separate from observed routes, reports bounded graph/session event
 truncation, and leaves Rollback/automatic continuation **Not Connected**. Graph
-state alone no longer advertises Phase 1C Cancel/Retry. This is local candidate
-evidence, not complete runtime-identity admission or production acceptance:
+state alone no longer advertises Phase 1C Cancel/Retry. This is production-
+accepted control/read evidence, not complete runtime-identity admission or
+provider execution:
 the downstream claim does not pin the selected bot/account/provider/model and
 immutable assignment revisions, MODEL execution uses ambient worker identity,
 and worker switches, autonomy, automatic actions, and the kill switch remain
 unchanged.
+
+Release evidence: commit `6e85b8762c28552313d7de7726118a6d733b42ef`
+passed CI `33356348578`; run `33357349773` applied `20260830010000` once and
+ledgered it before a verifier-only trimmed-newline hash mismatch. Canonical
+PostgreSQL `prosrc` MD5 is `2b0ea737ac99b22570ddbfdd4c583eeb`, not the
+trimmed-body `55508f9dad0b6f307b02713057949895`. Forward containment
+`2c68e7c9a1ef5ee22a38f7272236d61ab1e11b04` passed CI `33357696796` and
+deployed READY as `dpl_67Amo2Hm9uRNpFUpxTYCz1H83ffY`; it changed only the
+verifier and its regression test. Read-only run `33359633742` proved
+ledger `1|1|1|1|1`, exact catalog/ACL/runtime/rollback, linked lint, health,
+and stopped safety. Application commit
+`5bc8eea092c683bd53aa25867efe8ab29a32b93b` passed CI `33358790065` and
+deployed READY as `dpl_ABMNZDEY6drqBP7YdMqrfmHaJrYi`.
 
 **Addendum, 2026-08-30 latest+15 — Grok Phase 2 containment production
 accepted (ADR-190):** exact app commit

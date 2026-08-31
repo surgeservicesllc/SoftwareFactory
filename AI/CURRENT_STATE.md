@@ -1,14 +1,14 @@
 # Current state
 
-## 2026-08-30: Grok Bot failure containment is production accepted (ADR-190)
+## 2026-08-31: Grok atomic control is production accepted; provider loop remains open (ADR-204)
 
 Grok Bot is a SoftwareFactory product label and Chief-of-Staff experience, not
-an xAI provider or model. Production now serves exact application commit
-`d4040fee445079e34b2e062bfc234b708f802d9b`; all four jobs in CI run
-`33349358778` passed, and Vercel deployment
-`dpl_9zKFCaitCUAidmEaDbE9vAgKv5fY` is READY at
-`https://softwarefactory-hiqx4fnbh-surgeservices-projects.vercel.app`. Public
-health matches the exact release on `main`, Vercel project
+an xAI provider or model. Production now includes exact application commit
+`5bc8eea092c683bd53aa25867efe8ab29a32b93b`; all four jobs in CI run
+`33358790065` passed, and Vercel deployment
+`dpl_ABMNZDEY6drqBP7YdMqrfmHaJrYi` is READY at
+`https://softwarefactory-i7tikev82-surgeservices-projects.vercel.app`. At
+application acceptance, public health matched that exact release on `main`, Vercel project
 `prj_pAsrhftaVWI4SyaqstgRVSWHJkdD`, and reachable Supabase project
 `qpuofpmagrmyamahqwxw`.
 
@@ -46,8 +46,8 @@ remains ON; no safety state changed. The containment release is accepted, but
 the provider-backed loop still requires legitimate ready bot coverage and
 separately authorized execution. **GROK BOT: PRODUCTION READY is not declared.**
 
-The local follow-on now gives owner Resume a bounded, recoverable wake path
-without widening authority. One owner-authenticated database transaction
+The production control/read release gives owner Resume a bounded, recoverable
+wake path without widening authority. One owner-authenticated database transaction
 serializes the session, creates or replays the exact graph-control intent,
 records `control.requested`, applies Pause/Resume/Withdraw, resolves the intent,
 and records `control.applied`; any refusal rolls the whole transition back. Only
@@ -63,18 +63,40 @@ applied key is rejected after any later opposite graph control. New unavailable 
 actions roll back without an intent or event. Pause and stop never dispatch.
 Disabled, invalid, conflicting, or unavailable dispatch remains truthful **Not
 Connected**. Dispatch acceptance is not represented as a successful claim or
-execution. This is local candidate
-behavior only; no worker switch, autonomous action, kill switch, hosted state,
-or production execution changed.
+execution. The release changed no worker switch, autonomous action, kill
+switch, or provider execution state.
 
 Forward migration `20260830010000_atomic_grok_graph_control.sql`
 (SHA-256 `bbd664a7b556a07ab31b84b155725ea8a1b1c5a7f6a6afb1cfe1bae8c07f06b7`)
 adds one authenticated, owner-only atomic graph-control boundary. It is
-tenant/session/project/exact-launched-graph/key bound, exposes no table grant, preserves
-`SECURITY DEFINER` with `search_path=pg_catalog`, and orders supersession by
+tenant/session/project/exact-launched-graph/key bound, exposes no table grant,
+preserves `SECURITY DEFINER` with `search_path=pg_catalog`, and orders supersession by
 the immutable per-session `grok_events.sequence_no`. The bounded transcript is
-evidence, never an idempotency index. Hosted apply and exact catalog/ACL/
-runtime/rollback/lint/health verification remain release gates.
+evidence, never an idempotency index.
+
+Migration/workflow commit `6e85b8762c28552313d7de7726118a6d733b42ef`
+passed all four jobs in CI run `33356348578` and deployed successfully as
+GitHub deployment `6174926870`. Protected run `33357349773` passed exact
+preflight and applied `20260830010000` exactly once, inserted its ledger row,
+and reloaded PostgREST. Its postflight then stopped on a verifier-only mismatch:
+the workflow expected trimmed-body MD5 `55508f9dad0b6f307b02713057949895`,
+while PostgreSQL correctly retained the dollar-quoted body's delimiter-adjacent
+newlines and reported canonical `prosrc` MD5
+`2b0ea737ac99b22570ddbfdd4c583eeb`.
+
+Forward code containment
+`2c68e7c9a1ef5ee22a38f7272236d61ab1e11b04` derives the fingerprint from the
+exact migration body. It passed all four jobs in CI run `33357696796` and
+deployed READY as `dpl_67Amo2Hm9uRNpFUpxTYCz1H83ffY` at
+`https://softwarefactory-m8t3wp4zn-surgeservices-projects.vercel.app`. No
+migration was replayed, no ledger history was changed, and no attestation-only
+migration was added. Read-only run `33359633742` then proved ledger
+`1|1|1|1|1`, exact catalog/ACL/runtime/rollback, linked lint, production health,
+and stopped safety. Earlier read-only attempt `33358635527` stopped before its
+Supabase connection because `main` advanced to owner-merged PR #471; every
+database step was skipped and no mutation occurred. The successful attestation
+ran only after rebasing the application release and after the unrelated
+Services `20260830002200`/`20260830002300` applies completed.
 
 Direct Cancel and Retry are intentionally absent from this endpoint. Their
 existing Phase 1C action functions do not provide one atomic action-plus-audit

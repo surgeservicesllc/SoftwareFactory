@@ -1,8 +1,9 @@
 # SoftwareFactory — shared working status
 
-## GROK CANONICAL EVIDENCE + RESUME WAKE CANDIDATE (2026-08-30 — RELEASE IN PROGRESS)
+## GROK CANONICAL EVIDENCE + RESUME WAKE PRODUCTION ACCEPTED (2026-08-31)
 
-- Local candidate projects exact linked graph-run/node/artifact/event evidence
+- Production application commit `5bc8eea092c683bd53aa25867efe8ab29a32b93b`
+  projects exact linked graph-run/node/artifact/event evidence
   plus shared PR/CI/preview/deployment/health evidence into the Chief-of-Staff
   workspace. It keeps planned bot identity separate from observed execution,
   retains bounded newest graph/session event windows with explicit truncation,
@@ -20,16 +21,26 @@
 - Forward migration `20260830010000_atomic_grok_graph_control.sql`
   (`bbd664a7b556a07ab31b84b155725ea8a1b1c5a7f6a6afb1cfe1bae8c07f06b7`)
   supplies the authenticated owner-only atomic boundary without a table grant.
-  Database-first hosted apply and independent verification are pending; this
-  timestamp intentionally avoids already-used Services migrations through
-  `20260830001900`.
+  Protected run `33357349773` applied it exactly once and ledgered it; the run
+  then stopped only because the verifier trimmed delimiter-adjacent newlines.
+  Forward containment `2c68e7c9a1ef5ee22a38f7272236d61ab1e11b04`
+  corrected the canonical `prosrc` MD5 to
+  `2b0ea737ac99b22570ddbfdd4c583eeb` without replay, history change, or a no-op
+  migration. Read-only run `33359633742` proved ledger `1|1|1|1|1`
+  and the exact catalog/ACL/runtime/rollback/lint/health/stopped-safety chain.
+  Attempt `33358635527` is harmless historical evidence: it stopped before
+  Supabase when `main` advanced, skipped every database step, and changed
+  nothing.
 - This is a wake/recovery path, not complete provider-identity admission. The
   database claim still does not pin the selected bot/account/provider/model or
   immutable assignment revisions; MODEL execution uses ambient worker
   identity. Keep workers/autonomy/automatic actions OFF and the global kill
   switch ON. Do not declare `GROK BOT: PRODUCTION READY`.
-- Release gates, exact commit, CI run, Vercel deployment, public health, and
-  read-only stopped-safety verification are pending in this section.
+- Application CI `33358790065` passed all four jobs; Vercel deployment
+  `dpl_ABMNZDEY6drqBP7YdMqrfmHaJrYi` is READY at
+  `https://softwarefactory-i7tikev82-surgeservices-projects.vercel.app`, and
+  public health matched that exact application release, Vercel project, and
+  Supabase project at acceptance time.
 
 ## GROK BOT FAILURE CONTAINMENT ACCEPTED; PROVIDER LOOP STILL OPEN (2026-08-30 — PICK UP HERE)
 
