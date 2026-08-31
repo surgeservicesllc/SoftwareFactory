@@ -28,6 +28,30 @@ one-shot dispatch, inert schedule/global drain, read-only workflow authority,
 and no ambient checkout identity. Exact-head CI/build/browser, hosted 020,
 deployment, health, and live acceptance remain pending; no production claim is
 made and all execution controls remain stopped.
+**Addendum, 2026-08-31 - protected Grok causal production acceptance
+(ADR-240):** The candidate adds one manual start/finish workflow, three
+read-only SQL verifiers, strict bounded start/finish evidence schemas, an
+opt-in signed-in Playwright specification with all capture disabled, and static
+workflow/SQL contracts. Start creates a fresh workflow-unique docs-only goal,
+proves immutable planner/context/roster/admission identity, explicit Resume,
+durable first wake receipt, real Anthropic node artifacts, exact first-attempt
+OpenAI Phase 1C lineage, an exact one-file draft PR, and four exact-head checks.
+It publishes the exact session/graph handoff so the owner can separately
+approve the HUMAN ARCHITECTURE gate while start waits; the workflow cannot do
+that itself.
+Finish consumes only the exact start run/hash after separate owner merge and
+proves current-main/READY/health/Supabase identity, unchanged check IDs, exact
+merge/deployment, terminal artifacts from the same causal graph/run chain,
+passing five-stage validation, and a read-only reload. GitHub permissions are
+read-only except artifact transport; no approval, merge, deploy, dispatch,
+variable change, migration,
+or safety-state mutation exists. Focused validation is recorded by the atomic
+candidate commit once run. Production execution remains pending, so there is
+no live provider or production-ready claim. Hosted reproducibility is also
+blocked until the currently absent dedicated
+`GROK_CAUSAL_PRODUCTION_EMAIL` / `GROK_CAUSAL_PRODUCTION_PASSWORD` protected
+secrets are provisioned for an exact project owner; existing credentials must
+not be repurposed and a local signed-in browser is supplemental only.
 
 **Addendum, 2026-08-31 latest+55 - protected Grok 019 admission-version
 null fence (ADR-237):** Repository evidence freezes canonical-LF migration 019

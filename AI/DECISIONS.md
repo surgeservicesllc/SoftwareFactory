@@ -6302,3 +6302,64 @@ exact-launch scoped. The UI separately labels intent, dispatch acceptance, and
 worker receipt and preserves that truth after reload. This decision does not
 enable any worker, schedule, autonomy, automatic action, merge, deployment, or
 rollback, and it does not disengage the global kill switch.
+## ADR-240 - Accept Grok causally through a new start identity and a separately finished release
+
+- **Date**: 2026-08-31
+- **Status**: Accepted for the repository candidate; no live acceptance run
+
+Reading a convenient pre-existing session cannot prove that the deployed
+planner, Resume boundary, wake transport, graph worker, providers, Phase 1C,
+GitHub, deployment recorder, and terminal validator formed one causal chain.
+Production acceptance therefore has two manual phases joined by one strict,
+secret-free immutable evidence artifact.
+
+`start` must run from the exact current green and READY main commit, as the
+configured owner actor on attempt one, using a dedicated secret-backed account
+that is an owner of the exact project. It creates one workflow-unique harmless
+goal permitting only one new Markdown file below
+`docs/grok-causal-acceptance/`. The browser proves the new immutable plan,
+bounded context, roster, route, and paused graph before issuing exactly one
+Resume. Dispatch acceptance is not worker truth: the lane waits for the exact
+durable wake intent/revision, one accepted transport attempt, and the same
+worker's protocol/capability receipt. Database and provider evidence must then
+join the causal graph/run chain to completed real Anthropic MODEL nodes and
+artifacts, one first-attempt OpenAI Phase 1C run, one exact draft PR, one added
+docs file, and all four exact-head GitHub Actions checks. The artifact stores
+only bounded IDs, hashes, URLs, and timestamps; its SHA-256 is the finish
+capability.
+
+Because the exact full-lifecycle architecture gate is HUMAN, the start job
+publishes the new session and graph identity before it waits. The owner must
+separately approve only that exact ARCHITECTURE gate in the product; the
+workflow has no approval permission or endpoint. The sealed start artifact is
+created only after that approval causally produces the exact draft PR and its
+checks.
+
+The hosted lane requires dedicated protected secrets named
+`GROK_CAUSAL_PRODUCTION_EMAIL` and `GROK_CAUSAL_PRODUCTION_PASSWORD`. They are
+not currently provisioned, so hosted execution must remain blocked until an
+exact project-owner account is configured. Existing credentials must not be
+repurposed. An already authenticated local browser can supplement acceptance,
+but it cannot replace the hosted lane's reproducible account identity.
+
+`finish` accepts only that exact artifact run ID and SHA-256 after the owner has
+separately approved required graph gates, reviewed, and merged the exact PR.
+It must prove the unchanged PR-head check identities and the same database
+session/graph/run-chain/wake/bridge/agent-run/PR identity through the exact current-main
+merge SHA, exact READY Vercel/GitHub deployment, public health, completed graph
+and nodes, terminal monitoring artifact, matching observation, and passing
+five-stage post-deploy validation. Its browser action is read-only and reloads
+only the session named by the start artifact.
+
+The workflow cannot approve a gate, merge, deploy, dispatch a workflow, change
+a variable, apply a migration, or print a secret. GitHub permissions are read-
+only except the unavoidable artifact channel; checkout credentials and browser
+capture are disabled. Migrations 020 and 021, exact repository target claims,
+and durable wake receipts are prerequisites, never operations performed by
+this lane. Manual worker enablement remains a separate owner action: start
+requires the bounded graph and Phase 1C gates already enabled, while finish
+requires both returned to OFF. Scheduled workers remain OFF, the auth broker
+remains disabled, autonomy and automatic actions remain OFF, and the global
+kill switch remains ON throughout. Every identity, history, provider, CI,
+deployment, safety, or artifact mismatch fails closed and requires a new
+forward-reviewed candidate rather than evidence repair.

@@ -52,6 +52,37 @@ locally, including wrong repository/SHA/installation and moved-branch pinned-
 SHA cases. This is an isolated repository commit only. No push, deployment,
 workflow dispatch, Supabase apply, or live provider run occurred. Keep every
 worker, autonomy mode, and automatic action OFF and every kill switch ON.
+## Newest (2026-08-31): protected two-phase Grok causal acceptance (ADR-240)
+
+Use `.github/workflows/grok-causal-production-acceptance.yml` only after the
+exact repository candidate, migrations 020/021, four CI jobs, Vercel READY
+identity, public health, and Supabase ledger/catalog are all exact. `start`
+requires confirmation `start-causal-grok-docs-pr`, a dedicated account from
+`GROK_CAUSAL_PRODUCTION_EMAIL` / `GROK_CAUSAL_PRODUCTION_PASSWORD`, and
+separately enabled manual graph/Phase 1C worker gates. It creates one new
+workflow-owned docs-only session and will wait for a separate owner architecture
+gate; it never approves that gate. Preserve the printed start run ID and
+evidence SHA-256.
+
+`GROK_CAUSAL_PRODUCTION_EMAIL` and `GROK_CAUSAL_PRODUCTION_PASSWORD` are not
+currently configured as repository secrets, so hosted start is intentionally
+blocked. Provision them only for a dedicated owner account; do not substitute
+or repurpose an existing credential. A signed-in local browser is useful only
+as supplemental evidence and does not replace the hosted identity proof.
+
+After the owner independently approves remaining graph gates, reviews, and
+merges the exact draft PR, return both worker gates to OFF and run `finish`
+with confirmation `finish-causal-grok-release`, the new exact main SHA, and
+the exact start run/hash. Finish downloads and revalidates that immutable
+artifact, requires the unchanged exact PR-head checks, and proves the same
+session through merge, deployment, health, terminal artifacts, and read-only
+reload. Never replace the start artifact with hand-entered IDs.
+
+The lane has no automatic approval/merge/deploy/dispatch/migration/variable
+mutation. Do not add one. GitHub permissions are read-only except artifact
+transport; capture is OFF; emitted artifacts contain bounded IDs and hashes,
+not account credentials or goal/context content. Any mismatch is a stop for a
+new forward candidate. No production run or readiness claim exists yet.
 
 ## Newest (2026-08-31, latest+55): protected Grok 019 null-fence lane (ADR-237)
 

@@ -49,6 +49,50 @@ target code. Tests cover wrong repository/SHA/installation, a moved branch
 whose pinned SHA remains reachable, cleanup, and zero provider callback on
 workspace failure. Nothing was pushed, deployed, dispatched, or applied;
 workers/autonomy/actions remain OFF and kill switches remain ON.
+## 2026-08-31: Grok has a protected two-phase causal production acceptance lane (ADR-240)
+
+The repository candidate adds manual workflow
+`.github/workflows/grok-causal-production-acceptance.yml`. Its `start` phase
+does not inspect a pre-existing session: a dedicated secret-backed production
+account creates one workflow-unique harmless goal whose only permitted change
+is one new `docs/grok-causal-acceptance/<run>-<base>.md` file, verifies the
+immutable planner-v3 message/context/roster/admission identities, explicitly
+Resumes once, and waits for the exact durable dispatch plus worker receipt.
+It then binds real Anthropic node/artifact evidence to the same causal graph/run
+chain and the exact first-attempt OpenAI Phase 1C run, draft PR, one-file diff,
+and all four exact-head CI checks. The resulting strict, secret-free start
+artifact is uploaded with its SHA-256 and exact session/run/PR lineage.
+The workflow publishes that session identity while it waits because the owner
+must separately approve its exact HUMAN ARCHITECTURE gate; the workflow cannot
+approve any gate.
+
+The independent `finish` phase downloads only that exact run artifact and
+requires its owner-supplied SHA-256. After the owner separately approves gates,
+reviews, and merges the exact PR, finish proves current-main/READY Vercel/
+health/Supabase identity, unchanged PR-head check identities, the exact merge
+and GitHub deployment, terminal artifacts from that same graph/run chain,
+passing five-stage post-deploy evidence, and a read-only signed-in reload of the
+same session.
+It emits a second strict bounded artifact. The workflow has read-only GitHub
+permissions apart from the Actions artifact channel and contains no approval,
+merge, deployment, workflow dispatch, variable mutation, migration apply, or
+secret-output path.
+
+This is repository-only acceptance machinery. It has not been run against
+production and makes no live provider or production-readiness claim. It
+depends on hosted migrations 020 and 021 and separately controlled manual
+worker gates. It never schedules a worker or changes those gates; start fails
+unless they were separately enabled for the bounded run, and finish fails
+unless both are OFF again. Autonomy and every automatic action stay OFF, the
+global kill switch stays ON, and every identity/history/provider/CI/deployment
+mismatch fails closed.
+
+Hosted start is also externally blocked: protected repository secrets
+`GROK_CAUSAL_PRODUCTION_EMAIL` and `GROK_CAUSAL_PRODUCTION_PASSWORD` do not
+currently exist. They must be separately provisioned for one dedicated owner
+account; no existing credential may be repurposed. An already signed-in local
+browser can provide supplemental acceptance evidence, but it cannot establish
+the workflow's reproducible secret-backed account identity.
 
 ## 2026-08-31: Grok admission-version null fence has an exact protected lane (ADR-237)
 

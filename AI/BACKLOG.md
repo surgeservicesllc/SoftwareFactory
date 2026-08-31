@@ -34,6 +34,31 @@
 - [ ] Publish, apply, and accept migration 020 plus the exact worker release
   only through a separately reviewed forward release. No hosted or live
   execution evidence is claimed by this repository candidate.
+## Grok causal production acceptance (ADR-240, 2026-08-31)
+
+- [x] Add a manual two-phase lane whose start phase creates a new unique
+  docs-only Grok goal, explicitly Resumes once, and requires immutable plan,
+  roster, context, exact repository base/check policy, durable dispatch and
+  first worker receipt, real Claude nodes/artifacts, exact Phase 1C Codex run,
+  one-file draft PR, and all four exact-head checks.
+- [x] Seal a strict secret-free start artifact and require its exact workflow
+  run ID plus owner-supplied SHA-256 for every finish-phase read.
+- [x] Make finish prove the same session/run-chain/bridge/PR through exact merge,
+  READY deployment and health lineage, five-stage passing validation, terminal
+  artifacts, and a signed-in read-only reload.
+- [x] Add static workflow, SQL, evidence-schema, and opt-in Playwright
+  contracts; disable screenshot, video, and trace capture.
+- [ ] Provision dedicated protected repository secrets named
+  `GROK_CAUSAL_PRODUCTION_EMAIL` and `GROK_CAUSAL_PRODUCTION_PASSWORD` for an
+  owner of the exact acceptance project. Neither secret exists yet; do not
+  repurpose another account or credential. A user's signed-in local browser may
+  provide supplemental evidence but cannot replace the reproducible hosted
+  account identity.
+- [ ] Publish only after migrations 020 and 021 are integrated, all repository
+  gates pass, and the candidate reaches exact READY production. Then run start
+  and finish only under separate owner-controlled worker/gate/merge actions.
+  No live run, provider proof, merge, deployment, or hosted mutation is claimed
+  by this repository candidate.
 
 ## Grok admission-version null-fence release lane (ADR-237, 2026-08-31)
 
