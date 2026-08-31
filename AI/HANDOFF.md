@@ -24,6 +24,20 @@ green CI and READY deployment, dispatch only fresh read-only `scope=verify`.
 Workers/autonomy/automatic actions remain OFF and the global kill switch
 remains ON. Signed-in acceptance and a real provider-backed E2E still remain;
 **GROK BOT: PRODUCTION READY is not declared.**
+## Newest (2026-08-31, latest+51): Grok advanced audited controls (ADR-231)
+
+The selected Grok session now has a collapsed **Advanced controls** section.
+Approve / Reject opens the canonical lifecycle console with the exact
+project/graph and optional run in the URL; no exact graph means no approval
+link. Retry / Cancel, Rollback, and Continue Automatically open the existing
+Runs, Operations, and Autonomy consoles. These are navigation links only. Do
+not replace them with direct client mutations: every destination owns its
+authorization, eligibility, idempotency, audit, and risk boundary.
+
+Focused workspace tests pass 22/22; affected lint and repository typecheck
+pass. The slice is repository-only and has not been pushed or deployed.
+Workers/autonomy/automatic actions remain OFF and the global kill switch stays
+ON. Existing Not Connected labels remain authoritative.
 
 ## Newest (2026-08-31, latest+46): Grok 009/010 hosted; verifier-only catalog containment (ADR-226)
 
@@ -91,7 +105,7 @@ main SHA, four green exact-head checks, exact READY Vercel/health identity, and
 Focused tests pass 8/8; lint/typecheck and Playwright discovery pass. This is a
 local repository candidate only. It has not been pushed, deployed, or run
 against production, so it supplies no signed-in acceptance evidence yet.
-## Newest (2026-08-31, latest+46): Grok context envelopes and follow-up turns (ADR-227)
+## Newest (2026-08-31, latest+48): Grok context envelopes and follow-up turns (ADR-227)
 
 `20260831001100_grok_context_envelopes.sql` is a repository-only forward
 migration. It creates append-only, forced-RLS `grok_context_envelopes` and

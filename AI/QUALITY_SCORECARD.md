@@ -15,6 +15,14 @@ derived expanded-row count, and retains owner-only, non-grantable, explicit
 role-denial, and PostgreSQL 18 NOT NULL checks. The focused workflow contract
 passes 12/12. Exact-head release and a new read-only
 verify remain pending; no database or safety state changes with this fix.
+**Addendum, 2026-08-31 latest+51 - Grok advanced audited controls
+(ADR-231):** The focused workspace suite passes 22/22 and proves that the
+collapsed advanced-control panel preserves exact lifecycle project/graph/run
+identity, withholds approval navigation without a graph, and routes Retry /
+Cancel, Rollback, and Continue Automatically only to their existing audited
+consoles. Affected-file ESLint and repository typecheck pass. These links do
+not mutate state or grant authority; exact-head CI/build/browser, Vercel,
+health, and signed-in production evidence remain pending.
 
 **Addendum, 2026-08-31 latest+46 - Grok hosted completion and verifier catalog
 containment (ADR-226):** Exact main
@@ -58,7 +66,7 @@ manual-only dispatch, read-only GitHub permissions, exact identities, secret-
 only credentials, capture off, one permitted create mutation, no Resume or
 worker dispatch, read-only SQL, and stopped-containment checks before and
 after.
-**Addendum, 2026-08-31 latest+46 - durable Grok context envelopes (ADR-227):**
+**Addendum, 2026-08-31 latest+48 - durable Grok context envelopes (ADR-227):**
 The repository candidate now has bounded, append-only Grok input context for
 project, repository, captured text files, public URL/image references, and
 linked integrations. Focused unit, route, component, migration-contract, and

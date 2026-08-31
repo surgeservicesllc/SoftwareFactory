@@ -6013,3 +6013,25 @@ plan therefore produces `replanRequired=true`. No context or message operation
 wakes a worker, starts a run, dispatches an action, or changes autonomy. Replan
 must be a separately designed and owner-visible transition rather than an
 implicit side effect of conversation.
+
+## ADR-231 - Grok advanced controls navigate to canonical audited consoles
+
+- **Date**: 2026-08-31
+- **Status**: Accepted for the repository candidate
+
+Pause, Resume, and Stop are session-local controls whose atomic Grok boundary
+already returns exact allowed actions. Approve / Reject, Retry / Cancel,
+rollback, and automatic continuation belong to broader canonical lifecycle,
+run, operations, and autonomy boundaries. Duplicating those mutations inside
+the Grok client would create competing authorization, risk, idempotency, and
+audit semantics.
+
+The Grok inspector therefore hides these controls in a collapsed section and
+navigates to their existing consoles. Lifecycle navigation carries the exact
+project, graph, and optional graph-run identity; it is absent until an exact
+graph exists. The other links open the canonical Runs, Operations, and
+Autonomy consoles, which must resolve and recheck their own target and current
+eligibility before any state change. Merely opening a console never mutates or
+authorizes anything. Existing **Not Connected** and RED gates stay
+authoritative, and this decision changes no worker, autonomy, automatic-action,
+or kill-switch state.

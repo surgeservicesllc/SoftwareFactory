@@ -65,6 +65,21 @@ named decision, a named authorization, or production itself.
   health, and hosted 009/010 evidence remain mandatory; no current production
   acceptance is claimed.
 
+## Grok advanced control navigation (ADR-231, 2026-08-31)
+
+- [x] Keep advanced control complexity collapsed by default in the selected
+  Grok session inspector.
+- [x] Preserve exact project/graph/run identity when opening the canonical
+  lifecycle Approve / Reject console; withhold that link until a graph exists.
+- [x] Link Retry / Cancel, rollback, and automatic continuation to the existing
+  audited Runs, Operations, and Autonomy consoles without adding a second
+  mutation path or changing any safety state.
+- [x] Prove exact destinations, no-graph refusal copy, and the no-mutation
+  boundary in the 22/22 focused workspace suite; affected lint/typecheck pass.
+- [ ] Require exact-head CI, READY Vercel identity, health, and signed-in
+  production navigation acceptance before calling this slice production
+  accepted.
+
 ## Site-wide dark/light theme (ADR-225, 2026-08-31)
 
 - [x] Make dark the deterministic first-visit default and restore only a valid

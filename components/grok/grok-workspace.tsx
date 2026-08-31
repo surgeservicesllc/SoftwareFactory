@@ -24,6 +24,7 @@ import {
   Users,
   X,
 } from "lucide-react";
+import Link from "next/link";
 import {
   useCallback,
   useEffect,
@@ -120,6 +121,16 @@ const tabs: ReadonlyArray<{ key: InspectorTab; label: string; icon: typeof Targe
 function clock(value: string) {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? "" : date.toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
+}
+
+function lifecycleControlHref(session: GrokSession): string | null {
+  if (!session.graphId) return null;
+  const params = new URLSearchParams({
+    projectId: session.projectId,
+    graphId: session.graphId,
+  });
+  if (session.graphRunId) params.set("graphRunId", session.graphRunId);
+  return `/solutions/factory/requirement?${params.toString()}`;
 }
 
 function safeArtifactHref(value: string | null): string | null {
@@ -889,6 +900,7 @@ export function GrokWorkspace({
   const renderedControlActions = selectedRunIsRunning
     ? CONTROL_ACTIONS.filter((action) => action !== "stop")
     : CONTROL_ACTIONS;
+  const lifecycleControls = selectedSession ? lifecycleControlHref(selectedSession) : null;
 
   function moveEvidenceTab(event: KeyboardEvent<HTMLButtonElement>, index: number) {
     let nextIndex: number | null = null;
@@ -1008,6 +1020,30 @@ export function GrokWorkspace({
             <aside aria-label="Session inspector" className="min-w-0 p-3">
               <div className="flex items-center justify-between gap-2"><p className="label">Control center</p><button type="button" className="grid size-8 place-items-center rounded-lg border border-[var(--border)] text-muted hover:text-foreground" aria-label="Refresh session" onClick={() => sessionId ? void loadDetail(sessionId) : void load()}><RefreshCw className="size-3.5" /></button></div>
               {selectedSession ? <div className={cn("mt-3 grid gap-1", selectedRunIsRunning ? "grid-cols-2" : "grid-cols-3")}>{renderedControlActions.map((action) => { const Icon = controlIcon(action); const allowed = selectedSession.allowedActions.includes(action); const pending = controlPending === action; return <button key={action} type="button" aria-label={allowed ? `${action} session` : `${action} unavailable in ${selectedSession.status}`} disabled={!allowed || controlPending !== null} title={allowed ? `${action} this session` : `${action} is not available in ${selectedSession.status}`} className="flex min-h-12 flex-col items-center justify-center gap-1 rounded-lg border border-[var(--border)] text-[10px] capitalize text-muted enabled:hover:border-[var(--accent-border)] enabled:hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40" onClick={() => void controlSession(action)}>{pending ? <Loader2 className="size-3.5 animate-spin" aria-hidden="true" /> : <Icon className="size-3.5" aria-hidden="true" />}{action}</button>; })}</div> : null}
+              {selectedSession ? (
+                <details className="mt-3 rounded-lg border border-[var(--border)] bg-[var(--surface-inset)] p-3 text-xs">
+                  <summary className="cursor-pointer font-medium text-foreground">Advanced controls</summary>
+                  <div className="mt-3 grid gap-2">
+                    {lifecycleControls ? (
+                      <Link prefetch={false} href={lifecycleControls} className="flex items-center justify-between gap-3 rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-foreground hover:border-[var(--accent-border)]">
+                        <span><strong className="block text-xs">Approve / Reject</strong><span className="mt-0.5 block text-[10px] text-muted">Exact lifecycle gate and evidence</span></span><ChevronRight className="size-3.5 shrink-0 text-faint" aria-hidden="true" />
+                      </Link>
+                    ) : (
+                      <p className="rounded-md border border-dashed border-[var(--border-strong)] px-3 py-2 text-[10px] text-muted">Approve / Reject becomes available after an exact graph is recorded.</p>
+                    )}
+                    <Link prefetch={false} href="/solutions/runs" className="flex items-center justify-between gap-3 rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-foreground hover:border-[var(--accent-border)]">
+                      <span><strong className="block text-xs">Retry / Cancel</strong><span className="mt-0.5 block text-[10px] text-muted">Eligible recorded Phase 1C runs only</span></span><ChevronRight className="size-3.5 shrink-0 text-faint" aria-hidden="true" />
+                    </Link>
+                    <Link prefetch={false} href="/solutions/operations" className="flex items-center justify-between gap-3 rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-foreground hover:border-[var(--accent-border)]">
+                      <span><strong className="block text-xs">Rollback</strong><span className="mt-0.5 block text-[10px] text-muted">RED operations eligibility and evidence</span></span><ChevronRight className="size-3.5 shrink-0 text-faint" aria-hidden="true" />
+                    </Link>
+                    <Link prefetch={false} href="/solutions/autonomy" className="flex items-center justify-between gap-3 rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-foreground hover:border-[var(--accent-border)]">
+                      <span><strong className="block text-xs">Continue Automatically</strong><span className="mt-0.5 block text-[10px] text-muted">Resolved owner autonomy policy</span></span><ChevronRight className="size-3.5 shrink-0 text-faint" aria-hidden="true" />
+                    </Link>
+                  </div>
+                  <p className="mt-2 text-[10px] leading-4 text-muted">Opening a console does not approve, retry, cancel, roll back, or enable execution. Each audited boundary rechecks the exact target and current eligibility.</p>
+                </details>
+              ) : null}
               <div className="mt-3 flex gap-1 overflow-x-auto border-b border-[var(--border)] pb-2 xl:grid xl:grid-cols-5" role="tablist" aria-label="Session evidence">{tabs.map((entry, index) => { const Icon = entry.icon; return <button id={`grok-tab-${entry.key}`} key={entry.key} type="button" role="tab" aria-selected={tab === entry.key} aria-controls="grok-inspector-panel" tabIndex={tab === entry.key ? 0 : -1} className={cn("flex min-w-max items-center justify-center gap-1 rounded-md px-2 py-1.5 text-[10px] font-medium", tab === entry.key ? "bg-[var(--accent-surface)] text-[var(--accent-text)]" : "text-muted hover:text-foreground")} onClick={() => setTab(entry.key)} onKeyDown={(event) => moveEvidenceTab(event, index)}><Icon className="size-3" aria-hidden="true" />{entry.label}</button>; })}</div>
               <div id="grok-inspector-panel" role="tabpanel" aria-labelledby={`grok-tab-${tab}`} tabIndex={0} className="mt-4 max-h-[calc(70vh-11rem)] overflow-y-auto pr-1"><Inspector detail={detail} tab={tab} /></div>
             </aside>

@@ -311,6 +311,23 @@ describe("GrokWorkspace", () => {
     expect(within(controlCenter).queryByRole("button", { name: /retry/i })).not.toBeInTheDocument();
     expect(within(controlCenter).getByRole("button", { name: "resume unavailable in running" })).toBeDisabled();
 
+    await userEvent.click(within(controlCenter).getByText("Advanced controls"));
+    expect(within(controlCenter).getByRole("link", { name: /Approve \/ Reject/i })).toHaveAttribute(
+      "href",
+      `/solutions/factory/requirement?projectId=${PROJECT.id}`
+      + `&graphId=${SESSION.session.graphId}&graphRunId=${SESSION.session.graphRunId}`,
+    );
+    expect(within(controlCenter).getByRole("link", { name: /Retry \/ Cancel/i })).toHaveAttribute(
+      "href", "/solutions/runs",
+    );
+    expect(within(controlCenter).getByRole("link", { name: /Rollback/i })).toHaveAttribute(
+      "href", "/solutions/operations",
+    );
+    expect(within(controlCenter).getByRole("link", { name: /Continue Automatically/i })).toHaveAttribute(
+      "href", "/solutions/autonomy",
+    );
+    expect(within(controlCenter).getByText(/Opening a console does not approve/i)).toBeInTheDocument();
+
     await userEvent.click(within(controlCenter).getByRole("tab", { name: "Plan" }));
     expect(within(controlCenter).getByText("Inspect checkout")).toBeInTheDocument();
     expect(within(controlCenter).getByText(/after research/)).toBeInTheDocument();
@@ -343,11 +360,12 @@ describe("GrokWorkspace", () => {
     expect(within(controlCenter).getByRole("link", { name: "https://preview.example.dev" })).toBeInTheDocument();
 
     await userEvent.click(within(controlCenter).getByRole("tab", { name: "Deployment" }));
-    expect(within(controlCenter).getByText("production · success")).toBeInTheDocument();
-    expect(within(controlCenter).getByText("availability probe passed")).toBeInTheDocument();
-    expect(within(controlCenter).getByText("Rollback")).toBeInTheDocument();
-    expect(within(controlCenter).getByText("Automatic continuation")).toBeInTheDocument();
-    expect(within(controlCenter).getAllByText("Not Connected")).toHaveLength(2);
+    const deploymentPanel = within(controlCenter).getByRole("tabpanel");
+    expect(within(deploymentPanel).getByText("production · success")).toBeInTheDocument();
+    expect(within(deploymentPanel).getByText("availability probe passed")).toBeInTheDocument();
+    expect(within(deploymentPanel).getByText("Rollback")).toBeInTheDocument();
+    expect(within(deploymentPanel).getByText("Automatic continuation")).toBeInTheDocument();
+    expect(within(deploymentPanel).getAllByText("Not Connected")).toHaveLength(2);
   });
 
   it("renders captured and reference-only context without claiming a fetch occurred", async () => {
@@ -444,6 +462,16 @@ describe("GrokWorkspace", () => {
     await user.keyboard("{Home}");
     await waitFor(() => expect(goal).toHaveFocus());
     expect(goal).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("withholds lifecycle approval navigation until an exact graph exists", async () => {
+    installFetch(BLOCKED_SESSION);
+    render(<GrokWorkspace initialSelection={{ sessionId: BLOCKED_SESSION.session.id }} />);
+
+    const inspector = await screen.findByRole("complementary", { name: "Session inspector" });
+    await userEvent.click(within(inspector).getByText("Advanced controls"));
+    expect(within(inspector).queryByRole("link", { name: /Approve \/ Reject/i })).not.toBeInTheDocument();
+    expect(within(inspector).getByText(/Approve \/ Reject becomes available after an exact graph/i)).toBeInTheDocument();
   });
 
   it("renders a 202 durable-but-blocked plan without implying execution", async () => {

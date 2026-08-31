@@ -1,5 +1,22 @@
 # Current state
 
+## 2026-08-31: Grok exposes advanced audited controls without bypassing them (ADR-231)
+
+The repository candidate adds one collapsed **Advanced controls** section to
+the selected Grok session inspector. An exact recorded graph links to the
+existing lifecycle Approve / Reject console with project, graph, and optional
+graph-run identity preserved. Retry / Cancel, rollback, and automatic-
+continuation links open their existing Runs, Operations, and Autonomy consoles.
+Opening any link performs no mutation; every destination retains its own
+authorization, eligibility, evidence, and risk checks. A session without an
+exact graph does not receive an approval link.
+
+Focused workspace evidence passes 22/22, affected-file lint and repository
+typecheck pass. This is repository-only navigation, not new control authority:
+workers, autonomy, and automatic actions remain OFF and the global kill switch
+remains ON. Rollback and provider execution remain **Not Connected** wherever
+their existing adapters or live evidence say so. No production claim is made.
+
 ## 2026-08-31: Grok completion DDL is hosted; acceptance awaits a version-safe ACL verifier (ADR-227)
 
 Exact main `24a6313e98023bfc618a921fc563c9f4bde4cad2` passed all four
