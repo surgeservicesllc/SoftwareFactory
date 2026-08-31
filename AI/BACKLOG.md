@@ -334,8 +334,15 @@ the full seeded E2E journey passes — increment 10 of the plan.
   absent, templates frozen once in use; plus crm_timesheets with overlap
   refused and licence expiry on technicians. /Services/forms.
   20260830001700; hosted apply: scope=forms-timesheets-licences after merge.
-- [ ] Increment 9 follow-on: WDO/termite diagrams (a drawing surface, not a
-  form), and PDF rendering of a completed inspection.
+- [x] Increment 9 follow-on: the drawing surface shipped with increment 16
+  (ADR-205's click-to-place 0..1 coordinate diagram — this earlier row
+  predated it), and the report is now printable:
+  /Services/wdo/print/[inspectionId] lays the report out for paper — the
+  verdict, the areas that could NOT be inspected printed as a claim even
+  when empty, the findings table, and the diagram with numbered marks
+  keyed to it. A draft prints only under a DRAFT banner. Print-to-PDF is
+  the browser's own, said plainly on the page; no server renderer is
+  connected and none is pretended.
 - [x] Increment 10 (ADR-198): the customer portal, residential view — one
   login resolves to exactly one account through SECURITY DEFINER
   projections, with no existing staff policy widened; balance, issued
