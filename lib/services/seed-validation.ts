@@ -82,6 +82,55 @@ const SPECS: Spec[] = [
     parents: [{ column: "employee_id", table: "crm_employees" }],
   },
   {
+    table: "crm_form_templates",
+    optional: ["description"],
+    enumColumn: "kind",
+    parents: [],
+  },
+  {
+    table: "crm_form_fields",
+    optional: ["help_text", "options"],
+    enumColumn: "field_type",
+    parents: [{ column: "template_id", table: "crm_form_templates" }],
+  },
+  {
+    table: "crm_form_instances",
+    optional: [
+      "account_id", "property_id", "work_order_id", "technician_id",
+      "started_at", "completed_at", "signed_by_name", "signed_at",
+      "signature_path", "notes",
+    ],
+    enumColumn: "status",
+    parents: [
+      { column: "template_id", table: "crm_form_templates" },
+      { column: "account_id", table: "crm_accounts" },
+      { column: "technician_id", table: "crm_technicians" },
+    ],
+  },
+  {
+    table: "crm_form_answers",
+    /*
+     * Every answer fills exactly one of these — the schema insists on it —
+     * so the audit asks that each shape appears somewhere in the corpus,
+     * which is what proves every question type is exercised.
+     */
+    optional: ["value_text", "value_number", "value_boolean", "value_date", "value_options"],
+    parents: [
+      { column: "instance_id", table: "crm_form_instances" },
+      { column: "field_id", table: "crm_form_fields" },
+    ],
+  },
+  {
+    table: "crm_timesheets",
+    /*
+     * `ended_at` is optional because an open shift genuinely has none, and
+     * the corpus carries both — a running shift is a real state the
+     * timesheet page has to render.
+     */
+    optional: ["work_order_id", "ended_at", "notes"],
+    parents: [{ column: "technician_id", table: "crm_technicians" }],
+  },
+  {
     table: "crm_documents",
     optional: ["account_id", "property_id", "work_order_id", "content_type", "byte_size", "notes"],
     enumColumn: "kind",

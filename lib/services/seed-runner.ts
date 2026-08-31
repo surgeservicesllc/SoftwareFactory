@@ -60,6 +60,11 @@ export type SeedCounts = {
   messages: number;
   automations: number;
   attributions: number;
+  formTemplates: number;
+  formFields: number;
+  formInstances: number;
+  formAnswers: number;
+  timesheets: number;
   timelineEvents: number;
 };
 
@@ -1204,6 +1209,257 @@ export async function runSeed(
   const attributions = await insertAll(client, "crm_attributions", attributionRows, "id");
   if ("error" in attributions) return attributions;
 
+  /* ------------------------------- forms, timesheets and licences (9) */
+
+  const templateRows = dataset.formTemplates.map((template) => ({
+    organization_id: org,
+    name: template.name,
+    kind: template.kind,
+    version: template.version,
+    description: template.description,
+    active: template.active,
+    created_by: userId,
+  }));
+  const formTemplates = await insertAll(client, "crm_form_templates", templateRows, "id, name");
+  if ("error" in formTemplates) return formTemplates;
+  const templateIdByName = new Map(
+    formTemplates.data.map((row) => [row.name as string, row.id as string]),
+  );
+  const templateId = (index: number) =>
+    templateIdByName.get(dataset.formTemplates[index]?.name ?? "") ?? null;
+
+  /*
+   * The questions have to land before any form is assigned from a template:
+   * once one is, the schema freezes them, and a seeder adding a question
+   * afterwards would be testing that guard rather than the book.
+   */
+  const fieldRows = dataset.formTemplates.flatMap((template, templateIndex) => {
+    const id = templateId(templateIndex);
+    if (id === null) return [];
+    return template.fields.map((field, position) => ({
+      organization_id: org,
+      template_id: id,
+      position: position + 1,
+      label: field.label,
+      field_type: field.fieldType,
+      required: field.required,
+      help_text: field.helpText,
+      options: field.options ?? null,
+    }));
+  });
+  const formFields = await insertAll(client, "crm_form_fields", fieldRows, "id, template_id, position");
+  if ("error" in formFields) return formFields;
+  const fieldIdByKey = new Map(
+    formFields.data.map((row) => [`${row.template_id as string}:${row.position as number}`, row.id as string]),
+  );
+
+  const instanceRows = dataset.accounts.flatMap((account) => {
+    const accountId = accountIdByName.get(account.name);
+    if (accountId === undefined) return [];
+    const visitOffset = visitOffsets.get(account.name) ?? 0;
+    return (account.forms ?? []).flatMap((form) => {
+      const template = templateId(form.templateIndex);
+      if (template === null) return [];
+      const assignedAt = daysAgoIso(form.assignedDaysAgo);
+      return [
+        {
+          organization_id: org,
+          template_id: template,
+          account_id: accountId,
+          property_id:
+            form.propertySeat === undefined ? null : propertyFor(account.name, form.propertySeat),
+          work_order_id:
+            form.visitSeat === undefined ? null : visitIds[visitOffset + form.visitSeat] ?? null,
+          technician_id: technicianId(form.technicianIndex),
+          // Assigned first, so the answers can land before the completion
+          // the database checks them against.
+          status: "assigned",
+          assigned_at: assignedAt,
+          started_at: form.status === "assigned" ? null : assignedAt,
+          notes: form.notes,
+          created_by: userId,
+        },
+      ];
+    });
+  });
+  const formInstances = await insertAll(client, "crm_form_instances", instanceRows, "id");
+  if ("error" in formInstances) return formInstances;
+  const instanceIds = formInstances.data.map((row) => row.id as string);
+
+  // Answers, each in the column its question's type calls for.
+  const answerRows: SeedRow[] = [];
+  {
+    let cursor = 0;
+    for (const account of dataset.accounts) {
+      if (accountIdByName.get(account.name) === undefined) continue;
+      for (const form of account.forms ?? []) {
+        const template = dataset.formTemplates[form.templateIndex];
+        const templateKey = templateId(form.templateIndex);
+        const instance = instanceIds[cursor];
+        if (template === undefined || templateKey === null || instance === undefined) {
+          cursor += 1;
+          continue;
+        }
+        template.fields.forEach((field, position) => {
+          // A part-finished form answers what it has reached; a completed
+          // one answers everything, which is what lets it complete.
+          if (!form.answerEvery && !field.required) return;
+          const fieldId = fieldIdByKey.get(`${templateKey}:${position + 1}`);
+          if (fieldId === undefined) return;
+          answerRows.push({
+            organization_id: org,
+            instance_id: instance,
+            field_id: fieldId,
+            value_text:
+              field.fieldType === "text" ? `${account.contacts[0]?.firstName ?? "Alex"} ${account.contacts[0]?.lastName ?? "Reyes"}`
+              : field.fieldType === "long_text" ? "Interior, exterior perimeter, dock doors and the dry store."
+              : field.fieldType === "select" ? (field.options ?? ["none"])[(account.index + position) % (field.options?.length ?? 1)]
+              : null,
+            value_number: field.fieldType === "number" ? 4 + ((account.index + position) % 18) : null,
+            value_boolean: field.fieldType === "boolean" ? (account.index + position) % 3 !== 0 : null,
+            value_date: field.fieldType === "date" ? dateInDays(30 + (position % 60)) : null,
+            value_options:
+              field.fieldType === "multi_select"
+                ? [(field.options ?? ["ants"])[(account.index + position) % (field.options?.length ?? 1)]]
+                : null,
+            answered_at: daysAgoIso(Math.max(1, form.assignedDaysAgo - 1)),
+            created_by: userId,
+          });
+        });
+        cursor += 1;
+      }
+    }
+  }
+  const formAnswers = await insertAll(client, "crm_form_answers", answerRows, "id");
+  if ("error" in formAnswers) return formAnswers;
+
+  // Now the forms can reach the status they were meant to have, because the
+  // completeness trigger has something to count.
+  {
+    let cursor = 0;
+    const byStatus = new Map<string, string[]>();
+    for (const account of dataset.accounts) {
+      if (accountIdByName.get(account.name) === undefined) continue;
+      for (const form of account.forms ?? []) {
+        const instance = instanceIds[cursor];
+        cursor += 1;
+        if (instance === undefined || form.status === "assigned") continue;
+        const bucket = byStatus.get(form.status) ?? [];
+        bucket.push(instance);
+        byStatus.set(form.status, bucket);
+      }
+    }
+    for (const [status, ids] of byStatus) {
+      for (let start = 0; start < ids.length; start += 500) {
+        const slice = ids.slice(start, start + 500);
+        const moved = await client
+          .from("crm_form_instances")
+          .update({
+            status,
+            completed_at: status === "completed" ? new Date().toISOString() : null,
+          } as never)
+          .eq("organization_id", org)
+          .in("id", slice);
+        if (moved.error) return { error: moved.error };
+      }
+    }
+  }
+
+  // Signatures, on the completed forms that carry one.
+  {
+    let cursor = 0;
+    for (const account of dataset.accounts) {
+      if (accountIdByName.get(account.name) === undefined) continue;
+      for (const form of account.forms ?? []) {
+        const instance = instanceIds[cursor];
+        cursor += 1;
+        if (instance === undefined || form.signedByName === undefined) continue;
+        const signed = await client
+          .from("crm_form_instances")
+          .update({
+            signed_by_name: form.signedByName,
+            signed_at: daysAgoIso(Math.max(1, form.assignedDaysAgo - 1)),
+            signature_path: `services/forms/${String(account.index).padStart(4, "0")}-${cursor}.png`,
+          } as never)
+          .eq("organization_id", org)
+          .eq("id", instance);
+        if (signed.error) return { error: signed.error };
+      }
+    }
+  }
+
+  // Shifts, laid end to end per technician by the generator so none
+  // overlaps another — the database refuses an overlap.
+  /*
+   * Which visits each technician actually performed, so a shift names a
+   * work order that person really worked rather than any row that would
+   * satisfy the foreign key.
+   */
+  const visitsByTechnician = new Map<string, string[]>();
+  for (const [position, row] of visitRows.entries()) {
+    const assigned = row.technician_id;
+    const visit = visitIds[position];
+    if (typeof assigned !== "string" || visit === undefined) continue;
+    const bucket = visitsByTechnician.get(assigned) ?? [];
+    bucket.push(visit);
+    visitsByTechnician.set(assigned, bucket);
+  }
+
+  const shiftRows = dataset.technicians.flatMap((technician, technicianIndex) => {
+    const id = technicianId(technicianIndex);
+    if (id === null) return [];
+    const theirVisits = visitsByTechnician.get(id) ?? [];
+    return (technician.shifts ?? []).map((shift, seat) => {
+      const start = new Date(Date.now() - shift.startedDaysAgo * 86_400_000);
+      start.setUTCHours(shift.startHour, 0, 0, 0);
+      const end = new Date(start.getTime() + shift.hours * 3_600_000);
+      return {
+        organization_id: org,
+        technician_id: id,
+        // A shift spent on a job names it; a day of admin or training does
+        // not, which is why the column is nullable in the first place.
+        work_order_id:
+          theirVisits.length > 0 && seat % 2 === 0
+            ? theirVisits[seat % theirVisits.length]
+            : null,
+        started_at: start.toISOString(),
+        // An open shift has no end, and reports no worked total.
+        ended_at: shift.open ? null : end.toISOString(),
+        break_minutes: shift.breakMinutes,
+        notes: shift.notes,
+        created_by: userId,
+      };
+    });
+  });
+  const timesheets = await insertAll(client, "crm_timesheets", shiftRows, "id");
+  if ("error" in timesheets) return timesheets;
+
+  // Licence expiry, so the compliance page has expired, expiring, current
+  // and unrecorded licences to tell apart. Grouped by date so one statement
+  // serves every technician sharing it.
+  {
+    const byDate = new Map<string, string[]>();
+    for (const [index, technician] of dataset.technicians.entries()) {
+      const id = technicianId(index);
+      if (id === null || technician.licenceExpiresInDays === undefined) continue;
+      const key = `${dateInDays(technician.licenceExpiresInDays)}|${technician.licenceState ?? "OR"}`;
+      const bucket = byDate.get(key) ?? [];
+      bucket.push(id);
+      byDate.set(key, bucket);
+    }
+    for (const [key, ids] of byDate) {
+      const [expires, state] = key.split("|");
+      for (let start = 0; start < ids.length; start += 500) {
+        const dated = await client
+          .from("crm_technicians")
+          .update({ license_expires_on: expires, license_state: state } as never)
+          .eq("organization_id", org)
+          .in("id", ids.slice(start, start + 500));
+        if (dated.error) return { error: dated.error };
+      }
+    }
+  }
+
   /* --------------------------------------------------- hand-recorded history */
 
   const eventRows = dataset.accounts.flatMap((account) =>
@@ -1264,6 +1520,11 @@ export async function runSeed(
       messages: messages.data.length,
       automations: automations.data.length,
       attributions: attributions.data.length,
+      formTemplates: formTemplates.data.length,
+      formFields: formFields.data.length,
+      formInstances: formInstances.data.length,
+      formAnswers: formAnswers.data.length,
+      timesheets: timesheets.data.length,
       timelineEvents: timelineTotal.count ?? 0,
     },
   };

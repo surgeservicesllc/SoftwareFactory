@@ -150,7 +150,7 @@ export const CRM_TIMELINE_COLUMNS =
 export const CRM_OPPORTUNITY_COLUMNS =
   "id, account_id, name, stage, value_cents, expected_close_date, notes, lost_reason, closed_at, owner_employee_id, created_at, updated_at";
 export const CRM_TECHNICIAN_COLUMNS =
-  "id, first_name, last_name, email, phone, license_number, active, branch_id, reports_to_id, hire_date, created_at, updated_at";
+  "id, first_name, last_name, email, phone, license_number, active, branch_id, reports_to_id, hire_date, license_expires_on, license_state, created_at, updated_at";
 export const CRM_SERVICE_PLAN_COLUMNS =
   "id, account_id, property_id, service_type, recurrence, next_due, technician_id, value_cents, active, notes, created_at, updated_at";
 export const CRM_WORK_ORDER_COLUMNS =
@@ -234,6 +234,9 @@ export type CrmTechnicianRow = {
   branch_id: string | null;
   reports_to_id: string | null;
   hire_date: string | null;
+  // Increment 9: when the applicator licence lapses, and where it is held.
+  license_expires_on: string | null;
+  license_state: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -485,6 +488,8 @@ export function toTechnicianView(row: CrmTechnicianRow) {
     branchId: row.branch_id,
     reportsToId: row.reports_to_id,
     hireDate: row.hire_date,
+    licenseExpiresOn: row.license_expires_on,
+    licenseState: row.license_state,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -1483,4 +1488,221 @@ export function toAttributionView(row: CrmAttributionRow) {
  */
 export function isProductiveKnock(disposition: CrmKnockDisposition): boolean {
   return disposition === "sold" || disposition === "appointment_set" || disposition === "callback";
+}
+
+/* -------------------------------------------------------------------------
+ * The forms engine, timesheets and licence expiry. The rule that runs
+ * through all of it: a form's data has to stay reportable, so an answer's
+ * shape is decided by its question's declared type rather than by whatever
+ * the field sent.
+ * ---------------------------------------------------------------------- */
+
+export const CRM_FORM_KINDS = [
+  "inspection", "service_report", "compliance_checklist", "wdo_report",
+  "safety_check", "other",
+] as const;
+export type CrmFormKind = (typeof CRM_FORM_KINDS)[number];
+
+export const CRM_FIELD_TYPES = [
+  "text", "long_text", "number", "boolean", "date", "select", "multi_select",
+] as const;
+export type CrmFieldType = (typeof CRM_FIELD_TYPES)[number];
+
+/** The two question types that carry choices; the schema CHECKs the pairing. */
+export const CRM_CHOICE_FIELD_TYPES = ["select", "multi_select"] as const;
+
+export const CRM_FORM_STATUSES = ["assigned", "in_progress", "completed", "void"] as const;
+export type CrmFormStatus = (typeof CRM_FORM_STATUSES)[number];
+
+/**
+ * Which column an answer belongs in, given its question's type. This is the
+ * TypeScript mirror of `crm_check_answer_shape` — the database is the
+ * authority, and this exists so the boundary can refuse a mismatch by name
+ * rather than surfacing a trigger's exception.
+ */
+export const CRM_ANSWER_SHAPE: Record<CrmFieldType, "text" | "number" | "boolean" | "date" | "options"> = {
+  text: "text",
+  long_text: "text",
+  number: "number",
+  boolean: "boolean",
+  date: "date",
+  select: "text",
+  multi_select: "options",
+};
+
+export const CRM_FORM_TEMPLATE_COLUMNS =
+  "id, name, kind, version, description, active, created_at, updated_at";
+export const CRM_FORM_FIELD_COLUMNS =
+  "id, template_id, position, label, field_type, required, help_text, options, created_at";
+export const CRM_FORM_INSTANCE_COLUMNS =
+  "id, template_id, account_id, property_id, work_order_id, technician_id, status, assigned_at, started_at, completed_at, signed_by_name, signed_at, signature_path, notes, created_at, updated_at";
+export const CRM_FORM_ANSWER_COLUMNS =
+  "id, instance_id, field_id, value_text, value_number, value_boolean, value_date, value_options, answered_at";
+export const CRM_TIMESHEET_COLUMNS =
+  "id, technician_id, work_order_id, started_at, ended_at, break_minutes, notes, created_at, updated_at";
+
+export type CrmFormTemplateRow = {
+  id: string;
+  name: string;
+  kind: CrmFormKind;
+  version: number;
+  description: string | null;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CrmFormFieldRow = {
+  id: string;
+  template_id: string;
+  position: number;
+  label: string;
+  field_type: CrmFieldType;
+  required: boolean;
+  help_text: string | null;
+  options: string[] | null;
+  created_at: string;
+};
+
+export type CrmFormInstanceRow = {
+  id: string;
+  template_id: string;
+  account_id: string | null;
+  property_id: string | null;
+  work_order_id: string | null;
+  technician_id: string | null;
+  status: CrmFormStatus;
+  assigned_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+  signed_by_name: string | null;
+  signed_at: string | null;
+  signature_path: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CrmFormAnswerRow = {
+  id: string;
+  instance_id: string;
+  field_id: string;
+  value_text: string | null;
+  value_number: number | string | null;
+  value_boolean: boolean | null;
+  value_date: string | null;
+  value_options: string[] | null;
+  answered_at: string;
+};
+
+export type CrmTimesheetRow = {
+  id: string;
+  technician_id: string;
+  work_order_id: string | null;
+  started_at: string;
+  ended_at: string | null;
+  break_minutes: number;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export function toFormTemplateView(row: CrmFormTemplateRow) {
+  return {
+    id: row.id,
+    name: row.name,
+    kind: row.kind,
+    version: row.version,
+    description: row.description,
+    active: row.active,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function toFormFieldView(row: CrmFormFieldRow) {
+  return {
+    id: row.id,
+    templateId: row.template_id,
+    position: row.position,
+    label: row.label,
+    fieldType: row.field_type,
+    required: row.required,
+    helpText: row.help_text,
+    options: row.options ?? [],
+    createdAt: row.created_at,
+  };
+}
+
+export function toFormInstanceView(row: CrmFormInstanceRow) {
+  return {
+    id: row.id,
+    templateId: row.template_id,
+    accountId: row.account_id,
+    propertyId: row.property_id,
+    workOrderId: row.work_order_id,
+    technicianId: row.technician_id,
+    status: row.status,
+    assignedAt: row.assigned_at,
+    startedAt: row.started_at,
+    completedAt: row.completed_at,
+    signedByName: row.signed_by_name,
+    signedAt: row.signed_at,
+    // The path, never a link — the same rule documents follow.
+    signaturePath: row.signature_path,
+    signed: row.signed_at !== null,
+    notes: row.notes,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function toFormAnswerView(row: CrmFormAnswerRow) {
+  return {
+    id: row.id,
+    instanceId: row.instance_id,
+    fieldId: row.field_id,
+    valueText: row.value_text,
+    valueNumber: row.value_number === null ? null : decimal(row.value_number),
+    valueBoolean: row.value_boolean,
+    valueDate: row.value_date,
+    valueOptions: row.value_options ?? null,
+    answeredAt: row.answered_at,
+  };
+}
+
+export function toTimesheetView(row: CrmTimesheetRow) {
+  const started = Date.parse(row.started_at);
+  const ended = row.ended_at === null ? null : Date.parse(row.ended_at);
+  return {
+    id: row.id,
+    technicianId: row.technician_id,
+    workOrderId: row.work_order_id,
+    startedAt: row.started_at,
+    endedAt: row.ended_at,
+    breakMinutes: row.break_minutes,
+    /*
+     * Null while the shift is open. A running shift has no worked total
+     * yet, and reporting one as though it were finished would inflate every
+     * figure built on it.
+     */
+    workedMinutes:
+      ended === null ? null : Math.max(0, Math.round((ended - started) / 60_000) - row.break_minutes),
+    notes: row.notes,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+/**
+ * How many days until an applicator licence lapses — negative once it has.
+ * Null when no expiry is recorded, which is a different thing from "not
+ * expiring": a licence with no date on file cannot be reported as current.
+ */
+export function licenceDaysRemaining(
+  expiresOn: string | null,
+  today = new Date().toISOString().slice(0, 10),
+): number | null {
+  if (expiresOn === null) return null;
+  return Math.round((Date.parse(expiresOn) - Date.parse(today)) / 86_400_000);
 }

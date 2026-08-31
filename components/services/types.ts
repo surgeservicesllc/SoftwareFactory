@@ -102,6 +102,8 @@ export type TechnicianView = {
   branchId: string | null;
   reportsToId: string | null;
   hireDate: string | null;
+  licenseExpiresOn: string | null;
+  licenseState: string | null;
 };
 
 export type ServicePlanView = {

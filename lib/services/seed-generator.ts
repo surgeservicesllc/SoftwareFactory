@@ -45,12 +45,13 @@ export const SEED_TARGETS: Record<
     marketingLists: number;
     campaigns: number;
     automations: number;
+    formTemplates: number;
   }
 > = {
   demo: {
     accounts: 40, technicians: 12, products: 14, jurisdictions: 8, branches: 4,
     employees: 14, territories: 8, canvassRoutes: 10, marketingLists: 6,
-    campaigns: 8, automations: 8,
+    campaigns: 8, automations: 8, formTemplates: 6,
   },
   full: {
     accounts: 320,
@@ -64,6 +65,7 @@ export const SEED_TARGETS: Record<
     marketingLists: 260,
     campaigns: 280,
     automations: 260,
+    formTemplates: 260,
   },
 };
 
@@ -299,7 +301,22 @@ export type SeedAccount = {
     campaignIndex?: number;
     note: string;
   }[];
+  /** Increment 9: the inspections and reports filled out about this customer. */
+  forms?: {
+    templateIndex: number;
+    propertySeat?: number;
+    visitSeat?: number;
+    technicianIndex: number;
+    status: "assigned" | "in_progress" | "completed" | "void";
+    assignedDaysAgo: number;
+    /** Completed forms answer everything; the trigger insists on it. */
+    answerEvery: boolean;
+    signedByName?: string;
+    notes: string;
+  }[];
 };
+
+
 
 export type SeedTechnician = {
   firstName: string;
@@ -311,6 +328,15 @@ export type SeedTechnician = {
   branchIndex?: number;
   reportsToIndex?: number;
   hiredDaysAgo?: number;
+  /*
+   * Increment 9. Shifts are laid end to end — one per calendar day — because
+   * the database refuses two shifts that overlap, and a seeder producing one
+   * would be testing that guard rather than the book.
+   */
+  shifts?: { startedDaysAgo: number; startHour: number; hours: number; breakMinutes: number; open: boolean; notes: string }[];
+  /** Negative once lapsed; absent means no expiry on file, which is its own state. */
+  licenceExpiresInDays?: number;
+  licenceState?: string;
 };
 
 export type SeedBranch = {
@@ -438,6 +464,21 @@ export type SeedAutomation = {
   active: boolean;
 };
 
+export type SeedFormTemplate = {
+  name: string;
+  kind: "inspection" | "service_report" | "compliance_checklist" | "wdo_report" | "safety_check" | "other";
+  version: number;
+  description: string;
+  active: boolean;
+  fields: {
+    label: string;
+    fieldType: "text" | "long_text" | "number" | "boolean" | "date" | "select" | "multi_select";
+    required: boolean;
+    helpText: string;
+    options?: string[];
+  }[];
+};
+
 export type SeedDataset = {
   scale: SeedScale;
   accounts: SeedAccount[];
@@ -451,6 +492,7 @@ export type SeedDataset = {
   marketingLists: SeedMarketingList[];
   campaigns: SeedCampaign[];
   automations: SeedAutomation[];
+  formTemplates: SeedFormTemplate[];
 };
 
 /* ---------------------------------------------------------------- generators */
@@ -725,6 +767,20 @@ export function generateSeedDataset(scale: SeedScale, seed = 20260830): SeedData
       technician.reportsToIndex = branchManagers[index % branchManagers.length];
     }
     technician.hiredDaysAgo = between(random, 45, 3600);
+    technician.shifts = generateShifts(random, index, 3);
+    /*
+     * Expired, expiring inside the horizon, comfortably current — and every
+     * seventh left with no expiry on file at all, because an unrecorded
+     * licence is a real state and folding it into "current" is how a
+     * compliance report becomes a liability.
+     */
+    if (index % 7 !== 0) {
+      technician.licenceExpiresInDays =
+        index % 3 === 0 ? -between(random, 1, 200)
+        : index % 3 === 1 ? between(random, 1, 55)
+        : between(random, 120, 900);
+      technician.licenceState = ["OR", "WA", "ID"][index % 3];
+    }
   }
 
   const marketingLists = Array.from({ length: targets.marketingLists }, (_, index) =>
@@ -738,6 +794,9 @@ export function generateSeedDataset(scale: SeedScale, seed = 20260830): SeedData
   );
   const canvassRoutes = Array.from({ length: targets.canvassRoutes }, (_, index) =>
     generateCanvassRoute(random, index, territories.length, salesReps, accounts.length),
+  );
+  const formTemplates = Array.from({ length: targets.formTemplates }, (_, index) =>
+    generateFormTemplate(random, index),
   );
 
   /*
@@ -793,6 +852,41 @@ export function generateSeedDataset(scale: SeedScale, seed = 20260830): SeedData
             };
           });
 
+    /*
+     * The forms filled out about this customer. A completed form answers
+     * every question, because the database counts the required ones and
+     * refuses the difference — a seeder that skipped one would be testing
+     * the trigger rather than the book.
+     */
+    account.forms =
+      !serviced || formTemplates.length === 0
+        ? []
+        : Array.from({ length: between(random, 1, 3) }, (_, seat) => {
+            const roll = (account.index + seat) % 7;
+            const status = (
+              roll === 0 ? "assigned"
+              : roll === 1 ? "in_progress"
+              : roll === 6 ? "void"
+              : "completed"
+            ) as NonNullable<SeedAccount["forms"]>[number]["status"];
+            return {
+              templateIndex: (account.index * 3 + seat) % formTemplates.length,
+              ...(account.properties.length > 0 ? { propertySeat: seat % account.properties.length } : {}),
+              ...(seat % 2 === 0 ? { visitSeat: seat } : {}),
+              technicianIndex: (account.index + seat) % Math.max(1, targets.technicians),
+              status,
+              assignedDaysAgo: between(random, 2, 700),
+              answerEvery: status === "completed",
+              // A signed form is the norm on a completed inspection and
+              // absent everywhere else, which is what makes the unsigned
+              // count on the forms page mean something.
+              ...(status === "completed" && (account.index + seat) % 5 !== 0
+                ? { signedByName: `${account.contacts[0]?.firstName ?? "Alex"} ${account.contacts[0]?.lastName ?? "Reyes"}` }
+                : {}),
+              notes: `${pick(random, ["Filled out on site", "Completed at the truck", "Reviewed with the customer", "Sent to the branch"])}.`,
+            };
+          });
+
     account.touches = Array.from({ length: between(random, 1, 3) }, (_, seat) => ({
       source: pick(random, ["google", "referral", "door knock", "yard sign", "facebook", "repeat customer"]),
       medium: pick(random, ["organic", "paid", "canvassing", "word of mouth", "email"]),
@@ -818,6 +912,7 @@ export function generateSeedDataset(scale: SeedScale, seed = 20260830): SeedData
     marketingLists,
     campaigns,
     automations,
+    formTemplates,
   };
 }
 
@@ -1738,4 +1833,111 @@ function generateAutomation(random: Random, index: number): SeedAutomation {
     // Armed rules are the minority, and nothing executes them yet in any case.
     active: index % 4 === 0,
   };
+}
+
+/* ---------------------------------------- forms, timesheets, licences (9) */
+
+const FORM_KINDS = [
+  "inspection", "service_report", "compliance_checklist", "wdo_report",
+  "safety_check", "other",
+] as const;
+const FORM_SUBJECTS = [
+  "Quarterly IPM inspection", "Rodent station audit", "Kitchen sanitation review",
+  "Termite graph and findings", "Bed bug follow-up", "Exterior perimeter check",
+  "Loading dock survey", "Safety walk", "Pre-treatment checklist",
+  "Post-service verification",
+] as const;
+
+/**
+ * A form template's questions, chosen so every field type appears somewhere
+ * in the corpus and every completed form has something real to say. The two
+ * choice types carry their choices, because the schema pairs them.
+ */
+function formQuestions(index: number): SeedFormTemplate["fields"] {
+  const base: SeedFormTemplate["fields"] = [
+    {
+      label: "Areas inspected",
+      fieldType: "long_text",
+      required: true,
+      helpText: "Everything walked on this visit.",
+    },
+    {
+      label: "Stations serviced",
+      fieldType: "number",
+      required: true,
+      helpText: "Count of devices checked.",
+    },
+    {
+      label: "Activity found",
+      fieldType: "boolean",
+      required: true,
+      helpText: "Any evidence at all.",
+    },
+    {
+      label: "Severity",
+      fieldType: "select",
+      required: false,
+      helpText: "Where the site sits today.",
+      options: ["none", "low", "moderate", "high"],
+    },
+    {
+      label: "Pests observed",
+      fieldType: "multi_select",
+      required: false,
+      helpText: "All that apply.",
+      options: ["ants", "german roaches", "norway rats", "house mice", "bed bugs", "wasps"],
+    },
+    {
+      label: "Next visit due",
+      fieldType: "date",
+      required: false,
+      helpText: "When this site should be seen again.",
+    },
+    {
+      label: "Customer contact spoken to",
+      fieldType: "text",
+      required: false,
+      helpText: "Who signed off on site.",
+    },
+  ];
+  // A little variation so the corpus is not 260 identical forms.
+  return index % 3 === 0 ? base : base.slice(0, 5 + (index % 3));
+}
+
+function generateFormTemplate(random: Random, index: number): SeedFormTemplate {
+  const subject = FORM_SUBJECTS[index % FORM_SUBJECTS.length];
+  return {
+    name: `${subject} ${pad(index, 4)}`,
+    kind: FORM_KINDS[index % FORM_KINDS.length],
+    // A handful are on their second version, because a real book revises.
+    version: index % 17 === 0 ? 2 : 1,
+    description: `${pick(random, ["Used on every quarterly visit", "Required by the account's compliance rule", "Filled out at the end of service", "Completed before treatment begins"])}.`,
+    active: index % 19 !== 0,
+    fields: formQuestions(index),
+  };
+}
+
+/**
+ * Shifts for one technician, laid end to end so they never overlap — the
+ * database refuses an overlap, and a seeder that produced one would be
+ * testing the guard rather than the book.
+ */
+function generateShifts(
+  random: Random,
+  technicianIndex: number,
+  count: number,
+): NonNullable<SeedTechnician["shifts"]> {
+  return Array.from({ length: count }, (_, seat) => {
+    // One shift per day, so two shifts can never share an hour.
+    const startedDaysAgo = 1 + seat * 3 + (technicianIndex % 3);
+    const open = seat === 0 && technicianIndex % 8 === 0;
+    return {
+      startedDaysAgo,
+      startHour: 7 + (seat % 3),
+      hours: between(random, 4, 9),
+      breakMinutes: [0, 30, 45, 60][seat % 4],
+      open,
+      notes: `${pick(random, ["Route day", "Callback run", "Commercial audits", "Training in the morning", "Covering the north side"])}.`,
+    };
+  });
 }

@@ -15,7 +15,7 @@ import { pgliteSupabaseClient } from "../support/pglite-supabase-client";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const migrationsDirectory = resolve(repositoryRoot, "supabase/migrations");
-const latestMigration = "20260830001500_documents_canvassing_marketing.sql";
+const latestMigration = "20260830001600_forms_timesheets_licences.sql";
 
 /**
  * The full-scale seed, run for real.
@@ -118,7 +118,7 @@ describe("the full-scale CRM seed", { timeout: 900_000 }, () => {
       failing.map((table) => `${table.table}: ${table.notes.join("; ") || "below floor or orphaned"}`),
     ).toEqual([]);
     expect(report.pass).toBe(true);
-    expect(report.totals.tables).toBe(35);
+    expect(report.totals.tables).toBe(40);
   });
 
   it("earned its history through the database, not by forging system rows", async () => {
