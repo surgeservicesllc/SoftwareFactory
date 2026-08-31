@@ -370,7 +370,15 @@ function Inspector({ detail, tab }: { detail: GrokSessionDetail | null; tab: Ins
   }
 
   if (tab === "agents") {
-    const hasObservedRun = Boolean(detail.session.graphRunId);
+    const hasObservedRun = Boolean(
+      detail.session.graphRunId
+      && detail.tasks.some((task) => (
+        task.attempt !== null
+        && task.attempt !== undefined
+        && task.provider !== null
+        && task.model !== null
+      )),
+    );
     const hasPlan = detail.tasks.length > 0;
     const assigned = detail.tasks.filter((task) => task.provider || task.agentName);
     return (
@@ -479,10 +487,7 @@ function Inspector({ detail, tab }: { detail: GrokSessionDetail | null; tab: Ins
   }
 
   if (tab === "preview") {
-    const previewUrl = release?.deployment?.url ?? null;
-    return previewUrl ? (
-      <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-inset)] p-3 text-xs"><p className="font-semibold text-foreground">Recorded deployment URL</p><p className="mt-2 break-all text-muted"><EvidenceLink href={previewUrl}>{previewUrl}</EvidenceLink></p></div>
-    ) : <NotConnected label="Preview" detail="No provider deployment URL has been recorded for this run." />;
+    return <NotConnected label="Preview" detail="No distinct preview deployment evidence has been recorded for this run. Production deployment evidence is shown only on the Deployment tab." />;
   }
 
   if (tab === "deployment") {

@@ -77,7 +77,8 @@ test.describe("Grok provider-backed recorded evidence", () => {
     await expect.poll(() => inspector.getByRole("link").count()).toBeGreaterThan(0);
 
     await inspector.getByRole("tab", { name: "Preview" }).click();
-    await expect(inspector.getByRole("link")).toHaveAttribute("href", /^https?:\/\//);
+    await expect(inspector.getByText("Not Connected")).toBeVisible();
+    await expect(inspector.getByText(/No distinct preview deployment evidence/i)).toBeVisible();
 
     await inspector.getByRole("tab", { name: "Artifacts" }).click();
     await expect.poll(() => inspector.getByRole("listitem").count()).toBeGreaterThan(0);

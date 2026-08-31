@@ -374,7 +374,9 @@ describe("GrokWorkspace", () => {
     );
 
     await userEvent.click(within(controlCenter).getByRole("tab", { name: "Preview" }));
-    expect(within(controlCenter).getByRole("link", { name: "https://preview.example.dev" })).toBeInTheDocument();
+    expect(within(controlCenter).getByText("Not Connected")).toBeInTheDocument();
+    expect(within(controlCenter).getByText(/No distinct preview deployment evidence/i)).toBeInTheDocument();
+    expect(within(controlCenter).queryByRole("link", { name: "https://preview.example.dev" })).not.toBeInTheDocument();
 
     await userEvent.click(within(controlCenter).getByRole("tab", { name: "Deployment" }));
     const deploymentPanel = within(controlCenter).getByRole("tabpanel");
@@ -670,6 +672,26 @@ describe("GrokWorkspace", () => {
     expect(within(inspector).queryByRole("button", { name: /retry/i })).not.toBeInTheDocument();
     await userEvent.click(within(inspector).getByRole("tab", { name: "Agents" }));
     expect(within(inspector).getByText("Planned routing intent")).toBeInTheDocument();
+    expect(within(inspector).getByText(/do not prove execution/i)).toBeInTheDocument();
+  });
+
+  it("does not call a claimed graph an observed provider route before a node attempt exists", async () => {
+    installFetch({
+      ...SESSION,
+      tasks: SESSION.tasks.map((task) => ({
+        ...task,
+        status: "pending",
+        provider: null,
+        model: null,
+        attempt: null,
+      })),
+    });
+    render(<GrokWorkspace initialSelection={{ sessionId: SESSION.session.id }} />);
+
+    const inspector = await screen.findByRole("complementary", { name: "Session inspector" });
+    await userEvent.click(within(inspector).getByRole("tab", { name: "Agents" }));
+    expect(within(inspector).getByText("Planned routing intent")).toBeInTheDocument();
+    expect(within(inspector).queryByText("Observed node execution route")).not.toBeInTheDocument();
     expect(within(inspector).getByText(/do not prove execution/i)).toBeInTheDocument();
   });
 
