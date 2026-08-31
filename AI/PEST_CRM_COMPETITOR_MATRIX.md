@@ -68,7 +68,7 @@ built.
 | Recurring service plans / automated service cadence | Briostack, PestPac, FieldRoutes | **HAVE** (ADR-189) |
 | Twice-monthly and custom appointment sequencing | Briostack | **PARTIAL** — recurrences exist, sequencing does not |
 | **Route optimization / visual route manager / dynamic planner** | FieldRoutes (deepest), PestPac, Briostack, Jobber | **GAP** |
-| **Technician time in/out and timesheets** | PestPac | **GAP** |
+| Technician time in/out and timesheets | PestPac | **HAVE** (ADR-196) |
 | **GPS / fleet tracking** | GorillaDesk (Pro), FieldRoutes | **GAP** (needs a provider — would ship Not Connected) |
 
 ### C. Mobile and the field
@@ -79,7 +79,7 @@ built.
 | Materials/chemical logging from the field | PestPac, FieldRoutes, GorillaDesk, Fieldwork | **HAVE** (ADR-191) |
 | **Technician mobile app** | all | **GAP** |
 | **Offline mode — full capacity without signal** | PestPac | **GAP** |
-| **Signature capture** | PestPac, GorillaDesk (Pro) | **PARTIAL** — contracts record a signatory name and moment; nothing is captured |
+| Signature capture | PestPac, GorillaDesk (Pro) | **HAVE** (ADR-196) on forms — a name, a moment and a stored image, whole or absent |
 | Photos, files and documents attached to orders and accounts | PestPac | **HAVE** (ADR-195) — diagrams still a GAP |
 | **In-field card payment** | PestPac | **GAP** |
 
@@ -89,7 +89,7 @@ built.
 |---|---|---|
 | IPM devices, thresholds, scan ledger | Briostack, PestPac | **HAVE** (ADR-190) |
 | Pest sightings with corrective actions | PestPac | **HAVE** (ADR-190) |
-| **Digital form builder: inspections, service reports, compliance checklists — assignable, signed, instantly on the desktop** | PestPac | **GAP** |
+| Digital form builder: inspections, service reports, compliance checklists — assignable, signed, instantly on the desktop | PestPac | **HAVE** (ADR-196) |
 | **WDO / termite graphs and diagrams** | PestPac, ServSuite | **GAP** |
 
 ### E. Chemicals and compliance
@@ -101,7 +101,7 @@ built.
 | Append-only application log with applicator licence | FIFRA-compliant set | **HAVE** (ADR-191) |
 | Per-jurisdiction rules enforced at recording | PestPac | **HAVE** (ADR-191) |
 | Audit-ready report, CSV export | all | **HAVE** (ADR-191) |
-| **Technician licence expiry tracking and alerts** | PestPac, ServSuite | **GAP** |
+| Technician licence expiry tracking | PestPac, ServSuite | **HAVE** (ADR-196); alerting is a GAP — the report exists, nothing notifies |
 
 ### F. Billing and payments
 
@@ -156,9 +156,8 @@ Ranked by what a buyer comparing us to PestPac or Briostack would notice
 first, and tracked in `AI/BACKLOG.md`:
 
 1. ~~Documents, canvassing, marketing~~ — **SHIPPED** as ADR-195.
-2. **Digital forms and inspections engine** (increment 9) — PestPac's
-   strongest differentiator; also carries technician timesheets and licence
-   expiry tracking.
+2. ~~Digital forms and inspections engine~~ — **SHIPPED** as ADR-196,
+   with timesheets and licence expiry.
 3. **Customer portal** (increment 10) — both PestPac and Briostack lead
    with it; residential first, then the commercial view.
 4. **Dashboards and route optimization** (increment 11).

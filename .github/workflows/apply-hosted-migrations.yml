@@ -66,6 +66,7 @@ on:
           - billing-contracts
           - branches-org-sales
           - documents-canvassing-marketing
+          - forms-timesheets-licences
           - probe
 permissions:
   actions: read
@@ -1823,6 +1824,71 @@ jobs:
             end
             \$\$;"
           echo "Documents, canvassing and marketing applied; RLS, append-only facts, path-not-URL verified."
+
+      - name: Apply the forms engine, timesheets and licences (scope=forms-timesheets-licences)
+        if: ${{ inputs.scope == 'forms-timesheets-licences' }}
+        run: |
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+          VERSION=20260830001600_forms_timesheets_licences
+          FILE="supabase/migrations/${VERSION}.sql"
+          sha256sum "$FILE"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied "${VERSION%%_*}"
+          else
+            npx supabase migration repair --status applied "${VERSION%%_*}" --db-url "$DB_URL"
+          fi
+          psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
+          # Postflight: five tables under forced RLS; nothing deletable
+          # (hosted default privileges granted ALL at creation, so the
+          # ABSENCE of delete is what must be proven); anon and service_role
+          # hold nothing; and all four guards that make a form's data
+          # trustworthy are actually installed.
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "
+            do \$\$
+            declare
+              v_table text;
+              v_all text[] := array[
+                'crm_form_templates','crm_form_fields','crm_form_instances',
+                'crm_form_answers','crm_timesheets'];
+            begin
+              if (select count(*) from pg_class c
+                   join pg_namespace n on n.oid = c.relnamespace
+                  where n.nspname = 'public' and c.relrowsecurity and c.relforcerowsecurity
+                    and c.relname = any(v_all)) <> 5 then
+                raise exception 'the forms tables are missing or not under forced RLS';
+              end if;
+              foreach v_table in array v_all loop
+                if has_table_privilege('authenticated', 'public.' || v_table, 'delete') then
+                  raise exception 'form records are deletable on %', v_table;
+                end if;
+                if has_table_privilege('anon', 'public.' || v_table, 'select')
+                  or has_table_privilege('service_role', 'public.' || v_table, 'select') then
+                  raise exception 'anon or service_role can reach %', v_table;
+                end if;
+              end loop;
+              if (select count(*) from pg_trigger t join pg_class c on c.oid = t.tgrelid
+                  where t.tgname in (
+                    'crm_form_answers_check_shape',
+                    'crm_form_instances_check_completeness',
+                    'crm_form_fields_guard_in_use',
+                    'crm_timesheets_guard_overlap')) <> 4 then
+                raise exception 'a forms guard is missing';
+              end if;
+              -- Licence expiry is a column the compliance report reads.
+              if (select count(*) from information_schema.columns
+                   where table_schema = 'public' and table_name = 'crm_technicians'
+                     and column_name in ('license_expires_on','license_state')) <> 2 then
+                raise exception 'the licence expiry columns are missing';
+              end if;
+            end
+            \$\$;"
+          echo "Forms, timesheets and licences applied; RLS, no-delete, and all four guards verified."
 
       - name: Normalize exact legacy bot ACLs (scope=bot-legacy-acl-normalization)
         if: ${{ inputs.scope == 'bot-legacy-acl-normalization' }}

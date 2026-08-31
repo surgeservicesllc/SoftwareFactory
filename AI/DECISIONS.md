@@ -4086,3 +4086,65 @@ undeclared until the goal's full seeded E2E passes.
   on the three append-only tables, and tenant isolation in both directions.
   The full-scale seed covers all nine; hosted-apply scope
   `documents-canvassing-marketing` re-proves the posture after every apply.
+
+## ADR-196 - The forms engine: questions that freeze, answers that fit
+
+- **Date**: 2026-08-31
+- **Status**: Accepted (task #64, owner /goal: match BOSS and PestPac;
+  `AI/PEST_CRM_COMPETITOR_MATRIX.md` marks this the largest single gap)
+- **Context**: PestPac sells this harder than anything else — create,
+  assign and collect digital forms (inspections, service reports,
+  compliance checklists), signed in the field and readable from the desk
+  the moment they are done. Without it there is no way to record what an
+  inspection actually found, only that one happened.
+- **Decision**: `20260830001600_forms_timesheets_licences.sql` adds
+  `crm_form_templates` and `crm_form_fields` (versioned question sets over
+  seven field types), `crm_form_instances` and `crm_form_answers`,
+  `crm_timesheets`, and licence-expiry columns on `crm_technicians`.
+- **A form is worth only the trust its data earns later, so five things
+  are the database's job**:
+  1. **An answer lands in the column its question's type calls for.**
+     `crm_check_answer_shape` reads the field's declared type and refuses a
+     mismatch by name — "about a dozen" is not an answer to a number
+     question. A `select` answer must be one of the offered choices and a
+     `multi_select` a subset of them. A form whose answers are free text is
+     not reportable, which is the entire reason for building one.
+  2. **"Completed" is arithmetic.** `crm_check_form_completeness` counts
+     the required questions against the answers present and refuses the
+     difference, so a completed form is complete rather than marked done.
+  3. **A signature is a name, a moment and a stored image together, or
+     none of the three**, and the image is a private path — never a link,
+     on the same reasoning documents follow (ADR-195).
+  4. **A template with forms assigned from it freezes.**
+     `crm_guard_template_in_use` refuses the edit and names the remedy;
+     publishing the next version is what the remedy does. A report whose
+     questions changed underneath it is not a report.
+  5. **A technician cannot be in two places at once.**
+     `crm_guard_shift_overlap` refuses an overlapping shift, so a timesheet
+     total is arithmetic rather than an estimate. A shift ending before it
+     starts is refused, and so is one running past twenty-four hours —
+     that is a forgotten clock-out, and calling it a day's labour is a
+     payroll error rather than a long day.
+- **Two reporting decisions that must not be "tidied" later**:
+  - A licence with **no expiry on file is `unrecorded`**, never folded into
+    `current`. An unknown is not a pass, and folding the two together is
+    how a compliance report becomes a liability.
+  - A **running shift reports `workedMinutes: null`** — not zero, not
+    elapsed-so-far. Treating an open shift as finished inflates every
+    figure built on it.
+- **Surfaces**: `/Services/forms` (forms, templates, timesheets, licences)
+  over `/api/services/{forms,forms/instances,timesheets,licences}`. The
+  page leads with the uncomfortable counts — completed-but-unsigned forms,
+  shifts still running, expired and unrecorded licences.
+- **Verification**: `services-forms.behavior` (9) on the real chain proves
+  the shape refusal with the right value accepted, both choice refusals
+  with a real multi-select accepted, the completeness refusal *and* the
+  same transition succeeding once the required question is answered, the
+  template freeze plus the new version that resolves it, the two-thirds
+  signature and the URL signature both refused with a real path accepted,
+  the overlap refusal with a later shift accepted, both timesheet bounds,
+  an expiry with no licence behind it refused, the anon/service_role
+  shutout with no DELETE, and tenant isolation. Seed covers all five
+  tables — 40/40, 44,067 rows. Hosted-apply scope
+  `forms-timesheets-licences` re-proves RLS, no-delete, all four guards and
+  the licence columns after every apply.

@@ -9,6 +9,7 @@ import {
   KanbanSquare,
   LayoutDashboard,
   Radar,
+  ClipboardCheck,
   ScanLine,
   ShieldCheck,
   Users,
@@ -116,6 +117,12 @@ export const SERVICES_NAVIGATION: readonly ServicesNavItem[] = [
     label: "Marketing",
     description: "Lists, consent, campaigns, attribution",
     icon: Megaphone,
+  },
+  {
+    href: `${SERVICES_ROOT}/forms`,
+    label: "Forms & Compliance",
+    description: "Inspections, timesheets, licence expiry",
+    icon: ClipboardCheck,
   },
 ];
 

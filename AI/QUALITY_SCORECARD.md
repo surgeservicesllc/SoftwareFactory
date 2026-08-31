@@ -2,6 +2,28 @@
 
 Last reviewed: 2026-08-31
 
+**Addendum, 2026-08-31 latest+18 - the forms engine (ADR-196):**
+services-forms.behavior 9 on the real chain under hosted-style default
+privileges (prose refused for a number question by name with the right value
+accepted; a choice outside the offered list and a multi-select outside it
+both refused, with a real two-value multi-select accepted; completion refused
+while a required question is unanswered AND the same transition succeeding
+once it is answered; a template frozen once a form is assigned from it, with
+the new version the refusal names actually working; a two-thirds signature
+and a URL signature both refused with a real stored path accepted; an
+overlapping shift refused with a later one accepted; ends-before-starts and
+past-24-hours both refused; a licence expiry with no licence behind it
+refused; anon/service_role shut out with no DELETE on any of the five;
+tenant isolation). Seed extended to 40 tables — 44,067 rows, 40/40 PASS,
+zero orphans, carrying both a running shift and finished ones because the
+page renders both. RLS census 187; hosted service-role grants at 40 crm
+tables; runbook 194; workflow scope `forms-timesheets-licences` postflight
+proves forced RLS, no delete, all four guards and the licence columns.
+**Also this round:** the select-contract guard now resolves the shared
+`CRM_*_COLUMNS` constants instead of skipping them — 181 call sites moved
+from unverified to verified, with a second assertion pinning the resolution
+because its failure mode is silent. Lint zero warnings, tsc clean.
+
 **Addendum, 2026-08-31 latest+17 - documents, canvassing, marketing
 (ADR-195):** services-marketing-canvassing.behavior 9 on the real chain
 under hosted-style default privileges (a URL, an s3 scheme and a leading

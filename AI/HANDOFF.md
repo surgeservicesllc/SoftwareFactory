@@ -2,6 +2,39 @@
 
 Last updated: 2026-08-31
 
+## Newest (2026-08-31, latest+18): the forms engine (ADR-196, task #64)
+
+`20260830001600` adds crm_form_templates + crm_form_fields,
+crm_form_instances + crm_form_answers, crm_timesheets, and
+license_expires_on/license_state on crm_technicians.
+
+FIVE GUARDS, ALL TRIGGERS — do not move any of them into a route:
+1. `crm_check_answer_shape` — an answer goes in the column its question's
+   declared type calls for, and a choice answer must be among the offered
+   choices (multi_select is subset-checked with `<@`).
+2. `crm_check_form_completeness` — the transition to `completed` counts
+   required fields against answers present and refuses the difference.
+3. `crm_guard_template_in_use` — a template with instances freezes; the
+   exception text names the remedy (publish a new version).
+4. `crm_guard_shift_overlap` — an open shift runs to now() for overlap
+   purposes, which is why the comparison uses coalesce(ended_at, now()).
+5. Signature completeness is a CHECK: num_nonnulls(...) in (0, 3).
+
+SEEDING ORDER MATTERS HERE: fields must land BEFORE any instance is
+assigned from the template (guard 3), and answers must land BEFORE the
+instance is moved to `completed` (guard 2). The runner does exactly that —
+insert instances as `assigned`, insert answers, then move status in a
+grouped pass. Do not "simplify" it into one insert.
+
+TWO REPORTING RULES, both easy to break by tidying:
+- A licence with no expiry on file is `unrecorded`, NEVER folded into
+  `current`. An unknown is not a pass.
+- A running shift reports workedMinutes: null — not 0, not elapsed-so-far.
+
+VALIDATOR NOTE: crm_form_answers lists all five value columns as optional,
+which asks the audit to prove every answer shape appears in the corpus.
+That is the point — it is what proves every question type is exercised.
+
 ## Newest (2026-08-31, latest+17): documents, canvassing, marketing (ADR-195)
 
 Owner /goal: match BOSS and PestPac. The audit is

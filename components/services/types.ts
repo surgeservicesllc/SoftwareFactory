@@ -702,3 +702,91 @@ export type AttributionPayload = {
   lastTouch: Record<string, number>;
   counts: { total: number; accounts: number };
 };
+
+export type FormFieldView = {
+  id: string;
+  templateId: string;
+  position: number;
+  label: string;
+  fieldType: string;
+  required: boolean;
+  helpText: string | null;
+  options: string[];
+  createdAt: string;
+};
+
+export type FormTemplateView = {
+  id: string;
+  name: string;
+  kind: string;
+  version: number;
+  description: string | null;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+  fields: FormFieldView[];
+  inUse: boolean;
+};
+
+export type FormInstanceView = {
+  id: string;
+  templateId: string;
+  accountId: string | null;
+  propertyId: string | null;
+  workOrderId: string | null;
+  technicianId: string | null;
+  status: string;
+  assignedAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  signedByName: string | null;
+  signedAt: string | null;
+  signaturePath: string | null;
+  signed: boolean;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type TimesheetView = {
+  id: string;
+  technicianId: string;
+  workOrderId: string | null;
+  startedAt: string;
+  endedAt: string | null;
+  breakMinutes: number;
+  workedMinutes: number | null;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type FormsPayload = {
+  templates: FormTemplateView[];
+  instances: FormInstanceView[];
+  counts: {
+    templates: number;
+    assigned: number;
+    inProgress: number;
+    completed: number;
+    completedUnsigned: number;
+  };
+};
+
+export type TimesheetsPayload = {
+  shifts: TimesheetView[];
+  counts: { total: number; running: number; workedMinutes: number };
+};
+
+export type LicencesPayload = {
+  technicians: (TechnicianView & { daysRemaining: number | null; state: string })[];
+  horizonDays: number;
+  counts: {
+    onRoster: number;
+    current: number;
+    expiring: number;
+    expired: number;
+    unrecorded: number;
+    noLicence: number;
+  };
+};

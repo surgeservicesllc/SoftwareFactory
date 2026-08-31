@@ -62,9 +62,18 @@ moment it was withdrawn, and the message funnel is CHECKed one-way so a
 reported open rate cannot exceed its own delivery. Nothing sends: no
 email/SMS provider is connected and no executor runs the automation rules,
 and /Services/marketing carries **Not Connected** above every figure.
+The forms engine (ADR-196) closes the largest gap in the competitor
+matrix: versioned templates over seven field types, answers checked against
+their question's declared type by trigger, "completed" counted from the
+required questions rather than asserted, signatures whole or absent with the
+image stored as a path, and templates frozen once a form is assigned from
+them. Timesheets refuse overlapping shifts and report no worked total while
+a shift is still running; licence expiry reports current, expiring, expired
+and — kept deliberately apart — unrecorded, because a licence with no date
+on file is an unknown rather than a pass. /Services/forms reads all four.
 A workspace can populate itself two ways (ADR-192): the curated Demo Data
-book for presenting the product, or the full corpus — 38,728 rows across
-all thirty-five tables, every optional field populated, spanning years —
+book for presenting the product, or the full corpus — 44,067 rows across
+all forty tables, every optional field populated, spanning years —
 for testing dashboards, reports and pagination at the size of a real book.
 GET /api/services/seed-report audits whichever is loaded, table by table,
 PASS or FAIL. Plan of record: AI/SERVICES_CRM_GAP_ANALYSIS.md — ten increments;

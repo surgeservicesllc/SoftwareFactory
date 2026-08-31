@@ -89,11 +89,15 @@ the full seeded E2E journey passes — increment 10 of the plan.
   Until then `sending`/`sent` stay unreachable from the API and
   run_count/last_run_at stay unsettable, which is what keeps the page
   honest.
-- [ ] Increment 9: the forms and inspections engine (PestPac's strongest
-  differentiator per AI/PEST_CRM_COMPETITOR_MATRIX.md) — a form template
-  builder, assignable instances, typed answers, signature capture, and
-  completed forms readable from the desktop. Carries technician timesheets
-  (time in/out) and licence expiry tracking with alerts.
+- [x] Increment 9 (ADR-196): the forms and inspections engine — versioned
+  templates over seven field types, assignable instances, answers checked
+  against their question's declared type by trigger, "completed" counted
+  from the required questions rather than asserted, signatures whole or
+  absent, templates frozen once in use; plus crm_timesheets with overlap
+  refused and licence expiry on technicians. /Services/forms.
+  20260830001600; hosted apply: scope=forms-timesheets-licences after merge.
+- [ ] Increment 9 follow-on: WDO/termite diagrams (a drawing surface, not a
+  form), and PDF rendering of a completed inspection.
 - [ ] Increment 10: the customer portal — residential first (balance, pay
   request, service history, documents), then the commercial view (open
   conditions, device summary, sighting tickets, SDS/compliance library,
