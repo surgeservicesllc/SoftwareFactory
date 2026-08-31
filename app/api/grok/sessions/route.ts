@@ -404,6 +404,23 @@ export async function POST(request: Request) {
         );
       }
       if (plan.intent.kind === "research") {
+        if (
+          plan.graphLaunch.riskLevel !== "green"
+          || plan.graphLaunch.requiresOwnerApproval
+        ) {
+          return jsonNoStore(
+            {
+              sessionId: session.id,
+              error: {
+                code: "grok_intent_runtime_bridge_required",
+                message: "The read-only research bridge accepts only an exact GREEN plan that does not require owner approval. The higher-risk plan and specialist roster remain recorded, but no graph or worker was started.",
+              },
+              workerWoken: false,
+              executionStarted: false,
+            },
+            { status: 409 },
+          );
+        }
         let providerAdmissions;
         try {
           providerAdmissions = buildGrokReadOnlyIntentAdmissions(

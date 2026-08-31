@@ -37,9 +37,12 @@ describe("Grok read-only research runtime contract", () => {
     expect(admission).toContain("export function buildGrokReadOnlyIntentAdmissions");
     expect(admission).toContain("plan.intent.kind !== \"research\"");
     expect(admission).toContain("rosterByAssignment.get(task.assignmentId)");
+    expect(migration).toContain("v_entry ->> 'version' is distinct from '2'");
+    expect(migration).not.toContain("v_entry ->> 'version' <> '2'");
     expect(migration).toContain("v_task ->> 'assignmentId' is distinct from v_entry ->> 'assignmentId'");
     expect(migration).toContain("v_task ->> 'model' is distinct from v_entry ->> 'model'");
     expect(migration).toContain("public.grok_specialist_admission_hash(v_specialist)");
+    expect(migration).toContain("v_new.source_task_key := 'roster:' || v_specialist.assignment_id::text");
     expect(migration).toContain("public.grok_current_execution_admission_hash(v_new)");
     expect(migration).toContain("public.assert_current_grok_execution_admissions(v_graph.id)");
   });

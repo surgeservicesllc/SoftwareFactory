@@ -680,6 +680,69 @@ describe("Grok sessions POST", () => {
     expect(harness.resolveRelease).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ["red", false],
+    ["yellow", false],
+    ["green", true],
+  ] as const)(
+    "keeps %s research with owner-approval=%s recorded but blocked before RPC",
+    async (riskLevel, requiresOwnerApproval) => {
+      harness.readBoundedJson.mockResolvedValueOnce({
+        projectId,
+        prompt: "Research the authorization boundary",
+        idempotencyKey: "request-key-123",
+      });
+      const researchPlan = {
+        ...plan,
+        intent: {
+          ...plan.intent,
+          kind: "research",
+          prompt: "Research the authorization boundary",
+        },
+        graphLaunch: {
+          goal: "Research the authorization boundary",
+          topology: "DAG",
+          topologyReasons: [{ code: "DEPENDENCIES", detail: "Evidence fans in." }],
+          riskLevel,
+          requiresOwnerApproval,
+          nodes: [{
+            node_key: "research_repository",
+            executor: "MODEL",
+            capability: "discovery",
+            model_tier: "STANDARD",
+          }],
+          edges: [],
+          budget: { max_nodes: 1, max_concurrent_nodes: 1 },
+        },
+      };
+      harness.storedPlan.mockReturnValue(researchPlan);
+      harness.readBundle.mockResolvedValue({
+        ...bundle,
+        messages: [{ id: assistantMessageId, sequence_no: 2, role: "assistant" }],
+      });
+
+      const response = await POST(new Request("https://factory.example/api/grok/sessions", {
+        method: "POST",
+        headers: { origin: "https://factory.example", "content-type": "application/json" },
+        body: JSON.stringify({ projectId, prompt: "Research the authorization boundary" }),
+      }));
+
+      expect(response.status).toBe(409);
+      expect(await response.json()).toMatchObject({
+        sessionId,
+        error: {
+          code: "grok_intent_runtime_bridge_required",
+          message: expect.stringMatching(/exact GREEN plan.*no graph or worker was started/i),
+        },
+        workerWoken: false,
+        executionStarted: false,
+      });
+      expect(harness.buildReadOnlyAdmissions).not.toHaveBeenCalled();
+      expect(harness.serviceRpc).not.toHaveBeenCalled();
+      expect(harness.resolveRelease).not.toHaveBeenCalled();
+    },
+  );
+
   it("replays the existing paused graph without resolving a changed branch or creating another graph", async () => {
     harness.storedPlan.mockReturnValue(plan);
     harness.readBundle.mockResolvedValue({

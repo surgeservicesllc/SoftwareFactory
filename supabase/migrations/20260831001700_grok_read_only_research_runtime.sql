@@ -205,7 +205,7 @@ begin
      order by admission.value ->> 'nodeKey'
   loop
     v_node_key := v_entry ->> 'nodeKey';
-    if v_entry ->> 'version' <> '2'
+    if v_entry ->> 'version' is distinct from '2'
         or v_entry ->> 'lane' is distinct from 'graph_model'
         or v_entry ->> 'provider' is distinct from 'anthropic'
         or coalesce(v_node_key, '') !~ '^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$'
@@ -396,7 +396,9 @@ begin
     v_new.graph_id := v_graph.id;
     v_new.graph_node_id := v_graph_node.id;
     v_new.node_key := v_node_key;
-    v_new.source_task_key := v_node_key;
+    -- The v2 admission hash contract reserves source_task_key for the exact
+    -- immutable roster identity. The planner task remains exact in node_key.
+    v_new.source_task_key := 'roster:' || v_specialist.assignment_id::text;
     v_new.lane := 'graph_model';
     v_new.assignment_id := v_specialist.assignment_id;
     v_new.assignment_revision := v_specialist.assignment_revision;
