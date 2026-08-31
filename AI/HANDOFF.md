@@ -2,6 +2,30 @@
 
 Last updated: 2026-08-31
 
+## text_has_likely_secret has THREE definitions and ~130 lines (ADR-208)
+
+Two mistakes in one session, both worth not repeating.
+
+FIRST: three migrations redefine this function. Grep finds the oldest.
+Reading it and concluding a pattern is missing is wrong — check the LAST
+definition, which is what runs. `secret-detector-sql-parity` has a
+`latestDefinition()` helper for exactly this, and warns about the trap in
+its own comment.
+
+SECOND: the function is NOT just the leading regex. Past it are ~110 lines
+walking assignment lines and JSON literals, with a placeholder vocabulary
+so `PASSWORD=${DATABASE_PASSWORD}` and `=<set-in-secret-manager>` do not
+trip. A patch that rewrote the function from the regex dropped all of it.
+If you change the pattern, copy the WHOLE current body and edit inside it.
+
+Any change here must land in all three implementations together —
+public.text_has_likely_secret, lib/security/sensitive-data.ts,
+lib/worker/redact.ts — or the parity suites fail. That is their job.
+
+`pk_` (publishable) is deliberately NOT a secret. It ships in browser
+bundles; flagging it teaches people the warning is noise. There is a test
+pinning that, so "just make it [sprk]k_" has to argue with it first.
+
 ## Running a full local suite: do not touch supabase/migrations while it runs
 
 Twice in one session a full `npx vitest run` came back with a dozen-plus

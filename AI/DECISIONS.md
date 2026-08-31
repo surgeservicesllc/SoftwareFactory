@@ -4893,3 +4893,53 @@ vault stays unreadable by both browser roles.
 route re-reads status rather than echoing its own write.
 
 Hosted apply scope `service-integrations`.
+
+## ADR-208 - The secret guard did not know a restricted key was a key
+
+A Stripe **restricted** key (`rk_live_`, `rk_test_`) was invisible to all
+three implementations of this repository's secret rule:
+`public.text_has_likely_secret`, `lib/security/sensitive-data.ts` and
+`lib/worker/redact.ts`. Every one matched `sk_(live|test)_` and none
+matched `rk_`.
+
+**This was a disagreement inside the system, not a missing pattern.**
+`lib/billing` ACCEPTS an `rk_live_` key as a valid `STRIPE_SECRET_KEY` and
+has a test asserting exactly that. So the code that consumes the key
+treated it as a credential, while the layer deciding whether it may be
+stored in a column, committed to a file by a worker, or written to a log
+did not. Restricted keys are what a careful operator uses *instead of* a
+secret key — which makes this the shape most likely to be pasted by
+somebody following good advice.
+
+Fixed in all three at once, because the parity suites bind them together
+and fixing one would have failed the others. `[sr]k_(live|test)_`.
+
+**`pk_` is deliberately excluded.** A publishable key is meant to be
+public; it ships in browser bundles. Flagging it would teach people the
+warning is noise, and a warning nobody believes protects nothing. The
+obvious next tidy is `[sprk]k_`, so a test now pins the exclusion and that
+change has to argue with it.
+
+**How it was found, and the mistake on the way.** GitHub's push protection
+rejected the branch over increment 17's key-shaped test fixtures — correctly
+— which prompted a look at whether OUR guard caught the same shape. The
+first look concluded it had no Stripe pattern at all. **That was wrong**:
+three migrations redefine this function and I had read the FIRST. The live
+one already covered `sk_`. `secret-detector-sql-parity` warns about that
+exact trap in its own comment, and resolves it with a `latestDefinition()`
+helper that takes the last match.
+
+**The second mistake is why this migration is shaped the way it is.** The
+first patch rewrote the function from its leading regex — and silently
+dropped the ~110 lines after it, which walk assignment lines and JSON
+literals with a placeholder vocabulary so `PASSWORD=${DATABASE_PASSWORD}`
+does not trip. An existing test caught it within a minute. This migration
+is therefore the live body with **one character class changed**, generated
+by patching that substring rather than retyping the function, and the
+postflight asserts every previously-caught shape still trips, both walkers
+still work, and placeholders still pass.
+
+The function is immutable and backs CHECK constraints, so widening it
+governs new writes only; existing rows are not revalidated.
+
+Hosted apply scope `secret-guard-restricted-keys`.
