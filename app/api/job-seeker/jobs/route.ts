@@ -7,7 +7,7 @@ import {
   readBoundedJson,
   requestErrorResponse,
 } from "@/lib/server/http";
-import { evaluateJob, hasLeadershipEvidence } from "@/lib/job-seeker/evaluate";
+import { insertScoredJob, loadEvaluationInputs } from "@/lib/job-seeker/record";
 import { findSensitiveData } from "@/lib/server/sensitive-data";
 import { supabaseBoundaryErrorResponse } from "@/lib/supabase/http";
 import { assertSameOriginRequest } from "@/lib/supabase/request";
@@ -185,105 +185,39 @@ export async function POST(request: Request) {
     const { client, user, activeOrganization } = await requireActiveOrganization();
 
     // The evaluation draws on recorded facts; absent rows evaluate honestly
-    // as absent facts (the gaps will say the profile is empty).
-    const [{ data: profileRow }, { data: preferencesRow }] = await Promise.all([
-      client
-        .from("job_seeker_profiles")
-        .select("skills, technologies, industries, employment_history, salary_target, location, work_arrangement, open_to_relocation")
-        .eq("organization_id", activeOrganization.id)
-        .maybeSingle(),
-      client
-        .from("job_seeker_preferences")
-        .select("target_titles, compensation_minimum, locations, work_arrangements, industries, exclusions, qualification_threshold")
-        .eq("organization_id", activeOrganization.id)
-        .maybeSingle(),
-    ]);
-
-    const history = (profileRow?.employment_history ?? []) as Array<{ title: string; summary?: string; highlights?: string[] }>;
-    const evaluation = evaluateJob(
-      {
-        skills: (profileRow?.skills ?? []) as string[],
-        technologies: (profileRow?.technologies ?? []) as string[],
-        industries: (profileRow?.industries ?? []) as string[],
-        employmentTitles: history.map((entry) => entry.title),
-        hasLeadershipEvidence: hasLeadershipEvidence(history),
-        salaryTarget: profileRow?.salary_target ?? null,
-        location: profileRow?.location ?? null,
-        workArrangement: (profileRow?.work_arrangement ?? "any") as string,
-        openToRelocation: profileRow?.open_to_relocation ?? false,
-      },
-      {
-        targetTitles: (preferencesRow?.target_titles ?? []) as string[],
-        compensationMinimum: preferencesRow?.compensation_minimum ?? null,
-        locations: (preferencesRow?.locations ?? []) as string[],
-        workArrangements: (preferencesRow?.work_arrangements ?? []) as string[],
-        industries: (preferencesRow?.industries ?? []) as string[],
-        exclusions: (preferencesRow?.exclusions ?? []) as string[],
-        qualificationThreshold: preferencesRow?.qualification_threshold ?? 80,
-      },
-      {
-        title: payload.title,
-        company: payload.company,
-        description: payload.description ?? null,
-        salaryText: payload.salaryText ?? null,
-        location: payload.location ?? null,
-        workModel: payload.workModel === "any" ? null : payload.workModel ?? null,
-      },
-    );
-
-    const { data: jobRow, error: jobError } = await client
-      .from("job_seeker_jobs")
-      .insert({
-        organization_id: activeOrganization.id,
-        user_id: user.id,
-        source: "manual",
-        external_id: payload.externalId ?? null,
+    // as absent facts (the gaps will say the profile is empty). Recording
+    // crosses ONE database boundary: record_job_seeker_job commits the job,
+    // its match, its pipeline entry, and the audit event together, exactly
+    // as the automated scan path does — a manual record used to be three
+    // separate inserts that could half-land.
+    const inputs = await loadEvaluationInputs(client, activeOrganization.id);
+    const outcome = await insertScoredJob(client, {
+      organizationId: activeOrganization.id,
+      userId: user.id,
+      source: "manual",
+      job: {
+        externalId: payload.externalId ?? null,
         url: payload.url ?? null,
         title: payload.title,
         company: payload.company,
-        salary_text: payload.salaryText ?? null,
+        salaryText: payload.salaryText ?? null,
         location: payload.location ?? null,
-        work_model: payload.workModel === "any" ? null : payload.workModel ?? null,
+        workModel: payload.workModel === "any" ? null : payload.workModel ?? null,
         description: payload.description ?? null,
-      })
-      .select("id")
-      .single<{ id: string }>();
-    if (jobError) {
-      if (jobError.code === "23505") {
-        return jsonNoStore(
-          { error: { code: "duplicate_job", message: "This job is already recorded: same company, title, and job id." } },
-          { status: 409 },
-        );
-      }
-      return databaseErrorResponse(jobError);
+      },
+      inputs,
+    });
+    if (outcome.outcome === "duplicate") {
+      return jsonNoStore(
+        { error: { code: "duplicate_job", message: "This job is already recorded: same company, title, and job id." } },
+        { status: 409 },
+      );
     }
-
-    const { error: matchError } = await client.from("job_seeker_matches").insert({
-      organization_id: activeOrganization.id,
-      user_id: user.id,
-      job_id: jobRow.id,
-      score: evaluation.score,
-      breakdown: evaluation.breakdown,
-      reasons: evaluation.reasons,
-      gaps: evaluation.gaps,
-      threshold_used: evaluation.threshold,
-      qualified: evaluation.qualified,
-    });
-    if (matchError) return databaseErrorResponse(matchError);
-
-    // Every recorded job enters the pipeline at its honest stage.
-    const { error: applicationError } = await client.from("job_seeker_applications").insert({
-      organization_id: activeOrganization.id,
-      user_id: user.id,
-      job_id: jobRow.id,
-      stage: evaluation.qualified ? "QUALIFIED" : "FOUND",
-    });
-    if (applicationError) return databaseErrorResponse(applicationError);
 
     const { data: fullRow, error: readError } = await client
       .from("job_seeker_jobs")
       .select(JOB_COLUMNS)
-      .eq("id", jobRow.id)
+      .eq("id", outcome.jobId)
       .single<JobRow>();
     if (readError) return databaseErrorResponse(readError);
     return jsonNoStore({ job: toView(fullRow as unknown as JobRow) }, { status: 201 });

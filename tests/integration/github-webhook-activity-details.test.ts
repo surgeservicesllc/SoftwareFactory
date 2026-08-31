@@ -1,15 +1,9 @@
 // @vitest-environment node
 
-import { readdir, readFile } from "node:fs/promises";
-import { resolve } from "node:path";
-
 import { PGlite } from "@electric-sql/pglite";
-import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
 import { describe, expect, it } from "vitest";
 import { LATEST_MIGRATION } from "../support/latest-migration";
-
-const repositoryRoot = resolve(import.meta.dirname, "../..");
-const migrationsRoot = resolve(repositoryRoot, "supabase/migrations");
+import { createMigratedDatabase, latestMigration } from "../support/migrated-database";
 
 const ownerId = "00000000-0000-4000-8000-000000000101";
 const organizationId = "10000000-0000-4000-8000-000000000001";
@@ -18,39 +12,6 @@ const installationId = "30000000-0000-4000-8000-000000000001";
 const repositoryId = "40000000-0000-4000-8000-000000000001";
 const boundProjectId = "50000000-0000-4000-8000-000000000001";
 const nameOnlyProjectId = "50000000-0000-4000-8000-000000000002";
-
-async function createDatabase() {
-  const db = new PGlite({ extensions: { pgcrypto } });
-  await db.exec(`
-    create schema if not exists auth;
-    create table auth.users (
-      id uuid primary key default gen_random_uuid(),
-      raw_user_meta_data jsonb not null default '{}'::jsonb
-    );
-    create or replace function auth.uid()
-    returns uuid language sql stable as $$
-      select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid
-    $$;
-    create or replace function auth.jwt()
-    returns jsonb language sql stable as $$
-      select coalesce(nullif(current_setting('request.jwt.claims', true), '')::jsonb, '{}'::jsonb)
-    $$;
-    create role anon nologin;
-    create role authenticated nologin;
-    create role service_role nologin;
-  `);
-  return db;
-}
-
-async function applyFullMigrationChain(db: PGlite) {
-  const migrationFiles = (await readdir(migrationsRoot))
-    .filter((file) => /^\d+.*\.sql$/.test(file))
-    .sort();
-  expect(migrationFiles.at(-1)).toBe(LATEST_MIGRATION);
-  for (const file of migrationFiles) {
-    await db.exec(await readFile(resolve(migrationsRoot, file), "utf8"));
-  }
-}
 
 async function seedBindings(db: PGlite) {
   await db.exec(`
@@ -112,9 +73,11 @@ async function seedBindings(db: PGlite) {
 
 describe("persisted GitHub webhook activity details", () => {
   it("applies the full chain and records only allowlisted evidence on exact repository bindings", async () => {
-    const db = await createDatabase();
+    // The chain comes from the snapshot; the coverage assertion survives —
+    // the helper keys its cache on the CONTENT of every migration.
+    expect(await latestMigration()).toBe(LATEST_MIGRATION);
+    const db = await createMigratedDatabase();
     try {
-      await applyFullMigrationChain(db);
       await seedBindings(db);
 
       const deliveries = [
@@ -298,9 +261,8 @@ describe("persisted GitHub webhook activity details", () => {
   }, 60_000);
 
   it("keeps repository ordering and terminal deletion semantics under the activity triggers", async () => {
-    const db = await createDatabase();
+    const db = await createMigratedDatabase();
     try {
-      await applyFullMigrationChain(db);
       await seedBindings(db);
 
       let sequence = 0;

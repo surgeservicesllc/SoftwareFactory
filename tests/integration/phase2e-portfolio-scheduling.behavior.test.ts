@@ -1,12 +1,9 @@
 // @vitest-environment node
 
-import { readdir, readFile } from "node:fs/promises";
-import { resolve } from "node:path";
-
 import { PGlite } from "@electric-sql/pglite";
-import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
 import { describe, expect, it } from "vitest";
 import { LATEST_MIGRATION } from "../support/latest-migration";
+import { createMigratedDatabase, latestMigration } from "../support/migrated-database";
 
 /**
  * Phase 2E: does the factory schedule a *portfolio*, or one project at a time?
@@ -27,9 +24,6 @@ import { LATEST_MIGRATION } from "../support/latest-migration";
  * update ... skip locked` that handles contention is unchanged from Phase 1C.
  */
 
-const repositoryRoot = resolve(import.meta.dirname, "../..");
-const migrationsRoot = resolve(repositoryRoot, "supabase/migrations");
-const latestMigration = LATEST_MIGRATION;
 
 const ownerId = "00000000-0000-4000-8000-0000000002e1";
 const outsiderId = "00000000-0000-4000-8000-0000000002e2";
@@ -71,37 +65,12 @@ const beta: ProjectFixture = {
 const appId = 4573846;
 
 async function database() {
-  const db = new PGlite({ extensions: { pgcrypto } });
-  await db.exec(`
-    create schema if not exists auth;
-    create table auth.users (
-      id uuid primary key default gen_random_uuid(),
-      raw_user_meta_data jsonb not null default '{}'::jsonb
-    );
-    create or replace function auth.uid()
-    returns uuid language sql stable as $$
-      select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid
-    $$;
-    create or replace function auth.jwt()
-    returns jsonb language sql stable as $$
-      select coalesce(nullif(current_setting('request.jwt.claims', true), '')::jsonb, '{}'::jsonb)
-    $$;
-    create role anon nologin;
-    create role authenticated nologin;
-    create role service_role nologin bypassrls;
-  `);
-
-  const migrations = (await readdir(migrationsRoot))
-    .filter((file) => /^\d+.*\.sql$/.test(file))
-    .sort();
-  // Pinned so a new migration cannot land without this suite being re-run
-  // against it. Portfolio scheduling touches the claim path, which nearly
-  // every other durable behaviour depends on.
-  expect(migrations.at(-1)).toBe(latestMigration);
-  for (const migration of migrations) {
-    await db.exec(await readFile(resolve(migrationsRoot, migration), "utf8"));
-  }
-  return db;
+  // Restored from the snapshot. The pin the comment below described
+  // survives: the helper keys its cache on every migration's content,
+  // so a new migration rebuilds the snapshot and re-runs this suite
+  // against it.
+  expect(await latestMigration()).toBe(LATEST_MIGRATION);
+  return createMigratedDatabase();
 }
 
 function seedProject(project: ProjectFixture) {

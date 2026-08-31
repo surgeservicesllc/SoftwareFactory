@@ -1,11 +1,9 @@
 // @vitest-environment node
 
-import { readFile, readdir } from "node:fs/promises";
-import { resolve } from "node:path";
 
 import { PGlite } from "@electric-sql/pglite";
-import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { createMigratedDatabase } from "../support/migrated-database";
 
 /**
  * The two security invariants `AGENTS.md` states, checked across the whole
@@ -32,7 +30,6 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
  * this makes the widening visible in the diff that causes it.
  */
 
-const migrationsDirectory = resolve(import.meta.dirname, "../../supabase/migrations");
 
 /**
  * The only tables `service_role` may hold direct table privileges on: the
@@ -129,26 +126,10 @@ const INTENTIONALLY_POLICYLESS: Readonly<Record<string, string>> = Object.freeze
 let db: PGlite;
 
 beforeAll(async () => {
-  db = new PGlite({ extensions: { pgcrypto } });
-  await db.exec(`
-    create schema if not exists auth;
-    create table auth.users (
-      id uuid primary key default gen_random_uuid(),
-      raw_user_meta_data jsonb not null default '{}'::jsonb
-    );
-    create or replace function auth.uid() returns uuid language sql stable as $$
-      select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
-    create or replace function auth.jwt() returns jsonb language sql stable as $$
-      select coalesce(nullif(current_setting('request.jwt.claims', true), '')::jsonb, '{}'::jsonb) $$;
-    create role anon nologin;
-    create role authenticated nologin;
-    create role service_role nologin bypassrls;
-  `);
-
-  const files = (await readdir(migrationsDirectory)).filter((f) => f.endsWith(".sql")).sort();
-  for (const file of files) {
-    await db.exec(await readFile(resolve(migrationsDirectory, file), "utf8"));
-  }
+  // The chain, restored from a snapshot rather than replayed; the
+  // helper keys its cache on the CONTENT of every migration, and
+  // asserts coverage of the whole directory.
+  db = await createMigratedDatabase();
 }, 600_000);
 
 afterAll(async () => {

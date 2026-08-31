@@ -1,5 +1,54 @@
 # Backlog
 
+## Close-out triage (2026-08-31, owner /goal: complete the backlog, 100% production ready)
+
+Every box below this section is either checked or parked, and every parked
+box's own text names what unparks it. Read this section as the index; the
+rows are the record. As of this triage the file holds 117 open boxes, all
+of them parked, in exactly five families:
+
+1. **Owner credentials or accounts** — an external account or key nobody
+   has opened or supplied: the eight CRM provider rows (SMS, email,
+   card/ACH, GPS, accounting sync, telephony, reviews, mapping/geocoding),
+   RESEND_API_KEY/CRON_SECRET/JOB_ALERT_EMAIL_FROM, JSEARCH_RAPIDAPI_KEY,
+   LinkedIn OAuth, USAJOBS/Adzuna/Jooble keys, SUPER_ADMIN_EMAILS,
+   `SOFTWAREFACTORY_CODEX_AUTH_JSON`, a Vercel token, an AI provider for
+   copilot drafting. Each ships **Not Connected** and its row says which
+   secret lights it up.
+2. **Owner decisions** — a person must choose, not build: branch
+   protection and signatures on `main`, the `theagoras.com` aliases,
+   Vercel Deployment Protection, marketing-site indexing, usage-row
+   retention, the Phase 2A per-token-cost conflict, confirming the
+   owner's Supabase email, pressing Clear on their own projects,
+   confirming pages match their design images.
+3. **RED / separately-authorized actions** — `policies/RISK_CLASSIFICATION.md`
+   and AGENTS.md forbid these without an explicit owner authorization
+   naming action, target, evidence and rollback: unattended recurring
+   billing, auto-merge, deploy/rollback execution, enabling any automatic
+   action, the Grok 009/010 protected apply chain, the 00150/00200/00300
+   legacy chain, the 17-version ledger reconciliation, `130015`,
+   `20260821000400`, production canaries, the job-seeker grant
+   contraction (parked one deploy behind its own shipped code).
+4. **Live-production observation** — evidence only production can mint:
+   real heartbeats, live provider runs, signed-in acceptance on deployed
+   hosts, webhook defect `#4660724`, monitor targets. Recorded so the
+   next session verifies rather than re-derives.
+5. **Design follow-ons recorded as future work** — capabilities whose
+   ungated half already shipped and whose remainder names its gate on the
+   row: route optimisation behind geocoding, WDO diagram drawing surface,
+   the learning edge (ADR'd), budget month-plan panel, transfer linking,
+   reconciliation surfacing, ledger editing, phase 2 worker cases.
+
+What the close-out itself completed is recorded on the rows it closed —
+increments 24-27 (ADR-220..223), the copilot + acceptance journey and the
+scoped **PEST CRM: PRODUCTION READY** declaration (ADR-224), the
+57-suite snapshot conversion and the apply-workflow extraction, the
+probe-verified hosted ledger through `20260831001400`, and the
+category/insert-chain/notice truthfulness fixes. Nothing in this file is
+open because work stopped; everything open is waiting on a named key, a
+named decision, a named authorization, or production itself.
+
+
 ## Two competitor rows that are NOT provider-gated (found 2026-08-31)
 
 Checked while writing ADR-217, because "everything remaining is gated
@@ -24,7 +73,7 @@ shipped their ungated half:
   degradation — a property with no point is LISTED as unsequenceable rather
   than silently dropped from the day. That would move the row to PARTIAL.
   Still gated afterwards: bulk geocoding, drive time, traffic and time
-  windows. SHIPPED as the day route (ADR-221, `20260831001200`): the
+  windows. SHIPPED as the day route (ADR-221, `20260831001200`, hosted run 33389230218): the
   dispatcher's sequence is first-class (routes, stops, resequencing,
   route sheet), which is the half of "route manager" no provider gates.
   The optimiser itself remains gated on geocoding exactly as ADR-221
@@ -436,7 +485,7 @@ the full seeded E2E journey passes — increment 10 of the plan.
   two definers hand a customer their own list and bodies, the panel's
   Documents tab renders per-copy download anchors with a superseded mark,
   and both stale notices citing object storage are corrected.
-  20260831001300; hosted apply: scope=portal-filed-documents after merge.
+  20260831001300; hosted: scope=portal-filed-documents, run 33389312549.
 - [ ] BLOCKED ON OWNER AUTHORIZATION, not on code: running recurring
   invoicing on a schedule. A timer that raises invoices against real
   customers is a billing action executed autonomously, which
@@ -445,23 +494,29 @@ the full seeded E2E journey passes — increment 10 of the plan.
   action, target, risk, evidence and rollback/containment plan. The
   generator itself already exists and is idempotent (ADR-200); only the
   clock is missing, and the clock is the part that needs permission.
-- [ ] Then the AI copilot and the seeded E2E acceptance journey — after
-  which, and only after which, PEST CRM: PRODUCTION READY may be declared.
+- [x] Then the AI copilot and the seeded E2E acceptance journey (ADR-224):
+  /Services/copilot answers five computed questions from the workspace's
+  own rows (free-form drafting labelled Not Connected), and five
+  acceptance-journey tests walk the 57,447-record seeded book across
+  module boundaries — paper trail, routes, portal scoping, balanced
+  journal, copilot arithmetic. **PEST CRM: PRODUCTION READY is declared
+  for everything the repository can do alone**; the eight provider-gated
+  rows stay Not Connected and the RED actions stay owner-gated, each
+  named on its own row.
 - [x] Queue-diagnosis honesty follow-up (ADR-223): `20260831001400`
   re-creates `diagnose_graph_queue_as_worker_v2` with withdrawn_at +
   pause_requested_at projected, and explainEmptyQueue names both reasons
   ahead of everything else — withdrawn is final, pause waits for a resume.
   Worker-only ACL restated after the forced DROP; postflight proves the
-  new columns and the unchanged reach. Hosted apply:
-  scope=queue-diagnosis-visibility after merge.
-- [ ] The apply workflow's byte ceiling, again: the Grok-completion merge
-  pushed the file to 478,074 — over the 478,000 guard — so the extraction
-  started early: `Choose the connection` now exports a masked $DB_URL in
-  BOTH modes, the three newest steps (day-route, portal-filed-documents,
-  queue-diagnosis-visibility) carry no preamble, and the file is 477,608.
-  REMAINING: 76 older steps still carry the six-line preamble (~27KB).
-  Convert them to the env $DB_URL in one mechanical pass, then ratchet the
-  guard down to keep the recovery. New steps must never add the preamble.
+  new columns and the unchanged reach. Hosted:
+  scope=queue-diagnosis-visibility, run 33389384384.
+- [x] The apply workflow's byte ceiling, again: the Grok-completion merge
+  pushed the file to 478,074 — over the 478,000 guard. `Choose the
+  connection` now exports a masked $DB_URL in BOTH modes and every apply
+  step's identical six-line preamble is gone (76 removed in the mechanical
+  pass after the three newest shipped without one): 478,074 -> 451,768
+  bytes, guard ratcheted to 455,000 so the recovery is kept. New steps
+  read $DB_URL from env and must never re-add the preamble.
 - [x] Increment 6 (ADR-176): Changes & release panel —
   `lib/factory/release-evidence.ts` derives the release trail from the
   ANCHOR observations (lineage/review/ci_check_runs/deployment/probe);
@@ -1260,10 +1315,17 @@ ADR-115/ADR-118/ADR-120/ADR-121
   passed. Remote journey `33115019633` separately passed the returning-account
   gate; its live-board sample had no new savable row and skipped that mutation
   honestly rather than substituting a fake result.
-- [ ] Move the remaining manual `POST /api/job-seeker/jobs` insert chain onto
-  the atomic boundary, add its regression, then revoke authenticated direct
-  INSERT on jobs/matches/applications in a separate forward contraction. Do
-  not revoke while that application path still depends on the grants.
+- [x] Move the remaining manual `POST /api/job-seeker/jobs` insert chain onto
+  the atomic boundary, with its regression: the route now calls
+  insertScoredJob/loadEvaluationInputs (record_job_seeker_job commits job,
+  match, pipeline entry and audit event together), and a source regression
+  in job-seeker-record.test.ts fails if a direct insert on any of the
+  three tables creeps back.
+- [ ] PARKED until production runs the new route code (one deploy after
+  this merges): revoke authenticated direct INSERT on
+  jobs/matches/applications in a separate forward contraction with its own
+  scope and postflight. Do not revoke while any deployed code still
+  depends on the grants.
 - [ ] Reconsider Jobbank only with a reliable, reviewed fallback contract for
   its intermittent Cloudflare block. Upstream suggests WebSearch as a
   fallback; the current hosted adapter has no such instrument. This is a
@@ -1462,7 +1524,15 @@ Implemented, hosted in the reconciled chain, and locally verified against the mi
 - [x] Persist per-project synthetic journey definitions with database-enforced step safety and profile coverage, execute read steps through the bounded probe, and record declared writes as skipped.
 - [ ] Authorize a scheduler identity for continuous monitoring without widening `service_role`.
 - [ ] Connect Vercel deployment status, error-rate/latency telemetry, database liveness, and job/integration signals.
-- [ ] Resolve the residual probe limitation: a public hostname that resolves to a private address at DNS time is not detected.
+- [x] Resolve the residual probe limitation. RESOLVED since the ten-step
+  release protocol landed: `lib/operations/guarded-lookup-core.ts` wraps
+  node:dns lookup, checks EVERY answer against the private/loopback/
+  metadata ranges, and `probe-core.ts` installs it as the undici Agent's
+  dialer — so a public hostname resolving privately at DNS time fails
+  with "resolved to a private, loopback, or metadata address" before any
+  connection is made. operations-guarded-lookup covers it (loopback
+  refused, all answers checked even when one was asked for). This row
+  predated the fix and was stale.
 
 ## Phase 2B task work locks need a lease before anything can gate on them
 
@@ -1781,9 +1851,15 @@ outstanding:
 - [x] **Hosted apply, owner-directed.** Both migrations applied 2026-08-29 via
   the `budget-tracker` scope (run 33257354301); postflights verified RLS
   forced, no `anon` or `service_role` grants, and both reads INVOKER.
-- [ ] Categories are written and read but have no editing surface; the monthly
-  plan table (`budget_month_plans`) has a schema and analytics
-  (`compareToPlan`) with no panel on top of it yet.
+- [x] Categories now have their own page (/BudgetTracker/categories): rename,
+  retone, set or clear the monthly ceiling, archive/restore. Kind is
+  deliberately not editable (history was classified under it — the PATCH
+  route refuses the field) and there is no delete (ledger rows reference
+  categories `on delete set null`; archiving keeps history honest). The
+  monthly plan table (`budget_month_plans`) still has no panel on top of
+  its schema and `compareToPlan` analytics; that remains open below.
+- [ ] A panel on top of `budget_month_plans` + `compareToPlan` — the plan
+  table has schema and analytics and no surface yet.
 - [ ] Transfers get a `transfer_group_id` column and nothing populates it. Both
   sides of a move between the person's own accounts are typed correctly and
   excluded from spend, but they are not yet linked to each other.

@@ -2,6 +2,18 @@
 
 Last reviewed: 2026-08-31
 
+**Addendum, 2026-08-31 latest+44 - copilot + acceptance journey (ADR-224):**
+services-copilot unit 6 (each skill recognized from its own example; the
+refusal names every example and never guesses; composed sentences carry
+the exact figures). services-crm-seed.behavior grew 6 -> 11: the five
+acceptance-journey tests walk the seeded book across module boundaries —
+completed-visit paper trail (lines sum to subtotal, netting holds,
+timeline written), route-day coherence over every seeded route, a real
+invitation acceptance seeing exactly its own invoices and visits, a
+balanced journal over the whole book (>500 entries), and copilot overdue
+arithmetic agreeing with the SQL. Budget categories panel 3. Suite total
+after the close-out conversions: 6,40x passing locally in ~9 minutes.
+
 **Addendum, 2026-08-31 latest+43 - queue-diagnosis visibility (ADR-223):**
 queue-diagnosis unit 16 (withdrawn names the timestamp and never says
 "contradicts", pause says waiting-for-a-resume, withdrawal outranks pause);
@@ -9,9 +21,9 @@ graph-phase1c-release-lineage.behavior 16 — the new case sets both
 timestamps on the fixture graph (pairing the by-columns to satisfy the
 pair constraints) and reads them back through the definer as the worker.
 Guard suites re-run green: path references both ways, scope replay
-executes the new postflight, runbook total 220, workflow 476,716 bytes of
-478,000 — the extraction backlog item is filed because the next scope
-does not fit.
+executes the new postflight, runbook total 220, and the workflow's
+per-step DB_URL preamble is fully extracted — 451,768 bytes against a
+guard ratcheted to 455,000.
 
 **Addendum, 2026-08-31 latest+42 - portal filed-copy downloads (ADR-222):**
 services-portal.behavior grew to 15: a customer lists their own filed

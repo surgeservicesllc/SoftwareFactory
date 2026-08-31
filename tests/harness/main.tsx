@@ -238,6 +238,14 @@ function serveFixtures() {
     }
     if (url.includes("/api/job-seeker/profile")) return json({ profile: JOB_SEEKER_PROFILE });
     if (url.includes("/api/job-seeker/preferences")) return json({ preferences: JOB_SEEKER_PREFERENCES });
+    if (url.includes("/api/budget/categories")) {
+      return json({ categories: [
+        { id: "11111111-1111-4111-8111-111111111111", name: "Groceries", kind: "expense",
+          tone: "essential", monthlyLimitCents: 60000, isArchived: false },
+        { id: "22222222-2222-4222-8222-222222222222", name: "Old hobby", kind: "expense",
+          tone: "discretionary", monthlyLimitCents: null, isArchived: true },
+      ] });
+    }
     if (url.includes("/api/budget/overview")) return json(BUDGET_OVERVIEW);
     if (url.includes("/api/job-seeker/saved-searches")) return json({ savedSearches: [] });
     if (url.includes("/api/job-seeker/search/save")) return json({ saved: true });
@@ -411,6 +419,7 @@ const CASES: Record<string, () => React.ReactElement> = {
    * what the horizontal-overflow assertion is really aimed at.
    */
   "budget-tracker": () => <InShell><BudgetTrackerConsole section="overview" /></InShell>,
+  "budget-categories": () => <InShell><BudgetTrackerConsole section="categories" /></InShell>,
   /*
    * The resume review panel only exists after an upload, so the job-seeker
    * case above never renders it and it had no width coverage at all. Its

@@ -1,11 +1,9 @@
 // @vitest-environment node
 
-import { readdir, readFile } from "node:fs/promises";
-import { resolve } from "node:path";
 
 import { PGlite } from "@electric-sql/pglite";
-import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
 import { beforeAll, describe, expect, it, vi } from "vitest";
+import { createMigratedDatabase } from "../support/migrated-database";
 
 vi.mock("server-only", () => ({}));
 
@@ -24,7 +22,6 @@ vi.mock("server-only", () => ({}));
  * cannot.
  */
 
-const migrationsRoot = resolve(import.meta.dirname, "../../supabase/migrations");
 
 const seekerId = "00000000-0000-4000-8000-0000000a1001";
 const emaillessId = "00000000-0000-4000-8000-0000000a1002";
@@ -94,29 +91,10 @@ function hoursBefore(hours: number): string {
 }
 
 beforeAll(async () => {
-  db = new PGlite({ extensions: { pgcrypto } });
-  await db.exec(`
-    create schema if not exists auth;
-    create table auth.users (
-      id uuid primary key default gen_random_uuid(),
-      email text,
-      raw_user_meta_data jsonb not null default '{}'::jsonb
-    );
-    create or replace function auth.uid()
-    returns uuid language sql stable as $$
-      select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid
-    $$;
-    create or replace function auth.jwt()
-    returns jsonb language sql stable as $$
-      select coalesce(nullif(current_setting('request.jwt.claims', true), '')::jsonb, '{}'::jsonb)
-    $$;
-    create role anon nologin;
-    create role authenticated nologin;
-    create role service_role nologin bypassrls;
-  `);
-  for (const file of (await readdir(migrationsRoot)).filter((n) => /^\d+.*\.sql$/.test(n)).sort()) {
-    await db.exec(await readFile(resolve(migrationsRoot, file), "utf8"));
-  }
+  // The chain, restored from a snapshot rather than replayed; the
+  // helper keys its cache on the CONTENT of every migration, and
+  // asserts coverage of the whole directory.
+  db = await createMigratedDatabase();
 
   await db.exec(`
     insert into auth.users (id, email) values

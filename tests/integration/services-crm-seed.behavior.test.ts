@@ -8,6 +8,14 @@ import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import {
+  journalFromLedgers,
+  journalTotals,
+  type LedgerInvoice,
+  type LedgerPayment,
+  type LedgerRefund,
+} from "@/lib/services/accounting-export";
+import { composeOverdueAnswer, matchQuestion } from "@/lib/services/copilot";
 import { runSeed } from "@/lib/services/seed-runner";
 import { SEED_RECORD_FLOOR, buildSeedReport, formatSeedReport } from "@/lib/services/seed-validation";
 import { generateOperations, generateSeedDataset } from "@/lib/services/seed-generator";
@@ -278,5 +286,176 @@ describe("the full-scale CRM seed", { timeout: 900_000 }, () => {
         [org, account.rows[0].id, account.rows[0].property_id, barcode, owner],
       )).rejects.toThrow(/duplicate key|crm_devices_org_barcode_key/);
     }
+  });
+
+  /*
+   * THE ACCEPTANCE JOURNEY. Everything below walks the seeded book the way
+   * an operator, a dispatcher, a customer, and a bookkeeper would — across
+   * module boundaries, which is exactly what the per-increment suites never
+   * cross. It runs against the same seeded database the audit above passed,
+   * so a failure here is a coherence failure, not a fixture failure.
+   */
+
+  it("acceptance: one completed visit's paper trail is coherent end to end", async () => {
+    const trails = await db.query<{
+      invoice_id: string;
+      account_id: string;
+      subtotal_cents: number;
+      tax_cents: number;
+      total_cents: number;
+      paid_cents: number;
+      lines_cents: number;
+    }>(`
+      select i.id as invoice_id, i.account_id, i.subtotal_cents, i.tax_cents,
+             i.total_cents, i.paid_cents,
+             coalesce(sum(l.amount_cents), 0) as lines_cents
+        from public.crm_invoices i
+        join public.crm_work_orders w on w.id = i.work_order_id
+         and w.organization_id = i.organization_id
+        left join public.crm_invoice_lines l on l.invoice_id = i.id
+         and l.organization_id = i.organization_id
+       where i.organization_id = $1 and w.status = 'completed'
+       group by i.id
+       limit 50`, [org]);
+    expect(trails.rows.length).toBeGreaterThan(0);
+    for (const trail of trails.rows) {
+      // Lines are the invoice's arithmetic, not decoration.
+      expect(Number(trail.lines_cents), trail.invoice_id).toBe(Number(trail.subtotal_cents));
+      expect(Number(trail.total_cents)).toBe(Number(trail.subtotal_cents) + Number(trail.tax_cents));
+      // The payment trigger nets refunds; a paid figure past the total is
+      // the netting failing.
+      expect(Number(trail.paid_cents)).toBeLessThanOrEqual(Number(trail.total_cents));
+    }
+    // And the account's history was written by the database as it happened.
+    const events = await db.query<{ n: number }>(
+      `select count(*)::int as n from public.crm_timeline_events
+        where organization_id = $1 and account_id = $2`,
+      [org, trails.rows[0].account_id]);
+    expect(events.rows[0].n).toBeGreaterThan(0);
+  });
+
+  it("acceptance: every seeded route is a real day — right technician, right date, stops numbered from one", async () => {
+    const wrongOwner = await db.query<{ n: number }>(`
+      select count(*)::int as n
+        from public.crm_route_stops s
+        join public.crm_routes r on r.id = s.route_id and r.organization_id = s.organization_id
+        join public.crm_work_orders w on w.id = s.work_order_id and w.organization_id = s.organization_id
+       where s.organization_id = $1
+         and (w.technician_id is distinct from r.technician_id
+           or (w.scheduled_start at time zone 'UTC')::date is distinct from r.route_date)`, [org]);
+    expect(wrongOwner.rows[0].n).toBe(0);
+
+    const numbering = await db.query<{ bad: number }>(`
+      select count(*)::int as bad from (
+        select s.route_id
+          from public.crm_route_stops s
+         where s.organization_id = $1
+         group by s.route_id
+        having min(s.position) <> 1
+            or max(s.position) <> count(*)
+            or count(distinct s.position) <> count(*)
+      ) broken`, [org]);
+    expect(numbering.rows[0].bad).toBe(0);
+
+    const routeCount = await db.query<{ n: number }>(
+      "select count(*)::int as n from public.crm_routes where organization_id = $1", [org]);
+    expect(routeCount.rows[0].n).toBeGreaterThan(100);
+  });
+
+  it("acceptance: a customer accepting a seeded invitation sees exactly their own book", async () => {
+    // The seed writes INVITATIONS; the login is a real auth user accepting
+    // one, which is precisely what this walks. The suite's auth.users table
+    // needs the email column hosted Supabase carries.
+    await db.exec("reset role");
+    await db.exec("alter table auth.users add column if not exists email text");
+    const seat = await db.query<{ id: string; account_id: string; email: string }>(
+      `select id, account_id, email from public.crm_portal_users
+        where organization_id = $1 and active and user_id is null
+        order by invited_at desc limit 1`, [org]);
+    expect(seat.rows).toHaveLength(1);
+    const customer = await db.query<{ id: string }>(
+      "insert into auth.users (email) values ($1) returning id",
+      [seat.rows[0].email]);
+
+    const directInvoices = await db.query<{ n: number }>(
+      `select count(*)::int as n from public.crm_invoices
+        where organization_id = $1 and account_id = $2 and status <> 'draft'`,
+      [org, seat.rows[0].account_id]);
+
+    await db.query("select set_config('request.jwt.claim.sub', $1, false)", [customer.rows[0].id]);
+    await db.exec("set role authenticated");
+    try {
+      const accepted = await db.query<{ id: string }>(
+        "select public.crm_portal_accept_invitation() as id");
+      expect(accepted.rows[0].id).toBe(seat.rows[0].id);
+
+      const theirInvoices = await db.query("select * from public.crm_portal_invoices()");
+      expect(theirInvoices.rows.length).toBe(directInvoices.rows[0].n);
+      const visits = await db.query("select * from public.crm_portal_visits()");
+      // A seeded account has service history; an empty portal would mean the
+      // projection is scoped wrong, not that the customer is new.
+      expect(visits.rows.length).toBeGreaterThan(0);
+    } finally {
+      await db.exec("reset role");
+      await db.query("select set_config('request.jwt.claim.sub', $1, false)", [owner]);
+      await db.exec("set role authenticated");
+    }
+  });
+
+  it("acceptance: the bookkeeper's journal over the whole seeded book balances", async () => {
+    const invoiceRows = await db.query<LedgerInvoice & Record<string, unknown>>(
+      `select id, account_id as "accountId", number, issued_on as "issuedOn",
+              subtotal_cents as "subtotalCents", tax_cents as "taxCents",
+              total_cents as "totalCents", paid_cents as "paidCents", status
+         from public.crm_invoices where organization_id = $1`, [org]);
+    const paymentRows = await db.query<LedgerPayment & Record<string, unknown>>(
+      `select id, invoice_id as "invoiceId", amount_cents as "amountCents",
+              method::text as method, received_at as "receivedOn"
+         from public.crm_payments where organization_id = $1`, [org]);
+    const refundRows = await db.query<LedgerRefund & Record<string, unknown>>(
+      `select payment_id as "paymentId", amount_cents as "amountCents",
+              refunded_at as "refundedOn"
+         from public.crm_refunds where organization_id = $1`, [org]);
+    const accountRows = await db.query<{ id: string; name: string }>(
+      `select id, name from public.crm_accounts where organization_id = $1`, [org]);
+
+    const entries = journalFromLedgers({
+      invoices: invoiceRows.rows.map((row) => ({
+        ...row,
+        subtotalCents: Number(row.subtotalCents),
+        taxCents: Number(row.taxCents),
+        totalCents: Number(row.totalCents),
+        paidCents: Number(row.paidCents),
+      })),
+      payments: paymentRows.rows.map((row) => ({ ...row, amountCents: Number(row.amountCents) })),
+      refunds: refundRows.rows.map((row) => ({ ...row, amountCents: Number(row.amountCents) })),
+      names: new Map(accountRows.rows.map((row) => [row.id, row.name])),
+    });
+    const totals = journalTotals(entries);
+    // Balanced by construction is only proof if it holds over a book this
+    // size, not just over a fixture.
+    expect(totals.balanced).toBe(true);
+    expect(totals.entries).toBeGreaterThan(500);
+  });
+
+  it("acceptance: the copilot's overdue arithmetic agrees with the seeded book", async () => {
+    const overdue = await db.query<{ n: number; outstanding: number; oldest: string | null }>(`
+      select count(*)::int as n,
+             coalesce(sum(total_cents - paid_cents), 0)::bigint as outstanding,
+             min(due_on)::text as oldest
+        from public.crm_invoices
+       where organization_id = $1 and status = 'open'
+         and due_on < current_date and paid_cents < total_cents`, [org]);
+    const facts = overdue.rows[0];
+    expect(matchQuestion("Which invoices are overdue?")).toBe("overdue_invoices");
+    const answer = composeOverdueAnswer({
+      count: facts.n,
+      totalOutstandingCents: Number(facts.outstanding),
+      oldestDueOn: facts.oldest,
+    });
+    // The seed carries past-due paper on purpose — dunning needs it.
+    expect(facts.n).toBeGreaterThan(0);
+    expect(answer).toContain(String(facts.n));
+    expect(answer).toContain("past due");
   });
 });

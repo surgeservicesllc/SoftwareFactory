@@ -73,7 +73,7 @@ describe("hosted graph protocol cutover scopes", () => {
     // should cost ~22 lines here and a file there. If this fails, extract —
     // do not raise it.
     const canonicalLfSource = workflowSource.replace(/\r\n?/g, "\n");
-    expect(Buffer.byteLength(canonicalLfSource, "utf8")).toBeLessThan(478_000);
+    expect(Buffer.byteLength(canonicalLfSource, "utf8")).toBeLessThan(455_000);
   });
 
   it("exposes each protected phase exactly once and grants Actions read for the fleet check", () => {

@@ -216,6 +216,7 @@ const CASES = [
   "build",
   "job-seeker",
   "budget-tracker",
+  "budget-categories",
   "job-search",
   "resume-review",
   "bot-fabric",

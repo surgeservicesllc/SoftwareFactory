@@ -163,3 +163,28 @@ describe("atomic job recording client", () => {
     ).rejects.toThrow(/incomplete recorded outcome/i);
   });
 });
+
+describe("the manual record route stays on the atomic boundary", () => {
+  /**
+   * The manual POST used to be three separate inserts that could
+   * half-land — a job with no match, a match with no pipeline entry.
+   * It now crosses the same record_job_seeker_job boundary the scan
+   * path uses, and this regression fails if a direct insert on any of
+   * the three tables creeps back in. It is also the gate for the
+   * follow-up contraction: authenticated direct INSERT on these tables
+   * cannot be revoked while a route still depends on it.
+   */
+  it("calls insertScoredJob and never inserts the three tables directly", async () => {
+    const { readFile } = await import("node:fs/promises");
+    const { resolve } = await import("node:path");
+    const source = await readFile(
+      resolve(import.meta.dirname, "../../app/api/job-seeker/jobs/route.ts"),
+      "utf8",
+    );
+    expect(source).toContain("insertScoredJob(client");
+    expect(source).toContain("loadEvaluationInputs(client");
+    for (const table of ["job_seeker_jobs", "job_seeker_matches", "job_seeker_applications"]) {
+      expect(source).not.toMatch(new RegExp(`from\\("${table}"\\)[\\s\\S]{0,80}?\\.insert\\(`));
+    }
+  });
+});

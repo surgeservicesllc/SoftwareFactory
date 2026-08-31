@@ -5786,3 +5786,43 @@ still unreachable by browser roles, and the new columns actually in
 definition.
 
 Hosted apply scope `queue-diagnosis-visibility`.
+## ADR-224 - The copilot computes; it does not compose
+
+Every pest-control competitor now ships an "AI assistant", and the honest
+version of one for this phase is a question-answerer whose every figure is
+computed from the workspace's own rows at the moment of asking. /Services/
+copilot does exactly that: five skills (overdue invoices, today's routes,
+this week's visits, autopay coverage, this month's billing), each a
+bounded RLS-scoped read whose result is turned into a sentence by a pure
+function — reproducible from the database alone, testable without a
+network, wrong only if the book is wrong.
+
+**A refusal that teaches.** An unmatched question is a 200 with a list of
+what CAN be asked, not an error and not a guess. The matcher is keyword
+scoring, deliberately not fuzzy: a wrong answer delivered confidently is
+worse than "I don't know that one", and the unit suite pins that the
+refusal names every skill's example.
+
+**Free-form drafting is Not Connected, and the page says so.** Letters,
+summaries, replies — model work — need an AI provider, which is an
+outbound capability this phase does not connect. When one is supplied it
+becomes a NEW gated capability beside the computed answers, not a quiet
+upgrade to them; the computed answers must stay reproducible from the
+database alone, because they are what the acceptance journey checks
+against the seeded book.
+
+**The acceptance journey is the other half of the gate.** Five journey
+tests now walk the 57,447-record seeded book ACROSS module boundaries —
+the crossings no per-increment suite makes: a completed visit's lines sum
+to its invoice's subtotal and the netting holds; every route stop belongs
+to its route's technician and date with positions dense from one; a
+customer accepting a seeded invitation sees exactly their own invoices
+and visits through the portal definers; the general journal built over
+the whole book balances; and the copilot's overdue arithmetic agrees with
+the SQL it summarizes.
+
+With both halves in place, the declared bar for PEST CRM: PRODUCTION
+READY is met for everything the repository can do alone. The eight
+provider-gated rows stay **Not Connected** and the RED actions stay
+owner-gated — the matrix and backlog record each by name, and the
+declaration covers neither.
