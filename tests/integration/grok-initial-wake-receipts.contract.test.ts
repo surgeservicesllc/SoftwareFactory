@@ -62,17 +62,17 @@ describe("Grok initial Resume wake receipt contract", () => {
     expect(sql).toContain("never resolves a wake identity");
   });
 
-  it("places the receipt gate after claim and repository validation but before compile/provider", () => {
+  it("places the receipt gate after claim and exact target validation but before compile/provider", () => {
     const claim = worker.indexOf("const claim = await store.claimPlannedGraph()");
-    const repository = worker.indexOf("const mismatch = repositoryMismatch");
+    const target = worker.indexOf("const targetMismatch = graphClaimTargetMismatch");
     const receipt = worker.indexOf("await store.acknowledgeGrokWake");
     const absenceGuard = worker.indexOf("await store.assertNoGrokWakePayloadRequired");
     const compile = worker.indexOf("const compiled = compileClaimedGraph");
     const provider = worker.indexOf("const executor = buildClaudeNodeExecutor");
     expect(claim).toBeGreaterThan(-1);
-    expect(repository).toBeGreaterThan(claim);
-    expect(receipt).toBeGreaterThan(repository);
-    expect(absenceGuard).toBeGreaterThan(repository);
+    expect(target).toBeGreaterThan(claim);
+    expect(receipt).toBeGreaterThan(target);
+    expect(absenceGuard).toBeGreaterThan(target);
     expect(compile).toBeGreaterThan(receipt);
     expect(provider).toBeGreaterThan(compile);
     expect(worker).toContain("The exact Grok wake intent and control revision must be supplied together.");

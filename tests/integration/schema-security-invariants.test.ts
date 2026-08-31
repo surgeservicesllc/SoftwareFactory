@@ -295,6 +295,7 @@ describe("SECURITY DEFINER functions", () => {
       // artifacts, and close the run — where incomplete input can never be
       // recorded as COMPLETED. No credential material crosses any of them.
       "claim_planned_graph_by_id_v3",
+      "claim_planned_graph_by_target_v4",
       "claim_planned_graph_v3",
       // The provider sign-in path, added with the credential vault. `claim_`
       // and `resolve_` are reachable only by presenting a valid one-time code,
@@ -341,6 +342,7 @@ describe("SECURITY DEFINER functions", () => {
       // Research launches the planner's exact Claude-only, zero-write DAG;
       // this service boundary also pauses before visibility and never wakes.
       "launch_grok_read_only_research_v2_as_server",
+      "launch_grok_read_only_research_v3_as_server",
       "link_grok_artifact_as_server",
       "link_grok_task_as_server",
       // The verification sweep's two hands: enumerate connected subscription
@@ -422,6 +424,7 @@ describe("SECURITY DEFINER functions", () => {
       // never be orphaned by a re-plan.
       "replan_phase1c_run",
       "report_ai_auth_login_url",
+      "resolve_graph_execution_target_as_worker",
       "resolve_grok_control_intent_as_server",
       "resolve_provider_connect_session",
       // Which provider account signed in — display data on a completed

@@ -16,6 +16,25 @@
   forward production lane. No hosted apply or live worker acceptance is
   claimed by this repository candidate.
 
+## Exact graph target workspaces (ADR-238, 2026-08-31)
+
+- [x] Resolve one dispatched graph to its current active installation,
+  repository, required-check policy, base branch, and immutable base SHA
+  through a bounded service-role-only database function.
+- [x] Revalidate the complete target inside protocol-v4 claim and record exact
+  repository identity on new read-only research graphs before visibility.
+- [x] Request an exact-repository read-only installation token and expose only
+  a verified, no-hooks, detached, read-only target tree to Claude; clean it on
+  success or failure and never run target code.
+- [x] Make graph schedule/global drain inert without an equally exact target;
+  remove ambient checkout/repository/check-policy targeting from production.
+- [x] Cover ACL/catalog/runtime behavior, wrong repository/SHA/installation,
+  moved-branch pinned-SHA reachability, cleanup, and zero provider callback on
+  workspace failure in unit, contract, and full-chain PGlite tests.
+- [ ] Publish, apply, and accept migration 020 plus the exact worker release
+  only through a separately reviewed forward release. No hosted or live
+  execution evidence is claimed by this repository candidate.
+
 ## Grok admission-version null-fence release lane (ADR-237, 2026-08-31)
 
 - [x] Freeze canonical-LF migration 019 at SHA-256

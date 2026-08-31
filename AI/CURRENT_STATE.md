@@ -26,6 +26,30 @@ This is repository-only work. Nothing was applied, dispatched, pushed,
 deployed, or enabled; workers, schedules, autonomy, and automatic actions stay
 OFF and the global kill switch stays ON.
 
+## 2026-08-31: graph execution is pinned to an exact isolated target workspace (ADR-238)
+
+The repository candidate adds forward migration
+`20260831002000_exact_graph_repository_workspace.sql`. A service-role-only,
+`SECURITY DEFINER`, `search_path=pg_catalog` projection resolves one dispatched
+graph to its current active GitHub App installation, exact repository id/name,
+repository-owned required-check policy, base branch, and immutable 40-character
+base SHA. Protocol-v4 claim echoes and re-resolves that complete projection in
+the claim transaction. Read-only research launch v3 records the same immutable
+repository identity before its paused graph becomes visible.
+
+The graph workflow now accepts only exact one-shot targets; its retained
+schedule is intentionally inert. Before claim or any provider call, the worker
+uses the matching configured GitHub App to request a one-repository read-only
+installation token, builds a fresh detached Git tree at the pinned SHA under a
+dedicated temporary root, verifies origin/HEAD/hooks, rejects symlinks, removes
+the Git pointer, marks the tree read-only, and cleans it after use. Only that
+tree is passed to Claude. The reviewed SoftwareFactory checkout remains worker
+runtime and ambient `process.cwd()` / `GITHUB_REPOSITORY` no longer select
+target code. Tests cover wrong repository/SHA/installation, a moved branch
+whose pinned SHA remains reachable, cleanup, and zero provider callback on
+workspace failure. Nothing was pushed, deployed, dispatched, or applied;
+workers/autonomy/actions remain OFF and kill switches remain ON.
+
 ## 2026-08-31: Grok admission-version null fence has an exact protected lane (ADR-237)
 
 Migration `20260831001900_grok_admission_version_null_fence.sql` is frozen at

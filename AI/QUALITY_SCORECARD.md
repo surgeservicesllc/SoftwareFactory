@@ -15,6 +15,20 @@ Exact-head CI/build/browser, hosted migration, deployment, health, and signed-
 in live-worker acceptance remain pending; no production-readiness claim is
 made and every execution/safety switch remains in its stopped state.
 
+**Addendum, 2026-08-31 latest+55 - exact graph target workspace
+(ADR-238):** The full migration chain accepts forward-only 020 and proves its
+three new service-only definer/search-path ACLs. Runtime evidence resolves one
+active installation/repository/base/check target, rejects authenticated access
+and wrong repository/SHA/installation echoes without run residue, and accepts
+only the exact protocol-v4 claim. Real local Git tests prove a pinned SHA can
+still be checked out after its branch moves, verify origin/HEAD/no-hooks/no-Git
+pointer, reject wrong identity, clean every workspace, and invoke zero provider
+callback on preparation failure. Static workflow evidence proves exact
+one-shot dispatch, inert schedule/global drain, read-only workflow authority,
+and no ambient checkout identity. Exact-head CI/build/browser, hosted 020,
+deployment, health, and live acceptance remain pending; no production claim is
+made and all execution controls remain stopped.
+
 **Addendum, 2026-08-31 latest+55 - protected Grok 019 admission-version
 null fence (ADR-237):** Repository evidence freezes canonical-LF migration 019
 at SHA-256

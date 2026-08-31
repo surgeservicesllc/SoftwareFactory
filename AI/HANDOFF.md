@@ -26,6 +26,33 @@ global kill switch ON. Integration with newer 020/dispatch work may require a
 mechanical conflict resolution, but must preserve the exact third dispatch
 argument `{ wakeIntentId, controlRevision }`.
 
+## Newest (2026-08-31, latest+55): exact graph target workspace (ADR-238)
+
+Migration `20260831002000_exact_graph_repository_workspace.sql` introduces
+`resolve_graph_execution_target_as_worker(uuid,integer)`,
+`claim_planned_graph_by_target_v4(text,text[],jsonb,integer)`, and
+`launch_grok_read_only_research_v3_as_server(...)`. All three are postgres-
+owned, service-role-only `SECURITY DEFINER` functions with
+`search_path=pg_catalog`. The resolver returns no secret, only the current
+active installation/repository identifiers plus the graph's immutable base
+and check-policy identity; v4 claim compares the complete JSON projection
+before and after its targeted v3 claim.
+
+`scripts/graph-worker.mts` is now exact one-shot only. It resolves the opaque
+graph UUID, obtains a matching repository-scoped read-only installation token,
+prepares and verifies a fresh detached target tree, and only then claims. The
+tree has empty hooks/config, no `.git` pointer, no symlinks, read-only modes,
+and guaranteed scoped cleanup; Claude receives only its path. The workflow's
+schedule is retained but cannot start a job, and no ambient checkout,
+`GITHUB_REPOSITORY`, or workflow check list chooses the target. Preserve this
+ordering: workspace failure must occur before claim/provider invocation.
+
+Focused unit, contract, route, schema, and full-chain PGlite evidence passes
+locally, including wrong repository/SHA/installation and moved-branch pinned-
+SHA cases. This is an isolated repository commit only. No push, deployment,
+workflow dispatch, Supabase apply, or live provider run occurred. Keep every
+worker, autonomy mode, and automatic action OFF and every kill switch ON.
+
 ## Newest (2026-08-31, latest+55): protected Grok 019 null-fence lane (ADR-237)
 
 Use only `.github/workflows/grok-admission-version-null-fence-migration.yml`

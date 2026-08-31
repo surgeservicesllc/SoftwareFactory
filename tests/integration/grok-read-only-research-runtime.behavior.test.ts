@@ -17,6 +17,11 @@ const accountId = "04000000-0000-4000-8000-000000000004";
 const botId = "05000000-0000-4000-8000-000000000005";
 const roleId = "06000000-0000-4000-8000-000000000006";
 const assignmentId = "07000000-0000-4000-8000-000000000007";
+const connectionId = "08000000-0000-4000-8000-000000000008";
+const installationId = "09000000-0000-4000-8000-000000000009";
+const repositoryId = "0a000000-0000-4000-8000-00000000000a";
+const baseSha = "a".repeat(40);
+const requiredChecks = ["CI"];
 const capabilities = Object.freeze(["*"] as const);
 
 type ApplicationRole = "authenticated" | "service_role";
@@ -55,6 +60,37 @@ describe("Grok read-only research runtime behavior", () => {
       ) values (
         '${projectId}', '${organizationId}', 'Research Runtime', 'active',
         'factory/research-runtime', 'main', '${ownerId}'
+      );
+      insert into public.connections (
+        id, organization_id, name, provider, status, secret_reference, created_by
+      ) values (
+        '${connectionId}', '${organizationId}', 'GitHub', 'github', 'connected',
+        'env://GITHUB_APP', '${ownerId}'
+      );
+      insert into public.github_installations (
+        id, organization_id, connection_id, external_installation_id, app_id,
+        app_slug, account_id, account_login, account_type, target_type,
+        repository_selection, status, installed_at, created_by
+      ) values (
+        '${installationId}', '${organizationId}', '${connectionId}', 930001, 930002,
+        'research-runtime-app', 930003, 'factory', 'Organization', 'Organization',
+        'selected', 'active', now(), '${ownerId}'
+      );
+      insert into public.github_repositories (
+        id, organization_id, installation_id, external_repository_id,
+        owner_login, name, full_name, default_branch, html_url, private,
+        visibility, selected, github_updated_at
+      ) values (
+        '${repositoryId}', '${organizationId}', '${installationId}', 930004,
+        'factory', 'research-runtime', 'factory/research-runtime', 'main',
+        'https://github.com/factory/research-runtime', true, 'private', true, now()
+      );
+      insert into public.project_connections (
+        organization_id, project_id, connection_id, github_repository_id,
+        is_primary, created_by
+      ) values (
+        '${organizationId}', '${projectId}', '${connectionId}', '${repositoryId}',
+        true, '${ownerId}'
       );
       insert into public.ai_accounts (
         id, organization_id, provider, auth_method, display_name, status,
@@ -190,10 +226,11 @@ describe("Grok read-only research runtime behavior", () => {
     ]);
     const messageId = assistant.rows[0]!.id;
 
-    const call = `select id, graph_id from public.launch_grok_read_only_research_v2_as_server(
+    const call = `select id, graph_id from public.launch_grok_read_only_research_v3_as_server(
       $1::uuid,$2::uuid,$3::uuid,$4::uuid,$5::uuid,$6::text,$7::text,
       $8::public.graph_topology,$9::jsonb,$10::public.risk_level,$11::boolean,
-      $12::jsonb,$13::jsonb,$14::jsonb,$15::text,$16::jsonb
+      $12::jsonb,$13::jsonb,$14::jsonb,$15::uuid,$16::text,$17::text,$18::jsonb,
+      $19::text,$20::jsonb
     )`;
     const parameters = (options: {
       idempotencyKey: string;
@@ -215,6 +252,10 @@ describe("Grok read-only research runtime behavior", () => {
       JSON.stringify(planned.plan.graphLaunch.nodes),
       JSON.stringify(planned.plan.graphLaunch.edges),
       JSON.stringify(planned.plan.graphLaunch.budget),
+      repositoryId,
+      "main",
+      baseSha,
+      JSON.stringify(requiredChecks),
       "research-roster-0001",
       JSON.stringify(options.admissions ?? admissions),
     ];
@@ -272,6 +313,10 @@ describe("Grok read-only research runtime behavior", () => {
       graphs: number;
       launches: number;
       pause_requested_at: string | null;
+      github_repository_id: string | null;
+      base_branch: string | null;
+      base_sha: string | null;
+      required_check_names: string[] | null;
       roster: number;
       current_admissions: boolean;
     }>(`
@@ -283,6 +328,10 @@ describe("Grok read-only research runtime behavior", () => {
         (select count(*)::integer from public.graph_runs where graph_id=$1) as graph_runs,
         (select count(*)::integer from public.grok_events where session_id=$2 and event_type='graph.planned') as graph_events,
         (select pause_requested_at from public.graphs where id=$1) as pause_requested_at,
+        (select github_repository_id from public.graphs where id=$1) as github_repository_id,
+        (select base_branch from public.graphs where id=$1) as base_branch,
+        (select base_sha from public.graphs where id=$1) as base_sha,
+        (select required_check_names from public.graphs where id=$1) as required_check_names,
         public.assert_current_grok_execution_admissions($1::uuid) as current_admissions
     `, [launched.rows[0]!.graph_id, sessionId]);
     expect(evidence.rows[0]).toMatchObject({
@@ -293,6 +342,10 @@ describe("Grok read-only research runtime behavior", () => {
       graph_runs: 0,
       graph_events: 1,
       current_admissions: true,
+      github_repository_id: repositoryId,
+      base_branch: "main",
+      base_sha: baseSha,
+      required_check_names: requiredChecks,
     });
     expect(evidence.rows[0]!.pause_requested_at).not.toBeNull();
   }, 60_000);

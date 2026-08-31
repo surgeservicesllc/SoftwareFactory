@@ -472,8 +472,20 @@ export async function POST(request: Request) {
             { status: 409 },
           );
         }
+        const release = await resolveCanonicalFullLifecycleReleaseIdentity(
+          context.client,
+          context.activeOrganization.id,
+          project.projectId,
+        );
+        if (!release.ok) {
+          if (release.databaseError) return databaseErrorResponse(release.databaseError);
+          return jsonNoStore(
+            { error: { code: release.code, message: release.message } },
+            { status: release.status },
+          );
+        }
         const { error: launchError } = await serviceClient.rpc(
-          "launch_grok_read_only_research_v2_as_server",
+          "launch_grok_read_only_research_v3_as_server",
           {
             p_organization_id: context.activeOrganization.id,
             p_requested_by: context.user.id,
@@ -489,6 +501,10 @@ export async function POST(request: Request) {
             p_nodes: plan.graphLaunch.nodes,
             p_edges: plan.graphLaunch.edges,
             p_budget: plan.graphLaunch.budget,
+            p_github_repository_id: release.target.repository_id,
+            p_base_branch: release.target.base_branch,
+            p_base_sha: release.baseSha,
+            p_required_check_names: release.requiredChecks,
             p_roster_idempotency_key: grokSpecialistRosterIdempotencyKey(idempotencyKey),
             p_admissions: providerAdmissions,
           },

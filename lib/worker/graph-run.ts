@@ -112,6 +112,8 @@ const claimedGraphSchema = z.object({
   base_sha: z.string().regex(/^[0-9a-f]{40}$/).nullish(),
   required_check_names: requiredCheckNamesSchema.nullish(),
   required_checks_sha256: z.string().regex(/^[0-9a-f]{64}$/).nullish(),
+  /** Protocol-v4 hash of installation, repository, policy, and base identity. */
+  repository_target_sha256: z.string().regex(/^[0-9a-f]{64}$/).nullish(),
   phase1c_state: z.enum([
     "GRAPH_READY",
     "COMMAND_RECORDED",

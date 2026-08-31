@@ -6236,6 +6236,42 @@ deploy, or live database operation. Any mismatch requires a separately
 reviewed forward containment change; reset, replay, repair, down, and broad
 migration application are prohibited.
 
+## ADR-238 - A graph executes only in its immutable target repository workspace
+
+- **Date**: 2026-08-31
+- **Status**: Accepted for the repository candidate; hosted migration and live
+  execution remain separately gated
+
+The checked-out SoftwareFactory release is trusted worker runtime, not evidence
+of which repository a graph targets. A graph UUID must therefore resolve,
+before claim, to exactly one current active GitHub App connection,
+installation, selected repository, repository-owned required-check policy,
+default branch, and immutable 40-character base SHA. The bounded resolver is
+service-role-only and returns identifiers, never credential material. Its
+canonical target digest covers every field. Protocol-v4 claim accepts only
+that complete projection and re-resolves it inside the claim transaction;
+partial, stale, extra-field, wrong-installation, wrong-repository, and wrong-
+SHA projections fail before a run can survive.
+
+The matching configured GitHub App may mint one short-lived token scoped to
+the exact external repository id and read-only permissions. The worker creates
+a fresh dedicated workspace with separate trusted Git metadata, empty global
+and system configuration, disabled hooks/fsmonitor/submodule recursion, and a
+detached checkout of the immutable SHA. It verifies the canonical origin and
+HEAD, rejects symlinks, removes the work tree's Git pointer, applies read-only
+modes, exposes only that directory to Claude, and cleans it on every exit. Git
+may fetch a pinned commit still reachable after the named branch moves; branch
+movement does not rewrite the graph's base. Target package scripts, hooks,
+submodules, or repository tools are never executed.
+
+Production graph execution is exact one-shot only. Ambient
+`process.cwd()`, `GITHUB_REPOSITORY`, and workflow check-name configuration do
+not select target code or policy. The retained schedule and any global drain
+fail closed until a future scheduler can supply an equally exact graph target.
+This decision does not enable workers, autonomy, automatic actions, merge,
+deploy, or rollback, and does not disengage any kill switch. Release and hosted
+acceptance remain forward-only, separately reviewed work.
+
 ## ADR-239 - A Grok Resume is not a worker wake until the exact claim receipts it
 
 - **Date**: 2026-08-31

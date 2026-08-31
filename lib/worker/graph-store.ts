@@ -1,6 +1,10 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 import { WORKER_SUPPORTED_EXECUTORS } from "@/lib/worker/executor-support";
+import {
+  graphExecutionTargetClaim,
+  type GraphExecutionTarget,
+} from "@/lib/worker/graph-target";
 import type { GraphRunStore } from "@/lib/worker/graph-run";
 import { explainEmptyQueue, type QueueGraphRow } from "@/lib/worker/queue-diagnosis";
 import {
@@ -40,6 +44,7 @@ export class SupabaseGraphStore implements GraphRunStore {
     private readonly repositoryFullName: string,
     private readonly requiredCheckNames: readonly string[],
     private readonly targetGraphId: string | null,
+    private readonly exactTarget: GraphExecutionTarget | null,
   ) {}
 
   static create(options: {
@@ -49,6 +54,7 @@ export class SupabaseGraphStore implements GraphRunStore {
     repositoryFullName: string;
     requiredCheckNames: readonly string[];
     targetGraphId?: string | null;
+    exactTarget?: GraphExecutionTarget | null;
   }) {
     const client = createClient(options.url, options.serviceRoleKey, {
       auth: { persistSession: false, autoRefreshToken: false },
@@ -56,9 +62,10 @@ export class SupabaseGraphStore implements GraphRunStore {
     return new SupabaseGraphStore(
       client,
       options.workerId,
-      options.repositoryFullName,
-      options.requiredCheckNames,
-      options.targetGraphId ?? null,
+      options.exactTarget?.repository_full_name ?? options.repositoryFullName,
+      options.exactTarget?.required_check_names ?? options.requiredCheckNames,
+      options.exactTarget?.graph_id ?? options.targetGraphId ?? null,
+      options.exactTarget ?? null,
     );
   }
 
@@ -74,12 +81,19 @@ export class SupabaseGraphStore implements GraphRunStore {
       p_required_check_names: [...this.requiredCheckNames],
       p_protocol_version: 3,
     };
-    const { data, error } = this.targetGraphId
-      ? await this.client.rpc("claim_planned_graph_by_id_v3", {
-        ...claimRequest,
-        p_target_graph_id: this.targetGraphId,
+    const { data, error } = this.exactTarget
+      ? await this.client.rpc("claim_planned_graph_by_target_v4", {
+        p_worker_id: this.workerId,
+        p_supported_executors: [...WORKER_SUPPORTED_EXECUTORS],
+        p_expected_target: graphExecutionTargetClaim(this.exactTarget),
+        p_protocol_version: 4,
       })
-      : await this.client.rpc("claim_planned_graph_v3", claimRequest);
+      : this.targetGraphId
+        ? await this.client.rpc("claim_planned_graph_by_id_v3", {
+          ...claimRequest,
+          p_target_graph_id: this.targetGraphId,
+        })
+        : await this.client.rpc("claim_planned_graph_v3", claimRequest);
     if (error) throw new Error(`Claiming a planned graph failed: ${error.message ?? "unknown error"}`);
     return data ?? null;
   }

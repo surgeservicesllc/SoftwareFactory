@@ -1,10 +1,31 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { SupabaseGraphStore } from "@/lib/worker/graph-store";
+import type { GraphExecutionTarget } from "@/lib/worker/graph-target";
+
+const exactTarget = Object.freeze({
+  protocol_version: 1,
+  graph_id: "10000000-0000-4000-8000-000000000099",
+  organization_id: "10000000-0000-4000-8000-000000000001",
+  project_id: "10000000-0000-4000-8000-000000000002",
+  connection_id: "10000000-0000-4000-8000-000000000003",
+  github_repository_id: "10000000-0000-4000-8000-000000000004",
+  internal_installation_id: "10000000-0000-4000-8000-000000000005",
+  external_installation_id: 123,
+  app_id: 456,
+  external_repository_id: 789,
+  repository_full_name: "owner/repository",
+  base_branch: "main",
+  base_sha: "a".repeat(40),
+  required_check_names: ["CI"],
+  required_checks_sha256: "b".repeat(64),
+  target_sha256: "c".repeat(64),
+}) satisfies GraphExecutionTarget;
 
 function storeWith(
   rpc: ReturnType<typeof vi.fn>,
   targetGraphId: string | null = "10000000-0000-4000-8000-000000000099",
+  target: GraphExecutionTarget | null = null,
 ) {
   const store = Object.create(SupabaseGraphStore.prototype) as SupabaseGraphStore;
   Object.assign(store, {
@@ -13,6 +34,7 @@ function storeWith(
     repositoryFullName: "owner/repository",
     requiredCheckNames: ["CI"],
     targetGraphId,
+    exactTarget: target,
   });
   return store;
 }
@@ -40,6 +62,20 @@ describe("SupabaseGraphStore Full Lifecycle terminal boundary", () => {
       p_protocol_version: 3,
     });
     expect(rpc).not.toHaveBeenCalledWith("claim_planned_graph", expect.anything());
+  });
+
+  it("echoes the complete exact target through protocol v4 before claiming", async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: null, error: null });
+    const store = storeWith(rpc, exactTarget.graph_id, exactTarget);
+
+    await expect(store.claimPlannedGraph()).resolves.toBeNull();
+    expect(rpc).toHaveBeenCalledWith("claim_planned_graph_by_target_v4", {
+      p_worker_id: "graph-worker-test",
+      p_supported_executors: ["DETERMINISTIC", "MODEL", "ANCHOR"],
+      p_expected_target: exactTarget,
+      p_protocol_version: 4,
+    });
+    expect(rpc).not.toHaveBeenCalledWith("claim_planned_graph_by_id_v3", expect.anything());
   });
 
   it("keeps the disabled-by-default scheduled drain on the admission-fenced protocol-v3 claim", async () => {

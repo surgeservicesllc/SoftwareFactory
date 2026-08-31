@@ -702,7 +702,7 @@ describe("Grok sessions POST", () => {
     expect(harness.resolveRelease).not.toHaveBeenCalled();
   });
 
-  it("launches the exact immutable research DAG paused without release resolution or dispatch", async () => {
+  it("launches the exact immutable research DAG paused with release identity and no dispatch", async () => {
     harness.readBoundedJson.mockResolvedValueOnce({
       projectId,
       prompt: "Research the portal",
@@ -752,7 +752,7 @@ describe("Grok sessions POST", () => {
       researchGraph.nodes,
     );
     expect(harness.serviceRpc).toHaveBeenCalledWith(
-      "launch_grok_read_only_research_v2_as_server",
+      "launch_grok_read_only_research_v3_as_server",
       expect.objectContaining({
         p_organization_id: organizationId,
         p_project_id: projectId,
@@ -761,10 +761,16 @@ describe("Grok sessions POST", () => {
         p_goal: researchGraph.goal,
         p_nodes: researchGraph.nodes,
         p_admissions: providerAdmissions,
+        p_github_repository_id: repositoryId,
+        p_base_branch: "main",
+        p_base_sha: baseSha,
+        p_required_check_names: requiredChecks,
       }),
     );
     expect(harness.buildCanonicalPlan).not.toHaveBeenCalled();
-    expect(harness.resolveRelease).not.toHaveBeenCalled();
+    expect(harness.resolveRelease).toHaveBeenCalledWith(
+      expect.anything(), organizationId, projectId,
+    );
   });
 
   it.each([

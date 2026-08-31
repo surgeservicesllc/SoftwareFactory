@@ -65,7 +65,10 @@ describe("Grok read-only research runtime contract", () => {
     expect(route).toContain("launch_grok_deploy_readiness_v1_as_server");
     expect(route).toContain("plan.intent.kind === \"research\"");
     expect(route).toContain("buildGrokReadOnlyIntentAdmissions(");
-    expect(route).toContain("\"launch_grok_read_only_research_v2_as_server\"");
+    expect(route).toContain("\"launch_grok_read_only_research_v3_as_server\"");
+    expect(route).toContain("p_github_repository_id: release.target.repository_id");
+    expect(route).toContain("p_base_sha: release.baseSha");
+    expect(route).toContain("p_required_check_names: release.requiredChecks");
     expect(route).toContain("p_nodes: plan.graphLaunch.nodes");
     expect(route).toContain("bridge: plan.intent.kind === \"research\"");
   });

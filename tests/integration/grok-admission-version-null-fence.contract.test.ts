@@ -79,7 +79,7 @@ describe("Grok admission version null fence", () => {
   it("routes every browser request through the fenced names", () => {
     expect(store).toContain('"record_grok_specialist_roster_v2_as_server"');
     expect(route).toContain('"launch_grok_full_lifecycle_v4_as_server"');
-    expect(route).toContain('"launch_grok_read_only_research_v2_as_server"');
+    expect(route).toContain('"launch_grok_read_only_research_v3_as_server"');
     expect(route).toContain('"full_lifecycle_v4"');
     expect(route).toContain('"read_only_research_v2"');
     expect(route).not.toContain('"launch_grok_full_lifecycle_v3_as_server"');
