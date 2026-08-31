@@ -987,7 +987,10 @@ jobs:
                   where relation.oid='public.grok_specialist_admissions'::regclass
                     and relation.relkind='r' and pg_get_userbyid(relation.relowner)='postgres'
                     and relation.relrowsecurity and relation.relforcerowsecurity
-                    and relation.relacl is not null and (select count(*) from aclexplode(relation.relacl))=1
+                    and relation.relacl is not null and cardinality(relation.relacl)=1
+                    and (select count(*) from aclexplode(relation.relacl))=7
+                    and not exists (select 1 from aclexplode(relation.relacl) acl
+                      where acl.grantor<>relation.relowner or acl.grantee<>relation.relowner or acl.is_grantable)
                     and not has_table_privilege('anon',relation.oid,'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
                     and not has_table_privilege('authenticated',relation.oid,'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
                     and not has_table_privilege('service_role',relation.oid,'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER'))

@@ -5830,8 +5830,9 @@ declaration covers neither.
 ## ADR-225 - Theme is a document preference; products keep identities through tokens
 
 - **Date**: 2026-08-31
-- **Status**: Accepted for the repository candidate; exact-head production
-  acceptance remains required
+- **Status**: Production accepted at exact main
+  `85a7fed15ad876be4e56fd74903e41b68d4488b4`, CI `33395309085`, and READY
+  deployment `dpl_FcbZciXJFJN1DWxN2mxd23wEPfaU`
 - **Supersedes**: ADR-188 only where it required Services to be light rather
   than theme-responsive. Its CRM vocabulary and emerald product identity stay.
 
@@ -5861,3 +5862,29 @@ Services legacy status translation, horizontal overflow, page errors, and
 serious/critical axe. A deterministic contract independently prevents palette
 text, muted text, or faint text from falling below 4.5:1 on background, surface,
 or raised surface.
+
+## ADR-226 - Count an ACL item as an item and its privileges as privileges
+
+- **Date**: 2026-08-31
+- **Status**: Accepted; verifier correction pending exact-head release and
+  read-only production verification
+
+Protected Grok completion run `33397811324` applied and ledgered only
+`20260831001000_grok_specialist_admission_planning.sql` and reloaded
+PostgREST, then failed closed at its combined specialist postflight. The five
+function-body fingerprints match the exact PostgreSQL `prosrc` bodies. The
+verifier defect is the new table ACL predicate: it treated the row count from
+`aclexplode(relacl)` as the count of ACL items. PostgreSQL stores one owner
+table ACL item but expands it into seven rows, one for each standard table
+privilege.
+
+The exact table posture is therefore verified on both levels: `relacl` must
+contain exactly one ACL item; `aclexplode(relacl)` must contain exactly seven
+privilege rows; and every expanded row must be owner-to-owner and
+non-grantable. Existing explicit denials for `anon`, `authenticated`, and
+`service_role` remain mandatory. This is a verifier-only correction: it does
+not replay 010, change its ledger row, alter hosted catalog, enable a worker,
+weaken RLS, or change autonomy. After the corrected workflow itself passes
+exact-head CI and READY deployment identity, only a fresh read-only `verify`
+scope may accept ledger `1|1` and the catalog/ACL/runtime/rollback/lint/health/
+stopped-safety postflight.

@@ -1,5 +1,30 @@
 # Current state
 
+## 2026-08-31: Grok completion DDL is hosted; acceptance is stopped on a verifier-only ACL fix (ADR-226)
+
+Exact main `85a7fed15ad876be4e56fd74903e41b68d4488b4` passed all four
+required jobs in CI run `33395309085`, reached READY Vercel deployment
+`dpl_FcbZciXJFJN1DWxN2mxd23wEPfaU`, and reports that same Git, deployment,
+and Supabase project identity from public health. Protected read-only run
+`33397278231` proved the completion ledger began `0|0`. Run `33397377838`
+then applied only hash-pinned `20260831000900`, and read-only run
+`33397710586` independently proved ledger `1|0` plus exact catalog, ACL,
+runtime, lint, health, and stopped containment.
+
+Protected run `33397811324` applied and ledgered only hash-pinned
+`20260831001000` and reloaded PostgREST, then stopped at its postflight. The
+failure is in the workflow's table-ACL verifier: it required one row from
+`aclexplode(relacl)` for one owner ACL item, but PostgreSQL expands that table
+ACL item into the seven standard table privileges. The migration is never to
+be replayed, reset, repaired in history, or down-migrated. ADR-226 changes the
+verifier to require exactly one ACL item, exactly seven expanded privileges,
+and owner-only/non-grantable posture before a fresh read-only `verify` run.
+
+Workers, autonomy, and every automatic action stayed OFF; the global kill
+switch stayed ON. Signed-in create/return/reload acceptance and a real
+provider-backed repository/PR/CI/deployment journey still remain. **GROK BOT:
+PRODUCTION READY is not declared.**
+
 ## 2026-08-31: One persistent dark/light choice now covers every site shell (ADR-225)
 
 The repository candidate makes dark the first-visit default for the public
@@ -26,13 +51,19 @@ persistence, exact
 computed palettes, no horizontal overflow, no page errors, and no serious or
 critical axe findings. The token contract independently requires at least
 4.5:1 for text, muted text, and faint text against each palette's background,
-surface, and raised surface. Exact-head CI and Vercel production identity
-remain release gates; this section does not claim deployment yet.
+surface, and raised surface. Exact main
+`85a7fed15ad876be4e56fd74903e41b68d4488b4` passed all four required jobs in
+CI run `33395309085` and reached READY Vercel deployment
+`dpl_FcbZciXJFJN1DWxN2mxd23wEPfaU`. Matching health plus authenticated and
+public browser acceptance proved the saved preference across Services,
+Software Factory, and Budget Tracker. The site-wide theme release is
+production accepted.
 
-## 2026-08-31: Grok claim-time admission and specialist planning are a repository candidate (ADR-219)
+## 2026-08-31: Grok claim-time admission and specialist planning are hosted, with final verification pending (ADR-219, ADR-226)
 
-The next Grok boundary is implemented in the repository but is not hosted or
-production accepted. Forward migration
+The next Grok boundary is implemented and its two forward migrations are now
+hosted, but final read-only verification and signed-in production acceptance
+remain open. Forward migration
 `20260831000900_grok_claim_admission_fence.sql` (canonical LF SHA-256
 `7f2dc3b80e466b3c06f589ac6383fd768df847d66e02ec0cab53b8d8431ab737`;
 92,648 LF bytes) makes protocol v3 the only service-role Grok claim path. Every
@@ -76,8 +107,11 @@ RLS/ACL/replay/rollback checks, exact-head CI and deployment identity, hosted
 ledger/catalog/ACL/runtime/lint postflight, signed-in acceptance, or real
 provider-backed end-to-end evidence.
 
-Both migrations are repository-only and unhosted. Workers, autonomy, and every
-automatic action remain OFF, and the global kill switch remains ON. No actual
+Migration `00900` was accepted by protected apply run `33397377838` and
+independent read-only run `33397710586`. Migration `01000` was applied and
+ledgered by run `33397811324`; that run then stopped on the verifier-only ACL
+cardinality defect described in ADR-226. Workers, autonomy, and every automatic
+action remain OFF, and the global kill switch remains ON. No actual
 provider-backed run, repository change, draft pull request, or exact-head CI
 chain has passed through this boundary. **GROK BOT: PRODUCTION READY is not
 declared.**

@@ -423,6 +423,8 @@ describe("Grok Bot completion migration workflow", () => {
     ).run ?? "";
     for (const evidence of [
       "relation.relrowsecurity and relation.relforcerowsecurity",
+      "cardinality(relation.relacl)=1",
+      "count(*) from aclexplode(relation.relacl))=7",
       "count(*)=29 from pg_attribute",
       "grok_specialist_admissions_select_members",
       "count(*)=2 and bool_and(tgfoid='public.reject_grok_evidence_mutation()'::regprocedure)",
@@ -437,6 +439,9 @@ describe("Grok Bot completion migration workflow", () => {
     ]) {
       expect(postflight).toContain(evidence);
     }
+    expect(postflight).not.toContain(
+      "count(*) from aclexplode(relation.relacl))=1",
+    );
   });
 
   it("uses rollback runtime canaries, transactional linked lint, cache reload, and exact postflight health", () => {
