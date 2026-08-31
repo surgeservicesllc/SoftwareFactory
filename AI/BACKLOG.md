@@ -73,9 +73,14 @@
   applied and ledgered `20260831000100` once before a false-negative
   postflight: the workflow fingerprints for both new function bodies included
   delimiter text that PostgreSQL does not store in `prosrc`. Correct the two
-  hashes from the exact migration bodies, require exact-head CI/READY again,
-  and run only `scope=verify`. Never rerun, repair, replay, or down-migrate the
-  already accepted migration.
+  hashes from the exact migration bodies. Commit `d5e91c78e7696072eba72cb744d747c724b73eec`
+  did that; then-current main `25f39c45b15e1089d829150143a4ed6ee78acd36`
+  passed exact CI `33368051986` and READY production. Read-only verify
+  `33369343687` then passed identity, ledger, catalog, and stopped containment
+  before a second verifier-only defect: `psql -c` does not interpolate the
+  three canary input variables. Consume the checked-in runtime input through
+  `psql -f`, require exact-head CI/READY again, and run only `scope=verify`.
+  Never rerun, repair, replay, or down-migrate the already accepted migration.
 - [ ] Make admission cover every honest prompt/roster without inventing work:
   preserve research/deploy as durable plan-only sessions or add dedicated
   canonical templates; persist a deterministic immutable admission roster so

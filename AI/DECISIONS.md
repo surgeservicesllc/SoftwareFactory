@@ -4934,6 +4934,15 @@ Hosted apply scope `service-integrations`.
   verifier-only forward commit with hashes derived from the migration bodies,
   followed by read-only `scope=verify`; the migration must never be rerun,
   repaired, replayed, or replaced by an attestation-only migration.
+- **Verifier transport containment**: hash-fix commit
+  `d5e91c78e7696072eba72cb744d747c724b73eec` reached exact current-main CI
+  `33368051986` and READY production. Read-only run `33369343687` passed exact
+  release identity, ledger, catalog, and stopped containment, then failed
+  before its rollback canary because `psql -c` forwarded three client-variable
+  tokens without interpolation. Apply and reload were skipped and the open
+  transaction rolled back. The accepted forward containment is to load those
+  three safe values through a checked-in `psql -f` input and forbid the broken
+  `-c` form in the workflow contract; migration/history remain untouched.
 - **Limit**: launch admission is not claim admission. Existing Resume/wake and
   worker claims are still unable to prove complete current admissions, and
   MODEL execution still uses the worker adapter boundary. Research/deploy,

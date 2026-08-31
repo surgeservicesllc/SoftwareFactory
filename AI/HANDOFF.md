@@ -273,12 +273,20 @@ included `$function$` delimiter text. Exact stored-body hashes are
 `3c2b855b41873447c738b2b220d10544` (helper) and
 `78055b8bc6d6d44dbb1cbd6e94657a8d` (v2 launcher); native/PGlite catalog
 checks prove the function identities and raw ACLs are otherwise exact. This is
-verifier-only containment: publish the corrected workflow, wait for exact-head
-CI/READY, then dispatch read-only `scope=verify`. Do not dispatch
-`provider-admission` again and do not add an attestation-only migration.
+verifier-only containment. Hash-fix commit
+`d5e91c78e7696072eba72cb744d747c724b73eec` was inherited by then-current main
+`25f39c45b15e1089d829150143a4ed6ee78acd36`; exact CI `33368051986` and
+READY deployment `dpl_Hazwv3nZwHnNer7FAKSfkMqGThUU` passed. Read-only verify
+`33369343687` passed identity, ledger, catalog, and stopped containment, then
+failed before its rollback canary because `psql -c` does not interpolate
+`:'variable'` input. It skipped apply/reload and made no durable change. The
+next verifier-only commit must feed the checked-in input through `psql -f`,
+wait for exact-head CI/READY, and dispatch only read-only `scope=verify`. Do
+not dispatch `provider-admission` again and do not add an attestation-only
+migration.
 
-PICK UP HERE after corrected read-only verification and production acceptance
-are recorded: research/deploy need
+PICK UP HERE: finish the runtime-input verifier containment and record corrected
+read-only verification plus signed-in production acceptance. Then research/deploy need
 honest plan-only handling (or dedicated templates), specialist canonical
 coverage needs a persisted admission roster, and `*` needs identical TS/SQL
 normalization in a new forward migration. Then fence every Resume/wake and

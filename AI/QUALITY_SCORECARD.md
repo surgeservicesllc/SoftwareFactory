@@ -158,7 +158,7 @@ of HAVE.
 
 **Addendum, 2026-08-31 latest+28 - Grok provider admission (ADR-208):**
 the focused application/admission/security suites pass 119/119, the protected
-release workflow contract passes 11/11, and its migration behavior/contract
+release workflow contract passes 12/12, and its migration behavior/contract
 slice passes 43 tests. Lint, strict typecheck, production build, YAML parsing,
 every workflow shell block, canonical LF hash, and `git diff --check` pass.
 The exact rebased full repository run passes 6,068 tests with seven skipped,
@@ -173,9 +173,17 @@ exact READY deployment `dpl_FeUuBGBeQBDEieFtquUoHRCBPWbc`. Protected run
 `33365674624` applied and ledgered the migration once, then failed closed on
 two stale workflow-only `prosrc` fingerprints; exact-body/PGlite catalog
 verification proves the hosted function identities and ACLs are otherwise
-correct. Corrected exact-head read-only verification and signed-in production
-acceptance are still pending, and worker claim/wake is not admission-fenced,
-so this score does not declare production readiness.
+correct. Hash-fix commit `d5e91c78e7696072eba72cb744d747c724b73eec`
+reached then-current exact-main CI `33368051986` and READY deployment
+`dpl_Hazwv3nZwHnNer7FAKSfkMqGThUU`. Read-only run `33369343687` passed exact
+identity, ledger, catalog, and stopped containment, then failed before the
+rollback canary because its `psql -c` command could not interpolate three
+client variables; apply/reload were skipped and nothing durable changed. The
+workflow now routes that input through a checked-in `psql -f` script and pins
+the broken form with a regression test. Corrected exact-head read-only
+verification and signed-in production acceptance are still pending, and
+worker claim/wake is not admission-fenced, so this score does not declare
+production readiness.
 
 **Addendum, 2026-08-31 latest+25 - WDO reports (ADR-205):**
 services-wdo-inspections.behavior 14 on the real chain: an inspection

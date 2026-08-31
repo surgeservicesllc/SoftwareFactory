@@ -1,6 +1,6 @@
 # SoftwareFactory — shared working status
 
-## GROK IMMUTABLE PROVIDER ADMISSION VERIFIER CONTAINMENT (2026-08-31 — PICK UP HERE)
+## GROK IMMUTABLE PROVIDER ADMISSION RUNTIME VERIFIER CONTAINMENT (2026-08-31 — PICK UP HERE)
 
 - New forward migration `20260831000100_grok_provider_admission.sql`, canonical
   LF SHA-256 `37809d9b3d9bc760ffbee501fcca383f0daa5665fb047964734603ceed41aef7`,
@@ -11,7 +11,7 @@
   re-derives it; stale or mismatched input creates no graph or evidence.
 - Dedicated workflow scope `provider-admission` is one-file, forward-only, and
   proves exact ledger/catalog/ACL/lint/runtime/rollback/health/stopped safety.
-  Its unit contract is 11/11 green; focused admission/security is 119/119;
+  Its unit contract is 12/12 green; focused admission/security is 119/119;
   exact-main lint, typecheck, 6,068 tests (seven skipped), the 266-page
   production build, YAML, shell syntax, and hash checks pass.
 - Exact commit `49b087e1044c157ea24271c81070a2c38b03c8da` passed all four
@@ -20,8 +20,15 @@
   applied and ledgered `20260831000100` once, then stopped at postflight
   because two verifier hashes incorrectly included `$function$` delimiter
   text. Exact-body/PGlite catalog checks prove the hosted functions and ACLs
-  are correct. Publish the verifier-only hash fix, wait for exact-head CI and
-  READY production again, then run only read-only `scope=verify` and signed-in
+  are correct. Hash-fix commit `d5e91c78e7696072eba72cb744d747c724b73eec`
+  was on then-current main `25f39c45b15e1089d829150143a4ed6ee78acd36`,
+  which passed exact CI `33368051986` and READY deployment
+  `dpl_Hazwv3nZwHnNer7FAKSfkMqGThUU`. Read-only verify `33369343687` passed
+  identity, ledger, catalog, and stopped containment, then failed before the
+  rollback canary because `psql -c` did not interpolate its three fixture
+  variables. It skipped apply/reload and made no durable change. Publish the
+  checked-in `psql -f` runtime-input fix, wait for exact-head CI and READY
+  production again, then run only read-only `scope=verify` and signed-in
   production queue/reload acceptance. Never rerun, repair, replay, or
   down-migrate the applied migration.
 - NEXT CODE SLICE: plan-only research/deploy; immutable admission roster for

@@ -9,6 +9,8 @@ import { describe, expect, it } from "vitest";
 
 const root = resolve(import.meta.dirname, "../..");
 const workflowPath = ".github/workflows/grok-bot-release-migrations.yml";
+const providerAdmissionRuntimeInputPath =
+  ".github/grok-release/provider-admission-runtime-input.sql";
 const migrations = [
   {
     version: "20260830000900",
@@ -608,6 +610,24 @@ describe("Grok Bot hosted release workflow", () => {
     const postflight = stepByName(
       "Verify ledger catalog ACL runtime lint health and stopped safety",
     ).run ?? "";
+    const runtimeInput = readFileSync(
+      resolve(root, providerAdmissionRuntimeInputPath),
+      "utf8",
+    );
+    expect(postflight).toContain(
+      `-f "${providerAdmissionRuntimeInputPath}"`,
+    );
+    expect(postflight).not.toContain(
+      '-c "create temp table grok_provider_admission_release_input',
+    );
+    expect(runtimeInput).toContain("begin;");
+    expect(runtimeInput).toContain("grok_provider_admission_release_input");
+    expect(runtimeInput).toContain(":'canary_plan'::jsonb");
+    expect(runtimeInput).toContain(":'release_sha'");
+    expect(runtimeInput).toContain(":'canary_key'");
+    expect(runtimeInput).not.toMatch(
+      /(^|\n)\s*commit\b|\b(?:truncate|delete|update)\b/i,
+    );
     for (const evidence of [
       "grok_provider_admission_release_input",
       "set local role service_role",
