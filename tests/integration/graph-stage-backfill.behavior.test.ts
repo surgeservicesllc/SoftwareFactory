@@ -6,10 +6,11 @@ import { resolve } from "node:path";
 import { PGlite } from "@electric-sql/pglite";
 import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { LATEST_MIGRATION } from "../support/latest-migration";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const migrationsDirectory = resolve(repositoryRoot, "supabase/migrations");
-const latestMigration = "20260830001800_customer_portal.sql";
+const latestMigration = LATEST_MIGRATION;
 /*
  * Two different files on purpose. `latestMigration` pins the replay chain's
  * tail; `backfillMigration` is the one this suite re-runs against seeded

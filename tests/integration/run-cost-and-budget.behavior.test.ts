@@ -6,6 +6,7 @@ import { resolve } from "node:path";
 import { PGlite } from "@electric-sql/pglite";
 import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { LATEST_MIGRATION } from "../support/latest-migration";
 
 /**
  * What a run spent, read back through `list_graph_runs`.
@@ -21,7 +22,7 @@ const migrationsRoot = resolve(import.meta.dirname, "../../supabase/migrations")
  * migration added after this was written should make somebody re-read this
  * case rather than let it pass unexamined.
  */
-const latestMigration = "20260830001800_customer_portal.sql";
+const latestMigration = LATEST_MIGRATION;
 
 const ownerId = "00000000-0000-4000-8000-00000000c001";
 const organizationId = "10000000-0000-4000-8000-00000000c001";

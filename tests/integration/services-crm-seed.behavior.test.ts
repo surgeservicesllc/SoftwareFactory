@@ -12,10 +12,11 @@ import { runSeed } from "@/lib/services/seed-runner";
 import { SEED_RECORD_FLOOR, buildSeedReport, formatSeedReport } from "@/lib/services/seed-validation";
 import { generateOperations, generateSeedDataset } from "@/lib/services/seed-generator";
 import { pgliteSupabaseClient } from "../support/pglite-supabase-client";
+import { LATEST_MIGRATION } from "../support/latest-migration";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const migrationsDirectory = resolve(repositoryRoot, "supabase/migrations");
-const latestMigration = "20260830001800_customer_portal.sql";
+const latestMigration = LATEST_MIGRATION;
 
 /**
  * The full-scale seed, run for real.

@@ -6,6 +6,7 @@ import { resolve } from "node:path";
 import { PGlite } from "@electric-sql/pglite";
 import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { LATEST_MIGRATION } from "../support/latest-migration";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 
@@ -16,7 +17,7 @@ const migrationsDirectory = resolve(repositoryRoot, "supabase/migrations");
 // hosted project actually runs, so a stale hand-maintained list is worse than
 // no list. The pin below fails deliberately when a new migration lands, so its
 // author reviews this matrix.
-const newestMigration = "20260830001800_customer_portal.sql";
+const newestMigration = LATEST_MIGRATION;
 
 const ownerAId = "00000000-0000-4000-8000-000000000301";
 const memberAId = "00000000-0000-4000-8000-000000000302";

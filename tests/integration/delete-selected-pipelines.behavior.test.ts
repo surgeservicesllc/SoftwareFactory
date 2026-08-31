@@ -10,6 +10,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 vi.mock("server-only", () => ({}));
 
 import { createPhase1CExecutionPlan } from "@/lib/orchestration/plan";
+import { LATEST_MIGRATION } from "../support/latest-migration";
 
 /**
  * Stopping and deleting the pipelines somebody ticked, against real
@@ -178,7 +179,7 @@ beforeAll(async () => {
   const migrationFiles = (await readdir(migrationsRoot))
     .filter((name) => /^\d+.*\.sql$/.test(name))
     .sort();
-  expect(migrationFiles.at(-1)).toBe("20260830001800_customer_portal.sql");
+  expect(migrationFiles.at(-1)).toBe(LATEST_MIGRATION);
   for (const file of migrationFiles) {
     await db.exec(await readFile(resolve(migrationsRoot, file), "utf8"));
   }

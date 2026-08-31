@@ -6,6 +6,7 @@ import { resolve } from "node:path";
 import { PGlite } from "@electric-sql/pglite";
 import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { LATEST_MIGRATION } from "../support/latest-migration";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const migrationsDirectory = resolve(repositoryRoot, "supabase/migrations");
@@ -67,9 +68,7 @@ describe("safe activity list RPC", () => {
     const migrationFiles = (await readdir(migrationsDirectory))
       .filter((file) => file.endsWith(".sql"))
       .sort();
-    expect(migrationFiles.at(-1)).toBe(
-      "20260830001800_customer_portal.sql",
-    );
+    expect(migrationFiles.at(-1)).toBe(LATEST_MIGRATION);
     for (const migrationFile of migrationFiles) {
       await db.exec(await readFile(resolve(migrationsDirectory, migrationFile), "utf8"));
     }

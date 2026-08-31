@@ -6,6 +6,7 @@ import { resolve } from "node:path";
 import { PGlite } from "@electric-sql/pglite";
 import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { LATEST_MIGRATION } from "../support/latest-migration";
 
 /**
  * Editing and deleting a run, against the real migrated schema.
@@ -22,7 +23,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const migrationsRoot = resolve(repositoryRoot, "supabase/migrations");
-const latestMigration = "20260830001800_customer_portal.sql";
+const latestMigration = LATEST_MIGRATION;
 
 const ownerId = "00000000-0000-4000-8000-0000000003a1";
 const adminId = "00000000-0000-4000-8000-0000000003a2";
