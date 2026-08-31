@@ -2,6 +2,135 @@
 
 Last updated: 2026-08-31
 
+## Newest (2026-08-31, latest+24): the commercial portal view (ADR-203, #67)
+
+`20260830002300` adds seven portal projections, four indexes and one
+column. No tables — every input already existed.
+
+THE POLARITY IS THE OPPOSITE OF THE DASHBOARDS, AND BOTH FAILURES ARE
+SILENT. Every function here MUST be a definer: a portal user is not a
+member of the organization they are reading, so an invoker returns nothing
+and the page just looks empty. Meanwhile ADR-199's and ADR-202's functions
+must NOT be definers, or they aggregate across every tenant at once.
+Neither mistake raises. The postflights assert both directions; do not
+"harmonize" them.
+
+What makes a definer safe here is not the flag. It is ADR-198's sealed
+resolver: `crm_portal_account_for(uuid)` is executable by NO role, so no
+caller can name an account. If you add a portal projection, reach the
+resolver — never take an account id as an argument.
+
+The four nulls are load-bearing and each has a test:
+- No service scan → null last service, null reading. Not "caught nothing".
+- No `activity_threshold` → null `over_threshold`. Not "under" one.
+- No scan carried a count → null activity, with `scans` shown beside it.
+  A dark cell with two scans and a dark cell with none are opposite facts.
+- No SDS on file → null, and the route COUNTS `missingSds` rather than
+  hiding it.
+
+`unknown` is never folded into `clear` — `stationStanding()` in
+lib/services/crm.ts and `standingOf()` in the panel must keep agreeing.
+
+`barcode` is projected on purpose. It is the sticker on the box; a customer
+walking the floor matches the row to the wall. `access_notes` and
+`signature_path` are absent from the projections entirely, not filtered.
+
+The one write stamps `crm_pest_sightings.reported_by_portal_user_id` via a
+composite key, so a stamp can never name another tenant's portal user. The
+staff `toSightingView` surfaces it as `reportedByCustomer` — that customer
+is waiting on a call back.
+
+WORKFLOW SIZE: adding this scope breached the 480,000-byte ceiling. The
+three remaining inline heredoc guards moved to
+`.github/hosted-apply/guard/` and the ceiling came DOWN to 478,000. The
+rule is unchanged: if it fails, extract, do not raise it.
+`migration-path-references` now checks `.github/hosted-apply/**` both ways
+— a file nothing runs is verification that silently stopped.
+
+## Newest (2026-08-31, latest+23): revenue forecasting (ADR-202, #69)
+
+`20260830002200` adds crm_revenue_forecast and crm_forecast_basis. No
+tables.
+
+THE THING NOT TO ADD: a churn rate. Or a growth assumption, or a
+seasonality curve. The forecast projects rows somebody signed and applies
+no model, because this system has no evidence for one — a real number times
+an invented retention rate looks more precise than the truth and is less
+accurate, and somebody plans hiring on it. The absence is asserted on the
+payload and pinned by a route test, so adding one means deleting a test
+that says you did not.
+
+Weekly is 365/7/12 a month, NOT 4. A month is not four weeks; twelve
+four-week months lose a cycle a year. It has its own test.
+
+An open-ended contract is deliberately absent from the contracted line: a
+term that does not exist cannot be spread, and the plans underneath it are
+already counted, so inventing a spread would double them.
+
+crm_forecast_basis() must stay beside the forecast on the page, not behind
+it. Unpriced plans, open-ended contracts and customers with no plan are all
+reasons the number understates.
+
+## Newest (2026-08-31, latest+22): equipment and fleet (ADR-201, #68)
+
+`20260830002100` adds crm_equipment and the append-only
+crm_equipment_events, plus two projection triggers and crm_fleet_status.
+
+It is the IPM station pattern again, so the same rule applies: STATUS AND
+ASSIGNMENT ARE PROJECTIONS OF THE LEDGER. The route cannot set them — they
+are not in the patch schema, and tests assert each is refused. To move an
+asset, record what happened to it.
+
+Two fleet-specific rules, both easy to break by "tidying":
+- A meter that drops is refused, and the exception NAMES BOTH READINGS.
+  That message is passed through the route unflattened on purpose: a
+  technician needs to see 24,000 against 42,000 to know they transposed a
+  digit.
+- `unscheduled` is its own standing and is NEVER folded into `ok`. An asset
+  with no service interval has not been judged. The page counts it
+  separately for the same reason.
+
+Asset tags are case-insensitive (`upper()` in the unique index). The first
+draft's CHECK demanded uppercase, which made that index unreachable — if
+you tighten the tag grammar, keep lowercase legal.
+
+GPS/telemetry is Not Connected and should stay that way until a provider
+exists; everything on the page is what somebody recorded.
+
+## Newest (2026-08-31, latest+21): recurring billing (ADR-200, task #66)
+
+`20260830002000` adds crm_billing_runs, crm_dunning_notices, four columns
+on crm_invoices, and the generator.
+
+THE ONE THING THAT MATTERS: `crm_invoices_plan_period_key` is what stops a
+customer being billed twice. It is a PARTIAL unique index, and the
+generator's `on conflict … do nothing` REPEATS THE PREDICATE because
+Postgres will not infer a partial index from its columns. Drop the `where
+plan_id is not null` from that clause and the function still creates, the
+chain still replays green, and the first real billing run raises "there is
+no unique or exclusion constraint matching the ON CONFLICT specification"
+in front of a user. `tests/unit/migration-partial-index-conflict.test.ts`
+catches it now; it was checked by deleting the predicate and watching it
+fail, because the first draft of that test passed while the defect was
+present.
+
+Do not "optimize" the generator into a read-then-write. The index is the
+guarantee; looking first is not, and two people pressing the button at once
+is exactly when it matters.
+
+Other things easy to undo:
+- The generator is SECURITY INVOKER. A definer would write into whatever
+  organization the caller named.
+- A plan with no price is skipped, not invoiced for zero.
+- The plan's next_due advances even when the period was already billed —
+  otherwise every later run reconsiders it forever.
+- days_overdue and balance_cents are COPIED onto a dunning notice, so it
+  reads back as the age when somebody acted.
+- crm_dunning_notices has no UPDATE by design. crm_billing_runs does, and
+  only because the generator writes its own totals back.
+- Scheduled billing and reminder delivery are both Not Connected. Nothing
+  here runs on a timer and nothing here sends.
+
 ## Newest (2026-08-31, latest+20): the operating dashboards (ADR-199, #65)
 
 `20260830001900` adds FIVE FUNCTIONS AND NO TABLES: crm_revenue_by_month,

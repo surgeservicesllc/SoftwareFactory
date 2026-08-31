@@ -119,7 +119,7 @@ describe("the full-scale CRM seed", { timeout: 900_000 }, () => {
       failing.map((table) => `${table.table}: ${table.notes.join("; ") || "below floor or orphaned"}`),
     ).toEqual([]);
     expect(report.pass).toBe(true);
-    expect(report.totals.tables).toBe(42);
+    expect(report.totals.tables).toBe(46);
   });
 
   it("earned its history through the database, not by forging system rows", async () => {
@@ -208,6 +208,38 @@ describe("the full-scale CRM seed", { timeout: 900_000 }, () => {
       [org],
     );
     expect(span.rows[0].years).toBeGreaterThan(1);
+  });
+
+  it("attributes some sightings to the customer who filed them, and leaves the rest alone", async () => {
+    // Increment 15: a sighting the customer walked in themselves and one a
+    // technician observed are the same kind of fact, and the branch has to
+    // be able to tell them apart. The seed writes both, so the portal and
+    // the staff list have something real to distinguish.
+    const provenance = await db.query<{ reported: number; observed: number }>(
+      `select
+         count(*) filter (where reported_by_portal_user_id is not null)::integer as reported,
+         count(*) filter (where reported_by_portal_user_id is null)::integer as observed
+       from public.crm_pest_sightings where organization_id = $1`,
+      [org],
+    );
+    expect(provenance.rows[0].reported).toBeGreaterThan(0);
+    // Both kinds exist. A book where every sighting came from the customer
+    // would be as unrealistic as one where none did.
+    expect(provenance.rows[0].observed).toBeGreaterThan(0);
+
+    // Every stamp points at a portal user on the SAME account as the
+    // sighting. A stamp naming somebody else's customer would be worse
+    // than no stamp at all.
+    const mismatched = await db.query<{ count: number }>(
+      `select count(*)::integer as count
+         from public.crm_pest_sightings sighting
+         join public.crm_portal_users seat
+           on seat.id = sighting.reported_by_portal_user_id
+        where sighting.organization_id = $1
+          and seat.account_id <> sighting.account_id`,
+      [org],
+    );
+    expect(mismatched.rows[0].count).toBe(0);
   });
 
   it("generates identically on a second run, so a reseed is controlled", async () => {

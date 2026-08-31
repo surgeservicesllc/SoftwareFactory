@@ -2,6 +2,116 @@
 
 Last reviewed: 2026-08-31
 
+**Addendum, 2026-08-31 latest+24 - the commercial portal view (ADR-203):**
+services-commercial-portal.behavior 15 on the real chain: the LATEST scan
+reported rather than the first or a sum of both; a station scanned with no
+number written down reporting null, never 0; a station with a real count
+and no threshold reporting a null `over_threshold`, because there is no
+question to answer; a trend cell showing one scan and no activity, so an
+empty month cannot read as a clean one; a corrected sighting absent from
+open conditions while the open one stays; a safety library holding only
+what was applied at this customer's own sites and not what the branch
+stocks; completed inspections only, with `signature_path` absent from the
+projection rather than filtered; a customer's own report stamped with their
+portal seat and visible to staff as such; a refusal for another account's
+site and for a null one; the rival tenant seeing its own binder and getting
+zero rows even when it names Acme's site id explicitly; a signed-in
+stranger getting nothing on all six reads; a deactivated login closing the
+binder mid-session; and `crm_portal_account_for` still executable by
+nobody. services-commercial-portal-routes 9 pins the boundary — the null
+activity total surviving to JSON, `unknown` counted apart from `clear`, the
+same property filter reaching BOTH the table and the trend, the window
+bounded at 422 before it becomes a scan, `missingSds` counted rather than
+hidden, and the database's refusal arriving as a 404 rather than a 500.
+services-crm-seed grew a provenance test: both kinds of sighting exist and
+no stamp crosses an account; the seed report now shows crm_pest_sightings
+at 5/5 optional fields. RLS census unchanged at 200 and grants unchanged at
+46 crm tables — this migration creates no tables; runbook 202; workflow
+scope `commercial-portal`. The workflow ceiling ratcheted 480,000 → 478,000
+after three inline heredoc guards were extracted, and
+migration-path-references now checks `.github/hosted-apply/**` in both
+directions.
+
+**Addendum, 2026-08-31 latest+23 - revenue forecasting (ADR-202):**
+services-revenue-forecast.behavior 9 on the real chain: a monthly plan
+contributing once a month, a quarterly a third, and a weekly 365/7/12 —
+not four, which is the arithmetic everybody gets wrong and which would lose
+a whole cycle a year; an inactive plan and an unpriced one both
+contributing nothing; a contract spread across its term while an open-ended
+one stays out, because a term that does not exist cannot be spread and the
+plans underneath it are already counted; the basis reporting both
+omissions; a null priced share for a book with no plans; tenant isolation
+through an aggregate; and neither function a definer.
+services-dashboards-routes grew to 10, and the added one asserts the
+payload states `churnApplied: false` — so adding a churn model later means
+deleting a test that says there isn't one. RLS census unchanged at 200 and
+grants unchanged at 46 crm tables, because this migration creates no
+tables; runbook 201; workflow scope `revenue-forecast`.
+
+**Addendum, 2026-08-31 latest+22 - equipment and fleet (ADR-201):**
+services-equipment-fleet.behavior 13 on the real chain: an asset born with
+its acquisition event written by trigger rather than by the caller
+remembering; a backwards meter refused with BOTH readings in the message
+and the honest reading accepted straight after; assignment, transfer and
+release all through the ledger with the roster following; an `assigned`
+event naming nobody refused; repair in and back out; a 180-day schedule
+computed from the service just recorded while an asset with no interval
+reports null rather than a date; a scheduled asset never serviced reporting
+-310 days, because overdue-since-new is a finding and not an exemption; a
+retirement that clears the assignment and then refuses everything after; a
+retired status with no date refused; half a meter reading refused; an asset
+tag colliding case-insensitively inside a company and reusable across
+companies; the ledger append-only and the asset undeletable; and the report
+proven not to be a definer. services-fleet-routes 8 pins the boundary,
+including four separate attempts to set a projection through PATCH — every
+one refused — and the backwards-meter message surviving to the technician
+with both numbers intact.
+Two of those tests earned their keep immediately: the tag test caught a
+CHECK that demanded uppercase and so made the case-insensitive index
+unreachable, and three route tests failed on UUIDs containing a `g`, which
+is not a hex digit — the schema was right and the fixture was wrong. Seed
+extended to 46 tables — 47,244 rows, 46/46 PASS, deliberately carrying
+assets with no service interval, because that is the row the fleet report
+keeps out of "fine". RLS census 200; service-role grants at 46 crm tables;
+runbook 200; workflow scope `equipment-fleet` postflight re-proves the
+append-only grant on the ledger, both projection triggers, and that the tag
+index is case-insensitive.
+
+**Addendum, 2026-08-31 latest+21 - recurring billing (ADR-200):**
+services-recurring-billing.behavior 14 on the real chain, most of them
+pressing on one invariant from a different angle: the due plans billed and
+the not-yet-due one left alone; the unpriced plan considered and skipped
+rather than invoiced for zero; each plan advanced by its OWN recurrence, so
+a quarterly moves three months and a monthly one; the button pressed twice
+billing once AND reporting the skip, so a re-run is distinguishable from a
+run with nothing to do; a hand-written duplicate refused by
+crm_invoices_plan_period_key itself, proving the guarantee does not depend
+on the generator's care; two hand-raised invoices on the same day both
+landing, proving the index is partial; half a provenance refused; a rival
+naming our organization refused at the first write rather than silently
+finding nothing; the worklist ordered oldest-and-largest with a threshold
+that excludes the barely-late; a collections note filed against the wrong
+customer refused by name; and no definer among the writers.
+services-collections-routes 9 pins the boundary: the organization taken
+from the workspace and never the body, a re-run's skipped count surviving
+to the response, both Not Connected labels, the age copied onto the record
+as sent, and the age filter bounded.
+A fourth latent-trap guard shipped with it —
+migration-partial-index-conflict — after the real clause was written wrong
+first: ON CONFLICT against a partial unique index must repeat the
+predicate, and the failure waits for a real user rather than the migration.
+Its first draft mis-blamed the credential vault (column names matched on a
+different table) and its second passed while the defect was live (an
+earlier INSERT in the same function swallowed the match); it is table-aware
+and scans backward now, and was verified by deleting the predicate and
+watching it fail. Seed extended to 44 tables — 45,532 rows, 44/44 PASS,
+zero orphans, and deliberately carrying overdue invoices nobody has
+touched, because that is the row the worklist exists to surface. RLS census
+198; service-role grants at 44 crm tables; runbook 199; workflow scope
+`recurring-billing` postflight re-proves the index is present and partial,
+that a notice cannot be edited after the fact, and that neither writer is a
+definer.
+
 **Addendum, 2026-08-31 latest+20 - the operating dashboards (ADR-199):**
 services-dashboards.behavior 13 on the real chain: a draft invoice excluded
 from revenue while the issued one counts; eleven months of null collection

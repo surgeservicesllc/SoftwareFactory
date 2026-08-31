@@ -46,12 +46,14 @@ export const SEED_TARGETS: Record<
     campaigns: number;
     automations: number;
     formTemplates: number;
+    billingRuns: number;
+    equipment: number;
   }
 > = {
   demo: {
     accounts: 40, technicians: 12, products: 14, jurisdictions: 8, branches: 4,
     employees: 14, territories: 8, canvassRoutes: 10, marketingLists: 6,
-    campaigns: 8, automations: 8, formTemplates: 6,
+    campaigns: 8, automations: 8, formTemplates: 6, billingRuns: 12, equipment: 14,
   },
   full: {
     accounts: 320,
@@ -66,6 +68,8 @@ export const SEED_TARGETS: Record<
     campaigns: 280,
     automations: 260,
     formTemplates: 260,
+    billingRuns: 280,
+    equipment: 300,
   },
 };
 
@@ -331,6 +335,20 @@ export type SeedAccount = {
     submittedDaysAgo: number;
     resolvedDaysAgo?: number;
   }[];
+  /**
+   * Increment 12: what somebody DID about an overdue invoice. Not what a
+   * machine sent — nothing sends here — so every row is a call made, a
+   * letter posted, a plan agreed.
+   */
+  dunning?: {
+    invoiceSeat: number;
+    action:
+      | "reminder_call" | "reminder_letter" | "reminder_email" | "final_notice"
+      | "payment_plan" | "sent_to_collections" | "written_off";
+    daysOverdue: number;
+    actedDaysAgo: number;
+    outcome?: string;
+  }[];
   /** Increment 9: the inspections and reports filled out about this customer. */
   forms?: {
     templateIndex: number;
@@ -523,6 +541,56 @@ export type SeedDataset = {
   campaigns: SeedCampaign[];
   automations: SeedAutomation[];
   formTemplates: SeedFormTemplate[];
+  /**
+   * Increment 12: the batches that raised recurring invoices. Historical
+   * records of runs somebody performed, spread back over years so the
+   * billing page has a real history rather than one row.
+   */
+  billingRuns: SeedBillingRun[];
+  /** Increment 13: the kit, and what has happened to each piece. */
+  equipment: SeedEquipment[];
+};
+
+export type SeedEquipment = {
+  assetTag: string;
+  kind:
+    | "vehicle" | "trailer" | "sprayer" | "bait_gun" | "meter"
+    | "respirator" | "thermal_camera" | "ladder" | "other";
+  name: string;
+  make?: string;
+  model?: string;
+  serialNumber?: string;
+  branchIndex?: number;
+  meterReading?: number;
+  meterUnit?: "miles" | "kilometres" | "hours";
+  serviceIntervalDays?: number;
+  purchasedDaysAgo: number;
+  notes?: string;
+  /*
+   * What was recorded against it, oldest first. Meter readings are
+   * strictly increasing per asset because the ledger refuses anything
+   * else — a seeder that generated a backwards one would be testing the
+   * trigger rather than filling the book.
+   */
+  events: {
+    kind: "assigned" | "unassigned" | "service" | "inspection" | "meter_reading"
+      | "repair_opened" | "repair_closed";
+    technicianIndex?: number;
+    meterAdd?: number;
+    costCents?: number;
+    vendor?: string;
+    note?: string;
+    daysAgo: number;
+  }[];
+};
+
+export type SeedBillingRun = {
+  throughDaysAgo: number;
+  plansConsidered: number;
+  invoicesCreated: number;
+  plansAlreadyBilled: number;
+  totalCents: number;
+  note: string;
 };
 
 /* ---------------------------------------------------------------- generators */
@@ -830,6 +898,92 @@ export function generateSeedDataset(scale: SeedScale, seed = 20260830): SeedData
   );
 
   /*
+   * The kit. Meter readings only ever climb, because the ledger refuses
+   * anything else — generating a backwards one would be testing the
+   * trigger rather than filling the book.
+   */
+  const equipment: SeedEquipment[] = Array.from({ length: targets.equipment }, (_, index) => {
+    const kind = EQUIPMENT_KINDS[index % EQUIPMENT_KINDS.length];
+    const metered = kind === "vehicle" || kind === "trailer";
+    const purchasedDaysAgo = between(random, 60, 2600);
+    // Roughly one in six carries no service interval at all, which is the
+    // "unscheduled" row the fleet report exists to keep out of "fine".
+    const scheduled = index % 6 !== 0;
+    const eventCount = between(random, 2, 6);
+    return {
+      assetTag: `${EQUIPMENT_TAGS[kind]}-${pad(index + 1, 3)}`,
+      kind,
+      name: `${EQUIPMENT_NAMES[kind]} ${pad(index + 1, 3)}`,
+      ...(metered ? { make: pick(random, ["Ford", "Chevrolet", "Ram", "Isuzu"]) } : {}),
+      ...(metered ? { model: pick(random, ["Transit", "Express", "ProMaster", "NPR"]) } : {}),
+      serialNumber: `SN-${pad(index * 7 + 11, 6)}`,
+      ...(branches.length > 0 ? { branchIndex: index % branches.length } : {}),
+      ...(metered
+        ? {
+            meterReading: between(random, 4, 180) * 1000,
+            meterUnit: "miles" as const,
+          }
+        : {}),
+      ...(scheduled ? { serviceIntervalDays: pick(random, [90, 120, 180, 365]) } : {}),
+      purchasedDaysAgo,
+      notes: `${pick(random, ["Kept at the branch", "Assigned to the night crew", "Spare", "Runs the commercial route"])}.`,
+      events: Array.from({ length: eventCount }, (_, seat) => {
+        const roll = (index + seat) % 5;
+        const daysAgo = Math.max(1, purchasedDaysAgo - (seat + 1) * between(random, 20, 90));
+        if (roll === 0 && technicians.length > 0) {
+          return {
+            kind: "assigned" as const,
+            technicianIndex: (index + seat) % technicians.length,
+            daysAgo,
+          };
+        }
+        if (roll === 1) {
+          return {
+            kind: "service" as const,
+            costCents: between(random, 8, 90) * 1000,
+            vendor: pick(random, ["Cedar Point Motors", "Harbor Fleet Services", "In house"]),
+            note: "Routine service.",
+            daysAgo,
+          };
+        }
+        if (roll === 2) {
+          return { kind: "inspection" as const, note: "Annual inspection passed.", daysAgo };
+        }
+        if (roll === 3 && metered) {
+          return { kind: "meter_reading" as const, meterAdd: between(random, 200, 4000), daysAgo };
+        }
+        return { kind: "inspection" as const, note: "Checked at the yard.", daysAgo };
+      }).sort((left, right) => right.daysAgo - left.daysAgo),
+    };
+  });
+
+  /*
+   * Billing runs, oldest first. Most raise invoices; roughly one in seven
+   * finds every due plan already billed, which is what a second press of
+   * the button looks like and is worth having in the corpus.
+   */
+  const billingRuns: SeedBillingRun[] = Array.from({ length: targets.billingRuns }, (_, index) => {
+    const repeat = index % 7 === 3;
+    const considered = between(random, 4, 60);
+    const created = repeat ? 0 : between(random, 1, considered);
+    return {
+      throughDaysAgo: 3 + index * 4,
+      plansConsidered: considered,
+      invoicesCreated: created,
+      plansAlreadyBilled: repeat ? considered : Math.min(considered - created, between(random, 0, 4)),
+      totalCents: created * between(random, 18, 90) * 1000,
+      note: repeat
+        ? "Re-run after the first batch; every due period was already invoiced."
+        : pick(random, [
+            "Month-end recurring batch.",
+            "Weekly plans, run early for the holiday.",
+            "Quarterly programs.",
+            "Caught up after the outage.",
+          ]),
+    };
+  });
+
+  /*
    * The paper each customer carries, the lists they consented to, and how
    * they arrived. Attached in a second pass because a touch can name a
    * campaign, and campaigns did not exist when the accounts were built.
@@ -989,6 +1143,37 @@ export function generateSeedDataset(scale: SeedScale, seed = 20260830): SeedData
             };
           });
 
+    /*
+     * Collections work. Only on accounts that carry invoices at all, and
+     * deliberately NOT on every overdue one: an untouched overdue invoice
+     * is the row the worklist exists to surface, so the corpus has to
+     * contain some.
+     */
+    account.dunning =
+      !serviced || account.index % 3 === 0
+        ? []
+        : Array.from({ length: 1 + (account.index % 3) }, (_, seat) => {
+            const daysOverdue = between(random, 5, 240);
+            const action = DUNNING_ACTIONS[(account.index + seat) % DUNNING_ACTIONS.length];
+            return {
+              invoiceSeat: seat,
+              action,
+              daysOverdue,
+              actedDaysAgo: between(random, 1, 120),
+              // A closed-out action says what closed it; a reminder often
+              // has no outcome yet, which is the honest state.
+              ...(action === "payment_plan" || action === "written_off" || seat % 2 === 0
+                ? { outcome: pick(random, [
+                    "Left a message with the office.",
+                    "Agreed to pay in three instalments.",
+                    "Posted the final notice.",
+                    "Disputed; sent the service report.",
+                    "Written off after the business closed.",
+                  ]) }
+                : {}),
+            };
+          });
+
     account.touches = Array.from({ length: between(random, 1, 3) }, (_, seat) => ({
       source: pick(random, ["google", "referral", "door knock", "yard sign", "facebook", "repeat customer"]),
       medium: pick(random, ["organic", "paid", "canvassing", "word of mouth", "email"]),
@@ -1015,6 +1200,8 @@ export function generateSeedDataset(scale: SeedScale, seed = 20260830): SeedData
     campaigns,
     automations,
     formTemplates,
+    billingRuns,
+    equipment,
   };
 }
 
@@ -1766,6 +1953,28 @@ function generateTerritory(
     notes: `${pick(random, ["Dense residential", "Mixed commercial and residential", "Rural route, long drives", "Downtown core"])}.`,
   };
 }
+
+const EQUIPMENT_KINDS = [
+  "vehicle", "sprayer", "meter", "bait_gun", "trailer",
+  "respirator", "thermal_camera", "ladder", "other",
+] as const;
+
+const EQUIPMENT_TAGS: Record<(typeof EQUIPMENT_KINDS)[number], string> = {
+  vehicle: "TRUCK", sprayer: "SPRAY", meter: "METER", bait_gun: "BAIT",
+  trailer: "TRAIL", respirator: "RESP", thermal_camera: "THERM",
+  ladder: "LADDER", other: "KIT",
+};
+
+const EQUIPMENT_NAMES: Record<(typeof EQUIPMENT_KINDS)[number], string> = {
+  vehicle: "Service truck", sprayer: "Backpack sprayer", meter: "Moisture meter",
+  bait_gun: "Bait gun", trailer: "Equipment trailer", respirator: "Respirator",
+  thermal_camera: "Thermal camera", ladder: "Extension ladder", other: "Field kit",
+};
+
+const DUNNING_ACTIONS = [
+  "reminder_call", "reminder_letter", "reminder_email", "final_notice",
+  "payment_plan", "sent_to_collections", "written_off",
+] as const;
 
 const REQUEST_KINDS = [
   "service", "reschedule", "question", "complaint", "cancel", "quote",

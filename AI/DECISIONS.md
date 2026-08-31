@@ -4344,3 +4344,287 @@ undeclared until the goal's full seeded E2E passes.
   `services-dashboards-routes` (8) pins the boundary: nulls surviving to
   JSON, windows bounded, overdue excluding not-yet-due and undated, and
   five aggregate calls with no table reads at all.
+
+## ADR-200 - Recurring billing: the second invoice is refused by an index
+
+- **Status**: accepted (increment 12 of task #66, owner /goal). PestPac,
+  Briostack, FieldRoutes and GorillaDesk all bill recurring service
+  automatically; `AI/PEST_CRM_COMPETITOR_MATRIX.md` has carried it as a gap
+  since the billing ledger landed.
+- **The one invariant this migration exists for: A SERVICE PLAN CANNOT BE
+  BILLED TWICE FOR THE SAME PERIOD.** Every other kind of duplicate in this
+  schema is recoverable — a duplicate note is noise, a duplicate scan is a
+  scan. A duplicate invoice is a customer charged twice, and the first they
+  hear of it is a statement.
+- **So the guarantee is `crm_invoices_plan_period_key`, a partial unique
+  index, and not a check the generator performs.** A generator that reads
+  then writes double-bills the moment two people press the button together,
+  and "we only ever run it once" is a habit rather than a constraint. The
+  index means the second attempt cannot land even while the first is still
+  in flight. The generator's whole re-run story is one `on conflict … do
+  nothing` clause riding on it.
+  - It is **partial** (`where plan_id is not null`) so the hand-raised
+    invoices that make up most of any book are untouched by it. A total
+    index over the same columns would refuse the second hand-raised invoice
+    of the day.
+  - `ON CONFLICT` against a partial index **must repeat the predicate**.
+    Postgres will not infer one from its columns, and the failure — "there
+    is no unique or exclusion constraint matching the ON CONFLICT
+    specification" — arrives at runtime on the first row that reaches it,
+    not at CREATE FUNCTION time. The migration applies clean and the defect
+    waits for a real user. This is the fourth trap of that shape in the
+    chain, and like the others it now has a test:
+    `tests/unit/migration-partial-index-conflict.test.ts`, which is
+    table-aware after its first draft mis-blamed the credential vault, and
+    which was checked by deleting the predicate and watching it fail.
+- **A generated invoice carries its whole provenance or none of it** — plan,
+  period, and the run that made it — enforced by
+  `num_nonnulls(...) in (0, 4)`. A partial set is a row nobody can audit.
+- **The generator is SECURITY INVOKER**, like the dashboards (ADR-199) and
+  for the same reason: it writes into the caller's own organization through
+  RLS, so naming somebody else's is refused at the first write rather than
+  quietly finding nothing. The behavior suite proves the refusal is loud.
+- **What this deliberately does not do:**
+  - **It does not run on a schedule.** Nothing in this product does — the
+    automation rules (ADR-197) have no executor either. Generating is an
+    action somebody takes, and the run is recorded with their name on it.
+    Unattended billing needs a scheduler, and that is the honest shape of
+    the gap; the page says **Not Connected**.
+  - **It does not send anything.** No email or SMS provider is connected, so
+    a dunning notice records what a person *did* — called, posted a letter,
+    agreed a plan — rather than what a machine sent. A queue of unsent
+    reminders rendered like sent ones would be worse than no dunning at all.
+- **A plan with no price is considered and skipped, never invoiced for
+  zero.** A zero invoice is a bill the customer has to ring up about.
+- **The plan advances either way.** A period already billed is a period done
+  with; leaving `next_due` behind would make every later run reconsider it
+  forever.
+- **`days_overdue` and `balance_cents` are copied onto a dunning notice.**
+  Read back next year it must say how overdue the invoice was *when somebody
+  acted*, not how overdue it is now.
+- **A notice is final; a run is not quite.** `crm_dunning_notices` grants
+  SELECT and INSERT only. `crm_billing_runs` also grants UPDATE, because the
+  generator writes its own totals back — and nothing else does.
+- **Surfaces**: `/Services/collections` over
+  `/api/services/{billing/recurring,collections}`. The page leads with
+  **untouched** — overdue invoices nobody has called about — because a long
+  worklist somebody is working and a long worklist nobody has opened look
+  identical without it.
+- **Verification**: `services-recurring-billing.behavior` (14) on the real
+  chain — the due plans billed and the future one left alone, each plan
+  advanced by its *own* recurrence rather than a fixed month, the button
+  pressed twice billing once and *saying* it skipped, a hand-written
+  duplicate refused by the index itself, two hand-raised invoices on one day
+  both landing, half a provenance refused, a rival's cross-tenant run
+  refused at the first write, the worklist ordered oldest-and-largest with a
+  threshold that excludes the barely-late, a note filed against the wrong
+  customer refused by name, and no definer among the writers.
+  `services-collections-routes` (9) pins the boundary. Seed covers both
+  tables — 44/44, 45,532 rows. RLS census 198; grants at 44 `crm_*` tables;
+  runbook 199. Hosted apply scope `recurring-billing` re-proves the index is
+  present **and partial**, that a notice is not editable, and that neither
+  writer is a definer.
+
+## ADR-201 - Equipment and fleet: a meter that never runs backwards
+
+- **Status**: accepted (increment 13 of task #68, owner /goal). ServSuite
+  and FieldRoutes both sell asset management, and
+  `AI/PEST_CRM_COMPETITOR_MATRIX.md` carries it as a gap with **no provider
+  dependency** — one of the rows that can actually be closed by writing
+  code, unlike the GPS telemetry sitting beside it in the same section.
+- **The shape is the IPM station's (ADR-191), deliberately**, because the
+  problem is the same: a physical thing in the field whose current state is
+  only trustworthy if it is derived from what was recorded about it.
+  `crm_equipment_events` is append-only at the grant level; `status`,
+  `assigned_technician_id`, `meter_reading` and `last_serviced_on` are
+  projections of it, written by trigger; and an asset is born with its own
+  acquisition event so nothing predates its own record. The route has no
+  way to set any of those — the patch schema does not contain them, and a
+  test asserts each is refused.
+- **Two rules are specific to fleet, and both fail silently if you get them
+  wrong:**
+  1. **A METER DOES NOT RUN BACKWARDS.** An odometer that drops is a
+     transposed digit or the wrong asset, and accepting it corrupts every
+     service interval computed from it afterwards. Refused by trigger, and
+     the exception **names both readings** — that message travels through
+     the route unflattened, because "something went wrong" does not tell a
+     technician they typed 24,000 for 42,000.
+  2. **`unscheduled` IS NOT `ok`.** An asset with no service interval on
+     file has not been judged; folding it into "fine" is how a fleet report
+     starts claiming health nobody measured. It is a distinct standing, a
+     distinct count on the page, and excluded from the ok tally.
+- **A scheduled asset that was never serviced is due from its purchase
+  date**, not exempt. Overdue-since-new is a real finding and the report
+  says so with a negative number.
+- **Case-insensitive asset tags.** A tag is read off a sticker and
+  frequently typed one-handed on a phone, so `truck-04` and `TRUCK-04` are
+  the same asset and the second must collide. The first draft's CHECK
+  required uppercase, which made the `upper()` in the unique index
+  unreachable — caught by a test that expected the index and got the CHECK.
+- **Nothing is deletable.** A truck that leaves the fleet is retired, its
+  assignment cleared by the same event, and its history stays attached to
+  it. Recording anything against a retired asset is refused by name.
+- **`crm_fleet_status` is SECURITY INVOKER**, on ADR-199's reasoning: it
+  reads across a whole fleet and must not see past its reader.
+- **GPS and fleet telemetry stay Not Connected.** Location and live engine
+  data need a provider; everything on this page is what somebody recorded.
+- **Verification**: `services-equipment-fleet.behavior` (13) on the real
+  chain — acquisition written by trigger rather than by the caller
+  remembering; a backwards meter refused with both readings in the message
+  and the real reading accepted after; assignment, transfer and release
+  through the ledger; an `assigned` event with no technician refused;
+  repair in and out; a 180-day schedule computed and an unscheduled asset
+  reporting null rather than a date; overdue-since-new at −310 days; a
+  retirement that unassigns and then refuses everything after; a retired
+  status with no date refused; half a meter reading refused; a tag
+  colliding case-insensitively within a company and reusable across
+  companies; the ledger append-only and the asset undeletable; and the
+  report proven not to be a definer. `services-fleet-routes` (8) pins the
+  boundary. Seed covers both tables — 46/46, 47,244 rows. Hosted apply
+  scope `equipment-fleet` re-proves the append-only grant, both projection
+  triggers, and the case-insensitive tag index.
+
+## ADR-202 - Revenue forecasting: what is on the books, and nothing else
+
+- **Status**: accepted (increment 14 of task #69, owner /goal). Briostack
+  sells it, and `AI/PEST_CRM_COMPETITOR_MATRIX.md` carries it as a gap with
+  no provider dependency — everything it needs is already in
+  `crm_service_plans` and `crm_contracts`.
+- **Decision: the forecast projects rows somebody actually signed, and
+  applies no model to them.** No churn multiplier, no growth assumption, no
+  seasonality curve. Not because they would be hard — because this system
+  has no evidence for any of them. **Multiplying a real number by an
+  invented retention rate produces a figure that looks more precise than
+  the truth and is less accurate**, and a business plans hiring on it. The
+  absence is stated on the payload (`assumptions.churnApplied: false`) so a
+  consumer cannot mistake this for a model, and a route test pins it.
+- **What contributes**: an active, priced service plan contributes its
+  value at its recurrence; an active contract **with a term** contributes
+  its value spread across the months that term covers. An inactive plan, an
+  unpriced plan and a contract with no end date contribute nothing.
+- **Weekly is 365/7/12 per month, not 4.** A month is not four weeks, and
+  billing twelve four-week months loses a whole cycle a year. It has its
+  own test because it is the arithmetic everyone gets wrong.
+- **An open-ended contract is left out rather than guessed at.** A term
+  that does not exist cannot be spread, and the recurring plans underneath
+  such a contract are already counted — inventing a spread would double it.
+- **`crm_forecast_basis()` travels with the forecast, not behind it.** It
+  reports active plans, **unpriced** plans, active contracts, **open-ended**
+  contracts and customers with no plan at all. Every one of those is a
+  reason the projection understates, and **a forecast that hides its own
+  omissions is one nobody should act on**. The panel prints them as a
+  sentence under the figure.
+- **A share of nothing is null.** `priced_share_bps` is null when there are
+  no active plans, on the rule ADR-199 set.
+- **Both functions are SECURITY INVOKER**, on ADR-199's reasoning.
+- **Surfaces**: a Forecast tab on `/Services/dashboards`, over the existing
+  `/api/services/dashboards`.
+- **Verification**: `services-revenue-forecast.behavior` (9) on the real
+  chain — a monthly plan once a month, a quarterly at a third, weekly at
+  365/7/12 rather than four, an inactive and an unpriced plan contributing
+  nothing, a contract spread across its term while an open-ended one stays
+  out, the basis reporting both omissions, a null share for a book with no
+  plans, tenant isolation through an aggregate, and neither function a
+  definer. `services-dashboards-routes` grew to 10, including the
+  assumptions being asserted on the payload. Hosted apply scope
+  `revenue-forecast`.
+
+## ADR-203 - The commercial portal view: the binder, and the nulls that keep it honest
+
+**Increment 15.** A residential customer asks when somebody is coming and
+what they owe; increment 10 answers that. A food plant's quality manager
+asks six different questions, and the answers are what an auditor is handed
+in a binder: what is open right now, where are my stations and what did
+they catch, is the trend going the wrong way, what did you put down and
+where is its safety sheet, and what did the last inspection say.
+
+- **No tables.** Every input already existed — `crm_devices` and the
+  append-only `crm_device_events`, `crm_pest_sightings`, `crm_products` and
+  `crm_applications`, `crm_form_instances`. What was missing was the
+  projection. So `20260830002300_commercial_portal.sql` is seven functions,
+  four indexes and one column.
+- **Every projection is a SECURITY DEFINER, and that is the opposite of
+  ADR-199 and ADR-202 on purpose.** A portal user is not a member of the
+  organization whose data they are reading, so an invoker would return
+  nothing at all. What makes a definer safe here is not the flag but
+  ADR-198's sealed resolver: `crm_portal_account_for(uuid)` is executable
+  by no role, so no caller can name an account. The postflight re-proves
+  that at every apply, because these two polarities are the single easiest
+  thing in the chain to get backwards, and both failures are silent.
+- **The projections list their columns.** Anything internal is ABSENT
+  rather than filtered — `access_notes` (the branch's dispatch
+  instructions) and `signature_path` (a storage path) are simply not
+  selected. The portal is told a signature EXISTS; fetching it is the
+  storage layer's business, and no storage provider is connected.
+- **`barcode` IS projected, deliberately.** It is the sticker on the bait
+  box. A customer walking their floor with this page open needs to match
+  the row to the wall, and an identifier for a bait station is not a
+  secret.
+
+**The nulls are the point.** A compliance binder is exactly where a
+comfortable zero does damage, so four of them are stated in SQL and
+asserted in tests:
+
+- A station with **no service scan** has a null last service and a null
+  reading. It is not a station that caught nothing.
+- A station with **no `activity_threshold`** has a null `over_threshold`.
+  There is no threshold, so it is not "under" one.
+- A trend cell with **no scan carrying a count** reports null activity and
+  shows `scans` beside it — so an empty month reads as "nobody looked" and
+  never as "nothing found". `scans` and `scans_with_count` are both
+  returned because a dark cell with two scans behind it and a dark cell
+  with none mean opposite things.
+- A product with **no SDS on file** returns null, and the page says so. The
+  route counts `missingSds` rather than hiding it: an auditor finds that
+  gap either way, and finding it here first is the whole value of the
+  library.
+
+`stationStanding()` in `lib/services/crm.ts` and `standingOf()` in the
+panel encode the same three-way answer — flagged, clear, **not
+established** — and the route counts `unknown` separately from `clear`.
+Rolling those together would be the single most damaging rounding on the
+page.
+
+**One write, and one new column.** `crm_portal_report_sighting` lets a
+customer file a sighting against their own site: a roach seen at 06:00
+should not wait for the branch to open, and it lands in the same table a
+technician writes to, so the trend and the open-conditions list see it
+immediately. `crm_pest_sightings.reported_by_portal_user_id` records who
+filed it — null for everything staff wrote. It is a composite key against
+`(organization_id, id)`, so a stamp can never name another tenant's portal
+user. The site named must be the caller's own, on the check ADR-198's
+request flow already makes.
+
+**Surfaces**: three tabs on `/customer-portal` — Open conditions (with the
+report form), Stations (site filter, station table, monthly trend) and
+Compliance (safety library, inspection history) — over four new routes
+under `/api/customer-portal`. The staff-side `toSightingView` grew
+`reportedByCustomer` in the same change, because a branch triaging the
+morning list needs to know which sightings have a customer waiting on a
+call back.
+
+**Verification**: `services-commercial-portal.behavior` (15) on the real
+chain — the latest scan rather than the first or a sum, a scanned station
+with no count reporting null, a counted station with no threshold reporting
+null, a trend cell showing one scan and no activity, a corrected sighting
+absent from open conditions, a library holding only what was applied here,
+completed inspections only with the signature path unprojected, the
+customer's own report stamped and visible to staff, a refusal for another
+account's site, the rival tenant seeing its own binder and nothing else,
+a stranger getting nothing on all six reads, a deactivated login closing
+the binder mid-session, and the resolver still unreachable.
+`services-commercial-portal-routes` (9) pins the boundary. The seed stamps
+a deterministic third of each account's sightings and
+`services-crm-seed.behavior` proves both kinds exist and that no stamp
+crosses an account.
+
+**Two guards came out of this increment.** The workflow breached its
+480,000-byte ceiling, so the three remaining inline heredoc guards moved to
+`.github/hosted-apply/guard/` and the ceiling ratcheted down to 478,000 —
+the rule stays "if this fails, extract, do not raise it". And
+`migration-path-references` now checks `.github/hosted-apply/**` in both
+directions: a workflow naming a file that is gone dies at a dispatch, and a
+file nothing names is verification that silently stopped running, which is
+worse because the scope still reports success.
+
+Hosted apply scope `commercial-portal`.

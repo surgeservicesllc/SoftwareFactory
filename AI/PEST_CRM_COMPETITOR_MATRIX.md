@@ -57,7 +57,7 @@ built.
 | Global search across records | all | **HAVE** (ADR-186) |
 | Account timeline / service history | all | **HAVE** (ADR-185) |
 | **Customer portal — residential**: balances, pay invoice, request service, service history | PestPac, GorillaDesk (Pro), Briostack, Jobber | **PARTIAL** — balances, invoices, visit history, documents and service requests ship (ADR-198). Paying online is **Not Connected**: no card processor is configured. |
-| **Customer portal — commercial**: open conditions, trend reports with heat maps, device summary, sighting tickets, SDS/compliance document library, inspection history | PestPac | **GAP** — the residential view ships (ADR-198); the commercial one (device summaries, trend heat maps, sighting tickets) does not. |
+| **Customer portal — commercial**: open conditions, trend reports with heat maps, device summary, sighting tickets, SDS/compliance document library, inspection history | PestPac | **HAVE** (ADR-203) — open conditions unioning uncorrected sightings with failing stations; a station table read from the scan ledger; monthly activity by station type with the scan count beside it; a customer-filed sighting stamped with its portal seat; an SDS/label library covering only what was applied at the customer's own sites; completed-inspection history. Downloading a signed inspection copy is **Not Connected** — no object storage is configured. |
 | Customer communication: automated reminders, SMS/email notifications | Briostack, PestPac, FieldRoutes | **GAP** |
 
 ### B. Scheduling, routing, dispatch
@@ -112,8 +112,8 @@ built.
 | Invoices, payments, refunds, void | all | **HAVE** (ADR-194) |
 | Service details and chemical usage pulled onto the invoice | PestPac, FieldRoutes | **PARTIAL** — invoices reference a work order; lines are not generated from it |
 | **Autopay, stored payment methods, card + ACH** | PestPac, FieldRoutes, Briostack | **GAP** — the ledger records money that moved; it does not move money |
-| **Recurring/subscription auto-invoicing** | Briostack, FieldRoutes | **GAP** |
-| **AR aging, dunning, automated reminders** | Briostack, PestPac | **GAP** |
+| **Recurring/subscription auto-invoicing** | Briostack, FieldRoutes | **PARTIAL** (ADR-200) — invoices are raised from due service plans, idempotently, and a plan cannot be billed twice for a period. Running it on a SCHEDULE is the gap: nothing in this product runs on a timer, so generation is operator-triggered and the page says **Not Connected** about the rest. |
+| **AR aging, dunning, automated reminders** | Briostack, PestPac | **PARTIAL** — aging by bucket (ADR-199) and a collections worklist with recorded actions (ADR-200) both ship. AUTOMATED reminders are the gap: no email/SMS provider is connected, so a notice records what a person did rather than what a machine sent. |
 | **QuickBooks sync** | Briostack, GorillaDesk, Jobber | **GAP** |
 
 ### G. Sales and marketing
@@ -136,9 +136,9 @@ built.
 |---|---|---|
 | Pipeline conversion report | Briostack | **HAVE** (ADR-186) |
 | Compliance/application report with CSV | PestPac | **HAVE** (ADR-192) |
-| **Operating dashboards: revenue, retention/churn, tech productivity, route density** | all | **GAP** |
+| **Operating dashboards: revenue, retention/churn, tech productivity, route density** | all | **HAVE** (ADR-199) — all four, aggregated over the whole book in the database rather than over a bounded fetch. |
 | **Commercial trend reports with heat maps** | PestPac | **GAP** |
-| **Revenue forecasting** | Briostack | **GAP** |
+| **Revenue forecasting** | Briostack | **HAVE** (ADR-202) — projects active plans and contracts with their term, and applies no churn or growth model, because this system has no evidence for one. Every omission is reported beside the figure. |
 
 ### I. Operations
 
@@ -147,7 +147,7 @@ built.
 | Branch/office structure with managers | PestPac, ServSuite | **HAVE** (ADR-195) |
 | Org chart, roles, reporting lines | PestPac, ServSuite | **HAVE** (ADR-195) |
 | Warehouse/lot inventory | PestPac | **PARTIAL** — product lots exist; truck stock does not |
-| **Equipment and fleet/asset management** | ServSuite, FieldRoutes | **GAP** |
+| **Equipment and fleet/asset management** | ServSuite, FieldRoutes | **HAVE** (ADR-201) — assets, an append-only ledger, assignment, service schedules and meter readings that cannot run backwards. GPS telemetry beside it stays **Not Connected**. |
 | **Call centre / phone integration** | FieldRoutes, PestPac | **GAP** |
 
 ## Build order
@@ -158,14 +158,40 @@ first, and tracked in `AI/BACKLOG.md`:
 1. ~~Documents, canvassing, marketing~~ — **SHIPPED** as ADR-196.
 2. ~~Digital forms and inspections engine~~ — **SHIPPED** as ADR-197,
    with timesheets and licence expiry.
-3. ~~Customer portal, residential view~~ — **SHIPPED** as ADR-198. The
-   commercial view (device summaries, trend heat maps, sighting tickets)
-   is still open.
+3. ~~Customer portal, residential AND commercial views~~ — **SHIPPED** as
+   ADR-198 and ADR-203.
 4. ~~Operating dashboards~~ — **SHIPPED** as ADR-199 (revenue, receivable
    aging, retention, technician productivity, route density). Route
    OPTIMIZATION by drive time is still open and needs a mapping provider.
-5. **Recurring auto-invoicing, AR aging and dunning** (increment 12).
+5. ~~Recurring invoicing, AR aging and dunning~~ — **SHIPPED** as ADR-200
+   (aging shipped with ADR-199). Generation is operator-triggered and
+   idempotent; running it on a schedule needs a scheduler this product
+   does not have, and sending a reminder needs an email provider.
 
-Three capabilities need an external provider and will ship labelled **Not
-Connected** until an owner supplies credentials, never implied as working:
-card/ACH processing, SMS/email delivery, and GPS/fleet telemetry.
+## What is genuinely left, sorted by whether we can finish it
+
+**Buildable now — no provider, no external account:**
+
+1. ~~Commercial portal view~~ — **SHIPPED** as ADR-203. It was projection
+   work over the existing definer pattern, as predicted: no new tables,
+   one provenance column.
+2. ~~Equipment and fleet/asset management~~ — **SHIPPED** as ADR-201.
+3. ~~Revenue forecasting~~ — **SHIPPED** as ADR-202.
+4. **WDO/termite graphs and diagrams** — a drawing surface, not a form.
+   Large, and honestly the least certain of what is left.
+5. **Offline mode for technicians** — a service worker and a write queue.
+   Large, and the correctness bar is high: a queue that silently drops a
+   completed visit is worse than no offline mode.
+
+**Needs an external provider, and will ship labelled Not Connected until an
+owner supplies credentials — never implied as working:** card/ACH
+processing and in-field payment, autopay and stored payment methods,
+SMS/email delivery (which also gates automated reminders and campaign
+sending), GPS/fleet telemetry, QuickBooks sync, call-centre/telephony
+integration, and reviews/reputation platforms.
+
+**A note on what "parity" can mean here.** Of the twenty rows still
+short of HAVE, roughly half cannot be closed by writing code at all — they
+are accounts somebody has to open and pay for. The honest target is every
+buildable row shipped and every provider-gated row wired to the point where
+supplying a credential is the only remaining step.

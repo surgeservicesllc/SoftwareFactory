@@ -104,6 +104,9 @@ export const CRM_DEVICE_TYPES = [
 ] as const;
 export type CrmDeviceType = (typeof CRM_DEVICE_TYPES)[number];
 
+export const CRM_DEVICE_STATUSES = ["active", "removed"] as const;
+export type CrmDeviceStatus = (typeof CRM_DEVICE_STATUSES)[number];
+
 export const CRM_DEVICE_EVENT_KINDS = ["install", "service", "move", "remove"] as const;
 export type CrmDeviceEventKind = (typeof CRM_DEVICE_EVENT_KINDS)[number];
 
@@ -168,7 +171,7 @@ export const CRM_DEVICE_COLUMNS =
 export const CRM_DEVICE_EVENT_COLUMNS =
   "id, device_id, event, condition, activity_count, pest_observed, location_note, note, work_order_id, recorded_at, actor_user_id";
 export const CRM_SIGHTING_COLUMNS =
-  "id, account_id, property_id, pest, severity, location_note, note, sighted_at, corrective_action, corrected_at, created_at, updated_at";
+  "id, account_id, property_id, pest, severity, location_note, note, sighted_at, corrective_action, corrected_at, reported_by_portal_user_id, created_at, updated_at";
 
 export type CrmAccountRow = {
   id: string;
@@ -314,6 +317,9 @@ export type CrmSightingRow = {
   sighted_at: string;
   corrective_action: string | null;
   corrected_at: string | null;
+  /* Increment 15: null for everything staff wrote, set when the customer
+   * reported it through the portal. */
+  reported_by_portal_user_id: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -577,6 +583,11 @@ export function toSightingView(row: CrmSightingRow) {
     sightedAt: row.sighted_at,
     correctiveAction: row.corrective_action,
     correctedAt: row.corrected_at,
+    /* Who is asking. A sighting the customer filed and one a technician
+     * observed are the same kind of fact, but a branch triaging the
+     * morning list needs to know which is in front of them — the customer
+     * is waiting on a call back. */
+    reportedByCustomer: row.reported_by_portal_user_id !== null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -1973,6 +1984,216 @@ export function toPortalRequestMineView(row: CrmPortalRequestMineRow) {
 }
 
 /* ---------------------------------------------------------------------------
+ * The commercial portal view (increment 15).
+ *
+ * The residential portal answers "when are you coming and what do I owe".
+ * These are the questions a food plant's quality manager asks instead, and
+ * the shapes below are the definer projections in
+ * `20260830002300_commercial_portal.sql`, verbatim.
+ *
+ * Every nullable column stays nullable through its mapper, and for the
+ * same reason as increment 11: a compliance binder is exactly where a
+ * comfortable zero does damage. `overThreshold: null` means there was no
+ * threshold or no reading — not that the station is under one. An
+ * `activityTotal` of null means nobody wrote a number down that month, and
+ * `scans` is carried beside it so the page can say which.
+ * ------------------------------------------------------------------------- */
+
+export type CrmPortalSiteRow = {
+  id: string;
+  label: string;
+  address: string;
+  property_type: string | null;
+  active_devices: number;
+  open_sightings: number;
+  last_visit_at: string | null;
+  next_visit_at: string | null;
+};
+
+export type CrmPortalStationRow = {
+  id: string;
+  property_id: string;
+  property_label: string;
+  label: string;
+  barcode: string;
+  device_type: CrmDeviceType;
+  status: CrmDeviceStatus;
+  location_note: string | null;
+  activity_threshold: number | null;
+  installed_at: string;
+  last_service_at: string | null;
+  last_condition: CrmDeviceCondition | null;
+  last_activity_count: number | null;
+  last_pest_observed: string | null;
+  over_threshold: boolean | null;
+};
+
+export type CrmPortalTrendRow = {
+  month: string;
+  device_type: CrmDeviceType;
+  scans: number;
+  scans_with_count: number;
+  activity_total: number | string | null;
+  stations_flagged: number;
+};
+
+export type CrmPortalConditionRow = {
+  kind: string;
+  source_id: string;
+  property_id: string;
+  property_label: string;
+  headline: string;
+  detail: string | null;
+  severity: string;
+  observed_at: string;
+  reported_by_customer: boolean;
+};
+
+export type CrmPortalSafetyRow = {
+  product_id: string;
+  name: string;
+  epa_registration_number: string | null;
+  active_ingredient: string | null;
+  signal_word: string | null;
+  restricted_use: boolean;
+  sds_url: string | null;
+  label_url: string | null;
+  applications: number;
+  last_applied_at: string | null;
+};
+
+export type CrmPortalInspectionRow = {
+  id: string;
+  template_name: string;
+  template_kind: CrmFormKind;
+  property_id: string | null;
+  property_label: string | null;
+  completed_at: string;
+  signed_by_name: string | null;
+  signed_at: string | null;
+  has_signature: boolean;
+  notes: string | null;
+};
+
+export function toPortalSiteView(row: CrmPortalSiteRow) {
+  return {
+    id: row.id,
+    label: row.label,
+    address: row.address,
+    propertyType: row.property_type,
+    activeDevices: row.active_devices,
+    openSightings: row.open_sightings,
+    /* Null when nothing has ever been done here, and null when nothing is
+     * booked. Neither is a date, and neither should be shown as one. */
+    lastVisitAt: row.last_visit_at,
+    nextVisitAt: row.next_visit_at,
+  };
+}
+
+export function toPortalStationView(row: CrmPortalStationRow) {
+  return {
+    id: row.id,
+    propertyId: row.property_id,
+    propertyLabel: row.property_label,
+    label: row.label,
+    /* The sticker on the box. An identifier for a bait station is not a
+     * secret, and matching the row to the wall is the point. */
+    barcode: row.barcode,
+    deviceType: row.device_type,
+    status: row.status,
+    locationNote: row.location_note,
+    activityThreshold: row.activity_threshold,
+    installedAt: row.installed_at,
+    lastServiceAt: row.last_service_at,
+    lastCondition: row.last_condition,
+    lastActivityCount: row.last_activity_count,
+    lastPestObserved: row.last_pest_observed,
+    overThreshold: row.over_threshold,
+    /* Three states, not two: never scanned, scanned without a count, and
+     * scanned with one. The page needs to tell them apart. */
+    everScanned: row.last_service_at !== null,
+    counted: row.last_activity_count !== null,
+  };
+}
+
+export function toPortalTrendView(row: CrmPortalTrendRow) {
+  return {
+    month: row.month,
+    deviceType: row.device_type,
+    scans: row.scans,
+    scansWithCount: row.scans_with_count,
+    activityTotal: row.activity_total === null ? null : Number(row.activity_total),
+    stationsFlagged: row.stations_flagged,
+  };
+}
+
+export function toPortalConditionView(row: CrmPortalConditionRow) {
+  return {
+    kind: row.kind,
+    sourceId: row.source_id,
+    propertyId: row.property_id,
+    propertyLabel: row.property_label,
+    headline: row.headline,
+    detail: row.detail,
+    severity: row.severity,
+    observedAt: row.observed_at,
+    reportedByCustomer: row.reported_by_customer,
+  };
+}
+
+export function toPortalSafetyView(row: CrmPortalSafetyRow) {
+  return {
+    productId: row.product_id,
+    name: row.name,
+    epaRegistrationNumber: row.epa_registration_number,
+    activeIngredient: row.active_ingredient,
+    signalWord: row.signal_word,
+    restrictedUse: row.restricted_use,
+    /* Null means no sheet is recorded. The page says so; it does not offer
+     * a link that goes nowhere. */
+    sdsUrl: row.sds_url,
+    labelUrl: row.label_url,
+    applications: row.applications,
+    lastAppliedAt: row.last_applied_at,
+  };
+}
+
+export function toPortalInspectionView(row: CrmPortalInspectionRow) {
+  return {
+    id: row.id,
+    templateName: row.template_name,
+    templateKind: row.template_kind,
+    propertyId: row.property_id,
+    propertyLabel: row.property_label,
+    completedAt: row.completed_at,
+    signedByName: row.signed_by_name,
+    signedAt: row.signed_at,
+    /* Whether a signature exists. The storage path is not in the
+     * projection, so there is nothing here to hand over. */
+    hasSignature: row.has_signature,
+    notes: row.notes,
+  };
+}
+
+/**
+ * How a station reads on the floor. Kept beside the mapper because the
+ * page, the tests and any later export must agree on when a station is
+ * "unknown" rather than "clear" — the whole point of the null columns.
+ */
+export function stationStanding(
+  station: Pick<
+    ReturnType<typeof toPortalStationView>,
+    "overThreshold" | "lastCondition" | "everScanned"
+  >,
+): "flagged" | "clear" | "unknown" {
+  if (station.lastCondition === "damaged" || station.lastCondition === "missing") return "flagged";
+  if (station.lastCondition === "needs_service") return "flagged";
+  if (station.overThreshold === true) return "flagged";
+  if (!station.everScanned) return "unknown";
+  return station.overThreshold === null ? "unknown" : "clear";
+}
+
+/* ---------------------------------------------------------------------------
  * The operating dashboards (increment 11).
  *
  * These row types are the return shapes of the SECURITY INVOKER aggregate
@@ -2119,4 +2340,345 @@ export function toRouteDayView(row: CrmRouteDayRow) {
 export function bpsLabel(bps: number | null): string {
   if (bps === null) return "—";
   return `${(bps / 100).toFixed(1)}%`;
+}
+
+/* ---------------------------------------------------------------------------
+ * Recurring billing and collections (increment 12).
+ * ------------------------------------------------------------------------- */
+
+export type CrmDunningAction =
+  | "reminder_call"
+  | "reminder_letter"
+  | "reminder_email"
+  | "final_notice"
+  | "payment_plan"
+  | "sent_to_collections"
+  | "written_off";
+
+export const CRM_DUNNING_ACTIONS: readonly CrmDunningAction[] = [
+  "reminder_call",
+  "reminder_letter",
+  "reminder_email",
+  "final_notice",
+  "payment_plan",
+  "sent_to_collections",
+  "written_off",
+];
+
+export const CRM_BILLING_RUN_COLUMNS =
+  "id, through_on, plans_considered, invoices_created, plans_already_billed, total_cents, note, ran_at";
+export const CRM_DUNNING_NOTICE_COLUMNS =
+  "id, invoice_id, account_id, action, days_overdue, balance_cents, outcome, acted_at";
+
+export type CrmBillingRunRow = {
+  id: string;
+  through_on: string;
+  plans_considered: number;
+  invoices_created: number;
+  plans_already_billed: number;
+  total_cents: number | string;
+  note: string | null;
+  ran_at: string;
+};
+
+export type CrmDunningNoticeRow = {
+  id: string;
+  invoice_id: string;
+  account_id: string;
+  action: CrmDunningAction;
+  days_overdue: number;
+  balance_cents: number | string;
+  outcome: string | null;
+  acted_at: string;
+};
+
+export type CrmCollectionsRow = {
+  invoice_id: string;
+  account_id: string;
+  account_name: string;
+  number: string;
+  balance_cents: number | string;
+  due_on: string;
+  days_overdue: number;
+  notices: number;
+  last_action: CrmDunningAction | null;
+  last_acted_at: string | null;
+};
+
+export function toBillingRunView(row: CrmBillingRunRow) {
+  return {
+    id: row.id,
+    throughOn: row.through_on,
+    plansConsidered: row.plans_considered,
+    invoicesCreated: row.invoices_created,
+    /*
+     * Plans that were due but whose period was already invoiced. Reported
+     * on its own because a run that skipped forty and a run that found
+     * forty nothing to do are different events, and only one of them means
+     * somebody pressed the button twice.
+     */
+    plansAlreadyBilled: row.plans_already_billed,
+    totalCents: Number(row.total_cents),
+    note: row.note,
+    ranAt: row.ran_at,
+  };
+}
+
+export function toDunningNoticeView(row: CrmDunningNoticeRow) {
+  return {
+    id: row.id,
+    invoiceId: row.invoice_id,
+    accountId: row.account_id,
+    action: row.action,
+    /* The age when somebody acted, not the age now. */
+    daysOverdue: row.days_overdue,
+    balanceCents: Number(row.balance_cents),
+    outcome: row.outcome,
+    actedAt: row.acted_at,
+  };
+}
+
+/** Which aging bucket an overdue invoice sits in, by the same cuts the report uses. */
+export function agingBucket(daysOverdue: number): string {
+  if (daysOverdue <= 0) return "current";
+  if (daysOverdue <= 30) return "1-30";
+  if (daysOverdue <= 60) return "31-60";
+  if (daysOverdue <= 90) return "61-90";
+  return "90+";
+}
+
+export function toCollectionsView(row: CrmCollectionsRow) {
+  return {
+    invoiceId: row.invoice_id,
+    accountId: row.account_id,
+    accountName: row.account_name,
+    number: row.number,
+    balanceCents: Number(row.balance_cents),
+    dueOn: row.due_on,
+    daysOverdue: row.days_overdue,
+    bucket: agingBucket(row.days_overdue),
+    notices: row.notices,
+    /*
+     * Null when nobody has done anything yet — which is the row a
+     * collections desk most needs to see, so it is a real absence rather
+     * than a "none" that reads like an action.
+     */
+    lastAction: row.last_action,
+    lastActedAt: row.last_acted_at,
+    untouched: row.notices === 0,
+  };
+}
+
+/* ---------------------------------------------------------------------------
+ * Equipment and fleet (increment 13).
+ * ------------------------------------------------------------------------- */
+
+export type CrmEquipmentKind =
+  | "vehicle" | "trailer" | "sprayer" | "bait_gun" | "meter"
+  | "respirator" | "thermal_camera" | "ladder" | "other";
+
+export type CrmEquipmentStatus = "in_service" | "in_repair" | "out_of_service" | "retired";
+
+export type CrmEquipmentEventKind =
+  | "acquired" | "assigned" | "unassigned" | "service" | "inspection"
+  | "meter_reading" | "repair_opened" | "repair_closed" | "retired";
+
+export const CRM_EQUIPMENT_KINDS: readonly CrmEquipmentKind[] = [
+  "vehicle", "trailer", "sprayer", "bait_gun", "meter",
+  "respirator", "thermal_camera", "ladder", "other",
+];
+
+export const CRM_EQUIPMENT_EVENT_KINDS: readonly CrmEquipmentEventKind[] = [
+  "assigned", "unassigned", "service", "inspection",
+  "meter_reading", "repair_opened", "repair_closed", "retired",
+];
+
+export const CRM_METER_UNITS = ["miles", "kilometres", "hours"] as const;
+
+export const CRM_EQUIPMENT_COLUMNS =
+  "id, asset_tag, kind, name, make, model, serial_number, branch_id, status, assigned_technician_id, meter_reading, meter_unit, meter_read_at, service_interval_days, last_serviced_on, purchased_on, retired_on, notes, created_at, updated_at";
+export const CRM_EQUIPMENT_EVENT_COLUMNS =
+  "id, equipment_id, kind, technician_id, meter_reading, cost_cents, vendor, note, occurred_at";
+
+export type CrmEquipmentRow = {
+  id: string;
+  asset_tag: string;
+  kind: CrmEquipmentKind;
+  name: string;
+  make: string | null;
+  model: string | null;
+  serial_number: string | null;
+  branch_id: string | null;
+  status: CrmEquipmentStatus;
+  assigned_technician_id: string | null;
+  meter_reading: number | string | null;
+  meter_unit: string | null;
+  meter_read_at: string | null;
+  service_interval_days: number | null;
+  last_serviced_on: string | null;
+  purchased_on: string | null;
+  retired_on: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CrmEquipmentEventRow = {
+  id: string;
+  equipment_id: string;
+  kind: CrmEquipmentEventKind;
+  technician_id: string | null;
+  meter_reading: number | string | null;
+  cost_cents: number | string | null;
+  vendor: string | null;
+  note: string | null;
+  occurred_at: string;
+};
+
+export type CrmFleetStatusRow = {
+  equipment_id: string;
+  asset_tag: string;
+  name: string;
+  kind: CrmEquipmentKind;
+  status: CrmEquipmentStatus;
+  branch_id: string | null;
+  assigned_technician_id: string | null;
+  meter_reading: number | string | null;
+  meter_unit: string | null;
+  last_serviced_on: string | null;
+  service_interval_days: number | null;
+  next_service_due: string | null;
+  days_until_service: number | null;
+  events: number;
+};
+
+export function toEquipmentView(row: CrmEquipmentRow) {
+  return {
+    id: row.id,
+    assetTag: row.asset_tag,
+    kind: row.kind,
+    name: row.name,
+    make: row.make,
+    model: row.model,
+    serialNumber: row.serial_number,
+    branchId: row.branch_id,
+    status: row.status,
+    assignedTechnicianId: row.assigned_technician_id,
+    meterReading: row.meter_reading === null ? null : Number(row.meter_reading),
+    meterUnit: row.meter_unit,
+    meterReadAt: row.meter_read_at,
+    serviceIntervalDays: row.service_interval_days,
+    lastServicedOn: row.last_serviced_on,
+    purchasedOn: row.purchased_on,
+    retiredOn: row.retired_on,
+    notes: row.notes,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function toEquipmentEventView(row: CrmEquipmentEventRow) {
+  return {
+    id: row.id,
+    equipmentId: row.equipment_id,
+    kind: row.kind,
+    technicianId: row.technician_id,
+    meterReading: row.meter_reading === null ? null : Number(row.meter_reading),
+    costCents: row.cost_cents === null ? null : Number(row.cost_cents),
+    vendor: row.vendor,
+    note: row.note,
+    occurredAt: row.occurred_at,
+  };
+}
+
+/**
+ * How an asset's service standing reads.
+ *
+ * `unscheduled` is its own state and is never folded into `ok`: an asset
+ * with no interval on file has not been judged, and reporting it as fine is
+ * how a fleet report starts claiming everything is.
+ */
+export function serviceStanding(
+  intervalDays: number | null,
+  daysUntilService: number | null,
+): "unscheduled" | "overdue" | "due_soon" | "ok" {
+  if (intervalDays === null || daysUntilService === null) return "unscheduled";
+  if (daysUntilService < 0) return "overdue";
+  if (daysUntilService <= 14) return "due_soon";
+  return "ok";
+}
+
+export function toFleetStatusView(row: CrmFleetStatusRow) {
+  return {
+    equipmentId: row.equipment_id,
+    assetTag: row.asset_tag,
+    name: row.name,
+    kind: row.kind,
+    status: row.status,
+    branchId: row.branch_id,
+    assignedTechnicianId: row.assigned_technician_id,
+    meterReading: row.meter_reading === null ? null : Number(row.meter_reading),
+    meterUnit: row.meter_unit,
+    lastServicedOn: row.last_serviced_on,
+    serviceIntervalDays: row.service_interval_days,
+    /** Null when nothing says when — unscheduled, not "not due". */
+    nextServiceDue: row.next_service_due,
+    daysUntilService: row.days_until_service,
+    standing: serviceStanding(row.service_interval_days, row.days_until_service),
+    events: row.events,
+    /** Assigned to nobody. A real state, and the one a yard walk is for. */
+    unassigned: row.assigned_technician_id === null && row.status !== "retired",
+  };
+}
+
+/* ---------------------------------------------------------------------------
+ * Revenue forecasting (increment 14).
+ * ------------------------------------------------------------------------- */
+
+export type CrmForecastMonthRow = {
+  month: string;
+  recurring_cents: number | string;
+  contracted_cents: number | string;
+  total_cents: number | string;
+  plans: number;
+  contracts: number;
+};
+
+export type CrmForecastBasisRow = {
+  active_plans: number;
+  unpriced_plans: number;
+  active_contracts: number;
+  open_ended_contracts: number;
+  customers_without_plan: number;
+  priced_share_bps: number | null;
+};
+
+export function toForecastMonthView(row: CrmForecastMonthRow) {
+  return {
+    month: row.month,
+    recurringCents: Number(row.recurring_cents),
+    contractedCents: Number(row.contracted_cents),
+    totalCents: Number(row.total_cents),
+    plans: row.plans,
+    contracts: row.contracts,
+  };
+}
+
+export function toForecastBasisView(row: CrmForecastBasisRow) {
+  return {
+    activePlans: row.active_plans,
+    /*
+     * Each of these is a reason the forecast UNDERSTATES, which is why they
+     * travel with it rather than behind it. An unpriced plan bills nothing
+     * in the projection; an open-ended contract is absent from the
+     * contracted line entirely; a customer with no plan contributes
+     * nothing at all.
+     */
+    unpricedPlans: row.unpriced_plans,
+    activeContracts: row.active_contracts,
+    openEndedContracts: row.open_ended_contracts,
+    customersWithoutPlan: row.customers_without_plan,
+    /** Null when there are no plans at all — a share of nothing is not zero. */
+    pricedShareBps: row.priced_share_bps,
+  };
 }

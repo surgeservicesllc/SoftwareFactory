@@ -36,6 +36,8 @@ export type SeedCounts = {
   devices: number;
   deviceScans: number;
   sightings: number;
+  /* Of those sightings, the ones the customer filed themselves. */
+  customerReportedSightings: number;
   products: number;
   lots: number;
   applications: number;
@@ -54,6 +56,10 @@ export type SeedCounts = {
   documents: number;
   portalUsers: number;
   portalRequests: number;
+  billingRuns: number;
+  dunningNotices: number;
+  equipment: number;
+  equipmentEvents: number;
   canvassRoutes: number;
   knocks: number;
   marketingLists: number;
@@ -609,7 +615,14 @@ export async function runSeed(
       created_by: userId,
     })),
   );
-  const sightings = await insertAll(client, "crm_pest_sightings", sightingRows, "id");
+  // account_id comes back so the portal can claim a share of these below,
+  // once the invitations that would have reported them exist.
+  const sightings = await insertAll(
+    client,
+    "crm_pest_sightings",
+    sightingRows,
+    "id, account_id",
+  );
   if ("error" in sightings) return sightings;
 
   /* --------------------------------------------------------- applications */
@@ -996,6 +1009,133 @@ export async function runSeed(
   const documents = await insertAll(client, "crm_documents", documentRows, "id");
   if ("error" in documents) return documents;
 
+  /* ----------------------------------------- equipment and fleet (13) */
+
+  /*
+   * Assets first, then the ledger. Every asset is born with an acquisition
+   * event written by trigger, so the runner inserts none — and the events
+   * below are the ones that came after.
+   */
+  const equipmentRows = dataset.equipment.map((asset) => ({
+    organization_id: org,
+    asset_tag: asset.assetTag,
+    kind: asset.kind,
+    name: asset.name,
+    make: asset.make ?? null,
+    model: asset.model ?? null,
+    serial_number: asset.serialNumber ?? null,
+    branch_id: branchId(asset.branchIndex),
+    meter_reading: asset.meterReading ?? null,
+    meter_unit: asset.meterUnit ?? null,
+    // The schema takes a reading, its unit and its moment together or none
+    // of the three.
+    meter_read_at: asset.meterReading === undefined ? null : daysAgoIso(asset.purchasedDaysAgo),
+    service_interval_days: asset.serviceIntervalDays ?? null,
+    purchased_on: dateInDays(-asset.purchasedDaysAgo),
+    notes: asset.notes ?? null,
+    created_by: userId,
+  }));
+  const equipment = await insertAll(client, "crm_equipment", equipmentRows, "id, asset_tag");
+  if ("error" in equipment) return equipment;
+  const equipmentIdByTag = new Map(
+    equipment.data.map((row) => [row.asset_tag as string, row.id as string]),
+  );
+
+  /*
+   * The ledger, oldest first per asset, with meter readings that only ever
+   * climb — the trigger refuses anything else, and a seeder that produced
+   * a backwards reading would be testing the guard rather than filling the
+   * book.
+   */
+  const equipmentEventRows = dataset.equipment.flatMap((asset) => {
+    const equipmentId = equipmentIdByTag.get(asset.assetTag);
+    if (equipmentId === undefined) return [];
+    let meter = asset.meterReading ?? null;
+    return asset.events.map((event) => {
+      if (event.meterAdd !== undefined && meter !== null) meter += event.meterAdd;
+      return {
+        organization_id: org,
+        equipment_id: equipmentId,
+        kind: event.kind,
+        technician_id:
+          event.technicianIndex === undefined ? null : technicianId(event.technicianIndex),
+        meter_reading: event.meterAdd === undefined ? null : meter,
+        cost_cents: event.costCents ?? null,
+        vendor: event.vendor ?? null,
+        note: event.note ?? null,
+        occurred_at: daysAgoIso(event.daysAgo),
+        created_by: userId,
+      };
+    });
+  });
+  const equipmentEvents = await insertAll(
+    client,
+    "crm_equipment_events",
+    equipmentEventRows,
+    "id",
+  );
+  if ("error" in equipmentEvents) return equipmentEvents;
+
+  /* --------------------------- recurring billing and collections (12) */
+
+  /*
+   * Billing runs are historical records of batches somebody performed.
+   * They are seeded directly rather than by calling the generator: the
+   * generator would advance every plan's next_due as a side effect, which
+   * would leave the corpus with nothing due and a dispatch board that
+   * reads as finished work.
+   */
+  const billingRunRows = dataset.billingRuns.map((run) => ({
+    organization_id: org,
+    through_on: dateInDays(-run.throughDaysAgo),
+    plans_considered: run.plansConsidered,
+    invoices_created: run.invoicesCreated,
+    plans_already_billed: run.plansAlreadyBilled,
+    total_cents: run.totalCents,
+    note: run.note,
+    ran_at: daysAgoIso(run.throughDaysAgo),
+    created_by: userId,
+  }));
+  const billingRuns = await insertAll(client, "crm_billing_runs", billingRunRows, "id");
+  if ("error" in billingRuns) return billingRuns;
+
+  /*
+   * What somebody did about an overdue invoice. The account is carried on
+   * the row and a trigger checks it against the invoice's own account, so
+   * these are built from each account's own invoices rather than from a
+   * flat list — a note filed against the wrong customer is refused, and
+   * rightly.
+   */
+  const dunningRows = dataset.accounts.flatMap((account) => {
+    const accountId = accountIdByName.get(account.name);
+    if (accountId === undefined) return [];
+    const numbers = (operations.get(account.name)?.billing.invoices ?? [])
+      .filter((invoice) => invoice.status === "open")
+      .map((invoice) => invoice.number);
+    if (numbers.length === 0) return [];
+    return (account.dunning ?? []).flatMap((notice) => {
+      const number = numbers[notice.invoiceSeat % numbers.length];
+      const invoiceId = invoiceIdByNumber.get(number);
+      if (invoiceId === undefined) return [];
+      return [{
+        organization_id: org,
+        invoice_id: invoiceId,
+        account_id: accountId,
+        action: notice.action,
+        days_overdue: notice.daysOverdue,
+        // Derived from the account's own index rather than drawn from a
+        // generator this module does not own: the runner stays a pure
+        // shaper of rows, and a re-run reproduces the same figure.
+        balance_cents: (5 + ((account.index * 37 + notice.invoiceSeat * 11) % 896)) * 1000,
+        outcome: notice.outcome ?? null,
+        acted_at: daysAgoIso(notice.actedDaysAgo),
+        created_by: userId,
+      }];
+    });
+  });
+  const dunningNotices = await insertAll(client, "crm_dunning_notices", dunningRows, "id");
+  if ("error" in dunningNotices) return dunningNotices;
+
   /* ------------------------------------------- the customer portal (10) */
 
   /*
@@ -1029,6 +1169,50 @@ export async function runSeed(
   const portalUserIdByKey = new Map(
     portalUsers.data.map((row) => [`${row.account_id as string}:${row.email as string}`, row.id as string]),
   );
+
+  /*
+   * Provenance on a share of the sightings (increment 15).
+   *
+   * Some sightings are a technician's observation and some are the
+   * customer walking their own floor at 06:00 and filing it before the
+   * branch opens. Both are real, and the branch triaging the morning list
+   * needs to tell them apart — so a deterministic third of each account's
+   * sightings are stamped with that account's first portal seat.
+   *
+   * This is an UPDATE rather than part of the insert because the portal
+   * invitations do not exist yet at the point the sightings are written,
+   * and a stamp pointing at a row that is not there is not provenance.
+   */
+  const sightingIdsBySeat = new Map<string, string[]>();
+  {
+    const seenPerAccount = new Map<string, number>();
+    for (const row of sightings.data) {
+      const sightingAccount = row.account_id as string;
+      const seen = seenPerAccount.get(sightingAccount) ?? 0;
+      seenPerAccount.set(sightingAccount, seen + 1);
+      if (seen % 3 !== 0) continue;
+      const account = dataset.accounts.find(
+        (candidate) => accountIdByName.get(candidate.name) === sightingAccount,
+      );
+      const seat = account?.portalUsers?.[0];
+      if (seat === undefined) continue;
+      const portalUserId = portalUserIdByKey.get(`${sightingAccount}:${seat.email}`);
+      if (portalUserId === undefined) continue;
+      const bucket = sightingIdsBySeat.get(portalUserId);
+      if (bucket === undefined) sightingIdsBySeat.set(portalUserId, [row.id as string]);
+      else bucket.push(row.id as string);
+    }
+  }
+  let customerReportedSightings = 0;
+  for (const [portalUserId, ids] of sightingIdsBySeat) {
+    const stamped = await client
+      .from("crm_pest_sightings")
+      .update({ reported_by_portal_user_id: portalUserId } as never)
+      .in("id", ids)
+      .select("id");
+    if (stamped.error) return { error: stamped.error };
+    customerReportedSightings += (stamped.data ?? []).length;
+  }
 
   const portalRequestRows = dataset.accounts.flatMap((account) => {
     const accountId = accountIdByName.get(account.name);
@@ -1570,6 +1754,7 @@ export async function runSeed(
       // hand-recorded scans above.
       deviceScans: devices.data.length + scans.data.length,
       sightings: sightings.data.length,
+      customerReportedSightings,
       products: products.data.length,
       lots: lots.data.length,
       applications: applications.data.length + corrections.data.length,
@@ -1588,6 +1773,10 @@ export async function runSeed(
       documents: documents.data.length,
       portalUsers: portalUsers.data.length,
       portalRequests: portalRequests.data.length,
+      billingRuns: billingRuns.data.length,
+      dunningNotices: dunningNotices.data.length,
+      equipment: equipment.data.length,
+      equipmentEvents: equipmentEvents.data.length,
       canvassRoutes: canvassRoutes.data.length,
       knocks: knocks.data.length,
       marketingLists: lists.data.length,

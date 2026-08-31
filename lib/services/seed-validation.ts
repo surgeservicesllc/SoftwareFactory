@@ -131,6 +131,45 @@ const SPECS: Spec[] = [
     parents: [{ column: "technician_id", table: "crm_technicians" }],
   },
   {
+    table: "crm_equipment",
+    optional: [
+      "make", "model", "serial_number", "branch_id", "assigned_technician_id",
+      "meter_reading", "meter_unit", "meter_read_at", "service_interval_days",
+      "last_serviced_on", "purchased_on", "notes",
+    ],
+    /*
+     * `retired_on` is deliberately absent: the corpus keeps every asset on
+     * the roster, because a retired one is the state the fleet report
+     * excludes and seeding a shelf of them would flatter the counts.
+     */
+    enumColumn: "kind",
+    parents: [],
+  },
+  {
+    table: "crm_equipment_events",
+    optional: ["technician_id", "meter_reading", "cost_cents", "vendor", "note"],
+    enumColumn: "kind",
+    parents: [{ column: "equipment_id", table: "crm_equipment" }],
+  },
+  {
+    table: "crm_billing_runs",
+    /*
+     * A note is the only optional column. The counts are never null —
+     * a run that did nothing reports zeros, which is a measurement.
+     */
+    optional: ["note"],
+    parents: [],
+  },
+  {
+    table: "crm_dunning_notices",
+    optional: ["outcome"],
+    enumColumn: "action",
+    parents: [
+      { column: "invoice_id", table: "crm_invoices" },
+      { column: "account_id", table: "crm_accounts" },
+    ],
+  },
+  {
     table: "crm_portal_users",
     /*
      * `user_id`, `activated_at` and `last_seen_at` are deliberately NOT
@@ -320,7 +359,14 @@ const SPECS: Spec[] = [
   },
   {
     table: "crm_pest_sightings",
-    optional: ["location_note", "note", "corrective_action", "corrected_at"],
+    optional: [
+      "location_note",
+      "note",
+      "corrective_action",
+      "corrected_at",
+      // Increment 15: set on the sightings the customer filed themselves.
+      "reported_by_portal_user_id",
+    ],
     enumColumn: "severity",
     parents: [
       { column: "account_id", table: "crm_accounts" },

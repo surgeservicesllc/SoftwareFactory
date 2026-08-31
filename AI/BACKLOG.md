@@ -199,8 +199,37 @@ the full seeded E2E journey passes — increment 10 of the plan.
 - [ ] Increment 11 follow-on: route OPTIMIZATION, which needs a mapping
   provider for drive time. Density ships; sequencing by distance is
   labelled Not Connected until credentials are supplied.
-- [ ] Increment 12: recurring auto-invoicing from service plans, AR aging,
-  and dunning schedules.
+- [x] Increment 12 (ADR-200): recurring billing and dunning — invoices
+  raised from service plans that have come due, made safe by a PARTIAL
+  unique index rather than by the generator checking first; billing runs
+  recorded with the operator's name; a collections worklist ordered
+  oldest-and-largest; and dunning notices that record what a person did.
+  /Services/collections. 20260830002000; hosted apply:
+  scope=recurring-billing after merge.
+- [x] Increment 13 (ADR-201): equipment and fleet — assets over an
+  append-only ledger, with status, assignment and meter readings as
+  projections of it; service schedules where "no interval on file" is its
+  own standing rather than "fine"; and a meter that cannot run backwards.
+  /Services/fleet. 20260830002100; hosted apply: scope=equipment-fleet
+  after merge.
+- [x] Increment 14 (ADR-202): revenue forecasting — active plans and
+  contracts with a term, projected forward with NO churn or growth model,
+  and every reason the figure understates reported beside it. Forecast tab
+  on /Services/dashboards. 20260830002200; hosted apply:
+  scope=revenue-forecast after merge.
+- [x] Increment 15 (ADR-203): the commercial portal view — open conditions,
+  a station table and a monthly activity trend, an SDS/label library
+  covering only what was applied at the customer's own sites, and
+  completed-inspection history, plus a sighting the customer can file
+  themselves. Three tabs on /customer-portal. 20260830002300; hosted apply:
+  scope=commercial-portal after merge.
+- [ ] Increment 12 follow-on: UNATTENDED billing. The generator is correct
+  and idempotent but nothing calls it on a schedule, because nothing in
+  this product runs on a timer. Needs a scheduler or a worker executor —
+  the same gap the automation rules have.
+- [ ] Increment 12 follow-on: actually SENDING a dunning reminder. The
+  notice records what a person did; delivery needs an email/SMS provider
+  and stays Not Connected until credentials are supplied.
 - [ ] Provider-gated, ship Not Connected until an owner supplies
   credentials, never implied as working: card/ACH processing (the ledger
   records money that moved; it does not move money), SMS/email delivery,

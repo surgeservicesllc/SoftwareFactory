@@ -908,9 +908,27 @@ export type RouteDayView = {
   accounts: number;
 };
 
+export type ForecastMonthView = {
+  month: string;
+  recurringCents: number;
+  contractedCents: number;
+  totalCents: number;
+  plans: number;
+  contracts: number;
+};
+
+export type ForecastBasisView = {
+  activePlans: number;
+  unpricedPlans: number;
+  activeContracts: number;
+  openEndedContracts: number;
+  customersWithoutPlan: number;
+  pricedShareBps: number | null;
+};
+
 export type DashboardsPayload = {
   organizationId: string;
-  windows: { months: number; productivityDays: number; routeDays: number };
+  windows: { months: number; productivityDays: number; routeDays: number; forecastMonths: number };
   revenue: {
     months: RevenueMonthView[];
     totals: { invoicedCents: number; collectedCents: number; refundedCents: number };
@@ -927,8 +945,115 @@ export type DashboardsPayload = {
     idle: number;
     runningShifts: number;
   };
+  forecast: {
+    months: ForecastMonthView[];
+    basis: ForecastBasisView | null;
+    assumptions: { churnApplied: boolean; growthApplied: boolean; basis: string };
+  };
   routes: {
     days: RouteDayView[];
     optimization: { available: boolean; label: string };
   };
+};
+
+/* --- recurring billing and collections (increment 12) ------------------- */
+
+export type BillingRunView = {
+  id: string;
+  throughOn: string;
+  plansConsidered: number;
+  invoicesCreated: number;
+  plansAlreadyBilled: number;
+  totalCents: number;
+  note: string | null;
+  ranAt: string;
+};
+
+export type DunningNoticeView = {
+  id: string;
+  invoiceId: string;
+  accountId: string;
+  action: string;
+  daysOverdue: number;
+  balanceCents: number;
+  outcome: string | null;
+  actedAt: string;
+};
+
+export type CollectionsInvoiceView = {
+  invoiceId: string;
+  accountId: string;
+  accountName: string;
+  number: string;
+  balanceCents: number;
+  dueOn: string;
+  daysOverdue: number;
+  bucket: string;
+  notices: number;
+  lastAction: string | null;
+  lastActedAt: string | null;
+  untouched: boolean;
+};
+
+export type BillingRunsPayload = {
+  runs: BillingRunView[];
+  counts: { total: number; invoicesCreated: number; billedCents: number; alreadyBilled: number };
+  automatic: { available: boolean; label: string };
+};
+
+export type CollectionsPayload = {
+  minDays: number;
+  invoices: CollectionsInvoiceView[];
+  notices: DunningNoticeView[];
+  counts: { total: number; balanceCents: number; untouched: number; over90: number };
+  delivery: { available: boolean; label: string };
+};
+
+/* --- equipment and fleet (increment 13) --------------------------------- */
+
+export type FleetAssetView = {
+  equipmentId: string;
+  assetTag: string;
+  name: string;
+  kind: string;
+  status: string;
+  branchId: string | null;
+  assignedTechnicianId: string | null;
+  meterReading: number | null;
+  meterUnit: string | null;
+  lastServicedOn: string | null;
+  serviceIntervalDays: number | null;
+  nextServiceDue: string | null;
+  daysUntilService: number | null;
+  standing: string;
+  events: number;
+  unassigned: boolean;
+};
+
+export type EquipmentEventView = {
+  id: string;
+  equipmentId: string;
+  kind: string;
+  technicianId: string | null;
+  meterReading: number | null;
+  costCents: number | null;
+  vendor: string | null;
+  note: string | null;
+  occurredAt: string;
+};
+
+export type FleetPayload = {
+  fleet: FleetAssetView[];
+  events: EquipmentEventView[];
+  counts: {
+    total: number;
+    inService: number;
+    inRepair: number;
+    retired: number;
+    overdue: number;
+    dueSoon: number;
+    unscheduled: number;
+    unassigned: number;
+  };
+  telemetry: { available: boolean; label: string };
 };
