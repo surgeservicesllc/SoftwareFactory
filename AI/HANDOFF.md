@@ -22,8 +22,8 @@ default, accessible toggle state, reload and cross-product persistence, exact
 computed palettes, scoped Services status translation, intentional print
 paper, overflow, page errors, and serious/critical axe. The deterministic
 contrast contract requires >=4.5:1 for text/muted/faint across all palette
-surfaces. Consolidated lint/typecheck, 557 test files / 6,400 tests (three
-files / seven tests skipped), the 273-page production build, and the expanded
+surfaces. Consolidated lint/typecheck, 559 test files / 6,415 tests (three
+files / seven tests skipped), the 276-page production build, and the expanded
 6/6 browser journey pass.
 Exact-head CI, Vercel READY/health, and production browser acceptance still
 gate release.
@@ -185,8 +185,8 @@ behavior/contracts 10/10, and worker/auth runtime 69/69. The earlier combined
 planner/admission/release focused lanes were 164/164 before the final rebase;
 do not present them as final full-release evidence.
 
-Consolidated local lint, typecheck, 557 test files / 6,400 tests, and the
-273-page production build are green on the final combined tree; the separate
+Consolidated local lint, typecheck, 559 test files / 6,415 tests, and the
+276-page production build are green on the final combined tree; the separate
 site-theme browser journey is 6/6. PICK UP HERE: publish one final exact commit,
 wait for all four exact-head CI jobs and exact READY deployment/health, then
 apply only 009 and 010 through the ordered protected scopes and repeat read-only

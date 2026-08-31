@@ -11,7 +11,7 @@
 - Focused contracts and the 6/6 desktop/tablet/mobile browser theme journey are green,
   including persistence, responsive overflow, exact palettes, axe, and >=4.5:1
   token contrast.
-- Consolidated lint/typecheck, 557 test files / 6,400 tests, the 273-page
+- Consolidated lint/typecheck, 559 test files / 6,415 tests, the 276-page
   production build, diff check, and changed-file secret scan are green.
 - NEXT: publish one exact head, require all four exact-head CI jobs, then verify exact READY
   Vercel/health and production dark/light persistence before acceptance.
@@ -38,8 +38,8 @@
   behavior/contracts 10/10, worker/auth runtime 69/69. Earlier combined
   planner/admission/release lanes were 164/164 before final rebase and are not
   final full-release evidence.
-- NEXT 1: consolidated local lint, typecheck, 557 test files / 6,400 tests,
-  273-page production build, 6/6 site-theme browser journey, secret scan, and
+- NEXT 1: consolidated local lint, typecheck, 559 test files / 6,415 tests,
+  276-page production build, 6/6 site-theme browser journey, secret scan, and
   diff check are green. Publish one final exact candidate; require all four
   exact-head CI jobs plus exact READY Vercel and matching health, and separately
   run the migration/catalog/RLS/ACL/runtime/rollback gates before hosting 009/010.

@@ -19,8 +19,8 @@ destructive-action contrast, and printable white reports/labels remain fixed
 by design rather than being mistaken for application chrome.
 
 Focused component/contract evidence is green. Repository lint and typecheck,
-557 test files / 6,400 tests (three files / seven tests skipped), and the
-273-page production build pass on the consolidated candidate. The expanded
+559 test files / 6,415 tests (three files / seven tests skipped), and the
+276-page production build pass on the consolidated candidate. The expanded
 theme browser journey passes 6/6 across desktop, tablet, and mobile with
 persistence, exact
 computed palettes, no horizontal overflow, no page errors, and no serious or
@@ -69,7 +69,7 @@ Current focused evidence is 17/17 for the protected completion workflow,
 10/10 for claim behavior/contracts, and 69/69 for worker/auth runtime. The
 earlier combined planner/admission/release lanes were 164/164 before the final
 rebase and are supporting evidence only. Consolidated local lint, typecheck,
-557 test files / 6,400 tests, and the 273-page production build now pass on the
+559 test files / 6,415 tests, and the 276-page production build now pass on the
 final combined tree; the separate site-theme browser journey passes 6/6. Those
 local gates do not substitute for the still-pending migration chain/catalog/
 RLS/ACL/replay/rollback checks, exact-head CI and deployment identity, hosted

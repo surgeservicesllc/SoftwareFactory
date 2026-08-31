@@ -23,8 +23,8 @@ Services status chips, intentional white print paper, horizontal overflow,
 page errors, and serious/critical axe in both modes. A separate deterministic
 contract checks text/muted/faint against background/surface/raised for root,
 site chrome, Factory, and Services dark/light palettes at >=4.5:1. Consolidated
-lint and typecheck pass; the full suite passes 557 files / 6,400 tests with
-three files / seven tests skipped; and the production build generates 273
+lint and typecheck pass; the full suite passes 559 files / 6,415 tests with
+three files / seven tests skipped; and the production build generates 276
 pages. Exact-head CI, Vercel identity, health, and production-browser evidence
 remain pending at this repository checkpoint.
 
@@ -120,8 +120,8 @@ The implementation also adds deterministic planner-v3 complete-roster evidence,
 identical TypeScript/PostgreSQL wildcard normalization, append-only forced-RLS
 specialist rows, v3-only new launch/claim authority, and fail-closed
 research/deploy planning where no canonical executable bridge exists.
-Consolidated local lint, typecheck, 557 test files / 6,400 tests, and the
-273-page production build pass on the final combined tree; the separate
+Consolidated local lint, typecheck, 559 test files / 6,415 tests, and the
+276-page production build pass on the final combined tree; the separate
 site-theme browser journey passes 6/6. Migration chain/catalog/RLS/ACL/replay/
 rollback, exact CI and deployment identity, hosted postflight, signed-in
 acceptance, and provider-backed end-to-end evidence remain pending.
