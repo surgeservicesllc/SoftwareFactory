@@ -2,7 +2,7 @@
 
 Last reviewed: 2026-08-31
 
-**Addendum, 2026-08-31 latest+45 - the close-out tail:**
+**Addendum, 2026-08-31 latest+48 - the close-out tail:**
 budget-transactions-editing 5 (PATCH never carries the stated balance;
 delete asks first; breaks rendered with stated vs computed; transfer
 Link here offered only to the exact counterpart; Unlink sends the group
@@ -12,6 +12,40 @@ browser-rendering statement, absence-as-claim); services-canvassing-panel
 4 (route POST, follow-up date only where the schema allows, knock POST,
 unassigned rows kept). Node-version row closed with the full gate set
 green on v22.22.2. Every remaining open backlog row names its unparker.
+
+**Addendum, 2026-08-31 latest+47 - version-safe Grok ACL verification
+(ADR-227):** Exact main `24a6313e98023bfc618a921fc563c9f4bde4cad2`
+passed four-job CI `33400336336`, reached READY deployment
+`dpl_49dFxebk4jpWEXUtfK2CbsQpBk1T`, and matched public health. Fresh read-only
+verify `33401887942` skipped apply/reload and failed closed only at the
+specialist catalog predicate. PostgreSQL 17/18 includes `MAINTAIN` in the
+owner's default table privilege set, so a fixed expanded count of seven is
+incorrect. The candidate compares the actual privilege-type set to
+`acldefault('r', relowner)` in both directions, requires its dynamically
+derived expanded-row count, and retains owner-only, non-grantable, explicit
+role-denial, and PostgreSQL 18 NOT NULL checks. The focused workflow contract
+passes 12/12. Exact-head release and a new read-only
+verify remain pending; no database or safety state changes with this fix.
+
+**Addendum, 2026-08-31 latest+46 - Grok hosted completion and verifier catalog
+containment (ADR-226):** Exact main
+`85a7fed15ad876be4e56fd74903e41b68d4488b4` passed all four jobs in CI
+`33395309085`, reached READY deployment
+`dpl_FcbZciXJFJN1DWxN2mxd23wEPfaU`, and matches public health. Protected
+probe `33397278231` measured hosted ledger `0|0`; apply `33397377838` accepted
+only 009; independent probe `33397710586` accepted `1|0` with catalog, ACL,
+runtime, lint, health, and stopped containment green. Run `33397811324`
+applied and ledgered only 010 and reloaded PostgREST, then stopped on its
+combined specialist verifier. The verifier treated one table ACL item as one
+`aclexplode` privilege row; PostgreSQL expands the item to seven table
+privileges. The corrected workflow requires one ACL item, seven exact expanded
+owner privileges, and no non-owner or grantable row. PostgreSQL 18 also adds
+28 `contype='n'` rows for the table's NOT NULL declarations; the corrected
+verifier excludes those from the 24 named business constraints and attests all
+28 required NOT NULL attributes separately. Its focused contract is 12/12.
+Fresh read-only `verify`, signed-in acceptance, and real provider-backed
+E2E still remain; workers/autonomy/actions are OFF and the kill switch is ON.
+**GROK BOT: PRODUCTION READY is not declared.**
 
 **Addendum, 2026-08-31 latest+44 - copilot + acceptance journey (ADR-224):**
 services-copilot unit 6 (each skill recognized from its own example; the

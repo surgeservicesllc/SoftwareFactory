@@ -1,5 +1,33 @@
 # Current state
 
+## 2026-08-31: Grok completion DDL is hosted; acceptance awaits a version-safe ACL verifier (ADR-227)
+
+Exact main `24a6313e98023bfc618a921fc563c9f4bde4cad2` passed all four
+required jobs in CI run `33400336336`, reached READY Vercel deployment
+`dpl_49dFxebk4jpWEXUtfK2CbsQpBk1T`, and reports the matching Git,
+deployment, and Supabase project identity from public health. Its workflow-only
+containment correctly handles PostgreSQL 18 NOT NULL constraints separately
+from the 24 named business constraints. Fresh read-only run `33401887942`
+skipped both apply and reload, accepted exact identity and preflight, then
+failed closed only at the combined specialist catalog predicate.
+
+That remaining failure is verifier-only. PostgreSQL 17 and 18 add `MAINTAIN`
+to the table-owner default privilege set, so the one owner ACL item expands to
+eight privileges on the hosted version rather than the hard-coded seven. The
+candidate now compares the actual privilege-type set to
+`acldefault('r', relowner)` in both directions while independently requiring
+the same server-derived expanded-row count, owner-to-owner non-grantable rows,
+and denials for `anon`, `authenticated`, and `service_role`. It retains the
+PostgreSQL 18 NOT NULL split. The hosted ledger
+remains `1|1`; neither migration may be replayed, reset, repaired in history,
+or down-migrated. After this workflow-only correction passes exact-head CI and
+READY deployment identity, only a fresh read-only `verify` scope may run.
+
+Workers, autonomy, and every automatic action stayed OFF; the global kill
+switch stayed ON. Signed-in create/return/reload acceptance and a real
+provider-backed repository/PR/CI/deployment journey still remain. **GROK BOT:
+PRODUCTION READY is not declared.**
+
 ## 2026-08-31: One persistent dark/light choice now covers every site shell (ADR-225)
 
 The repository candidate makes dark the first-visit default for the public
@@ -26,13 +54,19 @@ persistence, exact
 computed palettes, no horizontal overflow, no page errors, and no serious or
 critical axe findings. The token contract independently requires at least
 4.5:1 for text, muted text, and faint text against each palette's background,
-surface, and raised surface. Exact-head CI and Vercel production identity
-remain release gates; this section does not claim deployment yet.
+surface, and raised surface. Exact main
+`85a7fed15ad876be4e56fd74903e41b68d4488b4` passed all four required jobs in
+CI run `33395309085` and reached READY Vercel deployment
+`dpl_FcbZciXJFJN1DWxN2mxd23wEPfaU`. Matching health plus authenticated and
+public browser acceptance proved the saved preference across Services,
+Software Factory, and Budget Tracker. The site-wide theme release is
+production accepted.
 
-## 2026-08-31: Grok claim-time admission and specialist planning are a repository candidate (ADR-219)
+## 2026-08-31: Grok claim-time admission and specialist planning are hosted, with final verification pending (ADR-219, ADR-226)
 
-The next Grok boundary is implemented in the repository but is not hosted or
-production accepted. Forward migration
+The next Grok boundary is implemented and its two forward migrations are now
+hosted, but final read-only verification and signed-in production acceptance
+remain open. Forward migration
 `20260831000900_grok_claim_admission_fence.sql` (canonical LF SHA-256
 `7f2dc3b80e466b3c06f589ac6383fd768df847d66e02ec0cab53b8d8431ab737`;
 92,648 LF bytes) makes protocol v3 the only service-role Grok claim path. Every
@@ -76,8 +110,11 @@ RLS/ACL/replay/rollback checks, exact-head CI and deployment identity, hosted
 ledger/catalog/ACL/runtime/lint postflight, signed-in acceptance, or real
 provider-backed end-to-end evidence.
 
-Both migrations are repository-only and unhosted. Workers, autonomy, and every
-automatic action remain OFF, and the global kill switch remains ON. No actual
+Migration `00900` was accepted by protected apply run `33397377838` and
+independent read-only run `33397710586`. Migration `01000` was applied and
+ledgered by run `33397811324`; that run then stopped on the verifier-only ACL
+and PostgreSQL-18 constraint-enumeration defects described in ADR-226. Workers, autonomy, and every automatic
+action remain OFF, and the global kill switch remains ON. No actual
 provider-backed run, repository change, draft pull request, or exact-head CI
 chain has passed through this boundary. **GROK BOT: PRODUCTION READY is not
 declared.**

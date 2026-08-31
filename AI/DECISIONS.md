@@ -5830,8 +5830,9 @@ declaration covers neither.
 ## ADR-225 - Theme is a document preference; products keep identities through tokens
 
 - **Date**: 2026-08-31
-- **Status**: Accepted for the repository candidate; exact-head production
-  acceptance remains required
+- **Status**: Production accepted at exact main
+  `85a7fed15ad876be4e56fd74903e41b68d4488b4`, CI `33395309085`, and READY
+  deployment `dpl_FcbZciXJFJN1DWxN2mxd23wEPfaU`
 - **Supersedes**: ADR-188 only where it required Services to be light rather
   than theme-responsive. Its CRM vocabulary and emerald product identity stay.
 
@@ -5861,3 +5862,66 @@ Services legacy status translation, horizontal overflow, page errors, and
 serious/critical axe. A deterministic contract independently prevents palette
 text, muted text, or faint text from falling below 4.5:1 on background, surface,
 or raised surface.
+
+## ADR-226 - Verify ACL items, privileges, and PostgreSQL 18 constraints by their own semantics
+
+- **Date**: 2026-08-31
+- **Status**: Accepted; verifier correction pending exact-head release and
+  read-only production verification
+
+Protected Grok completion run `33397811324` applied and ledgered only
+`20260831001000_grok_specialist_admission_planning.sql` and reloaded
+PostgREST, then failed closed at its combined specialist postflight. The five
+function-body fingerprints match the exact PostgreSQL `prosrc` bodies. The
+verifier defect is the new table ACL predicate: it treated the row count from
+`aclexplode(relacl)` as the count of ACL items. PostgreSQL stores one owner
+table ACL item but expands it into seven rows, one for each standard table
+privilege.
+
+The same combined predicate assumed `pg_constraint` contained only the 24
+named primary/foreign/unique/check constraints. PostgreSQL 18 additionally
+represents this table's 28 NOT NULL declarations as `contype='n'` rows. Those
+rows are neither drift nor substitutes for the named constraints. The exact
+named set therefore filters `contype='n'`, while `pg_attribute` independently
+proves that all 28 columns other than nullable `provider_identity` are NOT
+NULL.
+
+The exact table posture is therefore verified on both levels: `relacl` must
+contain exactly one ACL item; `aclexplode(relacl)` must contain exactly seven
+privilege rows; and every expanded row must be owner-to-owner and
+non-grantable. Existing explicit denials for `anon`, `authenticated`, and
+`service_role` remain mandatory. This and the PostgreSQL 18 constraint split
+are verifier-only corrections: they do
+not replay 010, change its ledger row, alter hosted catalog, enable a worker,
+weaken RLS, or change autonomy. After the corrected workflow itself passes
+exact-head CI and READY deployment identity, only a fresh read-only `verify`
+scope may accept ledger `1|1` and the catalog/ACL/runtime/rollback/lint/health/
+stopped-safety postflight.
+
+## ADR-227 - Compare table ACLs to PostgreSQL's version-local owner default
+
+- **Date**: 2026-08-31
+- **Status**: Accepted; verifier correction pending exact-head release and
+  read-only production verification
+
+ADR-226 correctly separated ACL items from expanded privileges and PostgreSQL
+18 NOT NULL constraints from the named business-constraint set, but it fixed
+the expanded privilege count at seven. Read-only production verify
+`33401887942` proved that assumption is not portable: PostgreSQL 17 and 18 add
+`MAINTAIN` to the table-owner default, so the hosted owner ACL expands to eight
+privileges. This is a verifier defect, not hosted catalog drift.
+
+The verifier now compares only `privilege_type` from the actual `relacl` and
+`acldefault('r', relowner)` with `EXCEPT` in both directions, and compares the
+two expanded-row counts dynamically so a duplicate ACL item cannot hide behind
+set semantics. The independent posture checks remain mandatory: every actual
+grant must be owner-to-owner and non-grantable, and `anon`, `authenticated`,
+and `service_role` must have no table privilege. The existing PostgreSQL 18
+`contype='n'` filtering and separate `pg_attribute` NOT NULL census are
+unchanged.
+
+This correction changes only protected verification and its contract test. It
+does not apply or replay a migration, reload PostgREST, change ledger/history,
+alter hosted catalog or ACLs, enable a worker, or change autonomy and kill
+switch state. After exact-head CI and READY deployment identity, the only
+permitted database action is a fresh read-only `scope=verify` at exact main.

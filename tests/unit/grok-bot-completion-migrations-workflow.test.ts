@@ -423,7 +423,12 @@ describe("Grok Bot completion migration workflow", () => {
     ).run ?? "";
     for (const evidence of [
       "relation.relrowsecurity and relation.relforcerowsecurity",
+      "acl.grantor<>relation.relowner or acl.grantee<>relation.relowner or acl.is_grantable",
+      "select actual.privilege_type from pg_catalog.aclexplode(relation.relacl) actual",
+      "select expected.privilege_type from pg_catalog.aclexplode(pg_catalog.acldefault('r',relation.relowner)) expected",
       "count(*)=29 from pg_attribute",
+      "count(*)=28 from pg_attribute",
+      "attnotnull<>(attname<>'provider_identity')",
       "grok_specialist_admissions_select_members",
       "count(*)=2 and bool_and(tgfoid='public.reject_grok_evidence_mutation()'::regprocedure)",
       "count(*)=24 and bool_and(convalidated)",
@@ -437,6 +442,14 @@ describe("Grok Bot completion migration workflow", () => {
     ]) {
       expect(postflight).toContain(evidence);
     }
+    expect(postflight.match(/contype<>'n'/g)).toHaveLength(4);
+    expect(postflight.match(/pg_catalog\.acldefault\('r',relation\.relowner\)/g)).toHaveLength(3);
+    expect(postflight.match(/\n\s+except\n/g)).toHaveLength(2);
+    expect(postflight).toMatch(
+      /\(select count\(\*\) from pg_catalog\.aclexplode\(relation\.relacl\)\)\s*=\s*\(select count\(\*\) from pg_catalog\.aclexplode\(pg_catalog\.acldefault\('r',relation\.relowner\)\)\)/,
+    );
+    expect(postflight).not.toContain("cardinality(relation.relacl)");
+    expect(postflight).not.toMatch(/count\(\*\) from (?:pg_catalog\.)?aclexplode\(relation\.relacl\)\)\s*=\s*\d/);
   });
 
   it("uses rollback runtime canaries, transactional linked lint, cache reload, and exact postflight health", () => {
