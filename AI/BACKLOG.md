@@ -48,6 +48,23 @@ category/insert-chain/notice truthfulness fixes. Nothing in this file is
 open because work stopped; everything open is waiting on a named key, a
 named decision, a named authorization, or production itself.
 
+## Grok record-only production acceptance (ADR-229, 2026-08-31)
+
+- [x] Add an env-gated signed-in Playwright journey for one exact RFC-reserved
+  account, project, harmless BUILD goal, exact return URL, and reload.
+- [x] Add read-only hosted preflight/postflight SQL proving planner-v3,
+  complete roster/route admission, immutable events, paused graph, and zero
+  graph/node/agent/provider/Phase 1C execution.
+- [x] Add a manual, explicit-confirm, exact-release workflow with stopped-state
+  checks, least privilege, no browser capture, and no execution control calls.
+- [x] Add static workflow safety and action-pin tests; focused evidence is 8/8,
+  with lint/typecheck and guarded Playwright discovery green.
+- [ ] Publish and run only after the exact fake account/project and Ready Claude
+  plus bounded Ready Codex prerequisites exist and the repository secret
+  `GROK_RECORD_ONLY_E2E_PASSWORD` is configured. Exact-head CI, Vercel READY,
+  health, and hosted 009/010 evidence remain mandatory; no current production
+  acceptance is claimed.
+
 ## Site-wide dark/light theme (ADR-225, 2026-08-31)
 
 - [x] Make dark the deterministic first-visit default and restore only a valid

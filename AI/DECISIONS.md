@@ -5948,3 +5948,31 @@ never decide whether an owner-scoped session may be resumed. Repository
 readiness is a separate live input: a Not Connected project may show its
 history, but the composer must disable new-goal submission before it creates a
 durable session and direct the owner to repair the project binding.
+## ADR-229 - Production acceptance records one plan and proves that nothing ran
+
+- **Date**: 2026-08-31
+- **Status**: Accepted for the repository candidate; never run in production
+
+The missing Grok proof is signed-in create/return/reload against the exact
+deployed release, but using Resume to obtain that proof would test execution
+and change the risk class. The permanent acceptance therefore records exactly
+one harmless BUILD goal and treats the paused planner result as the terminal
+state. It proves the planner-v3 plan, immutable specialist roster, exact
+execution admission route, return URL, and reload durability while separately
+proving that graph runs, node runs, agent runs, provider events, bridges, and
+submission guards remain absent.
+
+The browser is not trusted as the only witness. Its response and UI checks are
+paired with read-only hosted preflight/postflight SQL over immutable rows and
+current admission hashes. Any missing exact account, project, repository,
+branch, provider/model, Ready bot, migration, release identity, or containment
+prerequisite aborts instead of degrading the assertion. The workflow is manual,
+first-attempt-only, exact-confirmed, and owner-actor restricted; it has only
+read permissions and never dispatches an execution workflow or changes a
+worker, autonomy, automatic-action, or kill-switch setting.
+
+The only credential is the RFC-reserved account password supplied through the
+dedicated GitHub secret. Browser trace, screenshot, and video are disabled so
+the credential and signed-in content do not become artifacts. This repository
+candidate does not claim production acceptance until its exact-hosted run is
+green.

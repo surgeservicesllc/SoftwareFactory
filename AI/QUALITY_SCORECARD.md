@@ -47,6 +47,17 @@ readiness case proves disconnected-project history stays visible while the
 new-goal button fails closed and exposes the connection route. ESLint and
 repository TypeScript checks pass. Full CI/build/browser gates remain
 required when this lane is integrated with the active Grok context release.
+**Addendum, 2026-08-31 latest+49 - Grok record-only production acceptance
+(ADR-229):** The focused workflow contract and repository action-pin suites
+pass 8/8. ESLint passes on the guarded Playwright and workflow-contract files,
+the repository TypeScript check passes, and Playwright discovers exactly one
+desktop test when pointed at the external production origin. The test itself
+is intentionally skipped unless `GROK_RECORD_ONLY_E2E=1`; no signed-in
+production run occurred and no production claim is made. Static evidence pins
+manual-only dispatch, read-only GitHub permissions, exact identities, secret-
+only credentials, capture off, one permitted create mutation, no Resume or
+worker dispatch, read-only SQL, and stopped-containment checks before and
+after.
 
 **Addendum, 2026-08-31 latest+44 - copilot + acceptance journey (ADR-224):**
 services-copilot unit 6 (each skill recognized from its own example; the

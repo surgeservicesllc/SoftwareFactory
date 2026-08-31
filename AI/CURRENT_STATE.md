@@ -48,6 +48,31 @@ submission and links to project connections instead of failing after a durable
 session was created. Affected-file lint and repository
 typecheck pass. This is a repository candidate only and does not change worker,
 autonomy, automatic-action, or kill-switch state.
+## 2026-08-31: Grok record-only production acceptance is a repository candidate (ADR-229)
+
+A manual, fail-closed production acceptance lane now exists as a repository
+candidate. It is pinned to `https://www.theagoras.com`, Supabase project
+`qpuofpmagrmyamahqwxw`, and the RFC-reserved account
+`jordan.seeker.prod1@example.org`. With an exact owner-confirmed project and
+green release SHA, it may create one harmless BUILD planning session and then
+only read it. Browser and database postflight evidence require planner-v3,
+the complete admitted specialist roster and execution route, exact return URL,
+reload persistence, a paused graph, and zero graph, node, agent, provider, or
+Phase 1C execution.
+
+The workflow is manual and first-attempt-only, requires the exact
+`record-grok-goal` confirmation and configured release actor, has read-only
+GitHub permissions, and fails before login when identity, CI, Vercel, health,
+ledger, account, project, provider/model, Ready-bot, or stopped-containment
+prerequisites differ. It never calls Resume, dispatches another workflow,
+enables a worker, changes autonomy/actions, or disengages the kill switch.
+Credentials come only from GitHub secrets and browser capture is disabled.
+
+Focused workflow/action-pin tests pass 8/8, lint and typecheck pass, and
+Playwright discovers the single guarded desktop test. The signed-in lane has
+not run, this candidate has not been pushed or deployed, and no production
+acceptance is claimed. Running it later requires the exact fake account and
+project prerequisites plus `GROK_RECORD_ONLY_E2E_PASSWORD`.
 
 ## 2026-08-31: One persistent dark/light choice now covers every site shell (ADR-225)
 

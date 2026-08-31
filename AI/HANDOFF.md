@@ -71,6 +71,26 @@ without losing the directly loaded session. Focused route/workspace tests pass
 a new goal; the composer links to the project connection surface. Affected lint
 and repository typecheck pass. No migration or safety-state
 change is involved.
+## Newest (2026-08-31, latest+49): Grok record-only production acceptance (ADR-229)
+
+The candidate adds one manual production lane and one env-gated Playwright
+test. It is deliberately record-only: exactly one POST to `/api/grok/sessions`
+is permitted after login, every other application API mutation fails the test,
+and the workflow never calls Resume or any workflow dispatch. The return URL
+must carry exactly project/session/graph identity, and a fresh reload must
+reproduce the durable transcript and planner tasks.
+
+Preflight and postflight SQL are read-only. They fail closed on the exact fake
+account/project, migration ledger, provider/model/Ready-bot prerequisites,
+global stopped containment, planner-v3 roster/route hashes, immutable event
+sequence, paused graph, or any graph/node/agent/provider/Phase 1C execution.
+The workflow requires `record-grok-goal`, the configured owner actor, exact
+main SHA, four green exact-head checks, exact READY Vercel/health identity, and
+`GROK_RECORD_ONLY_E2E_PASSWORD` from secrets. Capture is off.
+
+Focused tests pass 8/8; lint/typecheck and Playwright discovery pass. This is a
+local repository candidate only. It has not been pushed, deployed, or run
+against production, so it supplies no signed-in acceptance evidence yet.
 
 ## Newest (2026-08-31, latest+45): site-wide dark/light theme (ADR-225)
 
