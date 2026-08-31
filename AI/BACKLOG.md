@@ -1,5 +1,26 @@
 # Backlog
 
+## Grok runtime 018-021 next-only release chain (ADR-241, 2026-08-31)
+
+- [x] Freeze the four committed canonical-LF identities and explicitly reject
+  the stale proposed 018 digest that does not identify the committed blob.
+- [x] Add one actor/attempt/confirmation-gated manual lane that derives only
+  the next absent migration from the exact 018 -> 019 -> 020 -> 021 prefix;
+  permit no migration selector, replay, down, reset, repair, or broad push.
+- [x] Pin exact main/green-CI/READY-Vercel/health/Supabase identity, immutable
+  unrelated-ledger history, stopped workflows/runtime, worker/schedule/auth/
+  autonomy/automatic-action OFF state, and the global kill switch ON before
+  mutation and after every operation.
+- [x] Preserve the unchanged dedicated 019 preflight and native postflight and
+  add chain-wide catalog/function/ACL/RLS/audit/runtime/lint verification with
+  one-file transactional rehearsal/apply and zero residue.
+- [x] Cover every intermediate prefix plus gap, digest, later-version, catalog,
+  and runtime failure contracts in static and native PGlite tests.
+- [ ] Publish one exact reviewed main SHA, require its complete CI and exact
+  READY deployment identity, then use fresh manual probe/apply-one cycles for
+  018, 019, 020, and 021 followed by verify. No hosted operation or production
+  acceptance is claimed by this repository candidate.
+
 ## Grok initial Resume durable wake receipt (ADR-239, 2026-08-31)
 
 - [x] Create one append-only wake intent in the exact owner Resume transaction,

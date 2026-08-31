@@ -2,6 +2,46 @@
 
 Last updated: 2026-08-31
 
+## Newest: protected Grok runtime 018-021 chain (ADR-241)
+
+Use only `.github/workflows/grok-runtime-release-chain-migrations.yml` for the
+combined 018 -> 019 -> 020 -> 021 production tail. It is manual, serialized,
+first-attempt/configured-actor restricted, and accepts only `probe`,
+`apply-one`, or `verify` with the exact operation confirmation and one reviewed
+lowercase 40-character current-main `release_sha`. There is deliberately no
+migration/version input. Preflight derives the next absent row only from the
+exact valid prefixes `0000`, `1000`, `1100`, `1110`, and `1111`; apply locks
+the stopped runtime catalogs and may persist only that one exact file plus one
+ledger row in one transaction.
+
+The immutable LF identities are 018
+`7c401a943833bc2fd7fc505cf3692012077180a3198f00ec9760b3a46dcc4444`
+/41,937, 019
+`a0dd4da859e5ed6cb65342f2e5b3962c07d672346bd06685052c6446e99c5221`
+/8,404, 020
+`6bdcbdaa5a0b6f512a53ed72c513da02ce2d8042d28157e70f497a6ded4f3057`
+/19,411, and 021
+`838f300d25c6a44f6632ed883010066524da229e165598968c7cdd7dab583b16`
+/37,089. Never substitute the stale 018 digest beginning `ca6a5d4b`.
+
+When 019 is next or installed, the coordinator calls its unchanged dedicated
+preflight and rollback-only native postflight; do not weaken or bypass that
+boundary. The standalone 017 verifier is intentionally called only while the
+prefix is `0000` or `1000`; after 019 its old service-grant expectation is no
+longer valid, so the chain-native predecessor fingerprint proves the same
+function bodies/ABI with the required revoked posture. Before each fresh run,
+keep all workers, schedules, execution/auth workflows, autonomy, and automatic
+actions stopped, auth broker disabled, and
+the global kill switch ON. Stop on any identity, ledger, catalog, ACL/RLS,
+audit, runtime, lint, or health mismatch. Do not reset, repair, down-migrate,
+replay, or dispatch another workflow as containment. This manifest currently
+ends at 021 and rejects every later hosted version; a future forward tail must
+append its own reviewed file identity and state transition rather than bypass
+that check.
+
+Nothing in this repository lane was dispatched, applied, pushed, deployed, or
+enabled, and no repository variable or secret was changed.
+
 ## Newest: initial Grok Resume wake receipt (ADR-239)
 
 Migration `20260831002100_grok_initial_wake_receipts.sql` is the forward-only

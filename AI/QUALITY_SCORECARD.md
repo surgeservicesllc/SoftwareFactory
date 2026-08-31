@@ -2,6 +2,26 @@
 
 Last reviewed: 2026-08-31
 
+**Addendum, 2026-08-31 - protected Grok runtime 018-021 chain (ADR-241):**
+The manual next-only lane freezes all four committed canonical-LF byte/hash
+identities, rejects the stale proposed 018 digest, and permits only exact
+prefixes through 021. Thirteen static contracts cover workflow authority,
+actor/attempt/confirmation and exact release identity gates, one-file
+staging/transaction semantics, no replay/down/reset/repair, the unchanged 019
+safeguards, action pins, catalog/ACL/RLS/audit/runtime checks, and linked lint.
+Four native PGlite cases prove every intermediate prefix, full postflight,
+019's unchanged native adverse/replay suite after 020/021, zero residue, and
+failure on an unrelated-ledger mismatch, gap, or later version. Hosted
+probe/apply-one/verify, exact-head CI/build/browser, deployment, health, and
+signed-in production acceptance remain pending; no live operation or safety-
+state change is claimed. The focused four-migration set passes 6 files / 36
+tests. Eight repository workflow/migration/runbook/security invariants pass
+32/32, and full source lint passes. Typecheck is blocked because the worktree's
+external dependency junction lacks declared package `unpdf`; default Turbopack
+build rejects that external junction, while webpack compiles and then reports
+the same seven existing App Router export/signature errors plus the missing
+`unpdf` type resolution. None originates in this release-only change.
+
 **Addendum, 2026-08-31 - initial Grok Resume durable wake truth (ADR-239):**
 Migration 021, route/store/worker boundaries, workflow wiring, and the Grok
 Progress inspector now separate durable Resume intent, GitHub dispatch

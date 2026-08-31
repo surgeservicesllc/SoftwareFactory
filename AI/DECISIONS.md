@@ -6363,3 +6363,65 @@ remains disabled, autonomy and automatic actions remain OFF, and the global
 kill switch remains ON throughout. Every identity, history, provider, CI,
 deployment, safety, or artifact mismatch fails closed and requires a new
 forward-reviewed candidate rather than evidence repair.
+
+## ADR-241 - Release Grok runtime migrations through one next-only forward chain
+
+- **Date**: 2026-08-31
+- **Status**: Accepted for the repository candidate; no hosted operation run
+
+Migrations 018 through 021 are one ordered runtime cutover, not four
+independent opportunities to select or replay DDL. Their only combined release
+lane is manual `probe` / `apply-one` / `verify`, serialized by the shared
+hosted-migration lock. The caller selects no version. The ledger may be only
+`0000`, `1000`, `1100`, `1110`, or `1111`; `apply-one` derives the one absent
+next version, locks the ledger and stopped runtime catalogs, and may persist
+only that canonical-LF file plus its one ledger row in a single transaction.
+Probe performs that same one-file operation under rollback. Verify requires
+`1111` and never replays DDL. A gap, duplicate, target catalog without its row,
+any version after 021, or a changed digest of every unrelated ledger row stops
+the lane. Reset, repair, down, broad push, rerun of a recorded version, and
+automatic workflow dispatch are not containment paths.
+
+The frozen canonical-LF identities are:
+
+- `20260831001800_grok_deploy_readiness_runtime.sql` — 41,937 bytes,
+  SHA-256 `7c401a943833bc2fd7fc505cf3692012077180a3198f00ec9760b3a46dcc4444`;
+- `20260831001900_grok_admission_version_null_fence.sql` — 8,404 bytes,
+  SHA-256 `a0dd4da859e5ed6cb65342f2e5b3962c07d672346bd06685052c6446e99c5221`;
+- `20260831002000_exact_graph_repository_workspace.sql` — 19,411 bytes,
+  SHA-256 `6bdcbdaa5a0b6f512a53ed72c513da02ce2d8042d28157e70f497a6ded4f3057`;
+- `20260831002100_grok_initial_wake_receipts.sql` — 37,089 bytes,
+  SHA-256 `838f300d25c6a44f6632ed883010066524da229e165598968c7cdd7dab583b16`.
+
+The earlier proposed 018 digest
+`ca6a5d4bbe5fbb30009f6b3f1bc81e1b0081472d2cc398832aae352ddab77b24`
+does not identify the committed Git blob and is rejected as stale. Release
+identity follows the reviewed commit's canonical-LF bytes, never an
+out-of-tree working copy.
+
+The chain adds catalog verification; it does not replace migration 019's
+dedicated safety boundary. Whenever 019 is next or installed, the coordinator
+must execute the unchanged dedicated 019 preflight and, once installed, its
+complete rollback-only native postflight. The old v1/v3 routines remain
+revoked and their exact bodies remain pinned; only the v2/v4 functions retain
+service execution. Null/missing/wrong-version refusal, zero residue,
+tenant denial, valid replay, and the exact native hashes therefore remain
+mandatory alongside the chain's 018/020/021 function ABI, SECURITY DEFINER,
+`search_path`, ACL, forced-RLS, constraint/index, immutable-trigger, audit, and
+fail-before-write probes. Linked lint begins only when 019 supplies 018's
+intentional forward dependency, then covers every installed chain function.
+The standalone 017 verifier is reused only for prefixes `0000` and `1000`:
+after 019 it correctly conflicts with the now-revoked v1 service endpoint.
+For `1100` and later, the chain's native predecessor fingerprint pins 017's
+exact context/claim bodies and ABI while requiring the 019-revoked posture.
+
+Every operation requires the configured actor on attempt one, its exact
+operation confirmation, exact current `surgeservicesllc/SoftwareFactory`
+`main`, four exact-head green jobs, one exact READY Vercel Production
+deployment, matching public health/Vercel/Supabase identity, stopped execution
+workflows, worker and schedule switches OFF, auth broker disabled, all
+autonomy/automatic actions OFF, kill switch ON, and no running or guarded work.
+Those identities and stopped states are rechecked before mutation and after
+the operation. This repository change does not dispatch the workflow, mutate
+the database, push, deploy, enable a worker, alter a variable/secret, or claim
+production acceptance.

@@ -1,5 +1,43 @@
 # Current state
 
+## 2026-08-31: Grok runtime 018-021 has one next-only protected lane (ADR-241)
+
+The manual `grok-runtime-release-chain-migrations.yml` workflow now coordinates
+the exact forward sequence `20260831001800` -> `20260831001900` ->
+`20260831002000` -> `20260831002100`. The caller cannot select a migration:
+`probe` and `apply-one` derive only the next absent member from an exact ledger
+prefix, while `verify` requires the complete four-row prefix and never replays
+DDL. Each apply can persist only one staged canonical-LF file and its one
+ledger row in a locked transaction. Gaps, duplicates, a changed unrelated-
+ledger digest, target catalog/ledger disagreement, and every hosted version
+later than 021 fail closed.
+
+The accepted file identities are 018
+`7c401a943833bc2fd7fc505cf3692012077180a3198f00ec9760b3a46dcc4444`
+(41,937 bytes), 019
+`a0dd4da859e5ed6cb65342f2e5b3962c07d672346bd06685052c6446e99c5221`
+(8,404 bytes), 020
+`6bdcbdaa5a0b6f512a53ed72c513da02ce2d8042d28157e70f497a6ded4f3057`
+(19,411 bytes), and 021
+`838f300d25c6a44f6632ed883010066524da229e165598968c7cdd7dab583b16`
+(37,089 bytes). The earlier proposed 018 digest beginning `ca6a5d4b` is stale,
+does not match the committed LF blob, and is explicitly rejected.
+
+The lane retains migration 019's unchanged dedicated preflight and complete
+native rollback-only postflight. Chain postflight also pins installed
+function bodies and ABI, SECURITY DEFINER/search-path/ACL posture, forced RLS,
+constraints, indexes, immutable audit triggers, stopped runtime state,
+fail-before-write probes, linked lint where the installed prefix supports it,
+and zero rehearsal residue. Every operation requires exact main/green-CI/
+READY-Vercel/health/Supabase identity, configured actor and first attempt,
+exact confirmation, stopped execution workflows, worker/schedule/auth and all
+automatic actions OFF, and the global kill switch ON.
+
+Release-specific static and native PGlite evidence passes 17/17; the focused
+four-migration contract set passes 6 files / 36 tests. This is repository-only
+release machinery: nothing was applied, dispatched, pushed, deployed, or
+enabled, and no variable or secret was changed.
+
 ## 2026-08-31: initial Grok Resume wake truth requires a durable worker receipt (ADR-239)
 
 Forward migration `20260831002100_grok_initial_wake_receipts.sql` records one
