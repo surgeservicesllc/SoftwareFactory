@@ -6,7 +6,7 @@
   requirements, acceptance criteria, dependency graph, configured-agent
   routing intent, and bounded budget. `Grok Bot` is the product name; no xAI
   provider is introduced.
-- [x] Local durable boundary in
+- [x] Hosted durable boundary in
   `20260830001000_grok_chief_of_staff_persistence.sql`: owner-only,
   tenant/project-scoped sessions; append-only messages/events; immutable
   task, graph, and artifact links; monotonic control intents; forced RLS and
@@ -26,6 +26,39 @@
   the graph atomically before visibility, produces no graph/node run, dispatches
   no worker, and replays idempotently from durable state. Focused bridge tests
   are green.
+- [x] Add a bounded manual Resume wake/recovery path after graph creation: only an
+  owner-authorized Resume resolves the exact project/repository target and
+  asks the existing graph worker to claim that graph UUID. Replays retry the
+  wake for commit-before-dispatch recovery only when the same applied key is
+  replayed while already unpaused; an older applied key cannot start a later
+  graph-control cycle. Exact requested graph controls may complete an
+  interrupted idempotent action and service-role resolution. The graph's
+  immutable repository id must match the resolved
+  dispatch target, other controls never dispatch, and disabled, invalid,
+  conflicting, or failed wakes remain **Not Connected**. This path does
+  not enable either worker or change autonomy/kill-switch state. Direct
+  Cancel/Retry are refused by this endpoint and remain **Not Connected** until
+  one forward database boundary can correlate each action with its audit
+  resolution atomically and replay it safely.
+- [x] Replace read-then-act recovery with the owner-only atomic graph-control
+  RPC in `20260830010000_atomic_grok_graph_control.sql`; preserve
+  authenticated-only execute, exact tenant/session/project/graph/key scope, no
+  table grant, pinned definer/search path, immutable event-sequence ordering,
+  exact replay without duplicate evidence, and rollback without residue for
+  unavailable fresh actions.
+- [x] Apply `20260830010000` exactly once through protected run `33357349773`.
+  The mutation and ledger insert succeeded; the run stopped only because its
+  postflight hashed a trimmed function body. Forward verifier containment
+  `2c68e7c9a1ef5ee22a38f7272236d61ab1e11b04` corrected the canonical
+  PostgreSQL `prosrc` fingerprint without replaying a migration or changing
+  history. Read-only run `33359633742` proved ledger `1|1|1|1|1`,
+  exact catalog/ACL/runtime/rollback, linked lint, health, and stopped safety.
+- [x] Project canonical linked graph-run and release evidence into the Grok
+  workspace: observed node route/state/attempt, token/cost/closure, newest 500
+  graph events and newest 200 session events with truncation truth, artifacts,
+  PR/diffs, exact CI, preview, deployment, and health. Do not infer bot/worker
+  identity; Rollback and automatic continuation remain **Not Connected**, and
+  graph state alone does not advertise Phase 1C Cancel/Retry.
 - [x] Establish the production baseline before containment: exact main
   `397798921ebda6a4f8e30d2c0d83af36a3dd73a0` is green/READY and hosted
   migrations `20260830000900` and `20260830001000` are each ledgered once.
@@ -55,7 +88,9 @@
   bot coverage exists and execution receives its own authorization. Keep
   workers, autonomy, and automatic actions OFF and the global kill switch ON;
   Phase 2 containment acceptance alone does not declare `GROK BOT: PRODUCTION
-  READY`.
+  READY`. Before enabling a worker, make the database claim pin the selected
+  bot, connected account, provider/model, and immutable assignment revisions;
+  do not treat repository-dispatch acceptance as proof of claim or execution.
 
 ## Services CRM → pest-services platform (task #63, owner /goal 2026-08-30)
 
@@ -223,7 +258,7 @@ the full seeded E2E journey passes — increment 10 of the plan.
   completed-inspection history, plus a sighting the customer can file
   themselves. Three tabs on /customer-portal. 20260830002300; hosted apply:
   scope=commercial-portal after merge.
-- [x] Increment 16 (ADR-204): WDO/termite inspection reports — a not-null
+- [x] Increment 16 (ADR-205): WDO/termite inspection reports — a not-null
   verdict so an unfinished inspection cannot read as a clean one, the
   areas that could NOT be inspected as first-class columns, a 0..1
   coordinate diagram with click-to-place marks, an issue-time

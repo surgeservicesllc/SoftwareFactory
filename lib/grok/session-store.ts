@@ -8,6 +8,7 @@ import { z } from "zod";
 import { assignmentPostingIsConfigured } from "@/lib/bots/assignment-config";
 import { loadBotFabric } from "@/lib/bots/service";
 import type { BotFabricSnapshot, SerializedBotRole } from "@/lib/bots/types";
+import { deriveReleaseEvidence } from "@/lib/factory/release-evidence";
 import {
   GROK_PLANNER_ERROR_CODES,
   GROK_PLAN_VERSION,
@@ -142,11 +143,12 @@ const readBundleSchema = z.object({
   task_links: z.array(taskLinkRowSchema).max(500),
   events: z.array(eventRowSchema).max(200),
   artifact_links: z.array(artifactLinkSchema).max(500),
-  control_intents: z.array(z.unknown()).max(200),
+  control_intents: z.array(z.unknown()).max(500),
   next: z.object({
     message_sequence: z.coerce.number().int().nonnegative(),
     event_sequence: z.coerce.number().int().nonnegative(),
   }).passthrough(),
+  events_truncated: z.boolean().optional(),
 }).strict();
 
 const planResourceSchema = z.object({ kind: z.string().min(1), id: z.string().min(1) }).strict();
@@ -237,12 +239,63 @@ const controlIntentSchema = z.object({
 
 export type GrokControlIntent = z.infer<typeof controlIntentSchema>;
 
+const appliedGraphControlSchema = z.object({
+  intent_id: z.string().uuid(),
+  organization_id: z.string().uuid(),
+  project_id: z.string().uuid(),
+  session_id: z.string().uuid(),
+  graph_id: z.string().uuid(),
+  action: z.enum(["pause", "resume", "withdraw"]),
+  state: z.literal("applied"),
+  idempotency_key: z.string().min(8).max(128),
+  replayed: z.boolean(),
+}).strict();
+
+export type GrokAppliedGraphControl = z.infer<typeof appliedGraphControlSchema>;
+
+export async function applyGrokGraphControl(
+  client: SupabaseClient,
+  input: Readonly<{
+    organizationId: string;
+    sessionId: string;
+    graphId: string;
+    action: "pause" | "resume" | "withdraw";
+    reason: string;
+    idempotencyKey: string;
+  }>,
+): Promise<GrokAppliedGraphControl> {
+  const value = await rpc<unknown>(client, "apply_grok_graph_control_as_owner", {
+    p_organization_id: input.organizationId,
+    p_session_id: input.sessionId,
+    p_graph_id: input.graphId,
+    p_action: input.action,
+    p_reason: input.reason,
+    p_idempotency_key: input.idempotencyKey,
+  });
+  const parsed = appliedGraphControlSchema.safeParse(
+    oneRow(value, "apply_grok_graph_control_as_owner"),
+  );
+  if (!parsed.success) {
+    throw new GrokStoreProjectionError("The atomic Grok graph control result was malformed.");
+  }
+  if (
+    parsed.data.organization_id !== input.organizationId
+    || parsed.data.session_id !== input.sessionId
+    || parsed.data.graph_id !== input.graphId
+    || parsed.data.action !== input.action
+    || parsed.data.idempotency_key !== input.idempotencyKey
+  ) {
+    throw new GrokStoreProjectionError("The atomic Grok graph control result did not match its exact input.");
+  }
+  return parsed.data;
+}
+
 export async function requestGrokControlIntent(
   client: SupabaseClient,
   input: Readonly<{
     organizationId: string;
     sessionId: string;
-    targetKind: "graph" | "graph_run";
+    targetKind: "graph" | "graph_run" | "task";
     targetId: string;
     action: "pause" | "resume" | "withdraw" | "cancel" | "retry";
     reason: string;
@@ -749,7 +802,53 @@ export async function readGrokBundle(
   });
   const parsed = readBundleSchema.safeParse(value);
   if (!parsed.success) throw new GrokStoreProjectionError("The Grok session projection was malformed.");
-  return parsed.data;
+  const first = parsed.data;
+  const snapshotLastSequence = first.session.last_event_sequence;
+  const hasExactEventWindow = (
+    events: readonly EventRow[],
+    firstSequence: number,
+    lastSequence: number,
+  ) => events.length === Math.max(0, lastSequence - firstSequence + 1)
+    && events.every((event, index) => event.sequence_no === firstSequence + index);
+  if (snapshotLastSequence <= 200) {
+    if (!hasExactEventWindow(first.events, 1, snapshotLastSequence)) {
+      throw new GrokStoreProjectionError("The Grok session event window was incomplete.");
+    }
+    return first;
+  }
+
+  // read_grok_session is cursor-based and returns the oldest page. Fetch the
+  // bounded tail explicitly so the workspace never hides newer control/audit
+  // truth behind a long-lived session's first 200 events.
+  const tailValue = await rpc<unknown>(client, "read_grok_session", {
+    p_organization_id: organizationId,
+    p_session_id: sessionId,
+    p_after_message_sequence: 0,
+    p_after_event_sequence: snapshotLastSequence - 200,
+    p_limit: 200,
+  });
+  const tail = readBundleSchema.safeParse(tailValue);
+  if (
+    !tail.success
+    || tail.data.session.id !== first.session.id
+    || tail.data.session.organization_id !== first.session.organization_id
+    || tail.data.session.project_id !== first.session.project_id
+    || tail.data.session.last_event_sequence < snapshotLastSequence
+  ) {
+    throw new GrokStoreProjectionError("The Grok session event tail was malformed.");
+  }
+  const events = tail.data.events.filter(
+    (event) => event.sequence_no <= snapshotLastSequence,
+  );
+  const firstTailSequence = snapshotLastSequence - 199;
+  if (!hasExactEventWindow(events, firstTailSequence, snapshotLastSequence)) {
+    throw new GrokStoreProjectionError("The Grok session event tail was incomplete.");
+  }
+  return {
+    ...first,
+    events,
+    events_truncated: true,
+  };
 }
 
 export function storedGrokPlan(bundle: ReadBundle): GrokChiefOfStaffPlan | null {
@@ -822,6 +921,13 @@ type GraphEvidence = Readonly<{
   withdrawnAt: string | null;
   runId: string | null;
   runState: string | null;
+  run: Readonly<{
+    closureNote: string | null;
+    startedAt: string | null;
+    completedAt: string | null;
+    tokensUsed: number | null;
+    costMicros: number | null;
+  }> | null;
   tasks: readonly Readonly<{
     id: string;
     key: string;
@@ -829,13 +935,48 @@ type GraphEvidence = Readonly<{
     state: string | null;
     provider: "anthropic" | "openai" | null;
     model: string | null;
+    attempt: number | null;
   }>[];
+  artifacts: readonly Readonly<{
+    id: string;
+    nodeKey: string | null;
+    kind: string;
+    payload: unknown;
+    createdAt: string;
+  }>[];
+  events: readonly Readonly<{
+    id: string;
+    type: string;
+    detail: string;
+    nodeKey: string | null;
+    createdAt: string;
+  }>[];
+  eventsTruncated: boolean;
 }>;
+
+const GRAPH_EVENT_LIMIT = 500;
+
+const graphArtifactRowSchema = z.object({
+  artifact_id: z.string().uuid(),
+  node_run_id: z.string().uuid().nullable(),
+  node_key: z.string().nullable(),
+  kind: z.string().min(1),
+  payload: z.unknown(),
+  created_at: z.string().datetime({ offset: true }),
+}).passthrough();
+
+function artifactLabel(kind: string, nodeKey: string | null, payload: unknown): string {
+  const observation = z.object({ observation: z.string().min(1).max(160) }).passthrough()
+    .safeParse(payload);
+  if (observation.success) return observation.data.observation.replaceAll("_", " ");
+  return nodeKey ? `${nodeKey} · ${kind}` : kind;
+}
 
 async function readGraphEvidence(
   client: SupabaseClient,
   organizationId: string,
   graphId: string,
+  graphRunId: string | null,
 ): Promise<GraphEvidence> {
   let graphRead = await client.from("graphs")
     .select("id,goal,pause_requested_at,withdrawn_at")
@@ -854,37 +995,103 @@ async function readGraphEvidence(
     throw new GrokStoreProjectionError("The linked Grok graph was unavailable.");
   }
 
+  const runQuery = client.from("graph_runs")
+    .select("id,state,closure_note,started_at,completed_at,tokens_used,cost_micros,created_at")
+    .eq("organization_id", organizationId).eq("graph_id", graphId);
   const [runRead, nodeRead] = await Promise.all([
-    client.from("graph_runs").select("id,state,created_at")
-      .eq("organization_id", organizationId).eq("graph_id", graphId)
-      .order("created_at", { ascending: false }).limit(1).maybeSingle(),
+    graphRunId
+      ? runQuery.eq("id", graphRunId).maybeSingle()
+      : runQuery
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
     client.from("graph_nodes").select("id,node_key,job")
       .eq("organization_id", organizationId).eq("graph_id", graphId)
       .order("node_key", { ascending: true }),
   ]);
   if (runRead.error) throw new GrokStoreDatabaseError(runRead.error);
   if (nodeRead.error) throw new GrokStoreDatabaseError(nodeRead.error);
-  const run = z.object({ id: z.string().uuid(), state: z.string().min(1) }).passthrough()
+  const run = z.object({
+    id: z.string().uuid(), state: z.string().min(1),
+    closure_note: z.string().nullable().optional(),
+    started_at: z.string().nullable().optional(),
+    completed_at: z.string().nullable().optional(),
+    tokens_used: z.coerce.number().int().nonnegative().nullable().optional(),
+    cost_micros: z.coerce.number().int().nonnegative().nullable().optional(),
+  }).passthrough()
     .nullable().safeParse(runRead.data);
   const nodes = z.array(z.object({
     id: z.string().uuid(), node_key: z.string().min(1), job: z.string().min(1),
   }).strict()).max(50).safeParse(nodeRead.data ?? []);
   if (!run.success || !nodes.success) throw new GrokStoreProjectionError("The linked graph evidence was malformed.");
 
-  let nodeRuns: Array<{ node_id: string; state: string; provider: string | null; model: string | null }> = [];
+  let nodeRuns: Array<{
+    id?: string; node_id: string; state: string; provider: string | null;
+    model: string | null; attempt?: number;
+  }> = [];
+  let artifacts: z.infer<typeof graphArtifactRowSchema>[] = [];
+  let graphEvents: Array<{
+    id: string; event_type: string; detail: string | null; node_run_id: string | null; created_at: string;
+  }> = [];
+  let parsedEventsWereTruncated = false;
   if (run.data) {
-    const nodeRunRead = await client.from("node_runs")
-      .select("node_id,state,provider,model")
-      .eq("organization_id", organizationId).eq("graph_run_id", run.data.id);
+    const [nodeRunRead, artifactRead, eventRead] = await Promise.all([
+      client.from("node_runs")
+        .select("id,node_id,state,provider,model,attempt")
+        .eq("organization_id", organizationId).eq("graph_run_id", run.data.id),
+      client.rpc("list_graph_run_artifacts", {
+        p_organization_id: organizationId,
+        p_graph_run_id: run.data.id,
+      }),
+      client.from("graph_events")
+        .select("id,event_type,detail,node_run_id,created_at")
+        .eq("organization_id", organizationId).eq("graph_run_id", run.data.id)
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false })
+        .limit(GRAPH_EVENT_LIMIT + 1),
+    ]);
     if (nodeRunRead.error) throw new GrokStoreDatabaseError(nodeRunRead.error);
+    if (artifactRead.error) throw new GrokStoreDatabaseError(artifactRead.error);
+    if (eventRead.error) throw new GrokStoreDatabaseError(eventRead.error);
     const parsed = z.array(z.object({
+      id: z.string().uuid().optional(),
       node_id: z.string().uuid(), state: z.string().min(1),
       provider: z.string().nullable(), model: z.string().nullable(),
+      attempt: z.coerce.number().int().nonnegative().optional(),
     }).strict()).max(50).safeParse(nodeRunRead.data ?? []);
-    if (!parsed.success) throw new GrokStoreProjectionError("The graph node-run evidence was malformed.");
+    const parsedArtifacts = z.array(graphArtifactRowSchema).max(500).safeParse(artifactRead.data ?? []);
+    const parsedEvents = z.array(z.object({
+      id: z.string().uuid(), event_type: z.string().min(1), detail: z.string().nullable(),
+      node_run_id: z.string().uuid().nullable(), created_at: z.string().datetime({ offset: true }),
+    }).strict()).max(GRAPH_EVENT_LIMIT + 1).safeParse(eventRead.data ?? []);
+    if (!parsed.success || !parsedArtifacts.success || !parsedEvents.success) {
+      throw new GrokStoreProjectionError("The graph run evidence was malformed.");
+    }
     nodeRuns = parsed.data;
+    artifacts = parsedArtifacts.data;
+    // Keep the newest bounded slice, then restore chronological reading order.
+    parsedEventsWereTruncated = parsedEvents.data.length > GRAPH_EVENT_LIMIT;
+    graphEvents = parsedEvents.data.slice(0, GRAPH_EVENT_LIMIT).reverse();
   }
-  const runByNode = new Map(nodeRuns.map((item) => [item.node_id, item]));
+  // A node may have multiple attempts. Never let database physical order pick
+  // the displayed state/provider/model: project the greatest durable attempt,
+  // with id only as a deterministic tie-breaker for malformed legacy rows.
+  const runByNode = new Map<string, (typeof nodeRuns)[number]>();
+  for (const candidate of nodeRuns) {
+    const current = runByNode.get(candidate.node_id);
+    const candidateAttempt = candidate.attempt ?? -1;
+    const currentAttempt = current?.attempt ?? -1;
+    if (
+      !current
+      || candidateAttempt > currentAttempt
+      || (candidateAttempt === currentAttempt && (candidate.id ?? "") > (current.id ?? ""))
+    ) runByNode.set(candidate.node_id, candidate);
+  }
+  const nodeKeyByRun = new Map(nodeRuns.flatMap((item) => {
+    const node = nodes.data.find((candidate) => candidate.id === item.node_id);
+    return item.id && node ? [[item.id, node.node_key] as const] : [];
+  }));
   return Object.freeze({
     graphId,
     goal: graph.data.goal,
@@ -892,6 +1099,13 @@ async function readGraphEvidence(
     withdrawnAt: graph.data.withdrawn_at ?? null,
     runId: run.data?.id ?? null,
     runState: run.data?.state ?? null,
+    run: run.data ? Object.freeze({
+      closureNote: run.data.closure_note ?? null,
+      startedAt: run.data.started_at ?? null,
+      completedAt: run.data.completed_at ?? null,
+      tokensUsed: run.data.tokens_used ?? null,
+      costMicros: run.data.cost_micros ?? null,
+    }) : null,
     tasks: Object.freeze(nodes.data.map((node) => {
       const nodeRun = runByNode.get(node.id);
       return Object.freeze({
@@ -900,18 +1114,35 @@ async function readGraphEvidence(
         provider: nodeRun?.provider === "anthropic" || nodeRun?.provider === "openai"
           ? nodeRun.provider : null,
         model: nodeRun?.model ?? null,
+        attempt: nodeRun?.attempt ?? null,
       });
     })),
+    artifacts: Object.freeze(artifacts.map((artifact) => Object.freeze({
+      id: artifact.artifact_id,
+      nodeKey: artifact.node_key,
+      kind: artifact.kind,
+      payload: artifact.payload,
+      createdAt: artifact.created_at,
+    }))),
+    events: Object.freeze(graphEvents.map((event) => Object.freeze({
+      id: event.id,
+      type: event.event_type,
+      detail: event.detail ?? event.event_type,
+      nodeKey: event.node_run_id ? nodeKeyByRun.get(event.node_run_id) ?? null : null,
+      createdAt: event.created_at,
+    }))),
+    eventsTruncated: parsedEventsWereTruncated,
   });
 }
 
 function allowedActions(evidence: GraphEvidence | null): readonly GrokControlAction[] {
   if (!evidence || evidence.withdrawnAt) return Object.freeze([]);
   const actions: GrokControlAction[] = [evidence.pausedAt ? "resume" : "pause"];
-  const runState = evidence.runState?.toUpperCase() ?? null;
-  if (runState === "RUNNING" || runState === "QUEUED") actions.push("cancel");
-  else actions.push("stop");
-  if (runState && ["FAILED", "CANCELLED", "BUDGET_STOPPED"].includes(runState)) actions.push("retry");
+  // Stop is graph-backed. Cancel and Retry require an exact Phase 1C bridge
+  // agent-run identity; graph-run state alone is not eligibility evidence.
+  // The audited withdraw boundary refuses a graph while any run is RUNNING,
+  // so do not advertise a control that cannot commit in that state.
+  if (evidence.runState?.toUpperCase() !== "RUNNING") actions.push("stop");
   return Object.freeze(actions);
 }
 
@@ -947,7 +1178,7 @@ export async function mapGrokSessionDetail(
   const plan = storedGrokPlan(bundle);
   const link = plannedGraphLink(bundle);
   const evidence = link?.graph_id
-    ? await readGraphEvidence(client, organizationId, link.graph_id)
+    ? await readGraphEvidence(client, organizationId, link.graph_id, link.graph_run_id)
     : null;
   const userMessage = bundle.messages.find((message) => message.role === "user");
   const plannedByKey = new Map(plan?.dag.tasks.map((task) => [task.id, task]) ?? []);
@@ -965,6 +1196,7 @@ export async function mapGrokSessionDetail(
           provider: task.provider,
           model: task.model,
           agentName: null,
+          attempt: task.attempt,
           dependsOn: Object.freeze([...(planned?.dependsOn ?? [])]),
         });
       })
@@ -1008,5 +1240,40 @@ export async function mapGrokSessionDetail(
     uri: artifact.uri ?? null,
     createdAt: artifact.created_at,
   }));
-  return Object.freeze({ session, messages, tasks, events, artifacts });
+  const graphArtifacts: readonly GrokArtifact[] = (evidence?.artifacts ?? []).map((artifact) => Object.freeze({
+    id: artifact.id,
+    kind: artifact.kind,
+    label: artifactLabel(artifact.kind, artifact.nodeKey, artifact.payload),
+    uri: null,
+    nodeKey: artifact.nodeKey,
+    createdAt: artifact.createdAt,
+  }));
+  const total = evidence?.tasks.length ?? 0;
+  // SKIPPED is terminal accounting, not completed work (paused/failed runs
+  // close undispatched nodes as SKIPPED), so it must not inflate this label.
+  const completed = evidence?.tasks.filter(
+    (task) => task.state?.toUpperCase() === "COMPLETED",
+  ).length ?? 0;
+  const runEvidence = evidence?.run && evidence.runState ? Object.freeze({
+    state: evidence.runState,
+    closureNote: evidence.run.closureNote,
+    startedAt: evidence.run.startedAt,
+    completedAt: evidence.run.completedAt,
+    tokensUsed: evidence.run.tokensUsed,
+    costMicros: evidence.run.costMicros,
+    progress: Object.freeze({
+      completed,
+      total,
+      percent: total === 0 ? 0 : Math.round((completed / total) * 100),
+    }),
+    events: evidence.events,
+    eventsTruncated: evidence.eventsTruncated,
+    release: deriveReleaseEvidence(evidence.artifacts),
+  }) : null;
+  return Object.freeze({
+    session, messages, tasks, events,
+    eventsTruncated: bundle.events_truncated ?? false,
+    artifacts: Object.freeze([...artifacts, ...graphArtifacts]),
+    runEvidence,
+  });
 }

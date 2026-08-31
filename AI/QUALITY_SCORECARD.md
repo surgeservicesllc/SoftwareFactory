@@ -2,7 +2,7 @@
 
 Last reviewed: 2026-08-31
 
-**Addendum, 2026-08-31 latest+25 - WDO reports (ADR-204):**
+**Addendum, 2026-08-31 latest+25 - WDO reports (ADR-205):**
 services-wdo-inspections.behavior 14 on the real chain: an inspection
 refused for not answering the headline question; a report claiming evidence
 it never recorded refused; a report calling a structure clean while a live
@@ -361,6 +361,60 @@ station, both an open and a closed sighting). RLS census 158;
 hosted-grants eleven crm tables; runbook 188; workflow scope pest-ipm
 postflight. Lint zero warnings, tsc clean; full vitest + production
 build before shipping.
+
+**Addendum, 2026-08-31 latest+20 — production-accepted atomic Grok control and
+bounded Resume wake (ADR-204):** one owner-authenticated transaction serializes the
+session, creates/replays the exact intent, records requested evidence, applies
+Pause/Resume/Withdraw, resolves the intent, and records applied evidence. After
+that transaction commits, only Resume resolves the exact project/repository
+binding and sends the linked graph
+UUID through the existing target-bound graph-worker dispatcher. Applied-Resume
+replay retries that best-effort wake only when the exact applied key is replayed
+while already unpaused and not withdrawn; a prior key cannot start a later Resume cycle, and a
+new key cannot Resume an already-unpaused graph. The graph's immutable
+repository id must match the resolved target before dispatch. Pause and stop
+do not dispatch. Legacy exact requested pause/Resume/withdraw controls are
+resolution-only recoverable when graph state already reflects their action and
+no later same-graph `control.requested` event exists, while an
+applied key is rejected whenever that action is available again in a later
+state cycle. Disabled, invalid, conflicting, and failed dispatch paths return
+`workerWoken: false` with **Not Connected** language. Dispatch acceptance is
+not counted as a successful claim or execution. Direct Cancel/Retry are refused
+and remain **Not Connected** because the current Phase 1C actions do not yet
+atomically correlate their state transition with Grok audit resolution across
+lost-response replay.
+Atomic control is supplied by forward migration `20260830010000` (SHA-256
+`bbd664a7b556a07ab31b84b155725ea8a1b1c5a7f6a6afb1cfe1bae8c07f06b7`):
+authenticated owner only, tenant/session/project/launched-graph/action/key scoped, no
+table grant, definer/search-path pinned, and later-control ordered by immutable
+event sequence. Migrated Postgres behavior covers atomic request/mutation/
+resolution/events, exact replay without duplicates, supersession despite
+inverted timestamps, generic-control supersession, unlinked-graph and
+unavailable-action rollback, member/anonymous and cross-tenant refusal, ACL,
+owner, and search path.
+The UI consumes canonical graph-run and shared release evidence, keeps planned
+identity separate from observed routes, reports bounded graph/session event
+truncation, and leaves Rollback/automatic continuation **Not Connected**. Graph
+state alone no longer advertises Phase 1C Cancel/Retry. This is production-
+accepted control/read evidence, not complete runtime-identity admission or
+provider execution:
+the downstream claim does not pin the selected bot/account/provider/model and
+immutable assignment revisions, MODEL execution uses ambient worker identity,
+and worker switches, autonomy, automatic actions, and the kill switch remain
+unchanged.
+
+Release evidence: commit `6e85b8762c28552313d7de7726118a6d733b42ef`
+passed CI `33356348578`; run `33357349773` applied `20260830010000` once and
+ledgered it before a verifier-only trimmed-newline hash mismatch. Canonical
+PostgreSQL `prosrc` MD5 is `2b0ea737ac99b22570ddbfdd4c583eeb`, not the
+trimmed-body `55508f9dad0b6f307b02713057949895`. Forward containment
+`2c68e7c9a1ef5ee22a38f7272236d61ab1e11b04` passed CI `33357696796` and
+deployed READY as `dpl_67Amo2Hm9uRNpFUpxTYCz1H83ffY`; it changed only the
+verifier and its regression test. Read-only run `33359633742` proved
+ledger `1|1|1|1|1`, exact catalog/ACL/runtime/rollback, linked lint, health,
+and stopped safety. Application commit
+`5bc8eea092c683bd53aa25867efe8ab29a32b93b` passed CI `33358790065` and
+deployed READY as `dpl_ABMNZDEY6drqBP7YdMqrfmHaJrYi`.
 
 **Addendum, 2026-08-30 latest+15 — Grok Phase 2 containment production
 accepted (ADR-190):** exact app commit

@@ -12,7 +12,7 @@ const repositoryRoot = resolve(import.meta.dirname, "../..");
 const migrationsDirectory = resolve(repositoryRoot, "supabase/migrations");
 
 /**
- * WDO inspection reports (ADR-204) against the real migration chain.
+ * WDO inspection reports (ADR-205) against the real migration chain.
  *
  * An NPMA-33 is a legal document, and the failure this suite is built
  * around is not a missing field. It is a report that READS AS CLEAN WHEN

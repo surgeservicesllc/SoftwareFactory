@@ -3,7 +3,6 @@
 import {
   Activity,
   AlertTriangle,
-  Ban,
   Bot,
   Box,
   ChevronRight,
@@ -39,7 +38,7 @@ import { FACTORY_STEPS } from "@/lib/sdlc/factory-steps";
 
 type Project = { readonly id: string; readonly name: string; readonly connectionStatus?: string };
 type LoadState = "loading" | "ready" | "signed-out" | "setup" | "error";
-type InspectorTab = "goal" | "plan" | "agents" | "progress" | "files" | "tests" | "artifacts" | "deployment";
+type InspectorTab = "goal" | "plan" | "agents" | "progress" | "files" | "tests" | "preview" | "artifacts" | "deployment";
 type GrokCreateResponse = GrokSessionDetail & Readonly<{
   workerWoken: boolean;
   executionStarted: boolean;
@@ -71,7 +70,8 @@ const POLLING_STATUSES = new Set([
   "paused",
   "awaiting_approval",
 ]);
-const CONTROL_ACTIONS: readonly GrokControlAction[] = ["pause", "resume", "cancel", "stop", "retry"];
+type RenderedGrokControlAction = Extract<GrokControlAction, "pause" | "resume" | "stop">;
+const CONTROL_ACTIONS: readonly RenderedGrokControlAction[] = ["pause", "resume", "stop"];
 const BLOCKED_FALLBACK = "The session and plan are saved, but no graph or worker execution has started.";
 const UNPLANNED_FALLBACK = "The request is saved, but no plan was recorded. No graph, worker, or provider started.";
 
@@ -82,6 +82,7 @@ const tabs: ReadonlyArray<{ key: InspectorTab; label: string; icon: typeof Targe
   { key: "progress", label: "Progress", icon: Activity },
   { key: "files", label: "Files / Diffs", icon: GitCompareArrows },
   { key: "tests", label: "Tests", icon: FlaskConical },
+  { key: "preview", label: "Preview", icon: PackageCheck },
   { key: "artifacts", label: "Artifacts", icon: Box },
   { key: "deployment", label: "Deployment", icon: Rocket },
 ];
@@ -163,7 +164,13 @@ class GrokRequestError extends Error {
 }
 
 async function readJson(response: Response) {
-  const body = await response.json().catch(() => ({}));
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch (error) {
+    if (response.ok) throw error;
+    body = {};
+  }
   if (!response.ok) {
     const message = (body as { error?: { message?: string } }).error?.message;
     const sessionId = (body as { sessionId?: unknown }).sessionId;
@@ -228,6 +235,25 @@ function ArtifactList({ artifacts, emptyLabel }: { artifacts: readonly GrokArtif
   );
 }
 
+function EvidenceLink({ href, children }: { href: string | null; children: string }) {
+  const safeHref = safeArtifactHref(href);
+  return safeHref ? (
+    <a className="font-medium text-[var(--accent-text)] hover:underline" href={safeHref}>{children}</a>
+  ) : <span>{children}</span>;
+}
+
+function NotConnected({ label, detail }: { label: string; detail: string }) {
+  return (
+    <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-inset)] p-3">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs font-semibold text-foreground">{label}</p>
+        <StatusBadge tone="neutral">Not Connected</StatusBadge>
+      </div>
+      <p className="mt-2 text-xs leading-5 text-muted">{detail}</p>
+    </div>
+  );
+}
+
 function Inspector({ detail, tab }: { detail: GrokSessionDetail | null; tab: InspectorTab }) {
   if (!detail) return <EmptyInspector label={tabs.find((entry) => entry.key === tab)?.label ?? "evidence"} />;
 
@@ -273,14 +299,14 @@ function Inspector({ detail, tab }: { detail: GrokSessionDetail | null; tab: Ins
       <div>
         <p className="text-xs font-semibold text-foreground">
           {hasObservedRun
-            ? "Observed execution identity"
+            ? "Observed node execution route"
             : hasPlan
               ? "Planned routing intent"
               : "No routing plan recorded"}
         </p>
         <p className="mt-1 text-xs leading-5 text-muted">
           {hasObservedRun
-            ? "Provider and model values below come from recorded node-run evidence."
+            ? "Provider, model, state, and attempt come from recorded node-run evidence. No bot account or worker-process identity was recorded."
             : hasPlan
               ? "Provider, model, and agent values below come from the saved plan; they do not prove execution."
               : "No provider, model, or agent routing identity was recorded, and no provider started."}
@@ -290,38 +316,95 @@ function Inspector({ detail, tab }: { detail: GrokSessionDetail | null; tab: Ins
             {assigned.map((task) => (
               <li key={task.id} className="flex items-start gap-3 rounded-lg border border-[var(--border)] p-3">
                 <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-[var(--accent-surface)] text-[var(--accent-text)]"><Bot className="size-4" aria-hidden="true" /></span>
-                <div className="min-w-0"><p className="truncate text-sm font-medium text-foreground">{hasObservedRun ? task.provider : task.agentName ?? task.provider}</p><p className="mt-0.5 truncate text-xs text-muted">{task.title}{task.model ? ` · ${task.model}` : ""}</p></div>
+                <div className="min-w-0"><p className="truncate text-sm font-medium text-foreground">{hasObservedRun ? task.provider : task.agentName ?? task.provider}</p><p className="mt-0.5 truncate text-xs text-muted">{task.title}{task.model ? ` · ${task.model}` : ""}{hasObservedRun ? ` · ${task.status}${task.attempt === null || task.attempt === undefined ? "" : ` · attempt ${task.attempt}`}` : ""}</p></div>
               </li>
             ))}
           </ul>
-        ) : <div className="mt-3"><EmptyInspector label={hasObservedRun ? "observed execution identities" : hasPlan ? "planned routing identities" : "routing identities"} /></div>}
+        ) : <div className="mt-3"><EmptyInspector label={hasObservedRun ? "observed execution routes" : hasPlan ? "planned routing identities" : "routing identities"} /></div>}
       </div>
     );
   }
 
   if (tab === "progress") {
-    if (!detail.events.length) return <EmptyInspector label="progress events" />;
+    const run = detail.runEvidence;
+    const progressEvents = run
+      ? [...run.events, ...detail.events].sort((left, right) => left.createdAt.localeCompare(right.createdAt))
+      : detail.events;
+    if (!run && !progressEvents.length) return <EmptyInspector label="progress events" />;
     return (
-      <ol className="space-y-3 border-l border-[var(--border-strong)] pl-4">
-        {detail.events.map((event) => (
+      <div className="space-y-4">
+        {run ? (
+          <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-inset)] p-3">
+            <div className="flex items-center justify-between gap-3 text-xs"><span className="font-semibold text-foreground">{run.progress.completed} of {run.progress.total} nodes complete</span><span className="text-muted">{run.progress.percent}%</span></div>
+            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[var(--surface)]"><div className="h-full bg-[var(--accent)]" style={{ width: `${run.progress.percent}%` }} /></div>
+            <dl className="mt-3 grid grid-cols-2 gap-2 text-xs">
+              <div><dt className="text-muted">Tokens</dt><dd className="mt-1 text-foreground">{run.tokensUsed === null ? "Not recorded" : run.tokensUsed.toLocaleString()}</dd></div>
+              <div><dt className="text-muted">Cost</dt><dd className="mt-1 text-foreground">{run.costMicros === null ? "Not recorded" : `$${(run.costMicros / 1_000_000).toFixed(4)}`}</dd></div>
+            </dl>
+            {run.closureNote ? <p className="mt-3 text-xs leading-5 text-muted">{run.closureNote}</p> : null}
+          </div>
+        ) : null}
+        {detail.eventsTruncated ? <p className="text-xs text-muted">Newest 200 Grok session events shown.</p> : null}
+        {run?.eventsTruncated ? <p className="text-xs text-muted">Newest 500 graph events shown.</p> : null}
+        <ol className="space-y-3 border-l border-[var(--border-strong)] pl-4">
+        {progressEvents.map((event) => (
           <li key={event.id} className="relative">
             <span className="absolute -left-[1.22rem] top-1 size-2 rounded-full bg-[var(--accent)]" aria-hidden="true" />
-            <p className="text-xs font-medium text-foreground">{event.type}</p>
+            <p className="text-xs font-medium text-foreground">{event.type}{"nodeKey" in event && event.nodeKey ? ` · ${event.nodeKey}` : ""}</p>
             <p className="mt-1 text-xs leading-5 text-muted">{event.detail}</p>
             <time className="mt-1 block text-[11px] text-muted">{clock(event.createdAt)}</time>
           </li>
         ))}
-      </ol>
+        </ol>
+      </div>
     );
   }
 
-  const matches = (patterns: readonly string[]) => detail.artifacts.filter((artifact) => {
-    const kind = artifact.kind.toLowerCase();
-    return patterns.some((pattern) => kind.includes(pattern));
-  });
-  if (tab === "files") return <ArtifactList artifacts={matches(["file", "diff", "commit", "pull_request"])} emptyLabel="files or diffs" />;
-  if (tab === "tests") return <ArtifactList artifacts={matches(["test", "validation", "check", "ci"])} emptyLabel="test evidence" />;
-  if (tab === "deployment") return <ArtifactList artifacts={matches(["deploy", "preview", "health"])} emptyLabel="deployment evidence" />;
+  const release = detail.runEvidence?.release;
+  if (tab === "files") {
+    if (!release?.pullRequest && !release?.producedCommit) return <EmptyInspector label="pull request or diff evidence" />;
+    return (
+      <div className="space-y-3">
+        {release.pullRequest ? (
+          <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-inset)] p-3 text-xs">
+            <p className="font-semibold text-foreground">{release.pullRequest.repository} · PR #{release.pullRequest.number}</p>
+            <p className="mt-2 text-muted"><EvidenceLink href={`${release.pullRequest.url}/files`}>Open files and diffs</EvidenceLink></p>
+          </div>
+        ) : null}
+        <dl className="grid grid-cols-2 gap-2 text-xs">
+          <div><dt className="text-muted">Produced commit</dt><dd className="mt-1 break-all text-foreground">{release.producedCommit ?? "Not recorded"}</dd></div>
+          <div><dt className="text-muted">Base branch</dt><dd className="mt-1 text-foreground">{release.baseBranch ?? "Not recorded"}</dd></div>
+        </dl>
+      </div>
+    );
+  }
+
+  if (tab === "tests") {
+    if (release?.checks === null || release?.checks === undefined) return <EmptyInspector label="exact-head CI evidence" />;
+    if (!release.checks.length) return <p className="text-xs text-muted">Exact-head CI was recorded with no check runs.</p>;
+    return <ul className="space-y-2">{release.checks.map((check) => (
+      <li key={`${check.name}:${check.url ?? check.conclusion}`} className="flex items-center justify-between gap-3 rounded-lg border border-[var(--border)] p-3 text-xs"><EvidenceLink href={check.url}>{check.name}</EvidenceLink><StatusBadge tone={check.conclusion === "success" ? "safe" : "danger"}>{check.conclusion}</StatusBadge></li>
+    ))}</ul>;
+  }
+
+  if (tab === "preview") {
+    const previewUrl = release?.deployment?.url ?? null;
+    return previewUrl ? (
+      <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-inset)] p-3 text-xs"><p className="font-semibold text-foreground">Recorded deployment URL</p><p className="mt-2 break-all text-muted"><EvidenceLink href={previewUrl}>{previewUrl}</EvidenceLink></p></div>
+    ) : <NotConnected label="Preview" detail="No provider deployment URL has been recorded for this run." />;
+  }
+
+  if (tab === "deployment") {
+    return (
+      <div className="space-y-3">
+        {release?.deployment ? <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-inset)] p-3 text-xs"><p className="font-semibold text-foreground">{release.deployment.environment ?? "Deployment"} · {release.deployment.state}</p>{release.deployment.url ? <p className="mt-2 break-all text-muted"><EvidenceLink href={release.deployment.url}>{release.deployment.url}</EvidenceLink></p> : null}</div> : <EmptyInspector label="deployment evidence" />}
+        {release?.health ? <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-inset)] p-3 text-xs"><div className="flex items-center justify-between gap-3"><p className="font-semibold text-foreground">Production health</p><StatusBadge tone={release.health.healthy ? "safe" : "danger"}>{release.health.healthy ? "healthy" : "unhealthy"}</StatusBadge></div>{release.health.postDeployValidation ? <p className="mt-2 text-muted">{release.health.postDeployValidation}</p> : null}</div> : <EmptyInspector label="production health evidence" />}
+        <NotConnected label="Rollback" detail="Grok Bot has no connected rollback executor. No rollback will run automatically." />
+        <NotConnected label="Automatic continuation" detail="Automatic continuation is not connected. A recorded run will not advance through external actions on its own." />
+      </div>
+    );
+  }
+
   return <ArtifactList artifacts={detail.artifacts} emptyLabel="artifacts" />;
 }
 
@@ -517,7 +600,6 @@ export function GrokWorkspace({
   async function controlSession(action: GrokControlAction) {
     if (!selectedSession || controlPending || !selectedSession.allowedActions.includes(action)) return;
     const attemptKey = `${selectedSession.id}:${action}`;
-    let responseReceived = false;
     setControlPending(action);
     detailRequest.current += 1;
     setErrorMessage("");
@@ -535,7 +617,6 @@ export function GrokWorkspace({
           reason: `${action} requested from the Grok Bot control center`,
         }),
       });
-      responseReceived = true;
       const body = await readJson(response) as GrokControlResponse;
       controlAttempts.current.delete(attemptKey);
       setDetail(body);
@@ -546,26 +627,30 @@ export function GrokWorkspace({
         ? `The ${action} control was already applied; durable state was reloaded.`
         : executionNotice(body)));
     } catch (error) {
-      // Reuse the key only when no HTTP response arrived, because the server
-      // may have committed the intent before the connection failed. An
-      // explicit failed response is a completed attempt and a later retry
-      // needs its own intent identity.
-      if (responseReceived) controlAttempts.current.delete(attemptKey);
+      // A missing response or server 5xx is indeterminate: the atomic database
+      // control may have committed before projection/transport failed. Reuse
+      // that exact key. Only success or a definitive client response releases
+      // the key for a later control cycle.
+      if (error instanceof GrokRequestError && error.status >= 400 && error.status < 500) {
+        controlAttempts.current.delete(attemptKey);
+      }
       setErrorMessage(error instanceof Error ? error.message : `The ${action} request could not be completed.`);
     } finally {
       setControlPending(null);
     }
   }
 
-  const controlIcon = (action: GrokControlAction) => action === "pause"
+  const controlIcon = (action: RenderedGrokControlAction) => action === "pause"
     ? Pause
     : action === "resume"
       ? Play
-      : action === "cancel"
-        ? Ban
-        : action === "stop"
-          ? CircleStop
-          : RefreshCw;
+      : CircleStop;
+  const selectedRunIsRunning = selectedSession?.status.toUpperCase() === "RUNNING"
+    || (detail?.session.id === selectedSession?.id
+      && detail?.runEvidence?.state.toUpperCase() === "RUNNING");
+  const renderedControlActions = selectedRunIsRunning
+    ? CONTROL_ACTIONS.filter((action) => action !== "stop")
+    : CONTROL_ACTIONS;
 
   return (
     <FactoryShell
@@ -630,7 +715,7 @@ export function GrokWorkspace({
 
             <aside aria-label="Session inspector" className="min-w-0 p-3">
               <div className="flex items-center justify-between gap-2"><p className="label">Control center</p><button type="button" className="grid size-8 place-items-center rounded-lg border border-[var(--border)] text-muted hover:text-foreground" aria-label="Refresh session" onClick={() => sessionId ? void loadDetail(sessionId) : void load()}><RefreshCw className="size-3.5" /></button></div>
-              {selectedSession ? <div className="mt-3 grid grid-cols-2 gap-1 sm:grid-cols-5">{CONTROL_ACTIONS.map((action) => { const Icon = controlIcon(action); const allowed = selectedSession.allowedActions.includes(action); const pending = controlPending === action; return <button key={action} type="button" aria-label={allowed ? `${action} session` : `${action} unavailable in ${selectedSession.status}`} disabled={!allowed || controlPending !== null} title={allowed ? `${action} this session` : `${action} is not available in ${selectedSession.status}`} className="flex min-h-12 flex-col items-center justify-center gap-1 rounded-lg border border-[var(--border)] text-[10px] capitalize text-muted enabled:hover:border-[var(--accent-border)] enabled:hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40" onClick={() => void controlSession(action)}>{pending ? <Loader2 className="size-3.5 animate-spin" aria-hidden="true" /> : <Icon className="size-3.5" aria-hidden="true" />}{action}</button>; })}</div> : null}
+              {selectedSession ? <div className={cn("mt-3 grid gap-1", selectedRunIsRunning ? "grid-cols-2" : "grid-cols-3")}>{renderedControlActions.map((action) => { const Icon = controlIcon(action); const allowed = selectedSession.allowedActions.includes(action); const pending = controlPending === action; return <button key={action} type="button" aria-label={allowed ? `${action} session` : `${action} unavailable in ${selectedSession.status}`} disabled={!allowed || controlPending !== null} title={allowed ? `${action} this session` : `${action} is not available in ${selectedSession.status}`} className="flex min-h-12 flex-col items-center justify-center gap-1 rounded-lg border border-[var(--border)] text-[10px] capitalize text-muted enabled:hover:border-[var(--accent-border)] enabled:hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40" onClick={() => void controlSession(action)}>{pending ? <Loader2 className="size-3.5 animate-spin" aria-hidden="true" /> : <Icon className="size-3.5" aria-hidden="true" />}{action}</button>; })}</div> : null}
               <div className="mt-3 flex gap-1 overflow-x-auto border-b border-[var(--border)] pb-2 xl:grid xl:grid-cols-4" role="tablist" aria-label="Session evidence">{tabs.map((entry) => { const Icon = entry.icon; return <button id={`grok-tab-${entry.key}`} key={entry.key} type="button" role="tab" aria-selected={tab === entry.key} aria-controls="grok-inspector-panel" className={cn("flex min-w-max items-center justify-center gap-1 rounded-md px-2 py-1.5 text-[10px] font-medium", tab === entry.key ? "bg-[var(--accent-surface)] text-[var(--accent-text)]" : "text-muted hover:text-foreground")} onClick={() => setTab(entry.key)}><Icon className="size-3" aria-hidden="true" />{entry.label}</button>; })}</div>
               <div id="grok-inspector-panel" role="tabpanel" aria-labelledby={`grok-tab-${tab}`} className="mt-4 max-h-[calc(70vh-11rem)] overflow-y-auto pr-1"><Inspector detail={detail} tab={tab} /></div>
             </aside>

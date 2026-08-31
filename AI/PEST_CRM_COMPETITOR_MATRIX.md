@@ -90,7 +90,7 @@ built.
 | IPM devices, thresholds, scan ledger | Briostack, PestPac | **HAVE** (ADR-191) |
 | Pest sightings with corrective actions | PestPac | **HAVE** (ADR-191) |
 | Digital form builder: inspections, service reports, compliance checklists — assignable, signed, instantly on the desktop | PestPac | **HAVE** (ADR-197) |
-| **WDO / termite graphs and diagrams** | PestPac, ServSuite | **HAVE** (ADR-204) — NPMA-33-shaped reports with a not-null verdict, obstructions and inaccessible areas as first-class columns, and a 0..1 coordinate diagram with click-to-place marks. An issue-time check refuses a report that contradicts its own findings in either direction. Uploading a floor plan is **Not Connected** — no object storage — so the built-in structure outline ships. |
+| **WDO / termite graphs and diagrams** | PestPac, ServSuite | **HAVE** (ADR-205) — NPMA-33-shaped reports with a not-null verdict, obstructions and inaccessible areas as first-class columns, and a 0..1 coordinate diagram with click-to-place marks. An issue-time check refuses a report that contradicts its own findings in either direction. Uploading a floor plan is **Not Connected** — no object storage — so the built-in structure outline ships. |
 
 ### E. Chemicals and compliance
 
@@ -177,7 +177,7 @@ first, and tracked in `AI/BACKLOG.md`:
    one provenance column.
 2. ~~Equipment and fleet/asset management~~ — **SHIPPED** as ADR-201.
 3. ~~Revenue forecasting~~ — **SHIPPED** as ADR-202.
-4. ~~WDO/termite graphs and diagrams~~ — **SHIPPED** as ADR-204. It was a
+4. ~~WDO/termite graphs and diagrams~~ — **SHIPPED** as ADR-205. It was a
    drawing surface, as expected, but the hard part turned out to be the
    verdict rather than the drawing: a not-null answer so an unfinished
    inspection cannot read as a clean structure.

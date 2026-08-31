@@ -1,14 +1,14 @@
 # Current state
 
-## 2026-08-30: Grok Bot failure containment is production accepted (ADR-190)
+## 2026-08-31: Grok atomic control is production accepted; provider loop remains open (ADR-204)
 
 Grok Bot is a SoftwareFactory product label and Chief-of-Staff experience, not
-an xAI provider or model. Production now serves exact application commit
-`d4040fee445079e34b2e062bfc234b708f802d9b`; all four jobs in CI run
-`33349358778` passed, and Vercel deployment
-`dpl_9zKFCaitCUAidmEaDbE9vAgKv5fY` is READY at
-`https://softwarefactory-hiqx4fnbh-surgeservices-projects.vercel.app`. Public
-health matches the exact release on `main`, Vercel project
+an xAI provider or model. Production now includes exact application commit
+`5bc8eea092c683bd53aa25867efe8ab29a32b93b`; all four jobs in CI run
+`33358790065` passed, and Vercel deployment
+`dpl_ABMNZDEY6drqBP7YdMqrfmHaJrYi` is READY at
+`https://softwarefactory-i7tikev82-surgeservices-projects.vercel.app`. At
+application acceptance, public health matched that exact release on `main`, Vercel project
 `prj_pAsrhftaVWI4SyaqstgRVSWHJkdD`, and reachable Supabase project
 `qpuofpmagrmyamahqwxw`.
 
@@ -45,6 +45,82 @@ Workers, autonomy, and automatic actions remain OFF, and the global kill switch
 remains ON; no safety state changed. The containment release is accepted, but
 the provider-backed loop still requires legitimate ready bot coverage and
 separately authorized execution. **GROK BOT: PRODUCTION READY is not declared.**
+
+The production control/read release gives owner Resume a bounded, recoverable
+wake path without widening authority. One owner-authenticated database transaction
+serializes the session, creates or replays the exact graph-control intent,
+records `control.requested`, applies Pause/Resume/Withdraw, resolves the intent,
+and records `control.applied`; any refusal rolls the whole transition back. Only
+after an audited Resume commits does the route resolve the project's exact
+Phase 1C repository binding and send the graph UUID through the existing
+target-bound graph-worker dispatch, and only when the graph's immutable
+`github_repository_id` equals that resolved target's internal repository id.
+An exact applied-Resume replay retries the wake only while the graph is unpaused
+and not withdrawn. A legacy requested graph control can finish only when the
+durable graph state already reflects its action and no later same-graph
+`control.requested` event exists; recovery never reruns the mutation. An
+applied key is rejected after any later opposite graph control. New unavailable graph
+actions roll back without an intent or event. Pause and stop never dispatch.
+Disabled, invalid, conflicting, or unavailable dispatch remains truthful **Not
+Connected**. Dispatch acceptance is not represented as a successful claim or
+execution. The release changed no worker switch, autonomous action, kill
+switch, or provider execution state.
+
+Forward migration `20260830010000_atomic_grok_graph_control.sql`
+(SHA-256 `bbd664a7b556a07ab31b84b155725ea8a1b1c5a7f6a6afb1cfe1bae8c07f06b7`)
+adds one authenticated, owner-only atomic graph-control boundary. It is
+tenant/session/project/exact-launched-graph/key bound, exposes no table grant,
+preserves `SECURITY DEFINER` with `search_path=pg_catalog`, and orders supersession by
+the immutable per-session `grok_events.sequence_no`. The bounded transcript is
+evidence, never an idempotency index.
+
+Migration/workflow commit `6e85b8762c28552313d7de7726118a6d733b42ef`
+passed all four jobs in CI run `33356348578` and deployed successfully as
+GitHub deployment `6174926870`. Protected run `33357349773` passed exact
+preflight and applied `20260830010000` exactly once, inserted its ledger row,
+and reloaded PostgREST. Its postflight then stopped on a verifier-only mismatch:
+the workflow expected trimmed-body MD5 `55508f9dad0b6f307b02713057949895`,
+while PostgreSQL correctly retained the dollar-quoted body's delimiter-adjacent
+newlines and reported canonical `prosrc` MD5
+`2b0ea737ac99b22570ddbfdd4c583eeb`.
+
+Forward code containment
+`2c68e7c9a1ef5ee22a38f7272236d61ab1e11b04` derives the fingerprint from the
+exact migration body. It passed all four jobs in CI run `33357696796` and
+deployed READY as `dpl_67Amo2Hm9uRNpFUpxTYCz1H83ffY` at
+`https://softwarefactory-m8t3wp4zn-surgeservices-projects.vercel.app`. No
+migration was replayed, no ledger history was changed, and no attestation-only
+migration was added. Read-only run `33359633742` then proved ledger
+`1|1|1|1|1`, exact catalog/ACL/runtime/rollback, linked lint, production health,
+and stopped safety. Earlier read-only attempt `33358635527` stopped before its
+Supabase connection because `main` advanced to owner-merged PR #471; every
+database step was skipped and no mutation occurred. The successful attestation
+ran only after rebasing the application release and after the unrelated
+Services `20260830002200`/`20260830002300` applies completed.
+
+Direct Cancel and Retry are intentionally absent from this endpoint. Their
+existing Phase 1C action functions do not provide one atomic action-plus-audit
+resolution boundary for every lost-response replay, so exposing them here
+could misstate a committed action as failed. The workspace does not advertise
+them; a future forward database boundary must make those transitions
+correlated and replay-safe before they return.
+
+The Grok workspace now projects canonical linked graph-run evidence instead of
+simulated progress: exact node state/provider/model/attempt, tokens, cost,
+closure, artifacts, the newest 500 graph events with explicit truncation, the
+newest 200 session events when its history is longer, and release evidence
+derived through the shared PR/CI/preview/deployment/health adapter. Planned bot
+identity remains separate from observed execution routes; no worker or bot
+account identity is inferred when the runtime did not persist one. Rollback and
+automatic continuation remain explicitly **Not Connected**, and Cancel/Retry
+are not advertised from graph state alone.
+
+This is a wake/recovery boundary, not complete provider-identity admission.
+The downstream database claim still does not pin the selected Grok bot,
+connected account, provider/model, or immutable assignment revisions, and the
+graph MODEL executor still uses ambient worker identity. Keep workers OFF and
+the global kill switch ON until that separate runtime admission is implemented
+and accepted.
 
 ## Services CRM (task #63, ADR-185 — newest product)
 
@@ -167,7 +243,7 @@ null, not "under" one; a trend cell with no counted scan reports null with
 its scan count beside it; and a product with no safety sheet on file is
 counted as a gap rather than hidden. Downloading a signed inspection copy
 is **Not Connected** — no object storage is configured.
-WDO reports (ADR-204) are the last of the large buildable rows. An NPMA-33
+WDO reports (ADR-205) are the last of the large buildable rows. An NPMA-33
 is a legal document, and the failure it is built to prevent is a report
 that reads as clean when nobody looked: `visible_evidence` is a not-null
 boolean, so "no visible evidence observed" is an answer somebody signed

@@ -4344,7 +4344,6 @@ undeclared until the goal's full seeded E2E passes.
   `services-dashboards-routes` (8) pins the boundary: nulls surviving to
   JSON, windows bounded, overdue excluding not-yet-due and undated, and
   five aggregate calls with no table reads at all.
-
 ## ADR-200 - Recurring billing: the second invoice is refused by an index
 
 - **Status**: accepted (increment 12 of task #66, owner /goal). PestPac,
@@ -4629,7 +4628,75 @@ worse because the scope still reports success.
 
 Hosted apply scope `commercial-portal`.
 
-## ADR-204 - WDO reports: the verdict is an answer, not an empty list
+## ADR-204 - Grok graph control is atomic and Resume has a bounded wake boundary
+
+- **Date**: 2026-08-30
+- **Status**: Production accepted for the control/read boundary; provider
+  execution remains disabled and unverified
+- **Decision**: canonical graph creation remains paused and dispatch-free. One
+  owner-authenticated database transaction serializes the scoped session,
+  creates or replays the exact graph intent, appends `control.requested`,
+  applies Pause/Resume/Withdraw, resolves the intent, and appends
+  `control.applied`; every refusal rolls back the full transition. Once an
+  owner-authorized Resume has committed,
+  the route may resolve the exact current Phase 1C project/repository binding
+  and call the existing graph-worker dispatcher with only that graph UUID.
+  Pause and stop never dispatch.
+- **Recovery**: replaying the same already-applied Resume retries the wake only
+  while the exact graph is unpaused and not withdrawn. The
+  target-bound database claim, not the GitHub event, is execution authority, so
+  duplicate wakes cannot claim a different graph or repository. Missing,
+  conflicting, disabled, or unavailable dispatch remains **Not Connected** and
+  is not presented as a successful claim or execution.
+- **Cycle and repository identity**: the recovery replay is allowed only when
+  the supplied key identifies an exact durable applied Resume and the graph is
+  already unpaused. Once the graph is paused again, that key belongs to the
+  earlier cycle and a new Resume needs a new key; a new key against an unpaused
+  graph is refused before intent creation. Immediately before dispatch, the
+  tenant-scoped graph row must name the same internal repository id as the
+  resolved Phase 1C target. A handoff or mismatch returns **Not Connected** and
+  cannot wake another repository.
+- **Interrupted graph-control recovery**: an exact legacy `requested` intent
+  is resolution-only recoverable when durable graph state already reflects its
+  action and no later same-graph `control.requested` event exists. Applied
+  replay returns the original result without a second mutation or duplicate
+  events only while graph state still reflects that action. New unavailable
+  actions and unlinked same-project graphs roll back without residue.
+- **Atomic boundary**: forward migration `20260830010000` adds one
+  authenticated, owner-only graph-control function bound to organization,
+  session, project, the exact durably launched graph, action, and key. It grants no table access, pins
+  definer/search path, and orders supersession with immutable per-session event
+  `sequence_no`, not transaction-stable timestamps. The bounded transcript is
+  evidence, never an idempotency index.
+- **Release containment**: protected run `33357349773` applied the migration
+  exactly once and then stopped because its verifier hashed a trimmed body.
+  PostgreSQL's exact `prosrc` retains the delimiter-adjacent newlines, so
+  forward code commit `2c68e7c9a1ef5ee22a38f7272236d61ab1e11b04`
+  corrected the expected MD5 to `2b0ea737ac99b22570ddbfdd4c583eeb` and added
+  a delimiter-derived regression test. A new database migration would have
+  misstated the incident and expanded the ledger without changing catalog
+  truth; none was added and no migration was replayed. Read-only run
+  `33359633742` is the acceptance evidence.
+- **Control-target consequence**: direct Cancel/Retry are refused by this Grok
+  endpoint and remain **Not Connected**. Existing Phase 1C action functions do
+  not atomically correlate each transition with its Grok audit resolution, so
+  a forward database boundary is required before lost-response replay can be
+  represented truthfully.
+- **Authority consequence**: this decision enables no worker, schedule,
+  provider, automatic action, merge, deployment, rollback, or kill-switch
+  change. Those remain separately authorized protected operations.
+- **Evidence consequence**: the Grok workspace projects only canonical linked
+  graph-run/node/artifact/event evidence and shared PR/CI/preview/deployment/
+  health evidence. Planned identity is not observed identity; missing bot or
+  worker identity is not inferred, and unavailable Rollback/continuation stays
+  **Not Connected**.
+- **Admission limit**: this wake boundary is not complete provider-identity
+  admission. The downstream database claim does not yet pin the selected bot,
+  connected account, provider/model, or immutable assignment revisions, and
+  MODEL execution still uses ambient worker identity. Workers remain OFF and
+  the kill switch remains ON until that separate boundary is implemented and
+  accepted.
+## ADR-205 - WDO reports: the verdict is an answer, not an empty list
 
 **Increment 16.** An NPMA-33 is not a form. It is a legal document a buyer,
 a lender and a court all read, and its failure mode is not a missing field
