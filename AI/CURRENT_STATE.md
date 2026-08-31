@@ -414,13 +414,21 @@ the last four being the offline field queue, plan sequencing, invoices
 built from the visit, and truck stock — bringing the matrix to 47 HAVE,
 3 PARTIAL, 8 GAP.
 
-No buildable row is left. Ten of the eleven remaining are gated on an
-external account nobody has opened: card/ACH processing, SMS/email
+The board is measured against eleven products, not ten: an earlier revision
+identified the directive's "BOSS" as "the Briostack office suite", which
+does not hold up — Briostack's office component is Brio Office, and the
+likely referent is PestBoss, a separately-sold product. Measuring PestBoss
+in its own right added two rows and no HAVEs: minting a printable station
+label, and delivering a service report as a document.
+
+One buildable row is left, the printable label. Ten of the remaining
+twelve are gated on an external account nobody has opened: card/ACH processing, SMS/email
 delivery, GPS telemetry, QuickBooks sync, telephony, reviews and
 drive-time routing. Those ship labelled **Not Connected** and are never
 implied to work.
 
-The eleventh — running recurring invoicing on a schedule — is gated on
+One more needs object storage configured before a service report can become
+a PDF. And the last — running recurring invoicing on a schedule — is gated on
 governance rather than an account. Raising invoices on a timer is a
 billing action executed autonomously, which `policies/RISK_CLASSIFICATION.md`
 classes RED and says cannot be authorized by a toggle or by an unrelated

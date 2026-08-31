@@ -18,7 +18,7 @@ Ten products this CRM is measured against, from the 2026 review roundups:
 |---|---------|--------|-------|
 | 1 | **PestPac** | WorkWave | Enterprise/commercial-heavy; deepest forms + commercial portal |
 | 2 | **FieldRoutes** | ServiceTitan (was PestRoutes) | Growth/enterprise; deepest dispatch + territory mapping, marketing built in |
-| 3 | **Briostack** (the BOSS office suite) | Briostack | Automation-first: automated servicing, twice-monthly scheduling, barcode, tech app |
+| 3 | **Briostack** | Briostack (EverCommerce) | Automation-first: automated servicing, twice-monthly scheduling, barcode, tech app. Its office component is **Brio Office** |
 | 4 | **GorillaDesk** | GorillaDesk | SMB; pest-specific, FIFRA chemical tracking, portal + e-sign + GPS on Pro |
 | 5 | **Jobber** | Jobber | Horizontal field service; CRM, online booking, one-click routing |
 | 6 | **Housecall Pro** | Housecall Pro | Horizontal SMB field service |
@@ -26,6 +26,26 @@ Ten products this CRM is measured against, from the 2026 review roundups:
 | 8 | **Fieldwork** | Fieldwork | Pest-specific SMB, mobile chemical tracking |
 | 9 | **QuoteIQ** | QuoteIQ | Owner-operator; all-in pricing, recurring revenue |
 | 10 | **ServSuite** | ServicePro | Long-standing pest/lawn vertical suite |
+| 11 | **PestBoss** | PestBoss | Facility/commercial monitoring: device dashboards, activity heat maps, in-field barcode production, service-report PDFs by print/email/SMS, client portal |
+
+**A correction about "BOSS."** An earlier revision of this file identified
+BOSS as "the Briostack office suite" and measured against Briostack on that
+basis. That identification does not hold up: Briostack's office component
+is **Brio Office**, and no product called BOSS appears in the pest-control
+field. The directive's "BOSS" is most likely **PestBoss**, which is a real
+and separately-sold product, so it is now listed and measured in its own
+right — making eleven products rather than ten, which is the honest way to
+fix a mis-named one.
+
+PestBoss's headline capabilities were largely already on this list under
+other vendors' names — barcode scanning, activity heat maps, device
+monitoring dashboards, a client portal with service and inspection history,
+digital service reports. Two were not, and are added below.
+
+Sources for the correction: [Briostack platform](https://www.briostack.com/pest-control-software),
+[PestBoss](https://www.pestboss.com/en/web/),
+[PestBoss on Software Advice](https://www.softwareadvice.com/field-service/pestboss-profile/),
+[PestBoss on Capterra](https://www.capterra.com/p/194603/PESTBOSS/).
 
 Sources: [PestPac customer portal](https://www.pestpac.com/features/customer-portal),
 [PestPac mobile app](https://www.pestpac.com/features/pest-control-mobile-app),
@@ -75,7 +95,8 @@ built.
 
 | Capability | Who has it | Us |
 |---|---|---|
-| Barcode scanning of stations | Briostack, PestPac | **HAVE** (ADR-191) |
+| Barcode scanning of stations | Briostack, PestPac, PestBoss | **HAVE** (ADR-191) |
+| **In-field barcode PRODUCTION**: minting and printing a station label at the site | PestBoss | **PARTIAL** — a barcode is assigned when a station is created and is unique per workspace, so scanning resolves to exactly one station. Producing a printable label in the field is the gap: it needs a label printer or a PDF, and neither exists here. |
 | Materials/chemical logging from the field | PestPac, FieldRoutes, GorillaDesk, Fieldwork | **HAVE** (ADR-192) |
 | **Technician mobile app** | all | **HAVE** (ADR-210) — /Services/field, a phone-shaped surface showing dispatched work and recording completions and station scans. Responsive web rather than a store-published native app. |
 | **Offline mode — full capacity without signal** | PestPac | **HAVE** (ADR-210) — writes are queued on the device against a client-minted token and replayed until the SERVER confirms, so a retry through a tunnel produces one visit rather than six. The screen never says "saved" for something still queued, refusals stay counted as unsent, and nothing unsent is ever pruned. The technician's own clock is what gets recorded, not the sync's. |
@@ -89,7 +110,8 @@ built.
 |---|---|---|
 | IPM devices, thresholds, scan ledger | Briostack, PestPac | **HAVE** (ADR-191) |
 | Pest sightings with corrective actions | PestPac | **HAVE** (ADR-191) |
-| Digital form builder: inspections, service reports, compliance checklists — assignable, signed, instantly on the desktop | PestPac | **HAVE** (ADR-197) |
+| Digital form builder: inspections, service reports, compliance checklists — assignable, signed, instantly on the desktop | PestPac, PestBoss | **HAVE** (ADR-197) |
+| **Service report delivered as a document**: filed, printed, or sent as a PDF from the field | PestBoss, PestPac | **GAP** — the content exists as form instances, applications and inspections, and the portal shows it. Rendering it as a document needs object storage, which is not configured; the commercial portal already says **Not Connected** about downloading a signed inspection copy for the same reason. |
 | **WDO / termite graphs and diagrams** | PestPac, ServSuite | **HAVE** (ADR-205) — NPMA-33-shaped reports with a not-null verdict, obstructions and inaccessible areas as first-class columns, and a 0..1 coordinate diagram with click-to-place marks. An issue-time check refuses a report that contradicts its own findings in either direction. Uploading a floor plan is **Not Connected** — no object storage — so the built-in structure outline ships. |
 
 ### E. Chemicals and compliance
@@ -199,23 +221,32 @@ SMS/email delivery (which also gates automated reminders and campaign
 sending), GPS/fleet telemetry, QuickBooks sync, call-centre/telephony
 integration, and reviews/reputation platforms.
 
-**A note on what "parity" can mean here.** 58 capability rows: **47 HAVE,
-3 PARTIAL, 8 GAP.**
+**A note on what "parity" can mean here.** 60 capability rows: **47 HAVE,
+4 PARTIAL, 9 GAP.**
 
-The composition matters more than the count. **Every one of the eleven
-remaining rows is gated on something outside the code.** Not most, not
-roughly half: all.
+(58 until PestBoss was measured in its own right. Correcting a mis-named
+competitor added two rows and no HAVEs, which is what an honest re-count
+of a wrong assumption tends to look like.)
+
+The composition matters more than the count. **Twelve of the thirteen
+remaining rows are gated on something outside the code.**
 
 Ten need an external account somebody has to open and pay for — SMS/email
 reminders, route optimization by drive time, GPS telemetry, in-field card
 payment, autopay and card/ACH, QuickBooks sync, reviews, call-centre
-integration, paying an invoice online, and automated dunning. The
-eleventh needs an owner authorization that Phase 1 deliberately withholds
-from automation; see the schedule below.
+integration, paying an invoice online, and automated dunning. One needs an
+owner authorization that Phase 1 deliberately withholds from automation;
+see the schedule below. One needs object storage to be configured before a
+service report can become a document.
 
-There is no longer a row on this list that could be closed by writing more
-code. That is the end of the build-out, not a pause in it: what remains is
-an account to open or an authorization to give.
+**The thirteenth is buildable**: minting a printable station label. It is
+small, and it is the only row on this board that code alone can still
+close.
+
+One row on this list can still be closed by writing code — the printable
+station label — and it appeared only because a mis-identified competitor
+was corrected. Everything else needs an account to open, an authorization
+to give, or storage to configure.
 
 ADR-207 built the registry the provider-gated rows depend on, so each is
 wired to the point where supplying a credential and the provider's own

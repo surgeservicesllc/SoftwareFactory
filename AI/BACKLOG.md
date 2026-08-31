@@ -347,6 +347,13 @@ the full seeded E2E journey passes — increment 10 of the plan.
   credentials, never implied as working: card/ACH processing (the ledger
   records money that moved; it does not move money), SMS/email delivery,
   GPS/fleet telemetry, and QuickBooks sync.
+- [ ] Mint a printable station label (PestBoss parity). Barcodes are already
+  assigned and unique per workspace, so scanning resolves to one station;
+  what is missing is producing the label in the field. The only row left on
+  the competitor board that code alone can close.
+- [ ] Deliver a service report as a document (PestBoss, PestPac parity).
+  Blocked on object storage being configured, the same thing that makes the
+  commercial portal say Not Connected about downloading a signed inspection.
 - [ ] BLOCKED ON OWNER AUTHORIZATION, not on code: running recurring
   invoicing on a schedule. A timer that raises invoices against real
   customers is a billing action executed autonomously, which
