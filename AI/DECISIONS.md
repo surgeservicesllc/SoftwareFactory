@@ -5703,3 +5703,31 @@ executable by `authenticated` and by nobody else, and the ADR-213 rule
 re-checked — no `crm_portal%` function reachable by `anon`.
 
 Hosted apply scope `portal-filed-documents`.
+
+## ADR-222 - The two nameless filters in the queue diagnosis
+
+`diagnose_graph_queue_as_worker_v2` exists to name WHICH filter excluded
+the graph somebody is watching. Withdrawal (20260830000200) and pause
+(20260830000400) added claim predicates after the diagnosis was written,
+so a withdrawn or paused graph fell through every named reason to the
+fallthrough line: "looks claimable — an empty claim contradicts this
+listing". The contradiction line is designed to accuse the system of a
+real inconsistency; printing it for a graph that was excluded on purpose
+is the diagnosis crying wolf, and the day it cries wolf is the day nobody
+reads it.
+
+`20260831001100` re-creates the function with `withdrawn_at` and
+`pause_requested_at` projected straight off `public.graphs` — DROP +
+CREATE because a return-type change refuses CREATE OR REPLACE, with the
+worker-only ACL restated. Protocol stays 2: nothing about claiming
+changed, and a worker that ignores two extra named columns keeps working.
+`explainEmptyQueue` checks them first — withdrawn is final ("will never be
+claimed"), pause is a wait for a person's resume, and both outrank every
+other reason because both are top-level claim predicates.
+
+The postflight re-proves what a DROP can silently lose: still a definer,
+still unreachable by browser roles, and the new columns actually in
+`pg_get_function_result` — an existence check alone would pass on the old
+definition.
+
+Hosted apply scope `queue-diagnosis-visibility`.

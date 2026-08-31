@@ -331,7 +331,7 @@ the measured list, not today's total outstanding migration count. Later exact ev
 forward candidates.
 Do not add any of them to the 19-row measurement or
 infer a new overall missing count without another complete ledger probe. As of this release,
-the repository total is 217 migration files after integration with current `origin/main`. Those two numbers do not stand in a prefix relationship, and the reason
+the repository total is 218 migration files after integration with current `origin/main`. Those two numbers do not stand in a prefix relationship, and the reason
 matters: the
 hosted ledger is **not a contiguous prefix** of the local files. It has gaps in the middle and
 rows well past them. Any sentence of the form "everything after `X` is outstanding" is therefore
@@ -377,10 +377,12 @@ Every scope in the table below has since been applied — probe run
 lists the remote ledger holding every version from `20260830002000`
 contiguously through `20260831000800` (autopay authorization). The known
 missing middle rows are unchanged by any of this, and `20260814002500`
-remains present-but-unledgered. Two local migrations are NOT yet hosted:
+remains present-but-unledgered. Three local migrations are NOT yet hosted:
 `20260831000900` (day route, dispatch `scope=day-route` once PR #482 is on
 `main`) and `20260831001000` (portal filed documents,
-`scope=portal-filed-documents` once its PR is on `main`). The table stays
+`scope=portal-filed-documents` once its PR is on `main`) and
+`20260831001100` (queue-diagnosis visibility,
+`scope=queue-diagnosis-visibility`, same PR). The table stays
 because what each postflight proves is still the reason it exists:
 
 | Scope | Version | What its postflight proves |

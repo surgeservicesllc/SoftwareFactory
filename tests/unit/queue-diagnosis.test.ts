@@ -20,6 +20,8 @@ function graph(overrides: Partial<QueueGraphRow>): QueueGraphRow {
     requires_owner_approval: false,
     is_lifecycle: false,
     created_at: "2026-08-23T20:00:00Z",
+    withdrawn_at: null,
+    pause_requested_at: null,
     repository_scope_matches: true,
     required_check_policy_matches: true,
     phase1c_resume_ready: true,
@@ -125,6 +127,29 @@ describe("the empty-queue diagnosis", () => {
 
   it("calls out the contradiction for a graph nothing excludes", () => {
     expect(reasonOf(explainEmptyQueue([graph({})], SUPPORTED))).toContain("contradicts");
+  });
+
+  it("names withdrawal instead of accusing the claim (20260831001100)", () => {
+    const reason = reasonOf(explainEmptyQueue(
+      [graph({ withdrawn_at: "2026-08-30T10:00:00Z" })], SUPPORTED));
+    expect(reason).toContain("withdrawn by a member at 2026-08-30T10:00:00Z");
+    expect(reason).not.toContain("contradicts");
+  });
+
+  it("names a requested pause as waiting for a resume, not a worker", () => {
+    const reason = reasonOf(explainEmptyQueue(
+      [graph({ pause_requested_at: "2026-08-30T11:00:00Z" })], SUPPORTED));
+    expect(reason).toContain("waiting for a resume, not a worker");
+    expect(reason).not.toContain("contradicts");
+  });
+
+  it("lets withdrawal outrank pause when both are set — withdrawn is final", () => {
+    const reason = reasonOf(explainEmptyQueue(
+      [graph({
+        withdrawn_at: "2026-08-30T10:00:00Z",
+        pause_requested_at: "2026-08-30T09:00:00Z",
+      })], SUPPORTED));
+    expect(reason).toContain("never be claimed");
   });
 
   it("never prints goal text, only ids and states", () => {

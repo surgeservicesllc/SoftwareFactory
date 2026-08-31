@@ -497,6 +497,11 @@ superseded copies instead of hiding them, and the two notices that blamed
 object storage for the missing link are corrected — that blocker ended
 with ADR-216.
 
+The worker's empty-queue diagnosis now names withdrawal and pause
+(ADR-222) instead of printing its accuse-the-claim contradiction line for
+a graph that was excluded on purpose. Read-only restatement of
+diagnose_graph_queue_as_worker_v2; protocol unchanged.
+
 Of the remaining eighteen rows, eight are gated on an
 external account nobody has opened: card/ACH processing, SMS/email
 delivery, GPS telemetry, QuickBooks sync, telephony, reviews and

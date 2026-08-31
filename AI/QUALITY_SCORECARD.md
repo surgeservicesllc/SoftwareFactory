@@ -2,6 +2,17 @@
 
 Last reviewed: 2026-08-31
 
+**Addendum, 2026-08-31 latest+42 - queue-diagnosis visibility (ADR-222):**
+queue-diagnosis unit 16 (withdrawn names the timestamp and never says
+"contradicts", pause says waiting-for-a-resume, withdrawal outranks pause);
+graph-phase1c-release-lineage.behavior 16 — the new case sets both
+timestamps on the fixture graph (pairing the by-columns to satisfy the
+pair constraints) and reads them back through the definer as the worker.
+Guard suites re-run green: path references both ways, scope replay
+executes the new postflight, runbook total 218, workflow 476,716 bytes of
+478,000 — the extraction backlog item is filed because the next scope
+does not fit.
+
 **Addendum, 2026-08-31 latest+41 - portal filed-copy downloads (ADR-221):**
 services-portal.behavior grew to 15: a customer lists their own filed
 copies with the original still present and flagged superseded, reads a

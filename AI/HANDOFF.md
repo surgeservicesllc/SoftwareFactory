@@ -2,6 +2,21 @@
 
 Last updated: 2026-08-31
 
+## Newest (2026-08-31, latest+42): queue-diagnosis visibility (ADR-222)
+
+`20260831001100` re-creates diagnose_graph_queue_as_worker_v2 with
+withdrawn_at + pause_requested_at projected; explainEmptyQueue names both
+before every other reason. Read-only restatement; protocol stays 2.
+
+A RETURN-TYPE CHANGE FORCES DROP + CREATE, AND A DROP LOSES THE ACL.
+Restate the revoke/grant in the same migration and make the postflight
+prove reach AND the new columns via pg_get_function_result — an existence
+check alone passes on the old definition.
+
+THE WORKFLOW BYTE CEILING IS NEARLY SPENT: 476,716 of 478,000. Do not add
+another apply scope without first extracting the repeated DB_URL/mask
+preamble (backlog item filed). Raising the guard is not the fix.
+
 ## Newest (2026-08-31, latest+41): portal filed-copy downloads (ADR-221)
 
 `20260831001000` adds crm_portal_filed_documents and

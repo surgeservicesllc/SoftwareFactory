@@ -517,6 +517,46 @@ describe("graph to Phase 1C release lineage", { timeout: 240_000 }, () => {
     }
   });
 
+  it("carries withdrawal and pause into the diagnosis instead of a false contradiction (20260831001100)", async () => {
+    // Both are top-level claim predicates; before 20260831001100 the
+    // projection omitted them, so an honestly excluded graph diagnosed as
+    // "looks claimable". Fixture writes pair the by-column to satisfy
+    // graphs_withdrawal_pair / graphs_pause_pair.
+    await resetRole(db);
+    await db.query(
+      `update public.graphs
+          set withdrawn_at = '2026-08-30T10:00:00Z', withdrawn_by = $2,
+              pause_requested_at = '2026-08-30T09:00:00Z', pause_requested_by = $2
+        where id = $1`,
+      [graphId, ownerId],
+    );
+    try {
+      await asWorker(db);
+      const flagged = await db.query<{
+        withdrawn_at: string | null;
+        pause_requested_at: string | null;
+      }>(
+        `select withdrawn_at, pause_requested_at
+           from public.diagnose_graph_queue_as_worker_v2(
+             'diagnostic-worker', 'factory/lineage', $1::jsonb, $2, 2
+           )`,
+        [requiredCheckNamesJson, graphId],
+      );
+      expect(flagged.rows).toHaveLength(1);
+      expect(flagged.rows[0].withdrawn_at).not.toBeNull();
+      expect(flagged.rows[0].pause_requested_at).not.toBeNull();
+    } finally {
+      await resetRole(db);
+      await db.query(
+        `update public.graphs
+            set withdrawn_at = null, withdrawn_by = null,
+                pause_requested_at = null, pause_requested_by = null
+          where id = $1`,
+        [graphId],
+      );
+    }
+  });
+
   it("enforces the 160-character and no-pipe required-check policy in SQL", async () => {
     await resetRole(db);
     const boundary = "x".repeat(160);

@@ -424,13 +424,19 @@ the full seeded E2E journey passes — increment 10 of the plan.
   clock is missing, and the clock is the part that needs permission.
 - [ ] Then the AI copilot and the seeded E2E acceptance journey — after
   which, and only after which, PEST CRM: PRODUCTION READY may be declared.
-- [ ] Queue-diagnosis honesty follow-up: `diagnose_graph_queue_as_worker_v2`
-  predates withdrawal and pause, so a withdrawn or paused graph shows in
-  the drain log as "looks claimable — an empty claim contradicts this
-  listing" (the contradiction line is the honest cover, not a wrong
-  claim). Extend the diagnostic projection with withdrawn_at +
-  pause_requested_at and teach explainEmptyQueue the two reasons — a
-  read-only restatement, safe to ship alone.
+- [x] Queue-diagnosis honesty follow-up (ADR-222): `20260831001100`
+  re-creates `diagnose_graph_queue_as_worker_v2` with withdrawn_at +
+  pause_requested_at projected, and explainEmptyQueue names both reasons
+  ahead of everything else — withdrawn is final, pause waits for a resume.
+  Worker-only ACL restated after the forced DROP; postflight proves the
+  new columns and the unchanged reach. Hosted apply:
+  scope=queue-diagnosis-visibility after merge.
+- [ ] The apply workflow's byte ceiling, again: adding the
+  queue-diagnosis-visibility step left 1,284 bytes under the 478,000
+  guard, so the NEXT scope cannot be added without first shrinking the
+  file (the repeated five-line DB_URL/mask preamble in ~85 steps is the
+  obvious extraction). Do the extraction before the next migration ships,
+  and ratchet the guard down to keep the recovery.
 - [x] Increment 6 (ADR-176): Changes & release panel —
   `lib/factory/release-evidence.ts` derives the release trail from the
   ANCHOR observations (lineage/review/ci_check_runs/deployment/probe);
