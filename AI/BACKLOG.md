@@ -325,9 +325,15 @@ the full seeded E2E journey passes — increment 10 of the plan.
   opportunities an owner, technicians a branch and a supervisor;
   /Services/branches, /Services/team, /Services/sales. 20260830001500;
   hosted apply: scope=branches-org-sales after merge.
-- [ ] Increment 7 follow-on (canvassing): door-to-door routes, knock
-  dispositions and per-rep canvassing stats. The territory map and the
-  leaderboard now exist to hang them on; the knocking itself does not.
+- [x] Increment 7 follow-on (canvassing): the schema and endpoints for
+  routes and knocks shipped with increment 7 — what was missing was the
+  page. /Services/canvassing now plans a route (name, day, territory,
+  rep), records a knock against one (address, disposition, a follow-up
+  date offered ONLY on callback/appointment — mirroring the schema's rule
+  so the refusal never fires blind), and shows per-rep figures with
+  unassigned routes kept as their own row rather than losing their doors.
+  A sold door still comes from the account it produced; that rule stays
+  the schema's.
 - [x] Increment 8 (ADR-196): documents, canvassing and the marketing hub —
   crm_documents (a storage PATH, never a URL, never bytes),
   crm_canvass_routes + append-only crm_knocks with dispositions,
