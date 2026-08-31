@@ -15,6 +15,7 @@ import {
   ClipboardCheck,
   ScanLine,
   ShieldCheck,
+  SignalHigh,
   TrendingUp,
   Truck,
   Users,
@@ -159,6 +160,12 @@ export const SERVICES_NAVIGATION: readonly ServicesNavItem[] = [
     label: "WDO Reports",
     description: "Termite inspections, findings and diagrams",
     icon: Bug,
+  },
+  {
+    href: `${SERVICES_ROOT}/field`,
+    label: "Today (Field)",
+    description: "The technician's surface, works without signal",
+    icon: SignalHigh,
   },
   {
     href: `${SERVICES_ROOT}/integrations`,

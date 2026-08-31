@@ -4982,3 +4982,96 @@ The function is immutable and backs CHECK constraints, so widening it
 governs new writes only; existing rows are not revalidated.
 
 Hosted apply scope `secret-guard-restricted-keys`.
+
+## ADR-210 - The offline field queue, and the outcome that must be impossible
+
+**Increment 18.** The last two rows the competitor matrix listed as
+buildable — "technician mobile app" and "offline mode, full capacity
+without signal" — are one feature. It was left until last because its
+correctness bar is the highest in the product.
+
+A crawlspace has no signal. A technician finishes a visit, taps complete,
+and drives away. Afterwards exactly ONE of these must be true, **and the
+technician must know which**:
+
+- the visit is recorded, or
+- the visit is visibly still unsent.
+
+The outcome worse than having no offline mode at all is the third one: the
+tap appeared to work, the write went twice or went nowhere, and nobody
+finds out until a customer disputes an invoice for a visit the system says
+never happened.
+
+**The mechanism is a client-minted token.** Every field write carries a
+uuid minted on the device *before the first attempt*, unique per
+organization. Replaying a write that already landed is a no-op returning
+the original outcome — so the queue may retry forever, which is exactly
+what it does when a tunnel drops a connection mid-request.
+
+**The insert into `crm_field_submissions` IS the lock.** `on conflict do
+nothing` returning zero rows means somebody already did this work, and the
+function returns what they got instead of doing it twice. There is no
+read-then-write window for two retries to race through, and the postflight
+asserts the unique index exists *and is unique* — without it the whole
+story is a race.
+
+**A defect in shipped code, found by building this.**
+`crm_work_order_set_completed_at` (increment 3) set `completed_at := now()`
+unconditionally on the transition to completed. Correct while every
+completion happened at a desk; wrong the moment a visit can be completed in
+a crawlspace and synced five hours later, because the trigger would record
+every offline visit as happening when the van found signal. That is not
+cosmetic: `completed_at` feeds technician productivity (ADR-199), route
+density, and the service dates on recurring invoices (ADR-200) — an
+offline day would report every visit bunched at the moment the queue
+drained. The trigger now defers to an explicitly supplied moment and
+defaults to `now()` only when none is given, so every existing caller is
+unchanged. The postflight asserts the `coalesce` is still there.
+
+**Two timestamps are kept, never collapsed.** `occurred_at` is the
+technician's clock; `accepted_at` is when the server heard. A visit
+completed at 09:12 in a crawlspace and synced at 14:40 in the depot car
+park is one fact with two moments.
+
+**A wrong device clock is refused loudly, not clamped.**
+`accepted_at >= occurred_at - interval '1 minute'` rejects a submission
+claiming the future, and the route turns that into a named, permanent
+error telling the technician to fix their clock — rather than silently
+rewriting their time into something plausible.
+
+**Client-side rules** (in `lib/services/field-queue.ts`, kept pure and
+tested directly rather than through a service worker and a fake browser):
+
+- A write is **never** removed until the server confirms. Not on optimism.
+- A **replay is confirmation**, not failure. Reading it as an error would
+  leave a recorded write queued forever.
+- A **permanent refusal stops being retried and stays visible**. A queue
+  that retries a refusal never drains; one that discards it loses the work.
+- `unsent` **includes refusals**. Folding them out to make the badge read
+  zero is the exact lie this queue exists to prevent.
+- **Nothing is ever pruned unless settled**, however old. A six-year-old
+  unsent write is still the technician's work.
+- The screen never says "saved" — it says **"waiting to send"** until the
+  server has it, and **"filed"** after.
+
+**Reconciliation is server-authoritative.** A device back after a week asks
+`crm_field_settled_tokens` which of its tokens actually landed, and the
+server's answer wins. Resolving that the other way — trusting the device —
+is what produces the duplicate.
+
+**Surfaces**: `/Services/field`.
+
+**Verification**: `services-field-offline.behavior` (9) on the real chain —
+a visit recorded at its own moment rather than the sync's; five replays of
+a completion leaving one submission and neither the timestamp nor the note
+overwritten; four replays of a station scan leaving ONE ledger event with
+the original count, which matters because the ledger is append-only and a
+double count could never be undone; a late arrival not overwriting a visit
+the office already closed; the server answering which tokens it holds; two
+tenants minting the same uuid without collision; a refusal for another
+account's work order; the submission log undeletable under forced RLS; and
+every field function still an invoker. `field-queue` (10) pins the client
+decisions, including that a replay settles, a refusal stays counted, and
+nothing unsent is ever pruned.
+
+Hosted apply scope `field-offline-queue`.

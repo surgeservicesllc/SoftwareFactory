@@ -95,6 +95,7 @@ const publicTables = [
   "crm_equipment_events",
   "crm_estimate_lines",
   "crm_estimates",
+  "crm_field_submissions",
   "crm_form_answers",
   "crm_form_fields",
   "crm_form_instances",

@@ -2194,6 +2194,67 @@ export function stationStanding(
 }
 
 /* ---------------------------------------------------------------------------
+ * The technician field app, offline-capable (increment 18).
+ *
+ * Every field write carries a token minted on the device BEFORE the first
+ * attempt. That token is the whole idempotency story: the same token
+ * arriving five times produces one write and four replays, so the queue
+ * may retry forever — which is exactly what it does when a tunnel drops
+ * the connection mid-request.
+ *
+ * `replayed` is surfaced rather than swallowed. A client that cannot tell
+ * "I just did this" from "this was already done" cannot honestly report
+ * what it still owes the server.
+ * ------------------------------------------------------------------------- */
+
+export const CRM_FIELD_SUBMISSION_KINDS = [
+  "complete_work_order",
+  "device_scan",
+  "pest_sighting",
+] as const;
+export type CrmFieldSubmissionKind = (typeof CRM_FIELD_SUBMISSION_KINDS)[number];
+
+/** The states a queued write can be in, from the device's point of view. */
+export const FIELD_QUEUE_STATES = ["queued", "sending", "settled", "refused"] as const;
+export type FieldQueueState = (typeof FIELD_QUEUE_STATES)[number];
+
+export type CrmFieldSettledRow = {
+  client_token: string;
+  kind: CrmFieldSubmissionKind;
+  result_id: string | null;
+  occurred_at: string;
+  accepted_at: string;
+};
+
+export function toFieldSettledView(row: CrmFieldSettledRow) {
+  return {
+    clientToken: row.client_token,
+    kind: row.kind,
+    resultId: row.result_id,
+    /* Two timestamps, deliberately. A visit completed at 09:12 in a
+     * crawlspace and synced at 14:40 in the depot car park is one fact
+     * with two moments, and collapsing them misreports the work. */
+    occurredAt: row.occurred_at,
+    acceptedAt: row.accepted_at,
+  };
+}
+
+/**
+ * How long a queued write waited before the server took it.
+ *
+ * Null when it has not been accepted — NOT zero. A write still sitting on
+ * a device has no latency yet, and reporting 0 would put it in the same
+ * bucket as one that synced instantly.
+ */
+export function syncLagSeconds(
+  entry: { occurredAt: string; acceptedAt: string | null },
+): number | null {
+  if (entry.acceptedAt === null) return null;
+  const lag = (Date.parse(entry.acceptedAt) - Date.parse(entry.occurredAt)) / 1000;
+  return Number.isFinite(lag) ? Math.max(0, Math.round(lag)) : null;
+}
+
+/* ---------------------------------------------------------------------------
  * The provider integration registry (increment 17).
  *
  * Nine of the capabilities the competitors sell need an account somebody

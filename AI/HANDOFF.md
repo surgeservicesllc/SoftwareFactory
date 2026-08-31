@@ -2,6 +2,38 @@
 
 Last updated: 2026-08-31
 
+## Newest (2026-08-31, latest+29): the offline field queue (ADR-210, #74)
+
+`20260830010400` adds crm_field_submissions, two idempotent field
+functions, and a fix to a shipped trigger.
+
+THE OUTCOME THAT MUST BE IMPOSSIBLE: a technician taps complete, the tap
+looks like it worked, and the write went twice or went nowhere. Everything
+here exists for that.
+
+THE INSERT INTO crm_field_submissions IS THE LOCK. `on conflict do
+nothing` returning no row means somebody already did this work. Do not
+"simplify" it into a select-then-insert: that reintroduces the race two
+retries through a tunnel will find.
+
+I FIXED A SHIPPED BUG DOING THIS. crm_work_order_set_completed_at stamped
+now() unconditionally, so every offline visit would be recorded as
+happening when the van found signal — and completed_at feeds productivity,
+route density and recurring invoice service dates. It now coalesces to a
+supplied value. The postflight asserts that coalesce is still there. If you
+revert it, offline mode silently starts lying about when work happened.
+
+CLIENT RULES, in lib/services/field-queue.ts (pure, tested directly):
+- A replay is CONFIRMATION. Treat it as an error and the write never leaves
+  the queue.
+- `unsent` INCLUDES refusals. A refused write is not sent.
+- Nothing is pruned unless settled, at any age.
+- The UI never says "saved" — "waiting to send" until the server confirms.
+
+Two timestamps, never collapsed: occurred_at is the technician's clock,
+accepted_at is when the server heard. A bad device clock is refused loudly
+by the sync-after-event constraint, not clamped.
+
 ## text_has_likely_secret has THREE definitions and ~130 lines (ADR-209)
 
 Two mistakes in one session, both worth not repeating.
