@@ -50,7 +50,7 @@ jobs:
       VERCEL_PROJECT_ID: prj_pAsrhftaVWI4SyaqstgRVSWHJkdD
       MIGRATION_VERSION: "20260831001700"
       MIGRATION_FILE: supabase/migrations/20260831001700_grok_read_only_research_runtime.sql
-      MIGRATION_SHA256: 7482bdc7f3da16cc7ee3c5f9257fa0540d361bd0f653f13e48c36ce5ec213873
+      MIGRATION_SHA256: 3fe4cf4b6d49b29ed927650ab1581d3e580352702c76f5f6f0a837094d603061
     steps:
       - name: Authorize one exact protected operation
         env:

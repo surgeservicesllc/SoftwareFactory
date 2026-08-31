@@ -145,7 +145,7 @@ begin
            and routine.pronargdefaults = 0
            and pg_catalog.md5(pg_catalog.replace(pg_catalog.replace(
              routine.prosrc, E'\r\n', E'\n'
-           ), E'\r', E'\n')) = '29ac8f9a0a3589df78bd930dd99fbca8'
+           ), E'\r', E'\n')) = 'e028c29915d50f0eb7773affa146fae7'
            and not pg_catalog.has_function_privilege('anon', routine.oid, 'EXECUTE')
            and not pg_catalog.has_function_privilege('authenticated', routine.oid, 'EXECUTE')
            and pg_catalog.has_function_privilege('service_role', routine.oid, 'EXECUTE')

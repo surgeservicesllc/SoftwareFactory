@@ -57,7 +57,7 @@ const releases = [
     migrationPath: "supabase/migrations/20260831001700_grok_read_only_research_runtime.sql",
     preflightPath: ".github/grok-release/grok-read-only-research-runtime-preflight.sql",
     postflightPath: ".github/grok-release/grok-read-only-research-runtime-postflight.sql",
-    sha256: "7482bdc7f3da16cc7ee3c5f9257fa0540d361bd0f653f13e48c36ce5ec213873",
+    sha256: "3fe4cf4b6d49b29ed927650ab1581d3e580352702c76f5f6f0a837094d603061",
     confirm: "grok-read-only-research",
     preflightMarker: "grok-read-only-research-release-preflight-ok",
     postflightMarker: "grok-read-only-research-release-postflight-ok",
@@ -246,7 +246,7 @@ describe("post-context migration release order and adverse behavior", () => {
 
   it("proves exact research pause replay admission adverse cases and zero execution", () => {
     for (const proof of [
-      "29ac8f9a0a3589df78bd930dd99fbca8", "relrowsecurity",
+      "e028c29915d50f0eb7773affa146fae7", "relrowsecurity",
       "relforcerowsecurity", "aclexplode", "idempotent_replay_mismatch",
       "cross_tenant_owner_was_not_blocked", "changed_replay_was_not_blocked",
       "write_node_was_not_blocked", "pause_requested_at", "writes = '[]'::jsonb",
