@@ -334,6 +334,10 @@ the full seeded E2E journey passes — increment 10 of the plan.
   lock that stops a location going negative, and one draw per application
   so an offline replay cannot double-count. /Services/compliance.
   20260831000400; hosted apply: scope=truck-stock after merge.
+- [x] The seed roster can no longer fall behind the schema: every crm_
+  table must be seeded or explicitly excused with a reason, checked against
+  the tables the migrations create. Three tables that had already slipped
+  past are now seeded.
 - [ ] Provider-gated, ship Not Connected until an owner supplies
   credentials, never implied as working: card/ACH processing (the ledger
   records money that moved; it does not move money), SMS/email delivery,

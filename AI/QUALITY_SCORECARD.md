@@ -2,6 +2,23 @@
 
 Last reviewed: 2026-08-31
 
+**Addendum, 2026-08-31 latest+33 - the roster that had fallen behind:**
+The seed report's table list was hand-written, so "48/48 tables passing"
+was complete only relative to a list three tables out of date:
+crm_service_integrations (ADR-207), crm_field_submissions (ADR-210) and
+crm_plan_steps (ADR-211) had shipped without entering it, and
+crm_stock_movements (ADR-213) would have made four. A green that means less
+than it looks like is worse than a red, because nobody investigates it.
+seed-report-covers-every-table 3 now compares the roster against the tables
+the migrations actually create, in both directions — an uncovered table
+fails, and so does a spec naming a table that no longer exists — and
+requires a real reason beside anything deliberately excused. One table is
+excused: the provider registry, which holds at most one row per provider.
+The other three are seeded for real: 558 plan steps, 1,183 stock movements
+including consumptions whose quantities match the applications they served,
+and 262 field submissions across all three kinds. Report: 48/48 -> 51/51,
+48,060 -> 50,063 records.
+
 **Addendum, 2026-08-31 latest+32 - truck stock (ADR-213):**
 services-truck-stock.behavior 12 on the real chain: balances derived from
 the ledger rather than stored, so a receipt of 100 and a transfer of 40

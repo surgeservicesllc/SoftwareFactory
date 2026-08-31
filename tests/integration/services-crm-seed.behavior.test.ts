@@ -119,7 +119,10 @@ describe("the full-scale CRM seed", { timeout: 900_000 }, () => {
       failing.map((table) => `${table.table}: ${table.notes.join("; ") || "below floor or orphaned"}`),
     ).toEqual([]);
     expect(report.pass).toBe(true);
-    expect(report.totals.tables).toBe(48);
+    // 51, and the number is checked rather than trusted: the roster used to
+    // be hand-written and fell three tables behind the schema without
+    // anything noticing, which `seed-report-covers-every-table` now stops.
+    expect(report.totals.tables).toBe(51);
   });
 
   it("earned its history through the database, not by forging system rows", async () => {
