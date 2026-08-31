@@ -89,6 +89,34 @@ describe("Grok Chief-of-Staff persistence", () => {
     return { idempotencyKey, session: result.rows[0] };
   }
 
+  async function createControlGraph(sessionId: string, goal: string) {
+    nextKey += 1;
+    await resetRole(db);
+    const result = await db.query<{ id: string }>(`
+      with new_graph as (
+        insert into public.graphs (organization_id,project_id,goal,topology,created_by)
+        values ($1,$2,$3,'SINGLE_AGENT',$4) returning id
+      ), new_link as (
+        insert into public.grok_task_links (
+          organization_id,project_id,session_id,graph_id,relation
+        )
+        select $1,$2,$5,new_graph.id,'planned' from new_graph
+        returning id,graph_id
+      ), new_launch as (
+        insert into public.grok_graph_launches (
+          organization_id,project_id,session_id,idempotency_key,input_sha256,
+          graph_id,task_link_id,created_by
+        )
+        select $1,$2,$5,$6,repeat('a',64),new_link.graph_id,new_link.id,$4
+          from new_link
+        returning graph_id
+      )
+      select graph_id as id from new_launch
+    `, [organizationId, projectId, goal, ownerId, sessionId,
+      `control-launch-${nextKey.toString().padStart(4, "0")}`]);
+    return result.rows[0];
+  }
+
   beforeAll(async () => {
     db = new PGlite({ extensions: { pgcrypto } });
     await db.exec(`
@@ -703,6 +731,392 @@ describe("Grok Chief-of-Staff persistence", () => {
       "select * from public.resolve_grok_control_intent_as_server($1::uuid,$2::uuid,'failed','LATE_FAILURE','changed')",
       [organizationId, requested.rows[0].id],
     )).rejects.toThrow(/transition|conflicts/i);
+  });
+
+  it("atomically applies and replays one owner graph control with immutable events", async () => {
+    const { session } = await createSession("Atomic graph control");
+    const graph = await createControlGraph(session.id, "Apply graph control");
+
+    await assumeRole(db, "authenticated", ownerId);
+    const applied = await db.query<{ intent_id: string; replayed: boolean; state: string }>(
+      `select * from public.apply_grok_graph_control_as_owner(
+         $1::uuid,$2::uuid,$3::uuid,'pause',$4::text,$5::text
+       )`,
+      [organizationId, session.id, graph.id,
+        "Pause in one atomic boundary", "atomic-pause-0001"],
+    );
+    expect(applied.rows).toHaveLength(1);
+    expect(applied.rows[0]).toMatchObject({ replayed: false, state: "applied" });
+    const replay = await db.query<{ intent_id: string; replayed: boolean; state: string }>(
+      `select * from public.apply_grok_graph_control_as_owner(
+         $1::uuid,$2::uuid,$3::uuid,'pause',$4::text,$5::text
+       )`,
+      [organizationId, session.id, graph.id,
+        "Pause in one atomic boundary", "atomic-pause-0001"],
+    );
+    expect(replay.rows[0]).toMatchObject({
+      intent_id: applied.rows[0].intent_id,
+      replayed: true,
+      state: "applied",
+    });
+    await resetRole(db);
+    const residue = await db.query<{
+      applied_events: number; pause_requested_at: string | null; requested_events: number; state: string;
+    }>(`
+      select graph.pause_requested_at,
+             intent.state,
+             count(*) filter (where event.event_type = 'control.requested')::int as requested_events,
+             count(*) filter (where event.event_type = 'control.applied')::int as applied_events
+        from public.graphs graph
+        join public.grok_control_intents intent on intent.graph_id = graph.id
+        join public.grok_events event on event.correlation_id = intent.id
+       where graph.id = $1 and intent.id = $2
+       group by graph.pause_requested_at, intent.state
+    `, [graph.id, applied.rows[0].intent_id]);
+    expect(residue.rows[0]).toMatchObject({
+      state: "applied",
+      requested_events: 1,
+      applied_events: 1,
+    });
+    expect(residue.rows[0].pause_requested_at).not.toBeNull();
+  });
+
+  it("uses acquired session event order when wall-clock intent order is inverted", async () => {
+    const { session } = await createSession("Atomic control ordering");
+    const graph = await createControlGraph(session.id, "Order graph controls");
+
+    await assumeRole(db, "authenticated", ownerId);
+    const older = await db.query<{ id: string }>(
+      `select * from public.request_grok_control_intent(
+         $1::uuid,$2::uuid,'graph',$3::uuid,'resume',$4::text,$5::text
+       )`,
+      [organizationId, session.id, graph.id,
+        "Resume requested before later pause", "ordered-resume-0001"],
+    );
+    const newer = await db.query<{ intent_id: string }>(
+      `select * from public.apply_grok_graph_control_as_owner(
+         $1::uuid,$2::uuid,$3::uuid,'pause',$4::text,$5::text
+       )`,
+      [organizationId, session.id, graph.id,
+        "Pause acquired after requested resume", "ordered-pause-0002"],
+    );
+    await resetRole(db);
+    await db.exec("alter table public.grok_control_intents disable trigger grok_control_intents_guard_update");
+    await db.query(
+      `update public.grok_control_intents
+          set requested_at = case when id = $1 then now() + interval '1 day'
+                                  else now() - interval '1 day' end
+        where id in ($1,$2)`,
+      [older.rows[0].id, newer.rows[0].intent_id],
+    );
+    await db.exec("alter table public.grok_control_intents enable trigger grok_control_intents_guard_update");
+    await assumeRole(db, "authenticated", ownerId);
+    await expect(db.query(
+      `select * from public.apply_grok_graph_control_as_owner(
+         $1::uuid,$2::uuid,$3::uuid,'resume',$4::text,$5::text
+       )`,
+      [organizationId, session.id, graph.id,
+        "Resume requested before later pause", "ordered-resume-0001"],
+    )).rejects.toThrow(/grok_control_superseded/i);
+    await resetRole(db);
+    const state = await db.query<{ pause_requested_at: string | null; resume_state: string }>(`
+      select graph.pause_requested_at, intent.state as resume_state
+        from public.graphs graph
+        join public.grok_control_intents intent on intent.id = $2
+       where graph.id = $1
+    `, [graph.id, older.rows[0].id]);
+    expect(state.rows[0].pause_requested_at).not.toBeNull();
+    expect(state.rows[0].resume_state).toBe("requested");
+  });
+
+  it("refuses requested recovery when a direct graph control contradicts the action", async () => {
+    const { session } = await createSession("Ambiguous requested recovery");
+    const graph = await createControlGraph(session.id, "Keep the later direct pause");
+    await assumeRole(db, "authenticated", ownerId);
+    const requested = await db.query<{ id: string }>(
+      `select * from public.request_grok_control_intent(
+         $1::uuid,$2::uuid,'graph',$3::uuid,'resume',$4::text,$5::text
+       )`,
+      [organizationId, session.id, graph.id,
+        "Resume before a direct pause", "ambiguous-resume-0001"],
+    );
+    await db.query("select * from public.set_graph_pause_as_member($1::uuid,$2::uuid,true)", [
+      organizationId, graph.id,
+    ]);
+    await expect(db.query(
+      `select * from public.apply_grok_graph_control_as_owner(
+         $1::uuid,$2::uuid,$3::uuid,'resume',$4::text,$5::text
+       )`,
+      [organizationId, session.id, graph.id,
+        "Resume before a direct pause", "ambiguous-resume-0001"],
+    )).rejects.toThrow(/grok_control_recovery_ambiguous/i);
+
+    await resetRole(db);
+    const state = await db.query<{
+      applied_events: number; pause_events: number; pause_requested_at: string | null;
+      requested_events: number; state: string;
+    }>(`
+      select graph.pause_requested_at, intent.state,
+             (select count(*)::int from public.activity_events
+               where entity_id = graph.id and event_type = 'graph.pause_changed') as pause_events,
+             count(*) filter (where event.event_type = 'control.requested')::int as requested_events,
+             count(*) filter (where event.event_type = 'control.applied')::int as applied_events
+        from public.graphs graph
+        join public.grok_control_intents intent on intent.id = $2
+        join public.grok_events event on event.correlation_id = intent.id
+       where graph.id = $1
+       group by graph.id, graph.pause_requested_at, intent.state
+    `, [graph.id, requested.rows[0].id]);
+    expect(state.rows[0]).toMatchObject({
+      state: "requested", requested_events: 1, applied_events: 0, pause_events: 1,
+    });
+    expect(state.rows[0].pause_requested_at).not.toBeNull();
+  });
+
+  it("resolves a requested intent without rerunning an already-committed action", async () => {
+    const { session } = await createSession("Resolution-lost recovery");
+    const graph = await createControlGraph(session.id, "Resolve the committed resume");
+    await assumeRole(db, "authenticated", ownerId);
+    await db.query("select * from public.set_graph_pause_as_member($1::uuid,$2::uuid,true)", [
+      organizationId, graph.id,
+    ]);
+    const requested = await db.query<{ id: string }>(
+      `select * from public.request_grok_control_intent(
+         $1::uuid,$2::uuid,'graph',$3::uuid,'resume',$4::text,$5::text
+       )`,
+      [organizationId, session.id, graph.id,
+        "Resume committed before resolution", "committed-resume-0001"],
+    );
+    await db.query("select * from public.set_graph_pause_as_member($1::uuid,$2::uuid,false)", [
+      organizationId, graph.id,
+    ]);
+    const recovered = await db.query<{ intent_id: string; replayed: boolean; state: string }>(
+      `select * from public.apply_grok_graph_control_as_owner(
+         $1::uuid,$2::uuid,$3::uuid,'resume',$4::text,$5::text
+       )`,
+      [organizationId, session.id, graph.id,
+        "Resume committed before resolution", "committed-resume-0001"],
+    );
+    expect(recovered.rows[0]).toMatchObject({
+      intent_id: requested.rows[0].id, replayed: true, state: "applied",
+    });
+
+    await resetRole(db);
+    const state = await db.query<{
+      applied_events: number; pause_events: number; pause_requested_at: string | null; state: string;
+    }>(`
+      select graph.pause_requested_at, intent.state,
+             (select count(*)::int from public.activity_events
+               where entity_id = graph.id and event_type = 'graph.pause_changed') as pause_events,
+             count(*) filter (where event.event_type = 'control.applied')::int as applied_events
+        from public.graphs graph
+        join public.grok_control_intents intent on intent.id = $2
+        join public.grok_events event on event.correlation_id = intent.id
+       where graph.id = $1
+       group by graph.id, graph.pause_requested_at, intent.state
+    `, [graph.id, requested.rows[0].id]);
+    expect(state.rows[0]).toEqual({
+      pause_requested_at: null, state: "applied", pause_events: 2, applied_events: 1,
+    });
+  });
+
+  it("rejects applied replay after an opposite direct Pause or Resume", async () => {
+    const { session } = await createSession("Applied replay state guard");
+    const graph = await createControlGraph(session.id, "Reject superseded applied keys");
+    await assumeRole(db, "authenticated", ownerId);
+    await db.query(
+      `select * from public.apply_grok_graph_control_as_owner(
+         $1::uuid,$2::uuid,$3::uuid,'pause',$4::text,$5::text
+       )`,
+      [organizationId, session.id, graph.id, "Atomic pause", "state-pause-0001"],
+    );
+    await db.query("select * from public.set_graph_pause_as_member($1::uuid,$2::uuid,false)", [
+      organizationId, graph.id,
+    ]);
+    await expect(db.query(
+      `select * from public.apply_grok_graph_control_as_owner(
+         $1::uuid,$2::uuid,$3::uuid,'pause',$4::text,$5::text
+       )`,
+      [organizationId, session.id, graph.id, "Atomic pause", "state-pause-0001"],
+    )).rejects.toThrow(/grok_control_superseded/i);
+
+    await db.query("select * from public.set_graph_pause_as_member($1::uuid,$2::uuid,true)", [
+      organizationId, graph.id,
+    ]);
+    await db.query(
+      `select * from public.apply_grok_graph_control_as_owner(
+         $1::uuid,$2::uuid,$3::uuid,'resume',$4::text,$5::text
+       )`,
+      [organizationId, session.id, graph.id, "Atomic resume", "state-resume-0001"],
+    );
+    await db.query("select * from public.set_graph_pause_as_member($1::uuid,$2::uuid,true)", [
+      organizationId, graph.id,
+    ]);
+    await expect(db.query(
+      `select * from public.apply_grok_graph_control_as_owner(
+         $1::uuid,$2::uuid,$3::uuid,'resume',$4::text,$5::text
+       )`,
+      [organizationId, session.id, graph.id, "Atomic resume", "state-resume-0001"],
+    )).rejects.toThrow(/grok_control_superseded/i);
+    await resetRole(db);
+    const state = await db.query<{ pause_requested_at: string | null }>(
+      "select pause_requested_at from public.graphs where id = $1", [graph.id],
+    );
+    expect(state.rows[0].pause_requested_at).not.toBeNull();
+  });
+
+  it("rejects an old applied Pause after permanent direct withdrawal", async () => {
+    const { session } = await createSession("Pause replay after withdrawal");
+    const graph = await createControlGraph(session.id, "Withdrawal supersedes pause");
+    await assumeRole(db, "authenticated", ownerId);
+    await db.query(
+      `select * from public.apply_grok_graph_control_as_owner(
+         $1::uuid,$2::uuid,$3::uuid,'pause',$4::text,$5::text
+       )`,
+      [organizationId, session.id, graph.id, "Pause before stopping", "withdrawn-pause-0001"],
+    );
+    await db.query("select * from public.withdraw_graph_as_member($1::uuid,$2::uuid,$3::text)", [
+      organizationId, graph.id, "Permanently stop after pausing",
+    ]);
+    await expect(db.query(
+      `select * from public.apply_grok_graph_control_as_owner(
+         $1::uuid,$2::uuid,$3::uuid,'pause',$4::text,$5::text
+       )`,
+      [organizationId, session.id, graph.id, "Pause before stopping", "withdrawn-pause-0001"],
+    )).rejects.toThrow(/grok_control_superseded/i);
+
+    await resetRole(db);
+    const state = await db.query<{
+      pause_requested_at: string | null; state: string; withdrawn_at: string | null;
+    }>(`
+      select graph.pause_requested_at, graph.withdrawn_at, intent.state
+        from public.graphs graph
+        join public.grok_control_intents intent on intent.graph_id = graph.id
+       where graph.id = $1 and intent.idempotency_key = 'withdrawn-pause-0001'
+    `, [graph.id]);
+    expect(state.rows[0]).toMatchObject({ state: "applied" });
+    expect(state.rows[0].pause_requested_at).not.toBeNull();
+    expect(state.rows[0].withdrawn_at).not.toBeNull();
+  });
+
+  it("requires the graph's exact durable Grok-session launch binding", async () => {
+    const linked = await createSession("Linked control session");
+    const wrong = await createSession("Wrong control session");
+    const graph = await createControlGraph(linked.session.id, "Only the linked session controls this");
+    await resetRole(db);
+    const unlinked = await db.query<{ id: string }>(
+      `insert into public.graphs (organization_id,project_id,goal,topology,created_by)
+       values ($1,$2,'Unlinked same-project graph','SINGLE_AGENT',$3) returning id`,
+      [organizationId, projectId, ownerId],
+    );
+    await assumeRole(db, "authenticated", ownerId);
+    await expect(db.query(
+      `select * from public.apply_grok_graph_control_as_owner(
+         $1::uuid,$2::uuid,$3::uuid,'pause',$4::text,$5::text
+       )`,
+      [organizationId, wrong.session.id, graph.id,
+        "Wrong session cannot pause", "wrong-session-pause-0001"],
+    )).rejects.toThrow(/grok_control_target_not_found/i);
+    await expect(db.query(
+      `select * from public.apply_grok_graph_control_as_owner(
+         $1::uuid,$2::uuid,$3::uuid,'pause',$4::text,$5::text
+       )`,
+      [organizationId, linked.session.id, unlinked.rows[0].id,
+        "Unlinked graph cannot pause", "unlinked-graph-pause-0001"],
+    )).rejects.toThrow(/grok_control_target_not_found/i);
+
+    await resetRole(db);
+    const residue = await db.query<{ events: number; intents: number }>(`
+      select
+        (select count(*)::int from public.grok_control_intents
+          where idempotency_key in ('wrong-session-pause-0001','unlinked-graph-pause-0001')) as intents,
+        (select count(*)::int from public.grok_events
+          where session_id in ($1,$2) and event_type like 'control.%') as events
+    `, [linked.session.id, wrong.session.id]);
+    expect(residue.rows[0]).toEqual({ intents: 0, events: 0 });
+  });
+
+  it("rolls back a fresh unavailable graph control without intent or audit residue", async () => {
+    const { session } = await createSession("Unavailable atomic graph control");
+    const graph = await createControlGraph(session.id, "Reject unavailable resume");
+    await assumeRole(db, "authenticated", ownerId);
+    await expect(db.query(
+      `select * from public.apply_grok_graph_control_as_owner(
+         $1::uuid,$2::uuid,$3::uuid,'resume',$4::text,$5::text
+       )`,
+      [organizationId, session.id, graph.id,
+        "Fresh resume is unavailable", "unavailable-resume-0001"],
+    )).rejects.toThrow(/grok_control_not_available/i);
+    await resetRole(db);
+    const residue = await db.query<{ events: number; intents: number; pause_requested_at: string | null }>(`
+      select graph.pause_requested_at,
+             (select count(*)::int from public.grok_control_intents
+               where session_id = $1 and idempotency_key = 'unavailable-resume-0001') as intents,
+             (select count(*)::int from public.grok_events
+               where session_id = $1 and event_type like 'control.%') as events
+        from public.graphs graph where graph.id = $2
+    `, [session.id, graph.id]);
+    expect(residue.rows[0]).toEqual({ pause_requested_at: null, intents: 0, events: 0 });
+  });
+
+  it("keeps the atomic graph control owner-only and tenant scoped", async () => {
+    const { session } = await createSession("Atomic graph control authority");
+    const graph = await createControlGraph(session.id, "Authorize graph controls");
+
+    await assumeRole(db, "authenticated", memberId);
+    await expect(db.query(
+      "select * from public.apply_grok_graph_control_as_owner($1::uuid,$2::uuid,$3::uuid,'pause',$4,$5)",
+      [organizationId, session.id, graph.id, "Member pause denied", "member-pause-0001"],
+    )).rejects.toThrow(/owner access is required/i);
+    await assumeRole(db, "authenticated", outsiderId);
+    await expect(db.query(
+      "select * from public.apply_grok_graph_control_as_owner($1::uuid,$2::uuid,$3::uuid,'pause',$4,$5)",
+      [organizationId, session.id, graph.id, "Outsider pause denied", "outsider-pause-0001"],
+    )).rejects.toThrow(/owner access is required/i);
+    await expect(db.query(
+      "select * from public.apply_grok_graph_control_as_owner($1::uuid,$2::uuid,$3::uuid,'pause',$4,$5)",
+      [outsiderOrganizationId, session.id, graph.id,
+        "Cross tenant pause denied", "cross-tenant-pause-0001"],
+    )).rejects.toThrow(/not_found/i);
+    await assumeRole(db, "anon");
+    await expect(db.query(
+      "select * from public.apply_grok_graph_control_as_owner($1::uuid,$2::uuid,$3::uuid,'pause',$4,$5)",
+      [organizationId, session.id, graph.id, "Anonymous pause denied", "anon-pause-0001"],
+    )).rejects.toThrow(/permission denied/i);
+  });
+
+  it("pins the atomic control catalog owner, search path and authenticated-only ACL", async () => {
+    await resetRole(db);
+    const catalog = await db.query<{
+      owner_name: string; proconfig: string[]; prosecdef: boolean;
+    }>(`
+      select owner_role.rolname as owner_name, proc.proconfig, proc.prosecdef
+        from pg_catalog.pg_proc proc
+        join pg_catalog.pg_roles owner_role on owner_role.oid = proc.proowner
+       where proc.oid = 'public.apply_grok_graph_control_as_owner(uuid,uuid,uuid,text,text,text)'::regprocedure
+    `);
+    expect(catalog.rows).toHaveLength(1);
+    expect(catalog.rows[0]).toMatchObject({
+      owner_name: "postgres",
+      prosecdef: true,
+      proconfig: ["search_path=pg_catalog"],
+    });
+    const acl = await db.query<{
+      anon_execute: boolean; authenticated_execute: boolean; service_execute: boolean;
+    }>(`
+      select
+        has_function_privilege('anon', 'public.apply_grok_graph_control_as_owner(uuid,uuid,uuid,text,text,text)', 'EXECUTE')
+          as anon_execute,
+        has_function_privilege('authenticated', 'public.apply_grok_graph_control_as_owner(uuid,uuid,uuid,text,text,text)', 'EXECUTE')
+          as authenticated_execute,
+        has_function_privilege('service_role', 'public.apply_grok_graph_control_as_owner(uuid,uuid,uuid,text,text,text)', 'EXECUTE')
+          as service_execute
+    `);
+    expect(acl.rows[0]).toEqual({
+      anon_execute: false,
+      authenticated_execute: true,
+      service_execute: false,
+    });
   });
 
   it("keeps every table private even from the BYPASSRLS service role", async () => {

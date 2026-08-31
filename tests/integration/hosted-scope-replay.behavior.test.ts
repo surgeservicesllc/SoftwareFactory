@@ -256,6 +256,7 @@ describe("the workflow's post-cutover surgical-scope fence", () => {
     const directory = resolve(repositoryRoot, ".github/hosted-apply/postflight");
     const files = (await readdir(directory)).filter((name) => name.endsWith(".sql")).sort();
     expect(files).toEqual([
+      "agentos-foundation.sql",
       "billing-contracts.sql",
       "branches-org-sales.sql",
       "chemicals-compliance.sql",
@@ -264,6 +265,8 @@ describe("the workflow's post-cutover surgical-scope fence", () => {
       "forms-timesheets-licences.sql",
       "operating-dashboards.sql",
       "pest-ipm.sql",
+      "record-only-boundary.sql",
+      "record-only-functions.sql",
     ]);
 
     for (const file of files) {

@@ -23,10 +23,16 @@ const migrations = [
     hash: "cf17ece506e30beb08163c8bc5888b6b18341bb4e66f61bafaabd6912f225aa6",
   },
   {
-    version: "20260830001200",
+    version: "20260830001100",
     stem: "MIGRATION_01100",
     path: "supabase/migrations/20260830001100_grok_planning_failure.sql",
     hash: "22c035897cb51c611aa373c83e637dc4e033352d9079059521eda7fefa35e8f7",
+  },
+  {
+    version: "20260830010000",
+    stem: "MIGRATION_10000",
+    path: "supabase/migrations/20260830010000_atomic_grok_graph_control.sql",
+    hash: "bbd664a7b556a07ab31b84b155725ea8a1b1c5a7f6a6afb1cfe1bae8c07f06b7",
   },
 ] as const;
 
@@ -84,6 +90,7 @@ describe("Grok Bot hosted release workflow", () => {
         "typed-input",
         "grok-persistence",
         "planning-failure",
+        "control-recovery",
         "verify",
       ],
     });
@@ -118,7 +125,7 @@ describe("Grok Bot hosted release workflow", () => {
     );
   });
 
-  it("pins all three reviewed migration byte identities", () => {
+  it("pins all four reviewed migration byte identities", () => {
     for (const migration of migrations) {
       expect(workflow.jobs.release.env[migration.stem]).toBe(migration.path);
       expect(workflow.jobs.release.env[`${migration.stem}_SHA256`]).toBe(
@@ -131,8 +138,8 @@ describe("Grok Bot hosted release workflow", () => {
         migration.hash,
       );
     }
-    const identity = stepByName("Verify the three exact forward files").run ?? "";
-    expect(identity.match(/verify_file/g)).toHaveLength(4);
+    const identity = stepByName("Verify the four exact forward files").run ?? "";
+    expect(identity.match(/verify_file/g)).toHaveLength(5);
     expect(identity).toContain("sha256sum");
     expect(identity).toContain("^[0-9a-f]{64}$");
     expect(source).not.toContain("planning_failure_sha256");
@@ -148,7 +155,7 @@ describe("Grok Bot hosted release workflow", () => {
     const authorize = authorization.run ?? "";
     expect(authorize).toContain("probe|verify) exit 0");
     expect(authorize).toContain(
-      "typed-input|grok-persistence|planning-failure)",
+      "typed-input|grok-persistence|planning-failure|control-recovery)",
     );
     expect(authorize).toContain('[ "$CONFIRM" != "apply" ]');
     expect(authorize).toContain('[ "$GITHUB_ACTOR" != "$AUTHORIZED_ACTOR" ]');
@@ -275,10 +282,11 @@ describe("Grok Bot hosted release workflow", () => {
       expect(preflight).toContain(version);
     }
     for (const state of [
-      "typed-input:1\\|0\\|0\\|0",
-      "grok-persistence:1\\|1\\|0\\|0",
-      "planning-failure:1\\|1\\|1\\|0",
-      "verify:1\\|1\\|1\\|1",
+      "typed-input:1\\|0\\|0\\|0\\|0",
+      "grok-persistence:1\\|1\\|0\\|0\\|0",
+      "planning-failure:1\\|1\\|1\\|0\\|0",
+      "control-recovery:1\\|1\\|1\\|1\\|0",
+      "verify:1\\|1\\|1\\|1\\|1",
     ]) {
       expect(preflight).toContain(state);
     }
@@ -287,10 +295,11 @@ describe("Grok Bot hosted release workflow", () => {
         "Verify ledger catalog ACL runtime lint health and stopped safety",
       ).run ?? "";
     for (const state of [
-      "typed-input:1\\|1\\|0\\|0",
-      "grok-persistence:1\\|1\\|1\\|0",
-      "planning-failure:1\\|1\\|1\\|1",
-      "verify:1\\|1\\|1\\|1",
+      "typed-input:1\\|1\\|0\\|0\\|0",
+      "grok-persistence:1\\|1\\|1\\|0\\|0",
+      "planning-failure:1\\|1\\|1\\|1\\|0",
+      "control-recovery:1\\|1\\|1\\|1\\|1",
+      "verify:1\\|1\\|1\\|1\\|1",
     ]) {
       expect(postflight).toContain(state);
     }
@@ -299,7 +308,7 @@ describe("Grok Bot hosted release workflow", () => {
   it("stages and applies exactly one file in one locked forward-only transaction", () => {
     const step = stepByName("Apply exactly one ordered forward migration");
     expect(step.if).toBe(
-      "${{ inputs.scope == 'typed-input' || inputs.scope == 'grok-persistence' || inputs.scope == 'planning-failure' }}",
+      "${{ inputs.scope == 'typed-input' || inputs.scope == 'grok-persistence' || inputs.scope == 'planning-failure' || inputs.scope == 'control-recovery' }}",
     );
     const command = step.run ?? "";
     for (const evidence of [
@@ -308,7 +317,9 @@ describe("Grok Bot hosted release workflow", () => {
       "grok-persistence)",
       "VERSION=20260830001000",
       "planning-failure)",
-      "VERSION=20260830001200",
+      "VERSION=20260830001100",
+      "control-recovery)",
+      "VERSION=20260830010000",
       "STAGE_DIR=$(mktemp -d)",
       'find "$STAGE_DIR" -maxdepth 1 -type f',
       "plpgsql_check_function_tb",
@@ -324,6 +335,21 @@ describe("Grok Bot hosted release workflow", () => {
       "insert into supabase_migrations.schema_migrations(version) values ('${VERSION}')",
     ]) {
       expect(command).toContain(evidence);
+    }
+    const preMutation = command.slice(0, command.indexOf('-f "$STAGED_FILE"'));
+    for (const prerequisiteIdentity of [
+      "('public.request_grok_control_intent(uuid,uuid,text,uuid,text,text,text)','05adb140368fa0f59cc0bf1cad31caee','authenticated')",
+      "('public.resolve_grok_control_intent_as_server(uuid,uuid,text,text,text)','bd952acdffd457e1ac03e64380284bec','service_role')",
+      "('public.set_graph_pause_as_member(uuid,uuid,boolean)','308dd7294f2b9706238b1aca89699bfe','authenticated')",
+      "('public.withdraw_graph_as_member(uuid,uuid,text)','0ef67c615f62c76ea36593cc92d75dab','authenticated')",
+      "pg_get_userbyid(proowner)='postgres'",
+      "prosecdef",
+      "proconfig=array['search_path=pg_catalog']::text[]",
+      "proacl is not null",
+      "aclexplode(proacl)",
+      "control-recovery prerequisite source, owner, security, search_path, or raw ACL drifted",
+    ]) {
+      expect(preMutation).toContain(prerequisiteIdentity);
     }
     expect(command.match(/-f "\$STAGED_FILE"/g)).toHaveLength(2);
     expect(command).not.toMatch(/supabase\s+db\s+(?:push|reset)/i);
@@ -381,12 +407,51 @@ describe("Grok Bot hosted release workflow", () => {
       "MISSING_CODEX_AGENT",
       "planning-failure exact replay drifted",
       "planning-failure tenant mismatch did not refuse",
+      "public.apply_grok_graph_control_as_owner(uuid,uuid,uuid,text,text,text)",
+      "55508f9dad0b6f307b02713057949895",
+      "control-recovery atomic pause evidence drifted",
+      "v_link := public.link_grok_task_as_server",
+      "insert into public.grok_graph_launches",
+      "control-recovery wrong-session graph did not refuse",
+      "control-recovery wrong-session graph refusal identity changed",
+      "control-recovery wrong-session graph left durable residue",
+      "control-recovery exact replay drifted",
+      "control-recovery requested resume resolution-only recovery drifted",
+      "control-recovery applied replay after opposite direct action did not refuse",
+      "control-recovery applied replay refusal identity changed",
+      "control-recovery applied replay refusal left state or audit residue",
+      "control-recovery requested replay after opposite direct action did not refuse",
+      "control-recovery requested replay refusal identity changed",
+      "control-recovery requested replay refusal left state or audit residue",
+      "control-recovery pause after withdrawal did not refuse",
+      "control-recovery pause after withdrawal refusal identity changed",
+      "control-recovery pause after withdrawal left state or audit residue",
+      "grok_control_recovery_ambiguous",
+      "grok_control_superseded",
+      "control-recovery anonymous action did not refuse",
+      "control-recovery non-owner action did not refuse",
+      "control-recovery refused action left durable residue",
+      "array[1,2,3]::bigint[]",
+      "array[1,2,3,4,5]::bigint[]",
       "plpgsql_check_function_tb",
       "Postflight linked-database lint",
     ]) {
       expect(postflight).toContain(evidence);
     }
     expect(postflight).toContain("count(*) from pg_policy policy");
+    const controlSignature =
+      "('public.apply_grok_graph_control_as_owner(uuid,uuid,uuid,text,text,text)',null)";
+    const apply = stepByName("Apply exactly one ordered forward migration").run ?? "";
+    const transactionalLint = apply.slice(
+      apply.indexOf("LINT_FINDINGS=$(psql"),
+      apply.indexOf("if printf '%s\\n' \"$LINT_FINDINGS\""),
+    );
+    const postCommitLint = postflight.slice(
+      postflight.indexOf("POST_LINT=$(psql"),
+      postflight.indexOf("if printf '%s\\n' \"$POST_LINT\""),
+    );
+    expect(transactionalLint).toContain(controlSignature);
+    expect(postCommitLint).toContain(controlSignature);
     expect(postflight).toContain("not constraint_row.convalidated");
     expect(postflight).toContain("not index_row.indisvalid");
     expect(postflight).toContain("not index_row.indisready");
