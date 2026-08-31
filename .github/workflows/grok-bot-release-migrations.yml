@@ -13,6 +13,7 @@ on:
           - typed-input
           - grok-persistence
           - planning-failure
+          - control-recovery
           - verify
       confirm:
         description: "Type apply for a mutation scope; probe and verify are read-only."
@@ -46,6 +47,8 @@ jobs:
       MIGRATION_01000_SHA256: cf17ece506e30beb08163c8bc5888b6b18341bb4e66f61bafaabd6912f225aa6
       MIGRATION_01100: supabase/migrations/20260830001100_grok_planning_failure.sql
       MIGRATION_01100_SHA256: 22c035897cb51c611aa373c83e637dc4e033352d9079059521eda7fefa35e8f7
+      MIGRATION_10000: supabase/migrations/20260830010000_atomic_grok_graph_control.sql
+      MIGRATION_10000_SHA256: bbd664a7b556a07ab31b84b155725ea8a1b1c5a7f6a6afb1cfe1bae8c07f06b7
       PRODUCTION_HEALTH_URL: https://www.theagoras.com/api/health
       VERCEL_PROJECT_ID: prj_pAsrhftaVWI4SyaqstgRVSWHJkdD
     steps:
@@ -57,7 +60,7 @@ jobs:
         run: |
           case "$SCOPE" in
             probe|verify) exit 0 ;;
-            typed-input|grok-persistence|planning-failure) ;;
+            typed-input|grok-persistence|planning-failure|control-recovery) ;;
             *) echo "::error::Unknown Grok release scope."; exit 1 ;;
           esac
           if [ "$CONFIRM" != "apply" ]; then
@@ -218,7 +221,7 @@ jobs:
           echo "::error::Could not connect to exact Supabase project ${PROJECT_REF}."
           exit 1
 
-      - name: Verify the three exact forward files
+      - name: Verify the four exact forward files
         run: |
           verify_file() {
             FILE=$1
@@ -233,6 +236,7 @@ jobs:
           verify_file "$MIGRATION_00900" "$MIGRATION_00900_SHA256"
           verify_file "$MIGRATION_01000" "$MIGRATION_01000_SHA256"
           verify_file "$MIGRATION_01100" "$MIGRATION_01100_SHA256"
+          verify_file "$MIGRATION_10000" "$MIGRATION_10000_SHA256"
 
       - name: Verify prerequisite ledger catalog and stopped database state
         env:
@@ -243,17 +247,19 @@ jobs:
               (select count(*) from supabase_migrations.schema_migrations where version='20260828000300')||'|'||
               (select count(*) from supabase_migrations.schema_migrations where version='20260830000900')||'|'||
               (select count(*) from supabase_migrations.schema_migrations where version='20260830001000')||'|'||
-              (select count(*) from supabase_migrations.schema_migrations where version='20260830001200');")
+              (select count(*) from supabase_migrations.schema_migrations where version='20260830001100')||'|'||
+              (select count(*) from supabase_migrations.schema_migrations where version='20260830010000');")
           case "$SCOPE:$LEDGER" in
-            probe:1\|0\|0\|0|probe:1\|1\|0\|0|probe:1\|1\|1\|0|probe:1\|1\|1\|1) ;;
-            typed-input:1\|0\|0\|0) ;;
-            grok-persistence:1\|1\|0\|0) ;;
-            planning-failure:1\|1\|1\|0) ;;
-            verify:1\|1\|1\|1) ;;
+            probe:1\|0\|0\|0\|0|probe:1\|1\|0\|0\|0|probe:1\|1\|1\|0\|0|probe:1\|1\|1\|1\|0|probe:1\|1\|1\|1\|1) ;;
+            typed-input:1\|0\|0\|0\|0) ;;
+            grok-persistence:1\|1\|0\|0\|0) ;;
+            planning-failure:1\|1\|1\|0\|0) ;;
+            control-recovery:1\|1\|1\|1\|0) ;;
+            verify:1\|1\|1\|1\|1) ;;
             *) echo "::error::Prerequisite ledger is not the exact ordered state for scope=${SCOPE} (${LEDGER})."; exit 1 ;;
           esac
 
-          if [ "$LEDGER" = "1|0|0|0" ]; then
+          if [ "$LEDGER" = "1|0|0|0|0" ]; then
             EXPECTED_TYPED="
               ('public.create_graph_from_plan_with_release_identity_as_server(uuid,uuid,uuid,text,public.graph_topology,jsonb,public.risk_level,boolean,jsonb,jsonb,jsonb,text,integer,uuid,text,text,jsonb)','878b6df53f450d723a4ef7da9dd677b2',true,false),
               ('public.complete_graph_run_with_validated_release_as_worker(text,uuid,public.graph_run_state,boolean,bigint,bigint,text,text)','8c127b52d5961d49cba980e276edf414',true,false)"
@@ -323,11 +329,11 @@ jobs:
                'grok_sessions','grok_messages','grok_task_links','grok_graph_launches',
                'grok_events','grok_artifact_links','grok_control_intents');")
           case "$SCOPE:$LEDGER:$GROK_TABLES" in
-            probe:1\|0\|0\|0:0|probe:1\|1\|0\|0:0|probe:1\|1\|1\|0:7|probe:1\|1\|1\|1:7|typed-input:1\|0\|0\|0:0|grok-persistence:1\|1\|0\|0:0|planning-failure:1\|1\|1\|0:7|verify:1\|1\|1\|1:7) ;;
+            probe:1\|0\|0\|0\|0:0|probe:1\|1\|0\|0\|0:0|probe:1\|1\|1\|0\|0:7|probe:1\|1\|1\|1\|0:7|probe:1\|1\|1\|1\|1:7|typed-input:1\|0\|0\|0\|0:0|grok-persistence:1\|1\|0\|0\|0:0|planning-failure:1\|1\|1\|0\|0:7|control-recovery:1\|1\|1\|1\|0:7|verify:1\|1\|1\|1\|1:7) ;;
             *) echo "::error::Grok ledger and catalog identity disagree (${SCOPE}:${LEDGER}:${GROK_TABLES})."; exit 1 ;;
           esac
 
-          if [ "$LEDGER" = "1|1|1|0" ]; then
+          if [ "$LEDGER" = "1|1|1|0|0" ]; then
             PLANNING_FAILURE_CATALOG=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
               select
                 to_regprocedure('public.record_grok_planning_failure_as_server(uuid,uuid,uuid,text,text,bigint)') is null
@@ -339,7 +345,7 @@ jobs:
                   from pg_constraint constraint_row
                  where constraint_row.conrelid='public.grok_sessions'::regclass
                    and constraint_row.conname='grok_sessions_closed_state'),false);")
-          elif [ "$LEDGER" = "1|1|1|1" ]; then
+          elif [ "$LEDGER" = "1|1|1|1|0" ] || [ "$LEDGER" = "1|1|1|1|1" ]; then
             PLANNING_FAILURE_CATALOG=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
               select
                 to_regprocedure('public.record_grok_planning_failure_as_server(uuid,uuid,uuid,text,text,bigint)') is not null
@@ -358,10 +364,23 @@ jobs:
             echo "::error::Planning-failure ledger and prerequisite catalog identity disagree."
             exit 1
           fi
+          if [ "$LEDGER" = "1|1|1|1|0" ]; then
+            CONTROL_RECOVERY_CATALOG=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+              select to_regprocedure('public.apply_grok_graph_control_as_owner(uuid,uuid,uuid,text,text,text)') is null;")
+          elif [ "$LEDGER" = "1|1|1|1|1" ]; then
+            CONTROL_RECOVERY_CATALOG=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+              select to_regprocedure('public.apply_grok_graph_control_as_owner(uuid,uuid,uuid,text,text,text)') is not null;")
+          else
+            CONTROL_RECOVERY_CATALOG=t
+          fi
+          if [ "$CONTROL_RECOVERY_CATALOG" != "t" ]; then
+            echo "::error::Control-recovery ledger and prerequisite catalog identity disagree."
+            exit 1
+          fi
           echo "::notice::Ledger=${LEDGER}; catalog and stopped containment are exact."
 
       - name: Apply exactly one ordered forward migration
-        if: ${{ inputs.scope == 'typed-input' || inputs.scope == 'grok-persistence' || inputs.scope == 'planning-failure' }}
+        if: ${{ inputs.scope == 'typed-input' || inputs.scope == 'grok-persistence' || inputs.scope == 'planning-failure' || inputs.scope == 'control-recovery' }}
         env:
           SCOPE: ${{ inputs.scope }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -387,6 +406,7 @@ jobs:
               E900=0
               E1000=0
               E1100=0
+              E10000=0
               CATALOG_GUARD="do \$guard\$ begin
                 if not exists (
                   select 1 from pg_proc routine
@@ -427,6 +447,7 @@ jobs:
               E900=1
               E1000=0
               E1100=0
+              E10000=0
               CATALOG_GUARD="do \$guard\$ begin
                 if exists (select 1 from pg_class relation join pg_namespace space on space.oid=relation.relnamespace where space.nspname='public' and relation.relname like 'grok_%')
                   or exists (select 1 from pg_proc routine join pg_namespace space on space.oid=routine.pronamespace where space.nspname='public' and routine.proname like '%grok%')
@@ -440,10 +461,11 @@ jobs:
             planning-failure)
               FILE=$MIGRATION_01100
               EXPECTED=$MIGRATION_01100_SHA256
-              VERSION=20260830001200
+              VERSION=20260830001100
               E900=1
               E1000=1
               E1100=0
+              E10000=0
               CATALOG_GUARD="do \$guard\$ begin
                 if to_regprocedure('public.record_grok_planning_failure_as_server(uuid,uuid,uuid,text,text,bigint)') is not null
                 then raise exception 'planning-failure RPC catalog is not pristine'; end if;
@@ -475,6 +497,52 @@ jobs:
                     from pg_constraint constraint_row where constraint_row.conrelid='public.grok_sessions'::regclass
                       and constraint_row.conname='grok_sessions_closed_state'),false)
                 then raise exception 'planning-failure prerequisite constraints drifted'; end if;
+              end \$guard\$;"
+              ;;
+            control-recovery)
+              FILE=$MIGRATION_10000
+              EXPECTED=$MIGRATION_10000_SHA256
+              VERSION=20260830010000
+              E900=1
+              E1000=1
+              E1100=1
+              E10000=0
+              CATALOG_GUARD="do \$guard\$ begin
+                if to_regprocedure('public.apply_grok_graph_control_as_owner(uuid,uuid,uuid,text,text,text)') is not null
+                then raise exception 'control-recovery RPC catalog is not pristine'; end if;
+                if not coalesce((
+                  with expected(signature,source_md5,execute_role) as (values
+                    ('public.request_grok_control_intent(uuid,uuid,text,uuid,text,text,text)','05adb140368fa0f59cc0bf1cad31caee','authenticated'),
+                    ('public.resolve_grok_control_intent_as_server(uuid,uuid,text,text,text)','bd952acdffd457e1ac03e64380284bec','service_role'),
+                    ('public.set_graph_pause_as_member(uuid,uuid,boolean)','308dd7294f2b9706238b1aca89699bfe','authenticated'),
+                    ('public.withdraw_graph_as_member(uuid,uuid,text)','0ef67c615f62c76ea36593cc92d75dab','authenticated')
+                  ), state as (
+                    select expected.*,routine.oid,routine.proowner,routine.prosecdef,routine.proconfig,routine.proacl,
+                           md5(replace(replace(routine.prosrc,E'\\r\\n',E'\\n'),E'\\r',E'\\n')) actual_source_md5
+                      from expected
+                      left join pg_proc routine on routine.oid=to_regprocedure(expected.signature)
+                  )
+                  select count(oid)=4 and count(distinct oid)=4 and bool_and(
+                    pg_get_userbyid(proowner)='postgres' and prosecdef
+                    and proconfig=array['search_path=pg_catalog']::text[] and proacl is not null
+                    and actual_source_md5=source_md5
+                    and (select count(*) from aclexplode(proacl))=2
+                    and not exists (select 1 from aclexplode(proacl) acl
+                      where acl.grantor<>proowner or acl.privilege_type<>'EXECUTE' or acl.is_grantable
+                         or acl.grantee not in (proowner,case execute_role
+                           when 'authenticated' then to_regrole('authenticated')::oid
+                           else to_regrole('service_role')::oid end))
+                    and has_function_privilege('anon',oid,'EXECUTE')=false
+                    and has_function_privilege('authenticated',oid,'EXECUTE')=(execute_role='authenticated')
+                    and has_function_privilege('service_role',oid,'EXECUTE')=(execute_role='service_role')
+                  ) and (select count(*) from pg_proc routine join pg_namespace space on space.oid=routine.pronamespace
+                          where space.nspname='public' and routine.proname in (
+                            'request_grok_control_intent','resolve_grok_control_intent_as_server',
+                            'set_graph_pause_as_member','withdraw_graph_as_member'))=4
+                    from state
+                ),false) then
+                  raise exception 'control-recovery prerequisite source, owner, security, search_path, or raw ACL drifted';
+                end if;
               end \$guard\$;"
               ;;
           esac
@@ -523,7 +591,8 @@ jobs:
                     ('public.request_grok_control_intent(uuid,uuid,text,uuid,text,text,text)',null),
                     ('public.resolve_grok_control_intent_as_server(uuid,uuid,text,text,text)',null),
                     ('public.set_grok_session_status_as_server(uuid,uuid,text,bigint)',null),
-                    ('public.record_grok_planning_failure_as_server(uuid,uuid,uuid,text,text,bigint)',null)
+                    ('public.record_grok_planning_failure_as_server(uuid,uuid,uuid,text,text,bigint)',null),
+                    ('public.apply_grok_graph_control_as_owner(uuid,uuid,uuid,text,text,text)',null)
                   ), available as (
                     select expected.signature,to_regprocedure(expected.signature) routine_oid,
                            to_regclass(expected.trigger_relation) trigger_relation_oid
@@ -565,7 +634,8 @@ jobs:
                   if (select count(*) from supabase_migrations.schema_migrations where version='20260828000300')<>1
                     or (select count(*) from supabase_migrations.schema_migrations where version='20260830000900')<>${E900}
                     or (select count(*) from supabase_migrations.schema_migrations where version='20260830001000')<>${E1000}
-                    or (select count(*) from supabase_migrations.schema_migrations where version='20260830001200')<>${E1100}
+                    or (select count(*) from supabase_migrations.schema_migrations where version='20260830001100')<>${E1100}
+                    or (select count(*) from supabase_migrations.schema_migrations where version='20260830010000')<>${E10000}
                   then raise exception 'locked Grok release ledger changed'; end if;
                   if exists (select 1 from public.organizations where coalesce(autonomous_mode,false)
                       or autonomy_kill_switch_active is distinct from true
@@ -588,7 +658,7 @@ jobs:
             -c "insert into supabase_migrations.schema_migrations(version) values ('${VERSION}');"
 
       - name: Reload the PostgREST schema cache
-        if: ${{ inputs.scope == 'typed-input' || inputs.scope == 'grok-persistence' || inputs.scope == 'planning-failure' }}
+        if: ${{ inputs.scope == 'typed-input' || inputs.scope == 'grok-persistence' || inputs.scope == 'planning-failure' || inputs.scope == 'control-recovery' }}
         run: psql "$DB_URL" -v ON_ERROR_STOP=1 -X -c "NOTIFY pgrst, 'reload schema';"
 
       - name: Verify ledger catalog ACL runtime lint health and stopped safety
@@ -606,16 +676,18 @@ jobs:
               (select count(*) from supabase_migrations.schema_migrations where version='20260828000300')||'|'||
               (select count(*) from supabase_migrations.schema_migrations where version='20260830000900')||'|'||
               (select count(*) from supabase_migrations.schema_migrations where version='20260830001000')||'|'||
-              (select count(*) from supabase_migrations.schema_migrations where version='20260830001200');")
+              (select count(*) from supabase_migrations.schema_migrations where version='20260830001100')||'|'||
+              (select count(*) from supabase_migrations.schema_migrations where version='20260830010000');")
           case "$SCOPE:$LEDGER" in
-            probe:1\|0\|0\|0|probe:1\|1\|0\|0|probe:1\|1\|1\|0|probe:1\|1\|1\|1) ;;
-            typed-input:1\|1\|0\|0) ;;
-            grok-persistence:1\|1\|1\|0) ;;
-            planning-failure:1\|1\|1\|1|verify:1\|1\|1\|1) ;;
+            probe:1\|0\|0\|0\|0|probe:1\|1\|0\|0\|0|probe:1\|1\|1\|0\|0|probe:1\|1\|1\|1\|0|probe:1\|1\|1\|1\|1) ;;
+            typed-input:1\|1\|0\|0\|0) ;;
+            grok-persistence:1\|1\|1\|0\|0) ;;
+            planning-failure:1\|1\|1\|1\|0) ;;
+            control-recovery:1\|1\|1\|1\|1|verify:1\|1\|1\|1\|1) ;;
             *) echo "::error::Postflight ledger is not scope-exact (${SCOPE}:${LEDGER})."; exit 1 ;;
           esac
 
-          if [ "$LEDGER" = "1|0|0|0" ]; then
+          if [ "$LEDGER" = "1|0|0|0|0" ]; then
             echo "::notice::Probe found the exact pre-release ledger; no Grok catalog postflight is due."
           else
             TYPED_READY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
@@ -664,7 +736,7 @@ jobs:
               \$typed_runtime\$;"
           fi
 
-          if [ "$LEDGER" = "1|1|1|0" ] || [ "$LEDGER" = "1|1|1|1" ]; then
+          if [ "$LEDGER" = "1|1|1|0|0" ] || [ "$LEDGER" = "1|1|1|1|0" ] || [ "$LEDGER" = "1|1|1|1|1" ]; then
             GROK_TABLE_READY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
               with expected(name) as (values
                 ('grok_sessions'),('grok_messages'),('grok_task_links'),('grok_graph_launches'),
@@ -711,7 +783,7 @@ jobs:
               exit 1
             fi
 
-            if [ "$LEDGER" = "1|1|1|1" ]; then
+            if [ "$LEDGER" = "1|1|1|1|0" ] || [ "$LEDGER" = "1|1|1|1|1" ]; then
               SESSION_UPDATE_SOURCE="'6a2c4bc103081a22672c9821c228665f'"
               STATUS_SOURCE="'d5056a47bac42c495dff7b0593cbf1a9'"
               PLANNING_FAILURE_FUNCTION=",('public.record_grok_planning_failure_as_server(uuid,uuid,uuid,text,text,bigint)','service_role','148341fdd59b01103e22687813d2e3ba','v','plpgsql')"
@@ -721,6 +793,12 @@ jobs:
               STATUS_SOURCE="'15e4d93bf5b4507691052bca792e9523'"
               PLANNING_FAILURE_FUNCTION=""
               EXPECTED_GROK_FUNCTIONS=16
+            fi
+            if [ "$LEDGER" = "1|1|1|1|1" ]; then
+              CONTROL_RECOVERY_FUNCTION=",('public.apply_grok_graph_control_as_owner(uuid,uuid,uuid,text,text,text)','authenticated','55508f9dad0b6f307b02713057949895','v','plpgsql')"
+              EXPECTED_GROK_FUNCTIONS=$((EXPECTED_GROK_FUNCTIONS + 1))
+            else
+              CONTROL_RECOVERY_FUNCTION=""
             fi
             GROK_FUNCTION_READY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
               with expected(signature,execute_role,source_md5,volatility,language_name) as (values
@@ -741,6 +819,7 @@ jobs:
                 ('public.resolve_grok_control_intent_as_server(uuid,uuid,text,text,text)','service_role','bd952acdffd457e1ac03e64380284bec','v','plpgsql'),
                 ('public.set_grok_session_status_as_server(uuid,uuid,text,bigint)','service_role',${STATUS_SOURCE},'v','plpgsql')
                 ${PLANNING_FAILURE_FUNCTION}
+                ${CONTROL_RECOVERY_FUNCTION}
               ), state as (
                 select expected.*,routine.oid,routine.proowner,routine.prosecdef,routine.proconfig,routine.proacl,
                        routine.provolatile,language.lanname,
@@ -767,14 +846,14 @@ jobs:
                       'append_grok_user_message','append_grok_message_as_server','link_grok_task_as_server',
                       'record_grok_event_as_server','launch_grok_full_lifecycle_as_server','link_grok_artifact_as_server',
                        'request_grok_control_intent','resolve_grok_control_intent_as_server','set_grok_session_status_as_server',
-                       'record_grok_planning_failure_as_server'))=${EXPECTED_GROK_FUNCTIONS}
+                       'record_grok_planning_failure_as_server','apply_grok_graph_control_as_owner'))=${EXPECTED_GROK_FUNCTIONS}
               from state;")
             if [ "$GROK_FUNCTION_READY" != "t" ]; then
               echo "::error::Grok function signature, owner, SECURITY DEFINER, search_path, overload, or raw ACL postflight failed."
               exit 1
             fi
 
-            if [ "$LEDGER" = "1|1|1|1" ]; then
+            if [ "$LEDGER" = "1|1|1|1|0" ] || [ "$LEDGER" = "1|1|1|1|1" ]; then
               PLANNING_FAILURE_READY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
                 select
                   exists (
@@ -913,6 +992,194 @@ jobs:
                 -c "rollback;"
             fi
 
+            if [ "$LEDGER" = "1|1|1|1|1" ]; then
+              CONTROL_RECOVERY_READY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+                select exists (
+                  select 1 from pg_proc routine
+                   where routine.oid=to_regprocedure('public.apply_grok_graph_control_as_owner(uuid,uuid,uuid,text,text,text)')
+                     and routine.prorettype='record'::regtype
+                     and routine.proargnames[1:6]=array['p_organization_id','p_session_id','p_graph_id','p_action','p_reason','p_idempotency_key']::text[]
+                     and strpos(routine.prosrc,'for update')>0
+                     and strpos(routine.prosrc,'public.has_organization_role')>0
+                     and strpos(routine.prosrc,'''owner''::public.organization_member_role')>0
+                     and strpos(routine.prosrc,'public.request_grok_control_intent')>0
+                     and strpos(routine.prosrc,'''control.requested''')>0
+                     and strpos(routine.prosrc,'later_event.sequence_no > v_request_sequence')>0
+                     and strpos(routine.prosrc,'public.set_graph_pause_as_member')>0
+                     and strpos(routine.prosrc,'public.withdraw_graph_as_member')>0
+                     and strpos(routine.prosrc,'public.resolve_grok_control_intent_as_server')>0
+                ) and (select count(*) from pg_proc routine join pg_namespace space on space.oid=routine.pronamespace
+                       where space.nspname='public' and routine.proname='apply_grok_graph_control_as_owner')=1;")
+              if [ "$CONTROL_RECOVERY_READY" != "t" ]; then
+                echo "::error::Control-recovery signature, return, ordering, or database-first source identity is not exact."
+                exit 1
+              fi
+
+              psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q \
+                -c "begin;" \
+                -c "do \$control_recovery_runtime\$
+                    declare
+                      v_organization_id uuid; v_project_id uuid; v_owner_id uuid; v_graph_id uuid;
+                      v_session public.grok_sessions; v_other_session public.grok_sessions;
+                      v_requested public.grok_control_intents;
+                      v_link public.grok_task_links; v_pause record; v_replay record; v_resume record;
+                      v_runtime_message text; v_activity_count bigint;
+                      v_key text := 'grok-control-release-' || pg_catalog.replace(pg_catalog.gen_random_uuid()::text,'-','');
+                    begin
+                      select member.organization_id,project.id,member.user_id
+                        into v_organization_id,v_project_id,v_owner_id
+                        from public.organization_members member
+                        join public.projects project on project.organization_id=member.organization_id
+                       where member.role='owner'::public.organization_member_role and project.status='active'
+                       order by member.created_at,project.created_at limit 1;
+                      if not found then raise exception 'control-recovery runtime fixture identity is unavailable'; end if;
+                      perform pg_catalog.set_config('request.jwt.claim.sub',v_owner_id::text,true);
+                      insert into public.graphs(organization_id,project_id,goal,topology,created_by)
+                        values(v_organization_id,v_project_id,'Grok control recovery release check','DAG'::public.graph_topology,v_owner_id)
+                        returning id into v_graph_id;
+                      select * into v_session from public.create_grok_session(
+                        v_organization_id,v_project_id,'Grok control recovery release check',v_key || ':session');
+                      v_link := public.link_grok_task_as_server(
+                        v_organization_id,v_session.id,null,null,null,v_graph_id,null,'planned');
+                      insert into public.grok_graph_launches(
+                        organization_id,project_id,session_id,message_id,idempotency_key,
+                        input_sha256,graph_id,task_link_id,created_by
+                      ) values (
+                        v_organization_id,v_project_id,v_session.id,null,v_key || ':launch',
+                        pg_catalog.repeat('0',64),v_graph_id,v_link.id,v_owner_id
+                      );
+                      select * into v_other_session from public.create_grok_session(
+                        v_organization_id,v_project_id,'Grok control recovery wrong-session check',v_key || ':other-session');
+                      begin
+                        perform public.apply_grok_graph_control_as_owner(
+                          v_organization_id,v_other_session.id,v_graph_id,'pause','release verification',v_key || ':wrong-session');
+                        raise exception 'control-recovery wrong-session graph did not refuse';
+                      exception when sqlstate 'P0002' then
+                        get stacked diagnostics v_runtime_message=message_text;
+                        if v_runtime_message is distinct from 'grok_control_target_not_found' then
+                          raise exception 'control-recovery wrong-session graph refusal identity changed';
+                        end if;
+                      end;
+                      if (select count(*) from public.grok_control_intents intent where intent.session_id=v_other_session.id)<>0
+                        or (select array_agg(event.event_type order by event.sequence_no) from public.grok_events event where event.session_id=v_other_session.id)
+                           is distinct from array['session.created']::text[]
+                        or coalesce((select graph.pause_requested_at is not null from public.graphs graph where graph.id=v_graph_id),false)
+                      then raise exception 'control-recovery wrong-session graph left durable residue'; end if;
+                      select * into v_pause from public.apply_grok_graph_control_as_owner(
+                        v_organization_id,v_session.id,v_graph_id,'pause','release verification',v_key || ':pause');
+                      if v_pause.state is distinct from 'applied' or v_pause.replayed
+                        or not coalesce((select graph.pause_requested_at is not null from public.graphs graph where graph.id=v_graph_id),false)
+                        or (select count(*) from public.grok_control_intents intent where intent.session_id=v_session.id)<>1
+                        or (select array_agg(event.event_type order by event.sequence_no) from public.grok_events event where event.session_id=v_session.id)
+                           is distinct from array['session.created','control.requested','control.applied']::text[]
+                        or (select array_agg(event.sequence_no order by event.sequence_no) from public.grok_events event where event.session_id=v_session.id)
+                           is distinct from array[1,2,3]::bigint[]
+                      then raise exception 'control-recovery atomic pause evidence drifted'; end if;
+                      select * into v_replay from public.apply_grok_graph_control_as_owner(
+                        v_organization_id,v_session.id,v_graph_id,'pause','release verification',v_key || ':pause');
+                      if not v_replay.replayed or v_replay.intent_id is distinct from v_pause.intent_id
+                        or (select count(*) from public.grok_events event where event.session_id=v_session.id)<>3
+                      then raise exception 'control-recovery exact replay drifted'; end if;
+                      select * into v_requested from public.request_grok_control_intent(
+                        v_organization_id,v_session.id,'graph',v_graph_id,'resume',
+                        'release verification',v_key || ':resume-recovery');
+                      perform public.set_graph_pause_as_member(v_organization_id,v_graph_id,false);
+                      select count(*) into v_activity_count from public.activity_events event
+                       where event.entity_type='graph' and event.entity_id=v_graph_id
+                         and event.event_type='graph.pause_changed';
+                      select * into v_resume from public.apply_grok_graph_control_as_owner(
+                        v_organization_id,v_session.id,v_graph_id,'resume','release verification',v_key || ':resume-recovery');
+                      if v_resume.state is distinct from 'applied' or not v_resume.replayed
+                        or v_resume.intent_id is distinct from v_requested.id
+                        or coalesce((select graph.pause_requested_at is not null from public.graphs graph where graph.id=v_graph_id),true)
+                        or (select array_agg(event.event_type order by event.sequence_no) from public.grok_events event where event.session_id=v_session.id)
+                           is distinct from array['session.created','control.requested','control.applied','control.requested','control.applied']::text[]
+                        or (select array_agg(event.sequence_no order by event.sequence_no) from public.grok_events event where event.session_id=v_session.id)
+                           is distinct from array[1,2,3,4,5]::bigint[]
+                        or v_activity_count<>2
+                        or (select count(*) from public.activity_events event
+                             where event.entity_type='graph' and event.entity_id=v_graph_id
+                               and event.event_type='graph.pause_changed')<>v_activity_count
+                      then raise exception 'control-recovery requested resume resolution-only recovery drifted'; end if;
+                      perform public.set_graph_pause_as_member(v_organization_id,v_graph_id,true);
+                      begin
+                        perform public.apply_grok_graph_control_as_owner(
+                          v_organization_id,v_session.id,v_graph_id,'resume','release verification',v_key || ':resume-recovery');
+                        raise exception 'control-recovery applied replay after opposite direct action did not refuse';
+                      exception when sqlstate '55000' then
+                        get stacked diagnostics v_runtime_message=message_text;
+                        if v_runtime_message is distinct from 'grok_control_superseded' then
+                          raise exception 'control-recovery applied replay refusal identity changed';
+                        end if;
+                      end;
+                      if not coalesce((select graph.pause_requested_at is not null from public.graphs graph where graph.id=v_graph_id),false)
+                        or (select count(*) from public.grok_control_intents intent where intent.session_id=v_session.id)<>2
+                        or (select count(*) from public.grok_events event where event.session_id=v_session.id)<>5
+                        or (select count(*) from public.activity_events event
+                             where event.entity_type='graph' and event.entity_id=v_graph_id
+                               and event.event_type='graph.pause_changed')<>3
+                      then raise exception 'control-recovery applied replay refusal left state or audit residue'; end if;
+                      select * into v_requested from public.request_grok_control_intent(
+                        v_organization_id,v_session.id,'graph',v_graph_id,'pause',
+                        'release verification',v_key || ':ambiguous-pause');
+                      perform public.set_graph_pause_as_member(v_organization_id,v_graph_id,false);
+                      begin
+                        perform public.apply_grok_graph_control_as_owner(
+                          v_organization_id,v_session.id,v_graph_id,'pause','release verification',v_key || ':ambiguous-pause');
+                        raise exception 'control-recovery requested replay after opposite direct action did not refuse';
+                      exception when sqlstate '55000' then
+                        get stacked diagnostics v_runtime_message=message_text;
+                        if v_runtime_message is distinct from 'grok_control_recovery_ambiguous' then
+                          raise exception 'control-recovery requested replay refusal identity changed';
+                        end if;
+                      end;
+                      if v_requested.state is distinct from 'requested'
+                        or coalesce((select graph.pause_requested_at is not null from public.graphs graph where graph.id=v_graph_id),true)
+                        or (select count(*) from public.grok_control_intents intent where intent.session_id=v_session.id)<>3
+                        or (select count(*) from public.grok_events event where event.session_id=v_session.id)<>6
+                        or (select count(*) from public.activity_events event
+                             where event.entity_type='graph' and event.entity_id=v_graph_id
+                               and event.event_type='graph.pause_changed')<>4
+                      then raise exception 'control-recovery requested replay refusal left state or audit residue'; end if;
+                      perform public.withdraw_graph_as_member(v_organization_id,v_graph_id,'release verification withdrawal');
+                      begin
+                        perform public.apply_grok_graph_control_as_owner(
+                          v_organization_id,v_session.id,v_graph_id,'pause','release verification',v_key || ':withdrawn-pause');
+                        raise exception 'control-recovery pause after withdrawal did not refuse';
+                      exception when sqlstate '55000' then
+                        get stacked diagnostics v_runtime_message=message_text;
+                        if v_runtime_message is distinct from 'grok_control_not_available' then
+                          raise exception 'control-recovery pause after withdrawal refusal identity changed';
+                        end if;
+                      end;
+                      if not coalesce((select graph.withdrawn_at is not null from public.graphs graph where graph.id=v_graph_id),false)
+                        or (select count(*) from public.grok_control_intents intent where intent.session_id=v_session.id)<>3
+                        or (select count(*) from public.grok_events event where event.session_id=v_session.id)<>6
+                        or (select count(*) from public.activity_events event
+                             where event.entity_type='graph' and event.entity_id=v_graph_id
+                               and event.event_type in ('graph.pause_changed','graph.withdrawn'))<>5
+                      then raise exception 'control-recovery pause after withdrawal left state or audit residue'; end if;
+                      perform pg_catalog.set_config('request.jwt.claim.sub','',true);
+                      begin
+                        perform public.apply_grok_graph_control_as_owner(
+                          v_organization_id,v_session.id,v_graph_id,'pause','release verification',v_key || ':anon');
+                        raise exception 'control-recovery anonymous action did not refuse';
+                      exception when sqlstate '42501' then null; end;
+                      perform pg_catalog.set_config('request.jwt.claim.sub',pg_catalog.gen_random_uuid()::text,true);
+                      begin
+                        perform public.apply_grok_graph_control_as_owner(
+                          v_organization_id,v_session.id,v_graph_id,'pause','release verification',v_key || ':nonowner');
+                        raise exception 'control-recovery non-owner action did not refuse';
+                      exception when sqlstate '42501' then null; end;
+                      perform pg_catalog.set_config('request.jwt.claim.sub',v_owner_id::text,true);
+                      if (select count(*) from public.grok_control_intents intent where intent.session_id=v_session.id)<>3
+                        or (select count(*) from public.grok_events event where event.session_id=v_session.id)<>6
+                      then raise exception 'control-recovery refused action left durable residue'; end if;
+                    end;
+                    \$control_recovery_runtime\$;" \
+                -c "rollback;"
+            fi
+
             GROK_EXECUTION_BOUNDARY_READY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
               with authenticated_boundary(signature) as (values
                 ('public.create_grok_session(uuid,uuid,text,text)'),
@@ -1035,7 +1302,8 @@ jobs:
                     ('public.request_grok_control_intent(uuid,uuid,text,uuid,text,text,text)',null),
                     ('public.resolve_grok_control_intent_as_server(uuid,uuid,text,text,text)',null),
                     ('public.set_grok_session_status_as_server(uuid,uuid,text,bigint)',null),
-                    ('public.record_grok_planning_failure_as_server(uuid,uuid,uuid,text,text,bigint)',null)
+                    ('public.record_grok_planning_failure_as_server(uuid,uuid,uuid,text,text,bigint)',null),
+                    ('public.apply_grok_graph_control_as_owner(uuid,uuid,uuid,text,text,text)',null)
                   ), available as (
                     select expected.signature,to_regprocedure(expected.signature) routine_oid,
                            to_regclass(expected.trigger_relation) trigger_relation_oid

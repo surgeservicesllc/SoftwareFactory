@@ -1,5 +1,6 @@
 // @vitest-environment node
 
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
@@ -72,6 +73,17 @@ const listFactoryCommandsCatalog = {
   contract: "162d47956f98e7b005c7abe1df680ee9",
 } as const;
 
+const protectedPostflights = {
+  functions: ".github/hosted-apply/postflight/record-only-functions.sql",
+  boundary: ".github/hosted-apply/postflight/record-only-boundary.sql",
+  foundation: ".github/hosted-apply/postflight/agentos-foundation.sql",
+} as const;
+const protectedPostflightHashes = {
+  functions: "41d12312051fa0e688de2716c4818919736bba5b1593fd9dcb9f55a437960ec2",
+  boundary: "acc65dc4e2f5a48f8752c8392357fbd74c7718574625c199edc49934d9187640",
+  foundation: "47ca3a8d369f8342f79139ccdcad81ffce36a7af872dccff906129411b8241a4",
+} as const;
+
 interface WorkflowStep {
   readonly name: string;
   readonly if?: string;
@@ -96,6 +108,9 @@ const hostedFunctionAclSource = readFileSync(
 );
 const repairSource = readFileSync(resolve(repositoryRoot, files.repair), "utf8");
 const recordOnlySource = readFileSync(resolve(repositoryRoot, files.recordOnly), "utf8");
+const protectedPostflightSource = Object.values(protectedPostflights)
+  .map((path) => readFileSync(resolve(repositoryRoot, path), "utf8"))
+  .join("\n");
 const workflow = parse(source) as HostedApplyWorkflow;
 const steps = workflow.jobs.apply.steps;
 
@@ -278,10 +293,18 @@ describe("the protected factory any-model record-only chain", () => {
     expect(command).toContain("clear_controls_ready post");
     expect(command).toContain("RECORD_ONLY_READY=");
     expect(command).toContain("RECORD_ONLY_BOUNDARY=");
-    expect(command).toContain("count(oid) = 12 and count(distinct oid) = 12");
-    expect(command).toContain("public.factory_record_only_submission_guards");
-    expect(command).toContain("command.parameters ->> 'executionMode' = 'record_only'");
-    expect(command).toContain("count(*) = 20 from pg_trigger");
+    expect(command).toContain("FOUNDATION_READY=");
+    for (const [key, path] of Object.entries(protectedPostflights)) {
+      expect(command).toContain(`-f ${path}`);
+      const body = readFileSync(resolve(repositoryRoot, path), "utf8");
+      expect(createHash("sha256").update(body).digest("hex"))
+        .toBe(protectedPostflightHashes[key as keyof typeof protectedPostflightHashes]);
+    }
+    expect(protectedPostflightSource).toContain("count(oid) = 12 and count(distinct oid) = 12");
+    expect(protectedPostflightSource).toContain("public.factory_record_only_submission_guards");
+    expect(protectedPostflightSource).toContain("command.parameters ->> 'executionMode' = 'record_only'");
+    expect(protectedPostflightSource).toContain("count(*) = 20 from pg_trigger");
+    expect(protectedPostflightSource).toContain("agentos_resolved_agent_grants(uuid)");
   });
 
   it("pins pre-CONTRACT legacy plus immutable job-seeker, executable-model, and clear-controls state", () => {
@@ -317,7 +340,7 @@ describe("the protected factory any-model record-only chain", () => {
     const command = protectedStep().run ?? "";
     for (const signature of lintedSignatures) expect(command).toContain(signature);
     for (const identity of Object.values(listFactoryCommandsCatalog)) {
-      expect(command).toContain(identity);
+      expect(protectedPostflightSource).toContain(identity);
     }
     const lint = command.indexOf("LINT_FINDINGS=");
     const create = command.indexOf("create extension if not exists plpgsql_check with schema extensions;", lint);
