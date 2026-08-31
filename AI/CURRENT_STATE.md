@@ -549,6 +549,14 @@ The worker's empty-queue diagnosis now names withdrawal and pause
 a graph that was excluded on purpose. Read-only restatement of
 diagnose_graph_queue_as_worker_v2; protocol unchanged.
 
+**PEST CRM: PRODUCTION READY (ADR-224), scoped exactly.** The copilot
+answers five computed questions from the workspace's own rows, and five
+acceptance-journey tests walk the 57,447-record seeded book across module
+boundaries. The declaration covers everything the repository can do
+alone; the eight provider-gated rows remain **Not Connected** and the RED
+actions remain owner-gated, each named on its own backlog row. Nothing in
+this declaration authorizes autonomous production changes.
+
 Of the remaining eighteen rows, eight are gated on an
 external account nobody has opened: card/ACH processing, SMS/email
 delivery, GPS telemetry, QuickBooks sync, telephony, reviews and

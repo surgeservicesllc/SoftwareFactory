@@ -1,5 +1,54 @@
 # Backlog
 
+## Close-out triage (2026-08-31, owner /goal: complete the backlog, 100% production ready)
+
+Every box below this section is either checked or parked, and every parked
+box's own text names what unparks it. Read this section as the index; the
+rows are the record. As of this triage the file holds 117 open boxes, all
+of them parked, in exactly five families:
+
+1. **Owner credentials or accounts** — an external account or key nobody
+   has opened or supplied: the eight CRM provider rows (SMS, email,
+   card/ACH, GPS, accounting sync, telephony, reviews, mapping/geocoding),
+   RESEND_API_KEY/CRON_SECRET/JOB_ALERT_EMAIL_FROM, JSEARCH_RAPIDAPI_KEY,
+   LinkedIn OAuth, USAJOBS/Adzuna/Jooble keys, SUPER_ADMIN_EMAILS,
+   `SOFTWAREFACTORY_CODEX_AUTH_JSON`, a Vercel token, an AI provider for
+   copilot drafting. Each ships **Not Connected** and its row says which
+   secret lights it up.
+2. **Owner decisions** — a person must choose, not build: branch
+   protection and signatures on `main`, the `theagoras.com` aliases,
+   Vercel Deployment Protection, marketing-site indexing, usage-row
+   retention, the Phase 2A per-token-cost conflict, confirming the
+   owner's Supabase email, pressing Clear on their own projects,
+   confirming pages match their design images.
+3. **RED / separately-authorized actions** — `policies/RISK_CLASSIFICATION.md`
+   and AGENTS.md forbid these without an explicit owner authorization
+   naming action, target, evidence and rollback: unattended recurring
+   billing, auto-merge, deploy/rollback execution, enabling any automatic
+   action, the Grok 009/010 protected apply chain, the 00150/00200/00300
+   legacy chain, the 17-version ledger reconciliation, `130015`,
+   `20260821000400`, production canaries, the job-seeker grant
+   contraction (parked one deploy behind its own shipped code).
+4. **Live-production observation** — evidence only production can mint:
+   real heartbeats, live provider runs, signed-in acceptance on deployed
+   hosts, webhook defect `#4660724`, monitor targets. Recorded so the
+   next session verifies rather than re-derives.
+5. **Design follow-ons recorded as future work** — capabilities whose
+   ungated half already shipped and whose remainder names its gate on the
+   row: route optimisation behind geocoding, WDO diagram drawing surface,
+   the learning edge (ADR'd), budget month-plan panel, transfer linking,
+   reconciliation surfacing, ledger editing, phase 2 worker cases.
+
+What the close-out itself completed is recorded on the rows it closed —
+increments 24-27 (ADR-220..223), the copilot + acceptance journey and the
+scoped **PEST CRM: PRODUCTION READY** declaration (ADR-224), the
+57-suite snapshot conversion and the apply-workflow extraction, the
+probe-verified hosted ledger through `20260831001400`, and the
+category/insert-chain/notice truthfulness fixes. Nothing in this file is
+open because work stopped; everything open is waiting on a named key, a
+named decision, a named authorization, or production itself.
+
+
 ## Two competitor rows that are NOT provider-gated (found 2026-08-31)
 
 Checked while writing ADR-217, because "everything remaining is gated
@@ -445,8 +494,15 @@ the full seeded E2E journey passes — increment 10 of the plan.
   action, target, risk, evidence and rollback/containment plan. The
   generator itself already exists and is idempotent (ADR-200); only the
   clock is missing, and the clock is the part that needs permission.
-- [ ] Then the AI copilot and the seeded E2E acceptance journey — after
-  which, and only after which, PEST CRM: PRODUCTION READY may be declared.
+- [x] Then the AI copilot and the seeded E2E acceptance journey (ADR-224):
+  /Services/copilot answers five computed questions from the workspace's
+  own rows (free-form drafting labelled Not Connected), and five
+  acceptance-journey tests walk the 57,447-record seeded book across
+  module boundaries — paper trail, routes, portal scoping, balanced
+  journal, copilot arithmetic. **PEST CRM: PRODUCTION READY is declared
+  for everything the repository can do alone**; the eight provider-gated
+  rows stay Not Connected and the RED actions stay owner-gated, each
+  named on its own row.
 - [x] Queue-diagnosis honesty follow-up (ADR-223): `20260831001400`
   re-creates `diagnose_graph_queue_as_worker_v2` with withdrawn_at +
   pause_requested_at projected, and explainEmptyQueue names both reasons

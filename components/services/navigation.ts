@@ -1,4 +1,5 @@
 import {
+  Sparkles,
   BanknoteArrowDown,
   Bug,
   Building2,
@@ -52,6 +53,12 @@ export const SERVICES_NAVIGATION: readonly ServicesNavItem[] = [
     label: "Overview",
     description: "The book of business at a glance",
     icon: LayoutDashboard,
+  },
+  {
+    href: `${SERVICES_ROOT}/copilot`,
+    label: "Copilot",
+    description: "Ask the workspace; answers computed from your rows",
+    icon: Sparkles,
   },
   {
     href: `${SERVICES_ROOT}/customers`,
