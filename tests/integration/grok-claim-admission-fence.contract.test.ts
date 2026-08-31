@@ -48,6 +48,7 @@ describe("Grok claim admission fence migration contract", () => {
       sql.indexOf("create function public.claim_planned_graph_v3"),
     );
     expect(graphProjection).toContain("'grok_admission_required', false");
+    expect(sql).not.toMatch(/\bpg_catalog\.coalesce\s*\(/i);
     const phase1cProjection = sql.slice(
       sql.indexOf("create function public.attach_current_grok_admission_to_phase1c_claim"),
       sql.indexOf("create function public.claim_phase1c_run_v3"),

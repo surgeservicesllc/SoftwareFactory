@@ -338,7 +338,7 @@ begin
     return p_claim || pg_catalog.jsonb_build_object('grok_admission_required', false);
   end if;
 
-  select pg_catalog.coalesce(pg_catalog.jsonb_agg(
+  select coalesce(pg_catalog.jsonb_agg(
     case when admission.id is null then node.value else
       node.value || pg_catalog.jsonb_build_object(
         'execution_admission', public.grok_execution_admission_projection(admission)
@@ -2125,7 +2125,7 @@ begin
       ('public.grok_execution_admission_projection(public.grok_execution_admissions)',
        'a85f407323a331e54d8d16123c46281f', 'i'::"char", false, null, null),
       ('public.attach_current_grok_admissions_to_claim(jsonb)',
-       '0e4a0ba5d0941f6cb43ecee3a23aecbb', 'v'::"char", true, null, null),
+       '427294dac55a06b5ca1f9a1c89b0cdfa', 'v'::"char", true, null, null),
       ('public.claim_planned_graph_v3(text,text[],text,jsonb,integer)',
        '4a6da8bed8d1fdda17f11df00d549817', 'v'::"char", true, 'service_role', null),
       ('public.claim_planned_graph_by_id_v3(text,text[],text,jsonb,uuid,integer)',

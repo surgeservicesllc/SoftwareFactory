@@ -118,12 +118,13 @@ hops, and getting it wrong drops every refund silently rather than failing.
 THE MAPPING LIVES IN THE SERVICE (journalFromLedgers), shared by the route
 and the behaviour suite. A mapping only the route knew would be a mapping
 only production ever exercised.
+
 ## Newest (2026-08-31, latest+39): Grok claim and specialist admission release candidate (ADR-219)
 
 The implementation is complete in the repository, not in hosted Supabase.
 `20260831000900_grok_claim_admission_fence.sql` has canonical LF SHA-256
-`795d49b41b2de34819272a45a837d50aa6c3808db5a2c85e6a4ad769d5deff6b`
-and 92,659 LF bytes. `20260831001000_grok_specialist_admission_planning.sql`
+`7f2dc3b80e466b3c06f589ac6383fd768df847d66e02ec0cab53b8d8431ab737`
+and 92,648 LF bytes. `20260831001000_grok_specialist_admission_planning.sql`
 has canonical LF SHA-256
 `728628f0368e1f715d8c786ffb536d2d3fcc3a859a177a0665a00ea98a8386f1`
 and 56,636 LF bytes.

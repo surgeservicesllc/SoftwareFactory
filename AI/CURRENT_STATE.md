@@ -5,8 +5,8 @@
 The next Grok boundary is implemented in the repository but is not hosted or
 production accepted. Forward migration
 `20260831000900_grok_claim_admission_fence.sql` (canonical LF SHA-256
-`795d49b41b2de34819272a45a837d50aa6c3808db5a2c85e6a4ad769d5deff6b`;
-92,659 LF bytes) makes protocol v3 the only service-role Grok claim path. Every
+`7f2dc3b80e466b3c06f589ac6383fd768df847d66e02ec0cab53b8d8431ab737`;
+92,648 LF bytes) makes protocol v3 the only service-role Grok claim path. Every
 Grok Resume, wake, graph claim, and Phase 1C claim revalidates the complete
 immutable admission set against the current graph node, assignment, bot, role,
 AI account, credential rotation, provider, and model. The worker receives only

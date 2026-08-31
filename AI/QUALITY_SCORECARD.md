@@ -56,7 +56,7 @@ on a correct schema. RLS census 215 -> 217; grants 60 -> 62 crm tables;
 runbook 215 -> 216; seed report 59/59 -> 61/61 and 55,723 -> 57,447 rows,
 with 857 routes and 867 stops. Matrix: 9 GAP -> 8, 9 PARTIAL -> 10.
 
-**Addendum, 2026-08-31 latest+39 - accounting export (ADR-219):**
+**Addendum, 2026-08-31 latest+40 - accounting export (ADR-220):**
 accounting-export unit 14 and services-accounting-export.behavior 6 on the
 real chain. The unit suite pins what an accountant checks: every entry
 balances, an unbalanced one throws rather than rendering, a draft and a
@@ -88,10 +88,10 @@ every suite run.
 
 **Addendum, 2026-08-31 latest+39 - Grok claim and specialist admission
 (ADR-219):** The rebased repository candidate carries two forward-only files:
-009 claim fence (`795d49b41b2de34819272a45a837d50aa6c3808db5a2c85e6a4ad769d5deff6b`,
-92,659 canonical-LF bytes) and 010 specialist planning
+009 claim fence (`7f2dc3b80e466b3c06f589ac6383fd768df847d66e02ec0cab53b8d8431ab737`,
+92,648 canonical-LF bytes) and 010 specialist planning
 (`728628f0368e1f715d8c786ffb536d2d3fcc3a859a177a0665a00ea98a8386f1`,
-56,636 canonical-LF bytes). The integrated migration inventory is 217.
+56,636 canonical-LF bytes). The integrated migration inventory is 220.
 
 Measured focused evidence on this rebased candidate is 17/17 for the dedicated
 release-workflow contract, 10/10 for claim behavior/contracts, and 69/69 for
