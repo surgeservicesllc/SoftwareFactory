@@ -300,14 +300,23 @@ export async function POST(request: Request) {
       project.name,
       bundle,
     );
+    const executionStarted = detail.session.graphRunId !== null;
+    const executionState = detail.session.status;
+    const executionMessage = executionStarted
+      ? `A durable graph run is linked and the session is ${executionState}. This request did not dispatch a worker.`
+      : executionState === "paused"
+        ? "The canonical release graph is durable and paused. This request did not dispatch a worker."
+        : `The canonical release graph is durable with status ${executionState}; no durable run evidence is linked. This request did not dispatch a worker.`;
     return jsonNoStore({
       ...detail,
+      // This route never dispatches. Keep that request-scoped fact separate
+      // from whether another authorized request already started a durable run.
       workerWoken: false,
-      executionStarted: false,
+      executionStarted,
       execution: {
-        state: "paused",
+        state: executionState,
         bridge: "full_lifecycle_v2",
-        message: "The canonical release graph is durable and paused. No worker was dispatched.",
+        message: executionMessage,
       },
     }, { status: 202 });
   } catch (error) {

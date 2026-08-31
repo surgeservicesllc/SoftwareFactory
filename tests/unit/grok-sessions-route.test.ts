@@ -253,6 +253,55 @@ describe("Grok sessions POST", () => {
     expect(harness.serviceRpc).not.toHaveBeenCalled();
   });
 
+  it("reports durable run evidence truthfully when a replay finds the graph already running", async () => {
+    const graphRunId = "90000000-0000-4000-8000-000000000009";
+    harness.storedPlan.mockReturnValue(plan);
+    harness.readBundle.mockResolvedValue({
+      ...bundle,
+      messages: [{ id: assistantMessageId, sequence_no: 2, role: "assistant" }],
+    });
+    harness.plannedGraphLink.mockReturnValue({ graph_id: graphId, relation: "planned" });
+    harness.mapDetail.mockResolvedValue({
+      session: {
+        id: sessionId,
+        projectId,
+        projectName: "Factory",
+        title: "Build the portal",
+        goal: "Build the portal",
+        status: "running",
+        commandId: null,
+        graphId,
+        graphRunId,
+        createdAt: "2026-08-30T20:00:00.000Z",
+        updatedAt: "2026-08-30T20:01:00.000Z",
+        allowedActions: ["pause", "cancel"],
+      },
+      messages: [], tasks: [], events: [], artifacts: [],
+    });
+
+    const response = await POST(new Request("https://factory.example/api/grok/sessions", {
+      method: "POST",
+      headers: { origin: "https://factory.example", "content-type": "application/json" },
+      body: JSON.stringify({ projectId, prompt: "Build the portal" }),
+    }));
+    const body = await response.json();
+
+    expect(response.status).toBe(202);
+    expect(body).toMatchObject({
+      session: { status: "running", graphId, graphRunId },
+      workerWoken: false,
+      executionStarted: true,
+      execution: {
+        state: "running",
+        bridge: "full_lifecycle_v2",
+        message: expect.stringMatching(/durable graph run is linked.*request did not dispatch/i),
+      },
+    });
+    expect(body.execution.message).not.toMatch(/is durable and paused/i);
+    expect(harness.resolveRelease).not.toHaveBeenCalled();
+    expect(harness.serviceRpc).not.toHaveBeenCalled();
+  });
+
   it("rejects secret-shaped prompts before authentication or persistence", async () => {
     harness.findSensitiveData.mockReturnValue({ reason: "secret-shaped token" });
     const response = await POST(new Request("https://factory.example/api/grok/sessions", {
