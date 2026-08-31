@@ -4,8 +4,12 @@
 
 Every box below this section is either checked or parked, and every parked
 box's own text names what unparks it. Read this section as the index; the
-rows are the record. As of this triage the file holds 117 open boxes, all
-of them parked, in exactly five families:
+rows are the record. At triage time the file held 117 open boxes; the
+close-out then kept working the fifth family and closed every box in it
+that needed no gate (categories, ledger editing, reconciliation
+surfacing, transfer linking, the month plan, the WDO printable report,
+the DNS-probe row that was stale) — each closure recorded on its row.
+What remains open is parked, in exactly five families:
 
 1. **Owner credentials or accounts** — an external account or key nobody
    has opened or supplied: the eight CRM provider rows (SMS, email,
@@ -33,11 +37,13 @@ of them parked, in exactly five families:
    real heartbeats, live provider runs, signed-in acceptance on deployed
    hosts, webhook defect `#4660724`, monitor targets. Recorded so the
    next session verifies rather than re-derives.
-5. **Design follow-ons recorded as future work** — capabilities whose
-   ungated half already shipped and whose remainder names its gate on the
-   row: route optimisation behind geocoding, WDO diagram drawing surface,
-   the learning edge (ADR'd), budget month-plan panel, transfer linking,
-   reconciliation surfacing, ledger editing, phase 2 worker cases.
+5. **Design work the repository itself gates on owner direction** — the
+   learning edge's own row demands an ADR and owner direction before code
+   because a wrong derived constraint narrows every later plan silently;
+   Jobbank needs a reviewed fallback contract; the FirstMate import
+   design rows record what NOT to import. The formerly-completable
+   members of this family (budget follow-ons, the WDO printable report)
+   have shipped and their rows say so.
 
 What the close-out itself completed is recorded on the rows it closed —
 increments 24-27 (ADR-220..223), the copilot + acceptance journey and the
