@@ -2,6 +2,45 @@
 
 Last reviewed: 2026-08-31
 
+**Addendum, 2026-08-31 latest+27 - the integration registry (ADR-207):**
+services-integrations.behavior 9 on the real chain: all eight providers
+reported including the ones nobody configured, because a capability the
+workspace lacks is what a page most needs to be told about; a provider
+configured AND switched on but with no credential still reported not live,
+which is the assertion the whole increment exists for; live turning on the
+moment a sealed credential appears and back off when either the credential
+is removed or the switch is thrown; a credential filed under a different
+purpose refusing to stand in; a key refused from the display label, the
+settings blob, and — after a route test caught the gap — the purpose name,
+whose shape check a Stripe secret key satisfies exactly and which was the
+one free-text column left unguarded in the first draft; one row per provider
+per workspace; a non-member refused with "membership is required" rather
+than handed an empty list; and the status function's RETURNS signature
+proven not to carry an envelope while provider_credentials stays unreadable
+by anon and authenticated alike. services-integrations-routes 9 pins the
+boundary: paused counted apart from awaiting-a-credential because the
+owner's next step differs, a live provider with a recorded error reported
+failing rather than connected, a caller's attempt to assert `live` refused
+by the strict schema, three shapes of credential field refused outright,
+and the route re-reading status rather than echoing its own write. RLS
+census 202 → 203; grants 48 → 49 crm tables; runbook 205; workflow scope
+`service-integrations`.
+
+**Addendum, 2026-08-31 latest+26 - the activity heat map (ADR-206):**
+portal-heat-map 6, pinning the four cell states the grid draws and one
+assertion that they never collapse into fewer: a month absent from the
+response classified as unscanned rather than clean (the function only
+returns a row where a scan happened, so the months nobody visited are
+exactly the ones missing, and a grid built from the returned rows alone
+would drop them silently); a scan with no number written down kept out of
+the clean state; a counted zero allowed to be clean, because that one
+actually is; and a bigint total crossing as a number rather than a string,
+without which the shading would compare text and rank 9 above 31. No
+migration, no new tables, no seed change. It also corrected the matrix's
+"commercial trend reports with heat maps" row, which was still GAP after
+ADR-203 shipped the data behind it — 12 GAP down to 11, 18 rows now short
+of HAVE.
+
 **Addendum, 2026-08-31 latest+25 - WDO reports (ADR-205):**
 services-wdo-inspections.behavior 14 on the real chain: an inspection
 refused for not answering the headline question; a report claiming evidence

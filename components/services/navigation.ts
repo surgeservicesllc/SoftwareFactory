@@ -9,6 +9,7 @@ import {
   IdCard,
   Megaphone,
   KanbanSquare,
+  PlugZap,
   LayoutDashboard,
   Radar,
   ClipboardCheck,
@@ -158,6 +159,12 @@ export const SERVICES_NAVIGATION: readonly ServicesNavItem[] = [
     label: "WDO Reports",
     description: "Termite inspections, findings and diagrams",
     icon: Bug,
+  },
+  {
+    href: `${SERVICES_ROOT}/integrations`,
+    label: "Integrations",
+    description: "What this workspace can do, and what needs an account",
+    icon: PlugZap,
   },
 ];
 

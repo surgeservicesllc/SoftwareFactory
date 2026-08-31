@@ -2,6 +2,90 @@
 
 Last updated: 2026-08-31
 
+## Running a full local suite: do not touch supabase/migrations while it runs
+
+Twice in one session a full `npx vitest run` came back with a dozen-plus
+failures that were entirely self-inflicted, and both times the cause was
+identical: a migration file created (or created and then deleted) WHILE the
+run was in flight.
+
+`tests/support/latest-migration.ts` resolves LATEST_MIGRATION once at module
+load. Suites that assert `migrationFiles.at(-1)` re-read the directory later.
+Change the directory in between and the two disagree, so every chain-replay
+suite fails with a message naming a file you just added or removed.
+
+The tell is unmistakable and worth recognising fast: MANY failures, ONE
+assertion message, and it names a migration filename. That is never a real
+defect.
+
+The rule: start a full suite only against a committed, quiet tree, and do
+other work somewhere that is not `supabase/migrations/`. If you must add a
+migration, kill the run first — a contaminated run is worse than no run,
+because it costs a re-run and it tempts you to read real failures out of
+noise.
+
+## Newest (2026-08-31, latest+27): the integration registry (ADR-207)
+
+`20260830010200` adds crm_service_integrations plus two definers. It is the
+one place that knows whether a provider capability actually works.
+
+THE RULE, AND THE ONLY ONE THAT MATTERS HERE: `live` is DERIVED, never
+stored. The table has NO status column. crm_integration_status() computes
+live as "an owner enabled it AND a sealed credential for its purpose really
+exists in provider_credentials". Add a status column somebody can set and
+the page will one day read Connected while nothing sends — the postflight
+asserts that column does not exist, and so does a test.
+
+Both functions are definers, which is the opposite of most reads in this
+chain, and it is load-bearing: provider_credentials is unreadable by every
+browser role (that absence is what keeps the envelope sealed), so the
+presence check has to run as the owner. Membership is checked explicitly
+and FIRST. The RETURNS clause carries credential_present boolean and
+nothing else — a test asserts the signature, so no body edit can leak the
+envelope without changing it.
+
+EVERY FREE TEXT IS SECRET-GUARDED, PURPOSE NAME INCLUDED. The first draft
+gave the purpose only its shape check, and a Stripe secret key fits that
+shape exactly — lower-case and underscored. A route test caught it. If you
+add a column here, guard it.
+
+Test fixtures that look like credentials are assembled at runtime by
+concatenation, never written as literals: GitHub push protection rejected
+this branch over a key-shaped fixture, and a literal that trips real
+scanners forever is a bad fixture even when it is invented.
+
+crm_integration_live returns FALSE, never null, for an unconfigured
+provider: callers write `if (!live)`.
+
+Anything gated on a provider must branch on `live` from this function and
+nothing else. A component constant, a settings flag, or `enabled` on its
+own will eventually claim something was sent.
+
+## Newest (2026-08-31, latest+26): the activity heat map (ADR-206, #71)
+
+The customer's Stations tab renders month x station-type activity as a
+shaded grid. FOUR states, never one ramp:
+
+  nobody scanned (dashed, empty) | scanned without counting (grey, "?")
+  | counted at nothing (clean colour) | activity (the ramp)
+
+ONLY "counted at nothing" means the site was clean. Collapse any of the
+other three into it — which is what a single opacity scale does — and a
+compliance grid starts telling a customer their site is fine because
+nobody went. The legend names all four in words for the same reason.
+
+THE GRID IS BUILT FROM THE ACCOUNT'S MONTHS AND TYPES, NOT FROM THE ROWS
+THE FUNCTION RETURNED. crm_portal_device_trend only emits a row where a
+scan happened, so the months nobody visited are precisely the ones missing
+from the response. Render only what came back and the most important cells
+vanish silently. tests/unit/portal-heat-map pins all four states and
+asserts they never collapse into fewer.
+
+This also corrected a stale matrix row: "commercial trend reports with heat
+maps" was marked GAP after ADR-203 had already shipped the data. When you
+audit that file, check the rows against the code rather than against the
+previous audit — that is the third stale row found this way.
+
 ## Newest (2026-08-31, latest+25): WDO reports (ADR-205, #70)
 
 `20260830010100` adds crm_wdo_inspections and crm_wdo_findings, two freeze
