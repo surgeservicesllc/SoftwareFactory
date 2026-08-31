@@ -763,6 +763,32 @@ export const CRM_INVOICE_LINE_COLUMNS =
 /** Where a line came from (ADR-212). Everything typed by a person is manual. */
 export const CRM_INVOICE_LINE_SOURCES = ["manual", "work_order", "application"] as const;
 export type CrmInvoiceLineSource = (typeof CRM_INVOICE_LINE_SOURCES)[number];
+
+/** How stock moves between places (ADR-213). Direction is the sides, not a sign. */
+export const CRM_STOCK_MOVEMENT_KINDS = [
+  "receipt",
+  "transfer",
+  "consumption",
+  "adjustment",
+] as const;
+export type CrmStockMovementKind = (typeof CRM_STOCK_MOVEMENT_KINDS)[number];
+
+/** A derived balance: nothing stores this, it is summed from the ledger. */
+export type CrmStockBalanceRow = {
+  stock_lot_id: string;
+  stock_branch_id: string | null;
+  stock_equipment_id: string | null;
+  stock_quantity: number | string;
+};
+
+export function toStockBalanceView(row: CrmStockBalanceRow) {
+  return {
+    lotId: row.stock_lot_id,
+    branchId: row.stock_branch_id,
+    equipmentId: row.stock_equipment_id,
+    quantity: decimal(row.stock_quantity),
+  };
+}
 export const CRM_PAYMENT_COLUMNS =
   "id, account_id, invoice_id, amount_cents, method, reference, received_at, recorded_at, note";
 export const CRM_REFUND_COLUMNS =

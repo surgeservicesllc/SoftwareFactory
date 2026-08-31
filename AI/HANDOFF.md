@@ -2,6 +2,40 @@
 
 Last updated: 2026-08-31
 
+## Newest (2026-08-31, latest+32): truck stock (ADR-213, #77)
+
+`20260831000400` adds crm_stock_movements, a derived balance function and
+a recorder that locks.
+
+THE LOCK IS THE WHOLE GUARANTEE. crm_stock_record_movement takes
+`select ... for update` on the LOT before it reads the balance. Do not
+"optimise" that away: two technicians drawing the last of a lot at the same
+moment is precisely when a read-then-write check lets a location go
+negative, and a negative holding means the record of what a regulated
+product was used on is wrong.
+
+NOTHING STORES A BALANCE. crm_stock_on_hand sums the ledger. A cached
+on-hand column would drift the first time somebody forgot the other half of
+a movement, which is the failure this replaces.
+
+DIRECTION IS THE SIDES, NOT A SIGN. Receipt = destination only.
+Consumption = source only. Transfer = both, and they must differ.
+Adjustment = exactly one. CHECK constraints state each shape. A signed
+quantity would let one row claim to add and subtract at once.
+
+QUANTITIES ARE ROUNDED TO THE LEDGER'S SCALE FIRST. The column holds three
+decimals, so checking an unrounded value means the guard and the row that
+lands are about different numbers. Two tests caught this as a message
+mixing scales ("holds 40.000 … 50 cannot be taken").
+
+ONE APPLICATION DRAWS ONCE, by partial unique index, so a replayed offline
+sync (ADR-210) cannot take the same ounces off a truck twice. This is where
+increments 18 and 21 meet.
+
+I CHECKED BEFORE CLAIMING A GAP: crm_product_lots.quantity_remaining IS
+decremented by trigger (increment 6). It is not decorative. Truck stock is
+additive — lots say how much is left, this says where it is.
+
 ## Newest (2026-08-31, latest+31): invoices built from the visit (ADR-212, #76)
 
 `20260831000300` adds two columns to crm_invoice_lines, a partial unique

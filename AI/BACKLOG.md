@@ -334,10 +334,23 @@ the full seeded E2E journey passes — increment 10 of the plan.
   application, built once and never rebuilt, so the document and the record
   of the visit cannot drift apart. /Services/billing. 20260831000300;
   hosted apply: scope=invoice-from-visit after merge.
+- [x] Increment 21 (ADR-213): truck stock — an append-only movement ledger
+  between warehouses and vehicles, balances derived rather than stored, a
+  lock that stops a location going negative, and one draw per application
+  so an offline replay cannot double-count. /Services/compliance.
+  20260831000400; hosted apply: scope=truck-stock after merge.
 - [ ] Provider-gated, ship Not Connected until an owner supplies
   credentials, never implied as working: card/ACH processing (the ledger
   records money that moved; it does not move money), SMS/email delivery,
   GPS/fleet telemetry, and QuickBooks sync.
+- [ ] BLOCKED ON OWNER AUTHORIZATION, not on code: running recurring
+  invoicing on a schedule. A timer that raises invoices against real
+  customers is a billing action executed autonomously, which
+  policies/RISK_CLASSIFICATION.md classes RED and says a toggle or an
+  unrelated task cannot authorize. Needs an owner authorization naming the
+  action, target, risk, evidence and rollback/containment plan. The
+  generator itself already exists and is idempotent (ADR-200); only the
+  clock is missing, and the clock is the part that needs permission.
 - [ ] Then the AI copilot and the seeded E2E acceptance journey — after
   which, and only after which, PEST CRM: PRODUCTION READY may be declared.
 - [ ] Queue-diagnosis honesty follow-up: `diagnose_graph_queue_as_worker_v2`

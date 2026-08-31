@@ -5224,3 +5224,58 @@ throughout the body — the same OUT-parameter trap as ADR-203's positional
 compare a null and match nothing.
 
 Hosted apply scope `invoice-from-visit`.
+
+## ADR-213 - Where the material physically is
+
+`crm_product_lots` already knew how much of a lot was LEFT: an application
+decrements `quantity_remaining` by trigger (increment 6), so that number is
+real rather than decorative — I checked before writing this, because an ADR
+claiming a gap that does not exist is worse than no ADR. What no table knew
+is WHERE the remainder sits. "We have 40 oz of Termidor" and "the 40 oz is
+on a truck that left at six" are different facts, and only the second one
+tells a technician whether to load.
+
+**The ledger is the balance.** Nothing stores an on-hand figure, because a
+stored one drifts the first time somebody forgets to type the other half.
+`crm_stock_on_hand` sums the movements, so a truck's stock is exactly what
+was put there minus what left.
+
+**Locations are the rows that already exist.** A warehouse is a branch
+(increment 13); a truck or a sprayer is equipment (increment 15). A third
+table naming the same places would be a second source of truth about where
+a depot is.
+
+**The outcome that must be impossible is a negative holding.** That is not
+a display bug: it means the record of what a regulated product was used on
+is wrong somewhere. The guard takes `select ... for update` on the lot
+BEFORE it reads the balance, because two technicians drawing the last of a
+lot at the same moment is exactly when a read-then-write check fails. Same
+shape as the field queue's insert-as-lock (ADR-210), for the same reason.
+
+**Direction is carried by which side is filled in, never by a sign.** A
+receipt has a destination and no source; a consumption has a source and no
+destination; a transfer has both and they must differ; an adjustment has
+exactly one. A signed quantity would let one row claim to add and subtract
+at once, and CHECK constraints state each shape rather than trusting the
+caller.
+
+**A consumption names its application, and their quantities must agree.**
+Otherwise the stock ledger and the compliance log tell two stories about
+one treatment. A partial unique index gives one application exactly one
+draw, so a replayed field sync (ADR-210) cannot take the same ounces off a
+truck twice — the two increments meet here, and this is the join that makes
+offline replay safe for inventory as well as for visits.
+
+**Quantities are normalised to the ledger's scale before anything is
+compared.** The column stores three decimals, so a caller's 39.9996 becomes
+40.000 on insert; checking the unrounded value would mean the balance guard
+and the row that lands are about two different numbers. Two tests caught
+this as a message reading "holds 40.000 and 50 cannot be taken" — two
+scales in one sentence about a regulated chemical — and the fix was the
+arithmetic rather than the wording.
+
+The table takes `select, insert` and no update or delete. A movement is
+what happened to a regulated product; correcting one is another movement,
+which is why `adjustment` exists.
+
+Hosted apply scope `truck-stock`.

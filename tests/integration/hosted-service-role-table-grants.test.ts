@@ -118,6 +118,7 @@ const publicTables = [
   "crm_refunds",
   "crm_service_integrations",
   "crm_service_plans",
+  "crm_stock_movements",
   "crm_technicians",
   "crm_territories",
   "crm_timeline_events",

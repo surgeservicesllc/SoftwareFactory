@@ -146,7 +146,7 @@ built.
 |---|---|---|
 | Branch/office structure with managers | PestPac, ServSuite | **HAVE** (ADR-195) |
 | Org chart, roles, reporting lines | PestPac, ServSuite | **HAVE** (ADR-195) |
-| Warehouse/lot inventory | PestPac | **PARTIAL** — product lots exist; truck stock does not |
+| Warehouse/lot inventory | PestPac | **HAVE** (ADR-213) — an append-only movement ledger between warehouses (branches) and vehicles or sprayers (equipment), with every balance DERIVED rather than stored. A location can never go negative: the guard locks the lot before it reads the balance. A consumption names the application it served and their quantities must agree, and one application draws stock exactly once however often an offline sync replays. |
 | **Equipment and fleet/asset management** | ServSuite, FieldRoutes | **HAVE** (ADR-201) — assets, an append-only ledger, assignment, service schedules and meter readings that cannot run backwards. GPS telemetry beside it stays **Not Connected**. |
 | **Call centre / phone integration** | FieldRoutes, PestPac | **GAP** |
 
@@ -199,27 +199,64 @@ SMS/email delivery (which also gates automated reminders and campaign
 sending), GPS/fleet telemetry, QuickBooks sync, call-centre/telephony
 integration, and reviews/reputation platforms.
 
-**A note on what "parity" can mean here.** 58 capability rows: **46 HAVE,
-4 PARTIAL, 8 GAP.**
+**A note on what "parity" can mean here.** 58 capability rows: **47 HAVE,
+3 PARTIAL, 8 GAP.**
 
-The composition matters more than the count. As of ADR-210 **every
-remaining GAP is provider-gated — all eight of them.** Not most, not
-roughly half: all. SMS/email reminders, route optimization by drive time,
-GPS telemetry, in-field card payment, autopay and card/ACH, QuickBooks
-sync, reviews, and call-centre integration each need an account somebody
-has to open and pay for.
+The composition matters more than the count. **Every one of the eleven
+remaining rows is gated on something outside the code.** Not most, not
+roughly half: all.
+
+Ten need an external account somebody has to open and pay for — SMS/email
+reminders, route optimization by drive time, GPS telemetry, in-field card
+payment, autopay and card/ACH, QuickBooks sync, reviews, call-centre
+integration, paying an invoice online, and automated dunning. The
+eleventh needs an owner authorization that Phase 1 deliberately withholds
+from automation; see the schedule below.
 
 There is no longer a row on this list that could be closed by writing more
-code. ADR-207 built the registry those eight depend on, so each is wired to
-the point where supplying a credential and the provider's own send-or-charge
-call are the only remaining steps, and `/Services/integrations` reports
-whether each is live from a sealed credential actually existing rather than
-a hard-coded label.
+code. That is the end of the build-out, not a pause in it: what remains is
+an account to open or an authorization to give.
 
-The four PARTIALs are capabilities where the data ships and a piece of what
-the competitors sell does not — automated sending on a schedule, drag
-sequencing, truck stock, and paying online. Those first three are
-buildable, and each is an increment rather than a row; paying online is
-provider-gated like the GAPs beside it. Appointment sequencing (ADR-211)
-and invoice lines from the visit (ADR-212) were on this list until they
-were built.
+ADR-207 built the registry the provider-gated rows depend on, so each is
+wired to the point where supplying a credential and the provider's own
+send-or-charge call are the only remaining steps, and
+`/Services/integrations` reports whether each is live from a sealed
+credential actually existing rather than from a hard-coded label.
+
+The three PARTIALs are capabilities where the data ships and a piece of
+what the competitors sell does not: paying an invoice online, running
+recurring invoicing on a SCHEDULE, and sending dunning reminders
+automatically.
+
+**None of the three can be closed by code alone**, and the schedule is the
+interesting one.
+
+Paying online and automated reminders are provider-gated exactly like the
+eight GAPs: one needs card processing, the other an email or SMS sender.
+Both ship labelled **Not Connected** rather than implied to work.
+
+The schedule looked buildable — nothing here runs on a timer, and giving
+recurring generation a clock is ordinary code. It is not buildable in this
+phase, and the block is governance rather than difficulty. Raising invoices
+against real customers is a billing action; `policies/RISK_CLASSIFICATION.md`
+classes billing and "enabling or widening autonomous ... authority" as RED,
+states that authorization "cannot be inferred from a toggle, an autonomous
+decision, chat silence, an unrelated task, or approval of a different
+target", and says Phase 1A "does not execute RED actions autonomously even
+after a UI control is changed".
+
+A build-out goal is precisely the "unrelated task" that rule names, so
+shipping a timer that bills a book of customers would be this repository's
+own policy being broken by the feature that cites it. Closing this row
+needs an owner authorization describing the action, target, risk, evidence
+and rollback plan — a decision for the owner, not a control an agent can
+switch on. Until then the generator stays operator-triggered, which is
+what the row already says.
+
+(An earlier revision of this paragraph listed "drag route sequencing" as a
+PARTIAL. It is not: route optimization is a GAP row above, and it is
+provider-gated on drive-time data. The count was right; the names were
+not.)
+
+Appointment sequencing (ADR-211), invoice lines from the visit (ADR-212)
+and truck stock (ADR-213) were on this list until they were built.

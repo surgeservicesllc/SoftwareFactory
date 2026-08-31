@@ -227,11 +227,12 @@ describe("Phase 1E production operations behavior", () => {
     // integration registry (ADR-207) added crm_service_integrations; 204
     // since Grok provider admission (ADR-208) added the immutable
     // grok_execution_admissions evidence table; 205 since the offline
-    // field queue (ADR-210) added crm_field_submissions; and 206 since plan
-    // sequencing (ADR-211) added crm_plan_steps.
+    // field queue (ADR-210) added crm_field_submissions; 206 since plan
+    // sequencing (ADR-211) added crm_plan_steps; and 207 since truck stock
+    // (ADR-213) added the append-only crm_stock_movements.
     // Each is RLS-enabled and forced, which the filter on the next line is
     // what actually proves.
-    expect(rlsRows).toHaveLength(206);
+    expect(rlsRows).toHaveLength(207);
     expect(rlsRows.filter((row) => !row.relrowsecurity || !row.relforcerowsecurity)).toEqual([]);
 
     const { rows: grantRows } = await db.query<{ table_name: string }>(
