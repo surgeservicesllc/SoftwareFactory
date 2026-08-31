@@ -5925,45 +5925,6 @@ does not apply or replay a migration, reload PostgREST, change ledger/history,
 alter hosted catalog or ACLs, enable a worker, or change autonomy and kill
 switch state. After exact-head CI and READY deployment identity, the only
 permitted database action is a fresh read-only `scope=verify` at exact main.
-## ADR-235 - Grok context is an immutable bounded envelope; follow-ups do not silently replan
-
-- **Date**: 2026-08-31
-- **Status**: Accepted for the repository candidate; protected migration and
-  exact-head production acceptance remain required
-
-Grok input context is durable evidence, not transient browser state and not a
-credential store. Every turn receives one immutable envelope attached to the
-exact tenant, project, session, and user message. The server derives the project
-and repository identity from authoritative records; clients may add bounded
-captured text files, public URL or image references, safe repository paths, and
-identifiers for integrations already linked to that tenant. Text is scanned for
-secret material before persistence. URLs and images are reference-only and are
-never fetched by this boundary. Raw binary data, query strings, URL credentials,
-private-network targets, absolute paths, and unlinked integration identifiers
-are rejected.
-
-The initial deterministic Chief of Staff planner receives a separate canonical
-summary capped at 8 KB and records it as an explicit `bounded_context`
-requirement. The executable Full Lifecycle/Phase 1C bridge remained **Not
-Connected** to the envelope at this decision: its existing 4 KB goal is
-preserved verbatim, and captured content is not copied into or truncated
-through that goal. ADR-230 later adds the separate typed claim projection and
-admission-time validation; it does not revise this envelope's persistence or
-follow-up semantics.
-
-Context writes are idempotent, append-only, sequence-fenced, audited without
-content, and exposed only through bounded safe projections. FORCE RLS and
-revoked direct grants make the dedicated functions the only mutation path.
-Initial context may be retained alongside an immutable planning refusal so the
-refusal remains explainable, but a blocked session cannot accept a follow-up.
-
-A follow-up appends its user message and context atomically. It records whether
-a plan already exists and explicitly returns `planChanged=false`; an existing
-plan therefore produces `replanRequired=true`. No context or message operation
-wakes a worker, starts a run, dispatches an action, or changes autonomy. Replan
-must be a separately designed and owner-visible transition rather than an
-implicit side effect of conversation.
-
 ## ADR-228 - Grok history pages by project and immutable session identity
 
 - **Date**: 2026-08-31
@@ -6167,3 +6128,42 @@ audit, and zero graph/node/agent/provider/Phase1C execution. Neither lane
 enables a worker, changes autonomy or automatic actions, disengages a kill
 switch, dispatches another workflow, fetches references, or authorizes a
 merge/deploy. Hosted probe/apply/verify remains a separately reviewed release.
+
+## ADR-235 - Grok context is an immutable bounded envelope; follow-ups do not silently replan
+
+- **Date**: 2026-08-31
+- **Status**: Accepted for the repository candidate; protected migration and
+  exact-head production acceptance remain required
+
+Grok input context is durable evidence, not transient browser state and not a
+credential store. Every turn receives one immutable envelope attached to the
+exact tenant, project, session, and user message. The server derives the project
+and repository identity from authoritative records; clients may add bounded
+captured text files, public URL or image references, safe repository paths, and
+identifiers for integrations already linked to that tenant. Text is scanned for
+secret material before persistence. URLs and images are reference-only and are
+never fetched by this boundary. Raw binary data, query strings, URL credentials,
+private-network targets, absolute paths, and unlinked integration identifiers
+are rejected.
+
+The initial deterministic Chief of Staff planner receives a separate canonical
+summary capped at 8 KB and records it as an explicit `bounded_context`
+requirement. The executable Full Lifecycle/Phase 1C bridge remained **Not
+Connected** to the envelope at this decision: its existing 4 KB goal is
+preserved verbatim, and captured content is not copied into or truncated
+through that goal. ADR-230 later adds the separate typed claim projection and
+admission-time validation; it does not revise this envelope's persistence or
+follow-up semantics.
+
+Context writes are idempotent, append-only, sequence-fenced, audited without
+content, and exposed only through bounded safe projections. FORCE RLS and
+revoked direct grants make the dedicated functions the only mutation path.
+Initial context may be retained alongside an immutable planning refusal so the
+refusal remains explainable, but a blocked session cannot accept a follow-up.
+
+A follow-up appends its user message and context atomically. It records whether
+a plan already exists and explicitly returns `planChanged=false`; an existing
+plan therefore produces `replanRequired=true`. No context or message operation
+wakes a worker, starts a run, dispatches an action, or changes autonomy. Replan
+must be a separately designed and owner-visible transition rather than an
+implicit side effect of conversation.
