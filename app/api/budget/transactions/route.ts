@@ -61,7 +61,7 @@ const transactionSchema = z
   );
 
 const TRANSACTION_COLUMNS =
-  "id, account_id, category_id, posted_on, kind, description, amount_cents, balance_after_cents, created_at";
+  "id, account_id, category_id, posted_on, kind, description, amount_cents, balance_after_cents, transfer_group_id, created_at";
 
 type TransactionRow = {
   id: string;
@@ -72,6 +72,7 @@ type TransactionRow = {
   description: string;
   amount_cents: number;
   balance_after_cents: number | null;
+  transfer_group_id: string | null;
   created_at: string;
 };
 
@@ -85,6 +86,7 @@ export function toTransactionView(row: TransactionRow) {
     description: row.description,
     amountCents: Number(row.amount_cents),
     balanceAfterCents: row.balance_after_cents === null ? null : Number(row.balance_after_cents),
+    transferGroupId: row.transfer_group_id,
     createdAt: row.created_at,
   };
 }

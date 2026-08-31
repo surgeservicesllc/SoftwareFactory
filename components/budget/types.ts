@@ -44,6 +44,7 @@ export type TransactionView = {
   readonly description: string;
   readonly amountCents: number;
   readonly balanceAfterCents?: number | null;
+  readonly transferGroupId?: string | null;
 };
 
 export type CategoryView = {

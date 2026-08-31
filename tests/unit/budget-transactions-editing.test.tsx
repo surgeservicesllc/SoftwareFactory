@@ -136,3 +136,105 @@ describe("ledger editing", () => {
     expect(screen.getByText(/\(no description\)/)).toBeInTheDocument();
   });
 });
+
+describe("transfer linking", () => {
+  const transferListing = {
+    transactions: [
+      {
+        id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+        accountId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        categoryId: null,
+        postedOn: "2026-08-02",
+        kind: "transfer_out",
+        description: "To savings",
+        amountCents: -50_000,
+        balanceAfterCents: null,
+        transferGroupId: null,
+        createdAt: "2026-08-02T12:00:00Z",
+      },
+      {
+        id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+        accountId: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        categoryId: null,
+        postedOn: "2026-08-02",
+        kind: "transfer_in",
+        description: "From checking",
+        amountCents: 50_000,
+        balanceAfterCents: null,
+        transferGroupId: null,
+        createdAt: "2026-08-02T12:00:00Z",
+      },
+      {
+        id: "ffffffff-ffff-4fff-8fff-ffffffffffff",
+        accountId: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        categoryId: null,
+        postedOn: "2026-08-03",
+        kind: "transfer_in",
+        description: "Wrong amount",
+        amountCents: 25_000,
+        balanceAfterCents: null,
+        transferGroupId: null,
+        createdAt: "2026-08-03T12:00:00Z",
+      },
+    ],
+    total: 3,
+  };
+
+  it("offers Link here only to the exact counterpart, and posts both ids", async () => {
+    const fetchMock = vi
+      .spyOn(global, "fetch")
+      .mockImplementation(() => Promise.resolve(jsonResponse(transferListing)));
+    render(<BudgetTransactionsPanel accounts={accounts} />);
+    await screen.findByText("To savings");
+
+    const linkButtons = screen.getAllByRole("button", { name: "Link" });
+    // All three unlinked transfer rows offer to start a link.
+    expect(linkButtons).toHaveLength(3);
+    await userEvent.click(linkButtons[0]);
+
+    // Only the exact counterpart qualifies: opposite kind, exact opposite
+    // amount, different account. "Wrong amount" does not.
+    expect(screen.getAllByRole("button", { name: "Link here" })).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "Cancel link" })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Link here" }));
+    await waitFor(() => {
+      const post = fetchMock.mock.calls.find(
+        ([input, init]) => String(input).includes("/api/budget/transfers") && init?.method === "POST",
+      );
+      expect(post).toBeDefined();
+      const body = JSON.parse(String(post?.[1]?.body));
+      expect(body.firstId).toBe("cccccccc-cccc-4ccc-8ccc-cccccccccccc");
+      expect(body.secondId).toBe("dddddddd-dddd-4ddd-8ddd-dddddddddddd");
+    });
+  });
+
+  it("shows Unlink on a linked pair and sends the group id", async () => {
+    const linked = {
+      transactions: transferListing.transactions.map((transaction) =>
+        transaction.description === "Wrong amount"
+          ? transaction
+          : { ...transaction, transferGroupId: "99999999-9999-4999-8999-999999999999" },
+      ),
+      total: 3,
+    };
+    const fetchMock = vi
+      .spyOn(global, "fetch")
+      .mockImplementation(() => Promise.resolve(jsonResponse(linked)));
+    render(<BudgetTransactionsPanel accounts={accounts} />);
+    await screen.findByText("To savings");
+
+    const unlinkButtons = screen.getAllByRole("button", { name: "Unlink" });
+    expect(unlinkButtons).toHaveLength(2);
+    await userEvent.click(unlinkButtons[0]);
+    await waitFor(() => {
+      const del = fetchMock.mock.calls.find(
+        ([input, init]) => String(input).includes("/api/budget/transfers") && init?.method === "DELETE",
+      );
+      expect(del).toBeDefined();
+      expect(JSON.parse(String(del?.[1]?.body)).transferGroupId).toBe(
+        "99999999-9999-4999-8999-999999999999",
+      );
+    });
+  });
+});

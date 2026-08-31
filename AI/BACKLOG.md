@@ -1860,9 +1860,11 @@ outstanding:
   its schema and `compareToPlan` analytics; that remains open below.
 - [ ] A panel on top of `budget_month_plans` + `compareToPlan` — the plan
   table has schema and analytics and no surface yet.
-- [ ] Transfers get a `transfer_group_id` column and nothing populates it. Both
-  sides of a move between the person's own accounts are typed correctly and
-  excluded from spend, but they are not yet linked to each other.
+- [x] Transfers link: POST/DELETE /api/budget/transfers pairs one
+  transfer-out with one transfer-in — exact opposite amounts, different
+  accounts, neither side already claimed, the race refused by a
+  conditional update — and the Transactions page offers Link only to the
+  exact counterpart, with Unlink on a linked pair.
 - [x] `reconcile()` is on the page: /api/budget/reconcile walks one
   account's whole ledger (anchored so the first stated balance reconciles
   exactly) and the Transactions page shows the breaks — date, description,

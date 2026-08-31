@@ -49,6 +49,7 @@ export function BudgetTransactionsPanel({ accounts }: { accounts: readonly Accou
     }>;
   } | null>(null);
   const [reconciling, setReconciling] = useState(false);
+  const [linkingFrom, setLinkingFrom] = useState<TransactionView | null>(null);
 
   const load = useCallback(async () => {
     setState("loading");
@@ -130,6 +131,67 @@ export function BudgetTransactionsPanel({ accounts }: { accounts: readonly Accou
     } finally {
       setBusy(false);
     }
+  }
+
+  async function linkTransfer(counterpart: TransactionView) {
+    if (!linkingFrom) return;
+    setBusy(true);
+    setRowMessage("");
+    try {
+      const response = await fetch("/api/budget/transfers", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ firstId: linkingFrom.id, secondId: counterpart.id }),
+      });
+      if (!response.ok) {
+        const failure = (await response.json().catch(() => null)) as
+          | { error?: { message?: string } }
+          | null;
+        setRowMessage(failure?.error?.message ?? "The transfer could not be linked.");
+        return;
+      }
+      setLinkingFrom(null);
+      await load();
+    } catch {
+      setRowMessage("The transfer could not be linked.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function unlinkTransfer(transaction: TransactionView) {
+    if (!transaction.transferGroupId) return;
+    setBusy(true);
+    setRowMessage("");
+    try {
+      const response = await fetch("/api/budget/transfers", {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ transferGroupId: transaction.transferGroupId }),
+      });
+      if (!response.ok) {
+        const failure = (await response.json().catch(() => null)) as
+          | { error?: { message?: string } }
+          | null;
+        setRowMessage(failure?.error?.message ?? "The link could not be removed.");
+        return;
+      }
+      await load();
+    } catch {
+      setRowMessage("The link could not be removed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** Whether a row can be the second side of the link being built. */
+  function isCounterpart(transaction: TransactionView): boolean {
+    if (!linkingFrom || transaction.id === linkingFrom.id) return false;
+    if (transaction.transferGroupId) return false;
+    const kinds = new Set([linkingFrom.kind, transaction.kind]);
+    return kinds.has("transfer_in") && kinds.has("transfer_out")
+      && transaction.amountCents + linkingFrom.amountCents === 0
+      && transaction.accountId !== linkingFrom.accountId;
   }
 
   async function runReconciliation() {
@@ -230,6 +292,12 @@ export function BudgetTransactionsPanel({ accounts }: { accounts: readonly Accou
       ) : (
         <>
           <div className="mt-4 overflow-x-auto">
+            {linkingFrom ? (
+              <p className="mb-2 text-sm text-muted">
+                Linking &ldquo;{linkingFrom.description}&rdquo; — choose its counterpart: the
+                opposite transfer kind, the exact opposite amount, on a different account.
+              </p>
+            ) : null}
             {rowMessage ? (
               <p role="alert" className="mb-2 text-sm text-[var(--danger)]">
                 {rowMessage}
@@ -312,6 +380,46 @@ export function BudgetTransactionsPanel({ accounts }: { accounts: readonly Accou
                         </>
                       ) : (
                         <>
+                          {transaction.kind === "transfer_out" || transaction.kind === "transfer_in" ? (
+                            transaction.transferGroupId ? (
+                              <button
+                                type="button"
+                                disabled={busy}
+                                className="mr-2 text-sm text-muted underline disabled:opacity-50"
+                                onClick={() => void unlinkTransfer(transaction)}
+                              >
+                                Unlink
+                              </button>
+                            ) : isCounterpart(transaction) ? (
+                              <button
+                                type="button"
+                                disabled={busy}
+                                className="mr-2 text-sm underline disabled:opacity-50"
+                                onClick={() => void linkTransfer(transaction)}
+                              >
+                                Link here
+                              </button>
+                            ) : linkingFrom?.id === transaction.id ? (
+                              <button
+                                type="button"
+                                className="mr-2 text-sm text-muted underline"
+                                onClick={() => setLinkingFrom(null)}
+                              >
+                                Cancel link
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                className="mr-2 text-sm underline"
+                                onClick={() => {
+                                  setRowMessage("");
+                                  setLinkingFrom(transaction);
+                                }}
+                              >
+                                Link
+                              </button>
+                            )
+                          ) : null}
                           <button
                             type="button"
                             className="mr-2 text-sm underline"
