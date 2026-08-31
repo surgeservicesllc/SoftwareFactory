@@ -396,12 +396,23 @@ all forty-eight tables, every optional field populated, spanning years —
 for testing dashboards, reports and pagination at the size of a real book.
 GET /api/services/seed-report audits whichever is loaded, table by table,
 PASS or FAIL. Plan of record: AI/SERVICES_CRM_GAP_ANALYSIS.md and
-AI/PEST_CRM_COMPETITOR_MATRIX.md. Increments 1 through 18 have shipped,
-the last of them the offline field queue. No buildable row is left: every
-remaining gap is gated on an external account nobody has opened —
-card/ACH processing, SMS/email delivery, GPS telemetry, QuickBooks sync,
-telephony and reviews. Those ship labelled **Not Connected** and are never
+AI/PEST_CRM_COMPETITOR_MATRIX.md. Increments 1 through 21 have shipped —
+the last four being the offline field queue, plan sequencing, invoices
+built from the visit, and truck stock — bringing the matrix to 47 HAVE,
+3 PARTIAL, 8 GAP.
+
+No buildable row is left. Ten of the eleven remaining are gated on an
+external account nobody has opened: card/ACH processing, SMS/email
+delivery, GPS telemetry, QuickBooks sync, telephony, reviews and
+drive-time routing. Those ship labelled **Not Connected** and are never
 implied to work.
+
+The eleventh — running recurring invoicing on a schedule — is gated on
+governance rather than an account. Raising invoices on a timer is a
+billing action executed autonomously, which `policies/RISK_CLASSIFICATION.md`
+classes RED and says cannot be authorized by a toggle or by an unrelated
+task. It needs an owner authorization naming the action, target, risk,
+evidence and rollback plan; until then generation stays operator-triggered.
 
 
 Last reviewed: 2026-08-31

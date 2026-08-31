@@ -338,6 +338,14 @@ the full seeded E2E journey passes — increment 10 of the plan.
   credentials, never implied as working: card/ACH processing (the ledger
   records money that moved; it does not move money), SMS/email delivery,
   GPS/fleet telemetry, and QuickBooks sync.
+- [ ] BLOCKED ON OWNER AUTHORIZATION, not on code: running recurring
+  invoicing on a schedule. A timer that raises invoices against real
+  customers is a billing action executed autonomously, which
+  policies/RISK_CLASSIFICATION.md classes RED and says a toggle or an
+  unrelated task cannot authorize. Needs an owner authorization naming the
+  action, target, risk, evidence and rollback/containment plan. The
+  generator itself already exists and is idempotent (ADR-200); only the
+  clock is missing, and the clock is the part that needs permission.
 - [ ] Then the AI copilot and the seeded E2E acceptance journey — after
   which, and only after which, PEST CRM: PRODUCTION READY may be declared.
 - [ ] Queue-diagnosis honesty follow-up: `diagnose_graph_queue_as_worker_v2`
