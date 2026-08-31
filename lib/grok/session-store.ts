@@ -803,7 +803,7 @@ export async function recordGrokSpecialistRoster(
     expectedEventSequence: number;
   }>,
 ): Promise<GrokSpecialistRosterResult> {
-  const value = await rpc<unknown>(client, "record_grok_specialist_roster_v1_as_server", {
+  const value = await rpc<unknown>(client, "record_grok_specialist_roster_v2_as_server", {
     p_organization_id: input.organizationId,
     p_requested_by: input.requestedBy,
     p_project_id: input.projectId,

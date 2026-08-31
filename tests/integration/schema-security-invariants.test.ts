@@ -327,12 +327,12 @@ describe("SECURITY DEFINER functions", () => {
       "inspect_ai_auth_sessions",
       "jsonb_has_sensitive_keys",
       // Grok has no service_role table grants. Its bounded server/worker RPCs
-      // and canonical Full Lifecycle v3 launcher are pinned by exact overload
+      // and null-fenced canonical Full Lifecycle v4 launcher are pinned by exact overload
       // below; the launcher atomically pauses before visibility.
-      "launch_grok_full_lifecycle_v3_as_server",
+      "launch_grok_full_lifecycle_v4_as_server",
       // Research launches the planner's exact Claude-only, zero-write DAG;
       // this service boundary also pauses before visibility and never wakes.
-      "launch_grok_read_only_research_v1_as_server",
+      "launch_grok_read_only_research_v2_as_server",
       "link_grok_artifact_as_server",
       "link_grok_task_as_server",
       // The verification sweep's two hands: enumerate connected subscription
@@ -398,7 +398,7 @@ describe("SECURITY DEFINER functions", () => {
       "record_grok_context_envelope_as_server",
       "record_grok_event_as_server",
       "record_grok_planning_failure_as_server",
-      "record_grok_specialist_roster_v1_as_server",
+      "record_grok_specialist_roster_v2_as_server",
       "record_job_seeker_alert_scan",
       "record_node_state_as_worker",
       "record_phase1c_run_artifact",
@@ -436,13 +436,16 @@ describe("SECURITY DEFINER functions", () => {
         and proc.proname in (
           'append_grok_message_as_server',
           'launch_grok_full_lifecycle_v3_as_server',
+          'launch_grok_full_lifecycle_v4_as_server',
           'launch_grok_read_only_research_v1_as_server',
+          'launch_grok_read_only_research_v2_as_server',
           'link_grok_artifact_as_server',
           'link_grok_task_as_server',
           'read_grok_execution_credential_as_worker',
           'record_grok_event_as_server',
           'record_grok_planning_failure_as_server',
           'record_grok_specialist_roster_v1_as_server',
+          'record_grok_specialist_roster_v2_as_server',
           'resolve_grok_control_intent_as_server',
           'set_grok_session_status_as_server'
         )
@@ -460,12 +463,12 @@ describe("SECURITY DEFINER functions", () => {
       {
         identity_arguments:
           "p_organization_id uuid, p_requested_by uuid, p_project_id uuid, p_session_id uuid, p_message_id uuid, p_idempotency_key text, p_goal text, p_topology graph_topology, p_topology_reasons jsonb, p_risk_level risk_level, p_requires_owner_approval boolean, p_nodes jsonb, p_edges jsonb, p_budget jsonb, p_github_repository_id uuid, p_base_branch text, p_base_sha text, p_required_check_names jsonb, p_roster_idempotency_key text, p_admissions jsonb",
-        proname: "launch_grok_full_lifecycle_v3_as_server",
+        proname: "launch_grok_full_lifecycle_v4_as_server",
       },
       {
         identity_arguments:
           "p_organization_id uuid, p_requested_by uuid, p_project_id uuid, p_session_id uuid, p_message_id uuid, p_idempotency_key text, p_goal text, p_topology graph_topology, p_topology_reasons jsonb, p_risk_level risk_level, p_requires_owner_approval boolean, p_nodes jsonb, p_edges jsonb, p_budget jsonb, p_roster_idempotency_key text, p_admissions jsonb",
-        proname: "launch_grok_read_only_research_v1_as_server",
+        proname: "launch_grok_read_only_research_v2_as_server",
       },
       {
         identity_arguments:
@@ -495,7 +498,7 @@ describe("SECURITY DEFINER functions", () => {
       {
         identity_arguments:
           "p_organization_id uuid, p_requested_by uuid, p_project_id uuid, p_session_id uuid, p_message_id uuid, p_idempotency_key text, p_expected_event_sequence bigint",
-        proname: "record_grok_specialist_roster_v1_as_server",
+        proname: "record_grok_specialist_roster_v2_as_server",
       },
       {
         identity_arguments:

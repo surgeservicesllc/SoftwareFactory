@@ -190,7 +190,7 @@ describe("Grok read-only research runtime behavior", () => {
     ]);
     const messageId = assistant.rows[0]!.id;
 
-    const call = `select id, graph_id from public.launch_grok_read_only_research_v1_as_server(
+    const call = `select id, graph_id from public.launch_grok_read_only_research_v2_as_server(
       $1::uuid,$2::uuid,$3::uuid,$4::uuid,$5::uuid,$6::text,$7::text,
       $8::public.graph_topology,$9::jsonb,$10::public.risk_level,$11::boolean,
       $12::jsonb,$13::jsonb,$14::jsonb,$15::text,$16::jsonb
@@ -225,7 +225,7 @@ describe("Grok read-only research runtime behavior", () => {
     await expect(db.query(call, parameters({
       idempotencyKey: "research-null-version-0001",
       admissions: nullVersion,
-    }))).rejects.toThrow(/invalid grok research admission identity/i);
+    }))).rejects.toThrow(/invalid grok research v2 admission protocol version/i);
     await expect(db.query(call, parameters({
       idempotencyKey: "research-red-risk-0001",
       riskLevel: "red",

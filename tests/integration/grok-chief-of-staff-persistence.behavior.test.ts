@@ -1304,9 +1304,41 @@ describe("Grok Chief-of-Staff persistence", () => {
       }), "provider-admission-assistant-0001", user.rows[0].id],
     );
 
-    const rosterCall = `select public.record_grok_specialist_roster_v1_as_server(
+    const rosterCall = `select public.record_grok_specialist_roster_v2_as_server(
       $1::uuid,$2::uuid,$3::uuid,$4::uuid,$5::uuid,$6::text,$7::bigint
     ) as result`;
+
+    const { session: nullRosterSession } = await createSession("Null roster version");
+    await assumeRole(db, "authenticated", ownerId);
+    const nullRosterUser = await db.query<MessageRow>(
+      `select * from public.append_grok_user_message(
+         $1::uuid,$2::uuid,$3::text,$4::jsonb,$5::text,0,null
+       )`,
+      [organizationId, nullRosterSession.id, "Reject a null roster version", "{}",
+        "provider-admission-null-roster-user-0001"],
+    );
+    await assumeRole(db, "service_role");
+    const nullRosterAssistant = await db.query<MessageRow>(
+      `select * from public.append_grok_message_as_server(
+         $1::uuid,$2::uuid,'assistant',$3::text,$4::jsonb,$5::text,1,$6::uuid
+       )`,
+      [organizationId, nullRosterSession.id, "The malformed provider plan is recorded.", JSON.stringify({
+        kind: "grok.plan",
+        plan: {
+          planner: { version: 3 },
+          intent: { kind: "build" },
+          admissionRoster: admissionRoster.map((entry, index) => index === 0
+            ? { ...entry, version: null }
+            : entry),
+          dag: { tasks: [] },
+        },
+      }), "provider-admission-null-roster-assistant-0001", nullRosterUser.rows[0].id],
+    );
+    await expect(db.query(rosterCall, [
+      organizationId, ownerId, projectId, nullRosterSession.id,
+      nullRosterAssistant.rows[0]!.id, "provider-admission-null-roster-0001", 2,
+    ])).rejects.toThrow(/invalid grok specialist roster protocol version/i);
+
     const rosterParameters = [
       organizationId, ownerId, projectId, session.id, assistant.rows[0].id,
       "provider-admission-roster-0001", 4,
@@ -1350,7 +1382,7 @@ describe("Grok Chief-of-Staff persistence", () => {
       "provider-admission-roster-0001",
       JSON.stringify(admissions),
     ] as const;
-    const call = `select * from public.launch_grok_full_lifecycle_v3_as_server(
+    const call = `select * from public.launch_grok_full_lifecycle_v4_as_server(
       $1::uuid,$2::uuid,$3::uuid,$4::uuid,$5::uuid,$6::text,$7::text,
       $8::public.graph_topology,$9::jsonb,$10::public.risk_level,$11::boolean,
       $12::jsonb,$13::jsonb,$14::jsonb,$15::uuid,$16::text,$17::text,
@@ -1360,6 +1392,15 @@ describe("Grok Chief-of-Staff persistence", () => {
     const mismatchedAdmissions = admissions.map((entry, index) => index === 0
       ? { ...entry, assignmentRevision: entry.assignmentRevision + 1 }
       : entry);
+    const nullVersionAdmissions = admissions.map((entry, index) => index === 0
+      ? { ...entry, version: null }
+      : entry);
+    await expect(
+      db.query(call, [
+        ...parameters.slice(0, 19),
+        JSON.stringify(nullVersionAdmissions),
+      ]),
+    ).rejects.toThrow(/invalid grok v4 provider admission protocol version/i);
     const mismatchedParameters = [
       ...parameters.slice(0, 19),
       JSON.stringify(mismatchedAdmissions),
@@ -1415,7 +1456,7 @@ describe("Grok Chief-of-Staff persistence", () => {
       "provider-admission-legacy-launch-0001", ...parameters.slice(6),
     ];
     await expect(db.query(call, legacyParameters)).rejects.toThrow(
-      /planner v3 intent has no admitted canonical runtime bridge/i,
+      /grok_plan_v3_roster_not_found/i,
     );
 
     await resetRole(db);

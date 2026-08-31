@@ -501,7 +501,7 @@ describe("immutable Grok specialist roster persistence", () => {
     })).resolves.toEqual(result);
     expect(grokSpecialistRosterIdempotencyKey("request-key-123"))
       .toBe("request-key-123:specialist-roster");
-    expect(rpc).toHaveBeenCalledWith("record_grok_specialist_roster_v1_as_server", {
+    expect(rpc).toHaveBeenCalledWith("record_grok_specialist_roster_v2_as_server", {
       p_organization_id: organizationId,
       p_requested_by: actorUserId,
       p_project_id: projectId,

@@ -512,7 +512,7 @@ describe("Grok sessions POST", () => {
     }));
     expect(harness.serviceRpc).toHaveBeenCalledTimes(1);
     expect(harness.serviceRpc).toHaveBeenCalledWith(
-      "launch_grok_full_lifecycle_v3_as_server",
+      "launch_grok_full_lifecycle_v4_as_server",
       {
         p_organization_id: organizationId,
         p_requested_by: "60000000-0000-4000-8000-000000000006",
@@ -665,7 +665,7 @@ describe("Grok sessions POST", () => {
       researchGraph.nodes,
     );
     expect(harness.serviceRpc).toHaveBeenCalledWith(
-      "launch_grok_read_only_research_v1_as_server",
+      "launch_grok_read_only_research_v2_as_server",
       expect.objectContaining({
         p_organization_id: organizationId,
         p_project_id: projectId,

@@ -441,7 +441,7 @@ export async function POST(request: Request) {
           );
         }
         const { error: launchError } = await serviceClient.rpc(
-          "launch_grok_read_only_research_v1_as_server",
+          "launch_grok_read_only_research_v2_as_server",
           {
             p_organization_id: context.activeOrganization.id,
             p_requested_by: context.user.id,
@@ -514,7 +514,7 @@ export async function POST(request: Request) {
         );
       }
       const { error: launchError } = await serviceClient.rpc(
-        "launch_grok_full_lifecycle_v3_as_server",
+        "launch_grok_full_lifecycle_v4_as_server",
         {
           p_organization_id: context.activeOrganization.id,
           p_requested_by: context.user.id,
