@@ -14,6 +14,20 @@ balanced journal over the whole book (>500 entries), and copilot overdue
 arithmetic agreeing with the SQL. Budget categories panel 3. Suite total
 after the close-out conversions: 6,40x passing locally in ~9 minutes.
 
+**Addendum, 2026-08-31 latest+45 - site-wide dark/light theme (ADR-225):**
+Focused theme/component contracts are green. The expanded Playwright journey
+passes 6/6 tests across desktop, tablet, and mobile and exercises dark default, accessible
+label/pressed state, light switch, reload, local-storage and cross-product
+persistence, exact root/Factory/Services/Budget/customer palettes, scoped
+Services status chips, intentional white print paper, horizontal overflow,
+page errors, and serious/critical axe in both modes. A separate deterministic
+contract checks text/muted/faint against background/surface/raised for root,
+site chrome, Factory, and Services dark/light palettes at >=4.5:1. Consolidated
+lint and typecheck pass; the full suite passes 557 files / 6,400 tests with
+three files / seven tests skipped; and the production build generates 273
+pages. Exact-head CI, Vercel identity, health, and production-browser evidence
+remain pending at this repository checkpoint.
+
 **Addendum, 2026-08-31 latest+43 - queue-diagnosis visibility (ADR-223):**
 queue-diagnosis unit 16 (withdrawn names the timestamp and never says
 "contradicts", pause says waiting-for-a-resume, withdrawal outranks pause);

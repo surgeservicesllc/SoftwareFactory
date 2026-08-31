@@ -64,7 +64,7 @@ export function NewsletterForm({ source = "resources" }: { source?: string }) {
           // height: `flex-1` overrode `h-11` and collapsed the field to the
           // 18px of its own text. It only means "share the row" from `sm` up,
           // which is the only place the container is a row.
-          className="h-11 min-w-0 rounded-xl border border-[#2b3547] bg-[#0a0f18] px-4 text-sm text-[#dce2e8] placeholder:text-[#5c6878] focus:border-[#5d6bff] focus:outline-none sm:flex-1"
+          className="h-11 min-w-0 rounded-xl border border-line-strong bg-surface-inset px-4 text-sm text-foreground placeholder:text-faint focus:border-[var(--site-accent)] focus:outline-none sm:flex-1"
         />
         <button
           type="submit"
@@ -78,7 +78,7 @@ export function NewsletterForm({ source = "resources" }: { source?: string }) {
         </button>
       </div>
 
-      <p className="mt-3 flex items-center gap-2 text-[11px] text-[#7f8c9e]" aria-live="polite">
+      <p className="mt-3 flex items-center gap-2 text-xs text-faint" aria-live="polite">
         {state.kind === "done" ? (
           <>
             <CheckCircle2 className="size-4 shrink-0 text-[#34d399]" aria-hidden="true" />

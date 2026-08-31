@@ -599,7 +599,7 @@ export function WdoPanel() {
 
 function Figure({ label, value, tone }: { label: string; value: string; tone?: "amber" | "rose" }) {
   return (
-    <div className="rounded-xl border border-line bg-white p-4">
+    <div className="rounded-xl border border-line bg-surface p-4">
       <dt className="flex items-center gap-2 text-xs uppercase tracking-wide text-faint">
         <Bug className="size-3.5" aria-hidden="true" />
         {label}

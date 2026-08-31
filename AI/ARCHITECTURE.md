@@ -1,5 +1,23 @@
 # Architecture
 
+## Site-wide color-theme boundary
+
+`data-theme` on the root document is the only color-mode authority. Dark is the
+fallback and first-visit default; a valid explicit light choice is read from
+`softwarefactory:color-theme` by a self-contained head script before paint and
+by the client toggle after hydration. The preference contains no account or
+tenant data. Storage events and one document-local event keep multiple toggles
+and tabs synchronized without making the root layout dynamic.
+
+Components consume semantic tokens rather than choosing a mode. The root
+palette covers public/console/Budget/Job Search surfaces; `.factory-theme` and
+`.services-theme` override those same tokens for their product identities, and
+`html[data-theme="light"]` supplies each light variant. Shared headers use the
+`--site-*` contract. Fixed colors are reserved for semantic data, provider
+branding, artwork, modal scrims, destructive contrast, avatars, and printable
+paper. A route/layout ownership contract keeps the toggle reachable from every
+visual shell, while browser and contrast contracts verify both modes.
+
 ## Current release boundary — exact bot identity and database containment
 
 Application commit `30d7e824691bdd4f8fa72481b21c91d3da6e3a31` is on

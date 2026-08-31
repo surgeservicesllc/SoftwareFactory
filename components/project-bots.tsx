@@ -1232,7 +1232,7 @@ function AssignWizard({
               className={cn(
                 "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-medium",
                 index === stepIndex
-                  ? "bg-[var(--accent)] text-white"
+                  ? "bg-[var(--accent)] text-[var(--accent-ink)]"
                   : index < stepIndex
                     ? "text-accent"
                     : "text-faint",

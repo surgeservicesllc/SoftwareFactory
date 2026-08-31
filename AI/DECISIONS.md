@@ -5826,3 +5826,38 @@ READY is met for everything the repository can do alone. The eight
 provider-gated rows stay **Not Connected** and the RED actions stay
 owner-gated — the matrix and backlog record each by name, and the
 declaration covers neither.
+
+## ADR-225 - Theme is a document preference; products keep identities through tokens
+
+- **Date**: 2026-08-31
+- **Status**: Accepted for the repository candidate; exact-head production
+  acceptance remains required
+- **Supersedes**: ADR-188 only where it required Services to be light rather
+  than theme-responsive. Its CRM vocabulary and emerald product identity stay.
+
+The site had two visual truths: Software Factory was dark and Services was
+light. That made navigation between products feel like leaving the application,
+and a page-level fix could never satisfy a person who expected the same choice
+on the next route. The theme is therefore a DOCUMENT preference, not a route or
+account preference. The root `data-theme` is authoritative, dark is the
+deterministic first-visit fallback, and only the explicit stored value `light`
+can replace it. A small head bootstrap applies that value before paint; the
+client control owns changes, persistence, same-document notification, browser
+chrome color, and cross-tab storage synchronization.
+
+Products keep identity by overriding one semantic contract. Root tokens style
+the public site, console, Budget Tracker, and Job Search. Factory and Services
+scope their own dark/light values for those same token names. Services remains
+emerald, but dark becomes its default and the prior sage/white design becomes
+its light variant. Structural fixed colors were converted; fixed colors remain
+when they are meaning rather than chrome — provider brands, status/chart data,
+artwork, modal scrims, destructive contrast, avatars, and printable paper.
+
+Every visual layout must reach a toggle through shared SiteHeader, FactoryShell,
+the customer header, or offline chrome. The coverage contract fails if a new
+visual layout has no owner. Browser acceptance spans desktop/tablet/mobile and
+both modes, including persistence across products, exact computed palettes,
+Services legacy status translation, horizontal overflow, page errors, and
+serious/critical axe. A deterministic contract independently prevents palette
+text, muted text, or faint text from falling below 4.5:1 on background, surface,
+or raised surface.

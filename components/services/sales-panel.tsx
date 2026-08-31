@@ -302,7 +302,7 @@ export function ServicesSalesPanel() {
 
 function Figure({ label, value, tone }: { label: string; value: string; tone?: "amber" }) {
   return (
-    <div className="rounded-xl border border-line bg-white p-4">
+    <div className="rounded-xl border border-line bg-surface p-4">
       <dt className="text-xs uppercase tracking-wide text-faint">{label}</dt>
       <dd
         className={cn(

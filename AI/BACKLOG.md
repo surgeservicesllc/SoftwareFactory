@@ -48,6 +48,23 @@ category/insert-chain/notice truthfulness fixes. Nothing in this file is
 open because work stopped; everything open is waiting on a named key, a
 named decision, a named authorization, or production itself.
 
+## Site-wide dark/light theme (ADR-225, 2026-08-31)
+
+- [x] Make dark the deterministic first-visit default and restore only a valid
+  explicit light choice before first paint.
+- [x] Put one accessible, persistent theme toggle in every visual shell,
+  including Factory, Services/Budget/portal shared chrome, customer portal,
+  authentication/decision pages, and the offline surface.
+- [x] Convert public marketing, console, Factory, Services, Budget, Job Search,
+  and customer structural colors to semantic theme tokens while preserving
+  intentional artwork, provider branding, data colors, scrims, destructive
+  contrast, and printable white paper.
+- [x] Verify dark/light persistence and palettes in desktop, tablet, and mobile
+  browser projects; require no horizontal overflow, no page errors, no serious
+  or critical axe findings, and >=4.5:1 palette-token text contrast.
+- [ ] Require the final combined exact-head lint, typecheck, full test, build,
+  four CI jobs, Vercel READY identity, health, and signed-out production theme
+  acceptance before calling the change production accepted.
 
 ## Two competitor rows that are NOT provider-gated (found 2026-08-31)
 

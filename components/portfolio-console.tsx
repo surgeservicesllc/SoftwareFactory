@@ -304,7 +304,7 @@ export function PortfolioConsole() {
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Name or repository"
-            className="rounded border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-900"
+            className="rounded border border-line-strong bg-surface-inset px-3 py-2 text-sm text-foreground"
           />
         </label>
         <label className="flex flex-col gap-1">
@@ -312,7 +312,7 @@ export function PortfolioConsole() {
           <select
             value={sort}
             onChange={(event) => setSort(event.target.value as SortKey)}
-            className="rounded border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-900"
+            className="rounded border border-line-strong bg-surface-inset px-3 py-2 text-sm text-foreground"
           >
             {(Object.keys(SORT_LABELS) as SortKey[]).map((key) => (
               <option key={key} value={key}>{SORT_LABELS[key]}</option>

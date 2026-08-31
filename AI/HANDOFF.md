@@ -2,6 +2,32 @@
 
 Last updated: 2026-08-31
 
+## Newest (2026-08-31, latest+45): site-wide dark/light theme (ADR-225)
+
+Dark is now the repository candidate's deterministic first-visit default for
+every product. `lib/theme.ts` owns the storage/default/bootstrap contract;
+`components/theme-toggle.tsx` owns the accessible control and cross-tab
+synchronization. Shared SiteHeader chrome, FactoryShell, the customer header,
+and the offline page make the control reachable from every visual layout.
+
+ROOT, FACTORY, AND SERVICES EACH HAVE DARK AND LIGHT SEMANTIC PALETTES. Services
+keeps its emerald identity and its old sage/white presentation as the light
+variant. Do not reintroduce fixed structural white/dark classes. Fixed colors
+remain only where the color itself is the content: artwork, provider brands,
+status/chart data, modal scrims, destructive contrast, avatars, and printable
+white report/label paper.
+
+The focused browser journey runs in desktop/tablet/mobile and proves dark
+default, accessible toggle state, reload and cross-product persistence, exact
+computed palettes, scoped Services status translation, intentional print
+paper, overflow, page errors, and serious/critical axe. The deterministic
+contrast contract requires >=4.5:1 for text/muted/faint across all palette
+surfaces. Consolidated lint/typecheck, 557 test files / 6,400 tests (three
+files / seven tests skipped), the 273-page production build, and the expanded
+6/6 browser journey pass.
+Exact-head CI, Vercel READY/health, and production browser acceptance still
+gate release.
+
 ## Newest (2026-08-31, latest+44): copilot + acceptance journey (ADR-224)
 
 /Services/copilot: five computed skills; lib/services/copilot.ts holds the

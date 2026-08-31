@@ -1,5 +1,7 @@
 import { WifiOff } from "lucide-react";
 
+import { ThemeToggle } from "@/components/theme-toggle";
+
 /**
  * Shown only when a navigation fails and the device is offline.
  *
@@ -16,6 +18,7 @@ export const metadata = {
 export default function OfflinePage() {
   return (
     <main className="grid min-h-screen place-items-center bg-background px-6">
+      <ThemeToggle className="fixed right-4 top-4" />
       <div className="max-w-sm text-center">
         <span className="mx-auto grid size-12 place-items-center rounded-xl border border-line bg-surface text-muted">
           <WifiOff className="size-5" aria-hidden="true" />

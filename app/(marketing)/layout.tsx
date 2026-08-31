@@ -20,7 +20,7 @@ export default async function MarketingLayout({
   const viewer = await readViewer();
 
   return (
-    <div className="flex min-h-screen flex-col bg-[#080b10]">
+    <div className="marketing-theme flex min-h-screen flex-col bg-background text-foreground">
       <a
         href="#main-content"
         className="fixed left-3 top-3 z-[100] -translate-y-20 rounded-md bg-[#7c5cff] px-3 py-2 text-sm font-semibold text-white transition-transform focus:translate-y-0"

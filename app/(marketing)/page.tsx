@@ -39,12 +39,12 @@ export default async function HomePage() {
         <div className="grid grid-cols-1 items-center gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
           <div>
             {page?.eyebrow ? <Eyebrow>{page.eyebrow}</Eyebrow> : null}
-            <h1 className="mt-5 text-balance text-[40px] font-bold leading-[1.04] tracking-[-0.045em] text-white sm:text-[58px]">
+            <h1 className="mt-5 text-balance text-[40px] font-bold leading-[1.04] tracking-[-0.045em] text-foreground sm:text-[58px]">
               {page?.headline}{" "}
               {page?.headlineAccent ? <GradientText>{page.headlineAccent}</GradientText> : null}
             </h1>
             {page?.subheadline ? (
-              <p className="mt-6 max-w-xl text-[15px] leading-7 text-[#8593a5]">{page.subheadline}</p>
+              <p className="mt-6 max-w-xl text-[15px] leading-7 text-muted">{page.subheadline}</p>
             ) : null}
             <div className="mt-8 flex flex-wrap gap-3">
               <PrimaryCta href="/auth/sign-up">
@@ -72,7 +72,7 @@ export default async function HomePage() {
           action={
             <a
               href="/platform"
-              className="inline-flex min-h-11 items-center gap-1.5 text-sm font-semibold text-[#a78bfa] hover:text-[#c4b5fd]"
+              className="inline-flex min-h-11 items-center gap-1.5 text-sm font-semibold text-[var(--accent-text)] hover:text-[var(--accent)]"
             >
               Explore the platform
               <ArrowRight className="size-4" aria-hidden="true" />
@@ -82,12 +82,12 @@ export default async function HomePage() {
         <ul className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
           {lifecycle.map((stage) => (
             <li key={stage.title}>
-              <SurfacePanel className="h-full p-4 transition-colors hover:border-[#33405a]">
+              <SurfacePanel className="h-full p-4 transition-colors hover:border-line-strong">
                 <IconTile icon={stage.icon} accent={stage.accent} />
-                <h3 className="mt-4 font-mono text-[12px] font-bold uppercase tracking-[0.14em] text-white">
+                <h3 className="mt-4 font-mono text-[12px] font-bold uppercase tracking-[0.14em] text-foreground">
                   {stage.title}
                 </h3>
-                <p className="mt-2 text-sm leading-5 text-[#7f8c9e]">{stage.body}</p>
+                <p className="mt-2 text-sm leading-5 text-faint">{stage.body}</p>
               </SurfacePanel>
             </li>
           ))}
@@ -97,15 +97,15 @@ export default async function HomePage() {
       <MarketingSection className="mt-14">
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
           <SurfacePanel className="p-6 sm:p-8">
-            <h2 className="text-[22px] font-semibold tracking-[-0.03em] text-white">
+            <h2 className="text-[22px] font-semibold tracking-[-0.03em] text-foreground">
               Built on a foundation you do not have to assemble
             </h2>
             <ul className="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-3">
               {foundation.map((item) => (
                 <li key={item.title}>
                   <IconTile icon={item.icon} accent={item.accent} />
-                  <h3 className="mt-3 text-[13px] font-semibold text-white">{item.title}</h3>
-                  <p className="mt-2 text-sm leading-5 text-[#7f8c9e]">{item.body}</p>
+                  <h3 className="mt-3 text-[13px] font-semibold text-foreground">{item.title}</h3>
+                  <p className="mt-2 text-sm leading-5 text-faint">{item.body}</p>
                 </li>
               ))}
             </ul>
@@ -114,23 +114,23 @@ export default async function HomePage() {
           {testimonial ? (
             <SurfacePanel className="flex flex-col justify-between p-6">
               <div>
-                <Quote className="size-7 text-[#3d4a5c]" aria-hidden="true" />
-                <blockquote className="mt-4 text-sm leading-7 text-[#c8d2df]">
+                <Quote className="size-7 text-faint" aria-hidden="true" />
+                <blockquote className="mt-4 text-sm leading-7 text-muted">
                   {testimonial.quote}
                 </blockquote>
               </div>
               <figcaption className="mt-6 flex items-center gap-3">
                 <span
-                  className="grid size-10 shrink-0 place-items-center rounded-full border border-[#25303f] bg-[#111826] text-[#5d6b7f]"
+                  className="grid size-10 shrink-0 place-items-center rounded-full border border-line bg-surface-raised text-faint"
                   aria-hidden="true"
                 >
                   <User className="size-4" />
                 </span>
                 <span>
-                  <span className="block text-xs font-semibold text-white">
+                  <span className="block text-xs font-semibold text-foreground">
                     {testimonial.authorName}
                   </span>
-                  <span className="block text-xs text-[#7f8c9e]">{testimonial.authorTitle}</span>
+                  <span className="block text-xs text-faint">{testimonial.authorTitle}</span>
                 </span>
               </figcaption>
             </SurfacePanel>
@@ -146,7 +146,7 @@ export default async function HomePage() {
             action={
               <a
                 href="/pricing"
-                className="inline-flex min-h-11 items-center gap-1.5 text-sm font-semibold text-[#a78bfa] hover:text-[#c4b5fd]"
+                className="inline-flex min-h-11 items-center gap-1.5 text-sm font-semibold text-[var(--accent-text)] hover:text-[var(--accent)]"
               >
                 See full pricing
                 <ArrowRight className="size-4" aria-hidden="true" />
@@ -157,14 +157,14 @@ export default async function HomePage() {
             {content.plans.map((plan) => (
               <li key={plan.slug}>
                 <SurfacePanel className="h-full p-5">
-                  <h3 className="text-sm font-semibold text-white">{plan.name}</h3>
-                  <p className="mt-3 text-[28px] font-bold leading-none tracking-[-0.04em] text-white">
+                  <h3 className="text-sm font-semibold text-foreground">{plan.name}</h3>
+                  <p className="mt-3 text-[28px] font-bold leading-none tracking-[-0.04em] text-foreground">
                     {formatPlanPrice(plan, "monthly")}
                   </p>
                   {plan.priceNote ? (
-                    <p className="mt-1.5 text-xs text-[#7f8c9e]">{plan.priceNote}</p>
+                    <p className="mt-1.5 text-xs text-faint">{plan.priceNote}</p>
                   ) : null}
-                  <p className="mt-4 text-sm leading-5 text-[#8593a5]">{plan.blurb}</p>
+                  <p className="mt-4 text-sm leading-5 text-muted">{plan.blurb}</p>
                 </SurfacePanel>
               </li>
             ))}
@@ -175,12 +175,12 @@ export default async function HomePage() {
       {content.logos.length ? (
         <MarketingSection className="mt-12">
           <SurfacePanel className="flex flex-col items-center gap-6 px-6 py-6 lg:flex-row lg:gap-10">
-            <p className="shrink-0 text-sm font-medium text-[#c8d2df]">
+            <p className="shrink-0 text-sm font-medium text-muted">
               Trusted by innovative teams worldwide
             </p>
             <ul className="flex flex-1 flex-wrap items-center justify-center gap-x-10 gap-y-4 lg:justify-between">
               {content.logos.map((logo) => (
-                <li key={logo.name} className="text-[17px] font-semibold text-[#8b97a8]">
+                <li key={logo.name} className="text-[17px] font-semibold text-faint">
                   {logo.wordmark}
                 </li>
               ))}

@@ -1,4 +1,5 @@
 import { SignOutButton } from "@/components/sign-out-button";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 /**
  * The customer portal's own chrome.
@@ -26,10 +27,13 @@ export default function CustomerLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <div className="services-theme min-h-screen bg-canvas">
-      <header className="border-b border-line bg-white">
+      <header className="border-b border-line bg-surface">
         <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
           <span className="text-sm font-semibold tracking-tight text-foreground">Your service</span>
-          <SignOutButton />
+          <div className="flex items-center gap-2">
+            <ThemeToggle />
+            <SignOutButton />
+          </div>
         </div>
       </header>
       {children}

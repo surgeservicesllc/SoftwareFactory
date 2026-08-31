@@ -62,12 +62,12 @@ function Meter({ label, used, limit }: { label: string; used: number; limit: num
   return (
     <div>
       <div className="flex items-baseline justify-between gap-2">
-        <span className="text-sm text-slate-300">{label}</span>
-        <span className="text-sm font-medium text-white">
-          {used} <span className="text-slate-400">/ {limitLabel(limit)}</span>
+        <span className="text-sm text-muted">{label}</span>
+        <span className="text-sm font-medium text-foreground">
+          {used} <span className="text-faint">/ {limitLabel(limit)}</span>
         </span>
       </div>
-      <div className="mt-1.5 h-2 rounded-full bg-slate-800" role="presentation">
+      <div className="mt-1.5 h-2 rounded-full bg-surface-inset" role="presentation">
         {unlimited ? null : (
           <div className={cn("h-2 rounded-full transition-all", tone)} style={{ width: `${percent}%` }} />
         )}
@@ -168,7 +168,7 @@ export function BillingConsole() {
 
   if (state === "loading") {
     return (
-      <Card className="flex items-center gap-3 p-6 text-slate-300">
+      <Card className="flex items-center gap-3 p-6 text-muted">
         <Loader2 className="size-4 animate-spin" aria-hidden="true" /> Loading billing state…
       </Card>
     );
@@ -190,7 +190,7 @@ export function BillingConsole() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <SectionTitle title="Current plan" />
-            <p className="mt-1 flex flex-wrap items-center gap-2 text-2xl font-semibold text-white">
+            <p className="mt-1 flex flex-wrap items-center gap-2 text-2xl font-semibold text-foreground">
               {plan.name}
               {subscription ? (
                 <StatusBadge
@@ -202,14 +202,14 @@ export function BillingConsole() {
               {!connected ? <NotConnectedBadge /> : null}
             </p>
             {subscription?.currentPeriodEnd ? (
-              <p className="mt-1 text-sm text-slate-400">
+              <p className="mt-1 text-sm text-muted">
                 {subscription.cancelAtPeriodEnd ? "Ends" : "Renews"}{" "}
                 {new Date(subscription.currentPeriodEnd).toLocaleDateString()} ·{" "}
                 {subscription.cadence === "yearly" ? "billed yearly" : "billed monthly"}
               </p>
             ) : null}
             {!connected ? (
-              <p className="mt-2 max-w-xl text-sm text-slate-400">
+              <p className="mt-2 max-w-xl text-sm text-muted">
                 Payments are Not Connected on this deployment: no Stripe keys are configured, so
                 plans cannot be purchased here yet. Every organization runs on the Free plan&apos;s
                 limits until payments are connected.
@@ -227,13 +227,13 @@ export function BillingConsole() {
             description="Deployment administrator only. The site creates its own Stripe products, prices, and webhook — you paste two values, total."
           />
           {summary.configuration ? (
-            <ul className="space-y-1 text-sm text-slate-300">
+            <ul className="space-y-1 text-sm text-muted">
               <li>
                 1. Stripe secret key:{" "}
                 {summary.configuration.secretKey === "ok" ? (
-                  <span className="text-emerald-400">configured</span>
+                  <span className="text-[var(--safe)]">configured</span>
                 ) : (
-                  <span className="text-amber-400">
+                  <span className="text-warning">
                     {summary.configuration.secretKey} — add STRIPE_SECRET_KEY in Vercel
                     (Production checked), then redeploy
                   </span>
@@ -244,43 +244,43 @@ export function BillingConsole() {
                 {summary.configuration.secretKey === "ok" ? (
                   <span>run the setup below</span>
                 ) : (
-                  <span className="text-slate-500">waiting on step 1</span>
+                  <span className="text-faint">waiting on step 1</span>
                 )}
               </li>
               <li>
                 3. Webhook signing secret:{" "}
                 {summary.configuration.webhookSecret === "ok" ? (
-                  <span className="text-emerald-400">configured</span>
+                  <span className="text-[var(--safe)]">configured</span>
                 ) : (
-                  <span className="text-amber-400">
+                  <span className="text-warning">
                     {summary.configuration.webhookSecret} — step 2 hands you the value
                   </span>
                 )}
               </li>
             </ul>
           ) : null}
-          {bootstrapMessage ? <p className="text-sm text-red-400">{bootstrapMessage}</p> : null}
+          {bootstrapMessage ? <p className="text-sm text-danger">{bootstrapMessage}</p> : null}
           {bootstrap ? (
-            <div className="space-y-2 rounded-xl border border-slate-700 p-4 text-sm">
-              <p className="text-slate-300">
+            <div className="space-y-2 rounded-xl border border-line p-4 text-sm">
+              <p className="text-muted">
                 Prices ready:{" "}
                 {bootstrap.prices.map((price) => `${price.lookupKey} (${price.created ? "created" : "found"})`).join(", ")}
               </p>
-              <p className="text-slate-300">
+              <p className="text-muted">
                 Webhook {bootstrap.webhook.created ? "created" : "already existed"}: {bootstrap.webhook.url}
               </p>
               {bootstrap.webhook.signingSecret ? (
                 <div className="space-y-1">
-                  <p className="font-semibold text-amber-300">
+                  <p className="font-semibold text-warning">
                     Shown once — copy this now into Vercel as STRIPE_WEBHOOK_SECRET
                     (Production checked), then redeploy:
                   </p>
-                  <code className="block break-all rounded bg-slate-900 p-2 text-emerald-300">
+                  <code className="block break-all rounded bg-surface-inset p-2 text-[var(--safe)]">
                     {bootstrap.webhook.signingSecret}
                   </code>
                 </div>
               ) : bootstrap.webhook.created === false && summary.configuration?.webhookSecret !== "ok" ? (
-                <p className="text-amber-300">
+                <p className="text-warning">
                   The webhook already exists in Stripe but this deployment has no
                   STRIPE_WEBHOOK_SECRET. Open Stripe → Developers → Webhooks → this
                   endpoint → reveal the signing secret, and paste it into Vercel.
@@ -292,7 +292,7 @@ export function BillingConsole() {
               type="button"
               onClick={() => void runBootstrap()}
               disabled={pending !== null || summary.configuration?.secretKey !== "ok"}
-              className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-violet-600 px-4 text-sm font-semibold text-white hover:bg-violet-500 disabled:opacity-50"
+            className="btn btn-primary min-h-11"
             >
               {pending === "bootstrap" ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
               Create Stripe products, prices, and webhook
@@ -310,7 +310,7 @@ export function BillingConsole() {
           limit={plan.limits.graphLaunchesPerMonth}
         />
         <Meter label="Members" used={usage.seats} limit={plan.limits.maxSeats} />
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-faint">
           Limits gate new work only — nothing already created stops when a limit is reached.
         </p>
       </Card>
@@ -318,13 +318,13 @@ export function BillingConsole() {
       {connected && canManage ? (
         <Card className="space-y-4 p-6">
           <SectionTitle title={onPaidPlan ? "Manage subscription" : "Upgrade"} />
-          {message ? <p className="text-sm text-red-400">{message}</p> : null}
+          {message ? <p className="text-sm text-danger">{message}</p> : null}
           {onPaidPlan ? (
             <button
               type="button"
               onClick={() => void startAction("portal")}
               disabled={pending !== null}
-              className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-violet-600 px-4 text-sm font-semibold text-white hover:bg-violet-500 disabled:opacity-50"
+              className="btn btn-primary min-h-11"
             >
               {pending === "portal" ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
               Manage billing on Stripe
@@ -339,8 +339,8 @@ export function BillingConsole() {
                   className={cn(
                     "rounded-lg border px-3 py-1.5",
                     cadence === "monthly"
-                      ? "border-violet-500 text-white"
-                      : "border-slate-700 text-slate-400",
+                      ? "border-[var(--accent)] text-foreground"
+                      : "border-line text-muted",
                   )}
                 >
                   Monthly
@@ -351,8 +351,8 @@ export function BillingConsole() {
                   className={cn(
                     "rounded-lg border px-3 py-1.5",
                     cadence === "yearly"
-                      ? "border-violet-500 text-white"
-                      : "border-slate-700 text-slate-400",
+                      ? "border-[var(--accent)] text-foreground"
+                      : "border-line text-muted",
                   )}
                 >
                   Yearly
@@ -365,14 +365,14 @@ export function BillingConsole() {
                     type="button"
                     onClick={() => void startAction("checkout", { plan: planKey, cadence })}
                     disabled={pending !== null}
-                    className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-violet-600 px-4 text-sm font-semibold capitalize text-white hover:bg-violet-500 disabled:opacity-50"
+                    className="btn btn-primary min-h-11 capitalize"
                   >
                     {pending === planKey ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
                     Upgrade to {planKey}
                   </button>
                 ))}
               </div>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-faint">
                 Checkout opens on Stripe. Card details never touch this site.
               </p>
             </>
@@ -380,9 +380,9 @@ export function BillingConsole() {
         </Card>
       ) : null}
 
-      <p className="text-sm text-slate-400">
+      <p className="text-sm text-muted">
         Full plan comparison on the{" "}
-        <Link href="/pricing" className="text-violet-400 underline-offset-2 hover:underline">
+        <Link href="/pricing" className="text-accent-text underline-offset-2 hover:underline">
           pricing page
         </Link>
         .

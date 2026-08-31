@@ -1,5 +1,21 @@
 # SoftwareFactory — shared working status
 
+## SITE-WIDE DARK/LIGHT THEME REPOSITORY CANDIDATE; RELEASE OPEN (2026-08-31 — PICK UP HERE)
+
+- Dark is the first-visit default everywhere. A valid saved light choice is
+  applied before paint and persists across products, reloads, and tabs.
+- Theme controls are wired through SiteHeader, FactoryShell, customer portal,
+  and offline chrome; every visual layout reaches one of those owners.
+- Root, Factory, and Services palettes support both modes. Services is now dark
+  by default and keeps its prior sage/white design as light mode.
+- Focused contracts and the 6/6 desktop/tablet/mobile browser theme journey are green,
+  including persistence, responsive overflow, exact palettes, axe, and >=4.5:1
+  token contrast.
+- Consolidated lint/typecheck, 557 test files / 6,400 tests, the 273-page
+  production build, diff check, and changed-file secret scan are green.
+- NEXT: publish one exact head, require all four exact-head CI jobs, then verify exact READY
+  Vercel/health and production dark/light persistence before acceptance.
+
 ## GROK CLAIM/SPECIALIST ADMISSION REPOSITORY CANDIDATE; RELEASE, HOSTED, AND E2E OPEN (2026-08-31 — PICK UP HERE)
 
 - `20260831000900_grok_claim_admission_fence.sql` is frozen at canonical LF

@@ -4,8 +4,8 @@ import { cn } from "@/lib/cn";
  * The Services CRM's own visual vocabulary: lifecycle and stage colours,
  * account avatars, money. One definition each, so a "customer" is the same
  * green on the overview, the table, the board and the 360° page. These
- * render inside `.services-theme` (a light ground), so the palettes are
- * chosen against white cards.
+ * render inside `.services-theme`; the scoped CSS translates these lifecycle
+ * tones for the default dark palette and preserves their light equivalents.
  */
 
 export function dollars(cents: number | null): string {
@@ -35,7 +35,7 @@ export function AccountStatusBadge({ status, className }: { status: string; clas
   );
 }
 
-/** Stage colour families: badge (on white) and the board column's header bar. */
+/** Stage colour families: badge on the themed surface and the board header bar. */
 export const STAGE_TONES: Record<string, { badge: string; bar: string }> = {
   new: { badge: "border-slate-200 bg-slate-50 text-slate-600", bar: "bg-slate-400" },
   contacted: { badge: "border-sky-200 bg-sky-50 text-sky-700", bar: "bg-sky-500" },

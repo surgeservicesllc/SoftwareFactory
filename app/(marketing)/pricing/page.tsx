@@ -34,16 +34,16 @@ export default async function PricingPage() {
       <MarketingSection className="pt-10 sm:pt-14">
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] lg:items-start">
           <div>
-            <h1 className="text-balance text-[36px] font-bold leading-[1.08] tracking-[-0.04em] text-white sm:text-[46px]">
+            <h1 className="text-balance text-[36px] font-bold leading-[1.08] tracking-[-0.04em] text-foreground sm:text-[46px]">
               {page?.headline}{" "}
               {page?.headlineAccent ? <GradientText>{page.headlineAccent}</GradientText> : null}
             </h1>
             {page?.subheadline ? (
-              <p className="mt-5 max-w-xl text-[15px] leading-7 text-[#8593a5]">{page.subheadline}</p>
+              <p className="mt-5 max-w-xl text-[15px] leading-7 text-muted">{page.subheadline}</p>
             ) : null}
             <ul className="mt-6 flex flex-wrap gap-6">
               {["No setup fees", "Cancel anytime"].map((item) => (
-                <li key={item} className="flex items-center gap-2 text-sm text-[#c1cbd8]">
+                <li key={item} className="flex items-center gap-2 text-sm text-muted">
                   <CheckCircle2 className="size-4 text-[#a78bfa]" aria-hidden="true" />
                   {item}
                 </li>
@@ -53,7 +53,7 @@ export default async function PricingPage() {
 
           {pillars.length ? (
             <SurfacePanel className="p-5 sm:p-6">
-              <h2 className="text-sm font-semibold text-white">Everything you need to build</h2>
+              <h2 className="text-sm font-semibold text-foreground">Everything you need to build</h2>
               <ul className="mt-6 grid grid-cols-2 gap-6 sm:grid-cols-3 lg:grid-cols-5">
                 {pillars.map((pillar) => (
                   <li key={pillar.title} className="text-center">
@@ -63,8 +63,8 @@ export default async function PricingPage() {
                       size="lg"
                       className="mx-auto"
                     />
-                    <h3 className="mt-3 text-xs font-semibold text-white">{pillar.title}</h3>
-                    <p className="mt-1 text-xs leading-4 text-balance break-words text-[#7f8c9e]">{pillar.body}</p>
+                    <h3 className="mt-3 text-xs font-semibold text-foreground">{pillar.title}</h3>
+                    <p className="mt-1 text-xs leading-4 text-balance break-words text-faint">{pillar.body}</p>
                   </li>
                 ))}
               </ul>
@@ -84,14 +84,14 @@ export default async function PricingPage() {
           <aside className="space-y-4">
             {security.length ? (
               <SurfacePanel className="p-5">
-                <h2 className="text-sm font-semibold text-white">Enterprise-Grade Security</h2>
+                <h2 className="text-sm font-semibold text-foreground">Enterprise-Grade Security</h2>
                 <ul className="mt-5 space-y-3.5">
                   {security.map((item) => {
                     const Icon = resolveIcon(item.icon);
                     return (
                       <li key={item.title} className="flex items-start gap-2.5">
                         <Icon className="mt-0.5 size-4 shrink-0 text-[#34d399]" aria-hidden="true" />
-                        <span className="text-sm leading-5 text-[#c1cbd8]">{item.title}</span>
+                        <span className="text-sm leading-5 text-muted">{item.title}</span>
                       </li>
                     );
                   })}
@@ -101,36 +101,36 @@ export default async function PricingPage() {
 
             {testimonial ? (
               <SurfacePanel className="p-5">
-                <Quote className="size-6 text-[#3d4a5c]" aria-hidden="true" />
-                <blockquote className="mt-3 text-[13px] leading-6 text-[#c8d2df]">
+                <Quote className="size-6 text-faint" aria-hidden="true" />
+                <blockquote className="mt-3 text-[13px] leading-6 text-muted">
                   {testimonial.quote}
                 </blockquote>
                 <figcaption className="mt-4 flex items-center gap-3">
                   <span
-                    className="grid size-9 shrink-0 place-items-center rounded-full border border-[#25303f] bg-[#111826] text-[#5d6b7f]"
+                    className="grid size-9 shrink-0 place-items-center rounded-full border border-line bg-surface-raised text-faint"
                     aria-hidden="true"
                   >
                     <User className="size-4" />
                   </span>
                   <span>
-                    <span className="block text-xs font-semibold text-white">
+                    <span className="block text-xs font-semibold text-foreground">
                       {testimonial.authorName}
                     </span>
-                    <span className="block text-xs text-[#7f8c9e]">{testimonial.authorTitle}</span>
+                    <span className="block text-xs text-faint">{testimonial.authorTitle}</span>
                   </span>
                 </figcaption>
               </SurfacePanel>
             ) : null}
 
             <SurfacePanel className="p-5">
-              <h2 className="text-sm font-semibold text-white">Need a custom solution?</h2>
-              <p className="mt-2 text-sm leading-5 text-[#8593a5]">
+              <h2 className="text-sm font-semibold text-foreground">Need a custom solution?</h2>
+              <p className="mt-2 text-sm leading-5 text-muted">
                 Let&apos;s build a plan that&apos;s tailored to your team&apos;s unique needs.
               </p>
-              <SecondaryCta href="/about" className="mt-4 w-full border-[#3b2f6b] text-[#c4b5fd]">
+              <SecondaryCta href="/about" className="mt-4 w-full border-[var(--accent-border)] text-[var(--accent-text)]">
                 Contact Sales
               </SecondaryCta>
-              <p className="mt-4 flex items-center gap-2 text-sm text-[#8593a5]">
+              <p className="mt-4 flex items-center gap-2 text-sm text-muted">
                 <CalendarDays className="size-4 text-[#60a5fa]" aria-hidden="true" />
                 Schedule a Call
               </p>
@@ -140,7 +140,7 @@ export default async function PricingPage() {
       </MarketingSection>
 
       <MarketingSection className="mt-10">
-        <div className="flex items-center gap-3 rounded-xl border border-[#1c2433] bg-[#0b0f18] px-4 py-3 text-sm leading-5 text-[#7f8c9e]">
+        <div className="flex items-center gap-3 rounded-xl border border-line bg-surface-raised px-4 py-3 text-sm leading-5 text-muted">
           <CheckCircle2 className="size-4 shrink-0 text-[#4d8dff]" aria-hidden="true" />
           Plan prices are configuration in the marketing content schema. No billing provider is
           connected, so nothing on this page charges a card.

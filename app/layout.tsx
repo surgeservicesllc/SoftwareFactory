@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 
 import "./globals.css";
 import { ServiceWorkerRegistrar } from "@/components/service-worker-registrar";
+import { THEME_BOOTSTRAP_SCRIPT } from "@/lib/theme";
 
 const vercelHost =
   process.env.VERCEL_PROJECT_PRODUCTION_URL ?? process.env.VERCEL_URL;
@@ -60,8 +61,9 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  colorScheme: "dark",
-  // Keep in step with --bg in globals.css.
+  colorScheme: "dark light",
+  // Dark is the first-visit default. The pre-paint theme bootstrap and toggle
+  // keep this browser-chrome colour synchronized with a saved light choice.
   themeColor: "#0b0f14",
   width: "device-width",
   initialScale: 1,
@@ -69,7 +71,13 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en">
+    <html lang="en" data-theme="dark" suppressHydrationWarning>
+      <head>
+        <script
+          id="theme-bootstrap"
+          dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP_SCRIPT }}
+        />
+      </head>
       <body>
         {children}
         {/* Headless: registers the offline shell without delaying first paint. */}

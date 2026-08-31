@@ -1,7 +1,20 @@
 <!doctype html>
-<html lang="en" class="dark">
+<html lang="en" class="dark" data-theme="dark">
   <head>
     <meta charset="utf-8" />
+    <!-- Mirror app/layout.tsx's pre-paint contract for harness cases that do
+         not mount a ThemeToggle themselves (for example AppShell). -->
+    <script>
+      try {
+        const savedTheme = localStorage.getItem("softwarefactory:color-theme");
+        const theme = savedTheme === "light" ? "light" : "dark";
+        document.documentElement.setAttribute("data-theme", theme);
+        document.documentElement.style.colorScheme = theme;
+      } catch {
+        document.documentElement.setAttribute("data-theme", "dark");
+        document.documentElement.style.colorScheme = "dark";
+      }
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Layout harness</title>
   </head>

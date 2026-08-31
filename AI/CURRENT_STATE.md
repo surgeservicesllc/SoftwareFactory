@@ -1,5 +1,34 @@
 # Current state
 
+## 2026-08-31: One persistent dark/light choice now covers every site shell (ADR-225)
+
+The repository candidate makes dark the first-visit default for the public
+site, control plane, AI Factory, Services CRM, Budget Tracker, Job Search,
+customer portal, authentication/decision surfaces, and offline page. An
+accessible sun/moon control is reachable from every visual shell, persists one
+explicit choice in local storage, synchronizes it across open tabs, and applies
+it before first paint on later navigations so a saved light choice does not
+flash dark.
+
+Root, Factory, and Services palettes now expose the same semantic surface,
+text, border, action, and status contracts in both modes. Services retains its
+emerald identity but is dark by default; its prior sage/white presentation is
+the light variant. Legacy Services status classes receive a scoped dark
+translation. Intentional inverse artwork, provider-brand tiles, modal scrims,
+destructive-action contrast, and printable white reports/labels remain fixed
+by design rather than being mistaken for application chrome.
+
+Focused component/contract evidence is green. Repository lint and typecheck,
+557 test files / 6,400 tests (three files / seven tests skipped), and the
+273-page production build pass on the consolidated candidate. The expanded
+theme browser journey passes 6/6 across desktop, tablet, and mobile with
+persistence, exact
+computed palettes, no horizontal overflow, no page errors, and no serious or
+critical axe findings. The token contract independently requires at least
+4.5:1 for text, muted text, and faint text against each palette's background,
+surface, and raised surface. Exact-head CI and Vercel production identity
+remain release gates; this section does not claim deployment yet.
+
 ## 2026-08-31: Grok claim-time admission and specialist planning are a repository candidate (ADR-219)
 
 The next Grok boundary is implemented in the repository but is not hosted or
