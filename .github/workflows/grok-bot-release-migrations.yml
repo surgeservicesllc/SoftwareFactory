@@ -243,7 +243,7 @@ jobs:
               (select count(*) from supabase_migrations.schema_migrations where version='20260828000300')||'|'||
               (select count(*) from supabase_migrations.schema_migrations where version='20260830000900')||'|'||
               (select count(*) from supabase_migrations.schema_migrations where version='20260830001000')||'|'||
-              (select count(*) from supabase_migrations.schema_migrations where version='20260830001100');")
+              (select count(*) from supabase_migrations.schema_migrations where version='20260830001200');")
           case "$SCOPE:$LEDGER" in
             probe:1\|0\|0\|0|probe:1\|1\|0\|0|probe:1\|1\|1\|0|probe:1\|1\|1\|1) ;;
             typed-input:1\|0\|0\|0) ;;
@@ -440,7 +440,7 @@ jobs:
             planning-failure)
               FILE=$MIGRATION_01100
               EXPECTED=$MIGRATION_01100_SHA256
-              VERSION=20260830001100
+              VERSION=20260830001200
               E900=1
               E1000=1
               E1100=0
@@ -565,7 +565,7 @@ jobs:
                   if (select count(*) from supabase_migrations.schema_migrations where version='20260828000300')<>1
                     or (select count(*) from supabase_migrations.schema_migrations where version='20260830000900')<>${E900}
                     or (select count(*) from supabase_migrations.schema_migrations where version='20260830001000')<>${E1000}
-                    or (select count(*) from supabase_migrations.schema_migrations where version='20260830001100')<>${E1100}
+                    or (select count(*) from supabase_migrations.schema_migrations where version='20260830001200')<>${E1100}
                   then raise exception 'locked Grok release ledger changed'; end if;
                   if exists (select 1 from public.organizations where coalesce(autonomous_mode,false)
                       or autonomy_kill_switch_active is distinct from true
@@ -606,7 +606,7 @@ jobs:
               (select count(*) from supabase_migrations.schema_migrations where version='20260828000300')||'|'||
               (select count(*) from supabase_migrations.schema_migrations where version='20260830000900')||'|'||
               (select count(*) from supabase_migrations.schema_migrations where version='20260830001000')||'|'||
-              (select count(*) from supabase_migrations.schema_migrations where version='20260830001100');")
+              (select count(*) from supabase_migrations.schema_migrations where version='20260830001200');")
           case "$SCOPE:$LEDGER" in
             probe:1\|0\|0\|0|probe:1\|1\|0\|0|probe:1\|1\|1\|0|probe:1\|1\|1\|1) ;;
             typed-input:1\|1\|0\|0) ;;

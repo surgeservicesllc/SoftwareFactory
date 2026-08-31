@@ -1,9 +1,19 @@
 import {
+  Building2,
   CalendarDays,
+  Coins,
+  Trophy,
   HardHat,
+  IdCard,
+  Megaphone,
   KanbanSquare,
   LayoutDashboard,
+  Radar,
+  ClipboardCheck,
+  ScanLine,
+  ShieldCheck,
   Users,
+  UserRoundCheck,
   type LucideIcon,
 } from "lucide-react";
 
@@ -60,6 +70,66 @@ export const SERVICES_NAVIGATION: readonly ServicesNavItem[] = [
     label: "Technicians",
     description: "The roster that performs service",
     icon: HardHat,
+  },
+  {
+    href: `${SERVICES_ROOT}/ipm`,
+    label: "IPM & Devices",
+    description: "Stations, scans, sightings, thresholds",
+    icon: Radar,
+  },
+  {
+    href: `${SERVICES_ROOT}/compliance`,
+    label: "Chemicals & Compliance",
+    description: "Products, lots, applications, audit reports",
+    icon: ShieldCheck,
+  },
+  {
+    href: `${SERVICES_ROOT}/billing`,
+    label: "Billing",
+    description: "Estimates, contracts, invoices, payments",
+    icon: Coins,
+  },
+  {
+    href: `${SERVICES_ROOT}/sales`,
+    label: "Sales",
+    description: "Leaderboard, quota, commission ledger",
+    icon: Trophy,
+  },
+  {
+    href: `${SERVICES_ROOT}/branches`,
+    label: "Branches & Territories",
+    description: "Offices, managers, the map each one covers",
+    icon: Building2,
+  },
+  {
+    href: `${SERVICES_ROOT}/team`,
+    label: "Team",
+    description: "The org chart and the field roster",
+    icon: IdCard,
+  },
+  {
+    href: `${SERVICES_ROOT}/canvassing`,
+    label: "Canvassing",
+    description: "Door routes and what each door said",
+    icon: ScanLine,
+  },
+  {
+    href: `${SERVICES_ROOT}/marketing`,
+    label: "Marketing",
+    description: "Lists, consent, campaigns, attribution",
+    icon: Megaphone,
+  },
+  {
+    href: `${SERVICES_ROOT}/forms`,
+    label: "Forms & Compliance",
+    description: "Inspections, timesheets, licence expiry",
+    icon: ClipboardCheck,
+  },
+  {
+    href: `${SERVICES_ROOT}/portal`,
+    label: "Customer Portal",
+    description: "Invitations, and what customers asked for",
+    icon: UserRoundCheck,
   },
 ];
 

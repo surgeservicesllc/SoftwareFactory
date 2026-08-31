@@ -239,4 +239,58 @@ describe("the workflow's post-cutover surgical-scope fence", () => {
     }
   });
 
+  it("executes every extracted postflight file, and each one refuses when it should", async () => {
+    /*
+     * The CRM scopes' postflight checks were extracted for the same reason
+     * the probe SQL was: the workflow is measured against a 490,000-byte
+     * guard and adding a scope's verification inline was going to breach it.
+     * Extraction moves the same hazard with it — nothing else executes these
+     * files, so a mangled one fails only at a production dispatch.
+     *
+     * Running them here proves two things at once. Each file executes
+     * against the fully migrated chain, and each one is a real assertion
+     * rather than a no-op: the whole point of a postflight is that it
+     * RAISES when the schema is wrong, so one of them is run against a
+     * deliberately broken schema and must fail.
+     */
+    const directory = resolve(repositoryRoot, ".github/hosted-apply/postflight");
+    const files = (await readdir(directory)).filter((name) => name.endsWith(".sql")).sort();
+    expect(files).toEqual([
+      "billing-contracts.sql",
+      "branches-org-sales.sql",
+      "chemicals-compliance.sql",
+      "customer-portal.sql",
+      "documents-canvassing-marketing.sql",
+      "forms-timesheets-licences.sql",
+      "pest-ipm.sql",
+    ]);
+
+    for (const file of files) {
+      // The workflow must run the exact file this test proves executable,
+      // and must no longer carry the SQL inline.
+      expect(workflow).toContain(`-f .github/hosted-apply/postflight/${file}`);
+      const sql = await readFile(resolve(directory, file), "utf8");
+      try {
+        await db.exec(sql);
+      } catch (error) {
+        throw new Error(
+          `postflight file ${file} does not execute against the migrated chain: `
+            + (error instanceof Error ? error.message : String(error)),
+        );
+      }
+    }
+
+    /*
+     * And the check has teeth. Granting `authenticated` the DELETE that the
+     * portal's postflight exists to forbid must make that file fail — a
+     * postflight that passes on a broken schema is worse than none, because
+     * it is read as proof.
+     */
+    await db.exec("grant delete on table public.crm_portal_requests to authenticated");
+    const portal = await readFile(resolve(directory, "customer-portal.sql"), "utf8");
+    await expect(db.exec(portal)).rejects.toThrow(/portal records are deletable/);
+    await db.exec("revoke delete on table public.crm_portal_requests from authenticated");
+    await db.exec(portal);
+  });
+
 });

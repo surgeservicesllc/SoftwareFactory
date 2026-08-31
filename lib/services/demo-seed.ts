@@ -1,6 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { DEMO_BOOK, DEMO_SOURCE, DEMO_TECHNICIANS, demoBookTotals } from "@/lib/services/demo-data";
+import {
+  DEMO_BOOK,
+  DEMO_COMPLIANCE_RULES,
+  DEMO_PRODUCTS,
+  DEMO_SOURCE,
+  DEMO_TECHNICIANS,
+  demoBookTotals,
+} from "@/lib/services/demo-data";
 
 /**
  * Seed the Demo Data book of business into one organization, through the
@@ -26,6 +33,13 @@ export type SeedOutcome =
         technicians: number;
         servicePlans: number;
         workOrders: number;
+        devices: number;
+        deviceScans: number;
+        sightings: number;
+        products: number;
+        lots: number;
+        applications: number;
+        complianceRules: number;
         timelineEvents: number;
       };
     };
@@ -247,6 +261,175 @@ export async function seedDemoData(
     }
   }
 
+  // The IPM layer: barcoded stations whose install scans the database
+  // writes, hand-recorded service/move/remove scans, and sightings — the
+  // corrected ones resolved through the same update path the product uses.
+  for (const account of DEMO_BOOK) {
+    const accountId = accountIds.get(account.name);
+    for (const device of account.devices ?? []) {
+      const propertyId = propertyIds.get(`${accountId}:${device.propertyLabel}`);
+      if (!propertyId) return { error: { message: `Seeded property missing: ${device.propertyLabel}` } };
+      const insertedDevice = await client
+        .from("crm_devices")
+        .insert({
+          organization_id: organizationId,
+          account_id: accountId,
+          property_id: propertyId,
+          label: device.label,
+          device_type: device.deviceType,
+          barcode: device.barcode,
+          location_note: device.locationNote ?? null,
+          activity_threshold: device.activityThreshold ?? null,
+          installed_at: isoDaysAgo(device.installedDaysAgo),
+          created_by: userId,
+        })
+        .select("id")
+        .single();
+      if (insertedDevice.error) return { error: insertedDevice.error };
+      for (const scan of device.scans) {
+        const recorded = await client.from("crm_device_events").insert({
+          organization_id: organizationId,
+          device_id: (insertedDevice.data as { id: string }).id,
+          event: scan.event,
+          condition: scan.condition ?? null,
+          activity_count: scan.activityCount ?? null,
+          pest_observed: scan.pestObserved ?? null,
+          location_note: scan.locationNote ?? null,
+          note: scan.note ?? null,
+          recorded_at: isoDaysAgo(scan.daysAgo),
+          actor_user_id: userId,
+        });
+        if (recorded.error) return { error: recorded.error };
+      }
+    }
+    for (const sighting of account.sightings ?? []) {
+      const propertyId = propertyIds.get(`${accountId}:${sighting.propertyLabel}`);
+      if (!propertyId) return { error: { message: `Seeded property missing: ${sighting.propertyLabel}` } };
+      const insertedSighting = await client
+        .from("crm_pest_sightings")
+        .insert({
+          organization_id: organizationId,
+          account_id: accountId,
+          property_id: propertyId,
+          pest: sighting.pest,
+          severity: sighting.severity,
+          location_note: sighting.locationNote ?? null,
+          note: sighting.note ?? null,
+          sighted_at: isoDaysAgo(sighting.daysAgo),
+          created_by: userId,
+        })
+        .select("id")
+        .single();
+      if (insertedSighting.error) return { error: insertedSighting.error };
+      if (sighting.correctiveAction) {
+        const corrected = await client
+          .from("crm_pest_sightings")
+          .update({
+            corrective_action: sighting.correctiveAction,
+            corrected_at: isoDaysAgo(sighting.correctedDaysAgo ?? sighting.daysAgo),
+          })
+          .eq("organization_id", organizationId)
+          .eq("id", (insertedSighting.data as { id: string }).id);
+        if (corrected.error) return { error: corrected.error };
+      }
+    }
+  }
+
+  // The compliance layer: the catalogue and its lots, the jurisdictions
+  // this workspace operates in, and the application records — each drawing
+  // down its lot and writing its own timeline event through the database.
+  const productIds: string[] = [];
+  const lotIds: string[][] = [];
+  for (const product of DEMO_PRODUCTS) {
+    const insertedProduct = await client
+      .from("crm_products")
+      .insert({
+        organization_id: organizationId,
+        name: product.name,
+        epa_registration_number: product.epaRegistrationNumber,
+        active_ingredient: product.activeIngredient,
+        signal_word: product.signalWord ?? null,
+        restricted_use: product.restrictedUse ?? false,
+        default_unit: product.defaultUnit,
+        created_by: userId,
+      })
+      .select("id")
+      .single();
+    if (insertedProduct.error) return { error: insertedProduct.error };
+    const productId = (insertedProduct.data as { id: string }).id;
+    productIds.push(productId);
+
+    const lots: string[] = [];
+    for (const lot of product.lots) {
+      const insertedLot = await client
+        .from("crm_product_lots")
+        .insert({
+          organization_id: organizationId,
+          product_id: productId,
+          lot_number: lot.lotNumber,
+          unit: product.defaultUnit,
+          quantity_received: lot.quantity,
+          quantity_remaining: lot.quantity,
+          received_on: isoDaysAgo(lot.receivedDaysAgo).slice(0, 10),
+          expires_on:
+            lot.expiresInDays === undefined ? null : isoDateInDays(lot.expiresInDays),
+          created_by: userId,
+        })
+        .select("id")
+        .single();
+      if (insertedLot.error) return { error: insertedLot.error };
+      lots.push((insertedLot.data as { id: string }).id);
+    }
+    lotIds.push(lots);
+  }
+
+  const rules = await client.from("crm_compliance_rules").insert(
+    DEMO_COMPLIANCE_RULES.map((rule) => ({
+      organization_id: organizationId,
+      jurisdiction: rule.jurisdiction,
+      label: rule.label,
+      retention_years: rule.retentionYears,
+      requires_applicator_license: rule.requiresApplicatorLicense,
+      requires_target_pest: rule.requiresTargetPest,
+      requires_application_rate: rule.requiresApplicationRate,
+      requires_treated_area: rule.requiresTreatedArea,
+      created_by: userId,
+    })),
+  );
+  if (rules.error) return { error: rules.error };
+
+  for (const account of DEMO_BOOK) {
+    const accountId = accountIds.get(account.name);
+    for (const application of account.applications ?? []) {
+      const propertyId = propertyIds.get(`${accountId}:${application.propertyLabel}`);
+      if (!propertyId) {
+        return { error: { message: `Seeded property missing: ${application.propertyLabel}` } };
+      }
+      const recorded = await client.from("crm_applications").insert({
+        organization_id: organizationId,
+        account_id: accountId,
+        property_id: propertyId,
+        product_id: productIds[application.productIndex],
+        lot_id:
+          application.lotIndex === undefined
+            ? null
+            : lotIds[application.productIndex][application.lotIndex],
+        technician_id: technicianByIndex(application.technicianIndex),
+        applicator_license: DEMO_TECHNICIANS[application.technicianIndex].licenseNumber,
+        method: application.method,
+        quantity: application.quantity,
+        unit: application.unit,
+        target_pest: application.targetPest ?? null,
+        application_rate: application.applicationRate ?? null,
+        treated_area: application.treatedArea ?? null,
+        note: application.note ?? null,
+        applied_at: isoDaysAgo(application.daysAgo),
+        created_by: userId,
+      });
+      if (recorded.error) return { error: recorded.error };
+    }
+  }
+
   const events = await client.from("crm_timeline_events").insert(
     DEMO_BOOK.flatMap((account) =>
       account.events.map((event) => ({
@@ -272,10 +455,23 @@ export async function seedDemoData(
       technicians: DEMO_TECHNICIANS.length,
       servicePlans: totals.plans,
       workOrders: totals.workOrders,
+      devices: totals.devices,
+      // One database-written install per device plus every recorded scan.
+      deviceScans: totals.devices + totals.deviceScans,
+      sightings: totals.sightings,
+      products: DEMO_PRODUCTS.length,
+      lots: DEMO_PRODUCTS.reduce((sum, product) => sum + product.lots.length, 0),
+      applications: totals.applications,
+      complianceRules: DEMO_COMPLIANCE_RULES.length,
       // Hand-recorded events plus every trigger-written status move, stage
       // move, and visit outcome (completion or cancellation).
       timelineEvents:
-        totals.manualEvents + totals.statusMoves + totals.stageMoves + totals.visitOutcomes,
+        totals.manualEvents
+        + totals.statusMoves
+        + totals.stageMoves
+        + totals.visitOutcomes
+        // Every application writes its own 'service' event by trigger.
+        + totals.applications,
     },
   };
 }

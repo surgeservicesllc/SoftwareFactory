@@ -69,19 +69,61 @@ is a mockup commitment.
    /Services/schedule dispatch board + /Services/technicians roster;
    Demo Data fields the whole operation. Migration 20260830000800,
    hosted-apply scope `field-service`.
-4. **Pest/IPM differentiator**: devices/stations with QR/barcode
-   identity, install/service/move/remove scans, station history and
-   conditions, captures/consumption, thresholds and trends, pest
-   sighting logs, corrective actions; multi-site commercial dashboards.
-5. **Chemicals & compliance**: product/lot inventory, application logs
-   (rate/quantity/location/applicator), license tracking, SDS/label
-   references, jurisdiction-configurable rule records (never one
-   hardcoded state), audit-ready PDF/CSV export per
-   customer/site/date/pest/device/chemical/technician.
-6. **Invoicing & payments**: estimates/proposals → invoice → payment on
-   the existing Stripe machinery; `payment` timeline events.
-7. **Sales**: territories, canvassing routes, dispositions, leaderboards,
-   commissions, attribution.
+4. **Pest/IPM (SHIPPED with ADR-191)**: crm_devices with per-organization
+   barcode identity and IPM activity thresholds; the append-only
+   crm_device_events scan ledger (install/service/move/remove) whose
+   install is written at birth and from which device state is projected
+   by trigger; crm_pest_sightings with the corrective-action CHECK that
+   makes "resolved" mean something. The /Services/ipm command center:
+   scan box, per-site station tables, over-threshold flags, and the
+   sighting loop. Nothing deletable anywhere — a pulled station is a
+   remove scan. Migration 20260830001200, hosted-apply scope `pest-ipm`.
+   Still ahead in this pillar: device/site MAPS (coordinates and floor
+   plans), QR label generation, and long-run trend charts.
+5. **Chemicals & compliance (SHIPPED with ADR-192)**: crm_products (EPA
+   registration identity, https-checked SDS/label references, restricted-use
+   flag), crm_product_lots (trigger drawdown, expiry, remaining ≤ received),
+   the APPEND-ONLY crm_applications log (applicator license copied at
+   recording, rate/quantity/area/target pest, supersede-not-edit
+   corrections, its own 'service' timeline event), and crm_compliance_rules
+   as configurable per-jurisdiction rows enforced at the application
+   boundary. Audit-ready report by customer/site/date/product/technician,
+   as JSON or injection-guarded CSV. /Services/compliance. Migration
+   20260830001300, hosted-apply scope `chemicals-compliance`. Still ahead
+   in this pillar: PDF rendering (CSV ships now) and retention-window
+   reporting driven by each rule's configured years.
+6. **Billing: estimates, contracts, invoices, payments (SHIPPED with
+   ADR-194)**: crm_estimates and lines (totals derived from the lines at
+   the boundary, decided-iff-closed CHECK), crm_contracts (term, signature
+   completeness, ended-iff-closed), crm_invoices and lines (paid_cents and
+   the `paid` status maintained by trigger — never assertable by a
+   caller), and the APPEND-ONLY crm_payments and crm_refunds, with a
+   row-locking trigger that refuses a credit larger than the payment it
+   refunds. Every payment writes a `payment` timeline event, so all three
+   system kinds now have real database writers. Nothing deletable: a void
+   invoice keeps its reason on the record. /Services/billing reads the
+   four books and the ledger behind them. Migration 20260830001400,
+   hosted-apply scope `billing-contracts`. Still ahead in this pillar:
+   taking card payments through the existing Stripe machinery (the ledger
+   records money that moved; it does not yet move it), dunning schedules,
+   and PDF invoice rendering.
+7. **The company and the sales motion (SHIPPED with ADR-195)**:
+   crm_branches (per-organization code, address, IANA time zone, open and
+   close dates, a manager from the org chart), crm_employees as the org
+   chart itself (owner / branch manager / sales manager / sales rep / CSR /
+   dispatcher / admin, each with a branch, a supervisor, hire and end
+   dates, a commission rate in basis points and a monthly quota),
+   crm_territories (a branch's slice of the map, worked by one rep,
+   defined by the postal codes it covers, CHECKed element by element), and
+   crm_commissions whose amount is DERIVED from basis × rate by trigger —
+   the API carries no amount field, so the number cannot be asserted at
+   all. Accounts gained branch/territory/owning rep, opportunities an
+   owner, technicians a branch and a supervisor. /Services/branches,
+   /Services/team and /Services/sales, each naming the uncomfortable
+   figure: the book no branch serves, the map nobody works, the deals
+   nobody owns. Migration 20260830001500, hosted-apply scope
+   `branches-org-sales`. Still ahead in this pillar: door-to-door
+   canvassing routes and knock dispositions, and multi-touch attribution.
 8. **Marketing hub**: segments, lists, campaigns, email/SMS sends over
    env-gated providers (Resend machinery exists for email), consent and
    unsubscribe as first-class records, deliverability events, ROI;

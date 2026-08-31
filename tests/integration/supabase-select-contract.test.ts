@@ -64,7 +64,38 @@ async function sourceFiles(directory: string): Promise<string[]> {
 }
 
 /** `.from("x").select("a,b,rel(c)")` → table, plain columns, embed names. */
-function parseSelects(source: string, file: string): SelectSite[] {
+/**
+ * The shared column lists, resolved from source.
+ *
+ * Almost every route in this codebase selects through a constant —
+ * `.select(CRM_ACCOUNT_COLUMNS)` — rather than an inline string, which is
+ * good practice and used to make this guard blind: a non-literal argument
+ * was counted as unverifiable and skipped. That quietly put most of the CRM
+ * outside the check it was written for.
+ *
+ * So the constants are read first and substituted. A `.select(IDENT)` whose
+ * IDENT resolves to a string literal is checked exactly as an inline one is.
+ */
+function collectColumnConstants(sources: { file: string; text: string }[]): Map<string, string> {
+  const constants = new Map<string, string>();
+  const declaration = /export const ([A-Z][A-Z0-9_]*)\s*(?::\s*string)?\s*=\s*\n?\s*"([^"]*)"\s*;/g;
+  for (const { text } of sources) {
+    for (
+      let match = declaration.exec(text);
+      match !== null;
+      match = declaration.exec(text)
+    ) {
+      constants.set(match[1], match[2]);
+    }
+  }
+  return constants;
+}
+
+function parseSelects(
+  source: string,
+  file: string,
+  constants: Map<string, string> = new Map(),
+): SelectSite[] {
   const found: SelectSite[] = [];
   // Find each `.from("table")`, then scan a bounded window after it for the
   // matching `.select(...)`, stopping at the next `.from(` so a chain's select
@@ -81,7 +112,17 @@ function parseSelects(source: string, file: string): SelectSite[] {
     const window = source.slice(from, from + 400);
     const nextFrom = window.indexOf(".from(");
     const tail = nextFrom === -1 ? window : window.slice(0, nextFrom);
-    const select = /\.select\(\s*(?:"([^"]*)"|'([^']*)'|`([^`]*)`)/.exec(tail);
+    const select =
+      /\.select\(\s*(?:"([^"]*)"|'([^']*)'|`([^`]*)`|([A-Z][A-Z0-9_]*)\s*[,)])/.exec(tail);
+
+    // A constant that resolves is as good as a literal; one that does not is
+    // still honestly counted as unchecked.
+    const named = select?.[4];
+    const resolved = named === undefined ? undefined : constants.get(named);
+    if (select && named !== undefined && resolved === undefined) {
+      found.push({ file, table, columns: null, embeds: [] });
+      continue;
+    }
 
     if (!select) {
       // `.select()` with no literal, or a call with no select at all (insert,
@@ -90,7 +131,7 @@ function parseSelects(source: string, file: string): SelectSite[] {
       continue;
     }
 
-    const raw = (select[1] ?? select[2] ?? select[3] ?? "").trim();
+    const raw = (select[1] ?? select[2] ?? select[3] ?? resolved ?? "").trim();
     if (raw === "" || raw === "*") {
       found.push({ file, table, columns: [], embeds: [] });
       continue;
@@ -164,13 +205,21 @@ beforeAll(async () => {
     tables.get(row.table_name)!.add(row.column_name);
   }
 
+  // Read every source once, resolve the shared column constants, then parse.
+  const sources: { file: string; text: string }[] = [];
   for (const root of searchRoots) {
     for (const file of await sourceFiles(resolve(repositoryRoot, root))) {
-      const parsed = parseSelects(await readFile(file, "utf8"), file.replace(`${repositoryRoot}/`, ""));
-      for (const site of parsed) {
-        if (site.columns === null) skipped += 1;
-        sites.push(site);
-      }
+      sources.push({
+        file: file.replace(`${repositoryRoot}/`, ""),
+        text: await readFile(file, "utf8"),
+      });
+    }
+  }
+  const constants = collectColumnConstants(sources);
+  for (const { file, text } of sources) {
+    for (const site of parseSelects(text, file, constants)) {
+      if (site.columns === null) skipped += 1;
+      sites.push(site);
     }
   }
 }, 600_000);
@@ -223,8 +272,22 @@ describe("every .select() names real columns", () => {
   });
 
   it("reports how many sites could not be checked, so coverage is honest", () => {
-    // A dynamic select is skipped rather than guessed at. This asserts the
-    // proportion stays small; a jump means the guard is quietly covering less.
+    /*
+     * A genuinely dynamic select is skipped rather than guessed at. Constants
+     * are resolved (see collectColumnConstants), so what remains here is the
+     * real unverifiable tail: head-count probes, `select()` with no argument,
+     * and inserts. A jump means the guard is quietly covering less.
+     */
     expect(skipped).toBeLessThan(sites.length / 2);
+  });
+
+  it("resolves the shared column constants, so the CRM is actually covered", () => {
+    // The failure this catches is silent: if constant resolution broke, every
+    // `.select(CRM_*_COLUMNS)` would go back to being skipped and the column
+    // check above would pass vacuously over most of the product.
+    const crmSites = sites.filter((site) => site.table.startsWith("crm_"));
+    const checked = crmSites.filter((site) => site.columns !== null && site.columns.length > 0);
+    expect(crmSites.length).toBeGreaterThan(40);
+    expect(checked.length).toBeGreaterThan(crmSites.length / 2);
   });
 });

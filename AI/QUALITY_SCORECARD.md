@@ -1,6 +1,201 @@
 # Quality scorecard
 
-Last reviewed: 2026-08-30
+Last reviewed: 2026-08-31
+
+**Addendum, 2026-08-31 latest+19 - the customer portal (ADR-198):**
+services-portal.behavior 13 on the real chain under hosted-style default
+privileges, written from the attacker's side: a rival's customer reading our
+invoices through a definer that could have returned everything and getting
+only their own; a signed-in stranger with no portal link calling all five
+reads and getting nothing five times; a deactivated login still holding a
+session, with restoring it restoring exactly one account; a customer filing a
+request against a rival's site refused by name, with their own landing; the
+resolver `crm_portal_account_for(uuid)` executable by NO role while the
+argument-free `crm_portal_me()` answers only about the caller; a rival
+assigning our customer's login refused by the activation trigger, and the
+patient version — inviting our customer's own address and waiting for them to
+accept — refused by the global unique index; a portal user reading the two
+tables directly and seeing nothing; a draft invoice never reaching the
+customer; an unactivated invitation unable to act as a login; and `anon`
+holding execute on no portal function.
+services-customer-portal-routes 14 pins the boundary: one flat 403 carrying
+neither account nor organization id, argument-free RPC on every read, both
+Not Connected labels, an insert that omits `user_id` entirely rather than
+nulling it, a triage that cannot rewrite the customer's words, the closing
+moment supplied with a closing status and cleared when reopened, and the two
+rollout figures (invitations never used, accounts never invited) computed
+rather than estimated. Seed extended to 42 tables — 44,837 rows, 42/42 PASS,
+zero orphans; portal logins are invitations only, and `user_id`,
+`activated_at` and `last_seen_at` are excluded from optional-field coverage
+on purpose rather than faked. RLS census 189; hosted service-role grants at
+42 crm tables; runbook 195; workflow scope `customer-portal` postflight
+re-proves forced RLS, no DELETE, the sealed resolver, the activation guard
+and the nine caller-scoped definers after every apply.
+
+**Addendum, 2026-08-31 latest+18 - the forms engine (ADR-197):**
+services-forms.behavior 9 on the real chain under hosted-style default
+privileges (prose refused for a number question by name with the right value
+accepted; a choice outside the offered list and a multi-select outside it
+both refused, with a real two-value multi-select accepted; completion refused
+while a required question is unanswered AND the same transition succeeding
+once it is answered; a template frozen once a form is assigned from it, with
+the new version the refusal names actually working; a two-thirds signature
+and a URL signature both refused with a real stored path accepted; an
+overlapping shift refused with a later one accepted; ends-before-starts and
+past-24-hours both refused; a licence expiry with no licence behind it
+refused; anon/service_role shut out with no DELETE on any of the five;
+tenant isolation). Seed extended to 40 tables — 44,067 rows, 40/40 PASS,
+zero orphans, carrying both a running shift and finished ones because the
+page renders both. RLS census 187; hosted service-role grants at 40 crm
+tables; runbook 194; workflow scope `forms-timesheets-licences` postflight
+proves forced RLS, no delete, all four guards and the licence columns.
+**Also this round:** the select-contract guard now resolves the shared
+`CRM_*_COLUMNS` constants instead of skipping them — 181 call sites moved
+from unverified to verified, with a second assertion pinning the resolution
+because its failure mode is silent. Lint zero warnings, tsc clean.
+
+**Addendum, 2026-08-31 latest+17 - documents, canvassing, marketing
+(ADR-196):** services-marketing-canvassing.behavior 9 on the real chain
+under hosted-style default privileges (a URL, an s3 scheme and a leading
+slash each refused as a storage path while a real private path is accepted;
+a document filed about nothing refused; knocks and messages append-only at
+the GRANT — update and delete both denied outright rather than matching zero
+rows; a sold door forced to name its customer and a follow-up date confined
+to callbacks and appointments; an unsubscribe reason refused without an
+unsubscribe and the withdrawal keeping both moment and reason; a dynamic
+list forced to state its criteria; the message funnel refusing an open with
+no delivery and a bounce with no reason, then accepting the whole ordered
+funnel; an email campaign refused without a subject; a sending rule refused
+without its template; a rule refused for claiming runs it never had;
+anon/service_role shut out with no DELETE anywhere and no UPDATE on the
+three append-only tables; tenant isolation both ways). Seed extended to 35
+tables — 38,728 rows, 35/35 PASS, zero orphans. RLS census 182; hosted
+service-role grants at 35 crm tables; runbook 193; workflow scope
+`documents-canvassing-marketing` postflight proves forced RLS on nine
+tables, append-only facts, no delete, the shutout, and that a URL is still
+refused as a storage path in production.
+**And the guard that was missing:** `migration-regex-repetition` fails any
+migration using a regex repetition count above PostgreSQL's limit of 255 —
+the defect that has now cost two releases, because a CHECK's regex compiles
+only when a row carries a value and therefore survives every null-column
+test. Lint zero warnings, tsc clean.
+
+**Addendum, 2026-08-30 latest+16 - the company (ADR-195):**
+services-org-sales.behavior 9 on the real chain under hosted-style default
+privileges (the branch/manager/rep/book join holding together; a commission
+derived from basis and rate on insert AND still derived after the rate is
+raised; a paid commission refused without its approval and an accrued one
+refused with a stamp; a commission earned on nothing refused; closed-branch
+and ended-employee flags refused when they contradict their dates; a
+self-report refused; a free-text postal code refused while a real list of
+three is accepted, so the CHECK discriminates rather than merely blocks;
+cross-tenant invisibility and the impossibility of a cross-tenant reference;
+anon/service_role shut out and DELETE denied at the grant, not matched to
+zero rows). services-org-sales-routes 18 (per-branch counts tallied from the
+rows including the unassigned remainder, closure deactivating without a
+second instruction, duplicate codes as 409, a non-code refused before the
+database, role counts over the ACTIVE roster only, the login link reported
+as a fact and never as an identity, self-report refused at the boundary, the
+payout unsendable — the field does not exist in the schema — the ledger's
+computed amount reported back, approve-and-pay in one moment, moments taken
+back on return to accrued, postal codes upper-cased and de-duplicated, and a
+leaderboard reporting winRate null rather than 0 plus its own unowned
+denominator). Seed extended to 26 tables — 24,688 rows, 26/26 PASS, zero
+orphans, all seven employee roles and all four commission statuses present.
+RLS census 173; hosted service-role grants at 26 crm tables; runbook 192;
+workflow scope `branches-org-sales` postflight proves forced RLS, no DELETE
+anywhere, the anon/service_role shutout, the derive trigger and the three
+new columns on crm_accounts. Lint zero warnings, tsc clean.
+
+**Addendum, 2026-08-30 latest+15 - billing (ADR-194):**
+services-billing.behavior 6 on the real migration chain (settlement
+derived from the ledger and the invoice reopened by a refund; the refund
+cap proved at its exact remainder AND one cent past it; append-only
+enforced at the grant level for both payments and refunds; the arithmetic,
+signature and void CHECKs; void stays void through a full payment; tenant
+isolation). services-billing-routes 17 (totals derived from the lines and
+a caller-asserted subtotal refused; duplicate numbers surfaced as 409 and
+never merged; a decision given its moment and taken back on reopen; lines
+attached to the right parent; balance and overdue read from the ledger's
+own figures; `paid` unreachable by assertion with the table never touched;
+a void required to name its reason; due-before-issued refused; a payment
+filed against the invoice's own account with the ledger's verdict read
+back; payment refused against a void invoice; cross-origin refused before
+any read; the refund cap surfaced as 409 rather than 500; contract totals
+counting only running terms and ended_at taken back on reopen). The
+full-scale seed now covers all 22 tables — 23,375 rows, 22/22 PASS, zero
+orphans. Workflow scope `billing-contracts` postflight proves forced RLS
+on seven tables, the absence of update on payments/refunds, the absence of
+delete anywhere, the anon/service_role shutout and all three settlement
+triggers. Lint zero warnings, tsc clean; full vitest + production build
+before shipping.
+
+**Addendum, 2026-08-30 latest+14 - the full-scale seed (ADR-193):**
+services-crm-seed.behavior 5 against the real migration chain, running the
+production seeder and the production validator unmodified through a
+PGlite-backed supabase client shim: the whole book seeds (every table over
+the 250 floor); the audit passes for every table with zero orphans and every optional
+column populated; history is trigger-written (status_change and both
+'service' writers present, lots genuinely drawn down, one install scan per
+station); the lifecycle spread covers all four account statuses, all seven
+pipeline stages, four work-order statuses, both account kinds and more than
+a year of history; and a re-seed is refused by the barcode constraint
+rather than duplicated. Report at the time: 15,943 rows across 15 tables — PASS; 23,375 across
+22 after billing landed.
+The run surfaced a real production defect: the sds_url/label_url CHECK
+regexes used a repetition count above PostgreSQL's 255 limit and would have
+failed the first product carrying a link; fixed and pinned. Route suite
+extended to 22 (scale routing, unknown scale refused). Lint zero warnings,
+tsc clean.
+
+**Addendum, 2026-08-30 latest+13 - chemicals & compliance (ADR-192):**
+services-chemicals-compliance.behavior 6 on the real chain under
+hosted-style default privileges (lot drawn down exactly, an over-draw and
+a unit mismatch both refused with the shelf left untouched; the
+application's timeline event exact in summary, detail and actor;
+append-only proven by refused update/delete plus a working supersede that
+leaves the original standing; remaining-within-received and per-org EPA
+uniqueness; products undeletable; per-org jurisdictions with cross-org
+reuse; anon/service_role shut out of all four tables).
+services-compliance-routes 9 (license copied from the roster onto the
+record; a named jurisdiction's requirements enforced with the missing
+fields listed and nothing written; an unconfigured jurisdiction answered
+honestly; the lot's refusal returned as the caller's 422; unknown
+technician refused pre-write; non-https SDS refused pre-database;
+duplicate EPA as 409; the report resolving every id into an inspector's
+name; the CSV quoted and formula-guarded).
+services-compliance-panel 3 (catalogue with lot lines and rules from the
+live payload, the report table and its matching CSV window, the
+application body exact including its jurisdiction). Demo hygiene +1
+(fictional 90000-series registrations, DEMO-LOT numbers, applications
+landing on their own account's property in the product's own unit and
+never drawing more than a lot holds). RLS census 162; hosted-grants
+fifteen crm tables; runbook 189; workflow scope chemicals-compliance
+postflight. Lint zero warnings, tsc clean; full vitest + production
+build before shipping.
+
+**Addendum, 2026-08-30 latest+12 - pest/IPM core (ADR-191):**
+services-pest-ipm.behavior 4 on the real chain under hosted-style
+default privileges (a station born with its install scan carrying its
+actor and location; state driven through move/remove/reinstall by the
+ledger alone; grant-level ledger immutability plus undeletable devices
+and sightings; one barcode per organization with free cross-org reuse;
+the corrected_at/corrective_action CHECK; tenant isolation incl.
+cross-org property attachment refusal; anon/service_role shut out of all
+three tables). services-pest-ipm-routes 7 (exact tenant install, taken
+barcode as 409, barcode resolved inside the org with the actor recorded
+and the device re-read after the trigger, unknown barcode 404 appending
+nothing, a move without a destination refused pre-database, the
+corrective action landing with its timestamp, the org-scoped dashboard
+read). services-ipm-panel 4 (sites/stations/threshold flags from the
+live payload, empty state naming its next step, the scan body exact,
+the sighting loop closed through the real PATCH). Demo hygiene +1 (a
+real IPM program: unique DEMO-ST barcodes on the account's own
+properties, scans ordered after their install, an over-threshold
+station, both an open and a closed sighting). RLS census 158;
+hosted-grants eleven crm tables; runbook 188; workflow scope pest-ipm
+postflight. Lint zero warnings, tsc clean; full vitest + production
+build before shipping.
 
 **Addendum, 2026-08-30 latest+15 — Grok Phase 2 containment production
 accepted (ADR-190):** exact app commit
@@ -52,7 +247,7 @@ exact deployments, and signed-in return/reload acceptance remain pending.
 Workers/autonomy/automatic actions remain OFF and the global kill switch ON.
 
 **Addendum, 2026-08-30 latest+12 — Grok Bot local release candidate
-(ADR-190):** deterministic Chief-of-Staff planning, the owner-only durable
+(ADR-191):** deterministic Chief-of-Staff planning, the owner-only durable
 session/message/event/link/control boundary, and the responsive workspace are
 integrated. Focused bridge tests prove that the service-only boundary creates
 the exact canonical `full_lifecycle` v2 graph and pauses it atomically before

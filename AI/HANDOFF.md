@@ -1,7 +1,340 @@
 # Handoff
 
-Last updated: 2026-08-30
+Last updated: 2026-08-31
 
+## Newest (2026-08-31, latest+19): the customer portal (ADR-198, task #64)
+
+TWO COLLISIONS WITH `main` WERE RESOLVED IN THIS MERGE, both from parallel
+branches picking "the next number" without seeing each other:
+
+- **Migration versions.** main took `20260830001100` for
+  `grok_planning_failure`; this branch had it for `pest_ipm_core`. The CRM
+  chain renumbered up by one slot — `001200` through `001800` — because
+  none of it is on hosted yet, so the collision costs a sweep rather than a
+  repair. If you are reading an older commit message on this branch, its
+  migration numbers are one slot lower than the files.
+- **ADR numbers.** main took ADR-190 for the Grok Bot record. This branch
+  had ADR-190 through ADR-197 for the CRM increments; they are now 191
+  through 198. The merged number wins — renumbering a landed decision to
+  make room would break every reference already pointing at it.
+  `tests/unit/decision-log-numbering.test.ts` now fails on a fifth
+  duplicate, and names the four historical ones rather than pretending the
+  log is clean.
+
+`20260830001800` adds crm_portal_users and crm_portal_requests plus NINE
+SECURITY DEFINER functions. This is the most security-sensitive migration
+in the CRM: it admits a reader who is NOT an organization member.
+
+READ ADR-198 BEFORE TOUCHING IT. The short version, and the parts that are
+easy to undo by accident:
+
+- **No existing policy was widened, and none should be.** The portal's
+  entire visible surface is the column lists of the definer functions in
+  that one file. Adding an "or is a portal user" clause to a staff policy
+  would move that surface into every table at once.
+- **`crm_portal_account_for(uuid)` is executable by NOBODY** — not
+  authenticated, not service_role. It takes a login id, so execute on it
+  is a cross-tenant identifier leak. The projections reach it as their own
+  definer owner. The app asks about itself through `crm_portal_me()`,
+  which takes no argument. Do not "helpfully" grant the resolver back.
+- **Staff invite an ADDRESS; the customer claims it.**
+  `crm_portal_guard_activation` refuses any write that points `user_id` at
+  a session other than the caller's own, and
+  `crm_portal_accept_invitation()` is the only way in — it matches the
+  verified address behind the caller's own session, read through
+  `to_jsonb(u) ->> 'email'` so it parses against the test harness's auth
+  shim too. The trigger governs only CHANGES to `user_id`, which is what
+  lets staff still suspend or re-role a claimed link.
+- **Every accept failure returns the same message.** Never split "never
+  invited" from "already claimed" — that turns the route into an oracle
+  for whether an address is a customer.
+- **Seeding is invitations only.** `user_id`, `activated_at` and
+  `last_seen_at` stay empty and are deliberately NOT in the validator's
+  optional list. A seeder cannot accept an invitation on somebody's
+  behalf; claiming those columns as covered would make the report lie.
+- **Two Not Connected labels are load-bearing**: paying an invoice needs a
+  card processor, opening a document needs object storage. Neither is
+  configured. A storage path is not a link.
+- `/customer-portal` has its OWN route group and gate. It must not use
+  `requirePortalViewer` — that sends a signed-in person with no
+  organization to workspace onboarding, i.e. asks a pest-control customer
+  to sign up as a pest-control company.
+
+## Newest (2026-08-31, latest+18): the forms engine (ADR-197, task #64)
+
+`20260830001700` adds crm_form_templates + crm_form_fields,
+crm_form_instances + crm_form_answers, crm_timesheets, and
+license_expires_on/license_state on crm_technicians.
+
+FIVE GUARDS, ALL TRIGGERS — do not move any of them into a route:
+1. `crm_check_answer_shape` — an answer goes in the column its question's
+   declared type calls for, and a choice answer must be among the offered
+   choices (multi_select is subset-checked with `<@`).
+2. `crm_check_form_completeness` — the transition to `completed` counts
+   required fields against answers present and refuses the difference.
+3. `crm_guard_template_in_use` — a template with instances freezes; the
+   exception text names the remedy (publish a new version).
+4. `crm_guard_shift_overlap` — an open shift runs to now() for overlap
+   purposes, which is why the comparison uses coalesce(ended_at, now()).
+5. Signature completeness is a CHECK: num_nonnulls(...) in (0, 3).
+
+SEEDING ORDER MATTERS HERE: fields must land BEFORE any instance is
+assigned from the template (guard 3), and answers must land BEFORE the
+instance is moved to `completed` (guard 2). The runner does exactly that —
+insert instances as `assigned`, insert answers, then move status in a
+grouped pass. Do not "simplify" it into one insert.
+
+TWO REPORTING RULES, both easy to break by tidying:
+- A licence with no expiry on file is `unrecorded`, NEVER folded into
+  `current`. An unknown is not a pass.
+- A running shift reports workedMinutes: null — not 0, not elapsed-so-far.
+
+VALIDATOR NOTE: crm_form_answers lists all five value columns as optional,
+which asks the audit to prove every answer shape appears in the corpus.
+That is the point — it is what proves every question type is exercised.
+
+## Newest (2026-08-31, latest+17): documents, canvassing, marketing (ADR-196)
+
+Owner /goal: match BOSS and PestPac. The audit is
+`AI/PEST_CRM_COMPETITOR_MATRIX.md` — ten products, per-capability
+HAVE/PARTIAL/GAP, source-linked. This increment closes the photos/files,
+door-to-door and campaigns rows.
+
+`20260830001600` adds crm_documents, crm_canvass_routes + crm_knocks,
+crm_marketing_lists + crm_list_members, crm_campaigns + crm_messages,
+crm_automations, crm_attributions.
+
+FOUR INVARIANTS IN THE SCHEMA:
+1. A document is a storage PATH — the CHECK refuses anything with a scheme
+   in it, and bytes never enter the database. Render via a signed URL.
+2. crm_knocks holds select+insert only. A sold door must name its account;
+   a follow-up date is confined to callback/appointment_set.
+3. Consent keeps its moment: unsubscribed_at + reason, with the reason
+   refused when there is no unsubscribe. crm_messages is append-only.
+4. The message funnel is one-way by CHECK: clicked→opened→delivered→sent.
+
+READ THIS BEFORE "FINISHING" MARKETING: nothing sends. No provider, no
+executor. `sending`/`sent` are deliberately absent from the campaign API's
+settable set; run_count/last_run_at are not settable at all and the schema
+CHECKs they agree; the page carries Not Connected. Wiring a provider is the
+follow-on item in BACKLOG — do not fake it in the meantime.
+
+THE 255-REPETITION TRAP, SECOND OCCURRENCE: storage_path used `{2,300}`.
+PostgreSQL refuses a repetition count above 255 and a CHECK's regex only
+compiles when a row carries a value, so it survived every null-column test —
+exactly as ADR-193's `{4,500}` did. Fixed by splitting shape (regex) from
+length (char_length), and now guarded by
+`tests/unit/migration-regex-repetition.test.ts`, which strips comments
+first because the two ADR notes have to quote the counts that caused it.
+
+SEED: 35 tables, 38,728 rows, 35/35 PASS. Note one deliberate omission —
+`crm_automations.last_run_at` is NOT in the validator's optional list,
+because nothing runs an automation and seeding a moment would be claiming
+one had fired. An honestly empty column is not a coverage gap.
+
+## Newest (2026-08-30, latest+16): the company arrives (ADR-195, task #64)
+
+Owner directive: locations, branches, managers, salesmen, world class,
+competitor-researched. `20260830001500_branches_org_sales.sql` adds
+crm_branches, crm_employees (the org chart), crm_territories and
+crm_commissions, plus branch/territory/owner columns on crm_accounts, an
+owner on crm_opportunities, and branch/supervisor/hire_date on
+crm_technicians.
+
+THREE INVARIANTS IN THE SCHEMA:
+1. `crm_derive_commission_amount` computes amount = basis x rate on INSERT
+   **and UPDATE**, so raising a rate later re-derives the payout. The route
+   schema has NO amountCents field — the number cannot be sent at all, and
+   services-org-sales-routes pins that (422, table never touched).
+2. "Active" never contradicts a date: a branch with closed_on cannot be
+   active, an employee with end_date cannot be active, closes cannot
+   precede opens, and nobody reports to themselves.
+3. A commission is earned on something: num_nonnulls(opportunity, contract,
+   invoice) >= 1, with approved/paid as ordered moments.
+
+THE POSTAL-CODE TRICK: a CHECK cannot hold a subquery, so per-element
+validation of `postal_codes text[]` is done by regexing the JOINED string —
+`array_to_string(postal_codes, ',') ~ '^CODE(,CODE)*$'`. Repetition counts
+stay under Postgres's 255 limit (the trap ADR-193 found), so it compiles.
+
+WHY TECHNICIANS KEPT THEIR TABLE: a technician takes work-order
+assignments and carries a licence; an employee is a person in the business.
+Merging would have meant repointing three FKs and dropping a table with
+live history for a naming preference. Both gained branch + supervisor, and
+/Services/team shows them side by side.
+
+TWO HONESTY RULES ON THE SURFACES, do not "simplify" them away: winRate is
+NULL, not 0, for a rep with nothing decided (0 reads as "loses
+everything"); and unowned deals / unassigned accounts / unworked
+territories are reported at the top of their pages rather than excluded.
+
+BASE-BRANCH NOTE: origin/main moved four commits mid-flight, one adding a
+migration at 20260830000900 that collided with pest-ipm. This branch's
+three unapplied migrations renumbered to 001100/001200/001300 (and this one
+to 001400); 33 files swept. Main also arrived red — see the commit
+"Withhold the typed-input boundary with the release it consumes".
+
+## Newest (2026-08-30, latest+15): billing closes the chain (ADR-194, task #63)
+
+Increment 6. `20260830001400_billing_contracts.sql` adds crm_estimates
+(+lines), crm_contracts, crm_invoices (+lines), crm_payments and
+crm_refunds. Five invariants live in the SCHEMA, not in a route:
+
+1. crm_payments and crm_refunds hold `select, insert` and nothing else —
+   append-only AT THE GRANT LEVEL, so no policy or later migration can
+   quietly make money editable.
+2. `crm_guard_refund_total` locks the payment `for update`, sums the
+   credits already against it, refuses the excess. Two concurrent refunds
+   cannot together overdraw one payment.
+3. `crm_settle_invoice` derives paid_cents from payments minus refunds
+   and sets the status from that total; a refund that drops the total
+   reopens the invoice. `void`/`uncollectible` keep their status. The
+   API's settable set deliberately OMITS `paid` — a caller cannot assert
+   it, and services-billing-routes pins that (422, table never touched).
+4. Every payment writes a `payment` timeline event by trigger. All three
+   system kinds (status_change, service, payment) now have real writers.
+5. Integer cents under non-negative CHECKs; no floating-point money.
+
+Nothing is deletable: a withdrawn estimate is `declined`, a closed
+contract `ended`, an invoice raised in error `void` — with its reason on
+the record.
+
+Surfaces: /Services/billing (four books + the ledger) and
+/api/services/{estimates,estimates/[id],contracts,invoices,invoices/[id],
+payments,refunds}. Routes derive every total from the lines they were
+sent and surface the ledger's refusals as 409s, never 500s.
+
+WHAT IS NOT TRUE YET, say it plainly: this records money that moved; it
+does not move money. No card is charged from /Services/billing — the
+Stripe machinery is not wired to it. That is the next item in the
+pillar, tracked in BACKLOG.
+
+TRAPS RE-CONFIRMED THIS INCREMENT:
+- PGlite composite-FK trap, hit a 3rd and 4th time: a composite FK needs
+  its target's unique index to EXIST FIRST. crm_opportunities and
+  crm_service_plans had none, so 20260830001400 PREPENDS both
+  `(organization_id, id)` unique indexes before its own tables.
+- The hosted default-privileges trap: every new table is granted ALL to
+  authenticated/service_role on creation, so append-only is expressed by
+  REVOKE-then-GRANT, and the `billing-contracts` postflight proves the
+  ABSENCE of update/delete rather than assuming it.
+
+## Newest (2026-08-30, latest+14): the full-scale seed corpus (ADR-193, task #63)
+
+New owner /goal: populate the CRM so every feature can be tested end to
+end, 250+ rows per applicable table, every optional field populated,
+audited table by table. Three modules: seed-generator (deterministic
+mulberry32; fictional by construction; idempotent by identity — every
+unique value derives from its index, so a re-run collides with the
+database's constraints instead of doubling the book), seed-runner
+(dependency-ordered, batched, through the caller's RLS client; statuses
+and stages walk one step so triggers write the history; corrections are
+a SECOND pass because a supersede must reference an existing row), and
+seed-validation (reads the rows BACK: counts vs a 250 floor, optional
+coverage, enum spread, orphans, PASS/FAIL per table).
+
+VERIFICATION IS THE DELIVERABLE: services-crm-seed.behavior runs the
+production seeder and validator unmodified against the real chain in
+PGlite, through tests/support/pglite-supabase-client.ts — a shim
+implementing the slice of the supabase-js builder those modules use, and
+translating Postgres errors into Supabase's shapes (23505/23503/23514/
+42501) so the code takes the same branches it would live. Result (with
+increment 6's billing tables covered): 22/22 PASS, 23,375 rows, zero
+orphans. Set SEED_REPORT_PATH to capture
+the report; a passing vitest run swallows console output.
+
+BUG THIS FOUND (would have hit production): crm_products.sds_url and
+label_url used `~ '^https://[^[:space:]]{4,500}$'`. Postgres refuses a
+regex repetition count above 255, so the CHECK compiled only when a row
+carried a URL — every prior test left it null. Fixed in
+20260830001300 (NOT yet applied to hosted, so edited in place; shape and
+length are separate checks now) and pinned by a chain test that inserts
+a linked product.
+
+Surfaces: POST /api/services/demo-seed takes { scale: "book" | "full" }
+(book is the default, so the existing caller is unchanged);
+GET /api/services/seed-report returns the audit, ?format=text for a
+plain table. VALIDATOR TRAP: sample ordered by uuid PK, not insert order
+— insert order clusters by kind and the first page of a timeline is all
+trigger-written status changes, which would fail a fully-populated table.
+
+## Older (2026-08-30, latest+13): chemicals & compliance (ADR-192, task #63)
+
+Increment 5, the regulated pillar. 20260830001300 adds crm_products /
+crm_product_lots / crm_applications / crm_compliance_rules. Five schema
+invariants: applications are APPEND-ONLY at the grant level (a
+correction is a superseding record naming the original, never an edit);
+the applicator's license is COPIED onto the record by the route from the
+roster (renewals must not rewrite history); the lot drawdown is a
+`for update`-locked trigger refusing over-draws and unit mismatches;
+every application writes its own 'service' timeline event (the second
+real writer of that system kind); and jurisdiction rules are configurable
+rows, enforced at the application boundary with the missing fields named
+— no state hardcoded anywhere. TRAP: a self-referencing composite FK
+cannot be inline (the unique index it targets is the table's own) —
+`supersedes_id` is added as a separate constraint after the table;
+PGlite caught it with "no unique constraint matching given keys".
+
+Surfaces: products GET/POST (https-only SDS/label, EPA 409),
+products/[id]/lots POST, applications GET/POST, compliance/rules
+GET/POST, compliance/report (JSON or CSV; the CSV is RFC-4180 quoted and
+prefixes =,+,-,@ cells so a regulator's spreadsheet reads text, never a
+formula). /Services/compliance panel: catalogue with lot lines and
+inline receive, jurisdiction rules, recent applications, and the audit
+report with its matching CSV link. Demo Data gained a fictional
+catalogue (90000-series EPA numbers no real registration uses), lots,
+applications drawing them down, and two contrasting jurisdictions.
+
+Suites: services-chemicals-compliance.behavior 6, compliance routes 9,
+compliance panel 3, demo hygiene +1, demo-book replay extended (the two
+'service' writers counted apart). Census: RLS 162, hosted-grants fifteen
+crm tables, sentinels swept to 20260830001300 (28), runbook 189,
+workflow scope chemicals-compliance. Dispatch after merge. Next:
+increment 6, invoicing on the existing Stripe machinery.
+
+## Older (2026-08-30, latest+12): pest/IPM core (ADR-191, task #63)
+
+Increment 4, the goal's differentiator pillar. 20260830001200 adds
+crm_devices / crm_device_events / crm_pest_sightings on the established
+posture (org-scoped forced RLS, revoke-then-grant against hosted
+defaults, anon+service_role revoked, three-column composite keys to the
+account's own property). Four schema-held invariants: the scan ledger is
+APPEND-ONLY at the grant level (select+insert, nothing else); a station
+is born with its install scan (AFTER INSERT definer trigger — no device
+predates its ledger); device state is a PROJECTION of the ledger
+(install reactivates, remove closes with removed_at CHECKed against
+status, move relocates — all by trigger); and corrected_at is CHECKed
+against corrective_action so a resolved sighting always says what was
+done. Nothing is deletable anywhere. Barcode = field identity: unique
+per organization (a scan resolves to exactly one station), reusable
+across organizations, grammar-CHECKed. NOTE: this migration also adds
+crm_work_orders_org_id_key — the ledger's work-order FK needed a
+composite target that field service never created; PGlite caught it
+("no unique constraint matching given keys").
+
+Surfaces: /api/services/ipm (one org-scoped dashboard read),
+devices POST/PATCH, devices/scan (barcode → 404 or append; device
+re-read after the trigger moves it), sightings POST + PATCH (the
+corrective-action close). /Services/ipm panel: scan box, per-site
+station tables with threshold flags, sighting loop; nav entry "IPM &
+Devices". useAccountProperties extracted from the schedule panel to
+components/services/use-account-properties.ts and reused by both IPM
+forms. Demo Data now runs a real IPM program (8 stations across 5
+sites, scan histories with an over-threshold station, one open and one
+closed sighting), replayed against the chain.
+
+Suites: services-pest-ipm.behavior 4 (chain), pest-ipm routes 7, IPM
+panel 4, demo-data hygiene +1, demo-book replay extended. Census: RLS
+158, hosted-grants eleven crm tables, sentinels swept to
+20260830001200 (26), runbook 188, workflow scope pest-ipm (postflight:
+forced RLS x3, ledger immutability, no-DELETE, anon/service_role
+shutout, both device triggers, barcode uniqueness). Dispatch
+scope=pest-ipm right after merge. Next: increment 5, chemicals and
+compliance.
+
+## Older (2026-08-30, latest+11): field service core (ADR-189, task #63)
+## Newest (2026-08-30, latest+12): Grok Bot local release candidate (ADR-190)
+## Newest (2026-08-30, latest+14): Grok database phase accepted; application pending (ADR-190)
 ## Newest (2026-08-30, latest+15): Grok failure containment production accepted (ADR-190)
 
 Phase 2 application containment is accepted at exact commit

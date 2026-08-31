@@ -7,11 +7,18 @@ import { PGlite } from "@electric-sql/pglite";
 import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { DEMO_BOOK, DEMO_SOURCE, DEMO_TECHNICIANS, demoBookTotals } from "@/lib/services/demo-data";
+import {
+  DEMO_BOOK,
+  DEMO_COMPLIANCE_RULES,
+  DEMO_PRODUCTS,
+  DEMO_SOURCE,
+  DEMO_TECHNICIANS,
+  demoBookTotals,
+} from "@/lib/services/demo-data";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const migrationsDirectory = resolve(repositoryRoot, "supabase/migrations");
-const latestMigration = "20260830001100_grok_planning_failure.sql";
+const latestMigration = "20260830001800_customer_portal.sql";
 
 /**
  * The Demo Data book, replayed against the real migration chain move for
@@ -91,6 +98,41 @@ describe("the Demo Data book against the real schema", { timeout: 240_000 }, () 
       technicianIds.push(inserted.rows[0].id);
     }
 
+    const productIds: string[] = [];
+    const lotIds: string[][] = [];
+    for (const product of DEMO_PRODUCTS) {
+      const insertedProduct = await db.query<{ id: string }>(
+        `insert into public.crm_products
+           (organization_id, name, epa_registration_number, active_ingredient, signal_word, restricted_use, default_unit, created_by)
+         values ($1, $2, $3, $4, $5, $6, $7, $8) returning id`,
+        [org, product.name, product.epaRegistrationNumber, product.activeIngredient,
+         product.signalWord ?? null, product.restrictedUse ?? false, product.defaultUnit, owner],
+      );
+      productIds.push(insertedProduct.rows[0].id);
+      const lots: string[] = [];
+      for (const lot of product.lots) {
+        const insertedLot = await db.query<{ id: string }>(
+          `insert into public.crm_product_lots
+             (organization_id, product_id, lot_number, unit, quantity_received, quantity_remaining, received_on, created_by)
+           values ($1, $2, $3, $4, $5, $5, $6, $7) returning id`,
+          [org, insertedProduct.rows[0].id, lot.lotNumber, product.defaultUnit, lot.quantity,
+           new Date(Date.now() - lot.receivedDaysAgo * 86_400_000).toISOString().slice(0, 10), owner],
+        );
+        lots.push(insertedLot.rows[0].id);
+      }
+      lotIds.push(lots);
+    }
+    for (const rule of DEMO_COMPLIANCE_RULES) {
+      await db.query(
+        `insert into public.crm_compliance_rules
+           (organization_id, jurisdiction, label, retention_years, requires_applicator_license,
+            requires_target_pest, requires_application_rate, requires_treated_area, created_by)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        [org, rule.jurisdiction, rule.label, rule.retentionYears, rule.requiresApplicatorLicense,
+         rule.requiresTargetPest, rule.requiresApplicationRate, rule.requiresTreatedArea, owner],
+      );
+    }
+
     const accountIds = new Map<string, string>();
     for (const account of DEMO_BOOK) {
       const inserted = await db.query<{ id: string }>(
@@ -159,6 +201,66 @@ describe("the Demo Data book against the real schema", { timeout: 240_000 }, () 
           );
         }
       }
+      for (const device of account.devices ?? []) {
+        const insertedDevice = await db.query<{ id: string }>(
+          `insert into public.crm_devices
+             (organization_id, account_id, property_id, label, device_type, barcode, location_note, activity_threshold, installed_at, created_by)
+           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) returning id`,
+          [org, accountId, propertyIds.get(device.propertyLabel), device.label, device.deviceType,
+           device.barcode, device.locationNote ?? null, device.activityThreshold ?? null,
+           new Date(Date.now() - device.installedDaysAgo * 86_400_000).toISOString(), owner],
+        );
+        for (const scan of device.scans) {
+          await db.query(
+            `insert into public.crm_device_events
+               (organization_id, device_id, event, condition, activity_count, pest_observed, location_note, note, recorded_at, actor_user_id)
+             values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+            [org, insertedDevice.rows[0].id, scan.event, scan.condition ?? null,
+             scan.activityCount ?? null, scan.pestObserved ?? null, scan.locationNote ?? null,
+             scan.note ?? null,
+             new Date(Date.now() - scan.daysAgo * 86_400_000).toISOString(), owner],
+          );
+        }
+      }
+      for (const sighting of account.sightings ?? []) {
+        const insertedSighting = await db.query<{ id: string }>(
+          `insert into public.crm_pest_sightings
+             (organization_id, account_id, property_id, pest, severity, location_note, note, sighted_at, created_by)
+           values ($1, $2, $3, $4, $5, $6, $7, $8, $9) returning id`,
+          [org, accountId, propertyIds.get(sighting.propertyLabel), sighting.pest, sighting.severity,
+           sighting.locationNote ?? null, sighting.note ?? null,
+           new Date(Date.now() - sighting.daysAgo * 86_400_000).toISOString(), owner],
+        );
+        if (sighting.correctiveAction) {
+          await db.query(
+            `update public.crm_pest_sightings
+                set corrective_action = $1, corrected_at = $2 where id = $3`,
+            [sighting.correctiveAction,
+             new Date(Date.now() - (sighting.correctedDaysAgo ?? sighting.daysAgo) * 86_400_000).toISOString(),
+             insertedSighting.rows[0].id],
+          );
+        }
+      }
+      for (const application of account.applications ?? []) {
+        await db.query(
+          `insert into public.crm_applications
+             (organization_id, account_id, property_id, product_id, lot_id, technician_id,
+              applicator_license, method, quantity, unit, target_pest, application_rate,
+              treated_area, note, applied_at, created_by)
+           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
+          [org, accountId, propertyIds.get(application.propertyLabel),
+           productIds[application.productIndex],
+           application.lotIndex === undefined
+             ? null
+             : lotIds[application.productIndex][application.lotIndex],
+           technicianIds[application.technicianIndex],
+           DEMO_TECHNICIANS[application.technicianIndex].licenseNumber,
+           application.method, application.quantity, application.unit,
+           application.targetPest ?? null, application.applicationRate ?? null,
+           application.treatedArea ?? null, application.note ?? null,
+           new Date(Date.now() - application.daysAgo * 86_400_000).toISOString(), owner],
+        );
+      }
       for (const opportunity of account.opportunities) {
         const insertedOpportunity = await db.query<{ id: string }>(
           `insert into public.crm_opportunities
@@ -191,7 +293,7 @@ describe("the Demo Data book against the real schema", { timeout: 240_000 }, () 
     }
 
     const totals = demoBookTotals();
-    const counted = await db.query<{ accounts: number; contacts: number; properties: number; opportunities: number; technicians: number; plans: number; work_orders: number; events: number }>(
+    const counted = await db.query<{ accounts: number; contacts: number; properties: number; opportunities: number; technicians: number; plans: number; work_orders: number; products: number; lots: number; applications: number; rules: number; devices: number; device_events: number; sightings: number; events: number }>(
       `select
          (select count(*)::integer from public.crm_accounts where organization_id = $1) as accounts,
          (select count(*)::integer from public.crm_contacts where organization_id = $1) as contacts,
@@ -200,6 +302,13 @@ describe("the Demo Data book against the real schema", { timeout: 240_000 }, () 
          (select count(*)::integer from public.crm_technicians where organization_id = $1) as technicians,
          (select count(*)::integer from public.crm_service_plans where organization_id = $1) as plans,
          (select count(*)::integer from public.crm_work_orders where organization_id = $1) as work_orders,
+         (select count(*)::integer from public.crm_products where organization_id = $1) as products,
+         (select count(*)::integer from public.crm_product_lots where organization_id = $1) as lots,
+         (select count(*)::integer from public.crm_applications where organization_id = $1) as applications,
+         (select count(*)::integer from public.crm_compliance_rules where organization_id = $1) as rules,
+         (select count(*)::integer from public.crm_devices where organization_id = $1) as devices,
+         (select count(*)::integer from public.crm_device_events where organization_id = $1) as device_events,
+         (select count(*)::integer from public.crm_pest_sightings where organization_id = $1) as sightings,
          (select count(*)::integer from public.crm_timeline_events where organization_id = $1) as events`,
       [org],
     );
@@ -211,24 +320,44 @@ describe("the Demo Data book against the real schema", { timeout: 240_000 }, () 
       technicians: DEMO_TECHNICIANS.length,
       plans: totals.plans,
       work_orders: totals.workOrders,
+      products: DEMO_PRODUCTS.length,
+      lots: DEMO_PRODUCTS.reduce((sum, product) => sum + product.lots.length, 0),
+      applications: totals.applications,
+      rules: DEMO_COMPLIANCE_RULES.length,
+      devices: totals.devices,
+      device_events: totals.devices + totals.deviceScans,
+      sightings: totals.sightings,
       // Manual events plus one trigger-written line per status move, stage
       // move, and visit outcome.
-      events: totals.manualEvents + totals.statusMoves + totals.stageMoves + totals.visitOutcomes,
+      // Manual entries, plus one trigger line per status move, stage move,
+      // visit outcome and application.
+      events:
+        totals.manualEvents
+        + totals.statusMoves
+        + totals.stageMoves
+        + totals.visitOutcomes
+        + totals.applications,
     });
 
-    // The completion machinery told the story: a finished visit reads as a
-    // 'service' event naming its property in detail.
-    const serviceEvents = await db.query<{ count: number; with_property: number }>(
+    /*
+     * Two machineries write 'service' history, and both told their story:
+     * a finished visit reads as a completion naming its property, and a
+     * pesticide application reads as what was applied, with its method.
+     * Counting them apart is what proves neither swallowed the other.
+     */
+    const serviceEvents = await db.query<{ count: number; completions: number; applications: number }>(
       `select count(*)::integer as count,
-              count(*) filter (where detail like 'Property: %')::integer as with_property
+              count(*) filter (where detail like 'Property: %')::integer as completions,
+              count(*) filter (where summary like 'Applied %' and detail like 'Method: %')::integer as applications
          from public.crm_timeline_events
         where organization_id = $1 and kind = 'service'`,
       [org],
     );
     const completions = DEMO_BOOK.flatMap((account) => account.visits ?? [])
       .filter((visit) => visit.statusPath.includes("completed")).length;
-    expect(serviceEvents.rows[0].count).toBe(completions);
-    expect(serviceEvents.rows[0].with_property).toBe(completions);
+    expect(serviceEvents.rows[0].completions).toBe(completions);
+    expect(serviceEvents.rows[0].applications).toBe(totals.applications);
+    expect(serviceEvents.rows[0].count).toBe(completions + totals.applications);
   });
 
   it("every seeded row is labeled and fictional, and the machinery closed what should be closed", async () => {

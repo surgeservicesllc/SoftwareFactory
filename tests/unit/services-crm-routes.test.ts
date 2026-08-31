@@ -2,9 +2,10 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { requireActiveOrganization, seedDemoData } = vi.hoisted(() => ({
+const { requireActiveOrganization, seedDemoData, runSeed } = vi.hoisted(() => ({
   requireActiveOrganization: vi.fn(),
   seedDemoData: vi.fn(),
+  runSeed: vi.fn(),
 }));
 
 vi.mock("server-only", () => ({}));
@@ -13,6 +14,7 @@ vi.mock("@/lib/supabase/tenant", async (importOriginal) => ({
   requireActiveOrganization,
 }));
 vi.mock("@/lib/services/demo-seed", () => ({ seedDemoData }));
+vi.mock("@/lib/services/seed-runner", () => ({ runSeed }));
 
 import { GET as listAccounts, POST as createAccount } from "@/app/api/services/accounts/route";
 import { GET as readAccount } from "@/app/api/services/accounts/[accountId]/route";
@@ -423,12 +425,43 @@ describe("the demo-seed boundary", () => {
     seedDemoData.mockResolvedValue({ seeded: seededCounts });
     const response = await seedDemo(post("https://factory.example/api/services/demo-seed", {}));
     expect(response.status).toBe(201);
-    expect(await response.json()).toEqual({ seeded: seededCounts });
+    // The response names which shape was seeded; an omitted scale is the
+    // curated book, so the existing caller keeps working unchanged.
+    expect(await response.json()).toEqual({ scale: "book", seeded: seededCounts });
     expect(seedDemoData).toHaveBeenCalledWith(
       expect.objectContaining({ from: expect.any(Function) }),
       organizationId,
       userId,
     );
+  });
+
+  it("routes the full scale to the corpus seeder, not the curated book", async () => {
+    client({ crm_accounts: [{ data: null, error: null, count: 0 }] });
+    runSeed.mockResolvedValue({ seeded: { accounts: 320, technicians: 260 } });
+    const response = await seedDemo(
+      post("https://factory.example/api/services/demo-seed", { scale: "full" }),
+    );
+    expect(response.status).toBe(201);
+    const body = await response.json();
+    expect(body.scale).toBe("full");
+    expect(body.seeded.accounts).toBe(320);
+    expect(runSeed).toHaveBeenCalledWith(
+      expect.objectContaining({ from: expect.any(Function) }),
+      organizationId,
+      userId,
+      "full",
+    );
+    expect(seedDemoData).not.toHaveBeenCalled();
+  });
+
+  it("refuses a scale it does not recognise", async () => {
+    client({ crm_accounts: [{ data: null, error: null, count: 0 }] });
+    const response = await seedDemo(
+      post("https://factory.example/api/services/demo-seed", { scale: "everything" }),
+    );
+    expect(response.status).toBe(422);
+    expect(runSeed).not.toHaveBeenCalled();
+    expect(seedDemoData).not.toHaveBeenCalled();
   });
 });
 

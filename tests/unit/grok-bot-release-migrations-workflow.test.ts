@@ -23,7 +23,7 @@ const migrations = [
     hash: "cf17ece506e30beb08163c8bc5888b6b18341bb4e66f61bafaabd6912f225aa6",
   },
   {
-    version: "20260830001100",
+    version: "20260830001200",
     stem: "MIGRATION_01100",
     path: "supabase/migrations/20260830001100_grok_planning_failure.sql",
     hash: "22c035897cb51c611aa373c83e637dc4e033352d9079059521eda7fefa35e8f7",
@@ -308,7 +308,7 @@ describe("Grok Bot hosted release workflow", () => {
       "grok-persistence)",
       "VERSION=20260830001000",
       "planning-failure)",
-      "VERSION=20260830001100",
+      "VERSION=20260830001200",
       "STAGE_DIR=$(mktemp -d)",
       'find "$STAGE_DIR" -maxdepth 1 -type f',
       "plpgsql_check_function_tb",

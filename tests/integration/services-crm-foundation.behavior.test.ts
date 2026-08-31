@@ -9,7 +9,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const migrationsDirectory = resolve(repositoryRoot, "supabase/migrations");
-const latestMigration = "20260830001100_grok_planning_failure.sql";
+const latestMigration = "20260830001800_customer_portal.sql";
 
 /**
  * The Services CRM foundation, exercised against the real migration chain

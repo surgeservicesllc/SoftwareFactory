@@ -83,6 +83,13 @@ const FULL_LIFECYCLE_RELEASE = [
   "20260828000100_project_production_url_configuration.sql",
   "20260828000200_target_bound_worker_claims.sql",
   "20260828000300_graph_postdeploy_validation.sql",
+  // The typed-input admission is the 2026-08-30 consumer of the same
+  // release: before admitting typed inputs it asserts that the launch
+  // boundary carries exactly one post-deploy digest, which the migration
+  // directly above is what installs. Withheld with the group it consumes,
+  // and re-applied with it below — so the reconstruction proves the repair
+  // left a schema this boundary can still be built on, rather than merely
+  // one that looks right.
   "20260830000900_full_lifecycle_typed_input_identity.sql",
 ] as const;
 

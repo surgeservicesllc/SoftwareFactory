@@ -70,12 +70,81 @@ The Demo Data book
 can seed a 14-account fictional clientele through the real machinery —
 every record source-labeled "Demo Data", history written by the
 triggers, loader + DemoNotice + pipeline headline on the Overview.
-Plan of record: AI/SERVICES_CRM_GAP_ANALYSIS.md — ten increments;
-PEST CRM: PRODUCTION READY is declared only after the seeded E2E
-journey (increment 10).
+Pest/IPM (ADR-191) is live: barcoded stations over an append-only scan
+ledger (install written at birth, device state projected from the ledger
+by trigger, per-organization barcode uniqueness), sightings closed only
+by recording a corrective action, and the /Services/ipm command center
+with a scan box, per-site station tables, threshold flags and the
+sighting loop. Chemicals and compliance (ADR-192) close the regulated half: a product
+catalogue with EPA identity and SDS/label links, lots drawn down by
+trigger, an append-only application log that copies the applicator's
+license and writes its own timeline event, jurisdiction rules configured
+as rows and enforced at the boundary, and an audit report served as JSON
+or injection-guarded CSV. Billing (ADR-194) closes the money half:
+estimates and their lines, contracts with signature and term
+completeness, invoices whose paid total and `paid` status are decided by
+the settlement trigger rather than asserted by any caller, and the
+append-only crm_payments / crm_refunds ledger with a row-locking trigger
+that refuses a credit larger than the payment it refunds. Every payment
+writes a `payment` timeline event, so all three system kinds now have
+real database writers; nothing in billing is deletable, and a void
+invoice keeps its reason. /Services/billing reads the four books and the
+ledger behind them. The company arrived with ADR-195: crm_branches (code, address, IANA time
+zone, open/close dates), crm_employees as the org chart (seven roles, a
+branch, a supervisor, a commission rate in basis points, a quota),
+crm_territories (a branch's slice of the map, worked by one rep, defined
+by the postal codes it covers) and crm_commissions, whose payout is
+DERIVED from its basis and rate by trigger — the API has no amount field
+at all. Accounts gained a branch, a territory and an owning rep;
+opportunities gained an owner; technicians gained a branch and a
+supervisor. /Services/branches, /Services/team and /Services/sales read
+them, each naming the uncomfortable number rather than hiding it: the
+book no branch serves, the map nobody works, the deals nobody owns.
+Documents, canvassing and marketing (ADR-196) close the door-to-door and
+campaign rows of the competitor matrix: crm_documents holds a private
+storage PATH and never a URL or bytes, crm_knocks is append-only so a
+disposition cannot be improved after the door closed, consent keeps the
+moment it was withdrawn, and the message funnel is CHECKed one-way so a
+reported open rate cannot exceed its own delivery. Nothing sends: no
+email/SMS provider is connected and no executor runs the automation rules,
+and /Services/marketing carries **Not Connected** above every figure.
+The forms engine (ADR-197) closes the largest gap in the competitor
+matrix: versioned templates over seven field types, answers checked against
+their question's declared type by trigger, "completed" counted from the
+required questions rather than asserted, signatures whole or absent with the
+image stored as a path, and templates frozen once a form is assigned from
+them. Timesheets refuse overlapping shifts and report no worked total while
+a shift is still running; licence expiry reports current, expiring, expired
+and — kept deliberately apart — unrecorded, because a licence with no date
+on file is an unknown rather than a pass. /Services/forms reads all four.
+The customer portal (ADR-198) admits the first reader who is not a member
+of the organization whose rows they read. It does so without widening a
+single staff-facing policy: a customer reaches exactly one account through
+reviewed SECURITY DEFINER functions whose column lists are the whole of
+what they can see, and a signed-in caller with no portal link resolves to
+no account and is answered with nothing. Staff invite an address on
+/Services/portal; the person at that address turns it into a login
+themselves, because the database refuses any write that points a portal
+row's login at a session other than the caller's own. /customer-portal
+shows that customer their balance, issued invoices, visit history,
+paperwork and the requests they have sent, with the company's reply beside
+their own words rather than over them. Paying an invoice and opening a
+document are both labelled **Not Connected**: no card processor and no
+object storage are configured, so the balance and the filing are stated
+and nothing pretends to be a button.
+A workspace can populate itself two ways (ADR-193): the curated Demo Data
+book for presenting the product, or the full corpus — 44,837 rows across
+all forty-two tables, every optional field populated, spanning years —
+for testing dashboards, reports and pagination at the size of a real book.
+GET /api/services/seed-report audits whichever is loaded, table by table,
+PASS or FAIL. Plan of record: AI/SERVICES_CRM_GAP_ANALYSIS.md and
+AI/PEST_CRM_COMPETITOR_MATRIX.md. Increments 11 (operating dashboards and
+route optimization) and 12 (recurring auto-invoicing, AR aging, dunning)
+remain open, as does the commercial portal view — device summaries, trend
+heat maps and sighting tickets — which PestPac has and this does not.
 
 
-Last reviewed: 2026-08-29
+Last reviewed: 2026-08-31
 
 ## 2026-08-29: Budget Tracker — own navigation, dated import, and a plan/history fix
 

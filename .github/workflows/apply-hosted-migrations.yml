@@ -61,6 +61,13 @@ on:
           - services-crm
           - crm-pipeline
           - field-service
+          - pest-ipm
+          - chemicals-compliance
+          - billing-contracts
+          - branches-org-sales
+          - documents-canvassing-marketing
+          - forms-timesheets-licences
+          - customer-portal
           - probe
 permissions:
   actions: read
@@ -1497,6 +1504,208 @@ jobs:
             end
             \$\$;"
           echo "Field service applied; RLS, grants and work-order triggers verified."
+
+      - name: Apply the pest/IPM core (scope=pest-ipm)
+        if: ${{ inputs.scope == 'pest-ipm' }}
+        run: |
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+          VERSION=20260830001200_pest_ipm_core
+          FILE="supabase/migrations/${VERSION}.sql"
+          sha256sum "$FILE"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied "${VERSION%%_*}"
+          else
+            npx supabase migration repair --status applied "${VERSION%%_*}" --db-url "$DB_URL"
+          fi
+          psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
+          # Postflight: three tables under forced RLS; the scan ledger holds
+          # select+insert ONLY (its immutability is the absence of every other
+          # grant, and hosted default privileges granted ALL at creation);
+          # devices and sightings are never deletable; anon and service_role
+          # hold nothing; both device triggers and the barcode uniqueness the
+          # scanner depends on exist.
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/postflight/pest-ipm.sql
+          echo "Pest/IPM applied; RLS, ledger immutability, triggers and barcode uniqueness verified."
+
+      - name: Apply chemicals and compliance (scope=chemicals-compliance)
+        if: ${{ inputs.scope == 'chemicals-compliance' }}
+        run: |
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+          VERSION=20260830001300_chemicals_compliance
+          FILE="supabase/migrations/${VERSION}.sql"
+          sha256sum "$FILE"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied "${VERSION%%_*}"
+          else
+            npx supabase migration repair --status applied "${VERSION%%_*}" --db-url "$DB_URL"
+          fi
+          psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
+          # Postflight: four tables under forced RLS; the application log
+          # holds select+insert ONLY (a pesticide application is a legal
+          # record — hosted default privileges granted ALL at creation, so
+          # the absence of update/delete is what must be proven); nothing
+          # deletable anywhere; anon and service_role hold nothing; both
+          # application triggers exist.
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/postflight/chemicals-compliance.sql
+          echo "Chemicals and compliance applied; RLS, append-only log, triggers verified."
+
+      - name: Apply billing and contracts (scope=billing-contracts)
+        if: ${{ inputs.scope == 'billing-contracts' }}
+        run: |
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+          VERSION=20260830001400_billing_contracts
+          FILE="supabase/migrations/${VERSION}.sql"
+          sha256sum "$FILE"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied "${VERSION%%_*}"
+          else
+            npx supabase migration repair --status applied "${VERSION%%_*}" --db-url "$DB_URL"
+          fi
+          psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
+          # Postflight: seven tables under forced RLS; payments and refunds
+          # hold select+insert ONLY (money that moved is a record, not a
+          # draft — and hosted default privileges granted ALL at creation,
+          # so the absence of update/delete is what must be proven);
+          # nothing deletable anywhere, because an invoice raised in error
+          # is voided rather than removed; anon and service_role hold
+          # nothing; the settlement and refund-guard triggers exist.
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/postflight/billing-contracts.sql
+          echo "Billing and contracts applied; RLS, append-only money, settlement triggers verified."
+
+      - name: Apply branches, the org chart and the sales motion (scope=branches-org-sales)
+        if: ${{ inputs.scope == 'branches-org-sales' }}
+        run: |
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+          VERSION=20260830001500_branches_org_sales
+          FILE="supabase/migrations/${VERSION}.sql"
+          sha256sum "$FILE"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied "${VERSION%%_*}"
+          else
+            npx supabase migration repair --status applied "${VERSION%%_*}" --db-url "$DB_URL"
+          fi
+          psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
+          # Postflight: four tables under forced RLS; nothing deletable, because
+          # a closed branch, an ended employee and a voided commission all stay
+          # on the record (hosted default privileges granted ALL at creation,
+          # so the ABSENCE of delete is what must be proven); anon and
+          # service_role hold nothing; the commission amount really is derived
+          # by trigger rather than taken from a caller.
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/postflight/branches-org-sales.sql
+          echo "Branches, the org chart and the sales motion applied; RLS, no-delete, derived commissions verified."
+
+      - name: Apply documents, canvassing and marketing (scope=documents-canvassing-marketing)
+        if: ${{ inputs.scope == 'documents-canvassing-marketing' }}
+        run: |
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+          VERSION=20260830001600_documents_canvassing_marketing
+          FILE="supabase/migrations/${VERSION}.sql"
+          sha256sum "$FILE"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied "${VERSION%%_*}"
+          else
+            npx supabase migration repair --status applied "${VERSION%%_*}" --db-url "$DB_URL"
+          fi
+          psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
+          # Postflight: nine tables under forced RLS; knocks, messages and
+          # attributions hold select+insert ONLY (a disposition cannot be
+          # improved after the door closed, and "we never sent that" has to be
+          # a claim the database can settle — hosted default privileges
+          # granted ALL at creation, so the ABSENCE of update/delete is what
+          # must be proven); nothing deletable anywhere; anon and service_role
+          # hold nothing; and the storage path really refuses a URL.
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/postflight/documents-canvassing-marketing.sql
+          echo "Documents, canvassing and marketing applied; RLS, append-only facts, path-not-URL verified."
+
+      - name: Apply the forms engine, timesheets and licences (scope=forms-timesheets-licences)
+        if: ${{ inputs.scope == 'forms-timesheets-licences' }}
+        run: |
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+          VERSION=20260830001700_forms_timesheets_licences
+          FILE="supabase/migrations/${VERSION}.sql"
+          sha256sum "$FILE"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied "${VERSION%%_*}"
+          else
+            npx supabase migration repair --status applied "${VERSION%%_*}" --db-url "$DB_URL"
+          fi
+          psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
+          # Postflight: five tables under forced RLS; nothing deletable
+          # (hosted default privileges granted ALL at creation, so the
+          # ABSENCE of delete is what must be proven); anon and service_role
+          # hold nothing; and all four guards that make a form's data
+          # trustworthy are actually installed.
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/postflight/forms-timesheets-licences.sql
+          echo "Forms, timesheets and licences applied; RLS, no-delete, and all four guards verified."
+
+      - name: Apply the customer portal (scope=customer-portal)
+        if: ${{ inputs.scope == 'customer-portal' }}
+        run: |
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+          VERSION=20260830001800_customer_portal
+          FILE="supabase/migrations/${VERSION}.sql"
+          sha256sum "$FILE"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied "${VERSION%%_*}"
+          else
+            npx supabase migration repair --status applied "${VERSION%%_*}" --db-url "$DB_URL"
+          fi
+          psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
+          # Postflight. This is the migration that admits a reader who is not
+          # a member of the organization, so the checks are about who can
+          # reach what rather than about shape:
+          #   * both tables under forced RLS, undeletable, invisible to anon
+          #     and service_role (hosted default privileges grant ALL at
+          #     creation, so the ABSENCE of a grant is what must be proven);
+          #   * the resolver reachable by NOBODY — it takes a uuid, so any
+          #     role holding execute could ask it about another tenant's
+          #     login;
+          #   * the seven caller-scoped functions reachable by authenticated
+          #     and by no one else.
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/postflight/customer-portal.sql
+          echo "Customer portal applied; forced RLS, no-delete, sealed resolver and nine caller-scoped definers verified."
 
       - name: Normalize exact legacy bot ACLs (scope=bot-legacy-acl-normalization)
         if: ${{ inputs.scope == 'bot-legacy-acl-normalization' }}
@@ -5764,7 +5973,7 @@ jobs:
           echo "Applied and verified: a voided run no longer consumes a gate approval."
 
       - name: Apply the Budget Tracker schema (scope=budget-tracker)
-        # Two files, in order. 20260829000300 adds four activity enum values
+        # Two files, in order. 20260829000100 adds four activity enum values
         # and nothing else; 20260829000200 creates the six budget_* tables,
         # their RLS, indexes and two read functions. They are separate
         # migrations, applied as separate transactions, because Postgres
@@ -5792,7 +6001,14 @@ jobs:
             echo "::add-mask::$DB_URL"
           fi
 
-          TYPES_FILE=supabase/migrations/20260829000300_budget_tracker_activity_types.sql
+          # 20260829000100, not 000300: the activity-types migration was
+          # renumbered when the job-seeker alert engine took 000300, and this
+          # scope kept the old name. Its pinned hash still matches the file
+          # byte for byte, so only the version drifted — but a dispatch would
+          # have died at sha256sum with "No such file" instead of applying,
+          # and the ledger probe below was asking about a version this
+          # repository does not contain.
+          TYPES_FILE=supabase/migrations/20260829000100_budget_tracker_activity_types.sql
           SCHEMA_FILE=supabase/migrations/20260829000200_budget_tracker_foundation.sql
           if [ "$(sha256sum "$TYPES_FILE" | cut -d' ' -f1)" != "3404458b6bc99c776659897baf89933acfc6b75bce9282d3f21bb9bb963b18a4" ]; then
             echo "::error::Migration hash mismatch on ${TYPES_FILE}; refusing production DDL."
@@ -5803,7 +6019,7 @@ jobs:
             exit 1
           fi
 
-          for VERSION in 20260829000300 20260829000200; do
+          for VERSION in 20260829000100 20260829000200; do
             ROW=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
               "select count(*) from supabase_migrations.schema_migrations where version = '${VERSION}';")
             if [ "$ROW" != "0" ]; then
@@ -5817,7 +6033,7 @@ jobs:
           echo "Applying ${SCHEMA_FILE}"
           psql "$DB_URL" -v ON_ERROR_STOP=1 -1 -q -f "$SCHEMA_FILE"
 
-          for VERSION in 20260829000300 20260829000200; do
+          for VERSION in 20260829000100 20260829000200; do
             if [ "$MODE" = "token" ]; then
               npx supabase migration repair --status applied "$VERSION"
             else

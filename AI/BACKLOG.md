@@ -92,65 +92,114 @@ the full seeded E2E journey passes — increment 10 of the plan.
   /Services/schedule board + /Services/technicians roster; Demo Data
   fields the operation. 20260830000800; hosted apply: dispatch
   scope=field-service after merge.
-- [ ] Increment 4: pest/IPM differentiator — devices/stations with
-  QR/barcode identity, scans, station history/conditions,
-  captures/thresholds/trends, sighting logs, corrective actions,
-  multi-site commercial dashboards. Then increments 5–10 per the gap
-  analysis (chemicals/compliance, invoicing, sales, marketing, AI
-  copilot, seeded E2E acceptance).
-
-Last triaged: 2026-08-29
-
-## AI Factory → autonomous build platform (task #61, owner directive 2026-08-30)
-
-The audit and increment plan live in `AI/AI_FACTORY_GAP_ANALYSIS.md`.
-(The first /goal registration exceeded the 4,000-char limit; a trimmed
-/goal was later registered and its evaluator is armed. This section is
-still the working plan of record.)
-
-- [x] Increment 1 (ADR-171): `/solutions/build` — conversational front
-  door; prompt → full_lifecycle launch → live watched run (counted
-  progress, SDLC-ordered stages, OPEN-gate call to decide, closure notes,
-  resume list). Nav seat "Build" first after Overview.
-- [x] Increment 5 (ADR-173): the Chief of Staff named over the real
-  compiler/scheduler/router; `composePlan` layers stored edges with
-  specialist assignments, gates and counted percent; Build gains the
-  Plan disclosure and a percent-led headline.
-- [x] Increment 2 (ADR-175): plan approval before launch —
-  `composeLaunchProposal` reads the full_lifecycle template back through
-  composePlan; submitting drafts the proposal (goal verbatim, layers
-  with specialists, the three HUMAN gates named, template jobs under a
-  disclosure) and POSTs nothing; Approve & launch is the old submit;
-  Edit withdraws keeping the words. Acceptance criteria stay the run's
-  own first-stage artifacts, never invented client-side.
-- [x] Increment 3a (shipped with increment 1): inline gate decisions —
-  every OPEN human gate on the watched run renders the shared
-  GateDecision control (same wording, same route, same evidence rules as
-  the runs panel); a decision re-reads the live feed.
-- [x] Increment 3b, Stop half (ADR-180): withdrawal —
-  20260830000200 adds graphs.withdrawn_* + the one claim predicate;
-  withdraw_graph_as_member (authenticated definer, RUNNING refusal,
-  idempotent, audited); POST /api/graphs/[graphId]/withdraw; Build
-  shows Stop only where it is true (waiting card + non-RUNNING active
-  rows). Pause/Resume still need engine support — deliberately unbuilt
-  rather than dead. Hosted apply: dispatch scope=withdraw-graph after
-  merge.
-- [x] Increment 3b, Pause/Resume half (ADR-183): the run-controls list
-  is now complete. 20260830000400 adds graphs.pause_requested_* + the
-  one claim predicate (graph-level on purpose — a run-level flag would
-  let the next drain resume the graph unasked), set_graph_pause_as_member
-  (authenticated definer, withdrawn refusal, idempotent both ways,
-  audited 'graph.pause_changed') and read_graph_pause_as_worker
-  (service-role boolean). The engine polls checkPause at wave
-  boundaries: in-flight work lands, nothing new starts, undispatched
-  nodes SKIP with a pause detail, the run closes CANCELLED spending no
-  chance. Resume = unpause + the launch route's worker wake; the
-  lifecycle reuse path makes the next claim continue from the completed
-  steps (proved end-to-end on the chain). Retry needs no new control: a
-  re-claim IS the retry. Build shows Pause on RUNNING, Resume + a
-  paused label on held builds, server notes verbatim; the runs feed
-  carries pausedAt/withdrawnAt with a 42703 deploy-window fallback.
-  Hosted apply: dispatch scope=pause-graph after merge.
+- [x] Increment 4 (ADR-191): pest/IPM core — crm_devices with per-org
+  barcode identity, the append-only crm_device_events scan ledger
+  (install written at birth; device state projected from the ledger by
+  trigger), crm_pest_sightings with the corrective-action CHECK; the
+  /Services/ipm command center (scan box, per-site station tables,
+  threshold flags, sighting loop); Demo Data now runs a real IPM
+  program. 20260830001200; hosted apply: scope=pest-ipm after merge.
+- [x] Increment 5 (ADR-192): chemicals & compliance — crm_products with
+  EPA identity and https-checked SDS/label references, crm_product_lots
+  with trigger drawdown, the APPEND-ONLY crm_applications log (license
+  copied at recording, supersede-not-edit corrections, its own timeline
+  event), and crm_compliance_rules as configurable per-jurisdiction rows
+  enforced at the application boundary; the audit report as JSON or
+  injection-guarded CSV; /Services/compliance. 20260830001300; hosted
+  apply: scope=chemicals-compliance after merge.
+- [x] Increment 6 (ADR-194): billing — crm_estimates and lines (totals
+  derived from the lines at the boundary), crm_contracts (term,
+  signature completeness, ended-iff-closed), crm_invoices and lines
+  whose paid total and `paid` status are decided by the settlement
+  trigger rather than any caller, and the APPEND-ONLY crm_payments /
+  crm_refunds with a row-locking trigger that refuses a credit larger
+  than the payment it refunds; every payment writes a `payment` timeline
+  event; /Services/billing. 20260830001400; hosted apply:
+  scope=billing-contracts after merge.
+- [ ] Increment 6 follow-on: take card payments through the existing
+  Stripe machinery. The ledger records money that moved; it does not yet
+  move it, and /Services/billing says so rather than implying otherwise.
+  Also open in this pillar: dunning schedules and PDF invoice rendering.
+- [x] Increment 7 (ADR-195): the company — crm_branches (code, address,
+  IANA time zone, open/close dates), crm_employees as the org chart (seven
+  roles, branch, supervisor, commission basis points, quota),
+  crm_territories (postal-code coverage, one rep, one branch) and
+  crm_commissions whose payout is derived from basis × rate by trigger and
+  cannot be sent by a caller at all; accounts gained branch/territory/owner,
+  opportunities an owner, technicians a branch and a supervisor;
+  /Services/branches, /Services/team, /Services/sales. 20260830001500;
+  hosted apply: scope=branches-org-sales after merge.
+- [ ] Increment 7 follow-on (canvassing): door-to-door routes, knock
+  dispositions and per-rep canvassing stats. The territory map and the
+  leaderboard now exist to hang them on; the knocking itself does not.
+- [x] Increment 8 (ADR-196): documents, canvassing and the marketing hub —
+  crm_documents (a storage PATH, never a URL, never bytes),
+  crm_canvass_routes + append-only crm_knocks with dispositions,
+  crm_marketing_lists + crm_list_members with consent as a record that
+  keeps its moment, crm_campaigns, append-only crm_messages,
+  crm_automations and append-only crm_attributions; /Services/canvassing
+  and /Services/marketing. No provider is wired and no executor runs the
+  rules: both surfaces carry **Not Connected**. 20260830001600; hosted
+  apply: scope=documents-canvassing-marketing after merge.
+- [ ] Increment 8 follow-on: wire an email/SMS provider behind
+  owner-supplied credentials, and an executor for the automation rules.
+  Until then `sending`/`sent` stay unreachable from the API and
+  run_count/last_run_at stay unsettable, which is what keeps the page
+  honest.
+- [x] Increment 9 (ADR-197): the forms and inspections engine — versioned
+  templates over seven field types, assignable instances, answers checked
+  against their question's declared type by trigger, "completed" counted
+  from the required questions rather than asserted, signatures whole or
+  absent, templates frozen once in use; plus crm_timesheets with overlap
+  refused and licence expiry on technicians. /Services/forms.
+  20260830001700; hosted apply: scope=forms-timesheets-licences after merge.
+- [ ] Increment 9 follow-on: WDO/termite diagrams (a drawing surface, not a
+  form), and PDF rendering of a completed inspection.
+- [x] Increment 10 (ADR-198): the customer portal, residential view — one
+  login resolves to exactly one account through SECURITY DEFINER
+  projections, with no existing staff policy widened; balance, issued
+  invoices, visit history, documents and service requests; staff invite an
+  address and the customer claims it themselves. /customer-portal and
+  /Services/portal. 20260830001800; hosted apply: scope=customer-portal
+  after merge.
+- [x] The `budget-tracker` apply scope pointed at
+  `20260829000300_budget_tracker_activity_types.sql`, a name the file lost
+  when the job-seeker alert engine took 000300. Its pinned hash still
+  matched the real file byte for byte, so only the version had drifted —
+  but a dispatch would have died at `sha256sum` with "No such file"
+  instead of applying, and the ledger probe asked about a version this
+  repository does not contain. Fixed to `20260829000100`, and
+  `tests/unit/migration-path-references.test.ts` now fails on any
+  `supabase/migrations/...` path a workflow or test names that is not a
+  real file.
+- [ ] Increment 10 follow-on: the COMMERCIAL portal view — open
+  conditions, device summary with trend heat maps, sighting tickets, an
+  SDS/compliance document library and inspection history. PestPac has it;
+  the residential view that shipped does not.
+- [ ] Increment 10 follow-on: sending the invitation. The row exists and
+  the accept flow works, but nothing emails a customer to tell them — no
+  email provider is connected, so an invitation is delivered by whatever
+  the office does today. Wire it when a provider is supplied.
+- [x] Increment 10 follow-on: the workflow size ceiling. The seven CRM
+  scopes' postflight SQL now lives in
+  `.github/hosted-apply/postflight/<scope>.sql` and runs with `psql -f`,
+  the way the probe SQL was extracted. 488KB -> 473KB, and the guard
+  ratcheted down to 480,000 so the recovery is kept.
+  `hosted-scope-replay` executes every one of the seven against the fully
+  migrated chain and proves one of them actually RAISES on a broken
+  schema — a postflight that passes on a broken schema is worse than none,
+  because it is read as proof.
+- [ ] Increment 11: operating dashboards (revenue, retention/churn,
+  technician productivity, route density) and route optimization —
+  sequencing a day's stops by real geography, not a claim of it.
+- [ ] Increment 12: recurring auto-invoicing from service plans, AR aging,
+  and dunning schedules.
+- [ ] Provider-gated, ship Not Connected until an owner supplies
+  credentials, never implied as working: card/ACH processing (the ledger
+  records money that moved; it does not move money), SMS/email delivery,
+  GPS/fleet telemetry, and QuickBooks sync.
+- [ ] Then the AI copilot and the seeded E2E acceptance journey — after
+  which, and only after which, PEST CRM: PRODUCTION READY may be declared.
 - [ ] Queue-diagnosis honesty follow-up: `diagnose_graph_queue_as_worker_v2`
   predates withdrawal and pause, so a withdrawn or paused graph shows in
   the drain log as "looks claimable — an empty claim contradicts this

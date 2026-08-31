@@ -49,6 +49,79 @@ export const DEMO_TECHNICIANS: readonly DemoTechnician[] = [
   { firstName: "Pete", lastName: "Kowalski", phone: "(555) 016-0003", licenseNumber: "DEMO-APP-09934" },
 ];
 
+export type DemoProduct = {
+  name: string;
+  epaRegistrationNumber: string;
+  activeIngredient: string;
+  signalWord?: "CAUTION" | "WARNING" | "DANGER";
+  restrictedUse?: boolean;
+  defaultUnit: "oz" | "fl_oz" | "lb" | "g" | "kg" | "ml" | "l" | "gal" | "each";
+  /** Lots received, referenced by index from an application. */
+  lots: readonly { lotNumber: string; quantity: number; receivedDaysAgo: number; expiresInDays?: number }[];
+};
+
+/**
+ * The demo catalogue. EPA registration numbers here are FICTIONAL — they
+ * follow the regulator's grammar so the schema and the report render
+ * truthfully, in a 90000-series prefix no real registration uses, and the
+ * hygiene suite pins that.
+ */
+export const DEMO_PRODUCTS: readonly DemoProduct[] = [
+  {
+    name: "Demo Gel Bait (fipronil)",
+    epaRegistrationNumber: "90001-101",
+    activeIngredient: "Fipronil 0.05%",
+    signalWord: "CAUTION",
+    defaultUnit: "oz",
+    lots: [
+      { lotNumber: "DEMO-LOT-2026-04", quantity: 60, receivedDaysAgo: 120, expiresInDays: 540 },
+      { lotNumber: "DEMO-LOT-2026-07", quantity: 60, receivedDaysAgo: 30, expiresInDays: 640 },
+    ],
+  },
+  {
+    name: "Demo Perimeter Concentrate (bifenthrin)",
+    epaRegistrationNumber: "90002-217",
+    activeIngredient: "Bifenthrin 7.9%",
+    signalWord: "WARNING",
+    defaultUnit: "fl_oz",
+    lots: [{ lotNumber: "DEMO-LOT-PC-118", quantity: 128, receivedDaysAgo: 95, expiresInDays: 700 }],
+  },
+  {
+    name: "Demo Rodent Block (bromadiolone)",
+    epaRegistrationNumber: "90003-044",
+    activeIngredient: "Bromadiolone 0.005%",
+    signalWord: "CAUTION",
+    restrictedUse: true,
+    defaultUnit: "lb",
+    lots: [{ lotNumber: "DEMO-LOT-RB-903", quantity: 18, receivedDaysAgo: 60 }],
+  },
+];
+
+/**
+ * The jurisdictions this demo workspace operates in. Configured rows, not
+ * a hardcoded regulator: the seeded book demonstrates the mechanism.
+ */
+export const DEMO_COMPLIANCE_RULES = [
+  {
+    jurisdiction: "US-OR",
+    label: "Oregon Department of Agriculture (Demo Data)",
+    retentionYears: 3,
+    requiresApplicatorLicense: true,
+    requiresTargetPest: true,
+    requiresApplicationRate: false,
+    requiresTreatedArea: false,
+  },
+  {
+    jurisdiction: "US-WA",
+    label: "Washington State Department of Agriculture (Demo Data)",
+    retentionYears: 7,
+    requiresApplicatorLicense: true,
+    requiresTargetPest: true,
+    requiresApplicationRate: true,
+    requiresTreatedArea: true,
+  },
+] as const;
+
 export type DemoPlan = {
   /** Which of the account's properties, by label. */
   propertyLabel: string;
@@ -72,6 +145,64 @@ export type DemoVisit = {
   completionNotes?: string;
 };
 
+export type DemoDeviceScan = {
+  event: "service" | "move" | "remove";
+  daysAgo: number;
+  condition?: "ok" | "needs_service" | "damaged" | "missing";
+  activityCount?: number;
+  pestObserved?: string;
+  locationNote?: string;
+  note?: string;
+};
+
+export type DemoDevice = {
+  propertyLabel: string;
+  label: string;
+  deviceType: "bait_station" | "snap_trap" | "multi_catch" | "insect_light_trap" | "pheromone_trap" | "other";
+  barcode: string;
+  installedDaysAgo: number;
+  locationNote?: string;
+  activityThreshold?: number;
+  /** Scans after the install, oldest first (daysAgo descending). */
+  scans: readonly DemoDeviceScan[];
+};
+
+export type DemoSighting = {
+  propertyLabel: string;
+  pest: string;
+  severity: "low" | "moderate" | "high";
+  daysAgo: number;
+  locationNote?: string;
+  note?: string;
+  /** When present, resolved through the real update path after seeding. */
+  correctiveAction?: string;
+  correctedDaysAgo?: number;
+};
+
+export type DemoApplication = {
+  propertyLabel: string;
+  productIndex: number;
+  lotIndex?: number;
+  technicianIndex: number;
+  method:
+    | "bait"
+    | "crack_and_crevice"
+    | "spot"
+    | "perimeter"
+    | "broadcast"
+    | "void"
+    | "dust"
+    | "fumigation"
+    | "other";
+  quantity: number;
+  unit: "oz" | "fl_oz" | "lb" | "g" | "kg" | "ml" | "l" | "gal" | "each";
+  daysAgo: number;
+  targetPest?: string;
+  applicationRate?: string;
+  treatedArea?: string;
+  note?: string;
+};
+
 export type DemoAccount = {
   name: string;
   kind: "residential" | "commercial";
@@ -93,6 +224,9 @@ export type DemoAccount = {
   events: readonly DemoEvent[];
   plans?: readonly DemoPlan[];
   visits?: readonly DemoVisit[];
+  devices?: readonly DemoDevice[];
+  sightings?: readonly DemoSighting[];
+  applications?: readonly DemoApplication[];
 };
 
 export const DEMO_BOOK: readonly DemoAccount[] = [
@@ -130,6 +264,58 @@ export const DEMO_BOOK: readonly DemoAccount[] = [
       { propertyLabel: "Distribution Center", serviceType: "Monthly IPM service", inDays: -18, durationHours: 3, technicianIndex: 0, statusPath: ["dispatched", "completed"], completionNotes: "All 12 exterior stations serviced; two with activity at the north fence, rebaited. Door sweeps on 3 and 7 holding." },
       { propertyLabel: "Distribution Center", serviceType: "Monthly IPM service", inDays: 10, durationHours: 3, technicianIndex: 0, statusPath: [] },
     ],
+    devices: [
+      {
+        propertyLabel: "Distribution Center", label: "Station 01", deviceType: "bait_station",
+        barcode: "DEMO-ST-1001", installedDaysAgo: 110, locationNote: "North fence line, post 1", activityThreshold: 3,
+        scans: [
+          { event: "service", daysAgo: 48, condition: "ok", activityCount: 1 },
+          { event: "service", daysAgo: 18, condition: "ok", activityCount: 4, pestObserved: "House mouse", note: "Rebaited; runway confirmed along the fence." },
+        ],
+      },
+      {
+        propertyLabel: "Distribution Center", label: "Station 02", deviceType: "bait_station",
+        barcode: "DEMO-ST-1002", installedDaysAgo: 110, locationNote: "North fence line, post 4", activityThreshold: 3,
+        scans: [
+          { event: "service", daysAgo: 48, condition: "ok", activityCount: 0 },
+          { event: "service", daysAgo: 18, condition: "ok", activityCount: 1 },
+        ],
+      },
+      {
+        propertyLabel: "Distribution Center", label: "Multi-catch A", deviceType: "multi_catch",
+        barcode: "DEMO-ST-1003", installedDaysAgo: 96, locationNote: "Dock door 3, interior left",
+        scans: [
+          { event: "service", daysAgo: 18, condition: "needs_service", activityCount: 2, pestObserved: "House mouse" },
+          { event: "move", daysAgo: 17, locationNote: "Dock door 7, interior right", note: "Moved to the active corner after the completed service visit." },
+        ],
+      },
+      {
+        propertyLabel: "Cold Storage Annex", label: "ILT 01", deviceType: "insect_light_trap",
+        barcode: "DEMO-ST-1004", installedDaysAgo: 96, locationNote: "Anteroom, above prep sink", activityThreshold: 25,
+        scans: [
+          { event: "service", daysAgo: 18, condition: "ok", activityCount: 9, pestObserved: "Small flies" },
+        ],
+      },
+    ],
+    sightings: [
+      {
+        propertyLabel: "Distribution Center", pest: "House mouse", severity: "high", daysAgo: 18,
+        locationNote: "Dock door 7", note: "Droppings along the interior track; multi-catch moved to cover it.",
+      },
+    ],
+    applications: [
+      {
+        propertyLabel: "Distribution Center", productIndex: 2, lotIndex: 0, technicianIndex: 0,
+        method: "bait", quantity: 1.5, unit: "lb", daysAgo: 48, targetPest: "House mouse",
+        applicationRate: "1 block per station", treatedArea: "12 exterior stations, north fence line",
+      },
+      {
+        propertyLabel: "Distribution Center", productIndex: 2, lotIndex: 0, technicianIndex: 0,
+        method: "bait", quantity: 1.5, unit: "lb", daysAgo: 18, targetPest: "House mouse",
+        applicationRate: "1 block per station", treatedArea: "12 exterior stations, north fence line",
+        note: "Two stations with activity rebaited; the rest topped up.",
+      },
+    ],
   },
   {
     name: "Bluefin Grill Group",
@@ -164,6 +350,44 @@ export const DEMO_BOOK: readonly DemoAccount[] = [
     visits: [
       { propertyLabel: "Bluefin Harborside", serviceType: "Monthly kitchen service", inDays: -25, durationHours: 2, technicianIndex: 1, statusPath: ["dispatched", "completed"], completionNotes: "Dish pit monitors clear two months running; drain treatment refreshed, gel bait rotated." },
     ],
+    devices: [
+      {
+        propertyLabel: "Bluefin Harborside", label: "Monitor DP-1", deviceType: "pheromone_trap",
+        barcode: "DEMO-ST-2001", installedDaysAgo: 84, locationNote: "Dish pit, under the sink", activityThreshold: 5,
+        scans: [
+          { event: "service", daysAgo: 55, condition: "ok", activityCount: 3, pestObserved: "German cockroach" },
+          { event: "service", daysAgo: 25, condition: "ok", activityCount: 0, note: "Clear two services running." },
+        ],
+      },
+      {
+        propertyLabel: "Bluefin Cannery Row", label: "Monitor K-1", deviceType: "snap_trap",
+        barcode: "DEMO-ST-2002", installedDaysAgo: 84, locationNote: "Kitchen, behind the line",
+        scans: [
+          { event: "service", daysAgo: 25, condition: "ok", activityCount: 0 },
+        ],
+      },
+    ],
+    sightings: [
+      {
+        propertyLabel: "Bluefin Harborside", pest: "Fruit flies", severity: "moderate", daysAgo: 40,
+        locationNote: "Bar drains", correctiveAction: "Bio-foam drain program started; nightly squeegee routine with the closing checklist.",
+        correctedDaysAgo: 33,
+      },
+    ],
+    applications: [
+      {
+        propertyLabel: "Bluefin Harborside", productIndex: 0, lotIndex: 0, technicianIndex: 1,
+        method: "crack_and_crevice", quantity: 2.5, unit: "oz", daysAgo: 55,
+        targetPest: "German cockroach", applicationRate: "Pea-sized placements",
+        treatedArea: "Dish pit and line, cracks and voids",
+      },
+      {
+        propertyLabel: "Bluefin Cannery Row", productIndex: 0, lotIndex: 1, technicianIndex: 1,
+        method: "crack_and_crevice", quantity: 1.75, unit: "oz", daysAgo: 25,
+        targetPest: "German cockroach", applicationRate: "Pea-sized placements",
+        treatedArea: "Kitchen, behind the line",
+      },
+    ],
   },
   {
     name: "Stonebridge Hotel & Suites",
@@ -196,6 +420,31 @@ export const DEMO_BOOK: readonly DemoAccount[] = [
     visits: [
       { propertyLabel: "Main Tower", serviceType: "Bed bug heat treatment — floors 9-11", inDays: -55, durationHours: 8, technicianIndex: 2, statusPath: ["dispatched", "in_progress", "completed"], completionNotes: "Three rooms treated to temperature; adjacent rooms inspected clear. Follow-up canine sweep booked." },
       { propertyLabel: "Main Tower", serviceType: "Follow-up canine sweep", inDays: 3, durationHours: 2, technicianIndex: 2, statusPath: [] },
+    ],
+    devices: [
+      {
+        propertyLabel: "Main Tower", label: "Laundry MC-1", deviceType: "multi_catch",
+        barcode: "DEMO-ST-3001", installedDaysAgo: 200, locationNote: "Laundry room, behind folding table",
+        scans: [
+          { event: "service", daysAgo: 60, condition: "ok", activityCount: 0 },
+        ],
+      },
+      {
+        propertyLabel: "Main Tower", label: "Old dock station", deviceType: "bait_station",
+        barcode: "DEMO-ST-3002", installedDaysAgo: 200, locationNote: "Loading court, east wall",
+        scans: [
+          { event: "service", daysAgo: 60, condition: "damaged", activityCount: 0, note: "Lid cracked by a cart; slated for removal." },
+          { event: "remove", daysAgo: 59, note: "Removed; wall line covered by the new court layout." },
+        ],
+      },
+    ],
+    applications: [
+      {
+        propertyLabel: "Main Tower", productIndex: 1, lotIndex: 0, technicianIndex: 2,
+        method: "perimeter", quantity: 16, unit: "fl_oz", daysAgo: 60,
+        targetPest: "Occasional invaders", applicationRate: "0.5 fl oz per gallon",
+        treatedArea: "Building perimeter, 620 linear ft",
+      },
     ],
   },
   {
@@ -484,6 +733,14 @@ export function demoBookTotals() {
               .length,
           0,
         ),
+      devices: totals.devices + (account.devices?.length ?? 0),
+      // The ledger holds one install per device (written by the database)
+      // plus every hand-recorded scan.
+      deviceScans:
+        totals.deviceScans
+        + (account.devices ?? []).reduce((sum, device) => sum + device.scans.length, 0),
+      sightings: totals.sightings + (account.sightings?.length ?? 0),
+      applications: totals.applications + (account.applications?.length ?? 0),
     }),
     {
       accounts: 0,
@@ -496,6 +753,10 @@ export function demoBookTotals() {
       statusMoves: 0,
       stageMoves: 0,
       visitOutcomes: 0,
+      devices: 0,
+      deviceScans: 0,
+      sightings: 0,
+      applications: 0,
     },
   );
 }
