@@ -2,6 +2,18 @@
 
 Last reviewed: 2026-08-31
 
+**Addendum, 2026-08-31 latest+34 - the printable station label (ADR-214):**
+code39 13 pins the transcribed pattern table by the properties the real one
+has — nine elements each, exactly three wide, only narrow and wide, all
+forty-four distinct — plus the framing, the alternation, the quiet zone, and
+four refusals. The refusal that matters: a lowercase barcode is NOT
+uppercased to make it fit, because crm_devices_org_barcode_key is
+case-sensitive and the symbol would scan as a different station on a
+regulated site. services-ipm-panel gains 2: a symbol beside the barcode a
+scan resolves to, and a lowercase barcode printing without one and saying
+why. No migration. Matrix: 47 HAVE -> 48, 4 PARTIAL -> 3, and the last row
+code alone could close is closed.
+
 **Addendum, 2026-08-31 latest+33 - the roster that had fallen behind:**
 The seed report's table list was hand-written, so "48/48 tables passing"
 was complete only relative to a list three tables out of date:

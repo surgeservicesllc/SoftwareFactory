@@ -202,3 +202,40 @@ describe("the IPM panel", () => {
     ]);
   });
 });
+
+describe("printing a station label", () => {
+  it("draws a Code 39 symbol beside the barcode a scan resolves to", async () => {
+    serve({});
+    const user = userEvent.setup();
+    render(<ServicesIpmPanel />);
+
+    const labels = await screen.findByTestId("station-labels");
+    await user.click(within(labels).getByRole("button", { name: /Station labels/ }));
+
+    const label = await screen.findByTestId("station-label");
+    expect(within(label).getByText("Station 01")).toBeInTheDocument();
+    expect(within(label).getByText("DEMO-ST-1001")).toBeInTheDocument();
+    expect(within(label).getByTestId("station-label-symbol")).toBeInTheDocument();
+  });
+
+  it("prints a lowercase barcode without a symbol, and says why", async () => {
+    // Barcodes are case-sensitive in this schema, so an uppercased symbol
+    // would scan as a different station. The label tells the truth instead.
+    serve({
+      ipm: {
+        ...ipmPayload,
+        devices: [{ ...ipmPayload.devices[0], barcode: "demo-st-1001" }],
+      },
+    });
+    const user = userEvent.setup();
+    render(<ServicesIpmPanel />);
+
+    const labels = await screen.findByTestId("station-labels");
+    await user.click(within(labels).getByRole("button", { name: /Station labels/ }));
+
+    const label = await screen.findByTestId("station-label");
+    expect(within(label).queryByTestId("station-label-symbol")).toBeNull();
+    expect(within(label).getByTestId("station-label-refusal").textContent)
+      .toMatch(/scan as a different station/);
+  });
+});

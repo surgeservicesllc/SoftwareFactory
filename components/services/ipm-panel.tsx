@@ -5,6 +5,7 @@ import { AlertTriangle, Radar, ScanLine } from "lucide-react";
 
 import { Card, Notice, PageHeader, SectionTitle } from "@/components/ui";
 import { useAccountProperties } from "@/components/services/use-account-properties";
+import { StationLabels } from "@/components/services/station-labels";
 import { cn } from "@/lib/cn";
 import type {
   AccountsPayload,
@@ -223,6 +224,15 @@ export function ServicesIpmPanel() {
             {openSightings.length} open {openSightings.length === 1 ? "sighting" : "sightings"}
           </span>
         </div>
+      ) : null}
+
+      {payload !== null ? (
+        <StationLabels
+          devices={payload.devices}
+          siteName={(propertyId) =>
+            payload.properties.find((property) => property.id === propertyId)?.label ?? null
+          }
+        />
       ) : null}
 
       <ScanCard onScan={(body) => act("/api/services/devices/scan", "POST", body)} />

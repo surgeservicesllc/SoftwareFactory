@@ -5279,3 +5279,40 @@ what happened to a regulated product; correcting one is another movement,
 which is why `adjustment` exists.
 
 Hosted apply scope `truck-stock`.
+
+## ADR-214 - A label that is worse and true, rather than better and wrong
+
+Correcting the BOSS mis-identification put PestBoss on the board and added
+two rows. One of them — minting and printing a station label in the field —
+was the only row left on the whole matrix that code alone could close.
+
+Barcodes were already assigned and unique per workspace, so a scan resolved
+to exactly one station. The missing half was the label a technician sticks
+on the station in the first place.
+
+**It prints from the browser rather than becoming a PDF.** A PDF needs
+object storage, which is not configured — the same thing that makes the
+commercial portal say Not Connected about downloading a signed inspection.
+A print stylesheet needs nothing, and "print" is what the capability
+actually is.
+
+**Code 39, not Code 128.** A station barcode here is `[A-Za-z0-9._-]{4,64}`
+and Code 39's alphabet is `0-9 A-Z space - . $ / + %`, so the overlap is
+almost exact and every handheld reads it. Code 128 would encode more at the
+cost of a 107-row pattern table this repository could not verify.
+
+**The refusal is the interesting part.** `crm_devices_org_barcode_key` is
+case-SENSITIVE: `trap-01` and `TRAP-01` are two different stations. The
+obvious convenience — uppercase the value so Code 39 can carry it — would
+hand a technician a label that scans as a station other than the one in
+their hand, on a regulated site, into a compliance record. So a barcode
+Code 39 cannot carry prints anyway, with the value in text and the reason
+beside it. A worse label and a true one.
+
+**The pattern table is transcribed, so it is pinned rather than trusted.**
+Thirteen tests assert the properties the real Code 39 table has: every entry
+nine elements, exactly three of them wide, only narrow and wide, and all
+forty-four distinct. A transcription slip breaks at least one of those, and
+almost any slip breaks distinctness.
+
+No hosted apply: this adds no migration.

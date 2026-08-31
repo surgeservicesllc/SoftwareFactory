@@ -96,7 +96,7 @@ built.
 | Capability | Who has it | Us |
 |---|---|---|
 | Barcode scanning of stations | Briostack, PestPac, PestBoss | **HAVE** (ADR-191) |
-| **In-field barcode PRODUCTION**: minting and printing a station label at the site | PestBoss | **PARTIAL** — a barcode is assigned when a station is created and is unique per workspace, so scanning resolves to exactly one station. Producing a printable label in the field is the gap: it needs a label printer or a PDF, and neither exists here. |
+| **In-field barcode PRODUCTION**: minting and printing a station label at the site | PestBoss | **HAVE** (ADR-214) — a Code 39 label sheet on the IPM page, printed from the browser rather than rendered to a PDF, because a PDF would need object storage and printing is what was actually wanted. A barcode Code 39 cannot carry still prints, with the value in text and the reason beside it: barcodes here are case-sensitive, so uppercasing one to make it fit would produce a symbol that scans as a DIFFERENT station. |
 | Materials/chemical logging from the field | PestPac, FieldRoutes, GorillaDesk, Fieldwork | **HAVE** (ADR-192) |
 | **Technician mobile app** | all | **HAVE** (ADR-210) — /Services/field, a phone-shaped surface showing dispatched work and recording completions and station scans. Responsive web rather than a store-published native app. |
 | **Offline mode — full capacity without signal** | PestPac | **HAVE** (ADR-210) — writes are queued on the device against a client-minted token and replayed until the SERVER confirms, so a retry through a tunnel produces one visit rather than six. The screen never says "saved" for something still queued, refusals stay counted as unsent, and nothing unsent is ever pruned. The technician's own clock is what gets recorded, not the sync's. |
@@ -221,15 +221,16 @@ SMS/email delivery (which also gates automated reminders and campaign
 sending), GPS/fleet telemetry, QuickBooks sync, call-centre/telephony
 integration, and reviews/reputation platforms.
 
-**A note on what "parity" can mean here.** 60 capability rows: **47 HAVE,
-4 PARTIAL, 9 GAP.**
+**A note on what "parity" can mean here.** 60 capability rows: **48 HAVE,
+3 PARTIAL, 9 GAP.**
 
 (58 until PestBoss was measured in its own right. Correcting a mis-named
 competitor added two rows and no HAVEs, which is what an honest re-count
 of a wrong assumption tends to look like.)
 
-The composition matters more than the count. **Twelve of the thirteen
-remaining rows are gated on something outside the code.**
+The composition matters more than the count. **Every one of the twelve
+remaining rows is gated on something outside the code.** Not most, not
+roughly half: all.
 
 Ten need an external account somebody has to open and pay for — SMS/email
 reminders, route optimization by drive time, GPS telemetry, in-field card
@@ -239,14 +240,11 @@ owner authorization that Phase 1 deliberately withholds from automation;
 see the schedule below. One needs object storage to be configured before a
 service report can become a document.
 
-**The thirteenth is buildable**: minting a printable station label. It is
-small, and it is the only row on this board that code alone can still
-close.
+The printable station label was the thirteenth, and the only one code
+alone could close. It is closed (ADR-214).
 
-One row on this list can still be closed by writing code — the printable
-station label — and it appeared only because a mis-identified competitor
-was corrected. Everything else needs an account to open, an authorization
-to give, or storage to configure.
+No row on this list can now be closed by writing code. What remains is an
+account to open, an authorization to give, or object storage to configure.
 
 ADR-207 built the registry the provider-gated rows depend on, so each is
 wired to the point where supplying a credential and the provider's own

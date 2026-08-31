@@ -421,8 +421,15 @@ likely referent is PestBoss, a separately-sold product. Measuring PestBoss
 in its own right added two rows and no HAVEs: minting a printable station
 label, and delivering a service report as a document.
 
-One buildable row is left, the printable label. Ten of the remaining
-twelve are gated on an external account nobody has opened: card/ACH processing, SMS/email
+That printable label is now built (ADR-214): a Code 39 label sheet on the
+IPM page, printed from the browser rather than rendered to a PDF, because a
+PDF would need object storage and printing is the capability. A barcode
+Code 39 cannot carry prints without a symbol and says why — barcodes are
+case-sensitive here, so uppercasing one would produce a label that scans as
+a different station.
+
+No buildable row is left. Ten of the remaining twelve are gated on an
+external account nobody has opened: card/ACH processing, SMS/email
 delivery, GPS telemetry, QuickBooks sync, telephony, reviews and
 drive-time routing. Those ship labelled **Not Connected** and are never
 implied to work.
