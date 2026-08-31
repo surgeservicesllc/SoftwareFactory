@@ -20,6 +20,8 @@ export type QueueGraphRow = Readonly<{
   requires_owner_approval: boolean;
   is_lifecycle: boolean;
   created_at: string;
+  withdrawn_at: string | null;
+  pause_requested_at: string | null;
   repository_scope_matches: boolean;
   required_check_policy_matches: boolean;
   phase1c_resume_ready: boolean;
@@ -31,6 +33,15 @@ export type QueueGraphRow = Readonly<{
 const LIVE_RUN_STATES = new Set(["FAILED", "CANCELLED"]);
 
 function excludingReason(graph: QueueGraphRow, supported: ReadonlySet<string>): string {
+  // Withdrawal and pause come first: both are top-level claim predicates
+  // (20260830000200 / 20260830000400), and both used to be invisible here,
+  // which made an honestly excluded graph read as a contradiction.
+  if (graph.withdrawn_at !== null) {
+    return `withdrawn by a member at ${graph.withdrawn_at}; it will never be claimed`;
+  }
+  if (graph.pause_requested_at !== null) {
+    return `paused at ${graph.pause_requested_at}; waiting for a resume, not a worker`;
+  }
   if (!graph.repository_scope_matches) {
     return "does not have this worker's exact active primary repository binding";
   }

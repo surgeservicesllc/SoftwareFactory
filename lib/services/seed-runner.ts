@@ -2296,6 +2296,77 @@ export async function runSeed(
   if ("error" in notices) return notices;
 
   /*
+   * The day route (ADR-221). A route is what a technician actually drives,
+   * which is not the same as the order the appointments were booked in — so
+   * the stops are grouped by technician and day and then SEQUENCED, and the
+   * sequence is the dispatcher's own.
+   *
+   * Nothing here computes an order from geography. There are no coordinates
+   * to compute one from, and inventing a plausible-looking optimisation
+   * would be seeding a claim the product does not make.
+   */
+  const routeBranchIds = [...branchIdByCode.values()];
+  const visitsByTechnicianDay = new Map<string, { technician: string; day: string; visits: string[] }>();
+  visits.data.forEach((visit, index) => {
+    const source = visitRows[index];
+    if (source === undefined) return;
+    const technician = source.technician_id as string | null;
+    if (technician === null) return;
+    const day = String(source.scheduled_start).slice(0, 10);
+    const key = `${technician}|${day}`;
+    const group = visitsByTechnicianDay.get(key);
+    if (group === undefined) {
+      visitsByTechnicianDay.set(key, { technician, day, visits: [visit.id as string] });
+    } else {
+      group.visits.push(visit.id as string);
+    }
+  });
+
+  const routeGroups = [...visitsByTechnicianDay.values()];
+  const routeRows: SeedRow[] = routeGroups.map((group, index) => {
+    // A route in the past was driven; one in the future is still being
+    // built. Only a released route has a released moment, and only a
+    // completed one has both — the schema checks that pairing.
+    const past = group.day < dateInDays(0);
+    const status = past ? "completed" : index % 4 === 0 ? "released" : "planned";
+    return {
+      organization_id: org,
+      technician_id: group.technician,
+      branch_id: routeBranchIds[index % routeBranchIds.length],
+      route_date: group.day,
+      status,
+      name: `${group.day} — ${["north", "harbour", "ridge", "valley"][index % 4]}`,
+      note: index % 9 === 0 ? "Depot stock check before the first call." : null,
+      released_at: status === "planned" ? null : `${group.day}T06:45:00Z`,
+      completed_at: status === "completed" ? `${group.day}T17:20:00Z` : null,
+      created_by: userId,
+    };
+  });
+  const routes = await insertAll(client, "crm_routes", routeRows, "id");
+  if ("error" in routes) return routes;
+
+  const routeStopRows: SeedRow[] = routes.data.flatMap((route, index) => {
+    const group = routeGroups[index];
+    if (group === undefined) return [];
+    return group.visits.map((visitId, position) => ({
+      organization_id: org,
+      route_id: route.id as string,
+      work_order_id: visitId,
+      position: position + 1,
+      // What the dispatcher expects, half an hour apart from the depot —
+      // an expectation, not the promise the customer holds, which lives on
+      // the work order's own window.
+      planned_arrival: `${group.day}T${String(8 + Math.min(position, 9)).padStart(2, "0")}:30:00Z`,
+      note: position === 0 && index % 7 === 0
+        ? "First call: site opens at eight, gate code at the kiosk."
+        : null,
+      created_by: userId,
+    }));
+  });
+  const routeStops = await insertAll(client, "crm_route_stops", routeStopRows, "id");
+  if ("error" in routeStops) return routeStops;
+
+  /*
    * Autopay authorization (ADR-218). The instrument is metadata only — a
    * brand, four digits and the NAME of the vault purpose a processor token
    * would be filed under. Nothing here is or resembles a card number, and

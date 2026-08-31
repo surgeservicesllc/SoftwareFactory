@@ -5603,3 +5603,186 @@ switch remains ON, and no provider-backed run or draft-PR/CI journey has passed.
 Exact publication, hosted catalog/runtime verification, signed-in acceptance,
 and a separately authorized real provider E2E remain independent gates.
 `GROK BOT: PRODUCTION READY` is not declared.
+
+## ADR-220 - A file the bookkeeper can post, which is not a sync
+
+"QuickBooks sync" carried a bare GAP with no gating reason written beside
+it, and that absence was the tell. The API sync genuinely needs an Intuit
+account nobody has opened. A FILE does not, and a file of balanced journal
+entries is what a great many small shops actually hand their accountant.
+
+Every field it needs was already here: `crm_invoices`, `crm_payments`,
+`crm_refunds` and `crm_accounts`. Nothing external is involved, which is
+why this row was never wholly gated.
+
+**It is an export and the code says so** — in the module header, in the
+route, and in the row. Nothing is pushed anywhere; a person downloads a
+file and imports it. Labelling it a sync would be the class of claim this
+repository has spent twenty-four increments refusing.
+
+**EVERY ENTRY BALANCES, BY CONSTRUCTION.** An accountant's first act is to
+check that debits equal credits, and a file that does not balance is
+rejected at the import screen — or worse, accepted, and then it silently
+corrupts a set of books. So entries are built as balanced wholes and
+`balanced()` throws rather than returning something plausible. If it ever
+fires, the bug is in that file and not in anybody's ledger. The whole-file
+total is checked too, because that is the check a person actually performs.
+
+**Integer cents throughout.** `(cents / 100).toFixed(2)` is the obvious
+rendering and it is wrong often enough to matter: floating division puts
+some values a hair under the rounding boundary, and a ledger out by a penny
+is out. `formatAmount` does the division by hand, and a test walks values
+that expose the difference.
+
+**The chart is names, not numbers.** Every package numbers its accounts
+differently; a bookkeeper maps five names in a minute, whereas numbers
+invented here would look authoritative and be wrong everywhere.
+
+**Undeposited Funds, not a bank account**, because this product does not
+know which bank the money landed in and a guess is something an accountant
+then has to unpick.
+
+**Three things the real schema taught me, none of which a fixture would
+have.** `crm_refunds` points at a PAYMENT, not an invoice, so reaching the
+invoice is two hops and my first draft dropped every refund silently.
+`crm_payments` carries its own `account_id`. And the payment triggers NET
+REFUNDS OUT of `paid_cents` — so a design that also posted refunds
+separately could double-count. This one does not: the refund posts as its
+own entry and `paid_cents` is used only for the write-off, and Accounts
+Receivable provably nets to zero across raise, payment, refund and
+write-off.
+
+**The mapping lives in the service, not the route.** A mapping only the
+route knew would be a mapping only production ever exercised; the
+behaviour suite drives the exact code path the download uses.
+
+I also removed a failure mode I could not test. The first draft reached
+across composite foreign keys with PostgREST embeddings, which cannot be
+verified here without a live PostgREST. Four plain selects joined in memory
+are a few more lines and no guesswork.
+
+Row moves GAP -> PARTIAL. The API sync stays gated, and stays named.
+
+No migration; no hosted apply scope.
+
+## ADR-221 - Geocoding gates the optimiser, not the route manager
+
+"Route optimization / visual route manager / dynamic planner" has been a
+GAP against four competitors, and I have now been wrong about it in both
+directions on the same day.
+
+First I called it "not provider-gated" without checking that
+`crm_properties` holds an address and NO COORDINATES. Turning an address
+into a point is geocoding, and geocoding needs a provider — so that was
+wrong, and I corrected it. Then, having corrected it, I let the blocker
+cover the whole row. That was the second error, and it is the one this
+increment fixes.
+
+**Sorting by scheduled time is not a route.** The appointment times say
+when a customer was promised a visit. The SEQUENCE says the order a
+technician drives them, and the two differ constantly for reasons no
+algorithm here could know: a commercial kitchen has to be done before it
+opens, a gated yard is locked until ten, a difficult call goes last so it
+cannot overrun into anybody else's window. Those are a dispatcher's
+judgements, and this schema had nowhere to put them — `crm_work_orders`
+carries a technician and a start time and nothing else.
+
+**THE ORDER IS THE DISPATCHER'S.** Nothing in this file computes one, and
+that is the honest boundary: what a person decides is stored faithfully,
+and drive time, traffic, time windows and geocoding a whole book of
+addresses are not pretended at.
+
+**Resequencing replaces the whole set.** Moving stop 3 to position 1 by
+updating rows one at a time collides with the unique index the moment two
+rows briefly hold the same number — the trap `crm_plan_set_sequence`
+(ADR-211) hit for the same reason. It also carries the dispatcher's own
+planned arrival and note across the move, because losing a gate code on
+every drag would make the feature unusable.
+
+**Three ways somebody drives to the wrong place, each closed by an index or
+a trigger.** A stop whose visit is scheduled for another day (the trigger
+names both dates). A visit on two routes at once. Two live routes for one
+technician on one morning. None of those is a display bug; each one puts a
+person at the wrong address.
+
+**Putting a visit on a route IS assigning it.** That is what a dispatcher
+is doing, so the sequencer fills a blank technician — and the trigger
+refuses a visit that already belongs to somebody else rather than quietly
+reassigning it.
+
+The postflight caught a bug in itself before it shipped:
+`information_schema.role_table_grants` reports the table OWNER's privileges
+too, which always include delete, so an unscoped check for a delete grant
+fails on a perfectly correct schema. The other postflights already scoped
+theirs to the browser roles; this one now does.
+
+Row moves GAP -> PARTIAL, with the optimiser named as the remainder.
+
+Hosted apply scope `day-route`.
+
+## ADR-222 - The filed copy is the download, so the portal stops apologizing for storage
+
+The portal's Documents tab and the inspections tab both carried a **Not
+Connected** notice blaming object storage for the absence of a download
+link. Those sentences went stale the day ADR-216 landed: a filed service
+document's bytes live in `crm_service_documents.body`, a column under
+forced RLS, and nothing about serving them to the customer they belong to
+requires a storage provider. Leaving the notices up would have violated
+the truthfulness rule in the other direction — claiming a blocker that no
+longer exists is as false as claiming a feature that doesn't.
+
+**Two definers, because the customer is a stranger to the schema.** A
+portal login is not an organization member and holds no grant on
+`crm_service_documents`. `crm_portal_filed_documents()` (the list, capped
+at 200, newest first) and `crm_portal_filed_document_body(uuid)` (one
+title/content-type/body row) are SECURITY DEFINER, scoped through
+`crm_portal_account_for(auth.uid())` exactly like every other portal
+projection. A wrong-tenant or unknown id returns the empty set — the same
+answer as "no such document", so an id is not an oracle.
+
+**Superseded is a flag, not a filter.** The customer may hold a printed
+copy of the original, so the original stays listed with `superseded true`
+(an EXISTS against `supersedes_id`) and the correction sits above it.
+Hiding it would make their paper copy unverifiable.
+
+**Download, never inline.** The body route answers with
+`content-disposition: attachment`, `x-content-type-options: nosniff` and
+`cache-control: no-store`, and the filename is derived from the sanitized
+title. A filed HTML report rendered inline in the portal's own origin
+would execute whatever a compromised office account managed to file; a
+download is inert until the customer opens it deliberately, in whatever
+their machine considers safe.
+
+The postflight proves reach, not shape: both functions stable definers,
+executable by `authenticated` and by nobody else, and the ADR-198 rule
+re-checked — no `crm_portal%` function reachable by `anon`.
+
+Hosted apply scope `portal-filed-documents`.
+
+## ADR-223 - The two nameless filters in the queue diagnosis
+
+`diagnose_graph_queue_as_worker_v2` exists to name WHICH filter excluded
+the graph somebody is watching. Withdrawal (20260830000200) and pause
+(20260830000400) added claim predicates after the diagnosis was written,
+so a withdrawn or paused graph fell through every named reason to the
+fallthrough line: "looks claimable — an empty claim contradicts this
+listing". The contradiction line is designed to accuse the system of a
+real inconsistency; printing it for a graph that was excluded on purpose
+is the diagnosis crying wolf, and the day it cries wolf is the day nobody
+reads it.
+
+`20260831001400` re-creates the function with `withdrawn_at` and
+`pause_requested_at` projected straight off `public.graphs` — DROP +
+CREATE because a return-type change refuses CREATE OR REPLACE, with the
+worker-only ACL restated. Protocol stays 2: nothing about claiming
+changed, and a worker that ignores two extra named columns keeps working.
+`explainEmptyQueue` checks them first — withdrawn is final ("will never be
+claimed"), pause is a wait for a person's resume, and both outrank every
+other reason because both are top-level claim predicates.
+
+The postflight re-proves what a DROP can silently lose: still a definer,
+still unreachable by browser roles, and the new columns actually in
+`pg_get_function_result` — an existence check alone would pass on the old
+definition.
+
+Hosted apply scope `queue-diagnosis-visibility`.

@@ -84,6 +84,9 @@ on:
           - service-documents
           - transactional-notices
           - autopay-authorization
+          - day-route
+          - portal-filed-documents
+          - queue-diagnosis-visibility
           - probe
 permissions:
   actions: read
@@ -294,6 +297,14 @@ jobs:
           if [[ "$SUPABASE_ACCESS_TOKEN" =~ ^sbp_[A-Za-z0-9]{16,}$ ]]; then
             echo "MODE=token" >> "$GITHUB_ENV"
             echo "Using the personal access token (linked project flow)."
+            # Export the psql URL once, masked, exactly as every apply step
+            # used to rebuild it inline. New steps read $DB_URL from env and
+            # carry no preamble; the byte guard is why (see the backlog).
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$URL"
+            echo "DB_URL=$URL" >> "$GITHUB_ENV"
           elif [ -n "$SUPABASE_DB_PASSWORD" ]; then
             echo "SUPABASE_ACCESS_TOKEN is missing or not shaped like a personal access token (they look like sbp_0102...1920; generate one at supabase.com -> Account -> Access Tokens)."
             echo "Falling back to the direct database connection using SUPABASE_DB_PASSWORD only."
@@ -2074,6 +2085,54 @@ jobs:
           psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
           psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/postflight/autopay-authorization.sql
           echo "Autopay authorization applied; mandates are frozen, card numbers are refused, and settlement stays unreachable until a processor is connected."
+
+      - name: Apply the day route (scope=day-route)
+        if: ${{ inputs.scope == 'day-route' }}
+        run: |
+          VERSION=20260831001200_day_route
+          FILE="supabase/migrations/${VERSION}.sql"
+          sha256sum "$FILE"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied "${VERSION%%_*}"
+          else
+            npx supabase migration repair --status applied "${VERSION%%_*}" --db-url "$DB_URL"
+          fi
+          psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/postflight/day-route.sql
+          echo "Day route applied; one route per technician per day, one route per visit, stops numbered from one."
+
+      - name: Apply portal filed-copy downloads (scope=portal-filed-documents)
+        if: ${{ inputs.scope == 'portal-filed-documents' }}
+        run: |
+          VERSION=20260831001300_portal_filed_documents
+          FILE="supabase/migrations/${VERSION}.sql"
+          sha256sum "$FILE"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied "${VERSION%%_*}"
+          else
+            npx supabase migration repair --status applied "${VERSION%%_*}" --db-url "$DB_URL"
+          fi
+          psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/postflight/portal-filed-documents.sql
+          echo "Portal filed copies applied; both definers authenticated-only, portal still sealed to anon."
+
+      - name: Widen the queue diagnosis projection (scope=queue-diagnosis-visibility)
+        if: ${{ inputs.scope == 'queue-diagnosis-visibility' }}
+        run: |
+          VERSION=20260831001400_queue_diagnosis_withdraw_pause
+          FILE="supabase/migrations/${VERSION}.sql"
+          sha256sum "$FILE"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied "${VERSION%%_*}"
+          else
+            npx supabase migration repair --status applied "${VERSION%%_*}" --db-url "$DB_URL"
+          fi
+          psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/postflight/queue-diagnosis-visibility.sql
+          echo "Queue diagnosis widened; still a worker-only definer, withdrawal and pause now visible."
 
       - name: Normalize exact legacy bot ACLs (scope=bot-legacy-acl-normalization)
         if: ${{ inputs.scope == 'bot-legacy-acl-normalization' }}

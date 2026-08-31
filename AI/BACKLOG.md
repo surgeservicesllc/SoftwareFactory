@@ -5,10 +5,10 @@
 Checked while writing ADR-217, because "everything remaining is gated
 outside the code" had been wrong three times in two days and was worth
 testing rather than repeating. Of the eleven GAP rows, nine name a real
-external account nobody has opened. Two do not, and both carry a bare
-**GAP** with no gating reason attached — because there isn't one:
+external account nobody has opened. Two did not, and both have now
+shipped their ungated half:
 
-- [ ] **Route optimization / visual route manager.** PARTLY buildable, and
+- [x] **Route optimization / visual route manager.** PARTLY buildable, and
   the first version of this entry overstated it — corrected here before it
   reached main. `crm_route_density` (ADR-199) is an analytics read, not a
   sequencer, and the sequencing arithmetic itself is genuinely ungated:
@@ -24,13 +24,21 @@ external account nobody has opened. Two do not, and both carry a bare
   degradation — a property with no point is LISTED as unsequenceable rather
   than silently dropped from the day. That would move the row to PARTIAL.
   Still gated afterwards: bulk geocoding, drive time, traffic and time
-  windows.
-- [ ] **QuickBooks sync.** The API sync is gated on an Intuit account. A
+  windows. SHIPPED as the day route (ADR-221, `20260831001200`): the
+  dispatcher's sequence is first-class (routes, stops, resequencing,
+  route sheet), which is the half of "route manager" no provider gates.
+  The optimiser itself remains gated on geocoding exactly as ADR-221
+  records; row is PARTIAL with the optimiser named as the remainder.
+- [x] **QuickBooks sync.** The API sync is gated on an Intuit account. A
   QuickBooks-readable EXPORT FILE is not, and is what many small shops
   actually use — the invoice and payment ledgers already hold everything it
-  needs. Would move the row to PARTIAL.
+  needs. SHIPPED as the accounting export (ADR-220): a balanced
+  general-journal CSV built from the real ledgers, downloadable from the
+  billing panel. Row is PARTIAL; the live API sync stays gated on the
+  Intuit account.
 
-Neither is started. They are recorded here rather than left as an
+Both shipped their ungated half; the provider-gated remainders are
+recorded on their rows. They are recorded here rather than left as an
 unexamined "gated" so the next reader treats that word as a claim to check
 — and the route entry above is a reminder that "buildable" is equally a
 claim to check, since the first version of it did not verify that the data
@@ -296,10 +304,10 @@ the full seeded E2E journey passes — increment 10 of the plan.
   `tests/unit/migration-path-references.test.ts` now fails on any
   `supabase/migrations/...` path a workflow or test names that is not a
   real file.
-- [ ] Increment 10 follow-on: the COMMERCIAL portal view — open
-  conditions, device summary with trend heat maps, sighting tickets, an
-  SDS/compliance document library and inspection history. PestPac has it;
-  the residential view that shipped does not.
+- [x] Increment 10 follow-on: the COMMERCIAL portal view. Shipped as
+  increment 15 (ADR-203) — open conditions, device trend heat maps,
+  sighting tickets, the SDS library and inspection history on
+  /customer-portal; this earlier entry predates it and was stale.
 - [ ] Increment 10 follow-on: sending the invitation. The row exists and
   the accept flow works, but nothing emails a customer to tell them — no
   email provider is connected, so an invitation is delivered by whatever
@@ -424,9 +432,11 @@ the full seeded E2E journey passes — increment 10 of the plan.
   under RLS had already solved it for the Job Seeker.
 - [ ] Send a filed document to a customer. The email/SMS provider row, same
   as every other outbound message.
-- [ ] Offer the filed copy for download in the customer portal, replacing
-  the two Not Connected notices that cite object storage — those sentences
-  are now out of date and should be corrected when that path is wired.
+- [x] Offer the filed copy for download in the customer portal (ADR-222):
+  two definers hand a customer their own list and bodies, the panel's
+  Documents tab renders per-copy download anchors with a superseded mark,
+  and both stale notices citing object storage are corrected.
+  20260831001300; hosted apply: scope=portal-filed-documents after merge.
 - [ ] BLOCKED ON OWNER AUTHORIZATION, not on code: running recurring
   invoicing on a schedule. A timer that raises invoices against real
   customers is a billing action executed autonomously, which
@@ -437,13 +447,21 @@ the full seeded E2E journey passes — increment 10 of the plan.
   clock is missing, and the clock is the part that needs permission.
 - [ ] Then the AI copilot and the seeded E2E acceptance journey — after
   which, and only after which, PEST CRM: PRODUCTION READY may be declared.
-- [ ] Queue-diagnosis honesty follow-up: `diagnose_graph_queue_as_worker_v2`
-  predates withdrawal and pause, so a withdrawn or paused graph shows in
-  the drain log as "looks claimable — an empty claim contradicts this
-  listing" (the contradiction line is the honest cover, not a wrong
-  claim). Extend the diagnostic projection with withdrawn_at +
-  pause_requested_at and teach explainEmptyQueue the two reasons — a
-  read-only restatement, safe to ship alone.
+- [x] Queue-diagnosis honesty follow-up (ADR-223): `20260831001400`
+  re-creates `diagnose_graph_queue_as_worker_v2` with withdrawn_at +
+  pause_requested_at projected, and explainEmptyQueue names both reasons
+  ahead of everything else — withdrawn is final, pause waits for a resume.
+  Worker-only ACL restated after the forced DROP; postflight proves the
+  new columns and the unchanged reach. Hosted apply:
+  scope=queue-diagnosis-visibility after merge.
+- [ ] The apply workflow's byte ceiling, again: the Grok-completion merge
+  pushed the file to 478,074 — over the 478,000 guard — so the extraction
+  started early: `Choose the connection` now exports a masked $DB_URL in
+  BOTH modes, the three newest steps (day-route, portal-filed-documents,
+  queue-diagnosis-visibility) carry no preamble, and the file is 477,608.
+  REMAINING: 76 older steps still carry the six-line preamble (~27KB).
+  Convert them to the env $DB_URL in one mechanical pass, then ratchet the
+  guard down to keep the recovery. New steps must never add the preamble.
 - [x] Increment 6 (ADR-176): Changes & release panel —
   `lib/factory/release-evidence.ts` derives the release trail from the
   ANCHOR observations (lineage/review/ci_check_runs/deployment/probe);
@@ -821,10 +839,10 @@ already in the database.
   was kept and why.
 - [x] Apply to hosted with a dedicated narrow scope, hash-pinned, with a ledger
   preflight and a post-apply readback that fails the run on a mismatch.
-- [ ] Dispatch `scope=probe` for the independent second read of the two
-  functions' privileges. The apply's own gate passed; a step that grades its
-  own work is the weaker evidence, and the probe read exists but has not been
-  run.
+- [x] Dispatch `scope=probe` for the independent second read of the two
+  functions' privileges. Run 33385704826 (2026-08-31 11:10Z, success) is
+  that read: the ACL listings show the expected grants and the after-ledger
+  listing is the current contiguous chain through `20260831000800`.
 
 ## Any-model safe Step 8 -> Step 9 release (2026-08-22, ADR-115)
 

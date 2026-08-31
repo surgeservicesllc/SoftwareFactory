@@ -519,7 +519,37 @@ is reachable only through a settlement that asks whether a processor is
 really connected. The seed writes 351 charge attempts and not one is
 settled.
 
-Of the remaining eighteen rows, ten are gated on an
+The books can now leave the building (ADR-220). A general-journal CSV
+carries invoices raised, payments taken, refunds given and uncollectible
+invoices written off as balanced double-entry lines, downloadable from the
+ledger tab. It is an EXPORT a bookkeeper imports, not a sync, and the code
+says so in the module, the route and the row; the API sync still needs an
+Intuit account. Every entry balances by construction — an unbalanced one
+throws rather than rendering — because a journal file that does not balance
+is rejected at the import screen, or worse, accepted.
+
+A dispatcher can now say what order a technician drives (ADR-221). A route
+is one technician's day from a branch, with stops numbered from one;
+resequencing replaces the whole set so a drag cannot collide, and it
+carries the planned arrival and notes somebody typed. Nothing computes the
+order from geography — crm_properties holds an address and no coordinates,
+and turning one into the other is geocoding. Drive time, traffic, time
+windows and bulk geocoding all still need a mapping provider.
+
+A portal customer can download their own filed copies (ADR-222). Two
+definer projections list and serve crm_service_documents bodies scoped
+through crm_portal_account_for; the Documents tab renders per-copy
+download anchors (attachment, nosniff, no-store — never inline), marks
+superseded copies instead of hiding them, and the two notices that blamed
+object storage for the missing link are corrected — that blocker ended
+with ADR-216.
+
+The worker's empty-queue diagnosis now names withdrawal and pause
+(ADR-223) instead of printing its accuse-the-claim contradiction line for
+a graph that was excluded on purpose. Read-only restatement of
+diagnose_graph_queue_as_worker_v2; protocol unchanged.
+
+Of the remaining eighteen rows, eight are gated on an
 external account nobody has opened: card/ACH processing, SMS/email
 delivery, GPS telemetry, QuickBooks sync, telephony, reviews and
 drive-time routing. Those ship labelled **Not Connected** and are never

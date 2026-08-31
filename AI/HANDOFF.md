@@ -2,6 +2,102 @@
 
 Last updated: 2026-08-31
 
+## Newest (2026-08-31, latest+43): queue-diagnosis visibility (ADR-223)
+
+`20260831001400` re-creates diagnose_graph_queue_as_worker_v2 with
+withdrawn_at + pause_requested_at projected; explainEmptyQueue names both
+before every other reason. Read-only restatement; protocol stays 2.
+
+A RETURN-TYPE CHANGE FORCES DROP + CREATE, AND A DROP LOSES THE ACL.
+Restate the revoke/grant in the same migration and make the postflight
+prove reach AND the new columns via pg_get_function_result — an existence
+check alone passes on the old definition.
+
+THE WORKFLOW BYTE CEILING IS NEARLY SPENT: 476,716 of 478,000. Do not add
+another apply scope without first extracting the repeated DB_URL/mask
+preamble (backlog item filed). Raising the guard is not the fix.
+
+## Newest (2026-08-31, latest+42): portal filed-copy downloads (ADR-222)
+
+`20260831001300` adds crm_portal_filed_documents and
+crm_portal_filed_document_body. Two API routes under
+app/api/customer-portal/filed-documents serve the list and the download;
+the panel's Documents tab renders the copies and both stale object-storage
+notices are corrected.
+
+BOTH FUNCTIONS ARE AND MUST STAY SECURITY DEFINER — a portal login is not
+an organization member and an invoker would return nothing. What makes
+that safe is the crm_portal_account_for scoping, the same as every other
+portal projection, and the postflight re-proves authenticated-only reach
+plus the ADR-213 no-anon sweep.
+
+THE DOWNLOAD IS AN ATTACHMENT, NEVER INLINE. A filed HTML report rendered
+in the portal's origin would execute whatever a compromised office account
+filed. content-disposition: attachment + nosniff + no-store; keep it so.
+
+SUPERSEDED COPIES STAY LISTED, flagged. The customer may hold a printed
+original; hiding it makes their paper unverifiable.
+
+A crm_service_documents FIXTURE MUST NAME A SUBJECT
+(crm_service_documents_names_a_subject: work order, inspection or
+property) and byte_size must be octet_length(body) — compute it in SQL,
+never by hand-counting.
+
+## Newest (2026-08-31, latest+41): the day route (ADR-221, #83)
+
+`20260831001200` adds crm_routes and crm_route_stops.
+
+RESEQUENCE BY REPLACING THE SET, never by renumbering in place. Moving stop
+3 to position 1 one row at a time collides with
+crm_route_stops_route_position_key the moment two rows hold the same
+number — the trap crm_plan_set_sequence hit. crm_route_set_order deletes
+and re-inserts, and carries planned_arrival and note across by work order
+so a drag does not lose what a dispatcher typed.
+
+THE ORDER IS THE DISPATCHER'S. Nothing here computes one and nothing should
+start to without a mapping provider: crm_properties has an address and NO
+COORDINATES. If you add an optimiser, it is a new capability behind
+crm_integration_live, not a quiet upgrade to this function.
+
+THREE INDEXES AND A TRIGGER ARE THE FEATURE. One route per technician per
+day, one route per visit, one stop per position, and a stop's visit must
+fall on the route's own date. Each guards against a person being sent to
+the wrong address.
+
+crm_route_set_order IS AND MUST STAY SECURITY INVOKER. It edits a
+dispatcher's working state; the postflight fails if it becomes a definer.
+
+WHEN WRITING A POSTFLIGHT THAT CHECKS A GRANT, SCOPE IT TO THE BROWSER
+ROLES. information_schema.role_table_grants reports the table owner's
+privileges too, which always include delete, so an unscoped check fails on
+a correct schema. This one did, before it shipped.
+
+## Newest (2026-08-31, latest+40): accounting export (ADR-220, #82)
+
+lib/services/accounting-export.ts plus app/api/services/accounting-export.
+No migration.
+
+IT IS AN EXPORT, NOT A SYNC. Do not relabel it. Nothing is pushed to an
+accounting package; a person downloads a file.
+
+EVERY ENTRY BALANCES BY CONSTRUCTION and `balanced()` throws rather than
+returning something plausible. If it fires, the bug is in that file and not
+in anybody's ledger. Do not "handle" the throw by rendering the entry.
+
+NEVER USE (cents / 100).toFixed(2). Floating division puts some values a
+hair under the rounding boundary and a ledger out by a penny is out.
+formatAmount divides by hand and a test walks the values that differ.
+
+THE PAYMENT TRIGGERS NET REFUNDS OUT OF paid_cents. So the refund posts as
+its own entry and paid_cents is used ONLY for the write-off. Adding refund
+handling to the write-off path would double-count every refund.
+
+crm_refunds POINTS AT A PAYMENT, not an invoice. Reaching the invoice is two
+hops, and getting it wrong drops every refund silently rather than failing.
+
+THE MAPPING LIVES IN THE SERVICE (journalFromLedgers), shared by the route
+and the behaviour suite. A mapping only the route knew would be a mapping
+only production ever exercised.
 ## Newest (2026-08-31, latest+39): Grok claim and specialist admission release candidate (ADR-219)
 
 The implementation is complete in the repository, not in hosted Supabase.
@@ -82,6 +178,19 @@ THERE IS NO `paid` INVOICE STATUS. Settlement is paid_cents reaching
 total_cents while the status stays `open`; `uncollectible` is the written
 -off ending. Reading a status that does not exist is how this increment's
 seed silently produced a fifth of the rows it should have.
+
+TWENTY-THREE SUITES CANNOT USE THE SNAPSHOT, AND MUST NOT BE CONVERTED.
+They inject `alter default privileges in schema public grant all privileges
+on tables` immediately BEFORE 20260830000500_services_crm_foundation.sql, so
+that every table the CRM chain then creates arrives carrying hosted-like
+grants. That is deliberate: it is what makes an immutability claim resting
+on the ABSENCE of a grant mean anything, and it is the hosted trap this
+repository has been caught by before. Converting them removes the
+simulation, the suites still pass, and they stop testing the thing they
+exist for — a green that means less than it looks like. I did exactly that
+to twenty-three of them and had to restore every one. The helper applies
+the chain uniformly and has no way to inject mid-chain; giving it one is
+its own piece of work.
 
 THE TEST CHAIN IS NOW SNAPSHOTTED. tests/support/migrated-database.ts
 builds the migrations once, dumps the data directory and hands out restored

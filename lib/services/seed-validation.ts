@@ -546,6 +546,23 @@ const SPECS: Spec[] = [
     ],
   },
   {
+    table: "crm_routes",
+    optional: ["name", "note", "released_at", "completed_at"],
+    enumColumn: "status",
+    parents: [
+      { column: "technician_id", table: "crm_technicians" },
+      { column: "branch_id", table: "crm_branches" },
+    ],
+  },
+  {
+    table: "crm_route_stops",
+    optional: ["planned_arrival", "note"],
+    parents: [
+      { column: "route_id", table: "crm_routes" },
+      { column: "work_order_id", table: "crm_work_orders" },
+    ],
+  },
+  {
     // `settled_at` and `processor_reference` are absent on purpose, exactly
     // as ADR-217's dispatch columns are: only a real settlement through a
     // connected processor writes them, and a seeded value in either would

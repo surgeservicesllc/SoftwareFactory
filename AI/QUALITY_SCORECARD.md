@@ -2,6 +2,78 @@
 
 Last reviewed: 2026-08-31
 
+**Addendum, 2026-08-31 latest+43 - queue-diagnosis visibility (ADR-223):**
+queue-diagnosis unit 16 (withdrawn names the timestamp and never says
+"contradicts", pause says waiting-for-a-resume, withdrawal outranks pause);
+graph-phase1c-release-lineage.behavior 16 — the new case sets both
+timestamps on the fixture graph (pairing the by-columns to satisfy the
+pair constraints) and reads them back through the definer as the worker.
+Guard suites re-run green: path references both ways, scope replay
+executes the new postflight, runbook total 220, workflow 476,716 bytes of
+478,000 — the extraction backlog item is filed because the next scope
+does not fit.
+
+**Addendum, 2026-08-31 latest+42 - portal filed-copy downloads (ADR-222):**
+services-portal.behavior grew to 15: a customer lists their own filed
+copies with the original still present and flagged superseded, reads a
+body, and a rival tenant's customer (or a stranger login) asking with a
+real id gets the empty set — the same answer as "no such document". The
+fixture lesson cost two failed runs: crm_service_documents refuses a row
+that names no subject (property/work order/inspection) and byte_size must
+be octet_length(body) computed in SQL, and a hand-ordered parameter list
+put a document id in filed_by. hosted-scope-replay executes the new
+postflight against the migrated chain; runbook total 220.
+
+**Addendum, 2026-08-31 latest+41 - the day route (ADR-221):**
+services-day-route.behavior 11 on the real chain, most of them about the
+three ways somebody drives to the wrong place: a stop whose visit is
+scheduled for another day (refused, naming both dates), a visit on two
+routes, two live routes for one technician on one morning. Also that
+resequencing renumbers from one and carries the dispatcher's planned
+arrival and note across a drag; that putting a visit on a route assigns it
+to that technician while a visit already belonging to somebody else is
+refused rather than quietly reassigned; that the same visit twice in one
+order is refused; that a completed route cannot be resequenced; and that
+anon and service_role hold NOTHING on the new tables despite hosted-like
+default privileges being injected before the CRM foundation — this suite
+replays the chain rather than restoring the snapshot for exactly that
+reason, because a revoke only means something if the grant was there to
+revoke. The postflight caught a bug in itself: role_table_grants reports
+the table OWNER's privileges too, so an unscoped delete-grant check fails
+on a correct schema. RLS census 215 -> 217; grants 60 -> 62 crm tables;
+runbook 215 -> 216; seed report 59/59 -> 61/61 and 55,723 -> 57,447 rows,
+with 857 routes and 867 stops. Matrix: 9 GAP -> 8, 9 PARTIAL -> 10.
+
+**Addendum, 2026-08-31 latest+39 - accounting export (ADR-219):**
+accounting-export unit 14 and services-accounting-export.behavior 6 on the
+real chain. The unit suite pins what an accountant checks: every entry
+balances, an unbalanced one throws rather than rendering, a draft and a
+void post nothing, the tax line is omitted when there is no tax, a refund
+mirrors a payment rather than negating one, a write-off takes only what is
+still outstanding, cents render by integer arithmetic across values that
+floating division gets wrong, and a customer called "Vance, Marisol" or
+"The \"Pest\" People" stays inside one CSV field. The behaviour suite runs
+the same builder over rows the DATABASE produced and found three things
+fixtures would not have: crm_refunds points at a PAYMENT rather than an
+invoice, so the first draft dropped every refund silently; crm_payments
+carries its own account_id; and the payment triggers NET REFUNDS OUT of
+paid_cents, so a design that also posted refunds separately would
+double-count — this one does not, and Accounts Receivable provably nets to
+zero across raise, payment, refund and write-off. The route's first draft
+reached across composite foreign keys with PostgREST embeddings, which
+cannot be verified without a live PostgREST; four plain selects joined in
+memory replaced them. No migration. Matrix: 10 GAP -> 9, 8 PARTIAL -> 9.
+
+Also in this batch: 17 more suites moved onto the migration snapshot
+(199 tests, test time 83.27s -> 55.39s). The CI quality job went 19m19s on
+#480 to 18m00s on #481 with only two suites converted, so the ceiling
+headroom is back from 41 seconds to about two minutes. Bulk conversion was
+attempted twice with a regex and reverted both times; the shapes differ too
+much (three suites declare the database inside a helper function, one has a
+local name colliding with the import, one has its own chain-applying
+helper). The 17 that stand were done per file with the imports fixed and
+every suite run.
+
 **Addendum, 2026-08-31 latest+39 - Grok claim and specialist admission
 (ADR-219):** The rebased repository candidate carries two forward-only files:
 009 claim fence (`795d49b41b2de34819272a45a837d50aa6c3808db5a2c85e6a4ad769d5deff6b`,
