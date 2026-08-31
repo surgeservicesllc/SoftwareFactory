@@ -18,6 +18,7 @@
     "worker": "tsx scripts/worker.mts",
     "worker:preflight": "tsx scripts/worker-preflight.mts",
     "worker:once": "tsx scripts/worker.mts --once",
+    "worker:rewake": "tsx scripts/phase1c-graph-rewake.mts",
     "check": "npm run lint && npm run typecheck && npm run test && npm run build",
     "agentos": "tsx scripts/agentos.mts",
     "seed:dev": "tsx scripts/seed-dev-lifecycle.mts",

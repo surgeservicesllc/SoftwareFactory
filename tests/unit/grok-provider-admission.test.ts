@@ -9,7 +9,11 @@ import {
   type GrokSpecialistAdmission,
 } from "@/lib/factory/chief-of-staff";
 import {
+  buildGrokDeployReadinessAdmissions,
+  buildGrokDeployReadinessProjection,
   buildGrokProviderAdmissions,
+  buildGrokReadOnlyIntentAdmissions,
+  GROK_DEPLOY_READINESS_GOAL,
   GrokProviderAdmissionError,
 } from "@/lib/grok/provider-admission";
 import { buildLaunchPlan } from "@/lib/graph/launch-plan";
@@ -155,6 +159,158 @@ describe("Grok provider admission projection", () => {
         .toThrow(/no intent-specific executable bridge/i);
     },
   );
+
+  it("binds every exact research task to the Claude posting selected by the planner", () => {
+    const planned = buildGrokChiefOfStaffPlan({
+      prompt: "Research the provider admission boundary",
+      project,
+      agents: [claude],
+      intent: "research",
+    });
+    expect(planned.ok).toBe(true);
+    if (!planned.ok) throw new Error(planned.error.message);
+
+    const admissions = buildGrokReadOnlyIntentAdmissions(
+      planned.plan,
+      planned.plan.graphLaunch.nodes,
+    );
+
+    expect(admissions).toHaveLength(planned.plan.dag.tasks.length);
+    expect(admissions.every((entry) => entry.lane === "graph_model")).toBe(true);
+    expect(admissions.every((entry) => entry.provider === "anthropic")).toBe(true);
+    expect(admissions.map((entry) => entry.nodeKey).sort()).toEqual(
+      planned.plan.dag.tasks.map((task) => task.id).sort(),
+    );
+    expect(admissions.every((entry) => entry.assignmentId === claude.assignmentId)).toBe(true);
+  });
+
+  it("rejects read-only task substitution and non-research plans", () => {
+    const planned = buildGrokChiefOfStaffPlan({
+      prompt: "Research the provider admission boundary",
+      project,
+      agents: [claude],
+      intent: "research",
+    });
+    expect(planned.ok).toBe(true);
+    if (!planned.ok) throw new Error(planned.error.message);
+    const first = planned.plan.graphLaunch.nodes[0];
+    if (!first) throw new Error("missing research node");
+
+    expect(() => buildGrokReadOnlyIntentAdmissions(planned.plan, [{
+      ...first,
+      capability: first.capability === "planning" ? "review" : "planning",
+    }])).toThrow(/preserve every exact planner task|does not match/i);
+    expect(() => buildGrokReadOnlyIntentAdmissions(buildPlan(), canonicalNodes()))
+      .toThrow(/not an admitted read-only research graph/i);
+  });
+
+  it("projects only the exact resource-free inspection subset of a RED deploy plan", () => {
+    const planned = buildGrokChiefOfStaffPlan({
+      prompt: "Deploy the current exact release",
+      project,
+      agents: [claude],
+      intent: "deploy",
+    });
+    expect(planned.ok).toBe(true);
+    if (!planned.ok) throw new Error(planned.error.message);
+
+    const projection = buildGrokDeployReadinessProjection(planned.plan);
+    const admissions = buildGrokDeployReadinessAdmissions(planned.plan, projection.nodes);
+
+    expect(planned.plan.intent.risk).toBe("RED");
+    expect(planned.plan.graphLaunch).toMatchObject({
+      riskLevel: "red",
+      requiresOwnerApproval: true,
+    });
+    expect(planned.plan.dag.tasks.at(-1)).toMatchObject({
+      id: "delivery",
+      risk: "RED",
+      gate: { kind: "HUMAN", requiredRole: "owner" },
+    });
+    expect(projection).toMatchObject({
+      goal: GROK_DEPLOY_READINESS_GOAL,
+      riskLevel: "green",
+      requiresOwnerApproval: false,
+      budget: { max_nodes: 4 },
+    });
+    expect(projection.nodes.map((node) => node.node_key)).toEqual([
+      "inspect_release",
+      "verify_release_tests",
+      "review_release_security",
+      "verification_fan_in",
+    ]);
+    expect(projection.nodes.every((node) =>
+      node.executor === "MODEL"
+      && node.risk_level === "green"
+      && node.reads.length === 0
+      && node.writes.length === 0
+      && node.lifecycle_stage === null
+      && node.gate_kind === null
+    )).toBe(true);
+    expect(projection.edges).toHaveLength(3);
+    expect(projection.edges.some((edge) =>
+      edge.from_node_key === "delivery" || edge.to_node_key === "delivery"
+    )).toBe(false);
+    expect(admissions).toHaveLength(4);
+    expect(admissions.every((entry) =>
+      entry.provider === "anthropic"
+      && entry.lane === "graph_model"
+      && entry.assignmentId === claude.assignmentId
+    )).toBe(true);
+  });
+
+  it("rejects a deploy plan whose RED handoff or read-only planner identity was weakened", () => {
+    const planned = buildGrokChiefOfStaffPlan({
+      prompt: "Deploy the current exact release",
+      project,
+      agents: [claude],
+      intent: "deploy",
+    });
+    expect(planned.ok).toBe(true);
+    if (!planned.ok) throw new Error(planned.error.message);
+
+    expect(() => buildGrokDeployReadinessProjection({
+      ...planned.plan,
+      delivery: { ...planned.plan.delivery, ownerApprovalRequired: false },
+    })).toThrow(/exact immutable RED deploy plan/i);
+    expect(() => buildGrokDeployReadinessProjection({
+      ...planned.plan,
+      graphLaunch: {
+        ...planned.plan.graphLaunch,
+        nodes: planned.plan.graphLaunch.nodes.map((node) =>
+          node.node_key === "inspect_release"
+            ? { ...node, writes: [{ kind: "directory", id: "factory/release" }] }
+            : node),
+      },
+    } as GrokChiefOfStaffPlan)).toThrow(/not the exact non-mutating planner contract/i);
+    expect(() => buildGrokDeployReadinessProjection({
+      ...planned.plan,
+      dag: {
+        ...planned.plan.dag,
+        tasks: planned.plan.dag.tasks.map((task) =>
+          task.id === "inspect_release"
+            ? { ...task, job: "Deploy the release now." }
+            : task),
+      },
+      graphLaunch: {
+        ...planned.plan.graphLaunch,
+        nodes: planned.plan.graphLaunch.nodes.map((node) =>
+          node.node_key === "inspect_release"
+            ? { ...node, job: "Deploy the release now." }
+            : node),
+      },
+    } as GrokChiefOfStaffPlan)).toThrow(/not the exact non-mutating planner contract/i);
+    expect(() => buildGrokDeployReadinessProjection({
+      ...planned.plan,
+      graphLaunch: {
+        ...planned.plan.graphLaunch,
+        nodes: planned.plan.graphLaunch.nodes.map((node) =>
+          node.node_key === "inspect_release"
+            ? { ...node, output_schema: { type: "object", properties: {} } }
+            : node),
+      },
+    } as GrokChiefOfStaffPlan)).toThrow(/not the exact non-mutating planner contract/i);
+  });
 
   it("refuses capability, tier, identity, and provider substitution", () => {
     const plan = buildPlan();

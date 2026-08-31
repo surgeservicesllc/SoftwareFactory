@@ -11,6 +11,7 @@ import {
   type GraphRunStore,
   type NodeInputs,
 } from "@/lib/worker/graph-run";
+import { grokClaimContextFixture } from "../support/grok-claim-context";
 
 const graphRunId = "10000000-0000-4000-8000-000000000001";
 const graphId = "20000000-0000-4000-8000-000000000001";
@@ -184,16 +185,29 @@ describe("claimed graph output contracts", () => {
   });
 
   it("refuses a Grok claim when a MODEL admission is missing or uses the other provider", () => {
-    expect(() => claim(FACTS_SCHEMA, { grok_admission_required: true })).toThrow(
+    expect(() => claim(FACTS_SCHEMA, {
+      grok_admission_required: true,
+      initial_context: grokClaimContextFixture(),
+    })).toThrow(
       /exact Anthropic admission/i,
     );
     expect(() => claim(FACTS_SCHEMA, {
       grok_admission_required: true,
+      initial_context: grokClaimContextFixture(),
       nodes: [
         { ...node("producer", "50000000-0000-4000-8000-000000000001"), execution_admission: admission("openai") },
       ],
       edges: [],
     })).toThrow(/exact Anthropic admission/i);
+  });
+
+  it("requires immutable initial context only for admitted Grok claims", () => {
+    expect(() => claim(FACTS_SCHEMA, { grok_admission_required: true })).toThrow(
+      /requires its immutable initial context/i,
+    );
+    expect(() => claim(FACTS_SCHEMA, {
+      initial_context: grokClaimContextFixture(),
+    })).toThrow(/non-Grok claim cannot inject initial context/i);
   });
 
   it("refuses provider admission metadata injected into a non-Grok claim", () => {

@@ -1,0 +1,978 @@
+name: Grok causal production acceptance
+
+# Manual, first-attempt-only proof of one newly created harmless docs-only
+# lifecycle.  Start stops at a green draft PR.  Finish can only read the exact
+# immutable start artifact after an owner independently approves and merges the
+# PR.  This lane never approves, merges, deploys, applies migrations, changes a
+# repository variable, or dispatches another workflow.
+
+on:
+  workflow_dispatch:
+    inputs:
+      phase:
+        description: "Start a new causal run, or finish the exact immutable start artifact after separate owner merge."
+        required: true
+        type: choice
+        options:
+          - start
+          - finish
+      confirm:
+        description: 'Start: "start-causal-grok-docs-pr". Finish: "finish-causal-grok-release".'
+        required: true
+        default: ""
+        type: string
+      release_sha:
+        description: "Exact lowercase current main SHA already green and READY in Vercel Production."
+        required: true
+        type: string
+      project_id:
+        description: "Exact active Factory project UUID owned by the dedicated acceptance account."
+        required: true
+        type: string
+      project_name:
+        description: "Exact project name for the project UUID."
+        required: true
+        type: string
+      repository:
+        description: "Exact owner/repository bound to the project."
+        required: true
+        type: string
+      default_branch:
+        description: "Exact default branch bound to the project."
+        required: true
+        type: string
+      start_run_id:
+        description: "Finish only: exact successful start workflow run ID. Leave blank for start."
+        required: false
+        default: ""
+        type: string
+      start_evidence_sha256:
+        description: "Finish only: exact SHA-256 printed by start. Leave blank for start."
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  actions: read
+  checks: read
+  contents: read
+  deployments: read
+  pull-requests: read
+
+concurrency:
+  group: apply-hosted-migrations
+  cancel-in-progress: false
+
+jobs:
+  acceptance:
+    name: ${{ inputs.phase == 'start' && 'Start exact causal Grok run' || 'Finish exact causal Grok run' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    env:
+      PROJECT_REF: qpuofpmagrmyamahqwxw
+      PRODUCTION_ORIGIN: https://www.theagoras.com
+      PRODUCTION_HEALTH_URL: https://www.theagoras.com/api/health
+      VERCEL_PROJECT_ID: prj_pAsrhftaVWI4SyaqstgRVSWHJkdD
+    steps:
+      - name: Authorize one exact causal acceptance phase
+        env:
+          AUTHORIZED_ACTOR: ${{ vars.PRODUCTION_RELEASE_ACTOR }}
+          PHASE: ${{ inputs.phase }}
+          CONFIRM: ${{ inputs.confirm }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          PROJECT_ID: ${{ inputs.project_id }}
+          PROJECT_NAME: ${{ inputs.project_name }}
+          REPOSITORY: ${{ inputs.repository }}
+          DEFAULT_BRANCH: ${{ inputs.default_branch }}
+          START_RUN_ID: ${{ inputs.start_run_id }}
+          START_EVIDENCE_SHA256: ${{ inputs.start_evidence_sha256 }}
+        run: |
+          set -euo pipefail
+          if [ -z "$AUTHORIZED_ACTOR" ] \
+            || [ "$GITHUB_ACTOR" != "$AUTHORIZED_ACTOR" ] \
+            || [ "$GITHUB_TRIGGERING_ACTOR" != "$AUTHORIZED_ACTOR" ] \
+            || [ "$GITHUB_RUN_ATTEMPT" != "1" ]; then
+            echo "::error::This first-attempt-only lane is restricted to the configured owner actor."
+            exit 1
+          fi
+          if [ "$GITHUB_REPOSITORY" != "surgeservicesllc/SoftwareFactory" ] \
+            || [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::This acceptance runs only from SoftwareFactory main."
+            exit 1
+          fi
+          if [ "$PHASE" = "start" ]; then
+            if [ "$CONFIRM" != "start-causal-grok-docs-pr" ] \
+              || [ -n "$START_RUN_ID" ] || [ -n "$START_EVIDENCE_SHA256" ]; then
+              echo "::error::Start requires its exact phrase and no finish identity."
+              exit 1
+            fi
+          elif [ "$PHASE" = "finish" ]; then
+            if [ "$CONFIRM" != "finish-causal-grok-release" ] \
+              || ! [[ "$START_RUN_ID" =~ ^[1-9][0-9]*$ ]] \
+              || ! [[ "$START_EVIDENCE_SHA256" =~ ^[0-9a-f]{64}$ ]]; then
+              echo "::error::Finish requires its exact phrase and immutable start run/hash identity."
+              exit 1
+            fi
+            if [ "$START_RUN_ID" = "$GITHUB_RUN_ID" ]; then
+              echo "::error::Finish cannot consume its own workflow run."
+              exit 1
+            fi
+          else
+            echo "::error::Unknown causal acceptance phase."
+            exit 1
+          fi
+          node <<'NODE'
+          const values = {
+            release: process.env.RELEASE_SHA ?? "",
+            project: process.env.PROJECT_ID ?? "",
+            name: process.env.PROJECT_NAME ?? "",
+            repository: process.env.REPOSITORY ?? "",
+            branch: process.env.DEFAULT_BRANCH ?? "",
+          };
+          const singleLine = Object.values(values).every((value) => !/[\r\n]/.test(value));
+          const exact = singleLine
+            && /^[0-9a-f]{40}$/.test(values.release)
+            && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(values.project)
+            && /^[A-Za-z0-9][A-Za-z0-9._ -]{0,159}$/.test(values.name)
+            && /^[A-Za-z0-9_.-]{1,100}\/[A-Za-z0-9_.-]{1,100}$/.test(values.repository)
+            && /^(?!.*\.\.)(?!.*[~^:?*\[\\])[A-Za-z0-9_./-]{1,255}$/.test(values.branch);
+          if (!exact) {
+            console.error("::error::Release, project, repository, or branch identity is malformed.");
+            process.exit(1);
+          }
+          NODE
+
+      - name: Check out the exact current release
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ inputs.release_sha }}
+          persist-credentials: false
+
+      - name: Verify exact main CI Vercel Supabase and worker policy
+        id: release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PHASE: ${{ inputs.phase }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          PHASE1C_WORKER_ENABLED: ${{ vars.SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED }}
+          GRAPH_WORKER_ENABLED: ${{ vars.SOFTWAREFACTORY_GRAPH_WORKER_ENABLED }}
+          GRAPH_WORKER_SCHEDULED: ${{ vars.SOFTWAREFACTORY_GRAPH_WORKER_SCHEDULED }}
+          AUTH_BROKER_DISABLED: ${{ vars.SOFTWAREFACTORY_AUTH_BROKER_DISABLED }}
+        run: |
+          set -euo pipefail
+          SHA=$(git rev-parse HEAD)
+          if [ "$SHA" != "$RELEASE_SHA" ] || [ "$GITHUB_SHA" != "$SHA" ]; then
+            echo "::error::Checked-out, requested, and workflow SHA identities differ."
+            exit 1
+          fi
+          CURRENT_MAIN_SHA=$(curl --fail --silent --show-error \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/git/ref/heads/main" \
+            | jq -r '.object.sha // empty')
+          if [ "$CURRENT_MAIN_SHA" != "$SHA" ]; then
+            echo "::error::Current main is not the requested exact release."
+            exit 1
+          fi
+
+          CHECKS=$(curl --fail --silent --show-error \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/commits/${SHA}/check-runs?per_page=100")
+          for NAME in \
+            "Lint, typecheck, test, and build" \
+            "Browser and accessibility tests 1/3" \
+            "Browser and accessibility tests 2/3" \
+            "Browser and accessibility tests 3/3"; do
+            STATE=$(jq -r --arg name "$NAME" --arg sha "$SHA" '
+              [.check_runs[] | select(.name==$name and .head_sha==$sha and .app.slug=="github-actions")]
+              | sort_by(.completed_at // .started_at // "") | last
+              | if .==null then "missing|missing" else "\(.status)|\(.conclusion // "null")" end
+            ' <<<"$CHECKS")
+            if [ "$STATE" != "completed|success" ]; then
+              echo "::error::Exact-head check '$NAME' is not green ($STATE)."
+              exit 1
+            fi
+          done
+
+          DEPLOYMENT=$(curl --fail --silent --show-error \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/deployments?environment=Production&per_page=100" \
+            | jq -c '[.[] | select(.environment=="Production" and .task=="deploy" and .creator.login=="vercel[bot]")][0] // empty')
+          if [ -z "$DEPLOYMENT" ] \
+            || ! jq -e --arg sha "$SHA" '.sha==$sha and (.ref==$sha or .ref=="main")' <<<"$DEPLOYMENT" >/dev/null; then
+            echo "::error::Latest Vercel Production identity is not the exact checked-out SHA."
+            exit 1
+          fi
+          STATUS=$(curl --fail --silent --show-error \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "$(jq -r '.statuses_url' <<<"$DEPLOYMENT")?per_page=1")
+          if ! jq -e 'length==1 and .[0].state=="success" and .[0].creator.login=="vercel[bot]" and (.[0].environment_url | test("^https://softwarefactory-[a-z0-9]+-surgeservices-projects\\.vercel\\.app/?$"))' <<<"$STATUS" >/dev/null; then
+            echo "::error::Exact-SHA Vercel Production is not READY."
+            exit 1
+          fi
+          DEPLOYMENT_ID=$(jq -r '.id' <<<"$DEPLOYMENT")
+          DEPLOYMENT_URL=$(jq -r '.[0].environment_url | rtrimstr("/")' <<<"$STATUS")
+          HEALTH=$(curl --fail --silent --show-error --max-time 20 --retry 2 "$PRODUCTION_HEALTH_URL")
+          if ! jq -e \
+            --arg sha "$SHA" --arg project "$PROJECT_REF" \
+            --arg deployment_url "$DEPLOYMENT_URL" --arg vercel_project "$VERCEL_PROJECT_ID" '
+              .status=="ok" and .service=="SoftwareFactory"
+              and .database=="reachable" and .databaseProject=="matched"
+              and .databaseProjectRef==$project and .deployment=="matched"
+              and .deploymentUrl==$deployment_url and .vercelProjectId==$vercel_project
+              and .release=="matched" and .releaseSha==$sha and .releaseRef=="main"
+            ' <<<"$HEALTH" >/dev/null; then
+            echo "::error::Production health does not match exact Git, Vercel, and Supabase identities."
+            exit 1
+          fi
+
+          if [ "${GRAPH_WORKER_SCHEDULED,,}" = "true" ] \
+            || [ "${AUTH_BROKER_DISABLED,,}" != "true" ]; then
+            echo "::error::Scheduled execution or the auth broker is outside bounded policy."
+            exit 1
+          fi
+          if [ "$PHASE" = "start" ]; then
+            if [ "${GRAPH_WORKER_ENABLED,,}" != "true" ] \
+              || [ "${PHASE1C_WORKER_ENABLED,,}" != "true" ]; then
+              echo "::error::Start requires separately authorized manual graph and Phase 1C worker gates."
+              exit 1
+            fi
+          elif [ "${GRAPH_WORKER_ENABLED,,}" = "true" ] \
+            || [ "${PHASE1C_WORKER_ENABLED,,}" = "true" ]; then
+            echo "::error::Finish requires both manual worker gates returned to OFF after terminal evidence."
+            exit 1
+          fi
+          echo "deployment_id=$DEPLOYMENT_ID" >> "$GITHUB_OUTPUT"
+          echo "deployment_url=$DEPLOYMENT_URL" >> "$GITHUB_OUTPUT"
+
+      - name: Connect read-only verifiers to the exact Supabase project
+        env:
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "$SUPABASE_DB_PASSWORD" ]; then
+            echo "::error::SUPABASE_DB_PASSWORD is required."
+            exit 1
+          fi
+          ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+          echo "::add-mask::$ENC"
+          for HOST in aws-0-us-west-2.pooler.supabase.com aws-1-us-west-2.pooler.supabase.com; do
+            URL="postgresql://postgres.${PROJECT_REF}:${ENC}@${HOST}:5432/postgres"
+            echo "::add-mask::$URL"
+            if psql "$URL" -v ON_ERROR_STOP=1 -X -Atqc \
+              "select current_database()='postgres' and current_user='postgres' and to_regnamespace('supabase_migrations') is not null" \
+              | grep -qx t; then
+              echo "DB_URL=$URL" >> "$GITHUB_ENV"
+              exit 0
+            fi
+          done
+          echo "::error::Could not connect to exact Supabase project ${PROJECT_REF}."
+          exit 1
+
+      - name: Verify exact start prerequisites and isolated safety state
+        if: inputs.phase == 'start'
+        env:
+          ACCEPTANCE_EMAIL: ${{ secrets.GROK_CAUSAL_PRODUCTION_EMAIL }}
+          PROJECT_ID: ${{ inputs.project_id }}
+          PROJECT_NAME: ${{ inputs.project_name }}
+          REPOSITORY: ${{ inputs.repository }}
+          DEFAULT_BRANCH: ${{ inputs.default_branch }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          set -euo pipefail
+          if [ -z "$ACCEPTANCE_EMAIL" ]; then
+            echo "::error::A dedicated acceptance account secret is required."
+            exit 1
+          fi
+          echo "::add-mask::$ACCEPTANCE_EMAIL"
+          SUFFIX="${GITHUB_RUN_ID}-${RELEASE_SHA:0:12}"
+          GOAL="Create only docs/grok-causal-acceptance/${SUFFIX}.md with a short harmless note that this is bounded Grok causal acceptance ${SUFFIX}. Do not modify any existing file, code, workflow, migration, policy, auth, RLS, secret, automation, deployment, or configuration."
+          RESULT=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atq \
+            -v account_email="$ACCEPTANCE_EMAIL" \
+            -v project_id="$PROJECT_ID" \
+            -v project_name="$PROJECT_NAME" \
+            -v repository="$REPOSITORY" \
+            -v default_branch="$DEFAULT_BRANCH" \
+            -v goal="$GOAL" \
+            -f .github/grok-release/grok-causal-acceptance-preflight.sql)
+          if [ "$RESULT" != "grok-causal-preflight-ok" ]; then
+            echo "::error::Exact account, project, provider, catalog, ledger, or safety preflight failed."
+            exit 1
+          fi
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22.x
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Install Chromium for exact signed-in acceptance
+        timeout-minutes: 14
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if timeout 240 npx playwright install --with-deps chromium; then exit 0; fi
+            sudo killall -q apt-get apt dpkg 2>/dev/null || true
+            for i in $(seq 1 30); do
+              if ! sudo fuser /var/lib/dpkg/lock-frontend /var/lib/apt/lists/lock >/dev/null 2>&1; then break; fi
+              sleep 2
+            done
+            sudo dpkg --configure -a 2>/dev/null || true
+          done
+          echo "::error::Chromium could not be installed after three bounded attempts."
+          exit 1
+
+      - name: Start one new exact docs-only Grok lifecycle
+        if: inputs.phase == 'start'
+        env:
+          GROK_CAUSAL_E2E: "1"
+          GROK_CAUSAL_E2E_PHASE: start
+          GROK_CAUSAL_E2E_EMAIL: ${{ secrets.GROK_CAUSAL_PRODUCTION_EMAIL }}
+          GROK_CAUSAL_E2E_PASSWORD: ${{ secrets.GROK_CAUSAL_PRODUCTION_PASSWORD }}
+          GROK_CAUSAL_E2E_WORKFLOW_RUN_ID: ${{ github.run_id }}
+          GROK_CAUSAL_E2E_RELEASE_SHA: ${{ inputs.release_sha }}
+          GROK_CAUSAL_E2E_PROJECT_ID: ${{ inputs.project_id }}
+          GROK_CAUSAL_E2E_PROJECT_NAME: ${{ inputs.project_name }}
+          GROK_CAUSAL_E2E_REPOSITORY: ${{ inputs.repository }}
+          GROK_CAUSAL_E2E_DEFAULT_BRANCH: ${{ inputs.default_branch }}
+          GROK_CAUSAL_BROWSER_EVIDENCE_PATH: test-results/grok-causal/start/browser.json
+          PLAYWRIGHT_BASE_URL: https://www.theagoras.com
+          PLAYWRIGHT_HARNESS_URL: https://www.theagoras.com
+        run: |
+          set -euo pipefail
+          if [ -z "$GROK_CAUSAL_E2E_EMAIL" ] || [ -z "$GROK_CAUSAL_E2E_PASSWORD" ]; then
+            echo "::error::Dedicated acceptance account secrets are required."
+            exit 1
+          fi
+          echo "::add-mask::$GROK_CAUSAL_E2E_EMAIL"
+          npx playwright test tests/e2e/grok-causal-production.spec.ts \
+            --project=desktop-chromium --reporter=line
+
+      - name: Read exact browser start identity
+        if: inputs.phase == 'start'
+        id: browser
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          PROJECT_ID: ${{ inputs.project_id }}
+          PROJECT_NAME: ${{ inputs.project_name }}
+          REPOSITORY: ${{ inputs.repository }}
+          DEFAULT_BRANCH: ${{ inputs.default_branch }}
+        run: |
+          set -euo pipefail
+          FILE=test-results/grok-causal/start/browser.json
+          if ! jq -e \
+            --arg run "$GITHUB_RUN_ID" --arg release "$RELEASE_SHA" \
+            --arg project "$PROJECT_ID" --arg name "$PROJECT_NAME" \
+            --arg repository "$REPOSITORY" --arg branch "$DEFAULT_BRANCH" '
+              .schemaVersion==1 and .phase=="start-browser"
+              and .workflowRunId==$run and .releaseSha==$release
+              and .projectId==$project and .projectName==$name
+              and .repository==$repository and .defaultBranch==$branch
+              and (.goalSha256|test("^[0-9a-f]{64}$"))
+              and (.contextSha256|test("^[0-9a-f]{64}$"))
+              and (.sessionId|test("^[0-9a-f-]{36}$"))
+              and (.graphId|test("^[0-9a-f-]{36}$"))
+              and (.wakeGraphRunId|test("^[0-9a-f-]{36}$"))
+              and (.wakeIntentId|test("^[0-9a-f-]{36}$"))
+              and (.controlRevision|type)=="number"
+              and (.workerId|type)=="string"
+              and (.dispatchRecordedAt|type)=="string"
+              and (.acknowledgedAt|type)=="string"
+              and .protocolVersion==1 and .capabilityVersion==1
+              and (.returnPath|startswith("/solutions/factory/grok?"))
+            ' "$FILE" >/dev/null; then
+            echo "::error::Browser evidence did not contain one exact bounded causal identity."
+            exit 1
+          fi
+          for KEY in goal_sha256 context_sha256 session_id graph_id wake_graph_run_id wake_intent_id control_revision worker_id return_path; do
+            JSON_KEY=$(jq -nr --arg key "$KEY" '$key | split("_") | .[0] + (.[1:] | map((.[0:1]|ascii_upcase)+.[1:]) | join(""))')
+            echo "$KEY=$(jq -r --arg key "$JSON_KEY" '.[$key]' "$FILE")" >> "$GITHUB_OUTPUT"
+          done
+
+      - name: Publish exact owner-only architecture handoff
+        if: inputs.phase == 'start'
+        env:
+          SESSION_ID: ${{ steps.browser.outputs.session_id }}
+          GRAPH_ID: ${{ steps.browser.outputs.graph_id }}
+          RETURN_PATH: ${{ steps.browser.outputs.return_path }}
+        run: |
+          set -euo pipefail
+          if ! [[ "$SESSION_ID" =~ ^[0-9a-f-]{36}$ ]] \
+            || ! [[ "$GRAPH_ID" =~ ^[0-9a-f-]{36}$ ]] \
+            || [[ "$RETURN_PATH" != /solutions/factory/grok\?* ]]; then
+            echo "::error::The owner handoff identity is malformed."
+            exit 1
+          fi
+          echo "### Separate owner action required" >> "$GITHUB_STEP_SUMMARY"
+          echo "Open the [exact new Grok session](${PRODUCTION_ORIGIN}${RETURN_PATH}) and approve only its ARCHITECTURE gate. This workflow cannot approve a gate and is now waiting for the resulting exact draft PR." >> "$GITHUB_STEP_SUMMARY"
+          echo "Session: \`$SESSION_ID\`; graph: \`$GRAPH_ID\`." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Wait for exact Claude Phase 1C draft PR and four checks
+        if: inputs.phase == 'start'
+        id: start_database
+        env:
+          ACCEPTANCE_EMAIL: ${{ secrets.GROK_CAUSAL_PRODUCTION_EMAIL }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          PROJECT_ID: ${{ inputs.project_id }}
+          REPOSITORY: ${{ inputs.repository }}
+          DEFAULT_BRANCH: ${{ inputs.default_branch }}
+          GOAL_SHA256: ${{ steps.browser.outputs.goal_sha256 }}
+          CONTEXT_SHA256: ${{ steps.browser.outputs.context_sha256 }}
+          SESSION_ID: ${{ steps.browser.outputs.session_id }}
+          GRAPH_ID: ${{ steps.browser.outputs.graph_id }}
+          WAKE_INTENT_ID: ${{ steps.browser.outputs.wake_intent_id }}
+          CONTROL_REVISION: ${{ steps.browser.outputs.control_revision }}
+          BROWSER_WORKER_ID: ${{ steps.browser.outputs.worker_id }}
+          BROWSER_WAKE_GRAPH_RUN_ID: ${{ steps.browser.outputs.wake_graph_run_id }}
+        run: |
+          set -euo pipefail
+          echo "::add-mask::$ACCEPTANCE_EMAIL"
+          SUFFIX="${GITHUB_RUN_ID}-${RELEASE_SHA:0:12}"
+          GOAL="Create only docs/grok-causal-acceptance/${SUFFIX}.md with a short harmless note that this is bounded Grok causal acceptance ${SUFFIX}. Do not modify any existing file, code, workflow, migration, policy, auth, RLS, secret, automation, deployment, or configuration."
+          if [ "$(printf %s "$GOAL" | sha256sum | cut -d' ' -f1)" != "$GOAL_SHA256" ]; then
+            echo "::error::Browser goal hash does not match the workflow-owned exact goal."
+            exit 1
+          fi
+          RESULT='{"ready":false}'
+          for attempt in $(seq 1 240); do
+            RESULT=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atq \
+              -v account_email="$ACCEPTANCE_EMAIL" \
+              -v project_id="$PROJECT_ID" \
+              -v repository="$REPOSITORY" \
+              -v default_branch="$DEFAULT_BRANCH" \
+              -v release_sha="$RELEASE_SHA" \
+              -v goal="$GOAL" \
+              -v context_sha256="$CONTEXT_SHA256" \
+              -v session_id="$SESSION_ID" \
+              -v graph_id="$GRAPH_ID" \
+              -v wake_intent_id="$WAKE_INTENT_ID" \
+              -v control_revision="$CONTROL_REVISION" \
+              -f .github/grok-release/grok-causal-acceptance-start.sql)
+            if jq -e '.ready==true' <<<"$RESULT" >/dev/null; then break; fi
+            CURRENT_MAIN_SHA=$(curl --fail --silent --show-error \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/git/ref/heads/main" \
+              | jq -r '.object.sha // empty')
+            HEALTH=$(curl --fail --silent --show-error --max-time 20 "$PRODUCTION_HEALTH_URL")
+            if [ "$CURRENT_MAIN_SHA" != "$RELEASE_SHA" ] \
+              || ! jq -e --arg sha "$RELEASE_SHA" --arg project "$PROJECT_REF" \
+                '.status=="ok" and .releaseSha==$sha and .databaseProjectRef==$project' \
+                <<<"$HEALTH" >/dev/null; then
+              echo "::error::Main or production health changed while awaiting exact evidence."
+              exit 1
+            fi
+            sleep 30
+          done
+          if ! jq -e '.ready==true' <<<"$RESULT" >/dev/null; then
+            echo "::error::The bounded window ended before exact draft-PR evidence became complete."
+            exit 1
+          fi
+          if [ "$(jq -r '.workerId' <<<"$RESULT")" != "$BROWSER_WORKER_ID" ]; then
+            echo "::error::Durable worker receipt changed between browser and database evidence."
+            exit 1
+          fi
+          if [ "$(jq -r '.initialGraphRunId' <<<"$RESULT")" != "$BROWSER_WAKE_GRAPH_RUN_ID" ]; then
+            echo "::error::Browser wake and durable receipt name different initial graph runs."
+            exit 1
+          fi
+          if ! jq -e --arg branch "$DEFAULT_BRANCH" '
+            (.initialGraphRunId|test("^[0-9a-f-]{36}$"))
+            and (.draftGraphRunId|test("^[0-9a-f-]{36}$"))
+            and (.graphRunIds|type)=="array" and (.graphRunIds|length)>=2 and (.graphRunIds|length)<=10
+            and all(.graphRunIds[]; test("^[0-9a-f-]{36}$"))
+            and (.dispatchAttemptId|test("^[0-9a-f-]{36}$"))
+            and (.wakeReceiptId|test("^[0-9a-f-]{36}$"))
+            and (.bridgeId|test("^[0-9a-f-]{36}$"))
+            and (.commandId|test("^[0-9a-f-]{36}$"))
+            and (.taskId|test("^[0-9a-f-]{36}$"))
+            and (.agentRunId|test("^[0-9a-f-]{36}$"))
+            and (.pullRequestId|test("^[0-9a-f-]{36}$"))
+            and (.pullRequestNumber|type)=="number" and .pullRequestNumber>0
+            and (.pullRequestUrl|test("^https://github\\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/pull/[1-9][0-9]*$"))
+            and (.headBranch|test("^[A-Za-z0-9_./-]{1,255}$"))
+            and (.headBranch|contains("..")|not)
+            and .baseBranch==$branch and (.headSha|test("^[0-9a-f]{40}$"))
+            and (.workerId|test("^[A-Za-z0-9][A-Za-z0-9._:-]{2,159}$"))
+            and (.claudeNodeRunIds|type)=="array" and (.claudeNodeRunIds|length)>=1
+            and all(.claudeNodeRunIds[]; test("^[0-9a-f-]{36}$"))
+          ' <<<"$RESULT" >/dev/null; then
+            echo "::error::Database evidence contains an unsafe or malformed output identity."
+            exit 1
+          fi
+          printf '%s\n' "$RESULT" > test-results/grok-causal/start/database.json
+          echo "initial_graph_run_id=$(jq -r .initialGraphRunId <<<"$RESULT")" >> "$GITHUB_OUTPUT"
+          echo "draft_graph_run_id=$(jq -r .draftGraphRunId <<<"$RESULT")" >> "$GITHUB_OUTPUT"
+          echo "dispatch_attempt_id=$(jq -r .dispatchAttemptId <<<"$RESULT")" >> "$GITHUB_OUTPUT"
+          echo "wake_receipt_id=$(jq -r .wakeReceiptId <<<"$RESULT")" >> "$GITHUB_OUTPUT"
+          echo "bridge_id=$(jq -r .bridgeId <<<"$RESULT")" >> "$GITHUB_OUTPUT"
+          echo "command_id=$(jq -r .commandId <<<"$RESULT")" >> "$GITHUB_OUTPUT"
+          echo "task_id=$(jq -r .taskId <<<"$RESULT")" >> "$GITHUB_OUTPUT"
+          echo "agent_run_id=$(jq -r .agentRunId <<<"$RESULT")" >> "$GITHUB_OUTPUT"
+          echo "pull_request_id=$(jq -r .pullRequestId <<<"$RESULT")" >> "$GITHUB_OUTPUT"
+          echo "pull_request_number=$(jq -r .pullRequestNumber <<<"$RESULT")" >> "$GITHUB_OUTPUT"
+          echo "pull_request_url=$(jq -r .pullRequestUrl <<<"$RESULT")" >> "$GITHUB_OUTPUT"
+          echo "head_branch=$(jq -r .headBranch <<<"$RESULT")" >> "$GITHUB_OUTPUT"
+          echo "base_branch=$(jq -r .baseBranch <<<"$RESULT")" >> "$GITHUB_OUTPUT"
+          echo "head_sha=$(jq -r .headSha <<<"$RESULT")" >> "$GITHUB_OUTPUT"
+
+      - name: Verify exact draft PR docs-only diff and immutable four checks
+        if: inputs.phase == 'start'
+        id: start_github
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          REPOSITORY: ${{ inputs.repository }}
+          DEFAULT_BRANCH: ${{ inputs.default_branch }}
+          PR_NUMBER: ${{ steps.start_database.outputs.pull_request_number }}
+          PR_URL: ${{ steps.start_database.outputs.pull_request_url }}
+          HEAD_BRANCH: ${{ steps.start_database.outputs.head_branch }}
+          HEAD_SHA: ${{ steps.start_database.outputs.head_sha }}
+        run: |
+          set -euo pipefail
+          EXPECTED_FILE="docs/grok-causal-acceptance/${GITHUB_RUN_ID}-${RELEASE_SHA:0:12}.md"
+          PR=$(curl --fail --silent --show-error \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${GITHUB_API_URL}/repos/${REPOSITORY}/pulls/${PR_NUMBER}")
+          if ! jq -e --arg repository "$REPOSITORY" --arg branch "$DEFAULT_BRANCH" \
+            --arg head_branch "$HEAD_BRANCH" --arg head "$HEAD_SHA" --arg url "$PR_URL" '
+              .draft==true and .state=="open" and .merged==false
+              and .base.ref==$branch and .head.ref==$head_branch
+              and .head.sha==$head and .head.repo.full_name==$repository
+              and .html_url==$url
+            ' <<<"$PR" >/dev/null; then
+            echo "::error::Draft pull request identity is not the exact database-bound PR."
+            exit 1
+          fi
+          FILES=$(curl --fail --silent --show-error \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${GITHUB_API_URL}/repos/${REPOSITORY}/pulls/${PR_NUMBER}/files?per_page=100")
+          if ! jq -e --arg expected "$EXPECTED_FILE" \
+            'length==1 and .[0].filename==$expected and .[0].status=="added" and .[0].previous_filename==null' \
+            <<<"$FILES" >/dev/null; then
+            echo "::error::The causal PR is not exactly one new workflow-owned Markdown file."
+            exit 1
+          fi
+          ALL_CHECKS=$(curl --fail --silent --show-error \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${GITHUB_API_URL}/repos/${REPOSITORY}/commits/${HEAD_SHA}/check-runs?per_page=100")
+          CHECKS='[]'
+          for NAME in \
+            "Lint, typecheck, test, and build" \
+            "Browser and accessibility tests 1/3" \
+            "Browser and accessibility tests 2/3" \
+            "Browser and accessibility tests 3/3"; do
+            ONE=$(jq -c --arg name "$NAME" --arg sha "$HEAD_SHA" '
+              [.check_runs[] | select(.name==$name and .head_sha==$sha and .app.slug=="github-actions")]
+              | sort_by(.completed_at // .started_at // "") | last
+            ' <<<"$ALL_CHECKS")
+            if ! jq -e '.status=="completed" and .conclusion=="success" and (.id|type)=="number" and (.details_url|type)=="string"' <<<"$ONE" >/dev/null; then
+              echo "::error::Exact PR-head check '$NAME' is not green."
+              exit 1
+            fi
+            CHECKS=$(jq -c --argjson one "$ONE" --arg name "$NAME" \
+              '. + [{id:$one.id,name:$name,conclusion:"success",url:$one.details_url}]' <<<"$CHECKS")
+          done
+          printf '%s\n' "$CHECKS" > test-results/grok-causal/start/checks.json
+
+      - name: Seal bounded immutable start evidence
+        if: inputs.phase == 'start'
+        id: start_evidence
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          PROJECT_ID: ${{ inputs.project_id }}
+          PROJECT_NAME: ${{ inputs.project_name }}
+          REPOSITORY: ${{ inputs.repository }}
+          DEFAULT_BRANCH: ${{ inputs.default_branch }}
+        run: |
+          set -euo pipefail
+          BROWSER=test-results/grok-causal/start/browser.json
+          DATABASE=test-results/grok-causal/start/database.json
+          CHECKS=test-results/grok-causal/start/checks.json
+          OUTPUT=test-results/grok-causal/start/evidence.json
+          jq -n \
+            --arg run "$GITHUB_RUN_ID" --arg release "$RELEASE_SHA" \
+            --arg project "$PROJECT_ID" --arg name "$PROJECT_NAME" \
+            --arg repository "$REPOSITORY" --arg branch "$DEFAULT_BRANCH" \
+            --argjson browser "$(jq -c . "$BROWSER")" \
+            --argjson database "$(jq -c . "$DATABASE")" \
+            --argjson checks "$(jq -c . "$CHECKS")" '
+              {
+                schemaVersion:1, phase:"start", workflowRunId:$run,
+                releaseSha:$release, productionOrigin:"https://www.theagoras.com",
+                supabaseProjectRef:"qpuofpmagrmyamahqwxw", projectId:$project,
+                projectName:$name, repository:$repository, defaultBranch:$branch,
+                goalSha256:$browser.goalSha256, contextSha256:$browser.contextSha256,
+                sessionId:$browser.sessionId, graphId:$browser.graphId,
+                returnPath:$browser.returnPath,
+                initialGraphRunId:$database.initialGraphRunId,
+                draftGraphRunId:$database.draftGraphRunId,
+                graphRunIds:$database.graphRunIds,
+                wake:{intentId:$browser.wakeIntentId,controlRevision:$browser.controlRevision,
+                  dispatchAttemptId:$database.dispatchAttemptId,receiptId:$database.wakeReceiptId,
+                  workerId:$database.workerId,
+                  dispatchRecordedAt:$browser.dispatchRecordedAt,
+                  acknowledgedAt:$browser.acknowledgedAt,
+                  protocolVersion:$browser.protocolVersion,
+                  capabilityVersion:$browser.capabilityVersion},
+                claude:{completedNodeRunIds:$database.claudeNodeRunIds},
+                phase1c:{bridgeId:$database.bridgeId,commandId:$database.commandId,
+                  taskId:$database.taskId,agentRunId:$database.agentRunId},
+                pullRequest:{id:$database.pullRequestId,number:$database.pullRequestNumber,
+                  url:$database.pullRequestUrl,headBranch:$database.headBranch,
+                  baseBranch:$database.baseBranch,headSha:$database.headSha},
+                checks:$checks,recordedAt:(now|todateiso8601)
+              }
+            ' > "$OUTPUT"
+          npx tsx tests/support/validate-grok-causal-evidence.mts start "$OUTPUT"
+          DIGEST=$(sha256sum "$OUTPUT" | cut -d' ' -f1)
+          echo "sha256=$DIGEST" >> "$GITHUB_OUTPUT"
+          echo "Start evidence SHA-256: \`$DIGEST\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "Start run: \`$GITHUB_RUN_ID\`; session: \`$(jq -r .sessionId "$OUTPUT")\`; draft PR: \`$(jq -r .pullRequest.number "$OUTPUT")\`." >> "$GITHUB_STEP_SUMMARY"
+          echo "Owner action remains separate: approve the remaining exact graph gates, review, and merge this exact PR without using this workflow." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload immutable start evidence
+        if: inputs.phase == 'start'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: grok-causal-start-evidence
+          path: test-results/grok-causal/start/evidence.json
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 9
+
+      - name: Download exact immutable start evidence
+        if: inputs.phase == 'finish'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: grok-causal-start-evidence
+          path: test-results/grok-causal/start-download
+          run-id: ${{ inputs.start_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify and read exact start evidence
+        if: inputs.phase == 'finish'
+        id: prior
+        env:
+          EXPECTED_RUN: ${{ inputs.start_run_id }}
+          EXPECTED_DIGEST: ${{ inputs.start_evidence_sha256 }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          PROJECT_ID: ${{ inputs.project_id }}
+          PROJECT_NAME: ${{ inputs.project_name }}
+          REPOSITORY: ${{ inputs.repository }}
+          DEFAULT_BRANCH: ${{ inputs.default_branch }}
+        run: |
+          set -euo pipefail
+          FILE=test-results/grok-causal/start-download/evidence.json
+          if [ "$(find test-results/grok-causal/start-download -type f | wc -l)" != "1" ] \
+            || [ "$(sha256sum "$FILE" | cut -d' ' -f1)" != "$EXPECTED_DIGEST" ]; then
+            echo "::error::Downloaded start artifact cardinality or SHA-256 differs."
+            exit 1
+          fi
+          npx tsx tests/support/validate-grok-causal-evidence.mts start "$FILE"
+          if ! jq -e \
+            --arg run "$EXPECTED_RUN" --arg release "$RELEASE_SHA" \
+            --arg project "$PROJECT_ID" --arg name "$PROJECT_NAME" \
+            --arg repository "$REPOSITORY" --arg branch "$DEFAULT_BRANCH" '
+              .workflowRunId==$run and .releaseSha!=$release
+              and .projectId==$project and .projectName==$name
+              and .repository==$repository and .defaultBranch==$branch
+              and .productionOrigin=="https://www.theagoras.com"
+              and .supabaseProjectRef=="qpuofpmagrmyamahqwxw"
+            ' "$FILE" >/dev/null; then
+            echo "::error::Start evidence does not match this exact finish release/project identity."
+            exit 1
+          fi
+          echo "release_sha=$(jq -r .releaseSha "$FILE")" >> "$GITHUB_OUTPUT"
+          echo "session_id=$(jq -r .sessionId "$FILE")" >> "$GITHUB_OUTPUT"
+          echo "graph_id=$(jq -r .graphId "$FILE")" >> "$GITHUB_OUTPUT"
+          echo "initial_graph_run_id=$(jq -r .initialGraphRunId "$FILE")" >> "$GITHUB_OUTPUT"
+          echo "draft_graph_run_id=$(jq -r .draftGraphRunId "$FILE")" >> "$GITHUB_OUTPUT"
+          echo "wake_intent_id=$(jq -r .wake.intentId "$FILE")" >> "$GITHUB_OUTPUT"
+          echo "control_revision=$(jq -r .wake.controlRevision "$FILE")" >> "$GITHUB_OUTPUT"
+          echo "dispatch_attempt_id=$(jq -r .wake.dispatchAttemptId "$FILE")" >> "$GITHUB_OUTPUT"
+          echo "wake_receipt_id=$(jq -r .wake.receiptId "$FILE")" >> "$GITHUB_OUTPUT"
+          echo "worker_id=$(jq -r .wake.workerId "$FILE")" >> "$GITHUB_OUTPUT"
+          echo "bridge_id=$(jq -r .phase1c.bridgeId "$FILE")" >> "$GITHUB_OUTPUT"
+          echo "command_id=$(jq -r .phase1c.commandId "$FILE")" >> "$GITHUB_OUTPUT"
+          echo "task_id=$(jq -r .phase1c.taskId "$FILE")" >> "$GITHUB_OUTPUT"
+          echo "agent_run_id=$(jq -r .phase1c.agentRunId "$FILE")" >> "$GITHUB_OUTPUT"
+          echo "pull_request_id=$(jq -r .pullRequest.id "$FILE")" >> "$GITHUB_OUTPUT"
+          echo "pull_request_number=$(jq -r .pullRequest.number "$FILE")" >> "$GITHUB_OUTPUT"
+          echo "head_branch=$(jq -r .pullRequest.headBranch "$FILE")" >> "$GITHUB_OUTPUT"
+          echo "head_sha=$(jq -r .pullRequest.headSha "$FILE")" >> "$GITHUB_OUTPUT"
+
+      - name: Verify exact separately merged PR and unchanged head checks
+        if: inputs.phase == 'finish'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ inputs.repository }}
+          DEFAULT_BRANCH: ${{ inputs.default_branch }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          START_RELEASE_SHA: ${{ steps.prior.outputs.release_sha }}
+          PR_NUMBER: ${{ steps.prior.outputs.pull_request_number }}
+          HEAD_BRANCH: ${{ steps.prior.outputs.head_branch }}
+          HEAD_SHA: ${{ steps.prior.outputs.head_sha }}
+        run: |
+          set -euo pipefail
+          FILE=test-results/grok-causal/start-download/evidence.json
+          PR=$(curl --fail --silent --show-error \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${GITHUB_API_URL}/repos/${REPOSITORY}/pulls/${PR_NUMBER}")
+          if ! jq -e --arg repository "$REPOSITORY" --arg branch "$DEFAULT_BRANCH" \
+            --arg head_branch "$HEAD_BRANCH" --arg head "$HEAD_SHA" --arg merge "$RELEASE_SHA" '
+              .draft==false and .state=="closed" and .merged==true
+              and .base.ref==$branch and .head.ref==$head_branch
+              and .head.sha==$head and .head.repo.full_name==$repository
+              and .merge_commit_sha==$merge and .merged_at!=null
+            ' <<<"$PR" >/dev/null; then
+            echo "::error::The exact causal PR was not separately merged as this release."
+            exit 1
+          fi
+          EXPECTED_FILE="docs/grok-causal-acceptance/${{ inputs.start_run_id }}-${START_RELEASE_SHA:0:12}.md"
+          FILES=$(curl --fail --silent --show-error \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${GITHUB_API_URL}/repos/${REPOSITORY}/pulls/${PR_NUMBER}/files?per_page=100")
+          if ! jq -e --arg expected "$EXPECTED_FILE" \
+            'length==1 and .[0].filename==$expected and .[0].status=="added" and .[0].previous_filename==null' \
+            <<<"$FILES" >/dev/null; then
+            echo "::error::Merged diff is not the one exact new docs-only acceptance file."
+            exit 1
+          fi
+          ALL_CHECKS=$(curl --fail --silent --show-error \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${GITHUB_API_URL}/repos/${REPOSITORY}/commits/${HEAD_SHA}/check-runs?per_page=100")
+          jq -c '.checks' "$FILE" | while IFS= read -r EXPECTED; do
+            jq -c '.[]' <<<"$EXPECTED" | while IFS= read -r CHECK; do
+              ID=$(jq -r .id <<<"$CHECK")
+              NAME=$(jq -r .name <<<"$CHECK")
+              URL=$(jq -r .url <<<"$CHECK")
+              if ! jq -e --argjson id "$ID" --arg name "$NAME" --arg url "$URL" --arg sha "$HEAD_SHA" '
+                [.check_runs[] | select(.name==$name and .head_sha==$sha and .app.slug=="github-actions")]
+                | sort_by(.completed_at // .started_at // "") | last
+                | .id==$id and .details_url==$url
+                  and .status=="completed" and .conclusion=="success"
+              ' <<<"$ALL_CHECKS" >/dev/null; then
+                echo "::error::One immutable start check identity no longer matches exact-head evidence."
+                exit 1
+              fi
+            done
+          done
+
+      - name: Wait for terminal same-chain Grok release lineage
+        if: inputs.phase == 'finish'
+        id: finish_database
+        env:
+          ACCEPTANCE_EMAIL: ${{ secrets.GROK_CAUSAL_PRODUCTION_EMAIL }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PROJECT_ID: ${{ inputs.project_id }}
+          REPOSITORY: ${{ inputs.repository }}
+          DEFAULT_BRANCH: ${{ inputs.default_branch }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          START_RELEASE_SHA: ${{ steps.prior.outputs.release_sha }}
+          SESSION_ID: ${{ steps.prior.outputs.session_id }}
+          GRAPH_ID: ${{ steps.prior.outputs.graph_id }}
+          INITIAL_GRAPH_RUN_ID: ${{ steps.prior.outputs.initial_graph_run_id }}
+          DRAFT_GRAPH_RUN_ID: ${{ steps.prior.outputs.draft_graph_run_id }}
+          WAKE_INTENT_ID: ${{ steps.prior.outputs.wake_intent_id }}
+          CONTROL_REVISION: ${{ steps.prior.outputs.control_revision }}
+          DISPATCH_ATTEMPT_ID: ${{ steps.prior.outputs.dispatch_attempt_id }}
+          WAKE_RECEIPT_ID: ${{ steps.prior.outputs.wake_receipt_id }}
+          WORKER_ID: ${{ steps.prior.outputs.worker_id }}
+          BRIDGE_ID: ${{ steps.prior.outputs.bridge_id }}
+          COMMAND_ID: ${{ steps.prior.outputs.command_id }}
+          TASK_ID: ${{ steps.prior.outputs.task_id }}
+          AGENT_RUN_ID: ${{ steps.prior.outputs.agent_run_id }}
+          PULL_REQUEST_ID: ${{ steps.prior.outputs.pull_request_id }}
+          PULL_REQUEST_NUMBER: ${{ steps.prior.outputs.pull_request_number }}
+          HEAD_BRANCH: ${{ steps.prior.outputs.head_branch }}
+          HEAD_SHA: ${{ steps.prior.outputs.head_sha }}
+          EXTERNAL_DEPLOYMENT_ID: ${{ steps.release.outputs.deployment_id }}
+          DEPLOYMENT_URL: ${{ steps.release.outputs.deployment_url }}
+        run: |
+          set -euo pipefail
+          echo "::add-mask::$ACCEPTANCE_EMAIL"
+          START_GRAPH_RUN_IDS=$(jq -c .graphRunIds test-results/grok-causal/start-download/evidence.json)
+          START_CLAUDE_NODE_RUN_IDS=$(jq -c .claude.completedNodeRunIds test-results/grok-causal/start-download/evidence.json)
+          RESULT='{"ready":false}'
+          for attempt in $(seq 1 120); do
+            RESULT=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atq \
+              -v account_email="$ACCEPTANCE_EMAIL" \
+              -v project_id="$PROJECT_ID" \
+              -v repository="$REPOSITORY" \
+              -v default_branch="$DEFAULT_BRANCH" \
+              -v production_origin="$PRODUCTION_ORIGIN" \
+              -v start_release_sha="$START_RELEASE_SHA" \
+              -v release_sha="$RELEASE_SHA" \
+              -v session_id="$SESSION_ID" \
+              -v graph_id="$GRAPH_ID" \
+              -v initial_graph_run_id="$INITIAL_GRAPH_RUN_ID" \
+              -v draft_graph_run_id="$DRAFT_GRAPH_RUN_ID" \
+              -v start_graph_run_ids="$START_GRAPH_RUN_IDS" \
+              -v start_claude_node_run_ids="$START_CLAUDE_NODE_RUN_IDS" \
+              -v wake_intent_id="$WAKE_INTENT_ID" \
+              -v control_revision="$CONTROL_REVISION" \
+              -v dispatch_attempt_id="$DISPATCH_ATTEMPT_ID" \
+              -v wake_receipt_id="$WAKE_RECEIPT_ID" \
+              -v worker_id="$WORKER_ID" \
+              -v bridge_id="$BRIDGE_ID" \
+              -v command_id="$COMMAND_ID" \
+              -v task_id="$TASK_ID" \
+              -v agent_run_id="$AGENT_RUN_ID" \
+              -v pull_request_id="$PULL_REQUEST_ID" \
+              -v pull_request_number="$PULL_REQUEST_NUMBER" \
+              -v head_branch="$HEAD_BRANCH" \
+              -v head_sha="$HEAD_SHA" \
+              -v external_deployment_id="$EXTERNAL_DEPLOYMENT_ID" \
+              -v deployment_url="$DEPLOYMENT_URL" \
+              -f .github/grok-release/grok-causal-acceptance-finish.sql)
+            if jq -e '.ready==true' <<<"$RESULT" >/dev/null; then break; fi
+            CURRENT_MAIN_SHA=$(curl --fail --silent --show-error \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/git/ref/heads/main" \
+              | jq -r '.object.sha // empty')
+            HEALTH=$(curl --fail --silent --show-error --max-time 20 "$PRODUCTION_HEALTH_URL")
+            if [ "$CURRENT_MAIN_SHA" != "$RELEASE_SHA" ] \
+              || ! jq -e --arg sha "$RELEASE_SHA" --arg project "$PROJECT_REF" \
+                '.status=="ok" and .releaseSha==$sha and .databaseProjectRef==$project' \
+                <<<"$HEALTH" >/dev/null; then
+              echo "::error::Main or production health changed while awaiting terminal lineage."
+              exit 1
+            fi
+            sleep 30
+          done
+          if ! jq -e '.ready==true' <<<"$RESULT" >/dev/null; then
+            echo "::error::The bounded window ended before exact terminal lineage became complete."
+            exit 1
+          fi
+          if ! jq -e '
+            (.initialGraphRunId|test("^[0-9a-f-]{36}$"))
+            and (.terminalGraphRunId|test("^[0-9a-f-]{36}$"))
+            and (.graphRunIds|type)=="array" and (.graphRunIds|length)>=2 and (.graphRunIds|length)<=10
+            and all(.graphRunIds[]; test("^[0-9a-f-]{36}$"))
+          ' <<<"$RESULT" >/dev/null; then
+            echo "::error::Terminal database evidence contains a malformed graph-run chain."
+            exit 1
+          fi
+          printf '%s\n' "$RESULT" > test-results/grok-causal/finish-database.json
+          echo "terminal_graph_run_id=$(jq -r .terminalGraphRunId <<<"$RESULT")" >> "$GITHUB_OUTPUT"
+
+      - name: Read exact terminal session in production
+        if: inputs.phase == 'finish'
+        env:
+          GROK_CAUSAL_E2E: "1"
+          GROK_CAUSAL_E2E_PHASE: finish
+          GROK_CAUSAL_E2E_EMAIL: ${{ secrets.GROK_CAUSAL_PRODUCTION_EMAIL }}
+          GROK_CAUSAL_E2E_PASSWORD: ${{ secrets.GROK_CAUSAL_PRODUCTION_PASSWORD }}
+          GROK_CAUSAL_E2E_RELEASE_SHA: ${{ inputs.release_sha }}
+          GROK_CAUSAL_E2E_MERGE_SHA: ${{ inputs.release_sha }}
+          GROK_CAUSAL_E2E_TERMINAL_GRAPH_RUN_ID: ${{ steps.finish_database.outputs.terminal_graph_run_id }}
+          GROK_CAUSAL_START_EVIDENCE_PATH: test-results/grok-causal/start-download/evidence.json
+          GROK_CAUSAL_BROWSER_EVIDENCE_PATH: test-results/grok-causal/finish-browser.json
+          PLAYWRIGHT_BASE_URL: https://www.theagoras.com
+          PLAYWRIGHT_HARNESS_URL: https://www.theagoras.com
+        run: |
+          set -euo pipefail
+          if [ -z "$GROK_CAUSAL_E2E_EMAIL" ] || [ -z "$GROK_CAUSAL_E2E_PASSWORD" ]; then
+            echo "::error::Dedicated acceptance account secrets are required."
+            exit 1
+          fi
+          echo "::add-mask::$GROK_CAUSAL_E2E_EMAIL"
+          npx playwright test tests/e2e/grok-causal-production.spec.ts \
+            --project=desktop-chromium --reporter=line
+
+      - name: Seal bounded immutable finish evidence
+        if: inputs.phase == 'finish'
+        id: finish_evidence
+        env:
+          START_RUN_ID: ${{ inputs.start_run_id }}
+          START_DIGEST: ${{ inputs.start_evidence_sha256 }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          PROJECT_ID: ${{ inputs.project_id }}
+          REPOSITORY: ${{ inputs.repository }}
+          DEFAULT_BRANCH: ${{ inputs.default_branch }}
+          EXTERNAL_DEPLOYMENT_ID: ${{ steps.release.outputs.deployment_id }}
+          TERMINAL_GRAPH_RUN_ID: ${{ steps.finish_database.outputs.terminal_graph_run_id }}
+        run: |
+          set -euo pipefail
+          START=test-results/grok-causal/start-download/evidence.json
+          DATABASE=test-results/grok-causal/finish-database.json
+          BROWSER=test-results/grok-causal/finish-browser.json
+          OUTPUT=test-results/grok-causal/finish-evidence.json
+          if ! jq -e --arg release "$RELEASE_SHA" --arg session "$(jq -r .sessionId "$START")" \
+            --arg terminal "$TERMINAL_GRAPH_RUN_ID" \
+            '.schemaVersion==1 and .phase=="finish-browser" and .releaseSha==$release and .sessionId==$session and .terminalGraphRunId==$terminal and .unexpectedMutations==0' \
+            "$BROWSER" >/dev/null; then
+            echo "::error::Terminal browser evidence is not exact or was not read-only."
+            exit 1
+          fi
+          jq -n \
+            --arg run "$GITHUB_RUN_ID" --arg start_run "$START_RUN_ID" \
+            --arg digest "$START_DIGEST" --arg release "$RELEASE_SHA" \
+            --arg project "$PROJECT_ID" --arg repository "$REPOSITORY" \
+            --arg branch "$DEFAULT_BRANCH" --argjson external "$EXTERNAL_DEPLOYMENT_ID" \
+            --argjson start "$(jq -c . "$START")" \
+            --argjson database "$(jq -c . "$DATABASE")" '
+              {
+                schemaVersion:1,phase:"finish",workflowRunId:$run,
+                startWorkflowRunId:$start_run,startEvidenceSha256:$digest,
+                startReleaseSha:$start.releaseSha,releaseSha:$release,
+                productionOrigin:"https://www.theagoras.com",
+                supabaseProjectRef:"qpuofpmagrmyamahqwxw",projectId:$project,
+                repository:$repository,defaultBranch:$branch,
+                sessionId:$database.sessionId,graphId:$database.graphId,
+                initialGraphRunId:$database.initialGraphRunId,
+                draftGraphRunId:$start.draftGraphRunId,
+                terminalGraphRunId:$database.terminalGraphRunId,
+                graphRunIds:$database.graphRunIds,wakeReceiptId:$database.wakeReceiptId,
+                bridgeId:$database.bridgeId,agentRunId:$database.agentRunId,
+                pullRequest:{id:$database.pullRequestId,number:$database.pullRequestNumber,
+                  headSha:$database.headSha,mergeCommitSha:$database.mergeCommitSha},
+                deployment:{id:$database.deploymentId,externalId:$external,
+                  url:$database.deploymentUrl,monitorObservationId:$database.monitorObservationId,
+                  validationId:$database.deploymentValidationId,
+                  terminalArtifactId:$database.terminalArtifactId},
+                checks:$start.checks,recordedAt:(now|todateiso8601)
+              }
+            ' > "$OUTPUT"
+          npx tsx tests/support/validate-grok-causal-evidence.mts finish "$OUTPUT"
+          DIGEST=$(sha256sum "$OUTPUT" | cut -d' ' -f1)
+          echo "sha256=$DIGEST" >> "$GITHUB_OUTPUT"
+          echo "Finish evidence SHA-256: \`$DIGEST\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "Exact start run \`$START_RUN_ID\` reached terminal validated release \`$RELEASE_SHA\` without a workflow mutation." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload immutable finish evidence
+        if: inputs.phase == 'finish'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: grok-causal-finish-evidence
+          path: test-results/grok-causal/finish-evidence.json
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 9

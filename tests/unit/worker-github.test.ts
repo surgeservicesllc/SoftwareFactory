@@ -2,7 +2,12 @@ import { generateKeyPairSync } from "node:crypto";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { GitHubAppInstallationTokenProvider, GitHubDraftPublisher, GitHubWorkerError } from "@/lib/worker/github";
+import {
+  GitHubAppInstallationTokenProvider,
+  GitHubDraftPublisher,
+  GitHubGraphReadTokenProvider,
+  GitHubWorkerError,
+} from "@/lib/worker/github";
 import { workerJobSchema, type WorkerJob } from "@/lib/worker/types";
 
 function job(): WorkerJob {
@@ -254,5 +259,58 @@ describe("GitHubDraftPublisher", () => {
 
     await expect(new GitHubAppInstallationTokenProvider(environment).createToken(job()))
       .rejects.toMatchObject({ code: "github_response_too_large" });
+  });
+});
+
+describe("GitHubGraphReadTokenProvider", () => {
+  it("requests one exact repository on the exact installation with read-only permissions", async () => {
+    const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    const environment = {
+      GITHUB_CANDIDATE_APP_ID: "456",
+      GITHUB_CANDIDATE_APP_PRIVATE_KEY_BASE64: Buffer.from(
+        privateKey.export({ format: "pem", type: "pkcs8" }).toString(),
+      ).toString("base64"),
+    };
+    const request = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      token: "github-installation-token-123456789",
+      expires_at: "2026-08-31T20:00:00.000Z",
+    }), { status: 201, headers: { "content-type": "application/json" } }));
+    vi.stubGlobal("fetch", request);
+
+    await expect(new GitHubGraphReadTokenProvider(environment).createToken({
+      app_id: 456,
+      external_installation_id: 123,
+      external_repository_id: 789,
+    })).resolves.toMatchObject({ token: "github-installation-token-123456789" });
+
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(String(request.mock.calls[0]?.[0])).toBe(
+      "https://api.github.com/app/installations/123/access_tokens",
+    );
+    const init = request.mock.calls[0]?.[1] as RequestInit;
+    expect(JSON.parse(String(init.body))).toEqual({
+      repository_ids: [789],
+      permissions: {
+        checks: "read",
+        contents: "read",
+        deployments: "read",
+        metadata: "read",
+        pull_requests: "read",
+        statuses: "read",
+      },
+    });
+    expect(String(init.body)).not.toContain("write");
+  });
+
+  it("refuses an installation whose exact app credential is unavailable before GitHub is called", async () => {
+    const request = vi.fn();
+    vi.stubGlobal("fetch", request);
+
+    await expect(new GitHubGraphReadTokenProvider({ GITHUB_APP_ID: "111" }).createToken({
+      app_id: 456,
+      external_installation_id: 123,
+      external_repository_id: 789,
+    })).rejects.toMatchObject({ code: "github_not_configured" });
+    expect(request).not.toHaveBeenCalled();
   });
 });

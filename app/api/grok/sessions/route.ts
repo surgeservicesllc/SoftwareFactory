@@ -11,6 +11,11 @@ import {
   resolveCanonicalFullLifecycleReleaseIdentity,
 } from "@/lib/graph/canonical-full-lifecycle";
 import {
+  GrokContextInputError,
+  normalizeGrokContext,
+  summarizeGrokContextForPlanning,
+} from "@/lib/grok/context";
+import {
   appendGrokAssistantPlan,
   appendGrokUserMessage,
   createGrokSession,
@@ -24,6 +29,7 @@ import {
   plannedGraphLink,
   readGrokBundle,
   readGrokProject,
+  recordGrokContextEnvelope,
   recordGrokPlanningFailure,
   recordGrokEvent,
   recordGrokSpecialistRoster,
@@ -31,7 +37,10 @@ import {
   storedGrokPlan,
 } from "@/lib/grok/session-store";
 import {
+  buildGrokDeployReadinessAdmissions,
+  buildGrokDeployReadinessProjection,
   buildGrokProviderAdmissions,
+  buildGrokReadOnlyIntentAdmissions,
   GrokProviderAdmissionError,
 } from "@/lib/grok/provider-admission";
 import { GitHubApiError } from "@/lib/github/client";
@@ -57,13 +66,19 @@ const requestSchema = z.object({
   // Preserve the exact message. The planner performs its own normalized,
   // bounded parse, while the transcript keeps what the owner actually sent.
   prompt: z.string().min(1).max(4_000).refine((value) => value.trim().length > 0),
+  context: z.array(z.unknown()).max(10).default([]),
   idempotencyKey: z.string().min(8).max(128).regex(/^[A-Za-z0-9._:-]+$/).optional(),
 }).strict();
 
 const listQuerySchema = z.object({
   projectId: z.string().uuid().optional(),
   limit: z.coerce.number().int().min(1).max(50).default(20),
-}).strict();
+  beforeCreatedAt: z.string().datetime({ offset: true }).optional(),
+  beforeId: z.string().uuid().optional(),
+}).strict().refine(
+  (value) => (value.beforeCreatedAt === undefined) === (value.beforeId === undefined),
+  { message: "A complete Grok session cursor is required." },
+);
 
 function ownerRequired() {
   return jsonNoStore(
@@ -108,6 +123,8 @@ export async function GET(request: Request) {
     const parsed = listQuerySchema.safeParse({
       projectId: url.searchParams.get("projectId") ?? undefined,
       limit: url.searchParams.get("limit") ?? undefined,
+      beforeCreatedAt: url.searchParams.get("beforeCreatedAt") ?? undefined,
+      beforeId: url.searchParams.get("beforeId") ?? undefined,
     });
     if (!parsed.success) {
       return jsonNoStore(
@@ -121,9 +138,19 @@ export async function GET(request: Request) {
       context.client,
       context.activeOrganization.id,
       parsed.data.projectId ?? null,
-      parsed.data.limit,
+      parsed.data.limit + 1,
+      parsed.data.beforeCreatedAt && parsed.data.beforeId
+        ? { createdAt: parsed.data.beforeCreatedAt, id: parsed.data.beforeId }
+        : null,
     );
-    return jsonNoStore({ sessions: mapGrokSessionList(rows) });
+    const page = rows.slice(0, parsed.data.limit);
+    const last = page.at(-1);
+    return jsonNoStore({
+      sessions: mapGrokSessionList(page),
+      nextCursor: rows.length > parsed.data.limit && last
+        ? { createdAt: last.created_at, id: last.session_id }
+        : null,
+    });
   } catch (error) {
     return storeFailure(error, "grok_sessions_unavailable", "Grok sessions could not be loaded.");
   }
@@ -132,10 +159,10 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     assertSameOriginRequest(request);
-    const parsed = requestSchema.safeParse(await readBoundedJson(request, 20 * 1024));
+    const parsed = requestSchema.safeParse(await readBoundedJson(request, 80 * 1024));
     if (!parsed.success) {
       return jsonNoStore(
-        { error: { code: "invalid_grok_request", message: "Provide one bounded prompt and projectId." } },
+        { error: { code: "invalid_grok_request", message: "Provide one bounded prompt, projectId, and valid context references." } },
         { status: 400 },
       );
     }
@@ -170,6 +197,8 @@ export async function POST(request: Request) {
         { status: 409 },
       );
     }
+    const contextItems = normalizeGrokContext(parsed.data.context, project);
+    const planningContextSummary = summarizeGrokContextForPlanning(contextItems);
 
     const idempotencyKey = parsed.data.idempotencyKey ?? `grok:${randomUUID()}`;
     const session = await createGrokSession(context.client, {
@@ -185,9 +214,25 @@ export async function POST(request: Request) {
       idempotencyKey,
     });
 
+    const serviceClient = createSupabaseGitHubWebhookClient();
     let bundle = await readGrokBundle(context.client, context.activeOrganization.id, session.id);
+    const persistInitialContext = async (current: typeof bundle) => {
+      await recordGrokContextEnvelope(serviceClient, {
+        organizationId: context.activeOrganization.id,
+        requestedBy: context.user.id,
+        projectId: project.projectId,
+        sessionId: session.id,
+        messageId: userMessage.id,
+        items: contextItems as unknown as readonly Record<string, unknown>[],
+        idempotencyKey,
+        expectedEventSequence: current.next.event_sequence,
+        replanRequired: false,
+      });
+      return readGrokBundle(context.client, context.activeOrganization.id, session.id);
+    };
     const durablePlanningFailure = storedGrokPlanningFailure(bundle);
     if (durablePlanningFailure) {
+      bundle = await persistInitialContext(bundle);
       return planningFailureResponse({
         sessionId: session.id,
         status: "blocked",
@@ -213,7 +258,6 @@ export async function POST(request: Request) {
       );
     }
 
-    const serviceClient = createSupabaseGitHubWebhookClient();
     let assistantMessage = bundle.messages.find(
       (message) => message.sequence_no === 2 && message.role === "assistant",
     ) ?? null;
@@ -228,6 +272,7 @@ export async function POST(request: Request) {
       const result = buildGrokChiefOfStaffPlan({
         prompt: parsed.data.prompt,
         project: plannerProject,
+        contextSummary: planningContextSummary,
         agents: await loadConfiguredGrokAgents(
           context.client,
           context.activeOrganization.id,
@@ -263,6 +308,7 @@ export async function POST(request: Request) {
           }
           const replayedFailure = storedGrokPlanningFailure(replayBundle);
           if (!replayedFailure) throw failureError;
+          replayBundle = await persistInitialContext(replayBundle);
           return planningFailureResponse({
             sessionId: session.id,
             status: "blocked",
@@ -271,10 +317,12 @@ export async function POST(request: Request) {
             message: replayedFailure.message,
           });
         }
+        bundle = await readGrokBundle(context.client, context.activeOrganization.id, session.id);
+        bundle = await persistInitialContext(bundle);
         return planningFailureResponse({
           sessionId: failure.session.id,
           status: "blocked",
-          version: failure.session.version,
+          version: bundle.session.version,
           code: result.error.code,
           message: failure.message.content,
         });
@@ -341,21 +389,129 @@ export async function POST(request: Request) {
     });
 
     bundle = await readGrokBundle(context.client, context.activeOrganization.id, session.id);
+    bundle = await persistInitialContext(bundle);
     if (!plannedGraphLink(bundle)) {
-      if (plan.intent.kind === "research" || plan.intent.kind === "deploy") {
-        return jsonNoStore(
-          {
-            sessionId: session.id,
-            error: {
-              code: "grok_intent_runtime_bridge_required",
-              message: `The deterministic ${plan.intent.kind} plan and specialist roster are recorded, but no intent-specific executable bridge is installed. No graph or worker was started.`,
+      if (plan.intent.kind === "deploy") {
+        let readiness;
+        let providerAdmissions;
+        try {
+          readiness = buildGrokDeployReadinessProjection(plan);
+          providerAdmissions = buildGrokDeployReadinessAdmissions(plan, readiness.nodes);
+        } catch (error) {
+          if (!(error instanceof GrokProviderAdmissionError)) throw error;
+          return jsonNoStore(
+            {
+              sessionId: session.id,
+              error: {
+                code: "grok_provider_admission_required",
+                message: error.message,
+              },
+              workerWoken: false,
+              executionStarted: false,
             },
-            workerWoken: false,
-            executionStarted: false,
+            { status: 409 },
+          );
+        }
+        const { error: launchError } = await serviceClient.rpc(
+          "launch_grok_deploy_readiness_v1_as_server",
+          {
+            p_organization_id: context.activeOrganization.id,
+            p_requested_by: context.user.id,
+            p_project_id: project.projectId,
+            p_session_id: session.id,
+            p_message_id: assistantMessage.id,
+            p_idempotency_key: idempotencyKey,
+            p_goal: readiness.goal,
+            p_topology: readiness.topology,
+            p_topology_reasons: readiness.topologyReasons,
+            p_risk_level: readiness.riskLevel,
+            p_requires_owner_approval: readiness.requiresOwnerApproval,
+            p_nodes: readiness.nodes,
+            p_edges: readiness.edges,
+            p_budget: readiness.budget,
+            p_roster_idempotency_key: grokSpecialistRosterIdempotencyKey(idempotencyKey),
+            p_admissions: providerAdmissions,
           },
-          { status: 409 },
         );
-      }
+        if (launchError) return databaseErrorResponse(launchError);
+        bundle = await readGrokBundle(context.client, context.activeOrganization.id, session.id);
+      } else if (plan.intent.kind === "research") {
+        if (
+          plan.graphLaunch.riskLevel !== "green"
+          || plan.graphLaunch.requiresOwnerApproval
+        ) {
+          return jsonNoStore(
+            {
+              sessionId: session.id,
+              error: {
+                code: "grok_intent_runtime_bridge_required",
+                message: "The read-only research bridge accepts only an exact GREEN plan that does not require owner approval. The higher-risk plan and specialist roster remain recorded, but no graph or worker was started.",
+              },
+              workerWoken: false,
+              executionStarted: false,
+            },
+            { status: 409 },
+          );
+        }
+        let providerAdmissions;
+        try {
+          providerAdmissions = buildGrokReadOnlyIntentAdmissions(
+            plan,
+            plan.graphLaunch.nodes,
+          );
+        } catch (error) {
+          if (!(error instanceof GrokProviderAdmissionError)) throw error;
+          return jsonNoStore(
+            {
+              sessionId: session.id,
+              error: {
+                code: "grok_provider_admission_required",
+                message: error.message,
+              },
+            },
+            { status: 409 },
+          );
+        }
+        const release = await resolveCanonicalFullLifecycleReleaseIdentity(
+          context.client,
+          context.activeOrganization.id,
+          project.projectId,
+        );
+        if (!release.ok) {
+          if (release.databaseError) return databaseErrorResponse(release.databaseError);
+          return jsonNoStore(
+            { error: { code: release.code, message: release.message } },
+            { status: release.status },
+          );
+        }
+        const { error: launchError } = await serviceClient.rpc(
+          "launch_grok_read_only_research_v3_as_server",
+          {
+            p_organization_id: context.activeOrganization.id,
+            p_requested_by: context.user.id,
+            p_project_id: project.projectId,
+            p_session_id: session.id,
+            p_message_id: assistantMessage.id,
+            p_idempotency_key: idempotencyKey,
+            p_goal: plan.graphLaunch.goal,
+            p_topology: plan.graphLaunch.topology,
+            p_topology_reasons: plan.graphLaunch.topologyReasons,
+            p_risk_level: plan.graphLaunch.riskLevel,
+            p_requires_owner_approval: plan.graphLaunch.requiresOwnerApproval,
+            p_nodes: plan.graphLaunch.nodes,
+            p_edges: plan.graphLaunch.edges,
+            p_budget: plan.graphLaunch.budget,
+            p_github_repository_id: release.target.repository_id,
+            p_base_branch: release.target.base_branch,
+            p_base_sha: release.baseSha,
+            p_required_check_names: release.requiredChecks,
+            p_roster_idempotency_key: grokSpecialistRosterIdempotencyKey(idempotencyKey),
+            p_admissions: providerAdmissions,
+          },
+        );
+        if (launchError) return databaseErrorResponse(launchError);
+        bundle = await readGrokBundle(context.client, context.activeOrganization.id, session.id);
+      } else {
       /*
        * The provider-labelled Grok DAG remains routing intent. Executing it as
        * a custom graph would let the worker silently reinterpret its provider,
@@ -406,7 +562,7 @@ export async function POST(request: Request) {
         );
       }
       const { error: launchError } = await serviceClient.rpc(
-        "launch_grok_full_lifecycle_v3_as_server",
+        "launch_grok_full_lifecycle_v4_as_server",
         {
           p_organization_id: context.activeOrganization.id,
           p_requested_by: context.user.id,
@@ -432,6 +588,7 @@ export async function POST(request: Request) {
       );
       if (launchError) return databaseErrorResponse(launchError);
       bundle = await readGrokBundle(context.client, context.activeOrganization.id, session.id);
+      }
     }
     const detail = await mapGrokSessionDetail(
       context.client,
@@ -441,11 +598,16 @@ export async function POST(request: Request) {
     );
     const executionStarted = detail.session.graphRunId !== null;
     const executionState = detail.session.status;
+    const graphKind = plan.intent.kind === "research"
+      ? "read-only research graph"
+      : plan.intent.kind === "deploy"
+        ? "read-only release-readiness graph"
+        : "canonical release graph";
     const executionMessage = executionStarted
       ? `A durable graph run is linked and the session is ${executionState}. This request did not dispatch a worker.`
       : executionState === "paused"
-        ? "The canonical release graph is durable and paused. This request did not dispatch a worker."
-        : `The canonical release graph is durable with status ${executionState}; no durable run evidence is linked. This request did not dispatch a worker.`;
+        ? `The ${graphKind} is durable and paused. This request did not dispatch a worker.`
+        : `The ${graphKind} is durable with status ${executionState}; no durable run evidence is linked. This request did not dispatch a worker.`;
     return jsonNoStore({
       ...detail,
       // This route never dispatches. Keep that request-scoped fact separate
@@ -454,12 +616,22 @@ export async function POST(request: Request) {
       executionStarted,
       execution: {
         state: executionState,
-        bridge: "full_lifecycle_v3",
+        bridge: plan.intent.kind === "research"
+          ? "read_only_research_v2"
+          : plan.intent.kind === "deploy"
+            ? "deploy_readiness_v1"
+            : "full_lifecycle_v4",
         message: executionMessage,
       },
     }, { status: 202 });
   } catch (error) {
     if (error instanceof ApiRequestError) return requestErrorResponse(error);
+    if (error instanceof GrokContextInputError) {
+      return jsonNoStore(
+        { error: { code: "invalid_grok_context", message: error.message } },
+        { status: 400 },
+      );
+    }
     if (error instanceof GitHubApiError || error instanceof GitHubConfigurationError) {
       return githubRouteErrorResponse(error);
     }

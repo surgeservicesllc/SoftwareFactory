@@ -5,9 +5,14 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { GrokWorkspace } from "@/components/grok/grok-workspace";
-import type { GrokSessionDetail } from "@/lib/grok/contracts";
+import type { GrokSession, GrokSessionCursor, GrokSessionDetail } from "@/lib/grok/contracts";
 
-const PROJECT = { id: "11111111-1111-4111-8111-111111111111", name: "Software Factory" };
+const PROJECT = {
+  id: "11111111-1111-4111-8111-111111111111",
+  name: "Software Factory",
+  connectionStatus: "connected",
+  connectionId: "99999999-9999-4999-8999-999999999999",
+};
 const SESSION: GrokSessionDetail = {
   session: {
     id: "22222222-2222-4222-8222-222222222222",
@@ -28,12 +33,25 @@ const SESSION: GrokSessionDetail = {
     { id: "m2", role: "assistant", content: "I recorded the plan.", createdAt: "2026-08-30T12:00:01.000Z" },
     { id: "m3", role: "tool", content: "CI evidence was recorded.", createdAt: "2026-08-30T12:00:02.000Z" },
   ],
+  contextEnvelopes: [],
   tasks: [
     { id: "t1", taskKey: "research", title: "Inspect checkout", status: "completed", provider: "anthropic", model: "claude-sonnet", agentName: null, attempt: 1, dependsOn: [] },
     { id: "t2", taskKey: "implement", title: "Apply the repair", status: "running", provider: "openai", model: "gpt-codex", agentName: null, attempt: 2, dependsOn: ["research"] },
   ],
   events: [{ id: "e1", type: "session.started", detail: "Planning began.", createdAt: "2026-08-30T12:00:04.000Z" }],
   artifacts: [{ id: "a1", kind: "test_run", label: "Focused tests", uri: null, createdAt: "2026-08-30T12:00:03.000Z" }],
+  wakeEvidence: {
+    wakeIntentId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    controlRevision: 17,
+    dispatchAccepted: true,
+    dispatchRecordedAt: "2026-08-30T12:00:00.500Z",
+    workerAcknowledged: false,
+    workerWoken: false,
+    workerId: null,
+    protocolVersion: null,
+    capabilityVersion: null,
+    acknowledgedAt: null,
+  },
   runEvidence: {
     state: "RUNNING",
     closureNote: null,
@@ -51,6 +69,21 @@ const SESSION: GrokSessionDetail = {
       checks: [{ name: "unit / linux", conclusion: "success", url: "https://github.com/example/factory/actions/runs/9" }],
       deployment: { environment: "production", state: "success", url: "https://preview.example.dev" },
       health: { url: "https://preview.example.dev/health", healthy: true, postDeployValidation: "availability probe passed" },
+    },
+    phase1c: {
+      bridgeId: "55555555-5555-4555-8555-555555555555",
+      state: "PULL_REQUEST_RECORDED",
+      originGraphRunId: "44444444-4444-4444-8444-444444444444",
+      commandId: "66666666-6666-4666-8666-666666666666",
+      taskId: "77777777-7777-4777-8777-777777777777",
+      agentRunId: "88888888-8888-4888-8888-888888888888",
+      headSha: "b".repeat(40),
+      pullRequestId: "99999999-9999-4999-8999-999999999998",
+      mergeCommitSha: null,
+      deploymentId: null,
+      monitorObservationId: null,
+      deploymentValidationId: null,
+      updatedAt: "2026-08-30T12:00:05.000Z",
     },
   },
 };
@@ -103,6 +136,9 @@ function installFetch(
     postHttpFailures?: number;
     controlBodyFailures?: number;
     controlHttpFailures?: number;
+    historyCursor?: GrokSessionCursor;
+    olderSessions?: readonly GrokSession[];
+    project?: typeof PROJECT;
   }> = {},
 ) {
   let remainingDetailFailures = options.detailFailures ?? 0;
@@ -113,7 +149,7 @@ function installFetch(
   let controlFailureOccurred = false;
   const mock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input);
-    if (url === "/api/projects") return json({ projects: [PROJECT] });
+    if (url === "/api/projects") return json({ projects: [options.project ?? PROJECT] });
     if (url === "/api/grok/sessions" && init?.method === "POST") {
       if (remainingPostFailures > 0) {
         remainingPostFailures -= 1;
@@ -142,8 +178,41 @@ function installFetch(
         },
       }, 202);
     }
-    if (url === "/api/grok/sessions") {
-      return json({ sessions: detail && options.includeDetailInList !== false ? [detail.session] : [] });
+    if (url.startsWith("/api/grok/sessions?") && !init?.method) {
+      const isOlderPage = url.includes("beforeCreatedAt=");
+      return json({
+        sessions: isOlderPage
+          ? options.olderSessions ?? []
+          : detail && options.includeDetailInList !== false ? [detail.session] : [],
+        nextCursor: isOlderPage ? null : options.historyCursor ?? null,
+      });
+    }
+    if (url.endsWith("/messages") && init?.method === "POST") {
+      const source = detail ?? SESSION;
+      const input = JSON.parse(String(init.body)) as { prompt: string };
+      return json({
+        ...source,
+        messages: [...source.messages, {
+          id: "follow-up-message", role: "user", content: input.prompt,
+          createdAt: "2026-08-30T12:05:00.000Z",
+        }],
+        contextEnvelopes: [...source.contextEnvelopes, {
+          id: "follow-up-envelope",
+          messageId: "follow-up-message",
+          itemCount: 3,
+          totalBytes: 0,
+          inputSha256: "a".repeat(64),
+          replanRequired: true,
+          createdAt: "2026-08-30T12:05:00.000Z",
+          items: [],
+        }],
+        turn: {
+          messageId: "follow-up-message", envelopeId: "follow-up-envelope",
+          replayed: false, planChanged: false, replanRequired: true,
+        },
+        workerWoken: false,
+        automaticActionStarted: false,
+      }, 201);
     }
     if (url.endsWith("/control") && init?.method === "POST") {
       const action = JSON.parse(String(init.body)).action as "pause" | "resume";
@@ -166,11 +235,19 @@ function installFetch(
           status: resumed ? "planned" : "paused",
           allowedActions: resumed ? ["pause", "stop"] : ["resume", "stop"],
         },
-        control: { intentId: "control-1", action, state: "applied" },
+        control: {
+          intentId: "control-1",
+          action,
+          state: "applied",
+          wakeIntentId: resumed ? "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" : null,
+          controlRevision: resumed ? 17 : null,
+        },
         replayed: resumed && controlFailureOccurred,
-        workerWoken: resumed,
+        dispatchAccepted: resumed,
+        workerAcknowledged: false,
+        workerWoken: false,
         note: resumed
-          ? "The resume was already applied and the exact graph worker wake was accepted again for recovery."
+          ? "The resume was already applied and GitHub accepted another exact recovery dispatch. The worker is not marked woken until it claims this graph and records the matching receipt."
           : "The control was durably applied by the existing audited runtime boundary.",
       });
     }
@@ -208,6 +285,52 @@ describe("GrokWorkspace", () => {
     expect(screen.getByText("No goal recorded")).toBeInTheDocument();
   });
 
+  it("loads project-scoped session history through an exact keyset cursor", async () => {
+    const user = userEvent.setup();
+    const olderSession: GrokSession = {
+      ...SESSION.session,
+      id: "22222222-2222-4222-8222-222222222223",
+      title: "Older repair",
+      createdAt: "2026-08-29T12:00:00.000Z",
+      updatedAt: "2026-08-29T12:01:00.000Z",
+    };
+    const historyCursor = {
+      createdAt: SESSION.session.createdAt,
+      id: SESSION.session.id,
+    };
+    const fetchMock = installFetch(SESSION, { historyCursor, olderSessions: [olderSession] });
+    render(<GrokWorkspace initialSelection={{ projectId: PROJECT.id }} />);
+
+    const loadOlder = await screen.findByRole("button", { name: "Load older sessions" });
+    await user.click(loadOlder);
+
+    expect(await screen.findByText(olderSession.title)).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      `/api/grok/sessions?projectId=${PROJECT.id}&limit=20`
+      + `&beforeCreatedAt=${encodeURIComponent(historyCursor.createdAt)}`
+      + `&beforeId=${historyCursor.id}`,
+      { cache: "no-store" },
+    );
+  });
+
+  it("keeps disconnected project history readable but refuses to start a new goal", async () => {
+    const project = { ...PROJECT, connectionStatus: "not_connected" };
+    const user = userEvent.setup();
+    installFetch(SESSION, { project });
+    render(<GrokWorkspace initialSelection={{ projectId: PROJECT.id }} />);
+
+    expect(await screen.findByText(/This project is Not Connected to an exact active GitHub repository/i)).toBeInTheDocument();
+    expect(screen.getByText("I recorded the plan.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Start a new goal" }));
+    const prompt = screen.getByRole("textbox", { name: "Tell Grok Bot what you want done" });
+    await user.type(prompt, "Fix checkout");
+    expect(screen.getByRole("button", { name: "Start goal" })).toBeDisabled();
+    expect(screen.getByRole("link", { name: "Open project connections" })).toHaveAttribute(
+      "href",
+      `/solutions/projects?projectId=${PROJECT.id}`,
+    );
+  });
+
   it("renders only persisted messages, task assignments, events, and evidence", async () => {
     installFetch(SESSION);
     render(<GrokWorkspace initialSelection={{ sessionId: SESSION.session.id }} />);
@@ -223,6 +346,22 @@ describe("GrokWorkspace", () => {
     expect(within(controlCenter).queryByRole("button", { name: /retry/i })).not.toBeInTheDocument();
     expect(within(controlCenter).getByRole("button", { name: "resume unavailable in running" })).toBeDisabled();
 
+    await userEvent.click(within(controlCenter).getByText("Advanced controls"));
+    expect(within(controlCenter).getByRole("link", { name: /Open lifecycle controls/i })).toHaveAttribute(
+      "href",
+      `/solutions/lifecycle/run/${SESSION.session.graphRunId}`,
+    );
+    expect(within(controlCenter).getByRole("link", { name: /Retry \/ Cancel/i })).toHaveAttribute(
+      "href", `/solutions/runs?runId=${SESSION.runEvidence?.phase1c?.agentRunId}`,
+    );
+    expect(within(controlCenter).getByRole("link", { name: /Rollback/i })).toHaveAttribute(
+      "href", "/solutions/operations",
+    );
+    expect(within(controlCenter).getByRole("link", { name: /Continue Automatically/i })).toHaveAttribute(
+      "href", "/solutions/autonomy",
+    );
+    expect(within(controlCenter).getByText(/Opening a console does not approve/i)).toBeInTheDocument();
+
     await userEvent.click(within(controlCenter).getByRole("tab", { name: "Plan" }));
     expect(within(controlCenter).getByText("Inspect checkout")).toBeInTheDocument();
     expect(within(controlCenter).getByText(/after research/)).toBeInTheDocument();
@@ -233,10 +372,17 @@ describe("GrokWorkspace", () => {
     expect(within(controlCenter).getByText(/attempt 2/)).toBeInTheDocument();
 
     await userEvent.click(within(controlCenter).getByRole("tab", { name: "Progress" }));
+    expect(within(controlCenter).getByText("Resume wake evidence")).toBeInTheDocument();
+    expect(within(controlCenter).getByText("Dispatch accepted")).toBeInTheDocument();
+    expect(within(controlCenter).getByText(/this is not a worker wake/i)).toBeInTheDocument();
+    expect(within(controlCenter).getByText("No")).toBeInTheDocument();
     expect(within(controlCenter).getByText("1 of 2 nodes complete")).toBeInTheDocument();
     expect(within(controlCenter).getByText("12,345")).toBeInTheDocument();
     expect(within(controlCenter).getByText("$0.4567")).toBeInTheDocument();
     expect(within(controlCenter).getByText(/node.completed · research/)).toBeInTheDocument();
+    expect(within(controlCenter).getByRole("link", { name: /Open exact agent run/i })).toHaveAttribute(
+      "href", `/solutions/runs?runId=${SESSION.runEvidence?.phase1c?.agentRunId}`,
+    );
     const progressItems = within(controlCenter).getAllByRole("listitem");
     expect(progressItems[0]).toHaveTextContent("node.completed · research");
     expect(progressItems[1]).toHaveTextContent("session.started");
@@ -252,14 +398,79 @@ describe("GrokWorkspace", () => {
     );
 
     await userEvent.click(within(controlCenter).getByRole("tab", { name: "Preview" }));
-    expect(within(controlCenter).getByRole("link", { name: "https://preview.example.dev" })).toBeInTheDocument();
+    expect(within(controlCenter).getByText("Not Connected")).toBeInTheDocument();
+    expect(within(controlCenter).getByText(/No distinct preview deployment evidence/i)).toBeInTheDocument();
+    expect(within(controlCenter).queryByRole("link", { name: "https://preview.example.dev" })).not.toBeInTheDocument();
 
     await userEvent.click(within(controlCenter).getByRole("tab", { name: "Deployment" }));
-    expect(within(controlCenter).getByText("production · success")).toBeInTheDocument();
-    expect(within(controlCenter).getByText("availability probe passed")).toBeInTheDocument();
-    expect(within(controlCenter).getByText("Rollback")).toBeInTheDocument();
-    expect(within(controlCenter).getByText("Automatic continuation")).toBeInTheDocument();
-    expect(within(controlCenter).getAllByText("Not Connected")).toHaveLength(2);
+    const deploymentPanel = within(controlCenter).getByRole("tabpanel");
+    expect(within(deploymentPanel).getByText("production · success")).toBeInTheDocument();
+    expect(within(deploymentPanel).getByText("availability probe passed")).toBeInTheDocument();
+    expect(within(deploymentPanel).getByText("Rollback")).toBeInTheDocument();
+    expect(within(deploymentPanel).getByText("Automatic continuation")).toBeInTheDocument();
+    expect(within(deploymentPanel).getAllByText("Not Connected")).toHaveLength(2);
+  });
+
+  it("renders captured and reference-only context without claiming a fetch occurred", async () => {
+    installFetch({
+      ...SESSION,
+      contextEnvelopes: [{
+        id: "context-envelope",
+        messageId: "m1",
+        itemCount: 2,
+        totalBytes: 14,
+        inputSha256: "a".repeat(64),
+        replanRequired: false,
+        createdAt: "2026-08-30T12:00:00.000Z",
+        items: [{
+          id: "context-file", kind: "file", label: "requirements.md", state: "captured",
+          mediaType: "text/markdown", url: null, repositoryPath: null, integrationId: null,
+          textPreview: "# Requirements", byteSize: 14,
+        }, {
+          id: "context-url", kind: "url", label: "Design reference", state: "reference_only",
+          mediaType: null, url: "https://docs.example.com/design", repositoryPath: null,
+          integrationId: null, textPreview: null, byteSize: 0,
+        }],
+      }],
+    });
+    render(<GrokWorkspace initialSelection={{ sessionId: SESSION.session.id }} />);
+    const inspector = await screen.findByRole("complementary", { name: "Session inspector" });
+    await userEvent.click(within(inspector).getByRole("tab", { name: "Context" }));
+    expect(within(inspector).getByText("requirements.md")).toBeInTheDocument();
+    expect(within(inspector).getByText("# Requirements")).toBeInTheDocument();
+    expect(within(inspector).getByText("Design reference")).toBeInTheDocument();
+    expect(within(inspector).getByText("Reference only")).toBeInTheDocument();
+  });
+
+  it("saves a multi-turn reference without dispatch and makes the replan boundary explicit", async () => {
+    const fetchMock = installFetch(SESSION);
+    const user = userEvent.setup();
+    render(<GrokWorkspace initialSelection={{ sessionId: SESSION.session.id }} />);
+    await screen.findByText("I recorded the plan.");
+
+    await user.click(screen.getByRole("button", { name: "Add a URL, image, repository, or integration reference" }));
+    await user.type(screen.getByRole("textbox", { name: "Reference label" }), "Revised design");
+    await user.type(screen.getByRole("textbox", { name: "Public HTTPS URL" }), "https://docs.example.com/revised");
+    await user.click(screen.getByRole("button", { name: "Add reference" }));
+    expect(screen.getByLabelText("Context ready to attach")).toHaveTextContent("Revised design · url");
+    await user.type(screen.getByRole("textbox", { name: "Add a Grok Bot follow-up" }), "Use this revision.");
+    await user.click(screen.getByRole("button", { name: "Save follow-up" }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      `/api/grok/sessions/${SESSION.session.id}/messages`,
+      expect.objectContaining({ method: "POST" }),
+    ));
+    const call = fetchMock.mock.calls.find(([url, init]) =>
+      String(url).endsWith("/messages") && init?.method === "POST");
+    expect(JSON.parse(String(call?.[1]?.body))).toMatchObject({
+      prompt: "Use this revision.",
+      context: [{ kind: "url", label: "Revised design", url: "https://docs.example.com/revised" }],
+      idempotencyKey: expect.stringMatching(/^grok-follow-up:/),
+    });
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "The current immutable plan was not changed. Start a new goal to replan.",
+    );
+    expect(screen.getByText("Use this revision.")).toBeInTheDocument();
   });
 
   it("keeps one evidence tab in the keyboard order and supports arrow, Home, and End navigation", async () => {
@@ -269,6 +480,7 @@ describe("GrokWorkspace", () => {
 
     const inspector = await screen.findByRole("complementary", { name: "Session inspector" });
     const goal = within(inspector).getByRole("tab", { name: "Goal" });
+    const context = within(inspector).getByRole("tab", { name: "Context" });
     const plan = within(inspector).getByRole("tab", { name: "Plan" });
     const deployment = within(inspector).getByRole("tab", { name: "Deployment" });
     const panel = within(inspector).getByRole("tabpanel");
@@ -277,6 +489,9 @@ describe("GrokWorkspace", () => {
     expect(plan).toHaveAttribute("tabindex", "-1");
     expect(panel).toHaveAttribute("tabindex", "0");
     goal.focus();
+    await user.keyboard("{ArrowRight}");
+    await waitFor(() => expect(context).toHaveFocus());
+    expect(context).toHaveAttribute("aria-selected", "true");
     await user.keyboard("{ArrowRight}");
     await waitFor(() => expect(plan).toHaveFocus());
     expect(plan).toHaveAttribute("aria-selected", "true");
@@ -290,6 +505,20 @@ describe("GrokWorkspace", () => {
     await user.keyboard("{Home}");
     await waitFor(() => expect(goal).toHaveFocus());
     expect(goal).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("withholds lifecycle control navigation until exact run evidence exists", async () => {
+    const graphOnly = {
+      ...BLOCKED_SESSION,
+      session: { ...BLOCKED_SESSION.session, graphId: SESSION.session.graphId },
+    };
+    installFetch(graphOnly);
+    render(<GrokWorkspace initialSelection={{ sessionId: graphOnly.session.id }} />);
+
+    const inspector = await screen.findByRole("complementary", { name: "Session inspector" });
+    await userEvent.click(within(inspector).getByText("Advanced controls"));
+    expect(within(inspector).queryByRole("link", { name: /Open lifecycle controls/i })).not.toBeInTheDocument();
+    expect(within(inspector).getByText(/Lifecycle controls become available after exact run evidence/i)).toBeInTheDocument();
   });
 
   it("renders a 202 durable-but-blocked plan without implying execution", async () => {
@@ -306,7 +535,7 @@ describe("GrokWorkspace", () => {
       expect.objectContaining({
         method: "POST",
         body: expect.stringMatching(new RegExp(
-          `^\\{"projectId":"${PROJECT.id}","prompt":"Fix checkout","idempotencyKey":"grok-submit:[^"]+"\\}$`,
+          `^\\{"projectId":"${PROJECT.id}","prompt":"Fix checkout","context":\\[\\],"idempotencyKey":"grok-submit:[^"]+"\\}$`,
         )),
       }),
     ));
@@ -470,6 +699,26 @@ describe("GrokWorkspace", () => {
     expect(within(inspector).getByText(/do not prove execution/i)).toBeInTheDocument();
   });
 
+  it("does not call a claimed graph an observed provider route before a node attempt exists", async () => {
+    installFetch({
+      ...SESSION,
+      tasks: SESSION.tasks.map((task) => ({
+        ...task,
+        status: "pending",
+        provider: null,
+        model: null,
+        attempt: null,
+      })),
+    });
+    render(<GrokWorkspace initialSelection={{ sessionId: SESSION.session.id }} />);
+
+    const inspector = await screen.findByRole("complementary", { name: "Session inspector" });
+    await userEvent.click(within(inspector).getByRole("tab", { name: "Agents" }));
+    expect(within(inspector).getByText("Planned routing intent")).toBeInTheDocument();
+    expect(within(inspector).queryByText("Observed node execution route")).not.toBeInTheDocument();
+    expect(within(inspector).getByText(/do not prove execution/i)).toBeInTheDocument();
+  });
+
   it("records a control intent through the session boundary and reloads durable state", async () => {
     const fetchMock = installFetch(SESSION);
     const user = userEvent.setup();
@@ -486,7 +735,7 @@ describe("GrokWorkspace", () => {
     expect(screen.getByRole("status")).toHaveTextContent("durably applied");
   });
 
-  it("reuses the exact Resume key after an indeterminate 500 and recovers the wake", async () => {
+  it("reuses the exact Resume key after an indeterminate 500 and recovers dispatch acceptance", async () => {
     const pausedSession: GrokSessionDetail = {
       ...SESSION,
       session: {
@@ -505,7 +754,7 @@ describe("GrokWorkspace", () => {
       "server lost the response after the durable control attempt",
     );
     await user.click(within(inspector).getByRole("button", { name: "resume session" }));
-    expect(await screen.findByRole("status")).toHaveTextContent("accepted again for recovery");
+    expect(await screen.findByRole("status")).toHaveTextContent("accepted another exact recovery dispatch");
 
     const bodies = fetchMock.mock.calls
       .filter(([url, init]) => String(url).endsWith("/control") && init?.method === "POST")
@@ -534,7 +783,7 @@ describe("GrokWorkspace", () => {
     await user.click(within(inspector).getByRole("button", { name: "resume session" }));
     await screen.findByRole("alert");
     await user.click(within(inspector).getByRole("button", { name: "resume session" }));
-    expect(await screen.findByRole("status")).toHaveTextContent("accepted again for recovery");
+    expect(await screen.findByRole("status")).toHaveTextContent("accepted another exact recovery dispatch");
 
     const bodies = fetchMock.mock.calls
       .filter(([url, init]) => String(url).endsWith("/control") && init?.method === "POST")

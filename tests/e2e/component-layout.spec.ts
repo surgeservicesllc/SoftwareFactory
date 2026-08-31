@@ -270,9 +270,11 @@ for (const width of [320, 768, 1440]) {
     await expect(page.getByRole("log", { name: "Recorded session messages" })).toContainText(
       "Execution is not connected",
     );
-    await expect(page.getByRole("status")).toContainText(
-      "no graph or worker execution has started",
-    );
+    await expect(
+      page.getByRole("status").filter({
+        hasText: "no graph or worker execution has started",
+      }),
+    ).toBeVisible();
 
     for (const name of [
       "Goal",
@@ -293,9 +295,10 @@ for (const width of [320, 768, 1440]) {
     }
 
     const inspector = page.getByRole("complementary", { name: "Session inspector" });
-    await expect(inspector.getByText("Rollback", { exact: true })).toBeVisible();
-    await expect(inspector.getByText("Automatic continuation", { exact: true })).toBeVisible();
-    await expect(inspector.getByText("Not Connected", { exact: true })).toHaveCount(2);
+    const deploymentPanel = inspector.getByRole("tabpanel", { name: "Deployment" });
+    await expect(deploymentPanel.getByText("Rollback", { exact: true })).toBeVisible();
+    await expect(deploymentPanel.getByText("Automatic continuation", { exact: true })).toBeVisible();
+    await expect(deploymentPanel.getByText("Not Connected", { exact: true })).toHaveCount(2);
 
     const results = await new AxeBuilder({ page })
       .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])

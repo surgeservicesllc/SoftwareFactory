@@ -50,6 +50,8 @@ describe("atomic Grok graph control", () => {
     state: "applied",
     idempotency_key: "control-key-123",
     replayed: false,
+    wake_intent_id: "61000000-0000-4000-8000-000000000006",
+    control_revision: 9,
   };
 
   it("applies one graph control through the atomic owner boundary", async () => {
@@ -63,7 +65,7 @@ describe("atomic Grok graph control", () => {
       reason: "Resume after reviewing durable evidence.",
       idempotencyKey: "control-key-123",
     })).resolves.toEqual(appliedControl);
-    expect(rpc).toHaveBeenCalledWith("apply_grok_graph_control_v2_as_owner", {
+    expect(rpc).toHaveBeenCalledWith("apply_grok_graph_control_v3_as_owner", {
       p_organization_id: organizationId,
       p_session_id: sessionId,
       p_graph_id: graphId,
@@ -85,6 +87,68 @@ describe("atomic Grok graph control", () => {
       reason: "Resume after reviewing durable evidence.",
       idempotencyKey: "control-key-123",
     })).resolves.toEqual(replay);
+  });
+
+  it("falls back narrowly for Pause without inventing wake evidence during app-first rollout", async () => {
+    const legacy = {
+      ...appliedControl,
+      action: "pause",
+      wake_intent_id: undefined,
+      control_revision: undefined,
+    };
+    const rpc = vi.fn()
+      .mockResolvedValueOnce({
+        data: null,
+        error: { code: "PGRST202", message: "apply_grok_graph_control_v3_as_owner is absent" },
+      })
+      .mockResolvedValueOnce({ data: [legacy], error: null });
+
+    await expect(applyGrokGraphControl({ rpc } as never, {
+      organizationId,
+      sessionId,
+      graphId,
+      action: "pause",
+      reason: "Pause while reviewing durable evidence.",
+      idempotencyKey: "control-key-123",
+    })).resolves.toMatchObject({
+      wake_intent_id: null,
+      control_revision: null,
+    });
+    expect(rpc.mock.calls.map(([name]) => name)).toEqual([
+      "apply_grok_graph_control_v3_as_owner",
+      "apply_grok_graph_control_v2_as_owner",
+    ]);
+  });
+
+  it("fails closed instead of applying a v2 Resume when the atomic wake boundary is absent", async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: null,
+      error: { code: "PGRST202", message: "apply_grok_graph_control_v3_as_owner is absent" },
+    });
+    await expect(applyGrokGraphControl({ rpc } as never, {
+      organizationId,
+      sessionId,
+      graphId,
+      action: "resume",
+      reason: "Resume after reviewing durable evidence.",
+      idempotencyKey: "control-key-123",
+    })).rejects.toBeInstanceOf(Error);
+    expect(rpc).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects a partial wake identity projection", async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: [{ ...appliedControl, control_revision: null }],
+      error: null,
+    });
+    await expect(applyGrokGraphControl({ rpc } as never, {
+      organizationId,
+      sessionId,
+      graphId,
+      action: "resume",
+      reason: "Resume after reviewing durable evidence.",
+      idempotencyKey: "control-key-123",
+    })).rejects.toThrow(/did not match its exact input/i);
   });
 
   it.each([
@@ -501,7 +565,7 @@ describe("immutable Grok specialist roster persistence", () => {
     })).resolves.toEqual(result);
     expect(grokSpecialistRosterIdempotencyKey("request-key-123"))
       .toBe("request-key-123:specialist-roster");
-    expect(rpc).toHaveBeenCalledWith("record_grok_specialist_roster_v1_as_server", {
+    expect(rpc).toHaveBeenCalledWith("record_grok_specialist_roster_v2_as_server", {
       p_organization_id: organizationId,
       p_requested_by: actorUserId,
       p_project_id: projectId,
@@ -642,7 +706,7 @@ describe("Grok session graph persistence", () => {
       next: { message_sequence: 2, event_sequence: 4 },
     };
 
-    const client = { from: vi.fn(), rpc: vi.fn() } as never;
+    const client = { from: vi.fn(), rpc: vi.fn().mockResolvedValue({ data: [], error: null }) } as never;
     const detail = await mapGrokSessionDetail(client, organizationId, "Factory", bundle as never);
 
     expect(detail.session).toMatchObject({ status: "blocked", graphId: null, graphRunId: null });
@@ -663,7 +727,9 @@ describe("Grok session graph persistence", () => {
         ? { data: { id: graphId, goal: plan.intent.prompt, pause_requested_at: null, withdrawn_at: null }, error: null }
         : table === "graph_runs"
           ? { data: null, error: null }
-          : { data: [{ id: nodeId, node_key: plannedTask.id, job: plannedTask.title }], error: null };
+          : table === "graph_phase1c_bridges"
+            ? { data: null, error: null }
+            : { data: [{ id: nodeId, node_key: plannedTask.id, job: plannedTask.title }], error: null };
       const query: Record<string, unknown> = {};
       for (const method of ["select", "eq", "order", "limit"]) {
         query[method] = vi.fn(() => query);
@@ -673,7 +739,10 @@ describe("Grok session graph persistence", () => {
         Promise.resolve(result).then(resolve, reject);
       return query;
     };
-    const client = { from: vi.fn((table: string) => tableResult(table)) } as never;
+    const client = {
+      from: vi.fn((table: string) => tableResult(table)),
+      rpc: vi.fn().mockResolvedValue({ data: [], error: null }),
+    } as never;
     const bundle = {
       session: {
         id: sessionId, organization_id: organizationId, project_id: projectId,
@@ -738,6 +807,24 @@ describe("Grok session graph persistence", () => {
         },
         error: null,
       },
+      graph_phase1c_bridges: {
+        data: {
+          id: "62200000-0000-4000-8000-000000000006",
+          graph_run_id: runId,
+          state: "PULL_REQUEST_RECORDED",
+          command_id: "62300000-0000-4000-8000-000000000006",
+          task_id: "62400000-0000-4000-8000-000000000006",
+          agent_run_id: "62500000-0000-4000-8000-000000000006",
+          pull_request_id: "62600000-0000-4000-8000-000000000006",
+          head_sha: "b".repeat(40),
+          merge_commit_sha: null,
+          deployment_id: null,
+          monitor_observation_id: null,
+          deployment_validation_id: null,
+          updated_at: createdAt,
+        },
+        error: null,
+      },
       graph_nodes: { data: [
         { id: nodeId, node_key: plannedTask.id, job: plannedTask.title },
         { id: skippedNodeId, node_key: "undispatched", job: "Undispatched work" },
@@ -774,8 +861,9 @@ describe("Grok session graph persistence", () => {
         queryByTable.set(table, query as Record<string, ReturnType<typeof vi.fn>>);
         return query;
       }),
-      rpc: vi.fn().mockResolvedValue({
-        data: [{
+      rpc: vi.fn().mockImplementation(async (name: string) => ({
+        data: name === "list_grok_context_envelopes"
+          || name === "read_grok_graph_wake_state_as_owner" ? [] : [{
           artifact_id: "65000000-0000-4000-8000-000000000006",
           node_run_id: "63000000-0000-4000-8000-000000000006",
           node_key: plannedTask.id,
@@ -789,7 +877,7 @@ describe("Grok session graph persistence", () => {
           created_at: createdAt,
         }],
         error: null,
-      }),
+      })),
     } as never;
     const bundle = {
       session: {
@@ -830,6 +918,11 @@ describe("Grok session graph persistence", () => {
       tokensUsed: 1200,
       costMicros: 3400,
       eventsTruncated: true,
+      phase1c: {
+        state: "PULL_REQUEST_RECORDED",
+        agentRunId: "62500000-0000-4000-8000-000000000006",
+        headSha: "b".repeat(40),
+      },
     });
     expect(detail.runEvidence?.events).toHaveLength(500);
     expect(detail.runEvidence?.events[0]).toMatchObject({
@@ -860,7 +953,7 @@ describe("Grok session graph persistence", () => {
 
   it("maps the database's enriched artifact projection without dropping its URI", async () => {
     const createdAt = "2026-08-30T20:00:00.000Z";
-    const rpc = vi.fn().mockResolvedValue({
+    const sessionRead = {
       data: {
         session: {
           id: sessionId,
@@ -899,7 +992,10 @@ describe("Grok session graph persistence", () => {
         next: { message_sequence: 1, event_sequence: 1 },
       },
       error: null,
-    });
+    };
+    const rpc = vi.fn()
+      .mockResolvedValueOnce(sessionRead)
+      .mockResolvedValueOnce({ data: [], error: null });
     const client = { rpc } as never;
     const bundle = await readGrokBundle(client, organizationId, sessionId);
     const detail = await mapGrokSessionDetail(client, organizationId, "Factory", bundle);
@@ -940,7 +1036,7 @@ describe("Grok session graph persistence", () => {
 
     const bundle = await readGrokBundle({ rpc } as never, organizationId, sessionId);
     const detail = await mapGrokSessionDetail(
-      { rpc: vi.fn() } as never,
+      { rpc: vi.fn().mockResolvedValue({ data: [], error: null }) } as never,
       organizationId,
       "Factory",
       bundle,

@@ -1,11 +1,106 @@
 # Backlog
 
+## Grok runtime 018-021 next-only release chain (ADR-241, 2026-08-31)
+
+- [x] Freeze the four committed canonical-LF identities and explicitly reject
+  the stale proposed 018 digest that does not identify the committed blob.
+- [x] Add one actor/attempt/confirmation-gated manual lane that derives only
+  the next absent migration from the exact 018 -> 019 -> 020 -> 021 prefix;
+  permit no migration selector, replay, down, reset, repair, or broad push.
+- [x] Pin exact main/green-CI/READY-Vercel/health/Supabase identity, immutable
+  unrelated-ledger history, stopped workflows/runtime, worker/schedule/auth/
+  autonomy/automatic-action OFF state, and the global kill switch ON before
+  mutation and after every operation.
+- [x] Preserve the unchanged dedicated 019 preflight and native postflight and
+  add chain-wide catalog/function/ACL/RLS/audit/runtime/lint verification with
+  one-file transactional rehearsal/apply and zero residue.
+- [x] Cover every intermediate prefix plus gap, digest, later-version, catalog,
+  and runtime failure contracts in static and native PGlite tests.
+- [ ] Publish one exact reviewed main SHA, require its complete CI and exact
+  READY deployment identity, then use fresh manual probe/apply-one cycles for
+  018, 019, 020, and 021 followed by verify. No hosted operation or production
+  acceptance is claimed by this repository candidate.
+
+## Grok initial Resume durable wake receipt (ADR-239, 2026-08-31)
+
+- [x] Create one append-only wake intent in the exact owner Resume transaction,
+  with tenant/session/graph/control revision identity and content-free audit.
+- [x] Record GitHub dispatch acceptance/failure separately and never translate
+  HTTP acceptance into `workerWoken`.
+- [x] Require the exact target graph claim to receipt worker identity,
+  protocol/capability version, and immutable timestamps before provider work;
+  fail closed on missing, stale, wrong, or conflicting replay identity.
+- [x] Project dispatch versus receipt truth through API, reload, and the Grok
+  Progress inspector; cover the service boundaries, SQL contract, and native
+  PGlite behavior.
+- [ ] Integrate and release migration 021 only through a separately reviewed
+  forward production lane. No hosted apply or live worker acceptance is
+  claimed by this repository candidate.
+
+## Exact graph target workspaces (ADR-238, 2026-08-31)
+
+- [x] Resolve one dispatched graph to its current active installation,
+  repository, required-check policy, base branch, and immutable base SHA
+  through a bounded service-role-only database function.
+- [x] Revalidate the complete target inside protocol-v4 claim and record exact
+  repository identity on new read-only research graphs before visibility.
+- [x] Request an exact-repository read-only installation token and expose only
+  a verified, no-hooks, detached, read-only target tree to Claude; clean it on
+  success or failure and never run target code.
+- [x] Make graph schedule/global drain inert without an equally exact target;
+  remove ambient checkout/repository/check-policy targeting from production.
+- [x] Cover ACL/catalog/runtime behavior, wrong repository/SHA/installation,
+  moved-branch pinned-SHA reachability, cleanup, and zero provider callback on
+  workspace failure in unit, contract, and full-chain PGlite tests.
+- [ ] Publish, apply, and accept migration 020 plus the exact worker release
+  only through a separately reviewed forward release. No hosted or live
+  execution evidence is claimed by this repository candidate.
+## Grok causal production acceptance (ADR-240, 2026-08-31)
+
+- [x] Add a manual two-phase lane whose start phase creates a new unique
+  docs-only Grok goal, explicitly Resumes once, and requires immutable plan,
+  roster, context, exact repository base/check policy, durable dispatch and
+  first worker receipt, real Claude nodes/artifacts, exact Phase 1C Codex run,
+  one-file draft PR, and all four exact-head checks.
+- [x] Seal a strict secret-free start artifact and require its exact workflow
+  run ID plus owner-supplied SHA-256 for every finish-phase read.
+- [x] Make finish prove the same session/run-chain/bridge/PR through exact merge,
+  READY deployment and health lineage, five-stage passing validation, terminal
+  artifacts, and a signed-in read-only reload.
+- [x] Add static workflow, SQL, evidence-schema, and opt-in Playwright
+  contracts; disable screenshot, video, and trace capture.
+- [ ] Provision dedicated protected repository secrets named
+  `GROK_CAUSAL_PRODUCTION_EMAIL` and `GROK_CAUSAL_PRODUCTION_PASSWORD` for an
+  owner of the exact acceptance project. Neither secret exists yet; do not
+  repurpose another account or credential. A user's signed-in local browser may
+  provide supplemental evidence but cannot replace the reproducible hosted
+  account identity.
+- [ ] Publish only after migrations 020 and 021 are integrated, all repository
+  gates pass, and the candidate reaches exact READY production. Then run start
+  and finish only under separate owner-controlled worker/gate/merge actions.
+  No live run, provider proof, merge, deployment, or hosted mutation is claimed
+  by this repository candidate.
+
+## Grok admission-version null-fence release lane (ADR-237, 2026-08-31)
+
+- [x] Freeze canonical-LF migration 019 at SHA-256
+  `a0dd4da859e5ed6cb65342f2e5b3962c07d672346bd06685052c6446e99c5221`
+  and 8,404 bytes, with one-file manual probe/apply/verify staging.
+- [x] Pin exact ledger lineage, unrelated-history digest, old/new function
+  source/ABI/security/search-path/ACL posture, linked lint, production identity,
+  health, and stopped-safety gates before and after the operation.
+- [x] Prove native null/missing/wrong roster, full-lifecycle-v4, and research-v2
+  rejection before writes, zero residue, valid/replay behavior, and corrected
+  route response labels for the callable v2/v4 boundary.
+- [ ] Publish and run probe/apply/verify only as a separately reviewed
+  production release. No hosted operation or production acceptance is claimed.
+
 ## Close-out triage (2026-08-31, owner /goal: complete the backlog, 100% production ready)
 
 Every box below this section is either checked or parked, and every parked
 box's own text names what unparks it. Read this section as the index; the
 rows are the record. As of this triage the file holds 117 open boxes, all
-of them parked, in exactly five families:
+ of them parked, in exactly five families:
 
 1. **Owner credentials or accounts** — an external account or key nobody
    has opened or supplied: the eight CRM provider rows (SMS, email,
@@ -47,6 +142,109 @@ probe-verified hosted ledger through `20260831001400`, and the
 category/insert-chain/notice truthfulness fixes. Nothing in this file is
 open because work stopped; everything open is waiting on a named key, a
 named decision, a named authorization, or production itself.
+
+## Grok 015/017 protected release lanes (ADR-234, 2026-08-31)
+
+- [x] Add separate manual, shared-concurrency `probe` / `apply` / `verify`
+  workflows for only the canonical-LF hash-pinned 015 context projection and
+  017 read-only research migrations.
+- [x] Require exact release/CI/READY/health/Supabase identity, configured
+  first-attempt actor and confirmation, unchanged unrelated ledger, exact
+  forward order through 016, native catalog/ACL fingerprints, linked lint, and
+  stopped workers/autonomy/actions with kill switches ON.
+- [x] Rehearse each target-version migration chain and its full rollback-only
+  runtime/adverse postflight, proving replay, tenant and tamper refusal,
+  content-free audit, paused read-only research, and zero execution residue.
+- [ ] Publish and dispatch 015 then 017 only as separately reviewed production
+  releases after their prerequisites are hosted. No hosted operation or
+  production acceptance is claimed by this repository candidate.
+
+## Grok Phase 1C exact graph re-wake (ADR-233, 2026-08-31)
+
+- [x] Persist exactly one immutable-identity re-wake intent in the admitted
+  Grok bridge transaction that records the Phase 1C pull request.
+- [x] Lease and acknowledge through service-role-only functions with exact
+  graph/project/repository/run/command/bridge identity, current admissions,
+  fresh non-disabled worker checks, bounded retries, and append-only evidence.
+- [x] Reuse the existing opaque graph-dispatch boundary immediately after a
+  targeted Phase 1C worker run; keep its independent worker gate authoritative.
+- [x] Add unit behavior, SQL/workflow contracts, full-chain migration coverage,
+  and a hash-pinned one-file protected `probe` / `apply` / `verify` lane.
+- [ ] Publish/apply/verify 016 only as a separately reviewed production
+  release. The repository candidate has no hosted ledger or runtime evidence.
+
+## Grok deploy-readiness projection (ADR-236, 2026-08-31)
+
+- [x] Preserve the exact planner-v3 deploy request as immutable RED intent with
+  its owner-gated HUMAN `delivery` handoff.
+- [x] Derive only the four exact Claude MODEL inspection/fan-in tasks into a
+  separate GREEN graph; remove delivery and every resource, write, lifecycle
+  stage, gate, feedback edge, provider fallback, provider tool, run, wake, and
+  dispatch path; pin the exact verifier schema hashes.
+- [x] Add the service-role-only, null-safe forward migration
+  `20260831001800_grok_deploy_readiness_runtime.sql` with exact message/plan/
+  task/edge/budget/roster/admission/hash checks, source-plan hashing, immutable
+  audit/link evidence, atomic pause, and idempotent current-admission replay.
+- [x] Route deploy intent to the dedicated readiness boundary without release
+  mutation identity resolution; prove focused TypeScript, route, contract,
+  schema, and full-chain PGlite behavior.
+- [ ] Integrate on exact main and create a separately reviewed protected 018
+  release scope before any hosted apply. Require exact ledger/catalog/ACL/RLS/
+  runtime/rollback/lint/health/stopped evidence and signed-in reload acceptance.
+  Do not merge, deploy, wake workers, or present the readiness graph as observed
+  production delivery.
+## Grok context-envelope 011 protected release lane (ADR-232, 2026-08-31)
+
+- [x] Pin the exact canonical-LF 011 migration path, SHA-256, Supabase project,
+  release SHA, configured actor, operation-specific confirmation, CI, Vercel,
+  and health identities.
+- [x] Permit only one staged migration file plus the 011 ledger row in one
+  forward transaction; prohibit reset, repair, replay, down, broad push, and
+  workflow dispatch paths.
+- [x] Snapshot every unrelated ledger row, require the 00100-01000 lineage, and
+  reprove the snapshot after probe/apply/verify without assuming the valid
+  later 01200-01400 rows are absent.
+- [x] Add rollback-only catalog, RLS/policy/grant/trigger/function-hash/ACL,
+  runtime/replay/audit, adverse-tenant/secret/bounds, immutability, linked-lint,
+  health, and zero-execution evidence with stopped containment before/after.
+- [x] Pass the full migrated-chain native rehearsal and 16/16 focused static
+  safety tests; keep credentials out of source and logs.
+- [ ] Publish or dispatch only as a separately reviewed production release.
+  This repository candidate has not applied 011 and carries no hosted ledger,
+  catalog, lint, runtime, or health acceptance evidence.
+
+## Grok record-only production acceptance (ADR-229, 2026-08-31)
+
+- [x] Add an env-gated signed-in Playwright journey for one exact RFC-reserved
+  account, project, harmless BUILD goal, exact return URL, and reload.
+- [x] Add read-only hosted preflight/postflight SQL proving planner-v3,
+  complete roster/route admission, immutable events, paused graph, and zero
+  graph/node/agent/provider/Phase 1C execution.
+- [x] Add a manual, explicit-confirm, exact-release workflow with stopped-state
+  checks, least privilege, no browser capture, and no execution control calls.
+- [x] Add static workflow safety and action-pin tests; focused evidence is 8/8,
+  with lint/typecheck and guarded Playwright discovery green.
+- [ ] Publish and run only after the exact fake account/project and Ready Claude
+  plus bounded Ready Codex prerequisites exist and the repository secret
+  `GROK_RECORD_ONLY_E2E_PASSWORD` is configured. Exact-head CI, Vercel READY,
+  health, and hosted 009/010 evidence remain mandatory; no current production
+  acceptance is claimed.
+
+## Grok advanced control navigation (ADR-231, 2026-08-31)
+
+- [x] Keep advanced control complexity collapsed by default in the selected
+  Grok session inspector.
+- [x] Open the canonical lifecycle controls for the exact immutable run, where
+  Approve / Reject appears on its actual open gate; withhold that link until
+  exact run evidence exists.
+- [x] Link Retry / Cancel, rollback, and automatic continuation to the existing
+  audited Runs, Operations, and Autonomy consoles without adding a second
+  mutation path or changing any safety state.
+- [x] Prove exact destinations, no-run refusal copy, and the no-mutation
+  boundary in the 22/22 focused workspace suite; affected lint/typecheck pass.
+- [ ] Require exact-head CI, READY Vercel identity, health, and signed-in
+  production navigation acceptance before calling this slice production
+  accepted.
 
 ## Site-wide dark/light theme (ADR-225, 2026-08-31)
 
@@ -132,6 +330,13 @@ the algorithm needs exists.
   conversation, plan/tasks, agents, progress, files/diffs, tests, artifacts,
   deployment, and honest blocked/control states across responsive and
   accessibility coverage.
+- [x] Scope session history at the database boundary instead of filtering an
+  organization-wide top-20 list in the browser. Expose the existing stable
+  `(created_at, id)` cursor, prove complete-cursor validation and bounded
+  look-ahead, add `Load older sessions`, and retain direct links that fall
+  outside the first project page. Keep disconnected-project history readable
+  while disabling new goals before any session is created (ADR-228; focused
+  32/32).
 - [x] Connect the session to the exact canonical `full_lifecycle` v2 bridge —
   Claude planning -> HUMAN architecture approval -> Codex Phase 1C ->
   CI/Vercel/health — while persisting planned identity separately from actual
@@ -215,6 +420,31 @@ the algorithm needs exists.
   claim requires and revalidates the complete current admission identity;
   legacy unadmitted Grok work cannot enter the worker. Protected apply run
   `33397377838` and independent read-only run `33397710586` accepted it.
+- [x] Implement durable bounded input context and multi-turn composition
+  (ADR-235) through `20260831001100`: exact server-derived project/repository
+  references, safe bounded text capture, URL/image reference-only handling,
+  tenant-linked integration references, forced RLS, append-only audit/hash
+  evidence, exact replay, and an atomic owner follow-up boundary that never
+  dispatches or silently changes the immutable plan. Repository candidate only;
+  the migration is not hosted yet.
+- [ ] Add `20260831001100` to an explicitly reviewed protected forward-only
+  release scope after integration. Require exact hash/ledger/catalog/RLS/ACL/
+  replay/immutability/tenant-isolation/health evidence and signed-in initial +
+  follow-up + reload acceptance. Keep URL/image fetching, binary storage,
+  workers, autonomy, and automatic actions out of that scope.
+- [x] Connect immutable initial Grok context to protocol-v3 Full Lifecycle and
+  Phase 1C claims (ADR-230) through `20260831001500`. The private projector runs
+  only after exact current admission, tenant, project, session, and plan-message
+  checks; revalidates item/file/envelope bounds, secrets, and hashes; excludes
+  all post-plan follow-ups; and rolls back the claim on mismatch. Admitted
+  Claude/Codex prompts receive a separate typed untrusted-data section without
+  changing the existing 4 KB goal. Legacy/non-Grok claims stay unchanged.
+- [x] Add `20260831001500` to a dedicated protected forward-only
+  `probe` / `apply` / `verify` scope after `01100` is accepted. ADR-234 pins its
+  canonical-LF hash and native `prosrc` identities and proves exact ledger/
+  catalog/ACL/runtime/rollback/lint/health plus stopped containment. Hosted
+  dispatch remains separately gated; no worker, autonomy, automatic-action,
+  URL/image fetch, merge, or deployment authority belongs to that scope.
 - [x] Publish one exact rebased candidate and require lint, typecheck, the full
   test suite, production build, all three browser/accessibility shards, exact
   green CI, exact READY Vercel identity, and matching public health. Exact main

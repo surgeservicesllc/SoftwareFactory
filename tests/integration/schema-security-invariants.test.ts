@@ -262,6 +262,7 @@ describe("SECURITY DEFINER functions", () => {
     // phase deliberately gives the worker a new capability.
     expect(result.rows.map((row) => row.proname)).toEqual([
       "abort_graph_run_as_worker",
+      "acknowledge_grok_graph_wake_as_worker",
       "agentos_record_trigger_delivery",
       "append_grok_message_as_server",
       "append_phase1c_run_event",
@@ -270,6 +271,9 @@ describe("SECURITY DEFINER functions", () => {
       // with the gate decision instead of exposing low-level record helpers.
       "approve_graph_phase1c_deployment_gate_as_worker",
       "approve_graph_phase1c_test_gate_as_worker",
+      // Absence-only guard for initial claims. It returns no wake identity;
+      // any Resume history requires the exact opaque dispatch payload.
+      "assert_no_grok_graph_wake_payload_required_as_worker",
       "bind_graph_phase1c_run_by_command_as_worker",
       // The auth-broker worker's eight capabilities: drive a sign-in session
       // through the provider's real login. `read_ai_auth_relay_code` returns
@@ -277,6 +281,7 @@ describe("SECURITY DEFINER functions", () => {
       // `complete_` accepts only an already-sealed credential — plaintext
       // never crosses this boundary in either direction.
       "claim_ai_auth_session",
+      "claim_grok_graph_rewake_as_worker",
       // A dispatch-bound Phase 1C wake may commit only the exact command UUID
       // supplied by the trusted server. Protocol v3 is the only executable
       // claim surface; the v2 routines remain present but private so every
@@ -290,6 +295,7 @@ describe("SECURITY DEFINER functions", () => {
       // artifacts, and close the run — where incomplete input can never be
       // recorded as COMPLETED. No credential material crosses any of them.
       "claim_planned_graph_by_id_v3",
+      "claim_planned_graph_by_target_v4",
       "claim_planned_graph_v3",
       // The provider sign-in path, added with the credential vault. `claim_`
       // and `resolve_` are reachable only by presenting a valid one-time code,
@@ -327,9 +333,16 @@ describe("SECURITY DEFINER functions", () => {
       "inspect_ai_auth_sessions",
       "jsonb_has_sensitive_keys",
       // Grok has no service_role table grants. Its bounded server/worker RPCs
-      // and canonical Full Lifecycle v3 launcher are pinned by exact overload
+      // and null-fenced canonical Full Lifecycle v4 launcher are pinned by exact overload
       // below; the launcher atomically pauses before visibility.
-      "launch_grok_full_lifecycle_v3_as_server",
+      // Deploy intent receives only a resource-free GREEN readiness projection;
+      // its RED delivery handoff remains immutable plan evidence, never a node.
+      "launch_grok_deploy_readiness_v1_as_server",
+      "launch_grok_full_lifecycle_v4_as_server",
+      // Research launches the planner's exact Claude-only, zero-write DAG;
+      // this service boundary also pauses before visibility and never wakes.
+      "launch_grok_read_only_research_v2_as_server",
+      "launch_grok_read_only_research_v3_as_server",
       "link_grok_artifact_as_server",
       "link_grok_task_as_server",
       // The verification sweep's two hands: enumerate connected subscription
@@ -389,9 +402,17 @@ describe("SECURITY DEFINER functions", () => {
       // Browser-authenticated managers cannot execute this RPC directly.
       "record_bot_readiness_preserving_disabled",
       "record_graph_artifact_as_worker",
+      // Initial Grok context is written only after the server has derived and
+      // normalized its project/repository identity. The definer revalidates
+      // tenant ownership, exact message identity, bounds, hashes, and CAS.
+      "record_grok_context_envelope_as_server",
       "record_grok_event_as_server",
+      "record_grok_graph_rewake_delivery_as_worker",
+      // Transport acceptance/failure is append-only and is deliberately
+      // separate from the exact worker acknowledgement above.
+      "record_grok_graph_wake_dispatch_as_server",
       "record_grok_planning_failure_as_server",
-      "record_grok_specialist_roster_v1_as_server",
+      "record_grok_specialist_roster_v2_as_server",
       "record_job_seeker_alert_scan",
       "record_node_state_as_worker",
       "record_phase1c_run_artifact",
@@ -403,6 +424,7 @@ describe("SECURITY DEFINER functions", () => {
       // never be orphaned by a re-plan.
       "replan_phase1c_run",
       "report_ai_auth_login_url",
+      "resolve_graph_execution_target_as_worker",
       "resolve_grok_control_intent_as_server",
       "resolve_provider_connect_session",
       // Which provider account signed in — display data on a completed
@@ -428,13 +450,18 @@ describe("SECURITY DEFINER functions", () => {
       where namespace.nspname = 'public'
         and proc.proname in (
           'append_grok_message_as_server',
+          'launch_grok_deploy_readiness_v1_as_server',
           'launch_grok_full_lifecycle_v3_as_server',
+          'launch_grok_full_lifecycle_v4_as_server',
+          'launch_grok_read_only_research_v1_as_server',
+          'launch_grok_read_only_research_v2_as_server',
           'link_grok_artifact_as_server',
           'link_grok_task_as_server',
           'read_grok_execution_credential_as_worker',
           'record_grok_event_as_server',
           'record_grok_planning_failure_as_server',
           'record_grok_specialist_roster_v1_as_server',
+          'record_grok_specialist_roster_v2_as_server',
           'resolve_grok_control_intent_as_server',
           'set_grok_session_status_as_server'
         )
@@ -451,8 +478,18 @@ describe("SECURITY DEFINER functions", () => {
       },
       {
         identity_arguments:
+          "p_organization_id uuid, p_requested_by uuid, p_project_id uuid, p_session_id uuid, p_message_id uuid, p_idempotency_key text, p_goal text, p_topology graph_topology, p_topology_reasons jsonb, p_risk_level risk_level, p_requires_owner_approval boolean, p_nodes jsonb, p_edges jsonb, p_budget jsonb, p_roster_idempotency_key text, p_admissions jsonb",
+        proname: "launch_grok_deploy_readiness_v1_as_server",
+      },
+      {
+        identity_arguments:
           "p_organization_id uuid, p_requested_by uuid, p_project_id uuid, p_session_id uuid, p_message_id uuid, p_idempotency_key text, p_goal text, p_topology graph_topology, p_topology_reasons jsonb, p_risk_level risk_level, p_requires_owner_approval boolean, p_nodes jsonb, p_edges jsonb, p_budget jsonb, p_github_repository_id uuid, p_base_branch text, p_base_sha text, p_required_check_names jsonb, p_roster_idempotency_key text, p_admissions jsonb",
-        proname: "launch_grok_full_lifecycle_v3_as_server",
+        proname: "launch_grok_full_lifecycle_v4_as_server",
+      },
+      {
+        identity_arguments:
+          "p_organization_id uuid, p_requested_by uuid, p_project_id uuid, p_session_id uuid, p_message_id uuid, p_idempotency_key text, p_goal text, p_topology graph_topology, p_topology_reasons jsonb, p_risk_level risk_level, p_requires_owner_approval boolean, p_nodes jsonb, p_edges jsonb, p_budget jsonb, p_roster_idempotency_key text, p_admissions jsonb",
+        proname: "launch_grok_read_only_research_v2_as_server",
       },
       {
         identity_arguments:
@@ -482,7 +519,7 @@ describe("SECURITY DEFINER functions", () => {
       {
         identity_arguments:
           "p_organization_id uuid, p_requested_by uuid, p_project_id uuid, p_session_id uuid, p_message_id uuid, p_idempotency_key text, p_expected_event_sequence bigint",
-        proname: "record_grok_specialist_roster_v1_as_server",
+        proname: "record_grok_specialist_roster_v2_as_server",
       },
       {
         identity_arguments:

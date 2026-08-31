@@ -244,6 +244,8 @@ export type GrokPlannerInput = Readonly<{
   prompt: string;
   project: GrokProjectContext;
   agents: readonly GrokConfiguredAgent[];
+  /** Canonical, secret-scanned, inert context evidence prepared server-side. */
+  contextSummary?: string;
   /** Optional explicit classification; it cannot lower policy-derived risk. */
   intent?: GrokIntentKind;
   requestedRisk?: RiskLevel;
@@ -476,6 +478,7 @@ const grokPlannerInputSchema = z.object({
   prompt: z.string().trim().min(1).max(4_000),
   project: grokProjectSchema,
   agents: z.array(grokAgentSchema).max(64),
+  contextSummary: z.string().trim().min(1).max(8_192).optional(),
   intent: z.enum(GROK_INTENT_KINDS).optional(),
   requestedRisk: z.enum(["GREEN", "YELLOW", "RED"]).optional(),
 }).strict();
@@ -1153,6 +1156,11 @@ export function buildGrokChiefOfStaffPlan(input: unknown): GrokPlannerResult {
   }
   const requirements: readonly GrokRequirement[] = Object.freeze([
     Object.freeze({ id: "requested_outcome", source: "user" as const, statement: value.prompt }),
+    ...(value.contextSummary ? [Object.freeze({
+      id: "bounded_context",
+      source: "user" as const,
+      statement: value.contextSummary,
+    })] : []),
     Object.freeze({
       id: "bound_project",
       source: "policy" as const,

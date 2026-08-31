@@ -277,7 +277,7 @@ describe("Phase 1C migration contract", { timeout: 120_000 }, () => {
     } finally {
       await db.close();
     }
-  }, 15_000);
+  });
 
   it("exposes only safe browser RPCs and service-role worker mutations", async () => {
     const db = await database();

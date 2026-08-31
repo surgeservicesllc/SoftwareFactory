@@ -65,7 +65,14 @@ function assertSafeWorkRoot(value: string) {
   const resolved = path.resolve(value);
   const root = path.parse(resolved).root;
   const home = path.resolve(homedir());
-  if (resolved === root || resolved === home || resolved === path.resolve(process.cwd())) {
+  if (
+    resolved === root
+    || resolved === home
+    // Runtime-only safety comparison. The worker root never selects a file to
+    // bundle, so tracing the whole application tree would be both unnecessary
+    // and harmful to the server-route deployment bundle.
+    || resolved === path.resolve(/* turbopackIgnore: true */ process.cwd())
+  ) {
     throw new WorkerConfigurationError(
       "SOFTWAREFACTORY_WORK_ROOT must be a dedicated child directory, not a filesystem, home, or repository root.",
     );

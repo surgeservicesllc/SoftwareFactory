@@ -1,0 +1,402 @@
+name: Grok record-only production acceptance
+
+# Manual, first-attempt-only acceptance of one harmless Grok BUILD goal. This
+# workflow records a planner-v3 session and paused graph, then proves through
+# immutable database evidence that no graph run, node run, agent run, provider
+# call, worker wake, merge, or deployment occurred. It never invokes Resume.
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type "record-grok-goal" to create one harmless record-only production session.'
+        required: true
+        default: ""
+        type: string
+      release_sha:
+        description: "Exact lowercase 40-character SoftwareFactory main SHA already green and READY in Production."
+        required: true
+        type: string
+      project_id:
+        description: "Exact active Factory project UUID owned by the fake journey account."
+        required: true
+        type: string
+      project_name:
+        description: "Exact displayed project name for that UUID."
+        required: true
+        type: string
+      repository:
+        description: "Exact owner/repository bound to the project."
+        required: true
+        type: string
+      default_branch:
+        description: "Exact default branch bound to the project."
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  checks: read
+  contents: read
+  deployments: read
+
+concurrency:
+  group: apply-hosted-migrations
+  cancel-in-progress: false
+
+jobs:
+  acceptance:
+    name: Signed-in planner-v3 record and reload
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      PROJECT_REF: qpuofpmagrmyamahqwxw
+      PRODUCTION_ORIGIN: https://www.theagoras.com
+      PRODUCTION_HEALTH_URL: https://www.theagoras.com/api/health
+      VERCEL_PROJECT_ID: prj_pAsrhftaVWI4SyaqstgRVSWHJkdD
+      FAKE_JOURNEY_ACCOUNT: jordan.seeker.prod1@example.org
+    steps:
+      - name: Authorize one exact record-only acceptance
+        env:
+          AUTHORIZED_ACTOR: ${{ vars.PRODUCTION_RELEASE_ACTOR }}
+          CONFIRM: ${{ inputs.confirm }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          PROJECT_ID: ${{ inputs.project_id }}
+          PROJECT_NAME: ${{ inputs.project_name }}
+          REPOSITORY: ${{ inputs.repository }}
+          DEFAULT_BRANCH: ${{ inputs.default_branch }}
+        run: |
+          set -euo pipefail
+          if [ "$CONFIRM" != "record-grok-goal" ]; then
+            echo "::error::The exact record-grok-goal confirmation is required."
+            exit 1
+          fi
+          if [ -z "$AUTHORIZED_ACTOR" ] \
+            || [ "$GITHUB_ACTOR" != "$AUTHORIZED_ACTOR" ] \
+            || [ "$GITHUB_TRIGGERING_ACTOR" != "$AUTHORIZED_ACTOR" ] \
+            || [ "$GITHUB_RUN_ATTEMPT" != "1" ]; then
+            echo "::error::This production record is first-attempt-only and restricted to the configured owner actor."
+            exit 1
+          fi
+          if [ "$GITHUB_REPOSITORY" != "surgeservicesllc/SoftwareFactory" ] \
+            || [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::This acceptance runs only from SoftwareFactory main."
+            exit 1
+          fi
+          node <<'NODE'
+          const values = {
+            release: process.env.RELEASE_SHA ?? "",
+            project: process.env.PROJECT_ID ?? "",
+            name: process.env.PROJECT_NAME ?? "",
+            repository: process.env.REPOSITORY ?? "",
+            branch: process.env.DEFAULT_BRANCH ?? "",
+          };
+          const singleLine = Object.values(values).every((value) => !/[\r\n]/.test(value));
+          const exact =
+            singleLine &&
+            /^[0-9a-f]{40}$/.test(values.release) &&
+            /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(values.project) &&
+            /^[A-Za-z0-9][A-Za-z0-9._ -]{0,159}$/.test(values.name) &&
+            /^[A-Za-z0-9_.-]{1,100}\/[A-Za-z0-9_.-]{1,100}$/.test(values.repository) &&
+            /^(?!.*\.\.)(?!.*[~^:?*\[\\])[A-Za-z0-9_./-]{1,255}$/.test(values.branch);
+          if (!exact) {
+            console.error("::error::Release, project, repository, or branch identity is malformed.");
+            process.exit(1);
+          }
+          NODE
+          GOAL="Build a harmless documentation-only record-only acceptance plan for run ${GITHUB_RUN_ID} at commit ${RELEASE_SHA:0:12}. Planning only; leave the repository unchanged."
+          echo "GROK_RECORD_ONLY_GOAL=$GOAL" >> "$GITHUB_ENV"
+
+      - name: Check out the exact release
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ inputs.release_sha }}
+          persist-credentials: false
+
+      - name: Verify exact green production and stopped execution workflows
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          PHASE1C_WORKER_ENABLED: ${{ vars.SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED }}
+          GRAPH_WORKER_ENABLED: ${{ vars.SOFTWAREFACTORY_GRAPH_WORKER_ENABLED }}
+          GRAPH_WORKER_SCHEDULED: ${{ vars.SOFTWAREFACTORY_GRAPH_WORKER_SCHEDULED }}
+          AUTH_BROKER_DISABLED: ${{ vars.SOFTWAREFACTORY_AUTH_BROKER_DISABLED }}
+        run: |
+          set -euo pipefail
+          SHA=$(git rev-parse HEAD)
+          if [ "$SHA" != "$RELEASE_SHA" ] || [ "$GITHUB_SHA" != "$SHA" ]; then
+            echo "::error::The checked-out, requested, and workflow SHA identities differ."
+            exit 1
+          fi
+          CURRENT_MAIN_SHA=$(curl --fail --silent --show-error \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/git/ref/heads/main" \
+            | jq -r '.object.sha // empty')
+          if [ "$CURRENT_MAIN_SHA" != "$SHA" ]; then
+            echo "::error::Current main moved away from the requested release."
+            exit 1
+          fi
+
+          CHECKS=$(curl --fail --silent --show-error \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/commits/${SHA}/check-runs?per_page=100")
+          for NAME in \
+            "Lint, typecheck, test, and build" \
+            "Browser and accessibility tests 1/3" \
+            "Browser and accessibility tests 2/3" \
+            "Browser and accessibility tests 3/3"; do
+            STATE=$(jq -r --arg name "$NAME" --arg sha "$SHA" '
+              [.check_runs[] | select(.name==$name and .head_sha==$sha and .app.slug=="github-actions")]
+              | sort_by(.completed_at // .started_at // "") | last
+              | if .==null then "missing|missing" else "\(.status)|\(.conclusion // "null")" end
+            ' <<<"$CHECKS")
+            if [ "$STATE" != "completed|success" ]; then
+              echo "::error::Exact-head check '$NAME' is not green ($STATE)."
+              exit 1
+            fi
+          done
+
+          DEPLOYMENT=$(curl --fail --silent --show-error \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/deployments?environment=Production&per_page=100" \
+            | jq -c '[.[] | select(.environment=="Production" and .task=="deploy" and .creator.login=="vercel[bot]")][0] // empty')
+          if [ -z "$DEPLOYMENT" ] \
+            || ! jq -e --arg sha "$SHA" '.sha==$sha and (.ref==$sha or .ref=="main")' <<<"$DEPLOYMENT" >/dev/null; then
+            echo "::error::Latest Vercel Production identity is not the exact checked-out SHA."
+            exit 1
+          fi
+          STATUS=$(curl --fail --silent --show-error \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "$(jq -r '.statuses_url' <<<"$DEPLOYMENT")?per_page=1")
+          if ! jq -e 'length==1 and .[0].state=="success" and .[0].creator.login=="vercel[bot]" and (.[0].environment_url | test("^https://softwarefactory-[a-z0-9]+-surgeservices-projects\\.vercel\\.app/?$"))' <<<"$STATUS" >/dev/null; then
+            echo "::error::Exact-SHA Vercel Production is not READY."
+            exit 1
+          fi
+          VERCEL_DEPLOYMENT_URL=$(jq -r '.[0].environment_url | rtrimstr("/")' <<<"$STATUS")
+          HEALTH=$(curl --fail --silent --show-error --max-time 20 --retry 2 "$PRODUCTION_HEALTH_URL")
+          if ! jq -e \
+            --arg sha "$SHA" \
+            --arg project "$PROJECT_REF" \
+            --arg deployment_url "$VERCEL_DEPLOYMENT_URL" \
+            --arg vercel_project "$VERCEL_PROJECT_ID" '
+              .status=="ok"
+              and .service=="SoftwareFactory"
+              and .database=="reachable"
+              and .databaseProject=="matched"
+              and .databaseProjectRef==$project
+              and .deployment=="matched"
+              and .deploymentUrl==$deployment_url
+              and .vercelProjectId==$vercel_project
+              and .release=="matched"
+              and .releaseSha==$sha
+              and .releaseRef=="main"
+            ' <<<"$HEALTH" >/dev/null; then
+            echo "::error::Production health does not match the exact Git, Vercel, and Supabase identities."
+            exit 1
+          fi
+
+          for WORKFLOW in graph-worker.yml codex-worker.yml claude-worker.yml auth-broker.yml graph-live-canary.yml handoff-canary.yml graph-artifact-containment.yml; do
+            ACTIVE=$(curl --fail --silent --show-error \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/workflows/${WORKFLOW}/runs?per_page=100" \
+              | jq '[.workflow_runs[] | select(.status != "completed")] | length')
+            if [ "$ACTIVE" != "0" ]; then
+              echo "::error::${WORKFLOW} has ${ACTIVE} active run(s)."
+              exit 1
+            fi
+          done
+          if [ "${PHASE1C_WORKER_ENABLED,,}" = "true" ] \
+            || [ "${GRAPH_WORKER_ENABLED,,}" = "true" ] \
+            || [ "${GRAPH_WORKER_SCHEDULED,,}" = "true" ] \
+            || [ "${AUTH_BROKER_DISABLED,,}" != "true" ]; then
+            echo "::error::A worker switch, schedule, or auth broker is outside stopped containment."
+            exit 1
+          fi
+
+      - name: Connect to the exact Supabase project
+        env:
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "$SUPABASE_DB_PASSWORD" ]; then
+            echo "::error::SUPABASE_DB_PASSWORD is required."
+            exit 1
+          fi
+          ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+          echo "::add-mask::$ENC"
+          for HOST in aws-0-us-west-2.pooler.supabase.com aws-1-us-west-2.pooler.supabase.com; do
+            URL="postgresql://postgres.${PROJECT_REF}:${ENC}@${HOST}:5432/postgres"
+            echo "::add-mask::$URL"
+            if psql "$URL" -v ON_ERROR_STOP=1 -X -Atqc \
+              "select current_database()='postgres' and current_user='postgres' and to_regnamespace('supabase_migrations') is not null" \
+              | grep -qx t; then
+              echo "DB_URL=$URL" >> "$GITHUB_ENV"
+              exit 0
+            fi
+          done
+          echo "::error::Could not connect to exact Supabase project ${PROJECT_REF}."
+          exit 1
+
+      - name: Verify exact fake account project prerequisites and stopped database state
+        env:
+          PROJECT_ID: ${{ inputs.project_id }}
+          PROJECT_NAME: ${{ inputs.project_name }}
+          REPOSITORY: ${{ inputs.repository }}
+          DEFAULT_BRANCH: ${{ inputs.default_branch }}
+        run: |
+          set -euo pipefail
+          RESULT=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atq \
+            -v account_email="$FAKE_JOURNEY_ACCOUNT" \
+            -v project_id="$PROJECT_ID" \
+            -v project_name="$PROJECT_NAME" \
+            -v repository="$REPOSITORY" \
+            -v default_branch="$DEFAULT_BRANCH" \
+            -f .github/grok-release/grok-record-only-acceptance-preflight.sql)
+          if [ "$RESULT" != "grok-record-only-preflight-ok" ]; then
+            echo "::error::The exact account/project/provider/model/readiness or stopped-state preflight failed."
+            exit 1
+          fi
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22.x
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Install Chromium
+        timeout-minutes: 14
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if timeout 240 npx playwright install --with-deps chromium; then
+              exit 0
+            fi
+            sudo killall -q apt-get apt dpkg 2>/dev/null || true
+            for i in $(seq 1 30); do
+              if ! sudo fuser /var/lib/dpkg/lock-frontend /var/lib/apt/lists/lock >/dev/null 2>&1; then
+                break
+              fi
+              sleep 2
+            done
+            sudo dpkg --configure -a 2>/dev/null || true
+          done
+          echo "::error::Chromium could not be installed after three bounded attempts."
+          exit 1
+
+      - name: Record and reload one harmless Grok goal
+        env:
+          GROK_RECORD_ONLY_E2E: "1"
+          GROK_RECORD_ONLY_E2E_PASSWORD: ${{ secrets.GROK_RECORD_ONLY_E2E_PASSWORD }}
+          GROK_RECORD_ONLY_E2E_PROJECT_ID: ${{ inputs.project_id }}
+          GROK_RECORD_ONLY_E2E_PROJECT_NAME: ${{ inputs.project_name }}
+          GROK_RECORD_ONLY_E2E_RELEASE_SHA: ${{ inputs.release_sha }}
+          GROK_RECORD_ONLY_EVIDENCE_PATH: test-results/grok-record-only-acceptance.json
+          PLAYWRIGHT_BASE_URL: https://www.theagoras.com
+          PLAYWRIGHT_HARNESS_URL: https://www.theagoras.com
+        run: |
+          set -euo pipefail
+          if [ -z "$GROK_RECORD_ONLY_E2E_PASSWORD" ]; then
+            echo "::error::GROK_RECORD_ONLY_E2E_PASSWORD is required for the exact fake account."
+            exit 1
+          fi
+          export GROK_RECORD_ONLY_E2E_GOAL="$GROK_RECORD_ONLY_GOAL"
+          npx playwright test tests/e2e/grok-record-only-production.spec.ts \
+            --project=desktop-chromium --reporter=line
+
+      - name: Read the bounded browser evidence identity
+        id: browser_evidence
+        env:
+          PROJECT_ID: ${{ inputs.project_id }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          set -euo pipefail
+          FILE=test-results/grok-record-only-acceptance.json
+          if ! jq -e \
+            --arg project "$PROJECT_ID" \
+            --arg release "$RELEASE_SHA" '
+              .schemaVersion==1
+              and .account=="jordan.seeker.prod1@example.org"
+              and .projectId==$project
+              and .releaseSha==$release
+              and .workerWoken==false
+              and .executionStarted==false
+              and (.sessionId | test("^[0-9a-f-]{36}$"))
+              and (.graphId | test("^[0-9a-f-]{36}$"))
+              and (.returnPath | startswith("/solutions/factory/grok?"))
+            ' "$FILE" >/dev/null; then
+            echo "::error::The browser did not produce one exact bounded acceptance identity."
+            exit 1
+          fi
+          echo "session_id=$(jq -r '.sessionId' "$FILE")" >> "$GITHUB_OUTPUT"
+          echo "graph_id=$(jq -r '.graphId' "$FILE")" >> "$GITHUB_OUTPUT"
+
+      - name: Verify planner-v3 roster route reload and zero execution in Supabase
+        env:
+          PROJECT_ID: ${{ inputs.project_id }}
+          PROJECT_NAME: ${{ inputs.project_name }}
+          SESSION_ID: ${{ steps.browser_evidence.outputs.session_id }}
+          GRAPH_ID: ${{ steps.browser_evidence.outputs.graph_id }}
+        run: |
+          set -euo pipefail
+          RESULT=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atq \
+            -v account_email="$FAKE_JOURNEY_ACCOUNT" \
+            -v project_id="$PROJECT_ID" \
+            -v project_name="$PROJECT_NAME" \
+            -v goal="$GROK_RECORD_ONLY_GOAL" \
+            -v session_id="$SESSION_ID" \
+            -v graph_id="$GRAPH_ID" \
+            -f .github/grok-release/grok-record-only-acceptance-postflight.sql)
+          if [ "$RESULT" != "grok-record-only-postflight-ok" ]; then
+            echo "::error::Planner-v3 durable evidence, route identity, or zero-execution postflight failed."
+            exit 1
+          fi
+
+      - name: Reverify exact main health and stopped execution workflows
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          set -euo pipefail
+          CURRENT_MAIN_SHA=$(curl --fail --silent --show-error \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/git/ref/heads/main" \
+            | jq -r '.object.sha // empty')
+          if [ "$CURRENT_MAIN_SHA" != "$RELEASE_SHA" ]; then
+            echo "::error::Main moved during the acceptance window."
+            exit 1
+          fi
+          HEALTH=$(curl --fail --silent --show-error --max-time 20 --retry 2 "$PRODUCTION_HEALTH_URL")
+          if ! jq -e --arg sha "$RELEASE_SHA" --arg project "$PROJECT_REF" \
+            '.status=="ok" and .releaseSha==$sha and .releaseRef=="main" and .databaseProjectRef==$project' \
+            <<<"$HEALTH" >/dev/null; then
+            echo "::error::Production health identity changed during the acceptance window."
+            exit 1
+          fi
+          for WORKFLOW in graph-worker.yml codex-worker.yml claude-worker.yml auth-broker.yml graph-live-canary.yml handoff-canary.yml graph-artifact-containment.yml; do
+            ACTIVE=$(curl --fail --silent --show-error \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/workflows/${WORKFLOW}/runs?per_page=100" \
+              | jq '[.workflow_runs[] | select(.status != "completed")] | length')
+            if [ "$ACTIVE" != "0" ]; then
+              echo "::error::${WORKFLOW} became active during acceptance."
+              exit 1
+            fi
+          done
+          echo "::notice::The exact signed-in Grok goal survived return/reload with planner-v3 roster and route evidence; execution remained zero."

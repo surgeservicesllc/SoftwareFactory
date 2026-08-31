@@ -32,6 +32,7 @@ let worker = "";
 let graphWorker = "";
 let graphWorkerScript = "";
 let releaseLineageMigration = "";
+let exactWorkspaceMigration = "";
 let releasePolicy: { requiredChecks: string[] };
 
 beforeAll(async () => {
@@ -41,6 +42,10 @@ beforeAll(async () => {
   graphWorkerScript = await readFile(resolve(repositoryRoot, "scripts/graph-worker.mts"), "utf8");
   releaseLineageMigration = await readFile(
     resolve(repositoryRoot, "supabase/migrations/20260827000200_graph_phase1c_release_lineage.sql"),
+    "utf8",
+  );
+  exactWorkspaceMigration = await readFile(
+    resolve(repositoryRoot, "supabase/migrations/20260831002000_exact_graph_repository_workspace.sql"),
     "utf8",
   );
   releasePolicy = JSON.parse(
@@ -119,16 +124,11 @@ describe("required check wiring", () => {
   });
 
   it("keeps the graph worker's TEST-anchor verdict on the same names", () => {
-    // The TEST anchor reads these names as "the verdict" for its commit. A
-    // renamed CI job would make the anchor wait forever on a check that never
-    // reports; a missing entry would let a required check fail unnoticed. The
-    // graph worker's job env is intentionally the third copy of this contract,
-    // guarded here exactly like the first two.
-    const produced = ciJobNames(ci);
-    const anchored = requiredChecks(graphWorker);
-
-    expect(anchored.length).toBeGreaterThan(0);
-    expect([...anchored].sort()).toEqual([...produced].sort());
+    // Protocol v4 resolves the policy from the graph's immutable database
+    // target. The workflow must not override that target with ambient text.
+    expect(requiredChecks(graphWorker)).toEqual([]);
+    expect(graphWorker).not.toContain("SOFTWAREFACTORY_REQUIRED_CHECKS:");
+    expect(graphWorkerScript).toContain("target.required_check_names");
   });
 
   it("flows the repository-owned four-check policy through launch and exact claim", () => {
@@ -141,7 +141,7 @@ describe("required check wiring", () => {
 
     expect(releasePolicy.requiredChecks).toEqual(expected);
     expect(requiredChecks(worker)).toEqual(expected);
-    expect(requiredChecks(graphWorker)).toEqual(expected);
+    expect(requiredChecks(graphWorker)).toEqual([]);
     expect(releaseLineageMigration).toMatch(
       /create or replace function public\.create_graph_from_plan_with_release_identity_as_server\([\s\S]*?p_required_check_names jsonb[\s\S]*?required_check_names_value := p_required_check_names/i,
     );
@@ -154,6 +154,12 @@ describe("required check wiring", () => {
     expect(releaseLineageMigration).toMatch(
       /char_length\(check_name #>> '\{\}'\) not between 1 and 160[\s\S]*?strpos\(check_name #>> '\{\}', '\|'\) > 0/i,
     );
+    expect(exactWorkspaceMigration).toMatch(
+      /resolve_graph_execution_target_as_worker[\s\S]*?'required_check_names', graph\.required_check_names[\s\S]*?'required_checks_sha256', graph\.required_checks_sha256/i,
+    );
+    expect(exactWorkspaceMigration).toMatch(
+      /claim_planned_graph_by_target_v4[\s\S]*?v_target -> 'required_check_names'/i,
+    );
   });
 
   it("never substitutes the graph-worker checkout for produced-change lineage", () => {
@@ -165,14 +171,14 @@ describe("required check wiring", () => {
     expect(graphWorkerScript).not.toMatch(/productionUrl:\s*process\.env\./);
     expect(graphWorker).not.toMatch(/^\s+SOFTWAREFACTORY_(?:PRODUCED_CHANGE|MERGE_COMMIT)_SHA:.*github\.sha/m);
     expect(graphWorker).not.toContain("SOFTWAREFACTORY_PRODUCTION_URL");
-    expect(graphWorker).toMatch(/^\s+pull-requests:\s*read/m);
-    expect(graphWorker).toMatch(/^\s+deployments:\s*read/m);
+    expect(graphWorker).toMatch(/permissions:\s*\r?\n\s+contents:\s*read/m);
+    expect(graphWorker).not.toMatch(/^\s+(?:pull-requests|deployments):/m);
     expect(graphWorker).not.toMatch(/^\s+[a-z_]+:\s*write\s*$/m);
   });
 
   it("contains unusable claims with bounded canned abort evidence", () => {
     expect(graphWorkerScript).toContain("CLAIM_ABORT_DETAIL.invalidProjection");
-    expect(graphWorkerScript).toContain("CLAIM_ABORT_DETAIL.repositoryMismatch");
+    expect(graphWorkerScript).toContain("CLAIM_ABORT_DETAIL.targetMismatch");
     expect(graphWorkerScript).toContain("CLAIM_ABORT_DETAIL.compileFailure");
     expect(graphWorkerScript).not.toMatch(/abortRun\([^)]*(?:parsed|compiled)\.detail/);
     expect(graphWorkerScript).not.toMatch(/abortRun\([^)]*mismatch/);
@@ -182,10 +188,13 @@ describe("required check wiring", () => {
     expect(graphWorker).toMatch(
       /SOFTWAREFACTORY_TARGET_GRAPH_ID:\s*\$\{\{ github\.event\.client_payload\.graph_id \|\| inputs\.graph_id \|\| '' \}\}/,
     );
-    expect(graphWorker).toContain("SOFTWAREFACTORY_TARGET_CLAIM_REQUIRED:");
-    expect(graphWorkerScript).toContain('optionalUuidEnv("SOFTWAREFACTORY_TARGET_GRAPH_ID")');
-    expect(graphWorkerScript).toMatch(/SupabaseGraphStore\.create\([\s\S]*?targetGraphId/);
-    expect(graphWorkerScript).toContain("An exact-target graph dispatch must use --once, not --drain.");
+    expect(graphWorker).not.toContain("SOFTWAREFACTORY_TARGET_CLAIM_REQUIRED:");
+    expect(graphWorkerScript).toContain('requiredUuidEnv("SOFTWAREFACTORY_TARGET_GRAPH_ID")');
+    expect(graphWorkerScript).toMatch(/SupabaseGraphTargetResolver\.create\([\s\S]*?\.resolve\(targetGraphId\)/);
+    expect(graphWorkerScript).toMatch(/SupabaseGraphStore\.create\([\s\S]*?exactTarget:\s*target/);
+    expect(graphWorkerScript).toContain("The graph worker accepts only an exact-target --once invocation.");
+    expect(graphWorkerScript).not.toContain("process.cwd()");
+    expect(graphWorkerScript).not.toContain("GITHUB_REPOSITORY");
   });
 
   it("preloads exactly the validation image the validator demands", async () => {

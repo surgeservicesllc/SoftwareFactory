@@ -16,9 +16,12 @@ const graphWorkflow = readFileSync(
 describe("Phase 1C durable worker workflow", () => {
   it("keeps every graph-worker trigger behind one exact global activation gate", () => {
     expect(graphWorkflow).toContain(
-      "if: ${{ vars.SOFTWAREFACTORY_GRAPH_WORKER_ENABLED == 'true' && (github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main') && (github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch' || vars.SOFTWAREFACTORY_GRAPH_WORKER_SCHEDULED == 'true') }}",
+      "if: ${{ vars.SOFTWAREFACTORY_GRAPH_WORKER_ENABLED == 'true' && github.event_name != 'schedule' && (github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main') && (github.event.client_payload.graph_id != '' || inputs.graph_id != '') }}",
     );
     expect(graphWorkflow).toContain('SOFTWAREFACTORY_GRAPH_WORKER_ENABLED: "true"');
+    expect(graphWorkflow).toContain("SOFTWAREFACTORY_GRAPH_WORK_ROOT: ${{ runner.temp }}/softwarefactory-graph-worker");
+    expect(graphWorkflow).toContain("npx tsx scripts/graph-worker.mts --once");
+    expect(graphWorkflow).not.toContain("SOFTWAREFACTORY_GRAPH_WORKER_SCHEDULED");
   });
   it("runs from dispatch, the scheduled recovery wake-up, or main-guarded manual dispatch", () => {
     expect(workflow).toContain("repository_dispatch:");

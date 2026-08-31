@@ -35,6 +35,7 @@ afterEach(() => {
 beforeEach(() => {
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://example.supabase.co");
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", "sb_publishable_test_value");
+  window.history.replaceState(null, "", "/solutions/runs");
 });
 
 describe("runStatusLabel", () => {
@@ -60,6 +61,22 @@ describe("runStatusLabel", () => {
 });
 
 describe("RunsConsole", () => {
+  it("opens the exact Phase 1C agent run named by the query string", async () => {
+    window.history.replaceState(null, "", "/solutions/runs?runId=run-1");
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/runs") return jsonResponse({ runs: [succeededRun] });
+      if (url === "/api/runs/run-1") return jsonResponse({ run: succeededRun });
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<RunsConsole />);
+
+    expect(await screen.findByRole("heading", { name: "Run evidence" })).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith("/api/runs/run-1", { cache: "no-store" });
+  });
+
   it("shows the plain-language status on the run list, not the raw enum", async () => {
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
       if (String(input) === "/api/runs") return jsonResponse({ runs: [succeededRun] });

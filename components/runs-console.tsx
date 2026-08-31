@@ -2,7 +2,7 @@
 
 import { AlertTriangle, Archive, Ban, CheckCircle2, CircleDotDashed, GitBranch, Loader2, RotateCcw, Save, Trash2 } from "lucide-react";
 import Link from "next/link";
-import { Children, useState } from "react";
+import { Children, useCallback, useEffect, useRef, useState } from "react";
 
 import {
   ControlPlaneDetail,
@@ -193,6 +193,7 @@ export function RunsConsole() {
     "Runs could not be loaded.",
   );
   const detail = useControlPlaneDetail<RunDetail>("runs", "run");
+  const openRunDetail = detail.open;
   const [cancelState, setCancelState] = useState<"idle" | "pending" | "error">("idle");
   const [cancelMessage, setCancelMessage] = useState("");
   const [retryState, setRetryState] = useState<"idle" | "pending" | "error">("idle");
@@ -222,7 +223,7 @@ export function RunsConsole() {
   const [rowDetach, setRowDetach] = useState(false);
   const [detachEvidence, setDetachEvidence] = useState(false);
 
-  function openRun(runId: string) {
+  const openRun = useCallback((runId: string) => {
     setCancelState("idle");
     setCancelMessage("");
     setRetryState("idle");
@@ -235,8 +236,16 @@ export function RunsConsole() {
     setDeleteReason("");
     // Destructive options never carry over from the last run that was open.
     setDetachEvidence(false);
-    void detail.open(runId);
-  }
+    void openRunDetail(runId);
+  }, [openRunDetail]);
+
+  const openedQueryRun = useRef<string | null>(null);
+  useEffect(() => {
+    const runId = new URLSearchParams(window.location.search).get("runId")?.trim();
+    if (!runId || openedQueryRun.current === runId) return;
+    openedQueryRun.current = runId;
+    openRun(runId);
+  }, [openRun]);
 
   async function requestCancellation(runId: string) {
     setCancelState("pending");

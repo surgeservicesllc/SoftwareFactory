@@ -14,6 +14,7 @@ import {
 } from "@/lib/worker/types";
 import { SoftwareFactoryWorker } from "@/lib/worker/worker";
 import { WorkspaceError, type PreparedWorkspace } from "@/lib/worker/workspace";
+import { grokClaimContextFixture } from "../support/grok-claim-context";
 
 const temporaryPaths: string[] = [];
 
@@ -575,6 +576,7 @@ describe("SoftwareFactoryWorker lifecycle", () => {
         ai_account_id: "20000000-0000-4000-8000-000000000003",
         admission_sha256: "b".repeat(64),
       },
+      initialContext: grokClaimContextFixture(),
     });
     const store = storeFor(claimed);
     const createSession = vi.fn();

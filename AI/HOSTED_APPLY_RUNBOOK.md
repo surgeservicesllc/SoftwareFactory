@@ -3,6 +3,114 @@
 Written 2026-08-14, after verifying the whole chain on a real PostgreSQL 16 cluster.
 Rebased 2026-08-16 on an owner-measured hosted position (see the section directly below).
 
+## Grok runtime 018-021 next-only chain (ADR-241, repository-only)
+
+Use only `.github/workflows/grok-runtime-release-chain-migrations.yml` for this
+combined forward tail. Its committed canonical-LF manifest is:
+
+- `20260831001800_grok_deploy_readiness_runtime.sql` — SHA-256
+  `7c401a943833bc2fd7fc505cf3692012077180a3198f00ec9760b3a46dcc4444`,
+  41,937 bytes;
+- `20260831001900_grok_admission_version_null_fence.sql` — SHA-256
+  `a0dd4da859e5ed6cb65342f2e5b3962c07d672346bd06685052c6446e99c5221`,
+  8,404 bytes;
+- `20260831002000_exact_graph_repository_workspace.sql` — SHA-256
+  `6bdcbdaa5a0b6f512a53ed72c513da02ce2d8042d28157e70f497a6ded4f3057`,
+  19,411 bytes;
+- `20260831002100_grok_initial_wake_receipts.sql` — SHA-256
+  `838f300d25c6a44f6632ed883010066524da229e165598968c7cdd7dab583b16`,
+  37,089 bytes.
+
+The previously proposed 018 SHA beginning `ca6a5d4b` is stale and must fail;
+it is not the committed LF blob. Choose one reviewed lowercase 40-character
+`surgeservicesllc/SoftwareFactory` current-main SHA and keep it unchanged
+through fresh runs. The lane requires four exact-head green jobs, the exact
+READY Vercel Production identity and matching public health/project
+`qpuofpmagrmyamahqwxw`, configured actor on attempt one, stopped execution and
+auth workflows, workers and schedules OFF, auth broker disabled, autonomy and
+automatic actions OFF, the global kill switch ON, zero running/guarded work,
+and an unchanged digest of every ledger row outside this four-file chain.
+
+Dispatch fresh manual runs in this exact order, stopping after any mismatch:
+
+1. `operation=probe`, `confirm=probe-grok-runtime-release-chain` — prove the
+   measured valid prefix and rehearse only its next absent file under rollback.
+2. `operation=apply-one`, `confirm=apply-one-grok-runtime-release-chain` —
+   repeat the proof and persist only that next file plus its ledger row in one
+   locked transaction.
+3. Repeat a fresh probe followed by a fresh apply-one until 018, 019, 020, and
+   021 are each recorded exactly once. Never rerun a recorded member.
+4. `operation=verify`, `confirm=verify-grok-runtime-release-chain` — require
+   the complete four-row prefix and verify without replaying DDL.
+
+When 019 is next or present, this coordinator executes the unchanged dedicated
+019 preflight and native rollback-only postflight; the standalone 019 lane is
+retained as evidence but must not become a second mutation path for this tail.
+The standalone 017 verifier runs only before 019 because its exact contract
+requires the old v1 service grant; after 019 the coordinator's native
+predecessor fingerprint requires those same 017 bodies with the v1 endpoint
+revoked.
+
+Require exact function bodies/signatures/security/search-path/ACLs, forced RLS,
+policies, constraints, indexes, immutable audit triggers, runtime adverse and
+replay proofs, linked lint where available, health, and stopped containment.
+Never use `db push`, reset, ledger repair, down migration, replay, automatic
+dispatch, or concurrent release activity. This manifest currently stops at
+021 and rejects every later ledger row; extend it only with a separately
+reviewed forward migration and its own canonical-LF identity.
+
+## Grok admission-version null fence (ADR-237, repository-only)
+
+Use only `.github/workflows/grok-admission-version-null-fence-migration.yml`
+for `20260831001900_grok_admission_version_null_fence.sql`, canonical-LF
+SHA-256
+`a0dd4da859e5ed6cb65342f2e5b3962c07d672346bd06685052c6446e99c5221`
+and exactly 8,404 bytes. Never apply it through a broad migration command,
+reset, history repair, replay, down migration, or automatic dispatch.
+
+Run a fresh manual `probe`, then `apply`, then `verify` against one unchanged
+reviewed lowercase 40-character current-main release. Supply the exact
+operation confirmation and migration hash each time. The lane requires 00100
+through 01700 exactly once, no later row before apply, an unchanged digest of
+every row other than 019, all four exact-head jobs green, exact READY Vercel
+Production and public health/Supabase identity, configured first-attempt actor,
+all execution/auth workflows stopped, worker/schedule switches OFF, auth broker
+disabled, autonomy and nine automatic actions OFF, kill switches ON, and zero
+running graph/agent/Phase1C-guard state.
+
+Probe must stage only the LF-normalized 019 bytes, rehearse DDL plus a temporary
+ledger row, lint all three new wrappers, execute native catalog/ACL and adverse
+runtime evidence, and roll back without residue. Apply repeats those proofs,
+then persists only 019 and its ledger row in one locked transaction and reloads
+PostgREST. Verify must prove the six exact old/new definitions and ABI,
+SECURITY DEFINER, `search_path=pg_catalog`, old v1/v3 service revocation, new
+v2/v4 service-only grants, null/missing/wrong rejection with zero residue,
+valid/replay behavior, linked lint, health, and unchanged stopped safety.
+Stop on any mismatch and contain only through a separately reviewed forward
+change. Applying 019 alone is not signed-in or provider execution acceptance.
+
+## Grok Phase 1C exact graph re-wake (ADR-233, repository-only)
+
+Use only `.github/workflows/grok-graph-rewake-migration.yml` for
+`20260831001600_grok_phase1c_graph_rewake.sql`, canonical-LF SHA-256
+`04e0bc9115c30f179bcac89fac512fe30c9b0c1bc4a5271166e755fd47fbf76e`.
+The lane is manual, first-attempt/actor restricted, serialized with every
+hosted migration, and accepts only `probe`, `apply`, or `verify` with its exact
+operation confirmation, release SHA, and migration hash.
+
+Require 00100-01500 exactly once, an unchanged digest of every unrelated
+ledger row, exact green current-main/READY Vercel/health/Supabase identity, no
+active execution/auth workflow, worker and schedule variables OFF, auth broker
+disabled, autonomy/actions OFF, kill switches ON, no running graph/agent work,
+and no submission guard. `probe` stages only canonical 016, rehearses the file,
+temporary ledger row, postflight, and linked lint under rollback. `apply`
+repeats those proofs then persists only 016 plus its ledger row in one locked
+transaction and reloads PostgREST. `verify` does not replay DDL; it verifies
+ledger, exact tables/RLS/policies/constraints/triggers/functions/ACLs,
+disabled-worker failure, zero evidence mutation, linked lint, health, and
+stopped containment. Never use broad push, reset, repair, down, or automatic
+dispatch as containment; stop for a new forward migration on any mismatch.
+
 ## Grok claim and specialist admission completion tail (ADR-219, repository-only)
 
 Use only `.github/workflows/grok-bot-completion-migrations.yml` for these two
@@ -389,7 +497,7 @@ the measured list, not today's total outstanding migration count. Later exact ev
 forward candidates.
 Do not add any of them to the 19-row measurement or
 infer a new overall missing count without another complete ledger probe. As of this release,
-the repository total is 220 migration files after integration with current `origin/main`. Those two numbers do not stand in a prefix relationship, and the reason
+the repository total is 228 migration files after integration with the current repository candidate. Those two numbers do not stand in a prefix relationship, and the reason
 matters: the
 hosted ledger is **not a contiguous prefix** of the local files. It has gaps in the middle and
 rows well past them. Any sentence of the form "everything after `X` is outstanding" is therefore

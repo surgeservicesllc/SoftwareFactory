@@ -47,6 +47,7 @@ const routes = [
 const grokProject = {
   id: "11111111-1111-4111-8111-111111111111",
   name: "Software Factory",
+  connectionStatus: "connected",
 };
 const grokSession = {
   id: "22222222-2222-4222-8222-222222222222",
@@ -72,9 +73,12 @@ for (const { path, heading } of routes) {
         contentType: "application/json",
         body: JSON.stringify({ projects: [grokProject] }),
       }));
-      await page.route("**/api/grok/sessions", (route) => route.fulfill({
+      // Session history is cursor-paged, so the initial request carries a
+      // query string. Match only the collection endpoint (never /:sessionId)
+      // while allowing those pagination parameters.
+      await page.route(/\/api\/grok\/sessions(?:\?.*)?$/, (route) => route.fulfill({
         contentType: "application/json",
-        body: JSON.stringify({ sessions: [grokSession] }),
+        body: JSON.stringify({ sessions: [grokSession], nextCursor: null }),
       }));
       await page.route("**/api/grok/sessions/*", (route) => route.fulfill({
         contentType: "application/json",

@@ -8,7 +8,7 @@ const harness = vi.hoisted(() => ({
   origin: vi.fn(), json: vi.fn(), tenant: vi.fn(), sensitive: vi.fn(),
   readBundle: vi.fn(), readProject: vi.fn(), mapDetail: vi.fn(),
   applyControl: vi.fn(),
-  dispatchGraphWorker: vi.fn(), rpc: vi.fn(), graphRead: vi.fn(),
+  dispatchGraphWorker: vi.fn(), recordWake: vi.fn(), rpc: vi.fn(), graphRead: vi.fn(),
 }));
 
 vi.mock("@/lib/supabase/request", () => ({ assertSameOriginRequest: harness.origin }));
@@ -16,6 +16,9 @@ vi.mock("@/lib/supabase/tenant", () => ({ requireActiveOrganization: harness.ten
 vi.mock("@/lib/security/sensitive-data", () => ({ findSensitiveData: harness.sensitive }));
 vi.mock("@/lib/orchestration/dispatch", () => ({
   dispatchGraphWorker: harness.dispatchGraphWorker,
+}));
+vi.mock("@/lib/grok/wake-dispatch", () => ({
+  recordGrokWakeDispatch: harness.recordWake,
 }));
 vi.mock("@/lib/server/http", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/server/http")>();
@@ -46,6 +49,8 @@ const projectId = "20000000-0000-4000-8000-000000000002";
 const sessionId = "30000000-0000-4000-8000-000000000003";
 const graphId = "40000000-0000-4000-8000-000000000004";
 const intentId = "50000000-0000-4000-8000-000000000005";
+const wakeIntentId = "60000000-0000-4000-8000-000000000006";
+const controlRevision = 11;
 const target = {
   app_id: 4582606,
   base_branch: "main",
@@ -129,8 +134,14 @@ describe("Grok session control route", () => {
       state: "applied",
       idempotency_key: input.idempotencyKey,
       replayed: false,
+      wake_intent_id: input.action === "resume" ? wakeIntentId : null,
+      control_revision: input.action === "resume" ? controlRevision : null,
     }));
     harness.dispatchGraphWorker.mockResolvedValue({ dispatched: true, reason: "dispatched" });
+    harness.recordWake.mockResolvedValue({
+      wake_intent_id: wakeIntentId,
+      control_revision: controlRevision,
+    });
   });
 
   it("returns the full reloadable session contract after applying a control", async () => {
@@ -146,6 +157,8 @@ describe("Grok session control route", () => {
       messages: [], tasks: [], events: [], artifacts: [],
       control: { intentId, action: "pause", state: "applied" },
       replayed: false,
+      dispatchAccepted: false,
+      workerAcknowledged: false,
       workerWoken: false,
     });
     expect(harness.readBundle).toHaveBeenCalledTimes(2);
@@ -160,7 +173,7 @@ describe("Grok session control route", () => {
     expect(harness.dispatchGraphWorker).not.toHaveBeenCalled();
   });
 
-  it("wakes the exact target only after a fresh resume is durably applied", async () => {
+  it("records dispatch acceptance without claiming worker wake after a fresh resume", async () => {
     harness.json.mockResolvedValue({
       action: "resume", reason: "Resume after reviewing evidence.", idempotencyKey: "control-key-123",
     });
@@ -177,10 +190,14 @@ describe("Grok session control route", () => {
 
     expect(response.status).toBe(200);
     expect(body).toMatchObject({
-      control: { intentId, action: "resume", state: "applied" },
+      control: {
+        intentId, action: "resume", state: "applied", wakeIntentId, controlRevision,
+      },
       replayed: false,
-      workerWoken: true,
-      note: expect.stringMatching(/exact graph worker wake was accepted/i),
+      dispatchAccepted: true,
+      workerAcknowledged: false,
+      workerWoken: false,
+      note: expect.stringMatching(/not marked woken until it claims/i),
     });
     expect(harness.applyControl).toHaveBeenCalledBefore(harness.dispatchGraphWorker);
     expect(harness.dispatchGraphWorker).toHaveBeenCalledWith({
@@ -188,7 +205,56 @@ describe("Grok session control route", () => {
       externalInstallationId: target.external_installation_id,
       externalRepositoryId: target.external_repository_id,
       repositoryFullName: target.repository_full_name,
-    }, graphId);
+    }, graphId, { wakeIntentId, controlRevision });
+    expect(harness.recordWake).toHaveBeenCalledWith(expect.objectContaining({
+      wakeIntentId,
+      controlRevision,
+      graphId,
+      sessionId,
+      outcome: "accepted",
+      failureCode: null,
+    }));
+  });
+
+  it("reports worker wake only when the reloaded durable receipt matches the Resume", async () => {
+    harness.json.mockResolvedValue({
+      action: "resume", reason: "Resume after reviewing evidence.", idempotencyKey: "control-key-123",
+    });
+    const paused = {
+      ...detail,
+      session: { ...detail.session, status: "paused", allowedActions: ["resume", "stop"] },
+    };
+    harness.mapDetail
+      .mockResolvedValueOnce(paused)
+      .mockResolvedValueOnce({
+        ...detail,
+        wakeEvidence: {
+          wakeIntentId,
+          controlRevision,
+          dispatchAccepted: true,
+          dispatchRecordedAt: "2026-08-31T12:00:00.000Z",
+          workerAcknowledged: true,
+          workerWoken: true,
+          workerId: "graph-worker-101-1",
+          protocolVersion: 1,
+          capabilityVersion: 1,
+          acknowledgedAt: "2026-08-31T12:00:01.000Z",
+        },
+      });
+
+    const response = await POST(new Request(
+      `https://factory.example/api/grok/sessions/${sessionId}/control`,
+      { method: "POST", headers: { origin: "https://factory.example" }, body: "{}" },
+    ), { params: Promise.resolve({ sessionId }) });
+    const body = await response.json();
+
+    expect(body).toMatchObject({
+      dispatchAccepted: true,
+      workerAcknowledged: true,
+      workerWoken: true,
+      wakeEvidence: { wakeIntentId, controlRevision, workerAcknowledged: true },
+      note: expect.stringMatching(/durable matching receipt/i),
+    });
   });
 
   it("retries an exact applied wake even when the bounded bundle omits that key", async () => {
@@ -209,6 +275,7 @@ describe("Grok session control route", () => {
       intent_id: intentId, organization_id: organizationId, project_id: projectId,
       session_id: sessionId, graph_id: graphId, action: input.action,
       state: "applied", idempotency_key: input.idempotencyKey, replayed: true,
+      wake_intent_id: wakeIntentId, control_revision: controlRevision,
     }));
 
     const response = await POST(new Request(
@@ -219,10 +286,14 @@ describe("Grok session control route", () => {
 
     expect(body).toMatchObject({
       replayed: true,
-      workerWoken: true,
-      note: expect.stringMatching(/accepted again for recovery/i),
+      dispatchAccepted: true,
+      workerAcknowledged: false,
+      workerWoken: false,
+      note: expect.stringMatching(/accepted another exact recovery dispatch/i),
     });
-    expect(harness.dispatchGraphWorker).toHaveBeenCalledWith(expect.any(Object), graphId);
+    expect(harness.dispatchGraphWorker).toHaveBeenCalledWith(
+      expect.any(Object), graphId, { wakeIntentId, controlRevision },
+    );
     expect(harness.readBundle).toHaveBeenCalledTimes(2);
     expect(harness.applyControl).toHaveBeenCalledWith(expect.anything(), {
       organizationId,
@@ -290,6 +361,7 @@ describe("Grok session control route", () => {
       intent_id: intentId, organization_id: organizationId, project_id: projectId,
       session_id: sessionId, graph_id: graphId, action: input.action,
       state: "applied", idempotency_key: input.idempotencyKey, replayed: true,
+      wake_intent_id: wakeIntentId, control_revision: controlRevision,
     }));
 
     const response = await POST(new Request(
@@ -299,7 +371,9 @@ describe("Grok session control route", () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(body).toMatchObject({ replayed: true, workerWoken: true });
+    expect(body).toMatchObject({
+      replayed: true, dispatchAccepted: true, workerAcknowledged: false, workerWoken: false,
+    });
     expect(harness.applyControl).toHaveBeenCalledBefore(harness.dispatchGraphWorker);
     expect(harness.rpc).not.toHaveBeenCalledWith("set_graph_pause_as_member_v2", expect.anything());
   });
@@ -472,6 +546,7 @@ describe("Grok session control route", () => {
       intent_id: intentId, organization_id: organizationId, project_id: projectId,
       session_id: sessionId, graph_id: graphId, action: input.action,
       state: "applied", idempotency_key: input.idempotencyKey, replayed: true,
+      wake_intent_id: wakeIntentId, control_revision: controlRevision,
     }));
     harness.graphRead.mockResolvedValue({
       data: {

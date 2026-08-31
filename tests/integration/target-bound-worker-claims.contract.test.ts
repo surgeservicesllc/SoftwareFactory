@@ -121,7 +121,7 @@ describe("target-bound worker claim contract", () => {
 
   it("routes target-bearing stores through the target-bound RPCs", () => {
     expect(graphStore).toMatch(
-      /this\.targetGraphId[\s\S]*?claim_planned_graph_by_id_v3[\s\S]*?p_target_graph_id: this\.targetGraphId/,
+      /this\.exactTarget[\s\S]*?claim_planned_graph_by_target_v4[\s\S]*?p_expected_target: graphExecutionTargetClaim\(this\.exactTarget\)/,
     );
     expect(phaseStore).toMatch(
       /this\.targetCommandId[\s\S]*?claim_phase1c_run_by_command_v3[\s\S]*?p_target_command_id: this\.targetCommandId/,
@@ -130,8 +130,10 @@ describe("target-bound worker claim contract", () => {
 
   it("requires dispatch/manual targets while leaving disabled schedules unchanged", () => {
     expect(graphWorkflow).toMatch(/workflow_dispatch:[\s\S]*?graph_id:[\s\S]*?required: true/);
-    expect(graphWorkflow).toContain("github.event_name == 'schedule' && '--drain' || '--once'");
-    expect(graphWorkflow).toContain("SOFTWAREFACTORY_GRAPH_WORKER_SCHEDULED == 'true'");
+    expect(graphWorkflow).toContain("github.event_name != 'schedule'");
+    expect(graphWorkflow).toContain("npx tsx scripts/graph-worker.mts --once");
+    expect(graphWorkflow).not.toContain("--drain");
+    expect(graphWorkflow).not.toContain("SOFTWAREFACTORY_GRAPH_WORKER_SCHEDULED");
     expect(phaseWorkflow).toMatch(/workflow_dispatch:[\s\S]*?command_id:[\s\S]*?required: true/);
     expect(phaseWorkflow).toContain("SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED == 'true'");
     expect(phaseWorkflow).toContain("github.event_name != 'schedule'");

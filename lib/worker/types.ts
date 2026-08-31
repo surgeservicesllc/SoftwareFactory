@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { githubWebUrlSchema } from "@/lib/github/schemas";
 import { executionAdmissionSchema } from "@/lib/worker/execution-admission";
+import { grokClaimContextSchema } from "@/lib/worker/grok-claim-context";
 
 export const workerRiskSchema = z.enum(["green", "yellow", "red"]);
 export type WorkerRisk = z.infer<typeof workerRiskSchema>;
@@ -102,7 +103,30 @@ export const workerJobSchema = z.object({
     { message: "Recovery pull request evidence must be complete or absent." },
   ).nullable().default(null),
   executionAdmission: executionAdmissionSchema.nullable().default(null),
-}).strict();
+  initialContext: grokClaimContextSchema.nullable().default(null),
+}).strict().superRefine((job, context) => {
+  if (job.executionAdmission?.lane === "phase1c" && !job.initialContext) {
+    context.addIssue({
+      code: "custom",
+      message: "An admitted Grok Phase 1C claim requires its immutable initial context.",
+      path: ["initialContext"],
+    });
+  }
+  if (job.executionAdmission && job.executionAdmission.lane !== "phase1c") {
+    context.addIssue({
+      code: "custom",
+      message: "A Phase 1C worker cannot accept a graph-model admission.",
+      path: ["executionAdmission", "lane"],
+    });
+  }
+  if (!job.executionAdmission && job.initialContext) {
+    context.addIssue({
+      code: "custom",
+      message: "A legacy Phase 1C claim cannot inject Grok context.",
+      path: ["initialContext"],
+    });
+  }
+});
 
 export type WorkerJob = z.infer<typeof workerJobSchema>;
 

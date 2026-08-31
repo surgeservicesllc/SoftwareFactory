@@ -6,6 +6,7 @@ import type { CodexAuthResolution } from "@/lib/worker/auth";
 import { controlledProcessEnvironment } from "@/lib/worker/env";
 import { hasLikelySecret, redactText } from "@/lib/worker/redact";
 import type { WorkerEvent, WorkerJob, WorkerUsage } from "@/lib/worker/types";
+import { renderGrokClaimContextForPrompt } from "@/lib/worker/grok-claim-context";
 import type { PreparedWorkspace } from "@/lib/worker/workspace";
 
 const responseSchema = {
@@ -238,6 +239,9 @@ function taskPrompt(job: WorkerJob) {
   const criteria = job.acceptanceCriteria.length
     ? job.acceptanceCriteria.map((criterion, index) => `${index + 1}. ${criterion}`).join("\n")
     : "1. Implement the requested change and preserve existing behavior outside its scope.";
+  const initialContext = job.initialContext
+    ? renderGrokClaimContextForPrompt(job.initialContext)
+    : null;
   return [
     "You are the Codex engineering worker for one pre-authorized SoftwareFactory run.",
     `Logical role: ${job.agentRole}. Risk classification: ${job.risk.toUpperCase()}.`,
@@ -251,6 +255,7 @@ function taskPrompt(job: WorkerJob) {
     "Do not claim a test passed unless you ran it. The worker independently runs full deterministic validation after you finish.",
     "Owner command:",
     job.prompt,
+    ...(initialContext ? [initialContext] : []),
     "Acceptance criteria:",
     criteria,
     "Finish with a concise structured summary, tests run, and residual risks.",

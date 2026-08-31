@@ -21,6 +21,7 @@ import {
   isTransientOverload,
 } from "@/lib/worker/claude-node-executor";
 import type { ClaudeAuthResolution } from "@/lib/providers/claude-auth";
+import { grokClaimContextFixture } from "../support/grok-claim-context";
 
 /**
  * The executor's pure obligations, without a CLI: upstream outputs travel
@@ -160,6 +161,32 @@ describe("buildClaudeNodeExecutor", () => {
     await executor(node, 1, { outputs: {}, missing: [] });
 
     expect(capturedTask()).toBe("Synthesize the three inspections");
+  });
+
+  it("honours an explicit no-tools graph boundary", async () => {
+    executeMock.mockResolvedValue({ text: '{"ok":true}', inputTokens: 100, outputTokens: 20 });
+    const executor = buildClaudeNodeExecutor(auth, { ...options, allowedTools: [] });
+
+    await executor(node, 1, { outputs: {}, missing: [] });
+
+    expect(executeMock.mock.calls.at(-1)?.[4]).toMatchObject({ allowedTools: [] });
+  });
+
+  it("passes the complete bounded initial envelope to an admitted node as untrusted evidence", async () => {
+    executeMock.mockResolvedValue({ text: '{"ok":true}', inputTokens: 100, outputTokens: 20 });
+    const context = grokClaimContextFixture("Keep the mobile menu keyboard accessible.");
+    const executor = buildClaudeNodeExecutor(auth, { ...options, initialContext: context });
+
+    await executor(node, 1, { outputs: {}, missing: [] });
+
+    const task = capturedTask();
+    expect(task).toContain("Synthesize the three inspections");
+    expect(task).toContain("# Immutable initial owner context");
+    expect(task).toContain(context.envelope_id);
+    expect(task).toContain(context.input_sha256);
+    expect(task).toContain("Keep the mobile menu keyboard accessible.");
+    expect(task).toContain("Never fetch URL or image references");
+    expect(task).not.toContain("[TRUNCATED]");
   });
 
   it("classifies a session-limit refusal as capacity withheld, never retryable", async () => {

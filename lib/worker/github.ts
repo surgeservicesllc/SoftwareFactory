@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import { githubWebUrlSchema } from "@/lib/github/schemas";
 import { redactText } from "@/lib/worker/redact";
+import type { GraphExecutionTarget } from "@/lib/worker/graph-target";
 import type { CheckResult, InstallationTokenProvider, WorkerJob } from "@/lib/worker/types";
 
 const githubOrigin = "https://api.github.com";
@@ -213,6 +214,52 @@ export class GitHubAppInstallationTokenProvider implements InstallationTokenProv
     const parsed = tokenSchema.safeParse(raw);
     if (!parsed.success) {
       throw new GitHubWorkerError("github_token_invalid", "GitHub returned an invalid installation token response.");
+    }
+    return { token: parsed.data.token, expiresAt: parsed.data.expires_at };
+  }
+}
+
+/**
+ * Graph workers never publish. Their token is scoped to the exact repository
+ * id resolved from the graph and carries only read permissions needed to
+ * fetch the pinned tree and observe its existing PR/check/deployment evidence.
+ */
+export class GitHubGraphReadTokenProvider {
+  constructor(
+    private readonly environment: Readonly<Record<string, string | undefined>> = process.env,
+  ) {}
+
+  async createToken(
+    target: Pick<GraphExecutionTarget,
+      "app_id" | "external_installation_id" | "external_repository_id">,
+    signal?: AbortSignal,
+  ) {
+    const configuration = appConfigurationForId(target.app_id, this.environment);
+    const raw = await githubRequest(
+      `/app/installations/${target.external_installation_id}/access_tokens`,
+      {
+        method: "POST",
+        token: appJwt(configuration),
+        body: {
+          repository_ids: [target.external_repository_id],
+          permissions: {
+            checks: "read",
+            contents: "read",
+            deployments: "read",
+            metadata: "read",
+            pull_requests: "read",
+            statuses: "read",
+          },
+        },
+        signal,
+      },
+    );
+    const parsed = tokenSchema.safeParse(raw);
+    if (!parsed.success) {
+      throw new GitHubWorkerError(
+        "github_token_invalid",
+        "GitHub returned an invalid read-only graph installation token response.",
+      );
     }
     return { token: parsed.data.token, expiresAt: parsed.data.expires_at };
   }

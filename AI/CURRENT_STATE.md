@@ -1,5 +1,295 @@
 # Current state
 
+## 2026-08-31: Grok runtime 018-021 has one next-only protected lane (ADR-241)
+
+The manual `grok-runtime-release-chain-migrations.yml` workflow now coordinates
+the exact forward sequence `20260831001800` -> `20260831001900` ->
+`20260831002000` -> `20260831002100`. The caller cannot select a migration:
+`probe` and `apply-one` derive only the next absent member from an exact ledger
+prefix, while `verify` requires the complete four-row prefix and never replays
+DDL. Each apply can persist only one staged canonical-LF file and its one
+ledger row in a locked transaction. Gaps, duplicates, a changed unrelated-
+ledger digest, target catalog/ledger disagreement, and every hosted version
+later than 021 fail closed.
+
+The accepted file identities are 018
+`7c401a943833bc2fd7fc505cf3692012077180a3198f00ec9760b3a46dcc4444`
+(41,937 bytes), 019
+`a0dd4da859e5ed6cb65342f2e5b3962c07d672346bd06685052c6446e99c5221`
+(8,404 bytes), 020
+`6bdcbdaa5a0b6f512a53ed72c513da02ce2d8042d28157e70f497a6ded4f3057`
+(19,411 bytes), and 021
+`838f300d25c6a44f6632ed883010066524da229e165598968c7cdd7dab583b16`
+(37,089 bytes). The earlier proposed 018 digest beginning `ca6a5d4b` is stale,
+does not match the committed LF blob, and is explicitly rejected.
+
+The lane retains migration 019's unchanged dedicated preflight and complete
+native rollback-only postflight. Chain postflight also pins installed
+function bodies and ABI, SECURITY DEFINER/search-path/ACL posture, forced RLS,
+constraints, indexes, immutable audit triggers, stopped runtime state,
+fail-before-write probes, linked lint where the installed prefix supports it,
+and zero rehearsal residue. Every operation requires exact main/green-CI/
+READY-Vercel/health/Supabase identity, configured actor and first attempt,
+exact confirmation, stopped execution workflows, worker/schedule/auth and all
+automatic actions OFF, and the global kill switch ON.
+
+Release-specific static and native PGlite evidence passes 17/17; the focused
+four-migration contract set passes 6 files / 36 tests. This is repository-only
+release machinery: nothing was applied, dispatched, pushed, deployed, or
+enabled, and no variable or secret was changed.
+
+## 2026-08-31: initial Grok Resume wake truth requires a durable worker receipt (ADR-239)
+
+Forward migration `20260831002100_grok_initial_wake_receipts.sql` records one
+immutable wake intent in the exact owner Resume transaction, bound to tenant,
+project, session, graph, control intent, and event revision. GitHub dispatch
+accepted/failed attempts are separate append-only transport evidence: an HTTP
+acceptance never sets `workerWoken`. Only the exact target graph worker can
+record the matching run/worker/protocol/capability receipt after its claim and
+before compilation or provider work. Missing, stale, wrong-graph, wrong-run,
+wrong-worker, wrong-version, and conflicting replay identities fail closed.
+
+The control response exposes `wakeIntentId`, `controlRevision`,
+`dispatchAccepted`, `workerAcknowledged`, and `workerWoken`; the durable session
+projection exposes the same evidence for reload and the Progress inspector
+labels dispatch acceptance as awaiting a receipt. Evidence tables are FORCE
+RLS with no direct grants and immutable guards; mutation functions are
+service-role-only and owner reads remain tenant/launch scoped. The opaque
+workflow payload contains only graph/wake UUID and control revision—never goal
+text. PGlite exercises the real Resume, accepted dispatch, exact claim, absent
+and wrong revision refusal, exact/idempotent receipt, owner projection, and
+content-free audit.
+
+This is repository-only work. Nothing was applied, dispatched, pushed,
+deployed, or enabled; workers, schedules, autonomy, and automatic actions stay
+OFF and the global kill switch stays ON.
+
+## 2026-08-31: graph execution is pinned to an exact isolated target workspace (ADR-238)
+
+The repository candidate adds forward migration
+`20260831002000_exact_graph_repository_workspace.sql`. A service-role-only,
+`SECURITY DEFINER`, `search_path=pg_catalog` projection resolves one dispatched
+graph to its current active GitHub App installation, exact repository id/name,
+repository-owned required-check policy, base branch, and immutable 40-character
+base SHA. Protocol-v4 claim echoes and re-resolves that complete projection in
+the claim transaction. Read-only research launch v3 records the same immutable
+repository identity before its paused graph becomes visible.
+
+The graph workflow now accepts only exact one-shot targets; its retained
+schedule is intentionally inert. Before claim or any provider call, the worker
+uses the matching configured GitHub App to request a one-repository read-only
+installation token, builds a fresh detached Git tree at the pinned SHA under a
+dedicated temporary root, verifies origin/HEAD/hooks, rejects symlinks, removes
+the Git pointer, marks the tree read-only, and cleans it after use. Only that
+tree is passed to Claude. The reviewed SoftwareFactory checkout remains worker
+runtime and ambient `process.cwd()` / `GITHUB_REPOSITORY` no longer select
+target code. Tests cover wrong repository/SHA/installation, a moved branch
+whose pinned SHA remains reachable, cleanup, and zero provider callback on
+workspace failure. Nothing was pushed, deployed, dispatched, or applied;
+workers/autonomy/actions remain OFF and kill switches remain ON.
+## 2026-08-31: Grok has a protected two-phase causal production acceptance lane (ADR-240)
+
+The repository candidate adds manual workflow
+`.github/workflows/grok-causal-production-acceptance.yml`. Its `start` phase
+does not inspect a pre-existing session: a dedicated secret-backed production
+account creates one workflow-unique harmless goal whose only permitted change
+is one new `docs/grok-causal-acceptance/<run>-<base>.md` file, verifies the
+immutable planner-v3 message/context/roster/admission identities, explicitly
+Resumes once, and waits for the exact durable dispatch plus worker receipt.
+It then binds real Anthropic node/artifact evidence to the same causal graph/run
+chain and the exact first-attempt OpenAI Phase 1C run, draft PR, one-file diff,
+and all four exact-head CI checks. The resulting strict, secret-free start
+artifact is uploaded with its SHA-256 and exact session/run/PR lineage.
+The workflow publishes that session identity while it waits because the owner
+must separately approve its exact HUMAN ARCHITECTURE gate; the workflow cannot
+approve any gate.
+
+The independent `finish` phase downloads only that exact run artifact and
+requires its owner-supplied SHA-256. After the owner separately approves gates,
+reviews, and merges the exact PR, finish proves current-main/READY Vercel/
+health/Supabase identity, unchanged PR-head check identities, the exact merge
+and GitHub deployment, terminal artifacts from that same graph/run chain,
+passing five-stage post-deploy evidence, and a read-only signed-in reload of the
+same session.
+It emits a second strict bounded artifact. The workflow has read-only GitHub
+permissions apart from the Actions artifact channel and contains no approval,
+merge, deployment, workflow dispatch, variable mutation, migration apply, or
+secret-output path.
+
+This is repository-only acceptance machinery. It has not been run against
+production and makes no live provider or production-readiness claim. It
+depends on hosted migrations 020 and 021 and separately controlled manual
+worker gates. It never schedules a worker or changes those gates; start fails
+unless they were separately enabled for the bounded run, and finish fails
+unless both are OFF again. Autonomy and every automatic action stay OFF, the
+global kill switch stays ON, and every identity/history/provider/CI/deployment
+mismatch fails closed.
+
+Hosted start is also externally blocked: protected repository secrets
+`GROK_CAUSAL_PRODUCTION_EMAIL` and `GROK_CAUSAL_PRODUCTION_PASSWORD` do not
+currently exist. They must be separately provisioned for one dedicated owner
+account; no existing credential may be repurposed. An already signed-in local
+browser can provide supplemental acceptance evidence, but it cannot establish
+the workflow's reproducible secret-backed account identity.
+
+## 2026-08-31: Grok admission-version null fence has an exact protected lane (ADR-237)
+
+Migration `20260831001900_grok_admission_version_null_fence.sql` is frozen at
+canonical-LF SHA-256
+`a0dd4da859e5ed6cb65342f2e5b3962c07d672346bd06685052c6446e99c5221`
+(8,404 bytes). A dedicated manual `probe` / `apply` / `verify` workflow stages
+only those bytes and permits apply to persist only that file plus one 019
+ledger row in a locked transaction. It requires exact lineage through 017,
+unchanged unrelated history, exact current-main/four-green-job/READY Vercel/
+health/Supabase identity, native function definitions and ABI, linked lint, and
+stopped workers/schedules/autonomy/actions with kill switches ON.
+
+Preflight and rollback-only postflight pin the unchanged v1/v3 source,
+SECURITY DEFINER, `search_path=pg_catalog`, and contracted ACLs as well as the
+new v2/v4 identities. The old roster-v1, lifecycle-v3, and research-v1
+signatures are no longer service-callable; only roster-v2, lifecycle-v4, and
+research-v2 retain exact service-role execute. Native fixtures reject null,
+missing, and wrong roster/admission versions before delegate writes, prove zero
+residue, and prove valid roster/research replay. Existing full-lifecycle native
+coverage proves v4 rejection plus valid exact replay. Route responses now name
+the actual `full_lifecycle_v4` / `read_only_research_v2` boundary instead of
+stale v3/v1 labels.
+
+Focused route/workflow/native/document contracts pass 10 files / 92 tests;
+the complete repository suite passes 577 files / 6,549 tests with three files /
+seven tests skipped. Strict typecheck and repository lint pass when the ignored
+generated `.next-webpack-failed` directory is excluded. The default build is
+blocked by this worktree's external `node_modules` junction; webpack compiles
+and reaches the same seven pre-existing App Router export/signature errors.
+
+This is repository-only release machinery. Nothing was applied, dispatched,
+pushed, deployed, or enabled; workers, autonomy, and all automatic actions
+remain OFF and the global kill switch remains ON.
+
+## 2026-08-31: Grok 015 and 017 have sequential protected release candidates (ADR-234)
+
+Two manual, serialized `probe` / `apply` / `verify` lanes now cover only
+`20260831001500_grok_claim_context_projection.sql` (canonical-LF SHA-256
+`4c33bcb908cb0b7a1972b4e2dc79d9fdc8bee13d118490e179afc2001a159e4b`,
+24,264 bytes) and `20260831001700_grok_read_only_research_runtime.sql`
+(canonical-LF SHA-256
+`3fe4cf4b6d49b29ed927650ab1581d3e580352702c76f5f6f0a837094d603061`,
+22,840 bytes). Apply can persist only its staged exact file and one ledger row
+in a locked transaction. The 015 lane refuses every later ledger row; the 017
+lane requires exact lineage through 016 and refuses every row later than 017.
+
+Rollback-only native PostgreSQL fixtures prove exact ledger/catalog/ACL/RLS,
+idempotent context and research behavior, tenant/admission/tamper refusal,
+content-free audit, paused read-only output, and zero graph/node/agent/provider/
+Phase1C execution. Both lanes also gate on exact current main, four green jobs,
+READY Vercel and health/Supabase identity, configured first-attempt actor,
+unmodified unrelated history, linked lint, workers/schedules stopped,
+autonomy/actions OFF, and kill switches ON. Focused workflow plus native
+behavior evidence passes 17/17 locally. Nothing was pushed, dispatched,
+deployed, or applied; no hosted ledger or production acceptance is claimed.
+
+## 2026-08-31: admitted Grok Phase 1C completion has an exact durable graph re-wake (ADR-233)
+
+The repository candidate adds forward migration
+`20260831001600_grok_phase1c_graph_rewake.sql` (canonical-LF SHA-256
+`04e0bc9115c30f179bcac89fac512fe30c9b0c1bc4a5271166e755fd47fbf76e`,
+38,463 bytes). The admitted Grok bridge transition to
+`PULL_REQUEST_RECORDED` now transactionally creates one exact graph re-wake
+intent. A fresh, non-disabled Phase 1C worker may lease only its exact command,
+dispatch only the database-projected graph UUID through the existing graph
+worker boundary, and append accepted/failed delivery evidence. Exact replay is
+idempotent; graph/project/repository/run/admission, stale-worker, lease, and
+delivery mismatches fail closed.
+
+The selected-session projection also carries exact bridge lineage as
+`runEvidence.phase1c` (bridge, origin graph run, command, task, agent run, PR,
+head, and later release identities). The Grok evidence panel and Retry / Cancel
+deep-link to `/solutions/runs?runId=<exact agent run>`, and the Runs console
+opens that query-named row. Without exact bridge-bound agent-run evidence, the
+link is withheld rather than guessed.
+
+The targeted Phase 1C workflow performs this wake immediately after its worker
+step, but only when the independent graph-worker gate is already ON. The new
+manual `probe` / `apply` / `verify` release lane pins the one 016 file and hash,
+exact green/READY production identity, prerequisite/unrelated ledger, catalog,
+RLS/ACL/trigger, linked-lint, disabled-worker, and stopped-safety evidence.
+Focused behavior/contract and full-chain migration tests pass locally. Nothing
+was pushed, deployed, dispatched, or applied; workers, autonomy, and automatic
+actions remain OFF and the global kill switch remains ON.
+
+## 2026-08-31: Grok deploy intent now records a contained release-readiness graph (ADR-236)
+
+The repository candidate replaces the deploy-intent dead end with one exact,
+durable inspection projection. The saved planner-v3 plan remains RED and keeps
+its owner-gated `delivery` HUMAN handoff. Only the four exact Claude release-
+identity, test-evidence, security, and fan-in tasks enter the projected graph;
+delivery is excluded. The projected graph is GREEN, has no owner gate, and
+every node has empty reads/writes plus null lifecycle/gate fields. Its fixed
+goal explicitly forbids merge, deployment, resource mutation, worker wake, and
+production claims. The graph worker recognizes only that fixed goal and passes
+an explicit empty provider-tool list, so the runtime cannot silently turn the
+zero-resource contract back into checkout access.
+
+Forward migration `20260831001800_grok_deploy_readiness_runtime.sql` derives
+that graph again from the immutable plan message and fails on plan, task, edge,
+budget, roster, admission, model, capability, tier, identity, or hash drift. Its
+node-contract proof pins the exact deterministic input/output schema hashes, so
+weakened verifier evidence requirements cannot enter the graph. Its
+service-role-only SECURITY DEFINER boundary uses the null-safe roster v2 entry,
+records the source-plan hash in idempotent launch evidence, atomically pauses
+the graph, and creates no graph run. Replay revalidates admissions, zero
+resources/gates, pause, and zero runs.
+
+Focused unit/route/contract/schema tests and the full-chain PGlite runtime
+canary are green in the isolated candidate. Nothing in this slice merges,
+deploys, wakes a worker, enables autonomy, changes automatic actions, or
+disengages the kill switch. It has not been pushed, hosted, dispatched, or
+applied, and it does not declare Grok or any deploy path production-ready.
+## 2026-08-31: Grok exposes advanced audited controls without bypassing them (ADR-231)
+
+The repository candidate adds one collapsed **Advanced controls** section to
+the selected Grok session inspector. Exact linked run evidence opens that
+immutable run's lifecycle controls, where Approve / Reject appears only on its
+actual open gate. Retry / Cancel, rollback, and automatic-
+continuation links open their existing Runs, Operations, and Autonomy consoles.
+Opening any link performs no mutation; every destination retains its own
+authorization, eligibility, evidence, and risk checks. A session without exact
+run evidence does not receive a lifecycle-control link.
+
+Focused workspace evidence passes 22/22, affected-file lint and repository
+typecheck pass. This is repository-only navigation, not new control authority:
+workers, autonomy, and automatic actions remain OFF and the global kill switch
+remains ON. Rollback and provider execution remain **Not Connected** wherever
+their existing adapters or live evidence say so. No production claim is made.
+
+## 2026-08-31: Grok context-envelope 011 protected release lane is a repository candidate (ADR-232)
+
+A dedicated manual `probe` / `apply` / `verify` lane now guards only
+`20260831001100_grok_context_envelopes.sql`, canonical LF SHA-256
+`6ef23581e4d51a1bc4ad1651917e42d52d10e9b7b2c156e9207df682946c3344`
+(35,129 bytes). It requires the exact current-main checkout, four green
+exact-head checks, READY Vercel and matching health/Supabase identity, the
+configured first-attempt release actor, an operation-specific confirmation,
+the full 00100-01000 prerequisite ledger, and an exact hash snapshot of every
+unrelated ledger row. Apply is one database transaction containing only the
+staged hash-pinned 011 file, its one ledger row, and schema-cache notification.
+
+The migration is rehearsed before apply and rolled back with its temporary
+ledger row. The same rehearsal and installed verifier prove exact tables,
+FORCE RLS, select policies, zero browser/service table grants, immutable and
+no-truncate triggers, native `pg_proc.prosrc` identities, function ACLs,
+linked-database lint, exact record/replay/follow-up/list behavior, content-free
+audit evidence, secret/private-URL/unlinked-integration/bounds/replay/tenant
+rejection, direct mutation rejection, and zero graph/node/agent/provider/
+Phase 1C execution. Workers, schedules, autonomy, and automatic actions remain
+OFF and every organization kill switch remains ON before, during, and after.
+
+Full-chain PGlite rehearsal with later 01200-01400 migrations present passes
+and leaves no 011 ledger/catalog residue. Focused workflow, action-pin, and
+secret-boundary suites pass 16/16 and focused ESLint passes. This is repository
+code only: it has not been pushed, deployed, dispatched, or applied to hosted
+Supabase, so no production database claim is made.
+
 ## 2026-08-31: Grok completion DDL is hosted; acceptance awaits a version-safe ACL verifier (ADR-227)
 
 Exact main `24a6313e98023bfc618a921fc563c9f4bde4cad2` passed all four
@@ -26,6 +316,107 @@ READY deployment identity, only a fresh read-only `verify` scope may run.
 Workers, autonomy, and every automatic action stayed OFF; the global kill
 switch stayed ON. Signed-in create/return/reload acceptance and a real
 provider-backed repository/PR/CI/deployment journey still remain. **GROK BOT:
+PRODUCTION READY is not declared.**
+
+## 2026-08-31: Grok history is project-scoped and cursor-complete (ADR-228)
+
+The Grok workspace no longer loads the newest organization-wide sessions and
+then filters that truncated list in the browser. It selects the active project
+first, calls the existing owner-scoped `list_grok_sessions` boundary with that
+exact project UUID, and exposes the database's `(created_at, id)` keyset cursor
+through the API. Owners can load older sessions without an offset race or a
+cross-project omission. A direct session link still reads that session by
+owner/tenant scope, then corrects the project history when the linked session
+is outside the first page or the URL omitted its project.
+
+The API fetches one bounded look-ahead row, returns at most the requested 50
+sessions, and emits a continuation cursor only when another row actually
+exists. Partial cursors are refused before tenant state is read. Focused API
+and workspace evidence passes 32/32. A selected project whose exact GitHub
+binding is Not Connected keeps its history readable but disables new-goal
+submission and links to project connections instead of failing after a durable
+session was created. Affected-file lint and repository
+typecheck pass. This is a repository candidate only and does not change worker,
+autonomy, automatic-action, or kill-switch state.
+## 2026-08-31: Grok record-only production acceptance is a repository candidate (ADR-229)
+
+A manual, fail-closed production acceptance lane now exists as a repository
+candidate. It is pinned to `https://www.theagoras.com`, Supabase project
+`qpuofpmagrmyamahqwxw`, and the RFC-reserved account
+`jordan.seeker.prod1@example.org`. With an exact owner-confirmed project and
+green release SHA, it may create one harmless BUILD planning session and then
+only read it. Browser and database postflight evidence require planner-v3,
+the complete admitted specialist roster and execution route, exact return URL,
+reload persistence, a paused graph, and zero graph, node, agent, provider, or
+Phase 1C execution.
+
+The workflow is manual and first-attempt-only, requires the exact
+`record-grok-goal` confirmation and configured release actor, has read-only
+GitHub permissions, and fails before login when identity, CI, Vercel, health,
+ledger, account, project, provider/model, Ready-bot, or stopped-containment
+prerequisites differ. It never calls Resume, dispatches another workflow,
+enables a worker, changes autonomy/actions, or disengages the kill switch.
+Credentials come only from GitHub secrets and browser capture is disabled.
+
+Focused workflow/action-pin tests pass 8/8, lint and typecheck pass, and
+Playwright discovers the single guarded desktop test. The signed-in lane has
+not run, this candidate has not been pushed or deployed, and no production
+acceptance is claimed. Running it later requires the exact fake account and
+project prerequisites plus `GROK_RECORD_ONLY_E2E_PASSWORD`.
+## 2026-08-31: Grok context envelopes and follow-up turns are a repository candidate (ADR-235)
+
+The repository candidate now binds every Grok request to a durable, append-only
+context envelope. The server derives the exact project and repository/default-
+branch references; owners may add bounded text/Markdown/JSON/YAML/CSV files,
+public HTTPS URL or image references, safe project-relative repository paths,
+and integrations already linked to that same tenant project. Images and URLs
+remain **Reference only** and are never fetched by this boundary. Binary input,
+private/credential-bearing URLs, secret-shaped text, unlinked integrations,
+and over-limit envelopes fail closed before persistence.
+
+Forward migration `20260831001100_grok_context_envelopes.sql` creates forced-RLS,
+append-only envelope/item evidence with exact tenant/project/session/message
+foreign keys, immutable content hashes, per-turn and per-session bounds, exact
+idempotent replay, and a content-free `context.recorded` audit event. There are
+no table grants, worker writes, graph/run creation, or automatic actions. A new
+owner-only follow-up RPC atomically records the user message and its context.
+When a plan already exists it records `planChanged=false` and
+`replanRequired=true`; the UI tells the owner to start a new goal instead of
+silently rewriting the immutable plan.
+
+The App Router boundary and responsive Grok workspace now support initial and
+follow-up context, attachment/reference states, safe previews, empty/loading/
+error/authorization truth, and explicit no-dispatch copy. This migration and
+application slice are repository-only and unhosted. Workers, autonomy, and
+automatic actions remain OFF and the global kill switch remains ON. This does
+not close provider-backed execution or declare **GROK BOT: PRODUCTION READY**.
+The initial Chief of Staff planner receives a deterministic, secret-scanned,
+8 KB context summary and records it as the `bounded_context` requirement.
+ADR-230's later repository candidate adds a separate admitted-claim context
+field while preserving that original bounded goal; no content is copied into
+or truncated through the 4 KB bridge.
+
+## 2026-08-31: immutable initial context reaches admitted v3 claims in the repository (ADR-230)
+
+Forward migration `20260831001500_grok_claim_context_projection.sql` keeps all
+four public Graph/Phase1C v3 claim signatures and ACLs unchanged. After the
+existing exact current-admission assertion, one private helper follows the
+launch's assistant plan reply to the sequence-one owner message, reads only its
+`replan_required=false` envelope, and rechecks tenant/project/session identity,
+item and byte bounds, secret posture, file hashes, and the canonical envelope
+hash. A mismatch raises in the claim transaction and rolls back run/lease
+creation. Post-plan follow-up envelopes are excluded.
+
+The Graph and Phase1C worker schemas validate the same bounded projection again
+before provider use. Admitted Claude nodes and admitted Codex initial turns
+receive the complete envelope as labelled untrusted evidence with envelope/hash
+provenance. URL/image/integration values stay reference-only and are never
+fetched; context contents are not logged. Legacy and non-Grok claims receive no
+new field. The owner goal and canonical Phase1C command remain unchanged.
+
+This is a local repository candidate only: `01500` is not hosted, and no real
+worker/provider run proves it in production. Workers, autonomy, and automatic
+actions remain OFF and the global kill switch remains ON. **GROK BOT:
 PRODUCTION READY is not declared.**
 
 ## 2026-08-31: One persistent dark/light choice now covers every site shell (ADR-225)

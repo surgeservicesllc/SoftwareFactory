@@ -10,7 +10,7 @@ import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
 /**
  * A database with the whole migration chain already applied.
  *
- * WHY THIS EXISTS. Fifty-one suites each replayed all 215 migrations into a
+ * WHY THIS EXISTS. Fifty-one suites each replayed all 222 migrations into a
  * fresh instance. Measured on a four-core box: replaying costs 5,378ms,
  * dumping the finished data directory costs 217ms, and restoring one costs
  * 981ms. So the same schema was being built fifty-one times at five and a

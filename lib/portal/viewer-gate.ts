@@ -30,7 +30,7 @@ import { listOrganizationMemberships } from "@/lib/supabase/tenant";
 export async function requirePortalViewer(next: string): Promise<void> {
   const viewer = await readViewer();
   if (!viewer.signedIn) {
-    redirect(`/sign-in?next=${encodeURIComponent(next)}`);
+    redirect(`/auth/sign-in?next=${encodeURIComponent(next)}`);
   }
 
   /*

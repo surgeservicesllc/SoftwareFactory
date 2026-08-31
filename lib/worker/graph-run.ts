@@ -10,6 +10,7 @@ import { DEFAULT_RETRY_POLICY, type ResourceRef } from "@/lib/graph/types";
 import type { VerificationVerdict } from "@/lib/graph/verification";
 import { SDLC_STAGES } from "@/lib/sdlc/lifecycle";
 import { executionAdmissionSchema } from "@/lib/worker/execution-admission";
+import { grokClaimContextSchema } from "@/lib/worker/grok-claim-context";
 import { deriveVerdict, verificationLensFor } from "@/lib/worker/verification-from-node";
 
 /**
@@ -98,6 +99,7 @@ const claimedGraphSchema = z.object({
   project_repository: z.string().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/).max(201),
   project_default_branch: z.string().min(1).max(255).refine((value) => value === value.trim()),
   grok_admission_required: z.boolean(),
+  initial_context: grokClaimContextSchema.nullish(),
   /*
    * Durable graph -> Phase 1C lineage. All fields tolerate an older or
    * non-lifecycle projection by becoming null; anchor nodes then record Not
@@ -110,6 +112,8 @@ const claimedGraphSchema = z.object({
   base_sha: z.string().regex(/^[0-9a-f]{40}$/).nullish(),
   required_check_names: requiredCheckNamesSchema.nullish(),
   required_checks_sha256: z.string().regex(/^[0-9a-f]{64}$/).nullish(),
+  /** Protocol-v4 hash of installation, repository, policy, and base identity. */
+  repository_target_sha256: z.string().regex(/^[0-9a-f]{64}$/).nullish(),
   phase1c_state: z.enum([
     "GRAPH_READY",
     "COMMAND_RECORDED",
@@ -151,6 +155,20 @@ const claimedGraphSchema = z.object({
         path: ["required_check_names"],
       });
     }
+  }
+  if (!claim.grok_admission_required && claim.initial_context) {
+    context.addIssue({
+      code: "custom",
+      message: "A non-Grok claim cannot inject initial context.",
+      path: ["initial_context"],
+    });
+  }
+  if (claim.grok_admission_required && !claim.initial_context) {
+    context.addIssue({
+      code: "custom",
+      message: "An admitted Grok claim requires its immutable initial context.",
+      path: ["initial_context"],
+    });
   }
   for (const [index, node] of claim.nodes.entries()) {
     if (!claim.grok_admission_required && node.execution_admission) {

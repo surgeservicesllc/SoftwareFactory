@@ -14,6 +14,10 @@ import {
   dispatchGraphWorker,
   type Phase1CDispatchTarget,
 } from "@/lib/orchestration/dispatch";
+import {
+  recordGrokWakeDispatch,
+  type GrokWakeDispatchFailureCode,
+} from "@/lib/grok/wake-dispatch";
 import { findSensitiveData } from "@/lib/security/sensitive-data";
 import {
   ApiRequestError,
@@ -74,21 +78,49 @@ async function wakeResumedGraph(
   client: TenantClient,
   organizationId: string,
   projectId: string,
+  sessionId: string,
   graphId: string,
+  wakeIntentId: string,
+  controlRevision: number,
 ): Promise<boolean> {
+  const record = async (
+    outcome: "accepted" | "failed",
+    failureCode: GrokWakeDispatchFailureCode | null,
+  ) => {
+    try {
+      await recordGrokWakeDispatch({
+        organizationId,
+        projectId,
+        sessionId,
+        graphId,
+        wakeIntentId,
+        controlRevision,
+        outcome,
+        failureCode,
+        idempotencyKey: `wake-dispatch:${randomUUID()}`,
+      });
+      return outcome === "accepted";
+    } catch {
+      // Without the immutable database row, an accepted GitHub HTTP response
+      // is not durable evidence and the worker receipt will fail closed.
+      return false;
+    }
+  };
   try {
     const admissionRead = await client.rpc("assert_grok_graph_admission_as_member", {
       p_organization_id: organizationId,
       p_graph_id: graphId,
     });
-    if (admissionRead.error || admissionRead.data !== true) return false;
+    if (admissionRead.error || admissionRead.data !== true) {
+      return record("failed", "ADMISSION_STALE");
+    }
     const graphRead = await client.from("graphs")
       .select("id,organization_id,project_id,github_repository_id,pause_requested_at,withdrawn_at")
       .eq("id", graphId)
       .eq("organization_id", organizationId)
       .eq("project_id", projectId)
       .maybeSingle();
-    if (graphRead.error) return false;
+    if (graphRead.error) return record("failed", "GRAPH_STALE");
     const graph = graphRepositoryBindingSchema.safeParse(graphRead.data);
     if (
       !graph.success
@@ -97,34 +129,46 @@ async function wakeResumedGraph(
       || graph.data.project_id !== projectId
       || graph.data.pause_requested_at !== null
       || graph.data.withdrawn_at !== null
-    ) return false;
+    ) return record("failed", "GRAPH_STALE");
     const targetRead = await client.rpc("resolve_phase1c_command_target", {
       p_organization_id: organizationId,
       p_project_id: projectId,
     }).single();
-    if (targetRead.error) return false;
+    if (targetRead.error) return record("failed", "TARGET_UNAVAILABLE");
     const target = phase1CTargetSchema.safeParse(targetRead.data);
     if (
       !target.success
       || target.data.project_id !== projectId
       || target.data.repository_id !== graph.data.github_repository_id
-    ) return false;
-    const result = await dispatchGraphWorker(dispatchTarget(target.data), graphId);
-    return result.dispatched;
+    ) return record("failed", "TARGET_MISMATCH");
+    const result = await dispatchGraphWorker(dispatchTarget(target.data), graphId, {
+      wakeIntentId,
+      controlRevision,
+    });
+    return result.dispatched
+      ? record("accepted", null)
+      : record("failed", "WORKER_DISABLED");
   } catch {
-    return false;
+    return record("failed", "DISPATCH_ERROR");
   }
 }
 
-function resumeNote(workerWoken: boolean, replayed: boolean): string {
-  if (workerWoken) {
+function resumeNote(
+  dispatchAccepted: boolean,
+  workerAcknowledged: boolean,
+  replayed: boolean,
+): string {
+  if (workerAcknowledged) {
+    return "The exact graph worker claim has a durable matching receipt. GitHub dispatch acceptance and worker acknowledgement are recorded separately.";
+  }
+  if (dispatchAccepted) {
     return replayed
-      ? "The resume was already applied and the exact graph worker wake was accepted again for recovery. Execution remains unobserved until a worker claims an eligible target."
-      : "The exact graph worker wake was accepted. Execution remains unobserved until a worker claims an eligible target.";
+      ? "The resume was already applied and GitHub accepted another exact recovery dispatch. The worker is not marked woken until it claims this graph and records the matching receipt."
+      : "GitHub accepted the exact graph dispatch. The worker is not marked woken until it claims this graph and records the matching receipt.";
   }
   return replayed
-    ? "The resume was already applied, but the graph worker is Not Connected and the recovery wake was not accepted. No execution claim was observed."
-    : "The resume committed, but the graph worker is Not Connected and no wake was accepted. No execution claim was observed.";
+    ? "The resume was already applied, but no durable recovery dispatch acceptance was recorded. The graph worker is Not Connected and no worker receipt exists."
+    : "The resume committed, but no durable dispatch acceptance was recorded. The graph worker is Not Connected and no worker receipt exists.";
 }
 
 export async function POST(
@@ -203,14 +247,22 @@ export async function POST(
       reason,
       idempotencyKey: parsedBody.data.idempotencyKey ?? `control:${randomUUID()}`,
     });
-    const workerWoken = databaseAction === "resume"
-      ? await wakeResumedGraph(
-          tenant.client,
-          tenant.activeOrganization.id,
-          project.projectId,
-          graphId,
-        )
-      : false;
+    let dispatchAccepted = false;
+    if (
+      databaseAction === "resume"
+      && control.wake_intent_id !== null
+      && control.control_revision !== null
+    ) {
+      dispatchAccepted = await wakeResumedGraph(
+        tenant.client,
+        tenant.activeOrganization.id,
+        project.projectId,
+        bundle.session.id,
+        graphId,
+        control.wake_intent_id,
+        control.control_revision,
+      );
+    }
     const afterBundle = await readGrokBundle(
       tenant.client,
       tenant.activeOrganization.id,
@@ -222,13 +274,29 @@ export async function POST(
       project.name,
       afterBundle,
     );
+    const wakeEvidence = after.wakeEvidence ?? null;
+    const workerAcknowledged = control.wake_intent_id !== null
+      && control.control_revision !== null
+      && wakeEvidence !== null
+      && wakeEvidence.wakeIntentId === control.wake_intent_id
+      && wakeEvidence.controlRevision === control.control_revision
+      && wakeEvidence.workerAcknowledged === true
+      && wakeEvidence.workerWoken === true;
     return jsonNoStore({
       ...after,
-      control: { intentId: control.intent_id, action: parsedBody.data.action, state: "applied" },
+      control: {
+        intentId: control.intent_id,
+        action: parsedBody.data.action,
+        state: "applied",
+        wakeIntentId: control.wake_intent_id,
+        controlRevision: control.control_revision,
+      },
       replayed: control.replayed,
-      workerWoken,
+      dispatchAccepted,
+      workerAcknowledged,
+      workerWoken: workerAcknowledged,
       note: databaseAction === "resume"
-        ? resumeNote(workerWoken, control.replayed)
+        ? resumeNote(dispatchAccepted, workerAcknowledged, control.replayed)
         : control.replayed
           ? "The control was already durably applied; no worker dispatch was required."
           : "The control was durably applied by the existing audited runtime boundary.",

@@ -2,6 +2,96 @@
 
 Last reviewed: 2026-08-31
 
+**Addendum, 2026-08-31 - protected Grok runtime 018-021 chain (ADR-241):**
+The manual next-only lane freezes all four committed canonical-LF byte/hash
+identities, rejects the stale proposed 018 digest, and permits only exact
+prefixes through 021. Thirteen static contracts cover workflow authority,
+actor/attempt/confirmation and exact release identity gates, one-file
+staging/transaction semantics, no replay/down/reset/repair, the unchanged 019
+safeguards, action pins, catalog/ACL/RLS/audit/runtime checks, and linked lint.
+Four native PGlite cases prove every intermediate prefix, full postflight,
+019's unchanged native adverse/replay suite after 020/021, zero residue, and
+failure on an unrelated-ledger mismatch, gap, or later version. Hosted
+probe/apply-one/verify, exact-head CI/build/browser, deployment, health, and
+signed-in production acceptance remain pending; no live operation or safety-
+state change is claimed. The focused four-migration set passes 6 files / 36
+tests. Eight repository workflow/migration/runbook/security invariants pass
+32/32, and full source lint passes. Typecheck is blocked because the worktree's
+external dependency junction lacks declared package `unpdf`; default Turbopack
+build rejects that external junction, while webpack compiles and then reports
+the same seven existing App Router export/signature errors plus the missing
+`unpdf` type resolution. None originates in this release-only change.
+
+**Addendum, 2026-08-31 - initial Grok Resume durable wake truth (ADR-239):**
+Migration 021, route/store/worker boundaries, workflow wiring, and the Grok
+Progress inspector now separate durable Resume intent, GitHub dispatch
+acceptance, and exact worker acknowledgement. Native full-chain PGlite proves
+same-transaction intent creation, absence/wrong-revision refusal before
+provider work, exact post-claim receipt, idempotent exact replay, owner read,
+and content-free audit. Unit and static contracts cover mismatched projections,
+app-first Resume refusal (with non-waking Pause/Withdraw fallback only), opaque payload wiring, ordering before
+compile/provider, FORCE RLS, immutability, and service-only mutation ACLs.
+Exact-head CI/build/browser, hosted migration, deployment, health, and signed-
+in live-worker acceptance remain pending; no production-readiness claim is
+made and every execution/safety switch remains in its stopped state.
+
+**Addendum, 2026-08-31 latest+55 - exact graph target workspace
+(ADR-238):** The full migration chain accepts forward-only 020 and proves its
+three new service-only definer/search-path ACLs. Runtime evidence resolves one
+active installation/repository/base/check target, rejects authenticated access
+and wrong repository/SHA/installation echoes without run residue, and accepts
+only the exact protocol-v4 claim. Real local Git tests prove a pinned SHA can
+still be checked out after its branch moves, verify origin/HEAD/no-hooks/no-Git
+pointer, reject wrong identity, clean every workspace, and invoke zero provider
+callback on preparation failure. Static workflow evidence proves exact
+one-shot dispatch, inert schedule/global drain, read-only workflow authority,
+and no ambient checkout identity. Exact-head CI/build/browser, hosted 020,
+deployment, health, and live acceptance remain pending; no production claim is
+made and all execution controls remain stopped.
+**Addendum, 2026-08-31 - protected Grok causal production acceptance
+(ADR-240):** The candidate adds one manual start/finish workflow, three
+read-only SQL verifiers, strict bounded start/finish evidence schemas, an
+opt-in signed-in Playwright specification with all capture disabled, and static
+workflow/SQL contracts. Start creates a fresh workflow-unique docs-only goal,
+proves immutable planner/context/roster/admission identity, explicit Resume,
+durable first wake receipt, real Anthropic node artifacts, exact first-attempt
+OpenAI Phase 1C lineage, an exact one-file draft PR, and four exact-head checks.
+It publishes the exact session/graph handoff so the owner can separately
+approve the HUMAN ARCHITECTURE gate while start waits; the workflow cannot do
+that itself.
+Finish consumes only the exact start run/hash after separate owner merge and
+proves current-main/READY/health/Supabase identity, unchanged check IDs, exact
+merge/deployment, terminal artifacts from the same causal graph/run chain,
+passing five-stage validation, and a read-only reload. GitHub permissions are
+read-only except artifact transport; no approval, merge, deploy, dispatch,
+variable change, migration,
+or safety-state mutation exists. Focused validation is recorded by the atomic
+candidate commit once run. Production execution remains pending, so there is
+no live provider or production-ready claim. Hosted reproducibility is also
+blocked until the currently absent dedicated
+`GROK_CAUSAL_PRODUCTION_EMAIL` / `GROK_CAUSAL_PRODUCTION_PASSWORD` protected
+secrets are provisioned for an exact project owner; existing credentials must
+not be repurposed and a local signed-in browser is supplemental only.
+
+**Addendum, 2026-08-31 latest+55 - protected Grok 019 admission-version
+null fence (ADR-237):** Repository evidence freezes canonical-LF migration 019
+at SHA-256
+`a0dd4da859e5ed6cb65342f2e5b3962c07d672346bd06685052c6446e99c5221`
+and 8,404 bytes. The manual one-file lane requires exact lineage/unrelated
+ledger, six native function source/ABI/security/search-path/ACL identities,
+four green jobs, READY Vercel and matching health/Supabase, linked lint, and
+stopped execution/autonomy/actions with kill switches ON. Rollback-only native
+evidence covers null/missing/wrong roster and v2/v4 admission rejection before
+writes, zero residue, valid/replay behavior, exact old-endpoint revocation, and
+new-endpoint service-only grants. Route contracts now report the actual v2/v4
+bridge. Focused evidence passes 10 files / 92 tests, the full repository suite
+passes 577 files / 6,549 tests with three files / seven tests skipped, and
+strict typecheck plus source lint pass. Turbopack remains blocked by the
+worktree's external dependency junction; webpack compiles then reaches the
+same seven pre-existing App Router route-export/signature errors. Hosted
+probe/apply/verify, exact-head CI/build/browser, deployment, and
+signed-in production acceptance remain pending; no production claim is made.
+
 **Addendum, 2026-08-31 latest+47 - version-safe Grok ACL verification
 (ADR-227):** Exact main `24a6313e98023bfc618a921fc563c9f4bde4cad2`
 passed four-job CI `33400336336`, reached READY deployment
@@ -15,6 +105,75 @@ derived expanded-row count, and retains owner-only, non-grantable, explicit
 role-denial, and PostgreSQL 18 NOT NULL checks. The focused workflow contract
 passes 12/12. Exact-head release and a new read-only
 verify remain pending; no database or safety state changes with this fix.
+**Addendum, 2026-08-31 latest+54 - protected Grok 015/017 lanes
+(ADR-234):** Focused static workflow and native PGlite target-chain suites pass
+17/17. Evidence pins canonical-LF migration hashes, target ordering through
+016, exact native function fingerprints/ACLs, forced RLS and zero table grants,
+one-file locked transactions, linked lint, immutable unrelated-ledger digests,
+runtime replay, tenant/tamper/write-node adverse cases, content-free audit,
+paused read-only graph output, and zero graph/node/agent/provider/Phase1C
+execution. Both workflows are manual, first-attempt-only, exact-confirmed, and
+serialized with every execution switch OFF and kill switch ON. Hosted
+probe/apply/verify, exact-head CI/build/browser, deployment, health, and signed-
+in production acceptance remain pending; this is repository evidence only.
+
+**Addendum, 2026-08-31 latest+53 - exact Grok Phase 1C graph re-wake
+(ADR-233):** Focused TypeScript behavior and SQL/workflow contract suites pass,
+and the full migration chain accepts 016 after the 015 context projection.
+Evidence covers gate-off zero lease/dispatch, exact target projection,
+idempotent no-op/replay, malformed identity refusal, retry evidence, disabled
+worker races, one transactional bridge intent, forced RLS, append-only
+attempts, least-privilege functions, and immediate targeted workflow wiring.
+The integrated base also proves strict `runEvidence.phase1c` projection, the
+exact Grok-to-Runs deep link, query-selected Runs detail, and link withholding
+when no bridge-bound agent run exists.
+The dedicated manual release lane pins canonical-LF SHA-256
+`04e0bc9115c30f179bcac89fac512fe30c9b0c1bc4a5271166e755fd47fbf76e`
+and one-file transactional probe/apply/verify semantics. Hosted apply,
+exact-head CI/build/browser, deployment, health, and live acceptance remain
+pending; all execution switches remain OFF and the kill switch remains ON.
+
+**Addendum, 2026-08-31 latest+55 - Grok deploy-readiness projection
+(ADR-236):** Twelve focused files pass 82/82 tests, including the provider
+projection/admission unit contract, App Router behavior, migration static
+contract, post-019 null-fence contract, schema-security allowlist/signature,
+migration version/collision/runbook/decision guards, the Claude executor tool
+ceiling, and a full-chain PGlite runtime canary. The canary proves the
+immutable source message remains a RED deploy plan with its HUMAN delivery
+handoff while the durable graph contains only four GREEN Claude inspections,
+zero resources, zero gates, and zero graph runs. Null admission versions, RED
+projected risk, projected owner approval, and any resource widening roll back
+without graph, launch, or roster residue. Exact replay returns the same launch
+and revalidates current admission. Changed planner jobs or verifier schemas also
+fail before residue, and the worker/executor suite proves this fixed graph gets
+an explicit empty provider-tool list. Focused ESLint passes. Repository typecheck
+is blocked before this slice by the shared dependency junction missing
+`unpdf`; Turbopack also refuses that out-of-root `node_modules` junction before
+compilation. Exact-main consolidated typecheck/build/CI remain release gates. The
+candidate has not been pushed, hosted, dispatched, or applied and does not
+claim deployment or production readiness.
+**Addendum, 2026-08-31 latest+52 - protected Grok context-envelope 011 lane
+(ADR-232):** The workflow contract, action-pin, and secret-boundary suites pass
+16/16; focused ESLint and whitespace checks pass. A native full-chain PGlite
+probe passes the preflight against the exact unrelated-ledger digest, proves
+the four PostgreSQL `pg_proc.prosrc` identities, executes the complete
+catalog/runtime/adverse postflight, and rehearses 011 with a temporary ledger
+row inside rollback while 01200-01400 coexist. The rehearsal leaves both 011
+tables and its ledger row absent. Static evidence requires manual-only
+operation-specific confirmation, exact release/migration identities, one-file
+transactional apply, linked lint with zero extension residue, exact FORCE RLS/
+policy/grant/trigger/function ACLs, all automatic execution stopped, kill
+switch on, and no reset/replay/down path. Hosted dispatch and production
+acceptance remain pending.
+
+**Addendum, 2026-08-31 latest+51 - Grok advanced audited controls
+(ADR-231):** The focused workspace suite passes 22/22 and proves that the
+collapsed advanced-control panel preserves exact lifecycle-run identity,
+withholds lifecycle navigation without run evidence, and routes Retry /
+Cancel, Rollback, and Continue Automatically only to their existing audited
+consoles. Affected-file ESLint and repository typecheck pass. These links do
+not mutate state or grant authority; exact-head CI/build/browser, Vercel,
+health, and signed-in production evidence remain pending.
 
 **Addendum, 2026-08-31 latest+46 - Grok hosted completion and verifier catalog
 containment (ADR-226):** Exact main
@@ -35,6 +194,70 @@ verifier excludes those from the 24 named business constraints and attests all
 Fresh read-only `verify`, signed-in acceptance, and real provider-backed
 E2E still remain; workers/autonomy/actions are OFF and the kill switch is ON.
 **GROK BOT: PRODUCTION READY is not declared.**
+
+**Addendum, 2026-08-31 latest+47 - project-complete Grok history (ADR-228):**
+Grok workspace + session-route focused evidence passes 32/32. New route cases
+prove exact project scoping, one-row look-ahead, stable `(created_at, id)`
+continuation, honest end-of-list, and rejection of a half cursor before tenant
+lookup. The browser component case follows the returned cursor and appends an
+older session; the pre-existing deep-link case continues to recover a session
+outside page one while its pending-detail case does not claim a plan. The
+readiness case proves disconnected-project history stays visible while the
+new-goal button fails closed and exposes the connection route. ESLint and
+repository TypeScript checks pass. Full CI/build/browser gates remain
+required when this lane is integrated with the active Grok context release.
+**Addendum, 2026-08-31 latest+49 - Grok record-only production acceptance
+(ADR-229):** The focused workflow contract and repository action-pin suites
+pass 8/8. ESLint passes on the guarded Playwright and workflow-contract files,
+the repository TypeScript check passes, and Playwright discovers exactly one
+desktop test when pointed at the external production origin. The test itself
+is intentionally skipped unless `GROK_RECORD_ONLY_E2E=1`; no signed-in
+production run occurred and no production claim is made. Static evidence pins
+manual-only dispatch, read-only GitHub permissions, exact identities, secret-
+only credentials, capture off, one permitted create mutation, no Resume or
+worker dispatch, read-only SQL, and stopped-containment checks before and
+after.
+**Addendum, 2026-08-31 latest+48 - durable Grok context envelopes (ADR-235):**
+The repository candidate now has bounded, append-only Grok input context for
+project, repository, captured text files, public URL/image references, and
+linked integrations. Focused unit, route, component, migration-contract, and
+full-migration-chain behavior tests cover owner/tenant isolation, exact replay,
+secret and private-network rejection, byte/item limits, immutable audit
+evidence, safe projections, atomic follow-up turns, and the explicit
+no-silent-replan/no-worker boundary. Lint and strict typecheck pass. Binary
+uploads, outbound URL/image retrieval, and production release evidence remain
+outside this repository checkpoint. ADR-230 later adds repository-only admitted
+worker consumption without changing this envelope contract. The deterministic planner does consume an 8 KB
+secret-scanned canonical summary as an explicit `bounded_context` requirement.
+The final repository suite passes 563 files / 6,443 tests with three files /
+seven tests skipped; the focused Grok/context set passes 120/120. The default
+production build is not claimed from this isolated worktree: Turbopack rejects
+its external `node_modules` junction, while the webpack fallback compiled and
+then exposed existing unrelated App Router export-type failures.
+
+**Addendum, 2026-08-31 latest+50 - admitted Grok claim context (ADR-230):**
+The full migration chain accepts forward-only `20260831001500`. Native catalog
+postflight pins the private projector, both replaced private attachment helpers,
+and all four unchanged public v3 wrappers, including owner, SECURITY DEFINER,
+`search_path=pg_catalog`, and exact service-role ACL posture. FORCE RLS and all
+four immutable context triggers are re-proved.
+
+Runtime behavior exercises a real admitted Graph target claim and a real
+admitted Phase1C target claim. Both carry exact initial envelope/hash provenance
+and captured text, while a later immutable `replan_required` follow-up is absent.
+A transactionally tampered envelope hash makes the Graph claim fail and proves
+the underlying graph-run creation rolled back. Legacy/non-Grok behavior remains
+unchanged. Worker schemas independently reject unknown fields, secret-shaped
+text, hash/byte/count/ordinal drift, and cross-protocol context injection.
+Claude/Codex prompt tests prove the owner objective remains present, context is
+labelled untrusted, references are not fetched, and no truncation marker is
+introduced. On the rebased tree, lint and strict typecheck pass; the focused
+set passes nine files / 127 tests and the complete repository suite passes 567
+files / 6,485 tests with three files / seven tests skipped. The default build
+is blocked by this worktree's external dependency junction; webpack compiles
+and then exposes the same seven pre-existing App Router export/signature errors
+recorded in the handoff. No hosted migration, provider run, worker enablement,
+autonomy change, or production-ready claim occurred.
 
 **Addendum, 2026-08-31 latest+44 - copilot + acceptance journey (ADR-224):**
 services-copilot unit 6 (each skill recognized from its own example; the
