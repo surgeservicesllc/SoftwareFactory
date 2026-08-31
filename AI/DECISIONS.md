@@ -3758,8 +3758,8 @@ undeclared until the goal's full seeded E2E passes.
 ## ADR-190 - Grok Bot is a factory Chief-of-Staff label over the canonical lifecycle
 
 - **Date**: 2026-08-30
-- **Status**: Accepted for the local durable-planning foundation; UI,
-  execution bridge, hosted apply, and production acceptance pending
+- **Status**: Accepted for the local release candidate; final exact-head gates,
+  hosted apply, deployment, and signed-in production acceptance pending
 - **Decision**: `Grok Bot` names the SoftwareFactory Chief-of-Staff product; it
   is not an xAI provider or model. An owner prompt is compiled
   deterministically into intent, requirements, acceptance criteria, task
@@ -3769,18 +3769,18 @@ undeclared until the goal's full seeded E2E passes.
   intents live behind forced RLS and bounded definer functions in
   `20260830001000_grok_chief_of_staff_persistence.sql`.
 - **Execution boundary**: a custom provider-labelled DAG is a plan, not proof
-  of execution, and must never be launched by the current route. Until the
-  exact bridge exists, the durable session reports
-  `execution_bridge_not_connected`, wakes no worker, and retains the plan for
-  reload. The only intended truthful bridge is canonical `full_lifecycle` v2:
-  Claude planning -> HUMAN architecture approval -> Codex Phase 1C -> exact
-  CI, Vercel, and health evidence. Planned provider/model/agent identity stays
-  separate from the graph/node/agent-run identity later observed from that
-  execution chain.
-- **Consequence**: UI and control surfaces may render only durable plan or
-  observed execution state, never simulated progress. The canonical bridge,
-  pause/resume/stop/retry/cancel acceptance, full release gates, hosted
-  migration, exact deployment, and signed-in production E2E remain required
-  before `GROK BOT: PRODUCTION READY` can be declared. Workers, autonomy, and
-  automatic actions remain OFF and the global kill switch remains ON while
-  this increment is integrated.
+  of execution, and is never launched. The service-only bridge creates the
+  exact canonical `full_lifecycle` v2 graph — Claude planning -> HUMAN
+  architecture approval -> Codex Phase 1C -> exact CI, Vercel, and health
+  evidence — and pauses it atomically before visibility. Creation and replay
+  create no graph/node runs and dispatch no worker; replay is idempotent, and
+  planned provider/model/agent identity stays separate from observed
+  graph/node/agent-run identity.
+- **Consequence**: UI and control surfaces render only durable plan or observed
+  execution state, never simulated progress. Focused bridge tests are green;
+  the prior full suite at `a26caec` was green with 5,705 passing tests and 7
+  skipped. Final post-release-workflow exact-head gates, ordered hosted ledger
+  application of `20260830000900` and `20260830001000`, exact deployment, and
+  signed-in production create/return/reload acceptance remain required before
+  `GROK BOT: PRODUCTION READY` can be declared. Workers, autonomy, and
+  automatic actions remain OFF and the global kill switch remains ON.

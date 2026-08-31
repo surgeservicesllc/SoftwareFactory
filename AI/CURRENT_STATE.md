@@ -1,32 +1,35 @@
 # Current state
 
-## 2026-08-30: Grok Bot durable planning foundation (ADR-190; local candidate)
+## 2026-08-30: Grok Bot local release candidate (ADR-190)
 
 Grok Bot is a SoftwareFactory product label and Chief-of-Staff experience, not
 an xAI provider or model. The local candidate turns an owner prompt into a
 deterministic, JSON-safe Intent -> Requirements -> Plan -> Task Graph record
-using the project's configured Claude and Codex bot roster. The planned
-provider/model/agent fields are routing intent; they are never presented as
-observed execution evidence.
+using the project's configured Claude and Codex bot roster. Its responsive
+workspace restores durable sessions and renders conversation, goal, plan,
+agents, progress, files/diffs, tests, artifacts, and deployment evidence.
+Planned provider/model/agent fields remain routing intent and are never
+presented as observed execution evidence.
 
 Migration `20260830001000_grok_chief_of_staff_persistence.sql` adds the durable
 owner-only Supabase boundary: sessions, append-only messages and events,
 immutable task/graph/artifact links, and monotonic control intents, all tenant
 and project scoped under forced RLS with bounded definer functions. The owner
-session APIs create, list, read, and control that durable state. Until an exact
-execution bridge is connected, creation returns a truthful blocked workspace
-with `execution_bridge_not_connected`; the generated custom DAG is routing
-intent only and is never launched or handed to a worker.
+session APIs create, list, read, and control that durable state. Replays are
+idempotent, and status/reload truth is projected from persisted state.
 
-The intended truthful execution bridge is the existing canonical
-`full_lifecycle` v2: Claude planning -> the HUMAN architecture gate -> Codex
-Phase 1C execution -> exact CI, Vercel, and health evidence. That bridge, the
-Grok workspace UI, hosted migration/release, and signed-in production
-acceptance are still pending integration. Focused Grok runtime verification is
-43/43, and the canonical lifecycle digest regression is 7/7; these are not a
-full-suite or production-readiness claim. Workers, autonomy, and automatic
-actions remain OFF, and the global kill switch remains ON. **GROK BOT:
-PRODUCTION READY is not declared.**
+The service-only execution bridge creates the exact canonical
+`full_lifecycle` v2 graph — Claude planning -> HUMAN architecture gate ->
+Codex Phase 1C -> exact CI, Vercel, and health evidence — and pauses it in the
+same transaction before it becomes visible. The custom provider-labelled DAG
+remains planning data and is never launched; graph and node runs remain absent,
+and no worker is dispatched. Focused bridge tests are green, and the prior full
+suite at `a26caec` was green with 5,705 passing tests and 7 skipped. Final
+post-release-workflow full gates, the exact push/deployment, hosted ledger
+application of migrations `20260830000900` and `20260830001000`, and signed-in
+production acceptance remain pending. Workers, autonomy, and automatic actions
+remain OFF, and the global kill switch remains ON. **GROK BOT: PRODUCTION
+READY is not declared.**
 
 ## Services CRM (task #63, ADR-185 — newest product)
 

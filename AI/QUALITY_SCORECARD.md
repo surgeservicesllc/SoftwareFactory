@@ -2,20 +2,20 @@
 
 Last reviewed: 2026-08-30
 
-**Addendum, 2026-08-30 latest+12 — Grok Bot durable planning foundation
-(ADR-190):** focused Grok runtime verification 43/43 covers the deterministic
-Chief-of-Staff planner, durable owner-only session/message/event/artifact/control
-boundary, forced-RLS/member denial and secret refusal, projection/store
-contracts, and owner route behavior. The separate canonical
-`full_lifecycle` v2 digest-pin regression is 7/7. The API saves the plan and
-returns an honest blocked state without launching the custom DAG or waking a
-worker; planned provider/model/agent identity is not counted as observed
-execution. These focused results are not a full-suite, build, hosted-migration,
-deployment, signed-in E2E, or production-readiness claim. Grok UI integration,
-the canonical Claude -> HUMAN gate -> Codex Phase 1C -> CI/Vercel/health
-bridge, end-to-end controls, and release acceptance remain pending. The safety
-envelope remains workers/autonomy/automatic actions OFF and global kill switch
-ON.
+**Addendum, 2026-08-30 latest+12 — Grok Bot local release candidate
+(ADR-190):** deterministic Chief-of-Staff planning, the owner-only durable
+session/message/event/link/control boundary, and the responsive workspace are
+integrated. Focused bridge tests prove that the service-only boundary creates
+the exact canonical `full_lifecycle` v2 graph and pauses it atomically before
+visibility, with idempotent replay/status truth, no custom provider-labelled
+DAG launch, no graph/node run, and no worker dispatch. Planned routing identity
+is not counted as observed execution. The prior full suite at `a26caec` was
+green with 5,705 passing tests and 7 skipped. This is not final exact-head,
+hosted-migration, deployment, signed-in E2E, or production-readiness evidence:
+post-release-workflow full gates, hosted ledger application of
+`20260830000900` and `20260830001000`, exact deployment, and signed-in
+production acceptance remain pending. The safety envelope remains
+workers/autonomy/automatic actions OFF and global kill switch ON.
 
 **Addendum, 2026-08-30 latest+11 — field service core (ADR-189):**
 services-field-service behavior 5 on the real chain under hosted-style

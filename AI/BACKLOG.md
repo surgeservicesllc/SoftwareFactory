@@ -11,25 +11,29 @@
   tenant/project-scoped sessions; append-only messages/events; immutable
   task, graph, and artifact links; monotonic control intents; forced RLS and
   narrow definer functions. Focused runtime suites: 43/43.
-- [x] Fail-closed planning API: save and reload the plan, return
-  `execution_bridge_not_connected`, wake no worker, and never launch the
-  custom provider-labelled DAG. Planned provider/model/agent identity is
-  routing intent, not observed run evidence.
-- [ ] Integrate and verify the Grok workspace UI: session history,
+- [x] Fail-closed planning API: save and reload the plan, preserve idempotent
+  durable status truth, wake no worker, and never launch the custom
+  provider-labelled DAG. Planned provider/model/agent identity is routing
+  intent, not observed run evidence.
+- [x] Integrate and verify the Grok workspace UI: session history,
   conversation, plan/tasks, agents, progress, files/diffs, tests, artifacts,
   deployment, and honest blocked/control states across responsive and
-  accessibility acceptance.
-- [ ] Connect the session to the exact canonical `full_lifecycle` v2 bridge —
+  accessibility coverage.
+- [x] Connect the session to the exact canonical `full_lifecycle` v2 bridge —
   Claude planning -> HUMAN architecture approval -> Codex Phase 1C ->
   CI/Vercel/health — while persisting planned identity separately from actual
-  graph/node/agent-run evidence. Canonical digest regression is 7/7; paused,
-  resumed, stopped, retry, and cancellation behavior still need end-to-end
-  bridge acceptance.
+  graph/node/agent-run evidence. The service-only boundary creates and pauses
+  the graph atomically before visibility, produces no graph/node run, dispatches
+  no worker, and replays idempotently from durable state. Focused bridge tests
+  are green.
 - [ ] Run the complete release gates, publish the exact accepted identity,
-  apply the single forward migration under its guarded scope, and perform
-  signed-in production persistence/return/reload acceptance. Keep workers,
-  autonomy, and automatic actions OFF and the global kill switch ON; do not
-  declare `GROK BOT: PRODUCTION READY` before this evidence exists.
+  apply only hosted ledger migrations `20260830000900` and `20260830001000`
+  in order under their guarded scope, and perform signed-in production
+  persistence/return/reload acceptance. The prior full suite at `a26caec` was
+  green with 5,705 passing tests and 7 skipped, but final gates must run on the
+  post-release-workflow exact head. Keep workers, autonomy, and automatic
+  actions OFF and the global kill switch ON; do not declare `GROK BOT:
+  PRODUCTION READY` before this evidence exists.
 
 ## Services CRM → pest-services platform (task #63, owner /goal 2026-08-30)
 

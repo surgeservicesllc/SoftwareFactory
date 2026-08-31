@@ -2,32 +2,30 @@
 
 Last updated: 2026-08-30
 
-## Newest (2026-08-30, latest+12): Grok Bot durable planning foundation (ADR-190)
+## Newest (2026-08-30, latest+12): Grok Bot local release candidate (ADR-190)
 
-The local candidate now has the truthful backend foundation for Grok Bot.
-`Grok Bot` is a product/Chief-of-Staff label over the factory's configured
-Claude and Codex bots, not xAI. The planner deterministically records intent,
-requirements, acceptance criteria, task dependencies, routing intent and
-budget. Migration `20260830001000_grok_chief_of_staff_persistence.sql` adds
-owner-only durable sessions, append-only messages/events, immutable
-task/graph/artifact links and monotonic control intents under tenant/project
-forced RLS; the owner APIs create/list/read/control that state.
+The local candidate now has the truthful Grok Bot planner, persistence,
+responsive workspace, and canonical lifecycle bridge. `Grok Bot` is a
+product/Chief-of-Staff label over the factory's configured Claude and Codex
+bots, not xAI. The deterministic plan and its owner-only sessions,
+append-only messages/events, immutable task/graph/artifact links, and monotonic
+control intents persist under tenant/project forced RLS. APIs and UI restore
+that durable conversation, plan, status, and evidence on reload.
 
-The deliberately important stop: a generated custom DAG is planning data only.
-The POST saves it and returns `202` with
-`execution_bridge_not_connected`; `workerWoken=false`, no graph is launched,
-and planned provider/model/agent labels are not passed off as observed
-node/agent-run evidence. Focused Grok runtime suites are 43/43; the canonical
-lifecycle digest pin is 7/7.
+The deliberately important boundary: a generated custom provider-labelled DAG
+is planning data only and is never launched. A service-only wrapper creates the
+exact canonical `full_lifecycle` v2 graph and pauses it atomically before it
+becomes visible. Creation and replay create no graph/node runs and dispatch no
+worker; replay is idempotent, while planned identity and observed execution
+evidence remain separate. Focused bridge tests are green. The prior complete
+suite at `a26caec` was green with 5,705 passing tests and 7 skipped.
 
-Next, integrate the workspace UI and bind the durable session to the exact
-canonical `full_lifecycle` v2 path: Claude planning -> HUMAN architecture gate
--> Codex Phase 1C -> CI/Vercel/health. Project the resulting graph/node/run
-identities back as observed evidence, then prove pause/resume/stop/retry/cancel,
-reload, full gates, guarded hosted migration, exact deployment, and signed-in
-production acceptance. None of that bridge/UI/release work is claimed complete
-here. Workers, autonomy, and automatic actions remain OFF; the global kill
-switch remains ON. Do not declare `GROK BOT: PRODUCTION READY` yet.
+Next, finish and verify the guarded release workflow; rerun all full gates on
+that exact head; push and verify the exact deployment; apply only hosted ledger
+migrations `20260830000900` and `20260830001000` in order; then prove signed-in
+production create/return/reload acceptance. Workers, autonomy, and automatic
+actions remain OFF; the global kill switch remains ON. Do not declare `GROK
+BOT: PRODUCTION READY` yet.
 
 ## Newest (2026-08-30, latest+11): field service core (ADR-189, task #63)
 
