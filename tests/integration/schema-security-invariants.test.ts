@@ -330,6 +330,9 @@ describe("SECURITY DEFINER functions", () => {
       // and canonical Full Lifecycle v3 launcher are pinned by exact overload
       // below; the launcher atomically pauses before visibility.
       "launch_grok_full_lifecycle_v3_as_server",
+      // Research launches the planner's exact Claude-only, zero-write DAG;
+      // this service boundary also pauses before visibility and never wakes.
+      "launch_grok_read_only_research_v1_as_server",
       "link_grok_artifact_as_server",
       "link_grok_task_as_server",
       // The verification sweep's two hands: enumerate connected subscription

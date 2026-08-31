@@ -38,6 +38,7 @@ import {
 } from "@/lib/grok/session-store";
 import {
   buildGrokProviderAdmissions,
+  buildGrokReadOnlyIntentAdmissions,
   GrokProviderAdmissionError,
 } from "@/lib/grok/provider-admission";
 import { GitHubApiError } from "@/lib/github/client";
@@ -388,7 +389,7 @@ export async function POST(request: Request) {
     bundle = await readGrokBundle(context.client, context.activeOrganization.id, session.id);
     bundle = await persistInitialContext(bundle);
     if (!plannedGraphLink(bundle)) {
-      if (plan.intent.kind === "research" || plan.intent.kind === "deploy") {
+      if (plan.intent.kind === "deploy") {
         return jsonNoStore(
           {
             sessionId: session.id,
@@ -402,6 +403,50 @@ export async function POST(request: Request) {
           { status: 409 },
         );
       }
+      if (plan.intent.kind === "research") {
+        let providerAdmissions;
+        try {
+          providerAdmissions = buildGrokReadOnlyIntentAdmissions(
+            plan,
+            plan.graphLaunch.nodes,
+          );
+        } catch (error) {
+          if (!(error instanceof GrokProviderAdmissionError)) throw error;
+          return jsonNoStore(
+            {
+              sessionId: session.id,
+              error: {
+                code: "grok_provider_admission_required",
+                message: error.message,
+              },
+            },
+            { status: 409 },
+          );
+        }
+        const { error: launchError } = await serviceClient.rpc(
+          "launch_grok_read_only_research_v1_as_server",
+          {
+            p_organization_id: context.activeOrganization.id,
+            p_requested_by: context.user.id,
+            p_project_id: project.projectId,
+            p_session_id: session.id,
+            p_message_id: assistantMessage.id,
+            p_idempotency_key: idempotencyKey,
+            p_goal: plan.graphLaunch.goal,
+            p_topology: plan.graphLaunch.topology,
+            p_topology_reasons: plan.graphLaunch.topologyReasons,
+            p_risk_level: plan.graphLaunch.riskLevel,
+            p_requires_owner_approval: plan.graphLaunch.requiresOwnerApproval,
+            p_nodes: plan.graphLaunch.nodes,
+            p_edges: plan.graphLaunch.edges,
+            p_budget: plan.graphLaunch.budget,
+            p_roster_idempotency_key: grokSpecialistRosterIdempotencyKey(idempotencyKey),
+            p_admissions: providerAdmissions,
+          },
+        );
+        if (launchError) return databaseErrorResponse(launchError);
+        bundle = await readGrokBundle(context.client, context.activeOrganization.id, session.id);
+      } else {
       /*
        * The provider-labelled Grok DAG remains routing intent. Executing it as
        * a custom graph would let the worker silently reinterpret its provider,
@@ -478,6 +523,7 @@ export async function POST(request: Request) {
       );
       if (launchError) return databaseErrorResponse(launchError);
       bundle = await readGrokBundle(context.client, context.activeOrganization.id, session.id);
+      }
     }
     const detail = await mapGrokSessionDetail(
       context.client,
@@ -487,11 +533,14 @@ export async function POST(request: Request) {
     );
     const executionStarted = detail.session.graphRunId !== null;
     const executionState = detail.session.status;
+    const graphKind = plan.intent.kind === "research"
+      ? "read-only research graph"
+      : "canonical release graph";
     const executionMessage = executionStarted
       ? `A durable graph run is linked and the session is ${executionState}. This request did not dispatch a worker.`
       : executionState === "paused"
-        ? "The canonical release graph is durable and paused. This request did not dispatch a worker."
-        : `The canonical release graph is durable with status ${executionState}; no durable run evidence is linked. This request did not dispatch a worker.`;
+        ? `The ${graphKind} is durable and paused. This request did not dispatch a worker.`
+        : `The ${graphKind} is durable with status ${executionState}; no durable run evidence is linked. This request did not dispatch a worker.`;
     return jsonNoStore({
       ...detail,
       // This route never dispatches. Keep that request-scoped fact separate
@@ -500,7 +549,9 @@ export async function POST(request: Request) {
       executionStarted,
       execution: {
         state: executionState,
-        bridge: "full_lifecycle_v3",
+        bridge: plan.intent.kind === "research"
+          ? "read_only_research_v1"
+          : "full_lifecycle_v3",
         message: executionMessage,
       },
     }, { status: 202 });

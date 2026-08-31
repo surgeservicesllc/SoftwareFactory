@@ -178,3 +178,72 @@ export function buildGrokProviderAdmissions(
   }
   return Object.freeze(admissions);
 }
+
+/**
+ * Bind an exact read-only planner DAG to the postings the planner selected.
+ *
+ * Unlike the canonical Full Lifecycle projection above, these node keys are
+ * the planner task keys themselves. Re-selecting a merely compatible bot here
+ * would make the durable graph disagree with the plan shown to the owner, so
+ * every node must retain its exact snapshotted assignment identity.
+ */
+export function buildGrokReadOnlyIntentAdmissions(
+  plan: GrokChiefOfStaffPlan,
+  nodes: readonly GrokCanonicalAdmissionNode[],
+): readonly GrokProviderAdmissionInput[] {
+  if (plan.planner.version !== 3 || !Array.isArray(plan.admissionRoster)) {
+    throw new GrokProviderAdmissionError(
+      "This goal uses a legacy plan without an immutable specialist admission roster. Re-plan it before execution.",
+    );
+  }
+  if (plan.intent.kind !== "research") {
+    throw new GrokProviderAdmissionError(
+      `The ${plan.intent.kind} plan is not an admitted read-only research graph.`,
+    );
+  }
+  if (nodes.length === 0 || nodes.length !== plan.dag.tasks.length) {
+    throw new GrokProviderAdmissionError(
+      "The read-only graph does not preserve every exact planner task.",
+    );
+  }
+
+  const taskById = new Map(plan.dag.tasks.map((task) => [task.id, task] as const));
+  const rosterByAssignment = new Map(
+    plan.admissionRoster.map((entry) => [entry.assignmentId, entry] as const),
+  );
+  if (taskById.size !== plan.dag.tasks.length || new Set(nodes.map((node) => node.node_key)).size !== nodes.length) {
+    throw new GrokProviderAdmissionError(
+      "The read-only graph contains duplicate or ambiguous planner task identities.",
+    );
+  }
+
+  const admissions = nodes.map((node) => {
+    const task = taskById.get(node.node_key);
+    if (!task
+      || task.executor !== "MODEL"
+      || task.provider !== "anthropic"
+      || node.executor !== "MODEL"
+      || node.capability !== task.capability
+      || node.model_tier !== task.modelTier
+      || !task.assignmentId
+    ) {
+      throw new GrokProviderAdmissionError(
+        `Read-only node ${node.node_key} does not match its exact Claude planner task.`,
+      );
+    }
+    const roster = rosterByAssignment.get(task.assignmentId);
+    if (!roster
+      || roster.provider !== "anthropic"
+      || roster.model !== task.model
+      || !supportsCapability(roster, task.capability)
+      || !supportsTier(roster, task.modelTier)
+    ) {
+      throw new GrokProviderAdmissionError(
+        `Read-only node ${node.node_key} has no current immutable match for its selected Claude posting.`,
+      );
+    }
+    return admissionFromRoster(roster, node, "graph_model");
+  });
+
+  return Object.freeze(admissions);
+}

@@ -29,6 +29,7 @@ const harness = vi.hoisted(() => ({
   plannedGraphLink: vi.fn(),
   buildCanonicalPlan: vi.fn(),
   buildProviderAdmissions: vi.fn(),
+  buildReadOnlyAdmissions: vi.fn(),
   resolveRelease: vi.fn(),
   serviceRpc: vi.fn(),
 }));
@@ -52,6 +53,7 @@ vi.mock("@/lib/graph/canonical-full-lifecycle", () => ({
 }));
 vi.mock("@/lib/grok/provider-admission", () => ({
   buildGrokProviderAdmissions: harness.buildProviderAdmissions,
+  buildGrokReadOnlyIntentAdmissions: harness.buildReadOnlyAdmissions,
   GrokProviderAdmissionError: class GrokProviderAdmissionError extends Error {},
 }));
 vi.mock("@/lib/github/service-role", () => ({
@@ -178,6 +180,7 @@ beforeEach(() => {
     template: { key: "full_lifecycle", version: 2 },
     plan: canonicalPlan,
   });
+  harness.buildReadOnlyAdmissions.mockReturnValue(providerAdmissions);
   harness.resolveRelease.mockResolvedValue({
     ok: true,
     target: { repository_id: repositoryId, base_branch: "main" },
@@ -569,9 +572,9 @@ describe("Grok sessions POST", () => {
     expect(harness.serviceRpc).not.toHaveBeenCalled();
   });
 
-  it("replays roster event 3 and plan event 4 exactly while research remains bridge-blocked", async () => {
-    const researchPlan = { ...plan, intent: { ...plan.intent, kind: "research" } };
-    harness.storedPlan.mockReturnValue(researchPlan);
+  it("replays roster event 3 and plan event 4 exactly while deploy remains bridge-blocked", async () => {
+    const deployPlan = { ...plan, intent: { ...plan.intent, kind: "deploy" } };
+    harness.storedPlan.mockReturnValue(deployPlan);
     harness.readBundle.mockResolvedValue({
       ...bundle,
       messages: [{ id: assistantMessageId, sequence_no: 2, role: "assistant" }],
@@ -610,6 +613,71 @@ describe("Grok sessions POST", () => {
     expect(harness.buildCanonicalPlan).not.toHaveBeenCalled();
     expect(harness.resolveRelease).not.toHaveBeenCalled();
     expect(harness.serviceRpc).not.toHaveBeenCalled();
+  });
+
+  it("launches the exact immutable research DAG paused without release resolution or dispatch", async () => {
+    harness.readBoundedJson.mockResolvedValueOnce({
+      projectId,
+      prompt: "Research the portal",
+      idempotencyKey: "request-key-123",
+    });
+    const researchGraph = {
+      goal: "Research the portal",
+      topology: "DAG",
+      topologyReasons: [{ code: "DEPENDENCIES", detail: "Evidence fans in." }],
+      riskLevel: "green",
+      requiresOwnerApproval: false,
+      nodes: [{
+        node_key: "research_repository",
+        executor: "MODEL",
+        capability: "discovery",
+        model_tier: "STANDARD",
+      }],
+      edges: [],
+      budget: { max_nodes: 1, max_concurrent_nodes: 1 },
+    };
+    const researchPlan = {
+      ...plan,
+      intent: { ...plan.intent, kind: "research", prompt: "Research the portal" },
+      graphLaunch: researchGraph,
+    };
+    harness.storedPlan.mockReturnValue(researchPlan);
+    harness.readBundle.mockResolvedValue({
+      ...bundle,
+      messages: [{ id: assistantMessageId, sequence_no: 2, role: "assistant" }],
+    });
+
+    const response = await POST(new Request("https://factory.example/api/grok/sessions", {
+      method: "POST",
+      headers: { origin: "https://factory.example", "content-type": "application/json" },
+      body: JSON.stringify({ projectId, prompt: "Research the portal" }),
+    }));
+
+    const responseBody = await response.json();
+    expect(response.status, JSON.stringify(responseBody)).toBe(202);
+    expect(responseBody).toMatchObject({
+      workerWoken: false,
+      executionStarted: false,
+      execution: { bridge: "read_only_research_v1", state: "paused" },
+    });
+    expect(harness.buildReadOnlyAdmissions).toHaveBeenCalledWith(
+      researchPlan,
+      researchGraph.nodes,
+    );
+    expect(harness.serviceRpc).toHaveBeenCalledWith(
+      "launch_grok_read_only_research_v1_as_server",
+      expect.objectContaining({
+        p_organization_id: organizationId,
+        p_project_id: projectId,
+        p_session_id: sessionId,
+        p_message_id: assistantMessageId,
+        p_goal: researchGraph.goal,
+        p_nodes: researchGraph.nodes,
+        p_admissions: providerAdmissions,
+      }),
+    );
+    expect(harness.buildCanonicalPlan).not.toHaveBeenCalled();
+    expect(harness.resolveRelease).not.toHaveBeenCalled();
   });
 
   it("replays the existing paused graph without resolving a changed branch or creating another graph", async () => {

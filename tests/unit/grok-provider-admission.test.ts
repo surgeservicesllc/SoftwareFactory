@@ -10,6 +10,7 @@ import {
 } from "@/lib/factory/chief-of-staff";
 import {
   buildGrokProviderAdmissions,
+  buildGrokReadOnlyIntentAdmissions,
   GrokProviderAdmissionError,
 } from "@/lib/grok/provider-admission";
 import { buildLaunchPlan } from "@/lib/graph/launch-plan";
@@ -155,6 +156,50 @@ describe("Grok provider admission projection", () => {
         .toThrow(/no intent-specific executable bridge/i);
     },
   );
+
+  it("binds every exact research task to the Claude posting selected by the planner", () => {
+    const planned = buildGrokChiefOfStaffPlan({
+      prompt: "Research the provider admission boundary",
+      project,
+      agents: [claude],
+      intent: "research",
+    });
+    expect(planned.ok).toBe(true);
+    if (!planned.ok) throw new Error(planned.error.message);
+
+    const admissions = buildGrokReadOnlyIntentAdmissions(
+      planned.plan,
+      planned.plan.graphLaunch.nodes,
+    );
+
+    expect(admissions).toHaveLength(planned.plan.dag.tasks.length);
+    expect(admissions.every((entry) => entry.lane === "graph_model")).toBe(true);
+    expect(admissions.every((entry) => entry.provider === "anthropic")).toBe(true);
+    expect(admissions.map((entry) => entry.nodeKey).sort()).toEqual(
+      planned.plan.dag.tasks.map((task) => task.id).sort(),
+    );
+    expect(admissions.every((entry) => entry.assignmentId === claude.assignmentId)).toBe(true);
+  });
+
+  it("rejects read-only task substitution and non-research plans", () => {
+    const planned = buildGrokChiefOfStaffPlan({
+      prompt: "Research the provider admission boundary",
+      project,
+      agents: [claude],
+      intent: "research",
+    });
+    expect(planned.ok).toBe(true);
+    if (!planned.ok) throw new Error(planned.error.message);
+    const first = planned.plan.graphLaunch.nodes[0];
+    if (!first) throw new Error("missing research node");
+
+    expect(() => buildGrokReadOnlyIntentAdmissions(planned.plan, [{
+      ...first,
+      capability: first.capability === "planning" ? "review" : "planning",
+    }])).toThrow(/preserve every exact planner task|does not match/i);
+    expect(() => buildGrokReadOnlyIntentAdmissions(buildPlan(), canonicalNodes()))
+      .toThrow(/not an admitted read-only research graph/i);
+  });
 
   it("refuses capability, tier, identity, and provider substitution", () => {
     const plan = buildPlan();
