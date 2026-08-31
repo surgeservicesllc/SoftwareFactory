@@ -146,7 +146,7 @@ built.
 |---|---|---|
 | Branch/office structure with managers | PestPac, ServSuite | **HAVE** (ADR-195) |
 | Org chart, roles, reporting lines | PestPac, ServSuite | **HAVE** (ADR-195) |
-| Warehouse/lot inventory | PestPac | **PARTIAL** — product lots exist; truck stock does not |
+| Warehouse/lot inventory | PestPac | **HAVE** (ADR-213) — an append-only movement ledger between warehouses (branches) and vehicles or sprayers (equipment), with every balance DERIVED rather than stored. A location can never go negative: the guard locks the lot before it reads the balance. A consumption names the application it served and their quantities must agree, and one application draws stock exactly once however often an offline sync replays. |
 | **Equipment and fleet/asset management** | ServSuite, FieldRoutes | **HAVE** (ADR-201) — assets, an append-only ledger, assignment, service schedules and meter readings that cannot run backwards. GPS telemetry beside it stays **Not Connected**. |
 | **Call centre / phone integration** | FieldRoutes, PestPac | **GAP** |
 
@@ -199,8 +199,8 @@ SMS/email delivery (which also gates automated reminders and campaign
 sending), GPS/fleet telemetry, QuickBooks sync, call-centre/telephony
 integration, and reviews/reputation platforms.
 
-**A note on what "parity" can mean here.** 58 capability rows: **46 HAVE,
-4 PARTIAL, 8 GAP.**
+**A note on what "parity" can mean here.** 58 capability rows: **47 HAVE,
+3 PARTIAL, 8 GAP.**
 
 The composition matters more than the count. As of ADR-210 **every
 remaining GAP is provider-gated — all eight of them.** Not most, not
@@ -216,10 +216,9 @@ call are the only remaining steps, and `/Services/integrations` reports
 whether each is live from a sealed credential actually existing rather than
 a hard-coded label.
 
-The four PARTIALs are capabilities where the data ships and a piece of what
-the competitors sell does not — automated sending on a schedule, drag
-sequencing, truck stock, and paying online. Those first three are
-buildable, and each is an increment rather than a row; paying online is
-provider-gated like the GAPs beside it. Appointment sequencing (ADR-211)
-and invoice lines from the visit (ADR-212) were on this list until they
-were built.
+The three PARTIALs are capabilities where the data ships and a piece of
+what the competitors sell does not — automated sending on a schedule, drag
+route sequencing, and paying online. Only the first two are buildable;
+paying online is provider-gated like the eight GAPs beside it. Appointment
+sequencing (ADR-211), invoice lines from the visit (ADR-212) and truck
+stock (ADR-213) were on this list until they were built.

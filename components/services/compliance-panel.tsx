@@ -6,6 +6,7 @@ import { AlertTriangle, Download, FlaskConical, ShieldCheck } from "lucide-react
 import { Card, Notice, PageHeader, SectionTitle } from "@/components/ui";
 import { useAccountProperties } from "@/components/services/use-account-properties";
 import type {
+  StockPayload,
   AccountsPayload,
   ApplicationsPayload,
   ComplianceReportPayload,
@@ -42,6 +43,7 @@ export function ServicesCompliancePanel() {
   const [rules, setRules] = useState<ComplianceRulesPayload | null>(null);
   const [accounts, setAccounts] = useState<AccountsPayload | null>(null);
   const [technicians, setTechnicians] = useState<TechniciansPayload | null>(null);
+  const [stock, setStock] = useState<StockPayload | null>(null);
   const [listError, setListError] = useState<string | null>(null);
   const [actError, setActError] = useState<string | null>(null);
   const [openForm, setOpenForm] = useState<"product" | "application" | "rule" | null>(null);
@@ -53,13 +55,15 @@ export function ServicesCompliancePanel() {
 
   const refresh = useCallback(async () => {
     try {
-      const [productsRes, applicationsRes, rulesRes, accountsRes, techniciansRes] = await Promise.all([
-        fetch("/api/services/products", { headers: { accept: "application/json" } }),
-        fetch("/api/services/applications", { headers: { accept: "application/json" } }),
-        fetch("/api/services/compliance/rules", { headers: { accept: "application/json" } }),
-        fetch("/api/services/accounts", { headers: { accept: "application/json" } }),
-        fetch("/api/services/technicians", { headers: { accept: "application/json" } }),
-      ]);
+      const [productsRes, applicationsRes, rulesRes, accountsRes, techniciansRes, stockRes] =
+        await Promise.all([
+          fetch("/api/services/products", { headers: { accept: "application/json" } }),
+          fetch("/api/services/applications", { headers: { accept: "application/json" } }),
+          fetch("/api/services/compliance/rules", { headers: { accept: "application/json" } }),
+          fetch("/api/services/accounts", { headers: { accept: "application/json" } }),
+          fetch("/api/services/technicians", { headers: { accept: "application/json" } }),
+          fetch("/api/services/stock", { headers: { accept: "application/json" } }),
+        ]);
       const productsBody = (await productsRes.json()) as ProductsPayload & {
         error?: { message?: string };
       };
@@ -73,6 +77,7 @@ export function ServicesCompliancePanel() {
       if (rulesRes.ok) setRules((await rulesRes.json()) as ComplianceRulesPayload);
       if (accountsRes.ok) setAccounts((await accountsRes.json()) as AccountsPayload);
       if (techniciansRes.ok) setTechnicians((await techniciansRes.json()) as TechniciansPayload);
+      if (stockRes.ok) setStock((await stockRes.json()) as StockPayload);
     } catch {
       setListError("The chemical catalogue could not be read.");
     }
@@ -123,6 +128,35 @@ export function ServicesCompliancePanel() {
     }
     return map;
   }, [technicians]);
+
+  /**
+
+   * Where each lot's remainder physically sits (ADR-213). Derived from the
+
+   * movement ledger, so it is what was put there minus what left rather
+
+   * than a number somebody typed.
+
+   */
+
+  const stockByLot = useMemo(() => {
+
+    const map = new Map<string, { locationLabel: string; quantity: number }[]>();
+
+    for (const balance of stock?.balances ?? []) {
+
+      const bucket = map.get(balance.lotId) ?? [];
+
+      bucket.push({ locationLabel: balance.locationLabel, quantity: balance.quantity });
+
+      map.set(balance.lotId, bucket);
+
+    }
+
+    return map;
+
+  }, [stock]);
+
 
   const lotsByProduct = useMemo(() => {
     const map = new Map<string, typeof catalogue extends null ? never : NonNullable<typeof catalogue>["lots"]>();
@@ -383,6 +417,14 @@ export function ServicesCompliancePanel() {
                             {lot.quantityRemaining === 0 ? (
                               <span className="rounded-full border border-line px-2 py-0.5 text-[11px]">spent</span>
                             ) : null}
+                            {(stockByLot.get(lot.id) ?? []).map((held) => (
+                              <span
+                                key={held.locationLabel}
+                                className="rounded-full border border-line px-2 py-0.5 text-[11px]"
+                              >
+                                {held.quantity} {lot.unit} · {held.locationLabel}
+                              </span>
+                            ))}
                           </li>
                         ))}
                       </ul>

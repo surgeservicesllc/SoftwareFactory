@@ -2,6 +2,27 @@
 
 Last reviewed: 2026-08-31
 
+**Addendum, 2026-08-31 latest+32 - truck stock (ADR-213):**
+services-truck-stock.behavior 12 on the real chain: balances derived from
+the ledger rather than stored, so a receipt of 100 and a transfer of 40
+read as 60 at the depot and 40 on the truck; a draw larger than a location
+holds refused in its own words; a draw from a place that never held the lot
+refused; a consumption whose quantity disagrees with its application
+refused, and the agreeing one accepted; one application drawing exactly
+once however often a sync replays; a consumption naming no application
+refused; a consumption for another lot's application refused; a miscount
+corrected by a second movement with both rows surviving; three impossible
+shapes refused by constraint (a receipt that also has a source, a transfer
+to where it already is, an adjustment claiming an application); the ledger
+undeletable and unupdatable by a member; one book's stock invisible to
+another; and both stock functions still invokers. services-stock-routes 11
+pins the boundary: places named rather than uuids, a location emptied to
+zero not shown as a holding, six database refusals each arriving with its
+own status and the database's own sentence, and two malformed movements
+refused before the database sees them. RLS census 206 -> 207; grants 51 ->
+52 crm tables; runbook 211; workflow scope `truck-stock`. Matrix: 46 HAVE
+-> 47, 4 PARTIAL -> 3.
+
 **Addendum, 2026-08-31 latest+31 - invoices from the visit (ADR-212):**
 services-invoice-from-visit.behavior 12 on the real chain: the service at
 the plan's value plus one chemical line naming product, amount, target and

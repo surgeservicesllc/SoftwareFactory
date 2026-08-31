@@ -1064,3 +1064,18 @@ export type FleetPayload = {
   };
   telemetry: { available: boolean; label: string };
 };
+
+/** Where a lot's remainder physically sits, derived from the ledger (ADR-213). */
+export type StockBalanceView = {
+  lotId: string;
+  branchId: string | null;
+  equipmentId: string | null;
+  quantity: number;
+  locationKind: "branch" | "equipment";
+  locationLabel: string;
+};
+
+export type StockPayload = {
+  balances: StockBalanceView[];
+  counts: { locations: number; lots: number };
+};

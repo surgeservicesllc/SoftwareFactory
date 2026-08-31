@@ -1,5 +1,29 @@
 # Current state
 
+## 2026-08-31: Stock has a place, not just a quantity (ADR-213)
+
+A lot has always known how much of it is left. It now also knows where the
+remainder sits: an append-only movement ledger between warehouses
+(branches) and vehicles or sprayers (equipment), with every balance derived
+by summing that ledger rather than stored anywhere. A truck's stock is
+exactly what was put on it minus what left.
+
+A location can never hold a negative amount of a chemical. The recorder
+locks the lot before it reads the balance, so two technicians drawing the
+last of a lot cannot both pass. A consumption names the application it
+served and their quantities must agree, and one application draws stock
+exactly once however often an offline sync replays it — which is where the
+field queue and inventory meet.
+
+Corrections are movements, not edits: the ledger takes select and insert
+and nothing else, and a miscount is recorded as an adjustment so both the
+original and the correction survive.
+
+Each lot on `/Services/compliance` now shows where its remainder is, by
+depot and by truck tag.
+
+Repository only: the migration is not yet applied to hosted.
+
 ## 2026-08-31: An invoice can be built from the visit it bills (ADR-212)
 
 A draft invoice raised against a completed work order can now be built from
