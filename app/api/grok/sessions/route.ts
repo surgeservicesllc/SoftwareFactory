@@ -25,6 +25,10 @@ import {
   storedGrokPlanningFailure,
   storedGrokPlan,
 } from "@/lib/grok/session-store";
+import {
+  buildGrokProviderAdmissions,
+  GrokProviderAdmissionError,
+} from "@/lib/grok/provider-admission";
 import { GitHubApiError } from "@/lib/github/client";
 import { GitHubConfigurationError } from "@/lib/github/config";
 import { githubRouteErrorResponse } from "@/lib/github/errors";
@@ -323,6 +327,22 @@ export async function POST(request: Request) {
           { status: canonical.status },
         );
       }
+      let providerAdmissions;
+      try {
+        providerAdmissions = buildGrokProviderAdmissions(plan, canonical.plan.nodes);
+      } catch (error) {
+        if (!(error instanceof GrokProviderAdmissionError)) throw error;
+        return jsonNoStore(
+          {
+            sessionId: session.id,
+            error: {
+              code: "grok_provider_admission_required",
+              message: error.message,
+            },
+          },
+          { status: 409 },
+        );
+      }
       const release = await resolveCanonicalFullLifecycleReleaseIdentity(
         context.client,
         context.activeOrganization.id,
@@ -336,7 +356,7 @@ export async function POST(request: Request) {
         );
       }
       const { error: launchError } = await serviceClient.rpc(
-        "launch_grok_full_lifecycle_as_server",
+        "launch_grok_full_lifecycle_v2_as_server",
         {
           p_organization_id: context.activeOrganization.id,
           p_requested_by: context.user.id,
@@ -356,6 +376,7 @@ export async function POST(request: Request) {
           p_base_branch: release.target.base_branch,
           p_base_sha: release.baseSha,
           p_required_check_names: release.requiredChecks,
+          p_admissions: providerAdmissions,
         },
       );
       if (launchError) return databaseErrorResponse(launchError);

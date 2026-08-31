@@ -27,7 +27,7 @@ const KNOWN_SECRET_SHAPES: Record<string, string> = {
   "a Stripe test key": "sk_test_abcdefghijklmnop1234",
   // Restricted keys are what a careful operator uses INSTEAD of a secret
   // key, and lib/billing accepts one as a valid STRIPE_SECRET_KEY. All
-  // three detectors missed it until ADR-208.
+  // three detectors missed it until ADR-209.
   "a Stripe restricted key": "rk_live_abcdefghijklmnop1234",
   "a GitHub personal access token": "ghp_abcdefghijklmnopqrstuvwxyz0123",
   "a GitHub fine-grained token": "github_pat_abcdefghijklmnopqrstuvwxyz0123",

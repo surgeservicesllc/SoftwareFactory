@@ -34,7 +34,7 @@ const KNOWN_SECRET_SHAPES: Record<string, string> = {
   "a Stripe test key": "sk_test_abcdefghijklmnop1234",
   // Restricted keys are what a careful operator uses INSTEAD of a secret
   // key, and lib/billing accepts one as a valid STRIPE_SECRET_KEY. All
-  // three detectors missed it until ADR-208.
+  // three detectors missed it until ADR-209.
   "a Stripe restricted key": "rk_live_abcdefghijklmnop1234",
   "a GitHub personal access token": "ghp_abcdefghijklmnopqrstuvwxyz0123",
   "a GitHub fine-grained token": "github_pat_abcdefghijklmnopqrstuvwxyz0123",
@@ -107,7 +107,7 @@ describe("the database's secret detector agrees with both TypeScript ones", () =
 
   it("still lets a Stripe PUBLISHABLE key through, in all three", async () => {
     /*
-     * `pk_` is meant to be public — it ships in browser bundles. ADR-208
+     * `pk_` is meant to be public — it ships in browser bundles. ADR-209
      * widened the Stripe pattern from `sk_` to `[sr]k_` to cover restricted
      * keys, and the obvious next "tidy" is to make it `[sprk]k_` and catch
      * publishable ones too.

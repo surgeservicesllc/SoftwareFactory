@@ -11,6 +11,8 @@ import type { RiskLevel } from "@/lib/risk";
 
 export type SerializedBot = {
   id: string;
+  /** Monotonic token identifying the exact bot configuration that was read. */
+  revision: number;
   name: string;
   provider: string;
   providerLabel: string;

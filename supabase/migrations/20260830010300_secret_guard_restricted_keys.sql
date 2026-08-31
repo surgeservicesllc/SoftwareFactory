@@ -1,5 +1,5 @@
 -- ---------------------------------------------------------------------------
--- The secret detectors did not know about a Stripe RESTRICTED key (ADR-208).
+-- The secret detectors did not know about a Stripe RESTRICTED key (ADR-209).
 --
 -- All three implementations of the rule — this function,
 -- `lib/security/sensitive-data.ts` and `lib/worker/redact.ts` — matched

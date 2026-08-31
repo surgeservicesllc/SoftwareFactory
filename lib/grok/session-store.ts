@@ -5,7 +5,9 @@ import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 
+import { listAiAccounts, type AiAccountRow } from "@/lib/ai-accounts/broker";
 import { assignmentPostingIsConfigured } from "@/lib/bots/assignment-config";
+import { normalizeCredentialRef } from "@/lib/bots/credentials";
 import { loadBotFabric } from "@/lib/bots/service";
 import type { BotFabricSnapshot, SerializedBotRole } from "@/lib/bots/types";
 import { deriveReleaseEvidence } from "@/lib/factory/release-evidence";
@@ -26,7 +28,9 @@ import type {
   GrokSessionDetail,
   GrokTask,
 } from "@/lib/grok/contracts";
+import { MODEL_TIERS, NODE_CAPABILITIES } from "@/lib/graph/contracts";
 import { GRAPH_TOPOLOGIES } from "@/lib/graph/types";
+import { containsLikelySecret } from "@/lib/security/sensitive-data";
 
 type DatabaseError = Readonly<{ code?: string; message?: string }>;
 
@@ -200,11 +204,27 @@ const storedTaskSchema = z.object({
   provider: z.enum(["anthropic", "openai"]),
   model: z.string().min(1).max(128),
   agentName: z.string().min(1).max(120),
+  assignmentId: z.string().uuid().optional(),
+  assignmentRevision: z.number().int().positive().optional(),
+  botId: z.string().uuid().optional(),
+  botRevision: z.number().int().positive().optional(),
+  roleId: z.string().uuid().optional(),
+  roleUpdatedAt: z.string().datetime({ offset: true }).optional(),
+  aiAccountId: z.string().uuid().optional(),
+  credentialRef: z.string().regex(/^[A-Z][A-Z0-9_]{2,63}$/).optional(),
+  credentialPurpose: z.string().regex(/^[a-z][a-z0-9_]{1,62}$/).optional(),
+  providerIdentity: z.string().trim().min(1).max(120).nullable().optional(),
+  accountUpdatedAt: z.string().datetime({ offset: true }).optional(),
+  agentCapabilities: z.array(z.union([z.enum(NODE_CAPABILITIES), z.literal("*")]))
+    .min(1).max(NODE_CAPABILITIES.length + 1).optional(),
+  agentMaxModelTier: z.enum(MODEL_TIERS).refine((value) => value !== "NONE").optional(),
   dependsOn: z.array(z.string().min(1).max(120)).max(50),
 }).passthrough();
 
 const storedPlanSchema = z.object({
-  planner: z.object({ version: z.literal(GROK_PLAN_VERSION) }).passthrough(),
+  planner: z.object({
+    version: z.union([z.literal(1), z.literal(GROK_PLAN_VERSION)]),
+  }).passthrough(),
   intent: z.object({ prompt: z.string().trim().min(1).max(4_000) }).passthrough(),
   project: z.object({ projectId: z.string().uuid() }).passthrough(),
   dag: z.object({ tasks: z.array(storedTaskSchema).min(1).max(50) }).passthrough(),
@@ -405,22 +425,66 @@ function tierForWorkEffort(workEffort: string): GrokConfiguredAgent["maxModelTie
   return "STANDARD";
 }
 
+const grokAiAccountSchema = z.object({
+  account_id: z.string().uuid(),
+  provider: z.enum(["anthropic", "openai"]),
+  status: z.string().min(1).max(64),
+  credential_purpose: z.string().regex(/^[a-z][a-z0-9_]{1,62}$/),
+  provider_identity: z.string().trim().min(1).max(120)
+    .refine((value) => !containsLikelySecret(value))
+    .nullable().optional(),
+  updated_at: z.string().datetime({ offset: true }),
+}).passthrough();
+
+function connectedAiAccounts(
+  accounts: readonly AiAccountRow[],
+): ReadonlyMap<string, z.infer<typeof grokAiAccountSchema>> {
+  const parsed = z.array(grokAiAccountSchema).max(200).safeParse(accounts);
+  if (!parsed.success) {
+    throw new GrokStoreProjectionError("The connected AI-account roster was malformed.");
+  }
+  const connected = new Map<string, z.infer<typeof grokAiAccountSchema>>();
+  for (const account of parsed.data) {
+    if (account.status !== "connected") continue;
+    if (connected.has(account.account_id)) {
+      throw new GrokStoreProjectionError("The connected AI-account roster contained a duplicate identity.");
+    }
+    connected.set(account.account_id, account);
+  }
+  return connected;
+}
+
 export function configuredGrokAgents(
   fabric: BotFabricSnapshot,
   projectId: string,
+  accounts: readonly AiAccountRow[],
 ): readonly GrokConfiguredAgent[] {
   if (fabric.assignmentsComplete !== true) {
     throw new GrokStoreProjectionError("The configured bot roster is incomplete.");
   }
   const botById = new Map(fabric.bots.map((bot) => [bot.id, bot]));
   const roleById = new Map(fabric.roles.map((role) => [role.id, role]));
+  const accountById = connectedAiAccounts(accounts);
   const agents: GrokConfiguredAgent[] = [];
   for (const assignment of fabric.assignments) {
     if (assignment.projectId !== projectId || assignment.status !== "active") continue;
     const bot = botById.get(assignment.botId);
     const role = roleById.get(assignment.roleId);
     if (!bot || !role || (bot.provider !== "anthropic" && bot.provider !== "openai")) continue;
-    if (bot.currentReadiness !== "ready" || !assignmentPostingIsConfigured({
+    const account = bot.aiAccountId ? accountById.get(bot.aiAccountId) : undefined;
+    if (!account || account.provider !== bot.provider) continue;
+    let credentialRef: string | null;
+    try {
+      credentialRef = normalizeCredentialRef(bot.credentialRef);
+    } catch {
+      continue;
+    }
+    if (!credentialRef || credentialRef !== bot.credentialRef) continue;
+    // The launch RPC independently requires the persisted readiness row. A
+    // currently openable recovered credential may improve the console's live
+    // overlay, but it cannot silently substitute for that audited state.
+    if (bot.readiness !== "ready" || bot.currentReadiness !== "ready"
+      || !assignmentPostingIsConfigured({
       config: assignment.config,
       model: assignment.model,
       workEffort: assignment.workEffort,
@@ -429,6 +493,17 @@ export function configuredGrokAgents(
     if (capabilities.length === 0) continue;
     agents.push(Object.freeze({
       id: assignment.id,
+      assignmentId: assignment.id,
+      assignmentRevision: assignment.revision,
+      botId: bot.id,
+      botRevision: bot.revision,
+      roleId: role.id,
+      roleUpdatedAt: role.updatedAt,
+      aiAccountId: account.account_id,
+      credentialRef,
+      credentialPurpose: account.credential_purpose,
+      providerIdentity: account.provider_identity ?? null,
+      accountUpdatedAt: account.updated_at,
       name: `${bot.name} — ${role.name}`,
       provider: bot.provider,
       model: assignment.model ?? bot.model,
@@ -448,7 +523,11 @@ export async function loadConfiguredGrokAgents(
   organizationId: string,
   projectId: string,
 ): Promise<readonly GrokConfiguredAgent[]> {
-  return configuredGrokAgents(await loadBotFabric(client, organizationId), projectId);
+  const [fabric, accounts] = await Promise.all([
+    loadBotFabric(client, organizationId),
+    listAiAccounts(client, organizationId),
+  ]);
+  return configuredGrokAgents(fabric, projectId, accounts);
 }
 
 export function grokSessionTitle(prompt: string): string {

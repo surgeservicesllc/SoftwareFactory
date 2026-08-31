@@ -59,6 +59,24 @@
   PR/diffs, exact CI, preview, deployment, and health. Do not infer bot/worker
   identity; Rollback and automatic continuation remain **Not Connected**, and
   graph state alone does not advertise Phase 1C Cancel/Retry.
+- [x] Add immutable launch-time provider admission (ADR-208): planner v2
+  snapshots safe assignment/bot/role/account/provider identity; the route maps
+  each canonical MODEL/Phase 1C node to one exact posting; and forward migration
+  `20260831000100` locks and re-derives the live identity before it atomically
+  records append-only admissions and creates a paused, zero-run graph. Revoke
+  service-role execution from the legacy unadmitted launcher. The dedicated
+  one-file workflow verifies exact ledger, forced RLS, ACL/catalog/source,
+  linked lint, runtime/replay/immutability/rollback, health, and stopped safety.
+- [ ] Make admission cover every honest prompt/roster without inventing work:
+  preserve research/deploy as durable plan-only sessions or add dedicated
+  canonical templates; persist a deterministic immutable admission roster so
+  evaluation/decision specialists need not be fake DAG tasks; normalize the
+  explicit `*` generalist capability in both TypeScript and a new forward SQL
+  launcher revision. Keep v1/v2 history readable and fail closed for execution.
+- [ ] Before enabling any worker, require a complete admission set in every
+  Resume/wake and worker-claim path, and revalidate the admitted assignment,
+  bot, role, AI account, provider credential rotation, provider/model, and
+  canonical node at claim time. Legacy unadmitted graphs must never be woken.
 - [x] Establish the production baseline before containment: exact main
   `397798921ebda6a4f8e30d2c0d83af36a3dd73a0` is green/READY and hosted
   migrations `20260830000900` and `20260830001000` are each ledgered once.

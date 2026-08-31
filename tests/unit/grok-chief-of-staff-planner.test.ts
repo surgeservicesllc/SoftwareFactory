@@ -18,7 +18,18 @@ const project = Object.freeze({
 });
 
 const claude = Object.freeze({
-  id: "claude-chief-1",
+  id: "11000000-0000-4000-8000-000000000011",
+  assignmentId: "11000000-0000-4000-8000-000000000011",
+  assignmentRevision: 7,
+  botId: "12000000-0000-4000-8000-000000000012",
+  botRevision: 5,
+  roleId: "13000000-0000-4000-8000-000000000013",
+  roleUpdatedAt: "2026-08-30T18:00:00.000Z",
+  aiAccountId: "14000000-0000-4000-8000-000000000014",
+  credentialRef: "SOFTWAREFACTORY_CLAUDE_CODE_OAUTH_TOKEN",
+  credentialPurpose: "claude",
+  providerIdentity: "claude-owner@example.com",
+  accountUpdatedAt: "2026-08-30T19:00:00.000Z",
   name: "Claude - Chief",
   provider: "anthropic",
   model: "claude-opus-4-1",
@@ -29,7 +40,18 @@ const claude = Object.freeze({
 } satisfies GrokConfiguredAgent);
 
 const codex = Object.freeze({
-  id: "codex-builder-1",
+  id: "21000000-0000-4000-8000-000000000021",
+  assignmentId: "21000000-0000-4000-8000-000000000021",
+  assignmentRevision: 11,
+  botId: "22000000-0000-4000-8000-000000000022",
+  botRevision: 9,
+  roleId: "23000000-0000-4000-8000-000000000023",
+  roleUpdatedAt: "2026-08-30T18:30:00.000Z",
+  aiAccountId: "24000000-0000-4000-8000-000000000024",
+  credentialRef: "SOFTWAREFACTORY_CODEX_AUTH_JSON",
+  credentialPurpose: "codex",
+  providerIdentity: null,
+  accountUpdatedAt: "2026-08-30T19:30:00.000Z",
   name: "Codex - Builder",
   provider: "openai",
   model: "gpt-5.3-codex",
@@ -72,7 +94,7 @@ describe("buildGrokChiefOfStaffPlan", () => {
     if (!first.ok) return;
     expect(first.plan.planner).toEqual({
       id: "grok-chief-of-staff",
-      version: 1,
+      version: 2,
       deterministic: true,
       executionStarted: false,
     });
@@ -80,7 +102,7 @@ describe("buildGrokChiefOfStaffPlan", () => {
     expect(Object.isFrozen(first.plan.dag.tasks)).toBe(true);
     expect(first.plan.delivery.mode).toBe("HANDOFF_ONLY");
     expect(JSON.parse(JSON.stringify(first.plan))).toMatchObject({
-      planner: { version: 1, executionStarted: false },
+      planner: { version: 2, executionStarted: false },
       intent: { kind: "build" },
     });
   });
@@ -231,7 +253,22 @@ describe("buildGrokChiefOfStaffPlan", () => {
       expect(task.contract.acceptsPartialInputs).toBe(false);
       expect(["anthropic", "openai"]).toContain(task.provider);
       expect(["STANDARD", "STRONG"]).toContain(task.modelTier);
+      expect(task).toMatchObject({
+        assignmentId: expect.any(String),
+        assignmentRevision: expect.any(Number),
+        botId: expect.any(String),
+        botRevision: expect.any(Number),
+        roleId: expect.any(String),
+        roleUpdatedAt: expect.any(String),
+        aiAccountId: expect.any(String),
+        credentialRef: expect.any(String),
+        credentialPurpose: expect.any(String),
+        accountUpdatedAt: expect.any(String),
+        agentCapabilities: expect.any(Array),
+        agentMaxModelTier: expect.any(String),
+      });
     }
+    expect(JSON.stringify(plan)).not.toContain("credentialValue");
   });
 
   it("serializes the compiler result once into the exact durable graph launch contract", () => {
@@ -263,16 +300,20 @@ describe("buildGrokChiefOfStaffPlan", () => {
   it("chooses agents deterministically: exact capability before wildcard, then priority and id", () => {
     const exactReviewer = {
       ...claude,
-      id: "claude-reviewer-exact",
+      id: "31000000-0000-4000-8000-000000000031",
+      assignmentId: "31000000-0000-4000-8000-000000000031",
+      botId: "32000000-0000-4000-8000-000000000032",
+      roleId: "33000000-0000-4000-8000-000000000033",
+      aiAccountId: "34000000-0000-4000-8000-000000000034",
       name: "Claude Reviewer",
       capabilities: ["review"] as const,
       priority: 999,
     } satisfies GrokConfiguredAgent;
     const plan = expectPlan("Build a customer portal", [claude, exactReviewer, codex]);
     expect(plan.dag.tasks.find((task) => task.id === "verify_correctness")?.agentId)
-      .toBe("claude-reviewer-exact");
+      .toBe("31000000-0000-4000-8000-000000000031");
     expect(plan.dag.tasks.find((task) => task.id === "architecture")?.agentId)
-      .toBe("claude-chief-1");
+      .toBe("11000000-0000-4000-8000-000000000011");
   });
 
   it("fails closed when no ready configured agents exist", () => {

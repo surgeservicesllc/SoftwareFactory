@@ -2,7 +2,7 @@
 
 Last reviewed: 2026-08-31
 
-**Addendum, 2026-08-31 latest+28 - restricted keys (ADR-208):**
+**Addendum, 2026-08-31 latest+28 - restricted keys (ADR-209):**
 A Stripe restricted key was invisible to all three secret detectors while
 lib/billing accepted one as a valid STRIPE_SECRET_KEY — the system called
 it a credential in one place and not in the layer that decides whether it
@@ -58,6 +58,21 @@ migration, no new tables, no seed change. It also corrected the matrix's
 "commercial trend reports with heat maps" row, which was still GAP after
 ADR-203 shipped the data behind it — 12 GAP down to 11, 18 rows now short
 of HAVE.
+
+**Addendum, 2026-08-31 latest+28 - Grok provider admission (ADR-208):**
+the focused application/admission/security suites pass 119/119, the protected
+release workflow contract passes 11/11, and its migration behavior/contract
+slice passes 43 tests. Lint, strict typecheck, production build, YAML parsing,
+every workflow shell block, canonical LF hash, and `git diff --check` pass.
+The exact rebased full repository run passes 6,068 tests with seven skipped,
+plus lint, strict typecheck, and the 266-page production build. The new
+evidence table is forced
+RLS with no direct non-owner grants, its rows reject update/delete/truncate,
+the old launcher is no longer service-role callable, and the new workflow
+canary rolls every fixture back after proving mismatch zero residue, valid
+replay, hash integrity, pause, and zero graph/node runs. Hosted apply and
+signed-in production acceptance are still pending, and worker claim/wake is
+not admission-fenced, so this score does not declare production readiness.
 
 **Addendum, 2026-08-31 latest+25 - WDO reports (ADR-205):**
 services-wdo-inspections.behavior 14 on the real chain: an inspection

@@ -178,7 +178,7 @@ export function composeLaunchProposal(goal: string): LaunchProposal | null {
  * one isolated repository-writing task. Planning is pure and never calls
  * either provider, a database, GitHub, or a deployment service.
  */
-export const GROK_PLAN_VERSION = 1 as const;
+export const GROK_PLAN_VERSION = 2 as const;
 export const GROK_INTENT_KINDS = ["build", "fix", "research", "test", "deploy"] as const;
 export type GrokIntentKind = (typeof GROK_INTENT_KINDS)[number];
 export type GrokProvider = "anthropic" | "openai";
@@ -186,6 +186,18 @@ export type GrokAgentCapability = NodeCapability | "*";
 
 export type GrokConfiguredAgent = Readonly<{
   id: string;
+  assignmentId: string;
+  assignmentRevision: number;
+  botId: string;
+  botRevision: number;
+  roleId: string;
+  roleUpdatedAt: string;
+  aiAccountId: string;
+  /** Safe server-side reference name only; never credential material. */
+  credentialRef: string;
+  credentialPurpose: string;
+  providerIdentity: string | null;
+  accountUpdatedAt: string;
   name: string;
   provider: GrokProvider;
   model: string;
@@ -255,6 +267,20 @@ export type GrokTask = Readonly<{
   model: string;
   agentId: string;
   agentName: string;
+  /** Optional only for version-1 plans persisted before identity snapshots. */
+  assignmentId?: string;
+  assignmentRevision?: number;
+  botId?: string;
+  botRevision?: number;
+  roleId?: string;
+  roleUpdatedAt?: string;
+  aiAccountId?: string;
+  credentialRef?: string;
+  credentialPurpose?: string;
+  providerIdentity?: string | null;
+  accountUpdatedAt?: string;
+  agentCapabilities?: readonly GrokAgentCapability[];
+  agentMaxModelTier?: Exclude<ModelTier, "NONE">;
   risk: RiskLevel;
   maxAttempts: number;
   timeoutMs: number;
@@ -380,7 +406,18 @@ export type GrokPlannerResult =
 
 const grokCapabilitySchema = z.union([z.enum(NODE_CAPABILITIES), z.literal("*")]);
 const grokAgentSchema = z.object({
-  id: z.string().trim().min(1).max(120).regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/),
+  id: z.string().uuid(),
+  assignmentId: z.string().uuid(),
+  assignmentRevision: z.number().int().positive(),
+  botId: z.string().uuid(),
+  botRevision: z.number().int().positive(),
+  roleId: z.string().uuid(),
+  roleUpdatedAt: z.string().datetime({ offset: true }),
+  aiAccountId: z.string().uuid(),
+  credentialRef: z.string().regex(/^[A-Z][A-Z0-9_]{2,63}$/),
+  credentialPurpose: z.string().regex(/^[a-z][a-z0-9_]{1,62}$/),
+  providerIdentity: z.string().trim().min(1).max(120).nullable(),
+  accountUpdatedAt: z.string().datetime({ offset: true }),
   name: z.string().trim().min(1).max(120),
   provider: z.enum(["anthropic", "openai"]),
   model: z.string().trim().min(1).max(128).regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/),
@@ -390,7 +427,15 @@ const grokAgentSchema = z.object({
   ),
   ready: z.boolean(),
   priority: z.number().int().min(0).max(10_000).optional(),
-}).strict();
+}).strict().superRefine((agent, context) => {
+  if (agent.id !== agent.assignmentId) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["assignmentId"],
+      message: "The agent id must identify the exact assignment.",
+    });
+  }
+});
 
 const grokProjectSchema = z.object({
   projectId: z.string().uuid(),
@@ -961,6 +1006,19 @@ export function buildGrokChiefOfStaffPlan(input: unknown): GrokPlannerResult {
       model: agent.model,
       agentId: agent.id,
       agentName: agent.name,
+      assignmentId: agent.assignmentId,
+      assignmentRevision: agent.assignmentRevision,
+      botId: agent.botId,
+      botRevision: agent.botRevision,
+      roleId: agent.roleId,
+      roleUpdatedAt: agent.roleUpdatedAt,
+      aiAccountId: agent.aiAccountId,
+      credentialRef: agent.credentialRef,
+      credentialPurpose: agent.credentialPurpose,
+      providerIdentity: agent.providerIdentity,
+      accountUpdatedAt: agent.accountUpdatedAt,
+      agentCapabilities: Object.freeze([...agent.capabilities]),
+      agentMaxModelTier: agent.maxModelTier,
       risk: contract.risk,
       maxAttempts: contract.retry.maxAttempts,
       timeoutMs: contract.timeoutMs,

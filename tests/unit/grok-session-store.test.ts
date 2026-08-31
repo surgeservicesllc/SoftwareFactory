@@ -3,16 +3,24 @@
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
-vi.mock("@/lib/bots/service", () => ({ loadBotFabric: vi.fn() }));
+const rosterHarness = vi.hoisted(() => ({
+  loadBotFabric: vi.fn(),
+  listAiAccounts: vi.fn(),
+}));
+vi.mock("@/lib/bots/service", () => ({ loadBotFabric: rosterHarness.loadBotFabric }));
+vi.mock("@/lib/ai-accounts/broker", () => ({ listAiAccounts: rosterHarness.listAiAccounts }));
 
 import { buildGrokChiefOfStaffPlan } from "@/lib/factory/chief-of-staff";
 import {
   applyGrokGraphControl,
+  configuredGrokAgents,
   GrokStoreProjectionError,
+  loadConfiguredGrokAgents,
   recordGrokPlanningFailure,
   mapGrokSessionDetail,
   readGrokBundle,
   storedGrokPlanningFailure,
+  storedGrokPlan,
 } from "@/lib/grok/session-store";
 
 const organizationId = "10000000-0000-4000-8000-000000000001";
@@ -256,7 +264,18 @@ function researchPlan() {
       defaultBranch: "main",
     },
     agents: [{
-      id: "claude-1",
+      id: "81000000-0000-4000-8000-000000000081",
+      assignmentId: "81000000-0000-4000-8000-000000000081",
+      assignmentRevision: 3,
+      botId: "82000000-0000-4000-8000-000000000082",
+      botRevision: 4,
+      roleId: "83000000-0000-4000-8000-000000000083",
+      roleUpdatedAt: "2026-08-30T18:00:00.000Z",
+      aiAccountId: "84000000-0000-4000-8000-000000000084",
+      credentialRef: "SOFTWAREFACTORY_CLAUDE_CODE_OAUTH_TOKEN",
+      credentialPurpose: "claude",
+      providerIdentity: "owner@example.com",
+      accountUpdatedAt: "2026-08-30T19:00:00.000Z",
       name: "Claude",
       provider: "anthropic",
       model: "claude-opus-5",
@@ -268,6 +287,180 @@ function researchPlan() {
   if (!planned.ok) throw new Error(planned.error.message);
   return planned.plan;
 }
+
+const configuredBotId = "82000000-0000-4000-8000-000000000082";
+const configuredRoleId = "83000000-0000-4000-8000-000000000083";
+const configuredAccountId = "84000000-0000-4000-8000-000000000084";
+const configuredAssignmentId = "85000000-0000-4000-8000-000000000085";
+
+function configuredFabric() {
+  return {
+    assignmentsComplete: true,
+    bots: [{
+      id: configuredBotId,
+      revision: 6,
+      name: "Claude connected",
+      provider: "anthropic",
+      providerLabel: "Claude",
+      providerVendor: "Anthropic",
+      model: "claude-opus-5",
+      credentialRef: "SOFTWAREFACTORY_CLAUDE_CODE_OAUTH_TOKEN",
+      credentialPresent: true,
+      baseUrl: null,
+      notes: null,
+      readiness: "ready" as const,
+      readinessLabel: "Ready",
+      readinessTone: "safe" as const,
+      readinessDetail: "The credential is available.",
+      lastCheckedAt: "2026-08-30T19:00:00.000Z",
+      currentReadiness: "ready" as const,
+      currentReadinessDetail: "The credential is available.",
+      aiAccountId: configuredAccountId,
+      createdAt: "2026-08-30T17:00:00.000Z",
+    }],
+    roles: [{
+      id: configuredRoleId,
+      name: "Reviewer",
+      slug: "reviewer",
+      summary: "Reviews and plans work.",
+      instructions: "Review evidence.",
+      riskCeiling: "GREEN" as const,
+      capabilities: ["planning", "review", "security", "testing", "reporting"],
+      createdAt: "2026-08-30T17:00:00.000Z",
+      updatedAt: "2026-08-30T18:30:00.000Z",
+    }],
+    assignments: [{
+      id: configuredAssignmentId,
+      revision: 8,
+      botId: configuredBotId,
+      projectId,
+      roleId: configuredRoleId,
+      status: "active" as const,
+      assignedAt: "2026-08-30T18:00:00.000Z",
+      releasedAt: null,
+      model: "claude-opus-5",
+      workEffort: "high",
+      config: {
+        preset: null,
+        responsibilities: [],
+        instructions: null,
+        repositoryAccess: "read" as const,
+        branchStrategy: "per_task_branch" as const,
+        canOpenPullRequest: false,
+        canMergePullRequest: false,
+        pipelineAccess: "none" as const,
+        environmentAccess: "none" as const,
+        tools: [],
+        requiresHumanApproval: true,
+        maxConcurrentTasks: 1,
+        priority: 1,
+      },
+    }],
+    projects: [],
+  };
+}
+
+function connectedAccount(overrides: Record<string, unknown> = {}) {
+  return {
+    account_id: configuredAccountId,
+    provider: "anthropic",
+    auth_method: "subscription_oauth",
+    display_name: "Claude account 1",
+    provider_identity: "owner@example.com",
+    status: "connected",
+    credential_purpose: "claude",
+    last_verified_at: "2026-08-30T19:00:00.000Z",
+    last_error: null,
+    created_at: "2026-08-30T17:00:00.000Z",
+    updated_at: "2026-08-30T19:30:00.000Z",
+    ...overrides,
+  };
+}
+
+describe("configured Grok agent identity", () => {
+  it("admits only the exact connected account and snapshots every concurrency token", () => {
+    const agents = configuredGrokAgents(configuredFabric(), projectId, [connectedAccount()]);
+
+    expect(agents).toHaveLength(1);
+    expect(agents[0]).toMatchObject({
+      id: configuredAssignmentId,
+      assignmentId: configuredAssignmentId,
+      assignmentRevision: 8,
+      botId: configuredBotId,
+      botRevision: 6,
+      roleId: configuredRoleId,
+      roleUpdatedAt: "2026-08-30T18:30:00.000Z",
+      aiAccountId: configuredAccountId,
+      credentialRef: "SOFTWAREFACTORY_CLAUDE_CODE_OAUTH_TOKEN",
+      credentialPurpose: "claude",
+      providerIdentity: "owner@example.com",
+      accountUpdatedAt: "2026-08-30T19:30:00.000Z",
+      maxModelTier: "STRONG",
+    });
+    expect(agents[0]?.capabilities).toEqual([
+      "planning", "qa", "reporting", "review", "security_review",
+    ]);
+    expect(JSON.stringify(agents)).not.toContain("credentialValue");
+  });
+
+  it("fails closed for a disconnected, mismatched, or privileged credential identity", () => {
+    expect(configuredGrokAgents(
+      configuredFabric(), projectId, [connectedAccount({ status: "needs_reauth" })],
+    )).toEqual([]);
+    expect(configuredGrokAgents(
+      configuredFabric(), projectId, [connectedAccount({ provider: "openai" })],
+    )).toEqual([]);
+    expect(configuredGrokAgents({
+      ...configuredFabric(),
+      bots: [{
+        ...configuredFabric().bots[0],
+        readiness: "not_connected" as const,
+        currentReadiness: "ready" as const,
+      }],
+    }, projectId, [connectedAccount()])).toEqual([]);
+    expect(configuredGrokAgents({
+      ...configuredFabric(),
+      bots: [{ ...configuredFabric().bots[0], credentialRef: "SUPABASE_SERVICE_ROLE_KEY" }],
+    }, projectId, [connectedAccount()])).toEqual([]);
+    expect(() => configuredGrokAgents(
+      configuredFabric(), projectId,
+      [connectedAccount({ provider_identity: `sk-${"a".repeat(30)}` })],
+    )).toThrow("The connected AI-account roster was malformed.");
+  });
+
+  it("loads the bot and account rosters together before projecting identities", async () => {
+    rosterHarness.loadBotFabric.mockResolvedValueOnce(configuredFabric());
+    rosterHarness.listAiAccounts.mockResolvedValueOnce([connectedAccount()]);
+
+    await expect(loadConfiguredGrokAgents({} as never, organizationId, projectId))
+      .resolves.toHaveLength(1);
+    expect(rosterHarness.loadBotFabric).toHaveBeenCalledWith(expect.anything(), organizationId);
+    expect(rosterHarness.listAiAccounts).toHaveBeenCalledWith(expect.anything(), organizationId);
+  });
+
+  it("reads legacy v1 plans but preserves their non-executable version and missing snapshot", () => {
+    const legacy = JSON.parse(JSON.stringify(researchPlan())) as {
+      planner: { version: number };
+      dag: { tasks: Array<Record<string, unknown>> };
+    };
+    legacy.planner.version = 1;
+    for (const task of legacy.dag.tasks) {
+      for (const field of [
+        "assignmentId", "assignmentRevision", "botId", "botRevision", "roleId",
+        "roleUpdatedAt", "aiAccountId", "credentialRef", "credentialPurpose",
+        "providerIdentity", "accountUpdatedAt", "agentCapabilities", "agentMaxModelTier",
+      ]) delete task[field];
+    }
+    const stored = storedGrokPlan({ messages: [{
+      sequence_no: 2,
+      role: "assistant",
+      metadata: { kind: "grok.plan", plan: legacy },
+    }] } as never);
+
+    expect(stored?.planner.version).toBe(1);
+    expect(stored?.dag.tasks[0]?.assignmentId).toBeUndefined();
+  });
+});
 
 describe("Grok session graph persistence", () => {
   it("records a planning failure through one atomic service-role RPC without prompt details", async () => {
