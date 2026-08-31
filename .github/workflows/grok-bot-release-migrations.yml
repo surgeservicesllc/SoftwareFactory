@@ -795,7 +795,7 @@ jobs:
               EXPECTED_GROK_FUNCTIONS=16
             fi
             if [ "$LEDGER" = "1|1|1|1|1" ]; then
-              CONTROL_RECOVERY_FUNCTION=",('public.apply_grok_graph_control_as_owner(uuid,uuid,uuid,text,text,text)','authenticated','55508f9dad0b6f307b02713057949895','v','plpgsql')"
+              CONTROL_RECOVERY_FUNCTION=",('public.apply_grok_graph_control_as_owner(uuid,uuid,uuid,text,text,text)','authenticated','2b0ea737ac99b22570ddbfdd4c583eeb','v','plpgsql')"
               EXPECTED_GROK_FUNCTIONS=$((EXPECTED_GROK_FUNCTIONS + 1))
             else
               CONTROL_RECOVERY_FUNCTION=""

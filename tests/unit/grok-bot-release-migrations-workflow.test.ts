@@ -78,6 +78,20 @@ function stepByName(name: string) {
   return step!;
 }
 
+function storedFunctionBody(migrationPath: string, functionName: string) {
+  const migration = readFileSync(resolve(root, migrationPath), "utf8")
+    .replace(/\r\n?/g, "\n");
+  const functionStart = migration.indexOf(`create function public.${functionName}(`);
+  expect(functionStart).toBeGreaterThanOrEqual(0);
+  const delimiter = "$function$";
+  const delimiterStart = migration.indexOf(`as ${delimiter}`, functionStart);
+  expect(delimiterStart).toBeGreaterThan(functionStart);
+  const bodyStart = delimiterStart + `as ${delimiter}`.length;
+  const bodyEnd = migration.indexOf(`${delimiter};`, bodyStart);
+  expect(bodyEnd).toBeGreaterThan(bodyStart);
+  return migration.slice(bodyStart, bodyEnd);
+}
+
 describe("Grok Bot hosted release workflow", () => {
   it("is manual, serialized with every hosted apply, and least privilege", () => {
     expect(Object.keys(workflow.on)).toEqual(["workflow_dispatch"]);
@@ -143,6 +157,16 @@ describe("Grok Bot hosted release workflow", () => {
     expect(identity).toContain("sha256sum");
     expect(identity).toContain("^[0-9a-f]{64}$");
     expect(source).not.toContain("planning_failure_sha256");
+  });
+
+  it("pins the exact PostgreSQL prosrc body including its delimiter newlines", () => {
+    const body = storedFunctionBody(
+      migrations[3].path,
+      "apply_grok_graph_control_as_owner",
+    );
+    const prosrcMd5 = createHash("md5").update(body).digest("hex");
+    expect(prosrcMd5).toBe("2b0ea737ac99b22570ddbfdd4c583eeb");
+    expect(source).toContain(`'${prosrcMd5}','v','plpgsql'`);
   });
 
   it("requires explicit actor, confirmation, exact green main, and READY production", () => {
@@ -408,7 +432,7 @@ describe("Grok Bot hosted release workflow", () => {
       "planning-failure exact replay drifted",
       "planning-failure tenant mismatch did not refuse",
       "public.apply_grok_graph_control_as_owner(uuid,uuid,uuid,text,text,text)",
-      "55508f9dad0b6f307b02713057949895",
+      "2b0ea737ac99b22570ddbfdd4c583eeb",
       "control-recovery atomic pause evidence drifted",
       "v_link := public.link_grok_task_as_server",
       "insert into public.grok_graph_launches",
