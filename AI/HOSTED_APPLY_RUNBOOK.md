@@ -288,6 +288,35 @@ version named below is a real file, and checks that the probe in
 `.github/workflows/apply-hosted-migrations.yml` asks about exactly this set — so the list and the
 probe cannot drift apart.)
 
+## Applied to hosted — 2026-08-31, the Services CRM chain
+
+Dispatched from `main` at `52a2eda` after PR #469 merged with CI green.
+Seven scopes, in dependency order, each reporting `success` and each having
+run its own postflight before reporting it:
+
+| Scope | Version | Run |
+|---|---|---|
+| `pest-ipm` | `20260830001200` | 33351874168 |
+| `chemicals-compliance` | `20260830001300` | 33351958922 |
+| `billing-contracts` | `20260830001400` | 33352013667 |
+| `branches-org-sales` | `20260830001500` | 33352126394 |
+| `documents-canvassing-marketing` | `20260830001600` | 33352184485 |
+| `forms-timesheets-licences` | `20260830001700` | 33352222216 |
+| `customer-portal` | `20260830001800` | 33352257894 |
+
+Each scope's postflight is the evidence, not the exit code: forced RLS on
+every new table, the ABSENCE of DELETE proven rather than assumed (hosted
+default privileges grant ALL at creation, so a capability expressed as a
+missing grant only means something if the grant was there to revoke),
+`anon` and `service_role` shut out, and every trigger the increment relies
+on confirmed present. The portal scope additionally proves its resolver is
+executable by no role at all and that its nine caller-scoped functions are
+definers reachable only by `authenticated`.
+
+`operating-dashboards` (`20260830001900`) is NOT yet applied — it is still
+on a branch. Its postflight asserts the inverse property: that none of its
+five functions is a definer.
+
 ## Historical release tail before ADR-115 — 2026-08-22 (superseded)
 
 The evidence in this section records an earlier checkpoint. It is not the
