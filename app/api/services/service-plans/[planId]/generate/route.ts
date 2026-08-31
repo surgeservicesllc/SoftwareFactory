@@ -72,7 +72,48 @@ export async function POST(
     }
 
     const dueDate = plan.next_due;
-    const advancedTo = advanceServiceDate(dueDate, plan.recurrence as CrmServiceRecurrence);
+
+    // A sequenced plan (ADR-211) advances along its own calendar, not by
+    // an interval: "the 1st and the 15th" is not every fortnight, and the
+    // difference compounds into a different day every month. The dates
+    // come from the database rather than from a second implementation
+    // here, so the visit that is generated and the preview the operator
+    // approved cannot disagree.
+    let advancedTo = advanceServiceDate(dueDate, plan.recurrence as CrmServiceRecurrence);
+    let serviceType = plan.service_type;
+
+    if (plan.cycle_months != null) {
+      const sequence = await client.rpc("crm_plan_occurrences", {
+        p_plan: plan.id,
+        p_from: dueDate,
+        p_count: 2,
+      });
+      if (sequence.error) return databaseErrorResponse(sequence.error);
+
+      const upcoming = (sequence.data ?? []) as {
+        occurs_on: string; service_type: string | null;
+      }[];
+      const dueStep = upcoming[0]?.occurs_on === dueDate ? upcoming[0] : null;
+      const next = dueStep ? upcoming[1] : upcoming[0];
+
+      if (!next) {
+        // A cycle with no reachable step generates nothing. Refusing is
+        // the honest answer; advancing by the recurrence would quietly put
+        // the account back on the calendar it was moved off.
+        return jsonNoStore(
+          {
+            error: {
+              code: "plan_sequence_empty",
+              message: "This plan is sequenced but its schedule has no upcoming visit.",
+            },
+          },
+          { status: 409 },
+        );
+      }
+      advancedTo = next.occurs_on;
+      serviceType = dueStep?.service_type ?? plan.service_type;
+    }
+
     const advanced = await client
       .from("crm_service_plans")
       .update({ next_due: advancedTo })
@@ -102,7 +143,7 @@ export async function POST(
         property_id: plan.property_id,
         technician_id: plan.technician_id,
         plan_id: plan.id,
-        service_type: plan.service_type,
+        service_type: serviceType,
         scheduled_start: `${dueDate}T09:00:00Z`,
         scheduled_end: `${dueDate}T11:00:00Z`,
         instructions: plan.notes,

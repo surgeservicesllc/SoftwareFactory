@@ -304,6 +304,12 @@ the full seeded E2E journey passes — increment 10 of the plan.
   trigger so an offline visit keeps the moment it actually happened.
   /Services/field. 20260830010400; hosted apply: scope=field-offline-queue
   after merge.
+- [x] Increment 19 (ADR-211): twice-monthly and custom appointment
+  sequencing — ordered visit steps on a calendar-anchored cycle, a
+  generator the dispatch path advances from, and a cadence that reports
+  visits a year beside bills a year so level billing reads as the
+  arrangement it is. /Services/schedule. 20260831000200; hosted apply:
+  scope=plan-sequencing after merge.
 - [ ] Provider-gated, ship Not Connected until an owner supplies
   credentials, never implied as working: card/ACH processing (the ledger
   records money that moved; it does not move money), SMS/email delivery,

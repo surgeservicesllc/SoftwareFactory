@@ -2,6 +2,34 @@
 
 Last reviewed: 2026-08-31
 
+**Addendum, 2026-08-31 latest+30 - plan sequencing (ADR-211):**
+services-plan-sequencing.behavior 14 on the real chain: a twice-monthly
+account on the 1st and the 15th for a whole year rather than 27 drifting
+fortnights; a seasonal program holding March/June/September/November across
+a year boundary with a different service named per visit; a plan nobody
+sequenced answering with nothing rather than inventing a date; the next
+occurrence strictly after the last, so generating cannot produce one date
+twice; SQL and the browser preview agreeing date for date over three years;
+visits and bills reported side by side at 4 against 12; a step outside its
+cycle refused; a step on a plan with no cycle refused; the cycle refused
+both when cleared under existing steps and when shrunk past one, each
+through PostgREST rather than through a function somebody has to call; a
+step carrying two anchors refused so no generator ever chooses; one book's
+calendar invisible to another, including through the generator; every
+sequencing function still an invoker; and the billing period unchanged.
+plan-sequence 13 pins the date arithmetic directly, including that day 31
+is month end in February and that week 5 means the last matching weekday in
+a month with four. services-plan-sequencing-routes 11 pins the boundary: a
+sequenced plan advancing along its calendar rather than its recurrence, the
+step's own service reaching the work order, a sequence with nothing ahead
+refused rather than quietly falling back to the interval, an unsequenced
+plan untouched, and four shapes refused before the database has to see
+them. services-schedule-panel gains 2, which is the "on a page" half: the
+preview appears before a save because the browser computes it, and the
+cadence line says visits and bills separately the moment they disagree.
+RLS census 205 -> 206; grants 50 -> 51 crm tables; runbook 209;
+workflow scope `plan-sequencing`. Matrix: 44 HAVE -> 45, 6 PARTIAL -> 5.
+
 **Addendum, 2026-08-31 latest+29 - the offline field queue (ADR-210):**
 services-field-offline.behavior 9 on the real chain: a visit recorded at
 the technician's own moment rather than the sync's; five replays of one

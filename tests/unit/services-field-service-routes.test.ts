@@ -112,6 +112,7 @@ const planRow = {
   value_cents: 154_000,
   active: true,
   notes: null,
+  cycle_months: null,
   created_at: "2026-08-30T10:00:00Z",
   updated_at: "2026-08-30T10:00:00Z",
 };

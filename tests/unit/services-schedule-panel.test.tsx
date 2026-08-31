@@ -55,11 +55,19 @@ const plansPayload = {
       valueCents: 89_000,
       active: true,
       notes: null,
+      cycleMonths: null,
       createdAt: "2026-08-30T10:00:00Z",
       updatedAt: "2026-08-30T10:00:00Z",
     },
   ],
   dueCount: 1,
+};
+
+const emptySequence = {
+  cycleMonths: null,
+  steps: [],
+  occurrences: [],
+  cadence: { sequenced: false, visitsPerYear: null, billsPerYear: 4 },
 };
 
 const techniciansPayload = {
@@ -109,6 +117,7 @@ let fetchMock: ReturnType<typeof vi.fn>;
 function serve(overrides: {
   workOrders?: unknown;
   plans?: unknown;
+  sequence?: unknown;
   onWrite?: (url: string, init: RequestInit) => Response | null;
 }) {
   fetchMock.mockImplementation((url: string, init?: RequestInit) => {
@@ -118,6 +127,9 @@ function serve(overrides: {
     }
     if (url.startsWith("/api/services/work-orders")) {
       return Promise.resolve(json(overrides.workOrders ?? workOrdersPayload));
+    }
+    if (url.includes("/steps")) {
+      return Promise.resolve(json(overrides.sequence ?? emptySequence));
     }
     if (url.startsWith("/api/services/service-plans")) {
       return Promise.resolve(json(overrides.plans ?? plansPayload));
@@ -241,5 +253,87 @@ describe("the technicians panel", () => {
     await user.type(screen.getAllByRole("textbox")[0], "Aisha");
     await user.click(dialogButtons[dialogButtons.length - 1]);
     expect(posted).toEqual({ firstName: "Aisha" });
+  });
+});
+
+describe("sequencing a plan onto named dates", () => {
+  it("previews the dates before anything is saved, and saves the sequence the operator built", async () => {
+    let sent: { cycleMonths: number | null; steps: unknown[] } | null = null;
+    serve({
+      onWrite: (url, init) => {
+        if (init.method === "PUT" && url.endsWith(`/service-plans/${planId}/steps`)) {
+          sent = JSON.parse(init.body as string);
+          return json({
+            cycleMonths: 1,
+            steps: [],
+            occurrences: [
+              { stepPosition: 1, occursOn: "2026-09-01", serviceType: "Quarterly deep inspection" },
+            ],
+            cadence: { sequenced: true, visitsPerYear: 24, billsPerYear: 4 },
+          });
+        }
+        return null;
+      },
+    });
+    const user = userEvent.setup();
+    render(<ServicesSchedulePanel />);
+
+    const plans = await screen.findByTestId("services-plans");
+    await user.click(within(plans).getByRole("button", { name: "Schedule" }));
+
+    const editor = await screen.findByTestId("plan-sequence-editor");
+    await user.click(within(editor).getByRole("button", { name: "1st and 15th" }));
+
+    // The preview is computed in the browser, so it appears before a save.
+    const preview = within(editor).getByTestId("plan-sequence-preview");
+    expect(within(preview).getAllByRole("listitem").length).toBeGreaterThan(0);
+    for (const date of within(preview).getAllByRole("listitem")) {
+      expect(date.textContent).toMatch(/-(01|15)$/);
+    }
+
+    await user.click(within(editor).getByRole("button", { name: "Save schedule" }));
+
+    expect(sent).toEqual({
+      cycleMonths: 1,
+      steps: [
+        { position: 1, monthOffset: 0, anchor: "day_of_month", dayOfMonth: 1, weekOfMonth: null, weekday: null, serviceType: null },
+        { position: 2, monthOffset: 0, anchor: "day_of_month", dayOfMonth: 15, weekOfMonth: null, weekday: null, serviceType: null },
+      ],
+    });
+  });
+
+  it("says visits and bills separately once they disagree", async () => {
+    serve({
+      sequence: {
+        cycleMonths: 12,
+        steps: [{
+          id: "a0000000-0000-4000-8000-0000000c0001",
+          planId,
+          position: 1,
+          monthOffset: 2,
+          anchor: "nth_weekday",
+          dayOfMonth: null,
+          weekOfMonth: 2,
+          weekday: 1,
+          serviceType: "perimeter",
+          createdAt: "2026-08-30T10:00:00Z",
+          updatedAt: "2026-08-30T10:00:00Z",
+        }],
+        occurrences: [
+          { stepPosition: 1, occursOn: "2027-03-08", serviceType: "perimeter" },
+        ],
+        cadence: { sequenced: true, visitsPerYear: 1, billsPerYear: 4 },
+      },
+    });
+    const user = userEvent.setup();
+    render(<ServicesSchedulePanel />);
+
+    const plans = await screen.findByTestId("services-plans");
+    await user.click(within(plans).getByRole("button", { name: "Schedule" }));
+
+    const cadence = await screen.findByTestId("plan-cadence");
+    expect(cadence.textContent).toContain("1 visits a year");
+    expect(cadence.textContent).toContain("4 bills a year");
+    expect(cadence.textContent).toContain("level billing");
   });
 });

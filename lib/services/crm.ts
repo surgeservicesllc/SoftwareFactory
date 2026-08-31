@@ -155,7 +155,9 @@ export const CRM_OPPORTUNITY_COLUMNS =
 export const CRM_TECHNICIAN_COLUMNS =
   "id, first_name, last_name, email, phone, license_number, active, branch_id, reports_to_id, hire_date, license_expires_on, license_state, created_at, updated_at";
 export const CRM_SERVICE_PLAN_COLUMNS =
-  "id, account_id, property_id, service_type, recurrence, next_due, technician_id, value_cents, active, notes, created_at, updated_at";
+  "id, account_id, property_id, service_type, recurrence, next_due, technician_id, value_cents, active, notes, cycle_months, created_at, updated_at";
+export const CRM_PLAN_STEP_COLUMNS =
+  "id, plan_id, position, month_offset, anchor, day_of_month, week_of_month, weekday, service_type, created_at, updated_at";
 export const CRM_WORK_ORDER_COLUMNS =
   "id, account_id, property_id, technician_id, plan_id, status, service_type, scheduled_start, scheduled_end, instructions, completion_notes, completed_at, created_at, updated_at";
 export const CRM_PRODUCT_COLUMNS =
@@ -255,6 +257,22 @@ export type CrmServicePlanRow = {
   value_cents: number | null;
   active: boolean;
   notes: string | null;
+  /** Null until somebody sequences the plan (ADR-211). */
+  cycle_months: number | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CrmPlanStepRow = {
+  id: string;
+  plan_id: string;
+  position: number;
+  month_offset: number;
+  anchor: "day_of_month" | "nth_weekday";
+  day_of_month: number | null;
+  week_of_month: number | null;
+  weekday: number | null;
+  service_type: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -513,6 +531,23 @@ export function toServicePlanView(row: CrmServicePlanRow) {
     valueCents: row.value_cents,
     active: row.active,
     notes: row.notes,
+    cycleMonths: row.cycle_months,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function toPlanStepView(row: CrmPlanStepRow) {
+  return {
+    id: row.id,
+    planId: row.plan_id,
+    position: row.position,
+    monthOffset: row.month_offset,
+    anchor: row.anchor,
+    dayOfMonth: row.day_of_month,
+    weekOfMonth: row.week_of_month,
+    weekday: row.weekday,
+    serviceType: row.service_type,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

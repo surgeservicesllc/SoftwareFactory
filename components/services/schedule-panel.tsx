@@ -7,6 +7,7 @@ import { CalendarClock, Repeat } from "lucide-react";
 import { Card, Notice, PageHeader, SectionTitle } from "@/components/ui";
 import { AccountAvatar, dollars } from "@/components/services/ui";
 import { useAccountProperties } from "@/components/services/use-account-properties";
+import { PlanSequenceEditor } from "@/components/services/plan-sequence-editor";
 import { cn } from "@/lib/cn";
 import type {
   AccountsPayload,
@@ -63,6 +64,7 @@ export function ServicesSchedulePanel() {
   const [listError, setListError] = useState<string | null>(null);
   const [actError, setActError] = useState<string | null>(null);
   const [openForm, setOpenForm] = useState<"workOrder" | "plan" | null>(null);
+  const [schedulingPlan, setSchedulingPlan] = useState<string | null>(null);
   const [pendingComplete, setPendingComplete] = useState<{ id: string; notes: string } | null>(null);
 
   const refresh = useCallback(async () => {
@@ -397,19 +399,22 @@ export function ServicesSchedulePanel() {
           />
           <ul className="mt-3 divide-y divide-line" data-testid="services-plans">
             {plans.plans.map((plan) => (
-              <li key={plan.id} className="flex flex-wrap items-center gap-3 py-2.5 text-sm">
+              <li key={plan.id} className="py-2.5 text-sm">
+                <div className="flex flex-wrap items-center gap-3">
                 <span className="min-w-0 flex-1">
                   <span className="block font-medium text-foreground">
                     {plan.serviceType}
                     <span className="font-normal text-muted">
                       {" "}
-                      · {accountNames.get(plan.accountId) ?? "account"} · {plan.recurrence} ·{" "}
+                      · {accountNames.get(plan.accountId) ?? "account"} ·{" "}
+                      {plan.cycleMonths == null ? plan.recurrence : "sequenced"} ·{" "}
                       {dollars(plan.valueCents)}
                     </span>
                   </span>
                   <span className="block text-xs text-faint">
                     next due {plan.nextDue}
                     {plan.active ? "" : " · paused"}
+                    {plan.cycleMonths == null ? "" : ` · billed ${plan.recurrence}`}
                   </span>
                 </span>
                 {plan.active ? (
@@ -432,6 +437,23 @@ export function ServicesSchedulePanel() {
                 >
                   {plan.active ? "Pause" : "Resume"}
                 </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setSchedulingPlan((current) => (current === plan.id ? null : plan.id))
+                  }
+                  className="btn btn-secondary px-2.5 py-1 text-xs"
+                >
+                  {schedulingPlan === plan.id ? "Close schedule" : "Schedule"}
+                </button>
+                </div>
+                {schedulingPlan === plan.id ? (
+                  <PlanSequenceEditor
+                    planId={plan.id}
+                    planServiceType={plan.serviceType}
+                    onSaved={() => void refresh()}
+                  />
+                ) : null}
               </li>
             ))}
           </ul>

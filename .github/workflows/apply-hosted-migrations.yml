@@ -77,6 +77,7 @@ on:
           - service-integrations
           - secret-guard-restricted-keys
           - field-offline-queue
+          - plan-sequencing
           - probe
 permissions:
   actions: read
@@ -1913,6 +1914,28 @@ jobs:
           psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
           psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/postflight/field-offline-queue.sql
           echo "Offline field queue applied; the token index is unique, submissions are undeletable, and the completion trigger still defers to the technician's clock."
+
+      - name: Apply plan sequencing (scope=plan-sequencing)
+        if: ${{ inputs.scope == 'plan-sequencing' }}
+        run: |
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+          VERSION=20260831000200_plan_sequencing
+          FILE="supabase/migrations/${VERSION}.sql"
+          sha256sum "$FILE"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied "${VERSION%%_*}"
+          else
+            npx supabase migration repair --status applied "${VERSION%%_*}" --db-url "$DB_URL"
+          fi
+          psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/postflight/plan-sequencing.sql
+          echo "Plan sequencing applied; the day and last-weekday clamps hold, both cross-table guards are triggers, and every reader is still an invoker."
 
       - name: Normalize exact legacy bot ACLs (scope=bot-legacy-acl-normalization)
         if: ${{ inputs.scope == 'bot-legacy-acl-normalization' }}
