@@ -250,6 +250,7 @@ test("every Services CRM section is gated server-side through its layout", async
     "/Services/collections",
     "/Services/fleet",
     "/Services/wdo",
+    "/Services/integrations",
   ]) {
     await page.goto(path);
     await expect(page).toHaveURL(/\/auth\/sign-in\?next=%2FServices/);

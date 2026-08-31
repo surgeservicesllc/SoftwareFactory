@@ -4813,3 +4813,83 @@ including one assertion that the four states never collapse into fewer.
 
 The legend names all four in words, because a colour a customer has to
 guess at is not a report.
+
+## ADR-207 - A capability is a credential that exists, not a switch somebody set
+
+**Increment 17.** Nine of the capabilities the competitors sell cannot be
+finished by writing code: SMS and email delivery, card and ACH processing,
+GPS telemetry, accounting sync, telephony, reviews, and route optimization
+by drive time. Every one needs an account somebody has to open and pay for.
+
+What CAN be built is everything up to the credential — and, more to the
+point, the thing that makes shipping them honest. Until now **Not
+Connected** was a hard-coded string in a component. That is fine exactly
+once: the day somebody connects Twilio, it stays a hard-coded string.
+
+**The one rule this increment exists to enforce:**
+
+> `live` is DERIVED, never stored.
+
+`crm_service_integrations` holds no credential and **no status column**. It
+holds which provider, what an operator calls it, whether an owner has
+switched it on, and the vault PURPOSE NAME that addresses the sealed
+credential. `crm_integration_status()` joins that purpose against
+`provider_credentials` and computes `live` as *enabled AND a sealed
+credential really exists*. A member can express an intention; a member
+cannot manufacture a capability.
+
+Give this table a `status` column somebody can set to `connected` and the
+page will eventually read Connected while nothing sends — the exact class
+of lie the earlier goal ("no hardcoded success") forbade, and the one this
+schema is shaped to make unrepresentable. The postflight asserts the column
+does not exist.
+
+- **Both functions are SECURITY DEFINER, and that needs justifying** since
+  most reads in this chain are not. They must look at
+  `provider_credentials`, which no browser role holds SELECT on — that
+  absence is what keeps the sealed envelope unreadable. So the presence
+  check runs as the owner, the membership check is explicit and first (as
+  `list_provider_credentials` does it), and the RETURNS clause carries
+  `credential_present boolean` and nothing else. No future edit to the body
+  can leak the envelope without also changing the signature, and a test
+  asserts that signature.
+- **`crm_integration_live` returns false, never null**, for a provider
+  nobody configured. A caller writing `if (!live)` must not fall through.
+- **Every free-text column is secret-guarded, purpose name included.** The
+  first draft guarded the label and the settings blob but left the purpose
+  name with only its shape check — and a Stripe secret key is lower-case
+  and underscored, so it satisfies that shape EXACTLY. A route test caught
+  it. The pattern was never going to catch it; `text_has_likely_secret` is
+  what does, and the least likely place for somebody to paste a key is the
+  worst place to leave unguarded.
+- **`CRM_INTEGRATION_GATES` says what each provider unlocks**, in the
+  product's own words, because that is what a Not Connected label has to
+  say to be useful. "SMS is not connected" tells an owner nothing;
+  "automated reminders and campaign sending stay off until SMS is
+  connected" tells them what they are choosing.
+- **Four standings, not two.** Not configured, configured-and-waiting-on-
+  an-account, connected-but-switched-off, and connected-but-failing are
+  four different situations with four different next steps, and only one of
+  them is the owner's to act on today.
+
+**What this does NOT do.** It does not connect anything. Supplying a
+credential is the vault's own flow (`open_provider_connect_session`), which
+never lets the value through a browser round-trip in the clear, and there
+is no credential field anywhere in this route — the request schema is
+`strict()`, so an unknown key is refused outright and a test tries three.
+
+**Surfaces**: `/Services/integrations`.
+
+**Verification**: `services-integrations.behavior` (9) on the real chain —
+every provider reported including unconfigured ones; a provider switched on
+with no credential still not live; live turning on the moment a sealed
+credential exists and back off when it is removed or the switch is thrown;
+a credential filed under a DIFFERENT purpose refusing to stand in; a key
+refused from the label, the settings blob and the purpose name; one row per
+provider; a stranger refused with membership required rather than an empty
+list; and the status signature proven not to carry an envelope while the
+vault stays unreadable by both browser roles.
+`services-integrations-routes` (9) pins the boundary, including that the
+route re-reads status rather than echoing its own write.
+
+Hosted apply scope `service-integrations`.

@@ -2194,6 +2194,110 @@ export function stationStanding(
 }
 
 /* ---------------------------------------------------------------------------
+ * The provider integration registry (increment 17).
+ *
+ * Nine of the capabilities the competitors sell need an account somebody
+ * has to open and pay for. This vocabulary is what lets the product ship
+ * them honestly: one place that knows, per provider, whether this
+ * workspace can actually do the thing.
+ *
+ * `live` is the ONLY field any feature may branch on, and it is derived in
+ * SQL from a sealed credential actually existing — never a stored status
+ * somebody can set. A component that decides "connected" from anything
+ * else here (enabled, configured, a label being present) is a component
+ * that will eventually claim to have sent something.
+ * ------------------------------------------------------------------------- */
+
+export const CRM_INTEGRATION_PROVIDERS = [
+  "sms",
+  "email",
+  "card_payments",
+  "gps_telemetry",
+  "accounting",
+  "telephony",
+  "reviews",
+  "mapping",
+] as const;
+export type CrmIntegrationProvider = (typeof CRM_INTEGRATION_PROVIDERS)[number];
+
+/**
+ * What each provider actually unlocks, in the product's own words.
+ *
+ * This is not decoration. It is what a **Not Connected** label has to say
+ * to be useful: "SMS is not connected" tells an owner nothing; "automated
+ * reminders and campaign sending stay off until SMS is connected" tells
+ * them what they are choosing.
+ */
+export const CRM_INTEGRATION_GATES: Record<CrmIntegrationProvider, string> = {
+  sms: "Automated appointment reminders, dunning reminders and campaign sending by text.",
+  email: "Automated reminders, dunning reminders and campaign sending by email.",
+  card_payments: "Paying an invoice from the portal, in-field card payment, and autopay.",
+  gps_telemetry: "Live vehicle location and driver behaviour on the fleet page.",
+  accounting: "Pushing invoices, payments and refunds to your accounting system.",
+  telephony: "Click-to-call, screen-pop on an inbound call, and call recording against an account.",
+  reviews: "Asking for a review after a completed visit, and reading what came back.",
+  mapping: "Route optimization by real drive time, rather than by scheduled window.",
+};
+
+export const CRM_INTEGRATION_LABELS: Record<CrmIntegrationProvider, string> = {
+  sms: "SMS delivery",
+  email: "Email delivery",
+  card_payments: "Card and ACH payments",
+  gps_telemetry: "GPS and fleet telemetry",
+  accounting: "Accounting sync",
+  telephony: "Telephony and call centre",
+  reviews: "Reviews and reputation",
+  mapping: "Mapping and drive-time routing",
+};
+
+export type CrmIntegrationStatusRow = {
+  provider: CrmIntegrationProvider;
+  configured: boolean;
+  enabled: boolean;
+  credential_present: boolean;
+  live: boolean;
+  display_label: string | null;
+  last_checked_at: string | null;
+  last_error: string | null;
+};
+
+export function toIntegrationStatusView(row: CrmIntegrationStatusRow) {
+  return {
+    provider: row.provider,
+    label: CRM_INTEGRATION_LABELS[row.provider],
+    gates: CRM_INTEGRATION_GATES[row.provider],
+    configured: row.configured,
+    enabled: row.enabled,
+    /* Whether a sealed credential exists. Never the credential, and never
+     * its contents — the status function's RETURNS clause is what makes
+     * that structural rather than a promise. */
+    credentialPresent: row.credential_present,
+    /* The only field a feature may branch on. */
+    live: row.live,
+    displayLabel: row.display_label,
+    lastCheckedAt: row.last_checked_at,
+    lastError: row.last_error,
+  };
+}
+
+/**
+ * Why a provider is not live, in one word the page can style and a person
+ * can act on. Four states, because "not connected" covers four different
+ * situations and only one of them is the owner's next step being obvious.
+ */
+export function integrationStanding(
+  status: Pick<
+    ReturnType<typeof toIntegrationStatusView>,
+    "configured" | "enabled" | "credentialPresent" | "live" | "lastError"
+  >,
+): "live" | "failing" | "paused" | "awaiting_credential" | "not_configured" {
+  if (status.live) return status.lastError === null ? "live" : "failing";
+  if (!status.configured) return "not_configured";
+  if (!status.credentialPresent) return "awaiting_credential";
+  return "paused";
+}
+
+/* ---------------------------------------------------------------------------
  * WDO inspection reports (increment 16).
  *
  * An NPMA-33 is a legal document, and the vocabulary has to carry the one

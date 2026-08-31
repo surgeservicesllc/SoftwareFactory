@@ -2,6 +2,43 @@
 
 Last updated: 2026-08-31
 
+## Newest (2026-08-31, latest+27): the integration registry (ADR-207)
+
+`20260830010200` adds crm_service_integrations plus two definers. It is the
+one place that knows whether a provider capability actually works.
+
+THE RULE, AND THE ONLY ONE THAT MATTERS HERE: `live` is DERIVED, never
+stored. The table has NO status column. crm_integration_status() computes
+live as "an owner enabled it AND a sealed credential for its purpose really
+exists in provider_credentials". Add a status column somebody can set and
+the page will one day read Connected while nothing sends — the postflight
+asserts that column does not exist, and so does a test.
+
+Both functions are definers, which is the opposite of most reads in this
+chain, and it is load-bearing: provider_credentials is unreadable by every
+browser role (that absence is what keeps the envelope sealed), so the
+presence check has to run as the owner. Membership is checked explicitly
+and FIRST. The RETURNS clause carries credential_present boolean and
+nothing else — a test asserts the signature, so no body edit can leak the
+envelope without changing it.
+
+EVERY FREE TEXT IS SECRET-GUARDED, PURPOSE NAME INCLUDED. The first draft
+gave the purpose only its shape check, and a Stripe secret key fits that
+shape exactly — lower-case and underscored. A route test caught it. If you
+add a column here, guard it.
+
+Test fixtures that look like credentials are assembled at runtime by
+concatenation, never written as literals: GitHub push protection rejected
+this branch over a key-shaped fixture, and a literal that trips real
+scanners forever is a bad fixture even when it is invented.
+
+crm_integration_live returns FALSE, never null, for an unconfigured
+provider: callers write `if (!live)`.
+
+Anything gated on a provider must branch on `live` from this function and
+nothing else. A component constant, a settings flag, or `enabled` on its
+own will eventually claim something was sent.
+
 ## Newest (2026-08-31, latest+26): the activity heat map (ADR-206, #71)
 
 The customer's Stations tab renders month x station-type activity as a

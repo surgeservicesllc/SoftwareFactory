@@ -275,6 +275,11 @@ the full seeded E2E journey passes — increment 10 of the plan.
 - [ ] Increment 12 follow-on: actually SENDING a dunning reminder. The
   notice records what a person did; delivery needs an email/SMS provider
   and stays Not Connected until credentials are supplied.
+- [x] ADR-207: the provider integration registry — one place that knows,
+  per provider, whether this workspace can actually do the thing, with
+  `live` derived from a sealed credential existing rather than stored.
+  /Services/integrations. 20260830010200; hosted apply:
+  scope=service-integrations after merge.
 - [ ] Provider-gated, ship Not Connected until an owner supplies
   credentials, never implied as working: card/ACH processing (the ledger
   records money that moved; it does not move money), SMS/email delivery,

@@ -185,8 +185,14 @@ first, and tracked in `AI/BACKLOG.md`:
    Large, and the correctness bar is high: a queue that silently drops a
    completed visit is worse than no offline mode.
 
-**Needs an external provider, and will ship labelled Not Connected until an
-owner supplies credentials — never implied as working:** card/ACH
+**Needs an external provider.** ADR-207 built the registry these depend on:
+`/Services/integrations` lists every one, says what it unlocks, and reports
+whether it is live — derived from a sealed credential actually existing,
+never from a stored status. So each of these is now wired to the point
+where the only missing piece is an account, and the **Not Connected** label
+is read from the database rather than hard-coded in a component. What
+remains for each is the account itself, and the provider-specific send or
+charge call behind it: card/ACH
 processing and in-field payment, autopay and stored payment methods,
 SMS/email delivery (which also gates automated reminders and campaign
 sending), GPS/fleet telemetry, QuickBooks sync, call-centre/telephony
