@@ -2194,6 +2194,219 @@ export function stationStanding(
 }
 
 /* ---------------------------------------------------------------------------
+ * WDO inspection reports (increment 16).
+ *
+ * An NPMA-33 is a legal document, and the vocabulary has to carry the one
+ * distinction the schema exists to protect: a report that says "no visible
+ * evidence" is an ANSWER somebody signed, not an absence of rows. So
+ * `visibleEvidence` is a plain boolean here and `status` is what says
+ * whether anybody has finished answering.
+ *
+ * `ADVERSE_WDO_FINDINGS` is shared rather than restated. It is the set the
+ * database's issue-time check uses to refuse a contradiction, and a page
+ * that drew the line somewhere else would show a customer a summary the
+ * database would not have issued.
+ * ------------------------------------------------------------------------- */
+
+export const CRM_WDO_STATUSES = ["draft", "issued"] as const;
+export type CrmWdoStatus = (typeof CRM_WDO_STATUSES)[number];
+
+export const CRM_WDO_FINDING_KINDS = [
+  "live_infestation",
+  "visible_damage",
+  "previous_infestation",
+  "previous_treatment",
+  "conducive_condition",
+] as const;
+export type CrmWdoFindingKind = (typeof CRM_WDO_FINDING_KINDS)[number];
+
+export const CRM_WDO_DIAGRAM_KINDS = ["outline", "uploaded_plan"] as const;
+export type CrmWdoDiagramKind = (typeof CRM_WDO_DIAGRAM_KINDS)[number];
+
+/**
+ * The findings that contradict "no visible evidence observed".
+ *
+ * A conducive condition — wood-to-soil contact, standing water — is worth
+ * recording and is NOT evidence of an organism, so it is deliberately not
+ * in this set: it must not block an honest clean report. Previous
+ * TREATMENT is likewise not evidence of anything living.
+ */
+export const ADVERSE_WDO_FINDINGS: readonly CrmWdoFindingKind[] = [
+  "live_infestation",
+  "visible_damage",
+  "previous_infestation",
+];
+
+export function isAdverseWdoFinding(kind: string): boolean {
+  return (ADVERSE_WDO_FINDINGS as readonly string[]).includes(kind);
+}
+
+export const CRM_WDO_INSPECTION_COLUMNS =
+  "id, account_id, property_id, work_order_id, inspector_technician_id, report_number, "
+  + "inspected_on, structures_inspected, visible_evidence, obstructions, inaccessible_areas, "
+  + "recommendation, diagram_kind, diagram_storage_path, status, issued_at, supersedes_id, "
+  + "created_at, updated_at";
+
+export const CRM_WDO_FINDING_COLUMNS =
+  "id, inspection_id, kind, organism, area, position_x, position_y, note, treatment_note, "
+  + "created_at, updated_at";
+
+export type CrmWdoInspectionRow = {
+  id: string;
+  account_id: string;
+  property_id: string;
+  work_order_id: string | null;
+  inspector_technician_id: string;
+  report_number: string;
+  inspected_on: string;
+  structures_inspected: string;
+  visible_evidence: boolean;
+  obstructions: string | null;
+  inaccessible_areas: string | null;
+  recommendation: string | null;
+  diagram_kind: CrmWdoDiagramKind;
+  diagram_storage_path: string | null;
+  status: CrmWdoStatus;
+  issued_at: string | null;
+  supersedes_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CrmWdoFindingRow = {
+  id: string;
+  inspection_id: string;
+  kind: CrmWdoFindingKind;
+  organism: string | null;
+  area: string;
+  position_x: number | string | null;
+  position_y: number | string | null;
+  note: string | null;
+  treatment_note: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export function toWdoInspectionView(row: CrmWdoInspectionRow) {
+  return {
+    id: row.id,
+    accountId: row.account_id,
+    propertyId: row.property_id,
+    workOrderId: row.work_order_id,
+    inspectorTechnicianId: row.inspector_technician_id,
+    reportNumber: row.report_number,
+    inspectedOn: row.inspected_on,
+    structuresInspected: row.structures_inspected,
+    visibleEvidence: row.visible_evidence,
+    /* What could NOT be inspected. Surfaced beside the verdict, never
+     * folded away — a report silent about its own blind spots is the one
+     * that ends in a lawsuit. */
+    obstructions: row.obstructions,
+    inaccessibleAreas: row.inaccessible_areas,
+    recommendation: row.recommendation,
+    diagramKind: row.diagram_kind,
+    diagramStoragePath: row.diagram_storage_path,
+    status: row.status,
+    issuedAt: row.issued_at,
+    supersedesId: row.supersedes_id,
+    /* An issued report is frozen. The database refuses the edit; the page
+     * should not offer it in the first place. */
+    editable: row.status === "draft",
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function toWdoFindingView(row: CrmWdoFindingRow) {
+  const x = row.position_x === null ? null : Number(row.position_x);
+  const y = row.position_y === null ? null : Number(row.position_y);
+  return {
+    id: row.id,
+    inspectionId: row.inspection_id,
+    kind: row.kind,
+    organism: row.organism,
+    area: row.area,
+    /* Normalized to 0..1, so the mark survives whatever it is drawn over.
+     * Both halves or neither — the schema will not store half a point. */
+    positionX: x,
+    positionY: y,
+    /* A finding recorded before anybody put a pin in the drawing is
+     * ordinary. It is listed and not drawn, and the surface says how many
+     * are placed rather than quietly drawing the subset it can. */
+    placed: x !== null && y !== null,
+    adverse: isAdverseWdoFinding(row.kind),
+    note: row.note,
+    treatmentNote: row.treatment_note,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export type CrmWdoSummaryRow = {
+  inspections: number;
+  issued: number;
+  drafts: number;
+  with_evidence: number;
+  clean: number;
+  reports_with_obstructions: number;
+  findings: number;
+  unplaced_findings: number;
+  latest_inspected_on: string | null;
+};
+
+export function toWdoSummaryView(row: CrmWdoSummaryRow) {
+  return {
+    inspections: row.inspections,
+    issued: row.issued,
+    drafts: row.drafts,
+    /* Both counted over ISSUED reports only. A draft has not answered the
+     * question, and putting it in either column would be an answer. */
+    withEvidence: row.with_evidence,
+    clean: row.clean,
+    reportsWithObstructions: row.reports_with_obstructions,
+    findings: row.findings,
+    unplacedFindings: row.unplaced_findings,
+    latestInspectedOn: row.latest_inspected_on,
+  };
+}
+
+export type CrmPortalWdoReportRow = {
+  id: string;
+  report_number: string;
+  property_id: string;
+  property_label: string | null;
+  inspected_on: string;
+  issued_at: string;
+  structures_inspected: string;
+  visible_evidence: boolean;
+  obstructions: string | null;
+  inaccessible_areas: string | null;
+  recommendation: string | null;
+  findings: number;
+  superseded: boolean;
+};
+
+export function toPortalWdoReportView(row: CrmPortalWdoReportRow) {
+  return {
+    id: row.id,
+    reportNumber: row.report_number,
+    propertyId: row.property_id,
+    propertyLabel: row.property_label,
+    inspectedOn: row.inspected_on,
+    issuedAt: row.issued_at,
+    structuresInspected: row.structures_inspected,
+    visibleEvidence: row.visible_evidence,
+    obstructions: row.obstructions,
+    inaccessibleAreas: row.inaccessible_areas,
+    recommendation: row.recommendation,
+    findings: row.findings,
+    /* Replaced by a later issued report. Shown so nobody relies on the
+     * older document without knowing a newer one exists. */
+    superseded: row.superseded,
+  };
+}
+
+/* ---------------------------------------------------------------------------
  * The operating dashboards (increment 11).
  *
  * These row types are the return shapes of the SECURITY INVOKER aggregate

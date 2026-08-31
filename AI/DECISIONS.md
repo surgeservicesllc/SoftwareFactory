@@ -4696,3 +4696,89 @@ Hosted apply scope `commercial-portal`.
   MODEL execution still uses ambient worker identity. Workers remain OFF and
   the kill switch remains ON until that separate boundary is implemented and
   accepted.
+## ADR-205 - WDO reports: the verdict is an answer, not an empty list
+
+**Increment 16.** An NPMA-33 is not a form. It is a legal document a buyer,
+a lender and a court all read, and its failure mode is not a missing field
+— it is **a report that reads as clean when nobody looked**.
+
+- **`visible_evidence` is a NOT NULL boolean, and that single choice is the
+  design.** "No visible evidence of wood-destroying organisms was observed"
+  is a POSITIVE recorded finding: an inspector went, looked, and says so
+  with their name on it. Model "clean" as the ABSENCE of finding rows and
+  two completely different facts collapse into one shape — an inspection
+  that happened and found nothing, and an inspection nobody finished. Here
+  they cannot: the first is `status = 'issued'` with
+  `visible_evidence = false`; the second is a draft, and **a draft is not a
+  document**.
+- **`obstructions` and `inaccessible_areas` are first-class columns**, not
+  notes. A WDO report that does not say what could NOT be inspected is the
+  one that ends in a lawsuit. Both travel to the customer's copy, and the
+  portal route counts `withLimitations` because that is the number a
+  buyer's surveyor asks about first.
+- **The diagram is a coordinate space, not an image.** `position_x` and
+  `position_y` are `numeric(5,4)` in 0..1, so a mark keeps its meaning at
+  any size and over any backdrop, and `num_nonnulls(...) in (0, 2)` refuses
+  half a point. A finding WITHOUT coordinates is ordinary — an inspector
+  writes "damage, crawlspace joists" long before anybody puts a pin in a
+  drawing — so it is listed and not drawn, and every surface states how
+  many of the findings are actually placed. `unplaced_findings` is reported
+  for the same reason `unscheduled` is its own standing in ADR-201: a
+  diagram showing four of five marks is not a diagram of the inspection.
+
+**The invariant, and where it had to move.** Issuing runs a check across
+two tables, so it cannot be a CHECK. The first draft put it in
+`crm_wdo_issue_report` alone — **which was a hole**: a member holds the
+same privileges through PostgREST and can PATCH `status` straight onto the
+row, and that path skipped the check entirely. The freeze trigger only
+fired on rows ALREADY issued. So the contradiction check lives on the
+`before update` trigger, on the `draft -> issued` transition, and a test
+comes in through the door the function does not guard.
+
+It refuses in **both directions**, and the second one is the point.
+Everyone remembers to stop a report claiming evidence it never recorded.
+The inverse — a report declaring a structure clean WHILE a live-infestation
+finding sits on it — is the document that gets somebody a mortgage on a
+house with termites in it.
+
+**What stayed in the function, and why it had to.** The already-issued
+refusal cannot live on the trigger. Every evaluation inside one statement
+shares the same transaction `now()`, so a trigger comparing old and new
+`issued_at` sees no difference and waves them all through. That matters
+because `select (f(x)).*` **evaluates f once per output column** — fourteen
+mutating calls from one ordinary-looking line of application code. With the
+check in the function the second evaluation raises and the whole statement
+rolls back, so the report is left untouched rather than half-issued. Moving
+it to the trigger made that test fail, which is exactly what it is for.
+
+**A conducive condition is not evidence.** Wood-to-soil contact and
+standing water are worth recording and are not an organism, so
+`ADVERSE_WDO_FINDINGS` excludes them and previous treatment. Draw that line
+anywhere else and an honest clean report becomes unissuable.
+
+**An issued report is frozen**, and a correction is a NEW report naming the
+one it supersedes — ADR-179's discipline for `crm_applications`, applied to
+a document somebody relied on. Neither table is deletable.
+
+**Surfaces**: `/Services/wdo` (report list, the SVG diagram with
+click-to-place marks, findings, and Issue) and a WDO section on the
+customer portal's Compliance tab showing ISSUED reports with their
+limitations spelled out. Uploading a floor plan is **Not Connected** — no
+object storage — so the built-in structure outline ships and the
+`uploaded_plan` diagram kind is declared rather than assumed.
+
+**Verification**: `services-wdo-inspections.behavior` (14) on the real
+chain — a report refused for having no answer, both contradiction
+directions through the FUNCTION and both again through a direct column
+write, a genuinely clean report issuing with a conducive condition on it,
+the `(f()).*` mistake rolling back whole, an issued report and its findings
+frozen, a correction superseding, paired and in-range coordinates, the
+summary counting evidence and clean over ISSUED only, the customer seeing
+issued reports with their obstructions and never a draft, the rival tenant
+getting nothing through either door, no DELETE on either table, and both
+function polarities. `services-wdo-routes` (9) pins the boundary. The seed
+writes 352 reports and 464 findings in all four honest shapes and **issues
+them through `crm_wdo_issue_report` rather than writing `status`**, so
+every issued report in the book passed the same check a real one would.
+
+Hosted apply scope `wdo-inspections`.

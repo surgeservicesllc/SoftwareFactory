@@ -38,6 +38,8 @@ export type SeedCounts = {
   sightings: number;
   /* Of those sightings, the ones the customer filed themselves. */
   customerReportedSightings: number;
+  wdoInspections: number;
+  wdoFindings: number;
   products: number;
   lots: number;
   applications: number;
@@ -625,8 +627,6 @@ export async function runSeed(
   );
   if ("error" in sightings) return sightings;
 
-  /* --------------------------------------------------------- applications */
-
   // Work orders came back in insert order too, so an account's visits are
   // the slice starting at its offset.
   const visitOffsets = new Map<string, number>();
@@ -637,6 +637,129 @@ export async function runSeed(
       cursor += operations.get(account.name)?.visits.length ?? 0;
     }
   }
+
+  /* ------------------------------------------------------- WDO reports (16) */
+
+  /*
+   * The reports are written as DRAFTS, then issued through
+   * crm_wdo_issue_report — the same function the product uses. Setting
+   * `status = 'issued'` on the insert would skip the check that spans both
+   * tables, and a seed that walked around the guard would be a book the
+   * product itself could not have produced.
+   */
+  const wdoRowFor = (account: (typeof dataset.accounts)[number], report: {
+    propertyIndex: number;
+    technicianIndex: number;
+    reportNumber: string;
+    inspectedDaysAgo: number;
+    structuresInspected: string;
+    visibleEvidence: boolean;
+    obstructions?: string;
+    inaccessibleAreas?: string;
+    recommendation?: string;
+    visitSeat?: number;
+  }, supersedesId: string | null) => ({
+    organization_id: org,
+    account_id: accountIdByName.get(account.name),
+    property_id: propertyFor(account.name, report.propertyIndex),
+    inspector_technician_id: technicianId(report.technicianIndex),
+    work_order_id:
+      report.visitSeat === undefined
+        ? null
+        : visitIds[(visitOffsets.get(account.name) ?? 0) + report.visitSeat] ?? null,
+    report_number: report.reportNumber,
+    inspected_on: dateInDays(-report.inspectedDaysAgo),
+    structures_inspected: report.structuresInspected,
+    visible_evidence: report.visibleEvidence,
+    obstructions: report.obstructions ?? null,
+    inaccessible_areas: report.inaccessibleAreas ?? null,
+    recommendation: report.recommendation ?? null,
+    supersedes_id: supersedesId,
+    created_by: userId,
+  });
+
+  /*
+   * Two passes, because a correction names the report it replaces and that
+   * report needs an id first. Doing it as two inserts rather than an
+   * insert-then-update matters: by the time the originals are ISSUED below
+   * they are frozen, and an update setting supersedes_id on a frozen row
+   * is exactly what the guard refuses.
+   */
+  const wdoFirstPass = dataset.accounts.flatMap((account) =>
+    (operations.get(account.name)?.wdoInspections ?? [])
+      .filter((report) => report.supersedesReportNumber === undefined)
+      .map((report) => wdoRowFor(account, report, null)),
+  );
+  const wdoOriginals = await insertAll(
+    client,
+    "crm_wdo_inspections",
+    wdoFirstPass,
+    "id, report_number",
+  );
+  if ("error" in wdoOriginals) return wdoOriginals;
+  const wdoIdByNumber = new Map(
+    wdoOriginals.data.map((row) => [row.report_number as string, row.id as string]),
+  );
+
+  const wdoSecondPass = dataset.accounts.flatMap((account) =>
+    (operations.get(account.name)?.wdoInspections ?? [])
+      .filter((report) => report.supersedesReportNumber !== undefined)
+      .map((report) =>
+        wdoRowFor(
+          account,
+          report,
+          wdoIdByNumber.get(report.supersedesReportNumber as string) ?? null,
+        ),
+      ),
+  );
+  const wdoCorrections = await insertAll(
+    client,
+    "crm_wdo_inspections",
+    wdoSecondPass,
+    "id, report_number",
+  );
+  if ("error" in wdoCorrections) return wdoCorrections;
+  for (const row of wdoCorrections.data) {
+    wdoIdByNumber.set(row.report_number as string, row.id as string);
+  }
+  const wdoInspectionCount = wdoOriginals.data.length + wdoCorrections.data.length;
+
+  const wdoFindingRows = dataset.accounts.flatMap((account) =>
+    (operations.get(account.name)?.wdoInspections ?? []).flatMap((report) => {
+      const inspectionId = wdoIdByNumber.get(report.reportNumber);
+      if (inspectionId === undefined) return [];
+      return report.findings.map((finding) => ({
+        organization_id: org,
+        inspection_id: inspectionId,
+        kind: finding.kind,
+        organism: finding.organism ?? null,
+        area: finding.area,
+        // Both halves or neither; the schema refuses anything between.
+        position_x: finding.positionX ?? null,
+        position_y: finding.positionY ?? null,
+        note: finding.note ?? null,
+        treatment_note: finding.treatmentNote ?? null,
+        created_by: userId,
+      }));
+    }),
+  );
+  const wdoFindings = await insertAll(client, "crm_wdo_findings", wdoFindingRows, "id");
+  if ("error" in wdoFindings) return wdoFindings;
+
+  // Issue the ones meant to be issued, one call each, through the product's
+  // own function — so every issued report in the book passed the same
+  // contradiction check a real one would.
+  for (const account of dataset.accounts) {
+    for (const report of operations.get(account.name)?.wdoInspections ?? []) {
+      if (!report.issued) continue;
+      const inspectionId = wdoIdByNumber.get(report.reportNumber);
+      if (inspectionId === undefined) continue;
+      const issued = await client.rpc("crm_wdo_issue_report", { p_inspection: inspectionId });
+      if (issued.error) return { error: issued.error };
+    }
+  }
+
+  /* --------------------------------------------------------- applications */
 
   const applicationRows = dataset.accounts.flatMap((account) => {
     const accountOperations = operations.get(account.name);
@@ -1755,6 +1878,8 @@ export async function runSeed(
       deviceScans: devices.data.length + scans.data.length,
       sightings: sightings.data.length,
       customerReportedSightings,
+      wdoInspections: wdoInspectionCount,
+      wdoFindings: wdoFindings.data.length,
       products: products.data.length,
       lots: lots.data.length,
       applications: applications.data.length + corrections.data.length,

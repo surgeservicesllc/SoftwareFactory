@@ -2,6 +2,37 @@
 
 Last reviewed: 2026-08-31
 
+**Addendum, 2026-08-31 latest+25 - WDO reports (ADR-205):**
+services-wdo-inspections.behavior 14 on the real chain: an inspection
+refused for not answering the headline question; a report claiming evidence
+it never recorded refused; a report calling a structure clean while a live
+infestation sits on it refused — and BOTH of those refused again through a
+direct column write, because the first draft enforced them only in
+`crm_wdo_issue_report` and a member can PATCH `status` through PostgREST,
+which was a real hole and now has a test coming in through that door; a
+genuinely clean report issuing with a conducive condition recorded on it,
+since drawing the adverse line anywhere wider makes an honest clean report
+unissuable; the `select (f(x)).*` mistake — fourteen evaluations of a
+mutating function from one line — rolling back whole rather than
+half-issuing, which is why that one guard stays in the function where the
+shared transaction `now()` cannot defeat it; an issued report and its
+findings frozen, with a correction superseding instead; coordinates paired
+and inside the unit square; the summary counting evidence and clean over
+ISSUED reports only so a draft lands in neither column; the customer seeing
+issued reports with their obstructions spelled out and never a draft; the
+rival tenant getting nothing through either door; no DELETE on either
+table; and both function polarities asserted. services-wdo-routes 9 pins
+the boundary — a null summary rather than a page of zeroes for a workspace
+that has inspected nothing, `visibleEvidence` refused with no default, the
+database's own sentence reaching the inspector rather than "something went
+wrong", 409 for already-issued, and `status`/`issuedAt` refused as if they
+were fields. Seed 48/48 tables, 48,060 records, with 352 reports and 464
+findings in all four honest shapes, issued through the product's own
+function rather than by writing `status`. RLS census 200 → 202; service-role
+grants 46 → 48 crm tables; runbook 204; workflow scope `wdo-inspections`.
+The PGlite supabase shim gained `.rpc()`, without which the seeder would
+have been silently forced into the shortcut the schema exists to close.
+
 **Addendum, 2026-08-31 latest+24 - the commercial portal view (ADR-203):**
 services-commercial-portal.behavior 15 on the real chain: the LATEST scan
 reported rather than the first or a sum of both; a station scanned with no

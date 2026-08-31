@@ -211,7 +211,7 @@ and nothing pretends to be a button.
 The operating dashboards (ADR-199) close the reporting gap, and they are
 built on one decision worth restating: every figure is aggregated in the
 database by a SECURITY INVOKER function. In SQL, because the corpus is
-47,244 rows and a route that tallies a bounded fetch reports a number that
+48,060 rows and a route that tallies a bounded fetch reports a number that
 is right only while a workspace is small. As an invoker, because these read
 across a whole book — a definer would read across every tenant's at once,
 the exact inverse of the portal, where a definer is what narrows. The
@@ -243,15 +243,31 @@ null, not "under" one; a trend cell with no counted scan reports null with
 its scan count beside it; and a product with no safety sheet on file is
 counted as a gap rather than hidden. Downloading a signed inspection copy
 is **Not Connected** — no object storage is configured.
+WDO reports (ADR-205) are the last of the large buildable rows. An NPMA-33
+is a legal document, and the failure it is built to prevent is a report
+that reads as clean when nobody looked: `visible_evidence` is a not-null
+boolean, so "no visible evidence observed" is an answer somebody signed
+rather than an absence of rows, and an unfinished draft cannot take the
+same shape as a completed clean inspection. What could NOT be inspected is
+a first-class column on both the staff report and the customer's copy. The
+diagram is a 0..1 coordinate space with click-to-place marks, so a finding
+recorded without a location is listed rather than silently dropped and
+every surface says how many of the findings are actually placed. The
+issue-time check that a report cannot contradict its own findings lives on
+the trigger rather than in the function that issues, because a member holds
+the same privileges through PostgREST and could otherwise write the status
+column directly. /Services/wdo. Uploading a floor plan is **Not
+Connected** — no object storage is configured — so the built-in structure
+outline ships.
 A workspace can populate itself two ways (ADR-193): the curated Demo Data
-book for presenting the product, or the full corpus — 47,244 rows across
-all forty-six tables, every optional field populated, spanning years —
+book for presenting the product, or the full corpus — 48,060 rows across
+all forty-eight tables, every optional field populated, spanning years —
 for testing dashboards, reports and pagination at the size of a real book.
 GET /api/services/seed-report audits whichever is loaded, table by table,
 PASS or FAIL. Plan of record: AI/SERVICES_CRM_GAP_ANALYSIS.md and
-AI/PEST_CRM_COMPETITOR_MATRIX.md. Increments 1 through 15 have shipped.
-What is left is either large and buildable — WDO/termite diagrams, offline
-mode for technicians — or gated on an external account nobody has opened:
+AI/PEST_CRM_COMPETITOR_MATRIX.md. Increments 1 through 16 have shipped.
+One buildable row is left — offline mode for technicians — and the rest are
+gated on an external account nobody has opened:
 card/ACH processing, SMS/email delivery, GPS telemetry, QuickBooks sync,
 telephony and reviews. Those ship labelled **Not Connected** and are never
 implied to work.
