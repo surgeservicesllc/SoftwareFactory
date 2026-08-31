@@ -76,6 +76,11 @@ export type SeedCounts = {
   formAnswers: number;
   timesheets: number;
   timelineEvents: number;
+  planSteps: number;
+  stockMovements: number;
+  fieldSubmissions: number;
+  propertyUnits: number;
+  serviceDocuments: number;
 };
 
 export type SeedRunOutcome = { error: SeedError } | { seeded: SeedCounts };
@@ -459,20 +464,33 @@ export async function runSeed(
     dataset.accounts.map((account) => [account.name, generateOperations(account, dataset)]),
   );
 
+  /*
+   * Roughly three plans in five run on a named calendar rather than an
+   * interval (ADR-211): a monthly plan visits on the 1st and the 15th, a
+   * quarterly one on the second Tuesday of each quarter's first month.
+   * The cycle has to be set at insert, because a step cannot be written
+   * against a plan that has no cycle — the trigger says so.
+   */
+  let planOrdinal = 0;
   const planRows = dataset.accounts.flatMap((account) =>
-    (operations.get(account.name)?.plans ?? []).map((plan) => ({
-      organization_id: org,
-      account_id: accountIdByName.get(account.name),
-      property_id: propertyFor(account.name, plan.propertyIndex),
-      service_type: plan.serviceType,
-      recurrence: plan.recurrence,
-      next_due: dateInDays(plan.dueInDays),
-      technician_id: technicianId(plan.technicianIndex),
-      value_cents: plan.valueCents,
-      active: plan.active,
-      notes: plan.notes,
-      created_by: userId,
-    })),
+    (operations.get(account.name)?.plans ?? []).map((plan) => {
+      const ordinal = planOrdinal++;
+      const sequenced = ordinal % 5 < 3;
+      return {
+        organization_id: org,
+        account_id: accountIdByName.get(account.name),
+        property_id: propertyFor(account.name, plan.propertyIndex),
+        service_type: plan.serviceType,
+        recurrence: plan.recurrence,
+        next_due: dateInDays(plan.dueInDays),
+        technician_id: technicianId(plan.technicianIndex),
+        value_cents: plan.valueCents,
+        active: plan.active,
+        notes: plan.notes,
+        cycle_months: sequenced ? (ordinal % 2 === 0 ? 1 : 3) : null,
+        created_by: userId,
+      };
+    }),
   );
   const plans = await insertAll(client, "crm_service_plans", planRows, "id");
   if ("error" in plans) return plans;
@@ -1857,6 +1875,281 @@ export async function runSeed(
   const events = await insertAll(client, "crm_timeline_events", eventRows, "id");
   if ("error" in events) return events;
 
+  /*
+   * The three tables the roster census (task #78) found uncovered. They are
+   * business data, not operational exhaust, so they are seeded rather than
+   * excused: a plan's calendar, where the chemical physically sits, and the
+   * proof that a field write arrived.
+   */
+
+  /** A deterministic uuid, so re-seeding is idempotent by natural key. */
+  const seedUuid = (prefix: string, ordinal: number) =>
+    `${prefix}-0000-4000-8000-${String(ordinal).padStart(12, "0")}`;
+
+  // ADR-211: the calendar a sequenced plan actually runs on.
+  const stepRows: SeedRow[] = plans.data.flatMap((plan, index) => {
+    const cycle = planRows[index]?.cycle_months as number | null | undefined;
+    if (cycle == null) return [];
+    const planId = plan.id as string;
+    // A twice-monthly plan's visits are both the plan's own service; a
+    // quarterly programme names what each visit is, which is the half of
+    // sequencing an interval cannot express.
+    const seasonal = ["Perimeter treatment", "Mosquito programme", "Rodent inspection"];
+    const steps: SeedRow[] = cycle === 1
+      ? [
+          { position: 1, month_offset: 0, anchor: "day_of_month", day_of_month: 1,
+            week_of_month: null, weekday: null, service_type: null },
+          { position: 2, month_offset: 0, anchor: "day_of_month", day_of_month: 15,
+            week_of_month: null, weekday: null, service_type: null },
+        ]
+      : [
+          { position: 1, month_offset: 0, anchor: "nth_weekday", day_of_month: null,
+            week_of_month: 2, weekday: 2,
+            service_type: seasonal[index % seasonal.length] },
+          { position: 2, month_offset: 1, anchor: "day_of_month", day_of_month: 20,
+            week_of_month: null, weekday: null, service_type: null },
+        ];
+    return steps.map((step) => ({
+      organization_id: org, plan_id: planId, ...step, created_by: userId,
+    }));
+  });
+  const planSteps = await insertAll(client, "crm_plan_steps", stepRows, "id");
+  if ("error" in planSteps) return planSteps;
+
+  // ADR-213: every lot arrives at a depot, and half of them go out on a truck.
+  const branchIds = branches.data.map((row) => row.id as string);
+  const vehicleIds = equipment.data.map((row) => row.id as string);
+  const movementRows: SeedRow[] = lots.data.flatMap((lot, index) => {
+    const lotId = lot.id as string;
+    const received = lotRows[index]?.quantity_received as number | undefined;
+    if (received === undefined || branchIds.length === 0) return [];
+    const depot = branchIds[index % branchIds.length];
+    const rows: SeedRow[] = [{
+      organization_id: org, lot_id: lotId, kind: "receipt", quantity: received,
+      to_branch_id: depot, occurred_at: daysAgoIso(120 - (index % 90)),
+      recorded_by: userId,
+    }];
+    // A truck load is a quarter of the lot, so the depot keeps the rest and
+    // neither side can go negative.
+    const load = Math.max(1, Math.round((received / 4) * 1000) / 1000);
+    if (index % 2 === 0 && vehicleIds.length > 0) {
+      const truck = vehicleIds[index % vehicleIds.length];
+      rows.push({
+        organization_id: org, lot_id: lotId, kind: "transfer",
+        quantity: load,
+        from_branch_id: depot,
+        to_equipment_id: truck,
+        occurred_at: daysAgoIso(110 - (index % 80)),
+        note: index % 6 === 0 ? "Loaded for the northern route" : null,
+        recorded_by: userId,
+      });
+      // Every third truck load comes back at the end of a week, which is
+      // the movement that fills the other direction.
+      if (index % 6 === 0) {
+        rows.push({
+          organization_id: org, lot_id: lotId, kind: "transfer",
+          quantity: Math.max(1, Math.round((load / 2) * 1000) / 1000),
+          from_equipment_id: truck,
+          to_branch_id: depot,
+          occurred_at: daysAgoIso(100 - (index % 70)),
+          note: "Returned to the shelf after the route",
+          recorded_by: userId,
+        });
+      }
+    }
+    // A shelf count that found less than the ledger said. An adjustment
+    // rather than an edit, because the ledger is append-only.
+    if (index % 7 === 0) {
+      rows.push({
+        organization_id: org, lot_id: lotId, kind: "adjustment",
+        quantity: 1,
+        from_branch_id: depot,
+        occurred_at: daysAgoIso(30 + (index % 20)),
+        note: "Shelf count came up one short",
+        recorded_by: userId,
+      });
+    }
+    return rows;
+  });
+  /*
+   * A treatment draws its material from somewhere, and the ledger says
+   * where. One consumption per lot, from the depot, naming the application
+   * it served — the quantities have to match exactly, which is the rule
+   * `crm_stock_record_movement` enforces at runtime and the reason this
+   * seed cannot simply pick a number.
+   *
+   * Only applications small enough to fit what the depot still holds after
+   * its truck load and shelf adjustment are drawn, because seeding a
+   * location into a negative balance would be seeding a lie about a
+   * regulated chemical.
+   */
+  const depotByLot = new Map<string, { depot: string; received: number }>();
+  lots.data.forEach((lot, index) => {
+    const received = lotRows[index]?.quantity_received as number | undefined;
+    if (received === undefined || branchIds.length === 0) return;
+    depotByLot.set(lot.id as string, {
+      depot: branchIds[index % branchIds.length],
+      received,
+    });
+  });
+  const drawnLots = new Set<string>();
+  applications.data.forEach((application, index) => {
+    const source = originalRows[index];
+    const lotId = source?.lot_id as string | undefined;
+    const quantity = source?.quantity as number | undefined;
+    if (lotId === undefined || quantity === undefined || drawnLots.has(lotId)) return;
+    const held = depotByLot.get(lotId);
+    if (held === undefined || quantity > held.received / 4) return;
+    drawnLots.add(lotId);
+    movementRows.push({
+      organization_id: org,
+      lot_id: lotId,
+      kind: "consumption",
+      quantity,
+      from_branch_id: held.depot,
+      application_id: application.id as string,
+      occurred_at: source?.applied_at as string,
+      note: null,
+      recorded_by: userId,
+    });
+  });
+
+  const stockMovements = await insertAll(client, "crm_stock_movements", movementRows, "id");
+  if ("error" in stockMovements) return stockMovements;
+
+  // ADR-210: a completed visit that was synced from the field carries the
+  // token the device minted, which is what makes a replay a no-op.
+  const submissionRows: SeedRow[] = visits.data.flatMap((visit, index) => {
+    if (!visitSources[index]?.statusPath.includes("completed")) return [];
+    const day = visitRows[index]?.scheduled_start as string | undefined;
+    if (day === undefined) return [];
+    // A completion is the common case; a device scan and a customer-filed
+    // sighting also arrive from the field, and a report that only ever saw
+    // one kind would not prove the queue carries the others.
+    const kind = index % 5 === 1
+      ? "device_scan"
+      : index % 5 === 3 ? "pest_sighting" : "complete_work_order";
+    return [{
+      organization_id: org,
+      client_token: seedUuid("50000000", index),
+      kind,
+      // Only a completion's result is the work order itself; the other
+      // kinds produced rows this seed does not track, and inventing an id
+      // would be a reference to something that is not there.
+      result_id: kind === "complete_work_order" ? (visit.id as string) : null,
+      occurred_at: day,
+      submitted_by: userId,
+    }];
+  });
+  const fieldSubmissions = await insertAll(client, "crm_field_submissions", submissionRows, "id");
+  if ("error" in fieldSubmissions) return fieldSubmissions;
+
+  /*
+   * Units inside a property (ADR-215). Commercial sites get doors; a
+   * single-family home does not, which is the case the schema had to keep
+   * working unchanged.
+   */
+  const unitRows: SeedRow[] = properties.data.flatMap((property, index) => {
+    if (index % 3 !== 0) return [];
+    const propertyId = property.id as string;
+    // Six doors and a common area, which is what a small block looks like.
+    return ["1A", "1B", "2A", "2B", "3A", "3B", "Common laundry"].map((label, door) => ({
+      organization_id: org,
+      property_id: propertyId,
+      label,
+      unit_type: label.startsWith("Common") ? "common area" : "apartment",
+      occupant_name: label.startsWith("Common")
+        ? null
+        : `${["M.", "R.", "J.", "T.", "S.", "N."][door % 6]} ${
+            ["Okafor", "Halvorsen", "Nakamura", "Delacroix", "Ferreira", "Adeyemi"][
+              (index + door) % 6
+            ]}`,
+      access_notes: door % 4 === 0 ? "Buzzer is out; call from the lobby" : null,
+      active: !(door === 5 && index % 9 === 0),
+      created_by: userId,
+    }));
+  });
+  const propertyUnits = await insertAll(client, "crm_property_units", unitRows, "id, property_id");
+  if ("error" in propertyUnits) return propertyUnits;
+
+  /*
+   * A filed copy of a completed visit's report (ADR-216). The bytes are what
+   * the report said on the day, which is what an auditor asks for.
+   */
+  const filedDocumentRows: SeedRow[] = visits.data.flatMap((visit, index) => {
+    // One filed report per completed visit, which is what a service report is.
+    if (!visitSources[index]?.statusPath.includes("completed")) return [];
+    const order = visitRows[index];
+    if (order === undefined) return [];
+    const day = String(order.scheduled_start).slice(0, 10);
+    const body = `<h1>Service report</h1><p>${order.service_type} on ${day}.</p>`
+      + `<p>Findings and materials as recorded against this visit.</p>`;
+    return [{
+      organization_id: org,
+      account_id: order.account_id as string,
+      property_id: order.property_id as string,
+      work_order_id: visit.id as string,
+      kind: index % 11 === 0 ? "logbook_extract" : "service_report",
+      title: `${order.service_type} — ${day}`,
+      content_type: index % 13 === 0 ? "text/plain" : "text/html",
+      byte_size: Buffer.byteLength(body, "utf8"),
+      body,
+      filed_by: userId,
+    }];
+  });
+  const serviceDocuments = await insertAll(
+    client, "crm_service_documents", filedDocumentRows, "id",
+  );
+  if ("error" in serviceDocuments) return serviceDocuments;
+
+  /*
+   * Some reports are corrected after filing. A correction is another filing
+   * that names the one it replaces; the original stays, because a customer
+   * may already hold it.
+   */
+  const documentCorrectionRows: SeedRow[] = serviceDocuments.data.flatMap((document, index) => {
+    if (index % 8 !== 0) return [];
+    const original = filedDocumentRows[index];
+    if (original === undefined) return [];
+    const corrected = `${original.body as string}<p>Corrected: material quantity restated.</p>`;
+    return [{
+      ...original,
+      title: `${original.title as string} (corrected)`,
+      byte_size: Buffer.byteLength(corrected, "utf8"),
+      body: corrected,
+      supersedes_id: document.id as string,
+    }];
+  });
+  const documentCorrections = await insertAll(
+    client, "crm_service_documents", documentCorrectionRows, "id",
+  );
+  if ("error" in documentCorrections) return documentCorrections;
+
+  // An issued inspection is filed the same way, which is the copy a buyer's
+  // lender asks for months later.
+  const inspectionDocumentRows: SeedRow[] = wdoOriginals.data.flatMap((inspection, index) => {
+    const source = wdoFirstPass[index];
+    if (source === undefined) return [];
+    const body = `<h1>Inspection report ${inspection.report_number as string}</h1>`
+      + `<p>Findings as issued. This copy is what the report said on the day.</p>`;
+    return [{
+      organization_id: org,
+      account_id: source.account_id as string,
+      property_id: source.property_id as string,
+      inspection_id: inspection.id as string,
+      kind: "inspection_report",
+      title: `Inspection ${inspection.report_number as string}`,
+      content_type: "text/html",
+      byte_size: Buffer.byteLength(body, "utf8"),
+      body,
+      filed_by: userId,
+    }];
+  });
+  const inspectionDocuments = await insertAll(
+    client, "crm_service_documents", inspectionDocumentRows, "id",
+  );
+  if ("error" in inspectionDocuments) return inspectionDocuments;
+
   const timelineTotal = await client
     .from("crm_timeline_events")
     .select("id", { count: "exact", head: true })
@@ -1916,6 +2209,12 @@ export async function runSeed(
       formAnswers: formAnswers.data.length,
       timesheets: timesheets.data.length,
       timelineEvents: timelineTotal.count ?? 0,
+      planSteps: planSteps.data.length,
+      stockMovements: stockMovements.data.length,
+      fieldSubmissions: fieldSubmissions.data.length,
+      propertyUnits: propertyUnits.data.length,
+      serviceDocuments: serviceDocuments.data.length + documentCorrections.data.length
+        + inspectionDocuments.data.length,
     },
   };
 }

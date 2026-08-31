@@ -2,6 +2,73 @@
 
 Last reviewed: 2026-08-31
 
+**Addendum, 2026-08-31 latest+36 - filed service documents (ADR-216):**
+services-documents.behavior 9 on the real chain: bytes kept exactly as
+filed; the copy unable to be updated or deleted by anybody, which is the
+whole value; a correction filed as another document naming the one it
+replaces, with the original still readable and marked superseded; a
+document about nothing refused; a size that disagrees with the body refused
+so a truncated file cannot claim to be whole; a content type this product
+cannot produce refused; the index carrying sizes rather than bodies so
+listing does not move megabytes; one book's filings invisible to another;
+the reader still an invoker. The row was recorded as blocked on object
+storage and that was wrong — job_seeker_uploads had solved the same problem
+already. bytea became TEXT after the seed exposed a real incompatibility:
+PostgREST wants a hex string for a bytea and the PGlite harness wants
+bytes, so the two paths would have disagreed about one column. RLS census
+208 -> 209; grants 53 -> 54 crm tables; runbook 213; seed report 52/52 ->
+53/53 and 51,281 -> 51,800 rows, with 519 filed documents including
+corrections and inspection copies. Matrix: 13 GAP -> 12, 5 PARTIAL -> 6.
+
+**Addendum, 2026-08-31 latest+35 - multi-unit properties (ADR-215):**
+services-multi-unit.behavior 9 on the real chain, most of them about the
+wrong door rather than the right one: a visit refused when it names a unit
+of a different property, and the same for a station and a sighting; one
+door being one row however it is typed, while the same number in another
+building is a different door; the coverage reader naming never-serviced
+units FIRST, because a 200-unit sweep that reached 188 is normal and the
+twelve nobody opened are the point; a unit's own stations and sightings
+counted rather than the building's; a property with no units behaving
+exactly as before; a removed door detaching from its visit rather than
+deleting the work; one book's doors invisible to another; and the reader
+still an invoker. That suite caught a real bug in the migration: ON DELETE
+SET NULL on a COMPOSITE key nulls every referencing column, two of which
+are NOT NULL, so deleting a door would have failed at the constraint — the
+column-list form `set null (unit_id)` detaches the door alone, and the
+postflight asserts all four references carry exactly one column in their
+delete set. RLS census 207 -> 208; grants 52 -> 53 crm tables; runbook 212;
+seed report 51/51 -> 52/52 and 50,063 -> 51,281 rows, with 1,218 doors.
+Matrix: 48 HAVE -> 49, 14 GAP -> 13.
+
+**Addendum, 2026-08-31 latest+34 - the printable station label (ADR-214):**
+code39 13 pins the transcribed pattern table by the properties the real one
+has — nine elements each, exactly three wide, only narrow and wide, all
+forty-four distinct — plus the framing, the alternation, the quiet zone, and
+four refusals. The refusal that matters: a lowercase barcode is NOT
+uppercased to make it fit, because crm_devices_org_barcode_key is
+case-sensitive and the symbol would scan as a different station on a
+regulated site. services-ipm-panel gains 2: a symbol beside the barcode a
+scan resolves to, and a lowercase barcode printing without one and saying
+why. No migration. Matrix: 47 HAVE -> 48, 4 PARTIAL -> 3, and the last row
+code alone could close is closed.
+
+**Addendum, 2026-08-31 latest+33 - the roster that had fallen behind:**
+The seed report's table list was hand-written, so "48/48 tables passing"
+was complete only relative to a list three tables out of date:
+crm_service_integrations (ADR-207), crm_field_submissions (ADR-210) and
+crm_plan_steps (ADR-211) had shipped without entering it, and
+crm_stock_movements (ADR-213) would have made four. A green that means less
+than it looks like is worse than a red, because nobody investigates it.
+seed-report-covers-every-table 3 now compares the roster against the tables
+the migrations actually create, in both directions — an uncovered table
+fails, and so does a spec naming a table that no longer exists — and
+requires a real reason beside anything deliberately excused. One table is
+excused: the provider registry, which holds at most one row per provider.
+The other three are seeded for real: 558 plan steps, 1,183 stock movements
+including consumptions whose quantities match the applications they served,
+and 262 field submissions across all three kinds. Report: 48/48 -> 51/51,
+48,060 -> 50,063 records.
+
 **Addendum, 2026-08-31 latest+32 - truck stock (ADR-213):**
 services-truck-stock.behavior 12 on the real chain: balances derived from
 the ledger rather than stored, so a receipt of 100 and a transfer of 40

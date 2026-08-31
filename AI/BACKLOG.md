@@ -339,10 +339,42 @@ the full seeded E2E journey passes — increment 10 of the plan.
   lock that stops a location going negative, and one draw per application
   so an offline replay cannot double-count. /Services/compliance.
   20260831000400; hosted apply: scope=truck-stock after merge.
+- [x] The seed roster can no longer fall behind the schema: every crm_
+  table must be seeded or explicitly excused with a reason, checked against
+  the tables the migrations create. Three tables that had already slipped
+  past are now seeded.
 - [ ] Provider-gated, ship Not Connected until an owner supplies
   credentials, never implied as working: card/ACH processing (the ledger
   records money that moved; it does not move money), SMS/email delivery,
   GPS/fleet telemetry, and QuickBooks sync.
+- [x] Mint a printable station label (PestBoss parity, ADR-214): a Code 39
+  label sheet on the IPM page, printed from the browser. A barcode Code 39
+  cannot carry prints without a symbol and says why, because barcodes are
+  case-sensitive and an uppercased one would scan as a different station.
+  This was the last row on the competitor board that code alone could close.
+- [x] Multi-unit properties (PestPac parity, ADR-215): a unit level below a
+  property, with every visit, station, sighting and plan referencing
+  (organization, property, unit) so a treatment cannot land on a door in
+  another building, plus a coverage reader that names the doors a sweep
+  missed. 20260831000500; hosted apply: scope=multi-unit-properties after
+  merge. This was the last row on the competitor board that code alone could
+  close.
+- [ ] Provider- or vendor-gated PestPac modules found by auditing the audit:
+  smart traps (a sensor feed), online sales (a self-serve purchase flow on
+  top of estimates and contracts, and the payment row it depends on), print
+  marketing fulfilment, customer surveys (the form model exists; sending is
+  the email/SMS row), and a website builder, which is outside a CRM core and
+  is listed rather than quietly dropped.
+- [x] File a service report as a document (PestBoss, PestPac parity,
+  ADR-216): frozen bytes, append-only, corrected by superseding.
+  20260831000600; hosted apply: scope=service-documents after merge. This
+  was recorded as blocked on object storage, which was wrong — a column
+  under RLS had already solved it for the Job Seeker.
+- [ ] Send a filed document to a customer. The email/SMS provider row, same
+  as every other outbound message.
+- [ ] Offer the filed copy for download in the customer portal, replacing
+  the two Not Connected notices that cite object storage — those sentences
+  are now out of date and should be corrected when that path is wired.
 - [ ] BLOCKED ON OWNER AUTHORIZATION, not on code: running recurring
   invoicing on a schedule. A timer that raises invoices against real
   customers is a billing action executed autonomously, which

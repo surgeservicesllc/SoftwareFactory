@@ -469,7 +469,66 @@ const SPECS: Spec[] = [
     optional: [],
     parents: [{ column: "payment_id", table: "crm_payments" }],
   },
+  {
+    table: "crm_plan_steps",
+    optional: ["day_of_month", "week_of_month", "weekday", "service_type"],
+    enumColumn: "anchor",
+    parents: [{ column: "plan_id", table: "crm_service_plans" }],
+  },
+  {
+    table: "crm_stock_movements",
+    optional: [
+      "from_branch_id", "from_equipment_id", "to_branch_id", "to_equipment_id",
+      "application_id", "note",
+    ],
+    enumColumn: "kind",
+    parents: [{ column: "lot_id", table: "crm_product_lots" }],
+  },
+  {
+    table: "crm_field_submissions",
+    optional: ["result_id"],
+    enumColumn: "kind",
+    parents: [],
+  },
+  {
+    table: "crm_property_units",
+    optional: ["unit_type", "occupant_name", "access_notes"],
+    parents: [{ column: "property_id", table: "crm_properties" }],
+  },
+  {
+    table: "crm_service_documents",
+    optional: ["work_order_id", "inspection_id", "property_id", "supersedes_id"],
+    enumColumn: "kind",
+    parents: [{ column: "account_id", table: "crm_accounts" }],
+  },
 ];
+
+/**
+ * The tables this report audits, by name. Exported so a census test can
+ * compare it against the schema the migrations actually create.
+ */
+export const SEED_SPEC_TABLES: readonly string[] = SPECS.map((spec) => spec.table);
+
+/**
+ * CRM tables the seed deliberately does NOT populate, each with the reason.
+ *
+ * This map exists because the roster above is hand-written, and a
+ * hand-written roster silently stops covering the schema the moment
+ * somebody adds a table. "48/48 tables passing" then reads as complete
+ * when it is not — the worst kind of green. `seed-report-covers-every-table`
+ * requires every crm_ table to be in one list or the other, so a new table
+ * forces a decision rather than slipping past.
+ *
+ * A reason here is a claim about the table's nature, not an excuse for
+ * skipping work: each says why 250 rows of it would be fiction.
+ */
+export const DELIBERATELY_UNSEEDED: Readonly<Record<string, string>> = {
+  crm_service_integrations:
+    "A registry of at most one row per provider per workspace (ADR-207). "
+    + "Eight providers cannot honestly become 250 rows, and the rows it does "
+    + "hold are seeded as disabled so nothing reads as connected.",
+};
+
 
 const SAMPLE = 1000;
 

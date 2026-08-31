@@ -414,13 +414,47 @@ the last four being the offline field queue, plan sequencing, invoices
 built from the visit, and truck stock — bringing the matrix to 47 HAVE,
 3 PARTIAL, 8 GAP.
 
-No buildable row is left. Ten of the eleven remaining are gated on an
+The board is measured against eleven products, not ten: an earlier revision
+identified the directive's "BOSS" as "the Briostack office suite", which
+does not hold up — Briostack's office component is Brio Office, and the
+likely referent is PestBoss, a separately-sold product. Measuring PestBoss
+in its own right added two rows and no HAVEs: minting a printable station
+label, and delivering a service report as a document.
+
+That printable label is now built (ADR-214): a Code 39 label sheet on the
+IPM page, printed from the browser rather than rendered to a PDF, because a
+PDF would need object storage and printing is the capability. A barcode
+Code 39 cannot carry prints without a symbol and says why — barcodes are
+case-sensitive here, so uppercasing one would produce a label that scans as
+a different station.
+
+Checking PestPac's own feature index against the board — the same doubt
+that found the BOSS error — turned up seven named modules with no row at
+all, in the deepest-measured competitor here. The board is now 67 rows:
+48 HAVE, 5 PARTIAL, 14 GAP. Two rounds of checking added nine rows and no
+HAVEs, which is what auditing your own audit looks like.
+
+That last buildable row is now built (ADR-215): a unit level under a
+property, with visits, stations, sightings and plans referencing
+(organization, property, unit) so a treatment cannot be attributed to a
+door in another building, and a coverage reader that names the doors a
+sweep missed rather than counting the ones it reached.
+
+A service report can now be FILED as a document (ADR-216): the bytes frozen
+as issued, append-only for everybody, corrected by filing another that names
+it. That row had been recorded as blocked on object storage, which was
+wrong — `20260820000300` had already solved the same problem for the Job
+Seeker by putting the bytes in a column under ordinary RLS. Sending it is
+still the email/SMS row.
+
+Of the remaining eighteen rows, ten are gated on an
 external account nobody has opened: card/ACH processing, SMS/email
 delivery, GPS telemetry, QuickBooks sync, telephony, reviews and
 drive-time routing. Those ship labelled **Not Connected** and are never
 implied to work.
 
-The eleventh — running recurring invoicing on a schedule — is gated on
+One more needs object storage configured before a service report can become
+a PDF. And the last — running recurring invoicing on a schedule — is gated on
 governance rather than an account. Raising invoices on a timer is a
 billing action executed autonomously, which `policies/RISK_CLASSIFICATION.md`
 classes RED and says cannot be authorized by a toggle or by an unrelated

@@ -5279,3 +5279,132 @@ what happened to a regulated product; correcting one is another movement,
 which is why `adjustment` exists.
 
 Hosted apply scope `truck-stock`.
+
+## ADR-214 - A label that is worse and true, rather than better and wrong
+
+Correcting the BOSS mis-identification put PestBoss on the board and added
+two rows. One of them — minting and printing a station label in the field —
+was the only row left on the whole matrix that code alone could close.
+
+Barcodes were already assigned and unique per workspace, so a scan resolved
+to exactly one station. The missing half was the label a technician sticks
+on the station in the first place.
+
+**It prints from the browser rather than becoming a PDF.** A PDF needs
+object storage, which is not configured — the same thing that makes the
+commercial portal say Not Connected about downloading a signed inspection.
+A print stylesheet needs nothing, and "print" is what the capability
+actually is.
+
+**Code 39, not Code 128.** A station barcode here is `[A-Za-z0-9._-]{4,64}`
+and Code 39's alphabet is `0-9 A-Z space - . $ / + %`, so the overlap is
+almost exact and every handheld reads it. Code 128 would encode more at the
+cost of a 107-row pattern table this repository could not verify.
+
+**The refusal is the interesting part.** `crm_devices_org_barcode_key` is
+case-SENSITIVE: `trap-01` and `TRAP-01` are two different stations. The
+obvious convenience — uppercase the value so Code 39 can carry it — would
+hand a technician a label that scans as a station other than the one in
+their hand, on a regulated site, into a compliance record. So a barcode
+Code 39 cannot carry prints anyway, with the value in text and the reason
+beside it. A worse label and a true one.
+
+**The pattern table is transcribed, so it is pinned rather than trusted.**
+Thirteen tests assert the properties the real Code 39 table has: every entry
+nine elements, exactly three of them wide, only narrow and wide, and all
+forty-four distinct. A transcription slip breaks at least one of those, and
+almost any slip breaks distinctness.
+
+No hosted apply: this adds no migration.
+
+## ADR-215 - A place inside a place
+
+An account had properties and a property had stations, visits and
+sightings. Nothing sat BELOW a property, so a 200-unit apartment block was
+one row here and two hundred service points in reality. That is the shape
+PestPac sells as Multi-Unit, and after two rounds of auditing the audit it
+was the last row on the competitor board needing neither a provider
+account, an owner authorization, nor object storage — only a level in the
+schema.
+
+**The composite reference is the whole feature.** Work orders, stations,
+sightings and plans reference `(organization, property, unit)` rather than
+`(unit)`, so a visit at Harborview cannot name a unit of Fairview. Getting
+that wrong is how multi-unit becomes a reporting feature that quietly
+attributes a treatment to the wrong home, which in a compliance record is
+worse than not having units at all.
+
+**The bug that composite key caused, and the fix.** `ON DELETE SET NULL` on
+a composite foreign key nulls EVERY referencing column — including
+`organization_id` and `property_id`, both NOT NULL. Deleting a door would
+have failed at the constraint rather than detaching the visit. The test for
+"a removed door does not unmake the work" caught it, and the fix is the
+column-list form, `on delete set null (unit_id)`, which nulls the door
+alone. A bare SET NULL here is a latent outage, so the postflight asserts
+all four references carry exactly one column in their delete set.
+
+**A unit is a place, not a person.** It carries an occupant NAME because a
+technician knocking needs one, and nothing else: no contact record, no
+account, no billing identity. Units are billed through the account that
+owns the property, which is how these contracts are actually written, and
+inventing a tenant identity would have created a second customer the
+product cannot support.
+
+**One door is one row, case-insensitively.** "4b" and "4B" are the same
+door, and a second row for it would split its history in half.
+
+**The coverage reader answers the question multi-unit exists for.** Not
+"how many units were treated" — that is easy and useless — but which doors
+were missed, sorted never-serviced first. A 200-unit sweep that reached 188
+is normal, and the twelve nobody opened are where the re-infestation comes
+from. `order by` is positional because `last_serviced_at` names an OUT
+parameter, the same trap as ADR-203.
+
+Hosted apply scope `multi-unit-properties`.
+
+## ADR-216 - The blocker was never storage; it was that nobody looked
+
+The competitor board carried "service report delivered as a document" as a
+GAP blocked on object storage, and I repeated that in three separate places
+today as a reason no more rows could be closed by code.
+
+It was wrong, and this repository already said so. `20260820000300` hit
+exactly this wall for the Job Seeker: hosted Supabase's `storage.objects` is
+owned by `supabase_storage_admin`, so this repository's psql apply path
+cannot create policies on it, and the web tier deliberately holds no
+service-role key that could bypass them. Rather than smuggle a privileged
+key into the browser-facing server or ship a bucket nobody can write to,
+that increment put the bytes in a column under ordinary RLS.
+
+The pattern was there the whole time. I had taken "no object storage is
+configured" — true — and drawn "therefore documents are impossible" — false.
+
+**What a filed document is for.** An auditor asks what the report SAID on
+the day, not what the database would render from today's rows. A report
+assembled live is a different document every time somebody corrects a note.
+This freezes it.
+
+**Which is why it is append-only**: `select, insert` and nothing else, for
+anybody. A filed copy that can be edited is not evidence, and a correction
+is another filing naming the one it replaces — the same shape as the
+compliance log. The original stays, because a customer may already hold it.
+
+**TEXT, not bytea, and that mattered.** The content types this column
+accepts are both text, so bytea bought nothing — and it cost a real
+incompatibility discovered in the seed: PostgREST wants a `\x` hex string
+for a bytea while the local PGlite harness wants bytes, so the seed path and
+the product path would have disagreed about the same column.
+`job_seeker_uploads` is bytea because it holds PDFs and DOCX; this holds
+HTML it can print.
+
+**The content type cannot lie.** `application/pdf` is refused, because this
+product has no PDF writer and a column claiming otherwise would be a
+falsehood the schema enforces.
+
+**What it still does not do is send.** Email and SMS remain the gated row
+they always were; printing already works from the browser (ADR-214). So the
+row moves from GAP to PARTIAL rather than to HAVE, and its reason changes
+from "needs object storage" to "needs a sender" — which is the truthful
+version of a blocker I had overstated.
+
+Hosted apply scope `service-documents`.
