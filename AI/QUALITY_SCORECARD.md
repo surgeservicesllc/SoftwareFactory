@@ -15,6 +15,22 @@ derived expanded-row count, and retains owner-only, non-grantable, explicit
 role-denial, and PostgreSQL 18 NOT NULL checks. The focused workflow contract
 passes 12/12. Exact-head release and a new read-only
 verify remain pending; no database or safety state changes with this fix.
+**Addendum, 2026-08-31 latest+53 - exact Grok Phase 1C graph re-wake
+(ADR-233):** Focused TypeScript behavior and SQL/workflow contract suites pass,
+and the full migration chain accepts 016 after the 015 context projection.
+Evidence covers gate-off zero lease/dispatch, exact target projection,
+idempotent no-op/replay, malformed identity refusal, retry evidence, disabled
+worker races, one transactional bridge intent, forced RLS, append-only
+attempts, least-privilege functions, and immediate targeted workflow wiring.
+The integrated base also proves strict `runEvidence.phase1c` projection, the
+exact Grok-to-Runs deep link, query-selected Runs detail, and link withholding
+when no bridge-bound agent run exists.
+The dedicated manual release lane pins canonical-LF SHA-256
+`04e0bc9115c30f179bcac89fac512fe30c9b0c1bc4a5271166e755fd47fbf76e`
+and one-file transactional probe/apply/verify semantics. Hosted apply,
+exact-head CI/build/browser, deployment, health, and live acceptance remain
+pending; all execution switches remain OFF and the kill switch remains ON.
+
 **Addendum, 2026-08-31 latest+52 - protected Grok context-envelope 011 lane
 (ADR-232):** The workflow contract, action-pin, and secret-boundary suites pass
 16/16; focused ESLint and whitespace checks pass. A native full-chain PGlite

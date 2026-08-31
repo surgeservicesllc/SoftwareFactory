@@ -32,6 +32,9 @@ const protectedChain = new Set([
   "20260831000900_grok_claim_admission_fence.sql",
   "20260831001000_grok_specialist_admission_planning.sql",
   "20260831001500_grok_claim_context_projection.sql",
+  "20260831001600_grok_phase1c_graph_rewake.sql",
+  "20260831001700_grok_read_only_research_runtime.sql",
+  "20260831001900_grok_admission_version_null_fence.sql",
 ]);
 
 const rosterTablesChildFirst = [

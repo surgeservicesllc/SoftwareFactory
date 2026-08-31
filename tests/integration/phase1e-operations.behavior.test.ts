@@ -217,7 +217,7 @@ describe("Phase 1E production operations behavior", () => {
     // their union was 219.)
     // Each is RLS-enabled and forced, which the filter on the next line is
     // what actually proves.
-    expect(rlsRows).toHaveLength(221);
+    expect(rlsRows).toHaveLength(223);
     expect(rlsRows.filter((row) => !row.relrowsecurity || !row.relforcerowsecurity)).toEqual([]);
 
     const { rows: grantRows } = await db.query<{ table_name: string }>(

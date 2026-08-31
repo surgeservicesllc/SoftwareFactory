@@ -277,6 +277,7 @@ describe("SECURITY DEFINER functions", () => {
       // `complete_` accepts only an already-sealed credential — plaintext
       // never crosses this boundary in either direction.
       "claim_ai_auth_session",
+      "claim_grok_graph_rewake_as_worker",
       // A dispatch-bound Phase 1C wake may commit only the exact command UUID
       // supplied by the trusted server. Protocol v3 is the only executable
       // claim surface; the v2 routines remain present but private so every
@@ -397,6 +398,7 @@ describe("SECURITY DEFINER functions", () => {
       // tenant ownership, exact message identity, bounds, hashes, and CAS.
       "record_grok_context_envelope_as_server",
       "record_grok_event_as_server",
+      "record_grok_graph_rewake_delivery_as_worker",
       "record_grok_planning_failure_as_server",
       "record_grok_specialist_roster_v2_as_server",
       "record_job_seeker_alert_scan",

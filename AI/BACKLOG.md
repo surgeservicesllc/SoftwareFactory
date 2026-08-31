@@ -48,6 +48,20 @@ category/insert-chain/notice truthfulness fixes. Nothing in this file is
 open because work stopped; everything open is waiting on a named key, a
 named decision, a named authorization, or production itself.
 
+## Grok Phase 1C exact graph re-wake (ADR-233, 2026-08-31)
+
+- [x] Persist exactly one immutable-identity re-wake intent in the admitted
+  Grok bridge transaction that records the Phase 1C pull request.
+- [x] Lease and acknowledge through service-role-only functions with exact
+  graph/project/repository/run/command/bridge identity, current admissions,
+  fresh non-disabled worker checks, bounded retries, and append-only evidence.
+- [x] Reuse the existing opaque graph-dispatch boundary immediately after a
+  targeted Phase 1C worker run; keep its independent worker gate authoritative.
+- [x] Add unit behavior, SQL/workflow contracts, full-chain migration coverage,
+  and a hash-pinned one-file protected `probe` / `apply` / `verify` lane.
+- [ ] Publish/apply/verify 016 only as a separately reviewed production
+  release. The repository candidate has no hosted ledger or runtime evidence.
+
 ## Grok context-envelope 011 protected release lane (ADR-232, 2026-08-31)
 
 - [x] Pin the exact canonical-LF 011 migration path, SHA-256, Supabase project,

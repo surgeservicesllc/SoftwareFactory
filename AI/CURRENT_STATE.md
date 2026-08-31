@@ -1,5 +1,34 @@
 # Current state
 
+## 2026-08-31: admitted Grok Phase 1C completion has an exact durable graph re-wake (ADR-233)
+
+The repository candidate adds forward migration
+`20260831001600_grok_phase1c_graph_rewake.sql` (canonical-LF SHA-256
+`04e0bc9115c30f179bcac89fac512fe30c9b0c1bc4a5271166e755fd47fbf76e`,
+38,463 bytes). The admitted Grok bridge transition to
+`PULL_REQUEST_RECORDED` now transactionally creates one exact graph re-wake
+intent. A fresh, non-disabled Phase 1C worker may lease only its exact command,
+dispatch only the database-projected graph UUID through the existing graph
+worker boundary, and append accepted/failed delivery evidence. Exact replay is
+idempotent; graph/project/repository/run/admission, stale-worker, lease, and
+delivery mismatches fail closed.
+
+The selected-session projection also carries exact bridge lineage as
+`runEvidence.phase1c` (bridge, origin graph run, command, task, agent run, PR,
+head, and later release identities). The Grok evidence panel and Retry / Cancel
+deep-link to `/solutions/runs?runId=<exact agent run>`, and the Runs console
+opens that query-named row. Without exact bridge-bound agent-run evidence, the
+link is withheld rather than guessed.
+
+The targeted Phase 1C workflow performs this wake immediately after its worker
+step, but only when the independent graph-worker gate is already ON. The new
+manual `probe` / `apply` / `verify` release lane pins the one 016 file and hash,
+exact green/READY production identity, prerequisite/unrelated ledger, catalog,
+RLS/ACL/trigger, linked-lint, disabled-worker, and stopped-safety evidence.
+Focused behavior/contract and full-chain migration tests pass locally. Nothing
+was pushed, deployed, dispatched, or applied; workers, autonomy, and automatic
+actions remain OFF and the global kill switch remains ON.
+
 ## 2026-08-31: Grok exposes advanced audited controls without bypassing them (ADR-231)
 
 The repository candidate adds one collapsed **Advanced controls** section to

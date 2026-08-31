@@ -6100,3 +6100,39 @@ text. Runtime fixtures are synthetic and rolled back, audit checks are
 content-free, and the canary proves no graph, node, agent, provider, bridge, or
 Phase 1C execution. Workers, schedules, autonomy, and automatic actions stay
 OFF and the organization kill switch stays ON for the entire lane.
+
+## ADR-233 - Phase 1C completion records one exact graph re-wake intent
+
+- **Date**: 2026-08-31
+- **Status**: Accepted for the repository candidate; hosted apply and live
+  dispatch are not authorized
+
+An admitted Grok Phase 1C run and its canonical lifecycle graph are separate
+workers. Recording the draft pull request makes the graph resumable, but a
+schedule or manual drain is not a correctness boundary. The same transaction
+that moves the exact bridge from `PHASE1C_BOUND` to
+`PULL_REQUEST_RECORDED` therefore inserts one durable re-wake intent keyed
+uniquely by bridge, command, and run.
+
+The intent is not execution authority. Its private validator re-derives the
+active Grok session, full-lifecycle-v2 graph, current execution admissions,
+exact successful Phase 1C run and pull request, and current executable GitHub
+repository binding. A service-role claim additionally requires the completing
+worker to be fresh, idle/active, non-disabled, and without a current run. The
+lease is bounded, delivery attempts are capped, identity fields are immutable,
+and accepted/failed outcomes are append-only. Exact accepted replay is a no-op;
+stale identity, active lease, exhausted retry, or disabled/stale worker fails
+closed.
+
+The targeted Phase 1C workflow invokes this outbox immediately after its worker
+step and reuses the existing repository-scoped GitHub App dispatch. Only the
+opaque exact graph UUID crosses that boundary, and the canonical graph worker
+must still win its protocol-v3 exact claim. If the independent graph-worker
+gate is OFF, no intent is leased and no dispatch occurs. This design does not
+enable a worker, autonomy, automatic actions, merge, deploy, or rollback, and
+it does not disengage the kill switch.
+
+Forward migration 016 has its own hash-pinned one-file manual release lane.
+Probe/apply/verify require exact release, ledger, catalog, lint, health, and
+stopped-safety evidence. No broad migration apply, reset, repair, down, or
+automatic workflow dispatch is permitted.

@@ -3,6 +3,28 @@
 Written 2026-08-14, after verifying the whole chain on a real PostgreSQL 16 cluster.
 Rebased 2026-08-16 on an owner-measured hosted position (see the section directly below).
 
+## Grok Phase 1C exact graph re-wake (ADR-233, repository-only)
+
+Use only `.github/workflows/grok-graph-rewake-migration.yml` for
+`20260831001600_grok_phase1c_graph_rewake.sql`, canonical-LF SHA-256
+`04e0bc9115c30f179bcac89fac512fe30c9b0c1bc4a5271166e755fd47fbf76e`.
+The lane is manual, first-attempt/actor restricted, serialized with every
+hosted migration, and accepts only `probe`, `apply`, or `verify` with its exact
+operation confirmation, release SHA, and migration hash.
+
+Require 00100-01500 exactly once, an unchanged digest of every unrelated
+ledger row, exact green current-main/READY Vercel/health/Supabase identity, no
+active execution/auth workflow, worker and schedule variables OFF, auth broker
+disabled, autonomy/actions OFF, kill switches ON, no running graph/agent work,
+and no submission guard. `probe` stages only canonical 016, rehearses the file,
+temporary ledger row, postflight, and linked lint under rollback. `apply`
+repeats those proofs then persists only 016 plus its ledger row in one locked
+transaction and reloads PostgREST. `verify` does not replay DDL; it verifies
+ledger, exact tables/RLS/policies/constraints/triggers/functions/ACLs,
+disabled-worker failure, zero evidence mutation, linked lint, health, and
+stopped containment. Never use broad push, reset, repair, down, or automatic
+dispatch as containment; stop for a new forward migration on any mismatch.
+
 ## Grok claim and specialist admission completion tail (ADR-219, repository-only)
 
 Use only `.github/workflows/grok-bot-completion-migrations.yml` for these two
@@ -389,7 +411,7 @@ the measured list, not today's total outstanding migration count. Later exact ev
 forward candidates.
 Do not add any of them to the 19-row measurement or
 infer a new overall missing count without another complete ledger probe. As of this release,
-the repository total is 222 migration files after integration with current `origin/main`. Those two numbers do not stand in a prefix relationship, and the reason
+the repository total is 225 migration files after integration with current `origin/main`. Those two numbers do not stand in a prefix relationship, and the reason
 matters: the
 hosted ledger is **not a contiguous prefix** of the local files. It has gaps in the middle and
 rows well past them. Any sentence of the form "everything after `X` is outstanding" is therefore

@@ -24,6 +24,33 @@ green CI and READY deployment, dispatch only fresh read-only `scope=verify`.
 Workers/autonomy/automatic actions remain OFF and the global kill switch
 remains ON. Signed-in acceptance and a real provider-backed E2E still remain;
 **GROK BOT: PRODUCTION READY is not declared.**
+## Newest (2026-08-31, latest+53): exact Grok Phase 1C graph re-wake (ADR-233)
+
+Migration `20260831001600_grok_phase1c_graph_rewake.sql`, canonical-LF SHA-256
+`04e0bc9115c30f179bcac89fac512fe30c9b0c1bc4a5271166e755fd47fbf76e`,
+records one durable re-wake only when an admitted Grok bridge atomically moves
+from `PHASE1C_BOUND` to `PULL_REQUEST_RECORDED`. Delivery revalidates the exact
+graph, project, repository binding, run, command, bridge, pull request,
+admissions, worker freshness, and lease. It sends only the opaque graph UUID
+through the existing graph-worker dispatch, then records immutable delivery
+evidence; replay cannot duplicate the accepted wake.
+
+That same bridge is owner-visible through `runEvidence.phase1c`. The Grok
+workspace deep-links **Open exact agent run** and Retry / Cancel to
+`/solutions/runs?runId=<agentRunId>`, and the Runs console loads that exact
+row. Preserve the null behavior: without a bridge-bound agent run, do not
+render or synthesize this link.
+
+Use `.github/workflows/grok-graph-rewake-migration.yml` for 016 only. `probe`
+rehearses and rolls back, `apply` persists only the staged hash-pinned file and
+one ledger row in a locked transaction, and `verify` rereads installed
+catalog/runtime evidence. All modes require exact current main, four green
+checks, READY Vercel/health/Supabase identity, configured first-attempt actor,
+00100-01500 lineage, unchanged unrelated ledger, workers/schedules stopped,
+autonomy/actions OFF, and kill switches ON. This candidate is repository-only:
+do not claim hosted or production acceptance and do not enable a worker to
+test it.
+
 ## Newest (2026-08-31, latest+52): protected Grok context-envelope 011 lane (ADR-232)
 
 Use `.github/workflows/grok-context-envelopes-migration.yml` for 011 only.

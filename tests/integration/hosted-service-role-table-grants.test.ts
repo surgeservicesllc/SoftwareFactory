@@ -172,6 +172,8 @@ const publicTables = [
   "grok_events",
   "grok_execution_admissions",
   "grok_graph_launches",
+  "grok_graph_rewake_attempts",
+  "grok_graph_rewake_intents",
   "grok_messages",
   "grok_phase1c_submission_guards",
   "grok_sessions",

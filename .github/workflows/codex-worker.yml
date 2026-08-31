@@ -95,3 +95,17 @@ jobs:
           GITHUB_CANDIDATE_APP_ID: ${{ secrets.SOFTWAREFACTORY_GITHUB_CANDIDATE_APP_ID }}
           GITHUB_CANDIDATE_APP_PRIVATE_KEY_BASE64: ${{ secrets.SOFTWAREFACTORY_GITHUB_CANDIDATE_APP_PRIVATE_KEY_BASE64 }}
         run: npm run worker:once
+
+      - name: Re-wake the exact canonical graph after admitted completion
+        if: ${{ always() && github.event.action != 'softwarefactory_phase1c_preflight' && vars.SOFTWAREFACTORY_GRAPH_WORKER_ENABLED == 'true' && (github.event.client_payload.command_id != '' || inputs.command_id != '') }}
+        env:
+          SOFTWAREFACTORY_GRAPH_WORKER_ENABLED: ${{ vars.SOFTWAREFACTORY_GRAPH_WORKER_ENABLED }}
+          SOFTWAREFACTORY_TARGET_COMMAND_ID: ${{ github.event.client_payload.command_id || inputs.command_id || '' }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.SOFTWAREFACTORY_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SOFTWAREFACTORY_SUPABASE_SERVICE_ROLE_KEY }}
+          GITHUB_APP_ID: ${{ secrets.SOFTWAREFACTORY_GITHUB_APP_ID }}
+          GITHUB_APP_PRIVATE_KEY_BASE64: ${{ secrets.SOFTWAREFACTORY_GITHUB_APP_PRIVATE_KEY_BASE64 }}
+          GITHUB_CANDIDATE_APP_ID: ${{ secrets.SOFTWAREFACTORY_GITHUB_CANDIDATE_APP_ID }}
+          GITHUB_CANDIDATE_APP_PRIVATE_KEY_BASE64: ${{ secrets.SOFTWAREFACTORY_GITHUB_CANDIDATE_APP_PRIVATE_KEY_BASE64 }}
+          NODE_OPTIONS: --import ./scripts/server-only-shim.mjs
+        run: npm run worker:rewake
