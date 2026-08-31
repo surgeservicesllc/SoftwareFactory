@@ -206,6 +206,12 @@ the full seeded E2E journey passes — increment 10 of the plan.
   oldest-and-largest; and dunning notices that record what a person did.
   /Services/collections. 20260830002000; hosted apply:
   scope=recurring-billing after merge.
+- [x] Increment 13 (ADR-201): equipment and fleet — assets over an
+  append-only ledger, with status, assignment and meter readings as
+  projections of it; service schedules where "no interval on file" is its
+  own standing rather than "fine"; and a meter that cannot run backwards.
+  /Services/fleet. 20260830002100; hosted apply: scope=equipment-fleet
+  after merge.
 - [ ] Increment 12 follow-on: UNATTENDED billing. The generator is correct
   and idempotent but nothing calls it on a schedule, because nothing in
   this product runs on a timer. Needs a scheduler or a worker executor —

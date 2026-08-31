@@ -2,6 +2,32 @@
 
 Last updated: 2026-08-31
 
+## Newest (2026-08-31, latest+22): equipment and fleet (ADR-201, #68)
+
+`20260830002100` adds crm_equipment and the append-only
+crm_equipment_events, plus two projection triggers and crm_fleet_status.
+
+It is the IPM station pattern again, so the same rule applies: STATUS AND
+ASSIGNMENT ARE PROJECTIONS OF THE LEDGER. The route cannot set them — they
+are not in the patch schema, and tests assert each is refused. To move an
+asset, record what happened to it.
+
+Two fleet-specific rules, both easy to break by "tidying":
+- A meter that drops is refused, and the exception NAMES BOTH READINGS.
+  That message is passed through the route unflattened on purpose: a
+  technician needs to see 24,000 against 42,000 to know they transposed a
+  digit.
+- `unscheduled` is its own standing and is NEVER folded into `ok`. An asset
+  with no service interval has not been judged. The page counts it
+  separately for the same reason.
+
+Asset tags are case-insensitive (`upper()` in the unique index). The first
+draft's CHECK demanded uppercase, which made that index unreachable — if
+you tighten the tag grammar, keep lowercase legal.
+
+GPS/telemetry is Not Connected and should stay that way until a provider
+exists; everything on the page is what somebody recorded.
+
 ## Newest (2026-08-31, latest+21): recurring billing (ADR-200, task #66)
 
 `20260830002000` adds crm_billing_runs, crm_dunning_notices, four columns

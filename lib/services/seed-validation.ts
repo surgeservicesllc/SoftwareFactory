@@ -131,6 +131,27 @@ const SPECS: Spec[] = [
     parents: [{ column: "technician_id", table: "crm_technicians" }],
   },
   {
+    table: "crm_equipment",
+    optional: [
+      "make", "model", "serial_number", "branch_id", "assigned_technician_id",
+      "meter_reading", "meter_unit", "meter_read_at", "service_interval_days",
+      "last_serviced_on", "purchased_on", "notes",
+    ],
+    /*
+     * `retired_on` is deliberately absent: the corpus keeps every asset on
+     * the roster, because a retired one is the state the fleet report
+     * excludes and seeding a shelf of them would flatter the counts.
+     */
+    enumColumn: "kind",
+    parents: [],
+  },
+  {
+    table: "crm_equipment_events",
+    optional: ["technician_id", "meter_reading", "cost_cents", "vendor", "note"],
+    enumColumn: "kind",
+    parents: [{ column: "equipment_id", table: "crm_equipment" }],
+  },
+  {
     table: "crm_billing_runs",
     /*
      * A note is the only optional column. The counts are never null —

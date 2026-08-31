@@ -147,7 +147,7 @@ built.
 | Branch/office structure with managers | PestPac, ServSuite | **HAVE** (ADR-195) |
 | Org chart, roles, reporting lines | PestPac, ServSuite | **HAVE** (ADR-195) |
 | Warehouse/lot inventory | PestPac | **PARTIAL** — product lots exist; truck stock does not |
-| **Equipment and fleet/asset management** | ServSuite, FieldRoutes | **GAP** |
+| **Equipment and fleet/asset management** | ServSuite, FieldRoutes | **HAVE** (ADR-201) — assets, an append-only ledger, assignment, service schedules and meter readings that cannot run backwards. GPS telemetry beside it stays **Not Connected**. |
 | **Call centre / phone integration** | FieldRoutes, PestPac | **GAP** |
 
 ## Build order
@@ -179,9 +179,7 @@ first, and tracked in `AI/BACKLOG.md`:
    `crm_device_events`, `crm_pest_sightings`, `crm_documents`,
    `crm_form_instances`); this is projection work over the portal's
    existing definer pattern.
-2. **Equipment and fleet/asset management** — vehicles, sprayers and
-   meters, assignment to a technician or branch, service intervals and
-   inspection records. ServSuite and FieldRoutes both sell it.
+2. ~~Equipment and fleet/asset management~~ — **SHIPPED** as ADR-201.
 3. **Revenue forecasting** — Briostack sells it, and the contract and
    service-plan tables already carry everything it needs.
 4. **WDO/termite graphs and diagrams** — a drawing surface, not a form.

@@ -4424,3 +4424,62 @@ undeclared until the goal's full seeded E2E passes.
   runbook 199. Hosted apply scope `recurring-billing` re-proves the index is
   present **and partial**, that a notice is not editable, and that neither
   writer is a definer.
+
+## ADR-201 - Equipment and fleet: a meter that never runs backwards
+
+- **Status**: accepted (increment 13 of task #68, owner /goal). ServSuite
+  and FieldRoutes both sell asset management, and
+  `AI/PEST_CRM_COMPETITOR_MATRIX.md` carries it as a gap with **no provider
+  dependency** — one of the rows that can actually be closed by writing
+  code, unlike the GPS telemetry sitting beside it in the same section.
+- **The shape is the IPM station's (ADR-191), deliberately**, because the
+  problem is the same: a physical thing in the field whose current state is
+  only trustworthy if it is derived from what was recorded about it.
+  `crm_equipment_events` is append-only at the grant level; `status`,
+  `assigned_technician_id`, `meter_reading` and `last_serviced_on` are
+  projections of it, written by trigger; and an asset is born with its own
+  acquisition event so nothing predates its own record. The route has no
+  way to set any of those — the patch schema does not contain them, and a
+  test asserts each is refused.
+- **Two rules are specific to fleet, and both fail silently if you get them
+  wrong:**
+  1. **A METER DOES NOT RUN BACKWARDS.** An odometer that drops is a
+     transposed digit or the wrong asset, and accepting it corrupts every
+     service interval computed from it afterwards. Refused by trigger, and
+     the exception **names both readings** — that message travels through
+     the route unflattened, because "something went wrong" does not tell a
+     technician they typed 24,000 for 42,000.
+  2. **`unscheduled` IS NOT `ok`.** An asset with no service interval on
+     file has not been judged; folding it into "fine" is how a fleet report
+     starts claiming health nobody measured. It is a distinct standing, a
+     distinct count on the page, and excluded from the ok tally.
+- **A scheduled asset that was never serviced is due from its purchase
+  date**, not exempt. Overdue-since-new is a real finding and the report
+  says so with a negative number.
+- **Case-insensitive asset tags.** A tag is read off a sticker and
+  frequently typed one-handed on a phone, so `truck-04` and `TRUCK-04` are
+  the same asset and the second must collide. The first draft's CHECK
+  required uppercase, which made the `upper()` in the unique index
+  unreachable — caught by a test that expected the index and got the CHECK.
+- **Nothing is deletable.** A truck that leaves the fleet is retired, its
+  assignment cleared by the same event, and its history stays attached to
+  it. Recording anything against a retired asset is refused by name.
+- **`crm_fleet_status` is SECURITY INVOKER**, on ADR-199's reasoning: it
+  reads across a whole fleet and must not see past its reader.
+- **GPS and fleet telemetry stay Not Connected.** Location and live engine
+  data need a provider; everything on this page is what somebody recorded.
+- **Verification**: `services-equipment-fleet.behavior` (13) on the real
+  chain — acquisition written by trigger rather than by the caller
+  remembering; a backwards meter refused with both readings in the message
+  and the real reading accepted after; assignment, transfer and release
+  through the ledger; an `assigned` event with no technician refused;
+  repair in and out; a 180-day schedule computed and an unscheduled asset
+  reporting null rather than a date; overdue-since-new at −310 days; a
+  retirement that unassigns and then refuses everything after; a retired
+  status with no date refused; half a meter reading refused; a tag
+  colliding case-insensitively within a company and reusable across
+  companies; the ledger append-only and the asset undeletable; and the
+  report proven not to be a definer. `services-fleet-routes` (8) pins the
+  boundary. Seed covers both tables — 46/46, 47,244 rows. Hosted apply
+  scope `equipment-fleet` re-proves the append-only grant, both projection
+  triggers, and the case-insensitive tag index.

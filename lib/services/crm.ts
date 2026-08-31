@@ -2247,3 +2247,165 @@ export function toCollectionsView(row: CrmCollectionsRow) {
     untouched: row.notices === 0,
   };
 }
+
+/* ---------------------------------------------------------------------------
+ * Equipment and fleet (increment 13).
+ * ------------------------------------------------------------------------- */
+
+export type CrmEquipmentKind =
+  | "vehicle" | "trailer" | "sprayer" | "bait_gun" | "meter"
+  | "respirator" | "thermal_camera" | "ladder" | "other";
+
+export type CrmEquipmentStatus = "in_service" | "in_repair" | "out_of_service" | "retired";
+
+export type CrmEquipmentEventKind =
+  | "acquired" | "assigned" | "unassigned" | "service" | "inspection"
+  | "meter_reading" | "repair_opened" | "repair_closed" | "retired";
+
+export const CRM_EQUIPMENT_KINDS: readonly CrmEquipmentKind[] = [
+  "vehicle", "trailer", "sprayer", "bait_gun", "meter",
+  "respirator", "thermal_camera", "ladder", "other",
+];
+
+export const CRM_EQUIPMENT_EVENT_KINDS: readonly CrmEquipmentEventKind[] = [
+  "assigned", "unassigned", "service", "inspection",
+  "meter_reading", "repair_opened", "repair_closed", "retired",
+];
+
+export const CRM_METER_UNITS = ["miles", "kilometres", "hours"] as const;
+
+export const CRM_EQUIPMENT_COLUMNS =
+  "id, asset_tag, kind, name, make, model, serial_number, branch_id, status, assigned_technician_id, meter_reading, meter_unit, meter_read_at, service_interval_days, last_serviced_on, purchased_on, retired_on, notes, created_at, updated_at";
+export const CRM_EQUIPMENT_EVENT_COLUMNS =
+  "id, equipment_id, kind, technician_id, meter_reading, cost_cents, vendor, note, occurred_at";
+
+export type CrmEquipmentRow = {
+  id: string;
+  asset_tag: string;
+  kind: CrmEquipmentKind;
+  name: string;
+  make: string | null;
+  model: string | null;
+  serial_number: string | null;
+  branch_id: string | null;
+  status: CrmEquipmentStatus;
+  assigned_technician_id: string | null;
+  meter_reading: number | string | null;
+  meter_unit: string | null;
+  meter_read_at: string | null;
+  service_interval_days: number | null;
+  last_serviced_on: string | null;
+  purchased_on: string | null;
+  retired_on: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CrmEquipmentEventRow = {
+  id: string;
+  equipment_id: string;
+  kind: CrmEquipmentEventKind;
+  technician_id: string | null;
+  meter_reading: number | string | null;
+  cost_cents: number | string | null;
+  vendor: string | null;
+  note: string | null;
+  occurred_at: string;
+};
+
+export type CrmFleetStatusRow = {
+  equipment_id: string;
+  asset_tag: string;
+  name: string;
+  kind: CrmEquipmentKind;
+  status: CrmEquipmentStatus;
+  branch_id: string | null;
+  assigned_technician_id: string | null;
+  meter_reading: number | string | null;
+  meter_unit: string | null;
+  last_serviced_on: string | null;
+  service_interval_days: number | null;
+  next_service_due: string | null;
+  days_until_service: number | null;
+  events: number;
+};
+
+export function toEquipmentView(row: CrmEquipmentRow) {
+  return {
+    id: row.id,
+    assetTag: row.asset_tag,
+    kind: row.kind,
+    name: row.name,
+    make: row.make,
+    model: row.model,
+    serialNumber: row.serial_number,
+    branchId: row.branch_id,
+    status: row.status,
+    assignedTechnicianId: row.assigned_technician_id,
+    meterReading: row.meter_reading === null ? null : Number(row.meter_reading),
+    meterUnit: row.meter_unit,
+    meterReadAt: row.meter_read_at,
+    serviceIntervalDays: row.service_interval_days,
+    lastServicedOn: row.last_serviced_on,
+    purchasedOn: row.purchased_on,
+    retiredOn: row.retired_on,
+    notes: row.notes,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function toEquipmentEventView(row: CrmEquipmentEventRow) {
+  return {
+    id: row.id,
+    equipmentId: row.equipment_id,
+    kind: row.kind,
+    technicianId: row.technician_id,
+    meterReading: row.meter_reading === null ? null : Number(row.meter_reading),
+    costCents: row.cost_cents === null ? null : Number(row.cost_cents),
+    vendor: row.vendor,
+    note: row.note,
+    occurredAt: row.occurred_at,
+  };
+}
+
+/**
+ * How an asset's service standing reads.
+ *
+ * `unscheduled` is its own state and is never folded into `ok`: an asset
+ * with no interval on file has not been judged, and reporting it as fine is
+ * how a fleet report starts claiming everything is.
+ */
+export function serviceStanding(
+  intervalDays: number | null,
+  daysUntilService: number | null,
+): "unscheduled" | "overdue" | "due_soon" | "ok" {
+  if (intervalDays === null || daysUntilService === null) return "unscheduled";
+  if (daysUntilService < 0) return "overdue";
+  if (daysUntilService <= 14) return "due_soon";
+  return "ok";
+}
+
+export function toFleetStatusView(row: CrmFleetStatusRow) {
+  return {
+    equipmentId: row.equipment_id,
+    assetTag: row.asset_tag,
+    name: row.name,
+    kind: row.kind,
+    status: row.status,
+    branchId: row.branch_id,
+    assignedTechnicianId: row.assigned_technician_id,
+    meterReading: row.meter_reading === null ? null : Number(row.meter_reading),
+    meterUnit: row.meter_unit,
+    lastServicedOn: row.last_serviced_on,
+    serviceIntervalDays: row.service_interval_days,
+    /** Null when nothing says when — unscheduled, not "not due". */
+    nextServiceDue: row.next_service_due,
+    daysUntilService: row.days_until_service,
+    standing: serviceStanding(row.service_interval_days, row.days_until_service),
+    events: row.events,
+    /** Assigned to nobody. A real state, and the one a yard walk is for. */
+    unassigned: row.assigned_technician_id === null && row.status !== "retired",
+  };
+}

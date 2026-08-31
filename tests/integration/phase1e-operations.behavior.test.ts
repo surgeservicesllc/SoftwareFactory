@@ -219,11 +219,12 @@ describe("Phase 1E production operations behavior", () => {
     // crm_form_answers and crm_timesheets; 189 since the customer portal
     // (ADR-198) added crm_portal_users and crm_portal_requests; 196 with
     // main's durable Grok workspace and its seven tenant-scoped
-    // session/evidence tables; and 198 since recurring billing (ADR-200)
-    // added crm_billing_runs and crm_dunning_notices. Each is RLS-enabled
-    // and forced, which the filter on the next line is what actually
-    // proves.
-    expect(rlsRows).toHaveLength(198);
+    // session/evidence tables; 198 since recurring billing (ADR-200) added
+    // crm_billing_runs and crm_dunning_notices; and 200 since the fleet
+    // (ADR-201) added crm_equipment and the append-only
+    // crm_equipment_events. Each is RLS-enabled and forced, which the
+    // filter on the next line is what actually proves.
+    expect(rlsRows).toHaveLength(200);
     expect(rlsRows.filter((row) => !row.relrowsecurity || !row.relforcerowsecurity)).toEqual([]);
 
     const { rows: grantRows } = await db.query<{ table_name: string }>(

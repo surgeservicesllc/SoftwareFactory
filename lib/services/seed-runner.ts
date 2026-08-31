@@ -56,6 +56,8 @@ export type SeedCounts = {
   portalRequests: number;
   billingRuns: number;
   dunningNotices: number;
+  equipment: number;
+  equipmentEvents: number;
   canvassRoutes: number;
   knocks: number;
   marketingLists: number;
@@ -998,6 +1000,73 @@ export async function runSeed(
   const documents = await insertAll(client, "crm_documents", documentRows, "id");
   if ("error" in documents) return documents;
 
+  /* ----------------------------------------- equipment and fleet (13) */
+
+  /*
+   * Assets first, then the ledger. Every asset is born with an acquisition
+   * event written by trigger, so the runner inserts none — and the events
+   * below are the ones that came after.
+   */
+  const equipmentRows = dataset.equipment.map((asset) => ({
+    organization_id: org,
+    asset_tag: asset.assetTag,
+    kind: asset.kind,
+    name: asset.name,
+    make: asset.make ?? null,
+    model: asset.model ?? null,
+    serial_number: asset.serialNumber ?? null,
+    branch_id: branchId(asset.branchIndex),
+    meter_reading: asset.meterReading ?? null,
+    meter_unit: asset.meterUnit ?? null,
+    // The schema takes a reading, its unit and its moment together or none
+    // of the three.
+    meter_read_at: asset.meterReading === undefined ? null : daysAgoIso(asset.purchasedDaysAgo),
+    service_interval_days: asset.serviceIntervalDays ?? null,
+    purchased_on: dateInDays(-asset.purchasedDaysAgo),
+    notes: asset.notes ?? null,
+    created_by: userId,
+  }));
+  const equipment = await insertAll(client, "crm_equipment", equipmentRows, "id, asset_tag");
+  if ("error" in equipment) return equipment;
+  const equipmentIdByTag = new Map(
+    equipment.data.map((row) => [row.asset_tag as string, row.id as string]),
+  );
+
+  /*
+   * The ledger, oldest first per asset, with meter readings that only ever
+   * climb — the trigger refuses anything else, and a seeder that produced
+   * a backwards reading would be testing the guard rather than filling the
+   * book.
+   */
+  const equipmentEventRows = dataset.equipment.flatMap((asset) => {
+    const equipmentId = equipmentIdByTag.get(asset.assetTag);
+    if (equipmentId === undefined) return [];
+    let meter = asset.meterReading ?? null;
+    return asset.events.map((event) => {
+      if (event.meterAdd !== undefined && meter !== null) meter += event.meterAdd;
+      return {
+        organization_id: org,
+        equipment_id: equipmentId,
+        kind: event.kind,
+        technician_id:
+          event.technicianIndex === undefined ? null : technicianId(event.technicianIndex),
+        meter_reading: event.meterAdd === undefined ? null : meter,
+        cost_cents: event.costCents ?? null,
+        vendor: event.vendor ?? null,
+        note: event.note ?? null,
+        occurred_at: daysAgoIso(event.daysAgo),
+        created_by: userId,
+      };
+    });
+  });
+  const equipmentEvents = await insertAll(
+    client,
+    "crm_equipment_events",
+    equipmentEventRows,
+    "id",
+  );
+  if ("error" in equipmentEvents) return equipmentEvents;
+
   /* --------------------------- recurring billing and collections (12) */
 
   /*
@@ -1652,6 +1721,8 @@ export async function runSeed(
       portalRequests: portalRequests.data.length,
       billingRuns: billingRuns.data.length,
       dunningNotices: dunningNotices.data.length,
+      equipment: equipment.data.length,
+      equipmentEvents: equipmentEvents.data.length,
       canvassRoutes: canvassRoutes.data.length,
       knocks: knocks.data.length,
       marketingLists: lists.data.length,

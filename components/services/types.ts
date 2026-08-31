@@ -985,3 +985,52 @@ export type CollectionsPayload = {
   counts: { total: number; balanceCents: number; untouched: number; over90: number };
   delivery: { available: boolean; label: string };
 };
+
+/* --- equipment and fleet (increment 13) --------------------------------- */
+
+export type FleetAssetView = {
+  equipmentId: string;
+  assetTag: string;
+  name: string;
+  kind: string;
+  status: string;
+  branchId: string | null;
+  assignedTechnicianId: string | null;
+  meterReading: number | null;
+  meterUnit: string | null;
+  lastServicedOn: string | null;
+  serviceIntervalDays: number | null;
+  nextServiceDue: string | null;
+  daysUntilService: number | null;
+  standing: string;
+  events: number;
+  unassigned: boolean;
+};
+
+export type EquipmentEventView = {
+  id: string;
+  equipmentId: string;
+  kind: string;
+  technicianId: string | null;
+  meterReading: number | null;
+  costCents: number | null;
+  vendor: string | null;
+  note: string | null;
+  occurredAt: string;
+};
+
+export type FleetPayload = {
+  fleet: FleetAssetView[];
+  events: EquipmentEventView[];
+  counts: {
+    total: number;
+    inService: number;
+    inRepair: number;
+    retired: number;
+    overdue: number;
+    dueSoon: number;
+    unscheduled: number;
+    unassigned: number;
+  };
+  telemetry: { available: boolean; label: string };
+};

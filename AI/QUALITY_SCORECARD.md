@@ -2,6 +2,35 @@
 
 Last reviewed: 2026-08-31
 
+**Addendum, 2026-08-31 latest+22 - equipment and fleet (ADR-201):**
+services-equipment-fleet.behavior 13 on the real chain: an asset born with
+its acquisition event written by trigger rather than by the caller
+remembering; a backwards meter refused with BOTH readings in the message
+and the honest reading accepted straight after; assignment, transfer and
+release all through the ledger with the roster following; an `assigned`
+event naming nobody refused; repair in and back out; a 180-day schedule
+computed from the service just recorded while an asset with no interval
+reports null rather than a date; a scheduled asset never serviced reporting
+-310 days, because overdue-since-new is a finding and not an exemption; a
+retirement that clears the assignment and then refuses everything after; a
+retired status with no date refused; half a meter reading refused; an asset
+tag colliding case-insensitively inside a company and reusable across
+companies; the ledger append-only and the asset undeletable; and the report
+proven not to be a definer. services-fleet-routes 8 pins the boundary,
+including four separate attempts to set a projection through PATCH — every
+one refused — and the backwards-meter message surviving to the technician
+with both numbers intact.
+Two of those tests earned their keep immediately: the tag test caught a
+CHECK that demanded uppercase and so made the case-insensitive index
+unreachable, and three route tests failed on UUIDs containing a `g`, which
+is not a hex digit — the schema was right and the fixture was wrong. Seed
+extended to 46 tables — 47,244 rows, 46/46 PASS, deliberately carrying
+assets with no service interval, because that is the row the fleet report
+keeps out of "fine". RLS census 200; service-role grants at 46 crm tables;
+runbook 200; workflow scope `equipment-fleet` postflight re-proves the
+append-only grant on the ledger, both projection triggers, and that the tag
+index is case-insensitive.
+
 **Addendum, 2026-08-31 latest+21 - recurring billing (ADR-200):**
 services-recurring-billing.behavior 14 on the real chain, most of them
 pressing on one invariant from a different angle: the due plans billed and
