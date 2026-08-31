@@ -2,6 +2,45 @@
 
 Last updated: 2026-08-31
 
+## Newest (2026-08-31, latest+38): autopay authorisation (ADR-218, #80)
+
+`20260831000800` adds crm_payment_instruments, crm_payment_mandates,
+crm_autopay_enrollments and crm_charge_attempts.
+
+THE MISSING GRANT IS THE FEATURE, AGAIN. crm_charge_attempts has SELECT and
+INSERT and no UPDATE. Do not add one: that absence is the only reason
+`succeeded` cannot be hand-written, and crm_autopay_record_settlement
+(definer, asks crm_integration_live for 'card_payments') is deliberately
+its sole writer. The postflight checks the absence on every hosted apply,
+because hosted default privileges would restore it.
+
+THE MANDATE IS APPEND-ONLY AND MUST STAY SO. It holds the words the
+customer agreed to. A mandate that can be edited is not evidence, and it is
+the row a chargeback turns on.
+
+NEVER RELAX text_has_likely_pan. It refuses any 12-19 digit run, which will
+occasionally refuse a long reference. That is the intended trade: a retype
+costs a moment, a stored card number costs PCI scope. The browser copy in
+lib/services/payment-instruments.ts must MATCH it exactly — a parity test
+runs both over one table, and a looser browser rule would put a PAN on the
+wire trusting a server check that will not fire.
+
+RAISE HAS NO FORMAT SPECIFIERS. `%.2f` prints a raw numeric at full scale;
+use to_char for money in messages.
+
+THERE IS NO `paid` INVOICE STATUS. Settlement is paid_cents reaching
+total_cents while the status stays `open`; `uncollectible` is the written
+-off ending. Reading a status that does not exist is how this increment's
+seed silently produced a fifth of the rows it should have.
+
+THE TEST CHAIN IS NOW SNAPSHOTTED. tests/support/migrated-database.ts
+builds the migrations once, dumps the data directory and hands out restored
+copies, keyed by a hash of every migration's CONTENT so an edited file
+rebuilds rather than reusing a stale schema. Replay is 5,378ms, restore is
+981ms. New suites should call createMigratedDatabase() rather than looping
+over the directory; the other fifty suites still replay and are worth
+converting.
+
 ## Newest (2026-08-31, latest+37): transactional notices (ADR-217, #79)
 
 `20260831000700` adds crm_notices and crm_contact_preferences.

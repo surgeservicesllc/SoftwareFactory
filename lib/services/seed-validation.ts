@@ -520,6 +520,44 @@ const SPECS: Spec[] = [
     enumColumn: "state",
     parents: [{ column: "account_id", table: "crm_accounts" }],
   },
+
+  {
+    table: "crm_payment_instruments",
+    optional: ["expires_month", "expires_year", "holder_name", "removed_at", "removed_reason"],
+    enumColumn: "kind",
+    parents: [{ column: "account_id", table: "crm_accounts" }],
+  },
+  {
+    table: "crm_payment_mandates",
+    optional: [],
+    enumColumn: "channel",
+    parents: [
+      { column: "account_id", table: "crm_accounts" },
+      { column: "instrument_id", table: "crm_payment_instruments" },
+    ],
+  },
+  {
+    table: "crm_autopay_enrollments",
+    optional: ["revoked_at", "revoke_reason"],
+    parents: [
+      { column: "account_id", table: "crm_accounts" },
+      { column: "instrument_id", table: "crm_payment_instruments" },
+      { column: "mandate_id", table: "crm_payment_mandates" },
+    ],
+  },
+  {
+    // `settled_at` and `processor_reference` are absent on purpose, exactly
+    // as ADR-217's dispatch columns are: only a real settlement through a
+    // connected processor writes them, and a seeded value in either would
+    // be a claim that money moved.
+    table: "crm_charge_attempts",
+    optional: ["failure_reason", "cancelled_at"],
+    enumColumn: "state",
+    parents: [
+      { column: "enrollment_id", table: "crm_autopay_enrollments" },
+      { column: "invoice_id", table: "crm_invoices" },
+    ],
+  },
 ];
 
 /**

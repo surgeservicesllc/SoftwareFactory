@@ -232,11 +232,13 @@ describe("Phase 1E production operations behavior", () => {
     // (ADR-213) added the append-only crm_stock_movements; and 208 since
     // multi-unit properties (ADR-215) added crm_property_units; 209
     // since filed service documents (ADR-216) added crm_service_documents;
-    // and 211 since transactional notices (ADR-217) added crm_notices and
-    // crm_contact_preferences.
+    // 211 since transactional notices (ADR-217) added crm_notices and
+    // crm_contact_preferences; and 215 since autopay authorization
+    // (ADR-218) added crm_payment_instruments, crm_payment_mandates,
+    // crm_autopay_enrollments and crm_charge_attempts.
     // Each is RLS-enabled and forced, which the filter on the next line is
     // what actually proves.
-    expect(rlsRows).toHaveLength(211);
+    expect(rlsRows).toHaveLength(215);
     expect(rlsRows.filter((row) => !row.relrowsecurity || !row.relforcerowsecurity)).toEqual([]);
 
     const { rows: grantRows } = await db.query<{ table_name: string }>(
