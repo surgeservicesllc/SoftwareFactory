@@ -155,11 +155,11 @@ still record their original user context after the immutable blocked evidence,
 but blocked sessions cannot append later messages.
 
 The initial deterministic Chief of Staff planner consumes one canonical,
-secret-scanned, 8 KB summary and records it as `bounded_context`. THE CANONICAL
-FULL LIFECYCLE/PHASE 1C WORKER DOES NOT RECEIVE IT. That typed executable
-context-reference bridge is **Not Connected**; the current v3 launcher still
-receives only the original 4 KB goal. Do not work around that boundary by
-copying attachment contents into the goal or by fetching reference-only items.
+secret-scanned, 8 KB summary and records it as `bounded_context`. At this
+checkpoint the canonical worker did not receive it. ADR-230's later candidate
+adds a separate typed admitted-claim projection while preserving the original
+4 KB goal. Never copy attachment contents into that goal or fetch reference-
+only items.
 
 This isolated candidate is not pushed, deployed, or applied. Before release,
 integrate it on the exact current main, re-run full quality/build/browser gates,
@@ -168,6 +168,53 @@ catalog, forced RLS, ACL, replay, immutability, tenant isolation, lint, health,
 and signed-in create/follow-up/reload behavior. Keep workers/autonomy/automatic
 actions OFF and the global kill switch ON. **GROK BOT: PRODUCTION READY is not
 declared.**
+
+## Newest (2026-08-31, latest+50): admitted Grok claim context (ADR-230)
+
+`20260831001500_grok_claim_context_projection.sql` is the next verified free
+forward version; `01200`-`01400` already existed and may coexist. The migration
+does not replace any public v3 signature. It source/authority-pins the current
+four wrappers and two private admission attachment helpers, adds one private
+ungranted projector, then replaces only those two private helpers.
+Its canonical LF SHA-256 is
+`4c33bcb908cb0b7a1972b4e2dc79d9fdc8bee13d118490e179afc2001a159e4b`
+(24,264 bytes). Native normalized `md5(pg_proc.prosrc)` is
+`06c7fb24b7c4b50bbf80aee57385ff57` for the projector,
+`c1075dafaa5bc957d16ff2599382a811` for the Graph attachment helper, and
+`2562fa378097239ce4a3e47e9121d410` for the Phase1C attachment helper.
+
+FOR GROK CLAIMS, CURRENT ADMISSION RUNS FIRST. The projector follows the exact
+launch plan message to its sequence-one owner request and admits only that
+message's immutable `replan_required=false` envelope. It recomputes tenant,
+project, session, actor, ordinal, item/byte bounds, secret posture, every file
+hash, and the canonical envelope hash. Any mismatch raises in the claim RPC's
+transaction and rolls back the graph run or Phase1C lease. Later follow-up
+envelopes are excluded even when they exist.
+
+`initial_context` carries envelope/hash provenance and bounded items. Strict
+Node-only schemas validate it again. Admitted Claude MODEL nodes and admitted
+Codex Phase1C initial prompts receive it as labelled untrusted evidence; the
+owner goal and canonical 4 KB command stay unchanged and untruncated. URL,
+image, integration, project, and repository values remain inert references.
+No worker logs context content, and no reference is fetched.
+
+The real migrated-chain behavior test proves a Graph v3 target claim and a
+Phase1C v3 target claim contain initial file context, omit a later
+`replan_required` follow-up, and roll back graph-run creation after a tampered
+envelope digest. Legacy/non-Grok compatibility remains green. This is a local
+commit candidate only: do not claim hosted or provider-backed acceptance.
+On the rebased control-center tree, lint and strict typecheck pass, the merged
+focused set passes nine files / 127 tests, and the complete repository suite
+passes 567 files / 6,485 tests with three files / seven tests skipped.
+
+The default production build reaches no application code because Turbopack
+rejects this isolated worktree's external `node_modules` junction. The webpack
+fallback compiles successfully, then stops on seven pre-existing App Router
+export/signature errors in activity, budget, GitHub-connections, and operations
+routes. None is in the context slice; a green production build is not claimed.
+Before release, use a dedicated hash-pinned protected forward-only scope after
+011 acceptance, keep workers/autonomy/actions OFF and kill switch ON, and prove
+ledger/catalog/ACL/runtime/rollback/lint/health/stopped containment.
 
 ## Newest (2026-08-31, latest+45): site-wide dark/light theme (ADR-225)
 

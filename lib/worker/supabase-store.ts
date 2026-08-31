@@ -57,6 +57,7 @@ type ClaimRow = {
   recovery_provider_run_reference: string | null;
   recovery_usage: unknown;
   execution_admission?: unknown;
+  initial_context?: unknown;
 };
 
 function databaseFailure(operation: string, error: unknown): never {
@@ -149,6 +150,7 @@ function mapClaim(row: ClaimRow): WorkerJob {
         }
       : null,
     executionAdmission: row.execution_admission ?? null,
+    initialContext: row.initial_context ?? null,
   });
 }
 

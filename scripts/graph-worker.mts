@@ -205,6 +205,7 @@ async function main() {
               repositoryFullName,
               defaultBranch: parsed.graph.base_branch ?? parsed.graph.project_default_branch,
               workingDirectory: process.cwd(),
+              initialContext: parsed.graph.initial_context ?? null,
               ...(exactModel ? { modelForNode: () => exactModel } : {}),
             });
             return executor(node, attempt, inputs);

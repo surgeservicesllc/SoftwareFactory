@@ -287,11 +287,18 @@ the algorithm needs exists.
   replay/immutability/tenant-isolation/health evidence and signed-in initial +
   follow-up + reload acceptance. Keep URL/image fetching, binary storage,
   workers, autonomy, and automatic actions out of that scope.
-- [ ] Connect immutable Grok context to executable Full Lifecycle/Phase 1C
-  through a typed context-reference input that revalidates the exact envelope,
-  tenant, admitted worker, and item bounds at claim/read time. This is **Not
-  Connected**: do not copy captured file contents into or truncate the existing
-  4 KB goal, fetch URL/image references, or broaden worker/storage authority.
+- [x] Connect immutable initial Grok context to protocol-v3 Full Lifecycle and
+  Phase 1C claims (ADR-230) through `20260831001500`. The private projector runs
+  only after exact current admission, tenant, project, session, and plan-message
+  checks; revalidates item/file/envelope bounds, secrets, and hashes; excludes
+  all post-plan follow-ups; and rolls back the claim on mismatch. Admitted
+  Claude/Codex prompts receive a separate typed untrusted-data section without
+  changing the existing 4 KB goal. Legacy/non-Grok claims stay unchanged.
+- [ ] Add `20260831001500` to a dedicated protected forward-only apply/verify
+  scope after `01100` is accepted. Pin canonical LF hash and native `prosrc`
+  identities; prove exact ledger/catalog/ACL/runtime/rollback/lint/health and
+  stopped containment. No worker, autonomy, automatic-action, URL/image fetch,
+  merge, or deployment authority belongs to that scope.
 - [x] Publish one exact rebased candidate and require lint, typecheck, the full
   test suite, production build, all three browser/accessibility shards, exact
   green CI, exact READY Vercel identity, and matching public health. Exact main

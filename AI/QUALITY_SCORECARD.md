@@ -88,15 +88,39 @@ full-migration-chain behavior tests cover owner/tenant isolation, exact replay,
 secret and private-network rejection, byte/item limits, immutable audit
 evidence, safe projections, atomic follow-up turns, and the explicit
 no-silent-replan/no-worker boundary. Lint and strict typecheck pass. Binary
-uploads, outbound URL/image retrieval, canonical worker consumption of the
-immutable context envelope, and production release evidence remain outside
-this repository checkpoint. The deterministic planner does consume an 8 KB
+uploads, outbound URL/image retrieval, and production release evidence remain
+outside this repository checkpoint. ADR-230 later adds repository-only admitted
+worker consumption without changing this envelope contract. The deterministic planner does consume an 8 KB
 secret-scanned canonical summary as an explicit `bounded_context` requirement.
 The final repository suite passes 563 files / 6,443 tests with three files /
 seven tests skipped; the focused Grok/context set passes 120/120. The default
 production build is not claimed from this isolated worktree: Turbopack rejects
 its external `node_modules` junction, while the webpack fallback compiled and
 then exposed existing unrelated App Router export-type failures.
+
+**Addendum, 2026-08-31 latest+50 - admitted Grok claim context (ADR-230):**
+The full migration chain accepts forward-only `20260831001500`. Native catalog
+postflight pins the private projector, both replaced private attachment helpers,
+and all four unchanged public v3 wrappers, including owner, SECURITY DEFINER,
+`search_path=pg_catalog`, and exact service-role ACL posture. FORCE RLS and all
+four immutable context triggers are re-proved.
+
+Runtime behavior exercises a real admitted Graph target claim and a real
+admitted Phase1C target claim. Both carry exact initial envelope/hash provenance
+and captured text, while a later immutable `replan_required` follow-up is absent.
+A transactionally tampered envelope hash makes the Graph claim fail and proves
+the underlying graph-run creation rolled back. Legacy/non-Grok behavior remains
+unchanged. Worker schemas independently reject unknown fields, secret-shaped
+text, hash/byte/count/ordinal drift, and cross-protocol context injection.
+Claude/Codex prompt tests prove the owner objective remains present, context is
+labelled untrusted, references are not fetched, and no truncation marker is
+introduced. On the rebased tree, lint and strict typecheck pass; the focused
+set passes nine files / 127 tests and the complete repository suite passes 567
+files / 6,485 tests with three files / seven tests skipped. The default build
+is blocked by this worktree's external dependency junction; webpack compiles
+and then exposes the same seven pre-existing App Router export/signature errors
+recorded in the handoff. No hosted migration, provider run, worker enablement,
+autonomy change, or production-ready claim occurred.
 
 **Addendum, 2026-08-31 latest+44 - copilot + acceptance journey (ADR-224):**
 services-copilot unit 6 (each skill recognized from its own example; the

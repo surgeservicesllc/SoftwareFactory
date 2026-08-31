@@ -146,10 +146,33 @@ application slice are repository-only and unhosted. Workers, autonomy, and
 automatic actions remain OFF and the global kill switch remains ON. This does
 not close provider-backed execution or declare **GROK BOT: PRODUCTION READY**.
 The initial Chief of Staff planner receives a deterministic, secret-scanned,
-8 KB context summary and records it as the `bounded_context` requirement. The
-canonical Full Lifecycle/Phase 1C worker input still receives only its original
-bounded goal: immutable-envelope resolution by an admitted worker is **Not
-Connected**. Captured file contents are not copied into that 4 KB bridge.
+8 KB context summary and records it as the `bounded_context` requirement.
+ADR-230's later repository candidate adds a separate admitted-claim context
+field while preserving that original bounded goal; no content is copied into
+or truncated through the 4 KB bridge.
+
+## 2026-08-31: immutable initial context reaches admitted v3 claims in the repository (ADR-230)
+
+Forward migration `20260831001500_grok_claim_context_projection.sql` keeps all
+four public Graph/Phase1C v3 claim signatures and ACLs unchanged. After the
+existing exact current-admission assertion, one private helper follows the
+launch's assistant plan reply to the sequence-one owner message, reads only its
+`replan_required=false` envelope, and rechecks tenant/project/session identity,
+item and byte bounds, secret posture, file hashes, and the canonical envelope
+hash. A mismatch raises in the claim transaction and rolls back run/lease
+creation. Post-plan follow-up envelopes are excluded.
+
+The Graph and Phase1C worker schemas validate the same bounded projection again
+before provider use. Admitted Claude nodes and admitted Codex initial turns
+receive the complete envelope as labelled untrusted evidence with envelope/hash
+provenance. URL/image/integration values stay reference-only and are never
+fetched; context contents are not logged. Legacy and non-Grok claims receive no
+new field. The owner goal and canonical Phase1C command remain unchanged.
+
+This is a local repository candidate only: `01500` is not hosted, and no real
+worker/provider run proves it in production. Workers, autonomy, and automatic
+actions remain OFF and the global kill switch remains ON. **GROK BOT:
+PRODUCTION READY is not declared.**
 
 ## 2026-08-31: One persistent dark/light choice now covers every site shell (ADR-225)
 

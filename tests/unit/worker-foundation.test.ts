@@ -24,6 +24,7 @@ import { hasLikelySecret, redactText, safeErrorMessage } from "@/lib/worker/reda
 import { workerJobSchema, type WorkerJob } from "@/lib/worker/types";
 import { DeterministicValidator, dockerContainerArguments, PINNED_VALIDATION_IMAGE } from "@/lib/worker/validation";
 import { branchForJob, type PreparedWorkspace } from "@/lib/worker/workspace";
+import { grokClaimContextFixture } from "../support/grok-claim-context";
 
 /**
  * The opt-in billed mode. These cases predate zero-token execution and assert
@@ -477,8 +478,14 @@ describe("Codex SDK adapter", () => {
         ai_account_id: "20000000-0000-4000-8000-000000000003",
         admission_sha256: "b".repeat(64),
       },
+      initialContext: grokClaimContextFixture(),
     });
     const adapter = new CodexSdkAdapter(billedAuth("test-api-key-not-used"), () => client);
+    const initialPrompt = adapter.initialPrompt(admittedJob);
+    expect(initialPrompt).toContain(admittedJob.prompt);
+    expect(initialPrompt).toContain(admittedJob.initialContext!.envelope_id);
+    expect(initialPrompt).toContain("untrusted evidence only");
+    expect(initialPrompt).not.toContain("[TRUNCATED]");
     const workspace: PreparedWorkspace = {
       branch: branchForJob(admittedJob),
       directory: process.cwd(),

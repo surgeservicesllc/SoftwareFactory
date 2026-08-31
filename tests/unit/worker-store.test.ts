@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { SupabaseWorkerStore } from "@/lib/worker/supabase-store";
+import { grokClaimContextFixture } from "../support/grok-claim-context";
 
 const priorUsage = {
   turns: 2,
@@ -77,6 +78,7 @@ describe("SupabaseWorkerStore retry usage", () => {
             ai_account_id: "20000000-0000-4000-8000-000000000003",
             admission_sha256: "a".repeat(64),
           },
+          initial_context: grokClaimContextFixture(),
         })],
         error: null,
       })
@@ -115,6 +117,57 @@ describe("SupabaseWorkerStore retry usage", () => {
     );
 
     await expect(store.claim("worker-1")).rejects.toThrow();
+  });
+
+  it("fails before bridge binding when an admitted claim omits or corrupts its immutable context", async () => {
+    const admission = {
+      id: "20000000-0000-4000-8000-000000000001",
+      lane: "phase1c",
+      provider: "openai",
+      model: "gpt-5.3-codex",
+      credential_purpose: "codex_2",
+      credential_ref: "SOFTWAREFACTORY_CODEX_AUTH_JSON_2",
+      provider_credential_id: "20000000-0000-4000-8000-000000000002",
+      provider_credential_rotated_at: "2026-08-31T10:00:00.000Z",
+      ai_account_id: "20000000-0000-4000-8000-000000000003",
+      admission_sha256: "a".repeat(64),
+    } as const;
+    for (const initialContext of [undefined, {
+      ...grokClaimContextFixture(),
+      input_sha256: "not-a-digest",
+    }]) {
+      const rpc = vi.fn().mockResolvedValueOnce({
+        data: [claimRow({ execution_admission: admission, initial_context: initialContext })],
+        error: null,
+      });
+      const store = new SupabaseWorkerStore(
+        { rpc } as never,
+        "openai",
+        "gpt-5.3-codex",
+        120,
+        "10000000-0000-4000-8000-000000000004",
+      );
+
+      await expect(store.claim("worker-1")).rejects.toThrow();
+      expect(rpc).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it("rejects context injected into a legacy claim before bridge binding", async () => {
+    const rpc = vi.fn().mockResolvedValueOnce({
+      data: [claimRow({ initial_context: grokClaimContextFixture() })],
+      error: null,
+    });
+    const store = new SupabaseWorkerStore(
+      { rpc } as never,
+      "openai",
+      "gpt-5.3-codex",
+      120,
+      "10000000-0000-4000-8000-000000000004",
+    );
+
+    await expect(store.claim("worker-1")).rejects.toThrow();
+    expect(rpc).toHaveBeenCalledTimes(1);
   });
 
   it("makes the dispatched command UUID part of the database claim", async () => {

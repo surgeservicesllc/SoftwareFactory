@@ -9,6 +9,10 @@ import type { NodeInputs } from "@/lib/worker/graph-run";
 import type { ClaudeAuthResolution } from "@/lib/providers/claude-auth";
 import { executeClaudeThroughCli } from "@/lib/providers/claude-cli-transport";
 import type { ProviderRunRequest } from "@/lib/providers/types";
+import {
+  renderGrokClaimContextForPrompt,
+  type GrokClaimContext,
+} from "@/lib/worker/grok-claim-context";
 
 /**
  * The worker's node executor: one bounded job through the subscription
@@ -26,6 +30,8 @@ export type NodeExecutorOptions = Readonly<{
   repositoryFullName: string;
   defaultBranch: string;
   workingDirectory: string;
+  /** Present only on exact admitted Grok protocol-v3 claims. */
+  initialContext?: GrokClaimContext | null;
   /** Model per node tier; the tiering decision stays with the caller. */
   modelForNode?: (node: CompiledNode) => string;
   maxTurns?: number;
@@ -185,7 +191,12 @@ export function buildClaudeNodeExecutor(
     // An edge is a data dependency: what upstream nodes produced travels
     // into this node's prompt, or the fan-in would run blind.
     const renderedInputs = renderInputs(inputs);
-    const task = renderedInputs === null ? node.job : `${node.job}\n\n${renderedInputs}`;
+    const renderedContext = options.initialContext
+      ? renderGrokClaimContextForPrompt(options.initialContext)
+      : null;
+    const task = [node.job, renderedContext, renderedInputs].filter(
+      (value): value is string => value !== null,
+    ).join("\n\n");
 
     // The node's declared timeout has to be enforced by somebody. The
     // transport only mirrors the signal it is handed and starts no timer of

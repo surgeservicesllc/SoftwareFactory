@@ -94,11 +94,13 @@ const FULL_LIFECYCLE_RELEASE = [
 ] as const;
 
 // These protected Grok releases enforce current protocol-v3 admission and
-// planning identities. Historical/partial reconstruction fixtures omit them;
-// the ordinary full-chain cases below still replay both files end to end.
+// planning/context identities. Historical/partial reconstruction fixtures
+// omit them; the ordinary full-chain cases below still replay all files end to
+// end.
 const PROTECTED_GROK_RELEASE = [
   "20260831000900_grok_claim_admission_fence.sql",
   "20260831001000_grok_specialist_admission_planning.sql",
+  "20260831001500_grok_claim_context_projection.sql",
 ] as const;
 
 async function applyChain(db: PGlite, options: { skip?: readonly string[] } = {}): Promise<void> {

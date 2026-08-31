@@ -1272,6 +1272,23 @@ describe("Grok Chief-of-Staff persistence", () => {
         "provider-admission-user-0001"],
     );
     await assumeRole(db, "service_role");
+    const initialContextText = "# Claim context";
+    const initialContextItems = [
+      { kind: "project", label: "Chief of Staff", media_type: null, source_url: null,
+        repository_path: null, integration_id: null, content_text: null, byte_size: 0, state: "reference_only" },
+      { kind: "repository", label: "factory/grok-workspace", media_type: null, source_url: null,
+        repository_path: "main", integration_id: null, content_text: null, byte_size: 0, state: "reference_only" },
+      { kind: "file", label: "claim-context.md", media_type: "text/markdown", source_url: null,
+        repository_path: null, integration_id: null, content_text: initialContextText,
+        byte_size: Buffer.byteLength(initialContextText), state: "captured" },
+    ];
+    const initialContext = await db.query<{ result: { envelope: { id: string; input_sha256: string } } }>(
+      `select public.record_grok_context_envelope_as_server(
+        $1::uuid,$2::uuid,$3::uuid,$4::uuid,$5::uuid,$6::jsonb,$7::text,2,false
+      ) as result`,
+      [organizationId, ownerId, projectId, session.id, user.rows[0].id,
+        JSON.stringify(initialContextItems), "provider-admission-context-0001"],
+    );
     const assistant = await db.query<MessageRow>(
       `select * from public.append_grok_message_as_server(
          $1::uuid,$2::uuid,'assistant',$3::text,$4::jsonb,$5::text,1,$6::uuid
@@ -1292,7 +1309,7 @@ describe("Grok Chief-of-Staff persistence", () => {
     ) as result`;
     const rosterParameters = [
       organizationId, ownerId, projectId, session.id, assistant.rows[0].id,
-      "provider-admission-roster-0001", 3,
+      "provider-admission-roster-0001", 4,
     ] as const;
     const admittedRoster = await db.query<{ result: {
       message_id: string; roster_count: number; roster_sha256: string; replayed: boolean;
@@ -1312,7 +1329,7 @@ describe("Grok Chief-of-Staff persistence", () => {
     });
 
     await db.query(`select public.record_grok_event_as_server(
-      $1::uuid,$2::uuid,'session.planned',$2::uuid,$3::jsonb,4,$4::uuid,null
+      $1::uuid,$2::uuid,'session.planned',$2::uuid,$3::jsonb,5,$4::uuid,null
     )`, [organizationId, session.id, JSON.stringify({
       schemaVersion: 1,
       detail: "The deterministic chief-of-staff plan was recorded; execution has not started.",
@@ -1428,6 +1445,101 @@ describe("Grok Chief-of-Staff persistence", () => {
     const launched = await db.query<{ id: string; graph_id: string }>(call, [...parameters]);
     const replay = await db.query<{ id: string; graph_id: string }>(call, [...parameters]);
     expect(replay.rows[0]).toEqual(launched.rows[0]);
+
+    await resetRole(db);
+    const currentSequence = await db.query<{
+      last_message_sequence: number; last_event_sequence: number;
+    }>(
+      "select last_message_sequence,last_event_sequence from public.grok_sessions where id=$1",
+      [session.id],
+    );
+    await assumeRole(db, "authenticated", ownerId);
+    const followUpText = "This post-plan follow-up must never enter an existing claim.";
+    await db.query(
+      `select public.append_grok_follow_up_context(
+        $1::uuid,$2::uuid,$3::uuid,$4::text,$5::jsonb,$6::text,$7::bigint,$8::bigint,$9::uuid
+      )`,
+      [organizationId, projectId, session.id, "Use the later note only after an explicit replan.",
+        JSON.stringify([
+          initialContextItems[0], initialContextItems[1],
+          { ...initialContextItems[2], label: "later.md", content_text: followUpText,
+            byte_size: Buffer.byteLength(followUpText) },
+        ]), "provider-admission-follow-up-0001",
+        currentSequence.rows[0]!.last_message_sequence,
+        currentSequence.rows[0]!.last_event_sequence,
+        assistant.rows[0].id],
+    );
+
+    // Exercise the real protocol-v3 target claim without consuming this
+    // fixture: unpause, claim, assert, and roll the whole transaction back.
+    await db.exec("begin");
+    try {
+      await db.query(
+        "select public.set_graph_pause_as_member_v2($1::uuid,$2::uuid,false)",
+        [organizationId, launched.rows[0].graph_id],
+      );
+      await assumeRole(db, "service_role");
+      const graphClaim = await db.query<{ claim: {
+        graph_id: string;
+        initial_context: {
+          envelope_id: string; input_sha256: string;
+          items: Array<{ content_text: string | null }>;
+        };
+      } | null }>(
+        `select public.claim_planned_graph_by_id_v3(
+          'grok-context-worker', array['DETERMINISTIC','MODEL','ANCHOR']::text[],
+          'factory/grok-workspace', $1::jsonb, $2::uuid, 3
+        ) as claim`,
+        [JSON.stringify(requiredChecks), launched.rows[0].graph_id],
+      );
+      expect(graphClaim.rows[0]!.claim).toMatchObject({
+        graph_id: launched.rows[0].graph_id,
+        initial_context: {
+          envelope_id: initialContext.rows[0]!.result.envelope.id,
+          input_sha256: initialContext.rows[0]!.result.envelope.input_sha256,
+        },
+      });
+      const graphContextJson = JSON.stringify(graphClaim.rows[0]!.claim!.initial_context);
+      expect(graphContextJson).toContain(initialContextText);
+      expect(graphContextJson).not.toContain(followUpText);
+    } finally {
+      await db.exec("rollback");
+      await db.exec("reset role");
+    }
+
+    await db.exec("begin");
+    try {
+      await db.exec("alter table public.grok_context_envelopes disable trigger grok_context_envelopes_immutable");
+      await db.query(
+        "update public.grok_context_envelopes set input_sha256=repeat('f',64) where id=$1",
+        [initialContext.rows[0]!.result.envelope.id],
+      );
+      await assumeRole(db, "authenticated", ownerId);
+      await db.query(
+        "select public.set_graph_pause_as_member_v2($1::uuid,$2::uuid,false)",
+        [organizationId, launched.rows[0].graph_id],
+      );
+      await assumeRole(db, "service_role");
+      await expect(db.query(
+        `select public.claim_planned_graph_by_id_v3(
+          'grok-context-worker', array['DETERMINISTIC','MODEL','ANCHOR']::text[],
+          'factory/grok-workspace', $1::jsonb, $2::uuid, 3
+        )`,
+        [JSON.stringify(requiredChecks), launched.rows[0].graph_id],
+      )).rejects.toThrow(/context envelope digest changed/i);
+    } finally {
+      await db.exec("rollback");
+      await db.exec("reset role");
+    }
+    const rolledBackClaim = await db.query<{ graph_runs: number; digest: string }>(`
+      select
+        (select count(*)::integer from public.graph_runs where graph_id=$1) as graph_runs,
+        (select input_sha256 from public.grok_context_envelopes where id=$2) as digest
+    `, [launched.rows[0].graph_id, initialContext.rows[0]!.result.envelope.id]);
+    expect(rolledBackClaim.rows[0]).toEqual({
+      graph_runs: 0,
+      digest: initialContext.rows[0]!.result.envelope.input_sha256,
+    });
 
     await resetRole(db);
     const evidence = await db.query<{
@@ -1658,6 +1770,10 @@ describe("Grok Chief-of-Staff persistence", () => {
     const claimed = await db.query<{ claim: {
       command_id: string; model: string; provider: string;
       execution_admission: { id: string; model: string; provider: string };
+      initial_context: {
+        envelope_id: string; input_sha256: string;
+        items: Array<{ content_text: string | null }>;
+      };
     } | null }>(`
       select public.claim_phase1c_run_by_command_v3(
         $1, 'openai', 'gpt-5.3-codex', 120, $2::uuid, 3
@@ -1671,7 +1787,14 @@ describe("Grok Chief-of-Staff persistence", () => {
         model: alternateCodexModel,
         provider: "openai",
       },
+      initial_context: {
+        envelope_id: initialContext.rows[0]!.result.envelope.id,
+        input_sha256: initialContext.rows[0]!.result.envelope.input_sha256,
+      },
     });
+    const phaseContextJson = JSON.stringify(claimed.rows[0]!.claim!.initial_context);
+    expect(phaseContextJson).toContain(initialContextText);
+    expect(phaseContextJson).not.toContain(followUpText);
 
     await resetRole(db);
     const beforeStaleReplay = await db.query<{

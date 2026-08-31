@@ -5944,11 +5944,12 @@ are rejected.
 
 The initial deterministic Chief of Staff planner receives a separate canonical
 summary capped at 8 KB and records it as an explicit `bounded_context`
-requirement. The executable Full Lifecycle/Phase 1C bridge remains **Not
-Connected** to the envelope: its existing 4 KB goal is preserved verbatim, and
-captured content is not copied, truncated, fetched, or granted to a worker by
-this decision. A future bridge must pass a typed immutable-envelope reference
-and revalidate tenant and worker admission at read time.
+requirement. The executable Full Lifecycle/Phase 1C bridge remained **Not
+Connected** to the envelope at this decision: its existing 4 KB goal is
+preserved verbatim, and captured content is not copied into or truncated
+through that goal. ADR-230 later adds the separate typed claim projection and
+admission-time validation; it does not revise this envelope's persistence or
+follow-up semantics.
 
 Context writes are idempotent, append-only, sequence-fenced, audited without
 content, and exposed only through bounded safe projections. FORCE RLS and
@@ -6013,6 +6014,42 @@ dedicated GitHub secret. Browser trace, screenshot, and video are disabled so
 the credential and signed-in content do not become artifacts. This repository
 candidate does not claim production acceptance until its exact-hosted run is
 green.
+
+## ADR-230 - Admitted workers receive only the immutable initial Grok envelope
+
+- **Date**: 2026-08-31
+- **Status**: Accepted for the repository candidate; protected migration and
+  provider-backed production acceptance remain required
+
+Worker context is a claim projection, not an expansion of the owner's goal.
+`20260831001500_grok_claim_context_projection.sql` preserves every public v3
+claim signature, SECURITY DEFINER setting, fixed search path, and ACL. It
+replaces only the private Graph and Phase1C attachment helpers and adds one
+ungranted internal projector. Legacy/non-Grok claims remain unchanged.
+
+For an admitted Grok claim, the existing current-admission assertion runs
+first. The projector then follows the exact launch plan message to its
+sequence-one owner message and selects only that message's immutable envelope
+where `replan_required=false`. It rechecks tenant/project/session/actor
+identity, item count, byte bounds, ordinals, secret posture, captured-file
+SHA-256, and the canonical envelope SHA-256. Any mismatch raises inside the
+same RPC transaction, rolling back the underlying claim and lease. Later
+follow-up envelopes are never selected, including a `replan_required` turn.
+
+The protocol carries envelope id and input hash provenance plus all bounded
+items. Text-file content is passed as explicitly untrusted evidence; URLs,
+images, repository paths, project identity, and integration ids remain inert
+references and are never fetched. A strict Node-only TypeScript schema repeats
+shape, byte, secret, ordinal, and file-hash validation before provider use.
+Neither worker logs context content.
+
+Admitted Claude graph nodes and admitted Codex Phase1C initial prompts receive
+the separately rendered envelope without truncation. The stored owner goal and
+the existing 4 KB Phase1C command are neither replaced nor shortened; repair
+turns retain the initial prompt in their existing provider thread. This wiring
+does not enable a worker, wake a graph, change autonomy, disengage the kill
+switch, authorize a merge/deploy, or fetch external content.
+
 ## ADR-231 - Grok advanced controls navigate to canonical audited consoles
 
 - **Date**: 2026-08-31
