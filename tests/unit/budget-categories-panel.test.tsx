@@ -49,7 +49,7 @@ describe("the budget categories panel", () => {
     vi.spyOn(global, "fetch").mockResolvedValue(jsonResponse({ categories }));
     render(<BudgetCategoriesPanel />);
 
-    expect(await screen.findByText("Groceries")).toBeInTheDocument();
+    expect((await screen.findAllByText("Groceries")).length).toBeGreaterThan(0);
     expect(screen.getByText("$600.00 / month")).toBeInTheDocument();
     // The archived one is under its own heading with a restore, not a delete.
     expect(screen.getByText("Archived")).toBeInTheDocument();
@@ -61,7 +61,7 @@ describe("the budget categories panel", () => {
   it("edits name and ceiling but never offers kind — history was classified under it", async () => {
     const fetchMock = vi.spyOn(global, "fetch").mockResolvedValue(jsonResponse({ categories }));
     render(<BudgetCategoriesPanel />);
-    await screen.findByText("Groceries");
+    await screen.findAllByText("Groceries");
 
     await userEvent.click(screen.getByRole("button", { name: "Edit" }));
     // Name and ceiling are editable; the row's only select is Tone — kind
@@ -91,7 +91,7 @@ describe("the budget categories panel", () => {
   it("reports a failed save instead of pretending", async () => {
     const fetchMock = vi.spyOn(global, "fetch").mockResolvedValue(jsonResponse({ categories }));
     render(<BudgetCategoriesPanel />);
-    await screen.findByText("Groceries");
+    await screen.findAllByText("Groceries");
 
     fetchMock.mockResolvedValueOnce(
       jsonResponse({ error: { message: "That name is already in use." } }, 422),

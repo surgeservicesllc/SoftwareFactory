@@ -1858,8 +1858,11 @@ outstanding:
   categories `on delete set null`; archiving keeps history honest). The
   monthly plan table (`budget_month_plans`) still has no panel on top of
   its schema and `compareToPlan` analytics; that remains open below.
-- [ ] A panel on top of `budget_month_plans` + `compareToPlan` — the plan
-  table has schema and analytics and no surface yet.
+- [x] The month plan is on the Categories page: GET/PUT /api/budget/plans
+  upserts one plan per category per month (blank clears it), and the card
+  shows planned against actual using `compareToPlan` over the SAME spend
+  definition as the overview (`categoryTotalsForMonth`), so the two pages
+  can never disagree about what was spent.
 - [x] Transfers link: POST/DELETE /api/budget/transfers pairs one
   transfer-out with one transfer-in — exact opposite amounts, different
   accounts, neither side already claimed, the race refused by a
