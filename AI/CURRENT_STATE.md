@@ -42,7 +42,10 @@ is outside the first page or the URL omitted its project.
 The API fetches one bounded look-ahead row, returns at most the requested 50
 sessions, and emits a continuation cursor only when another row actually
 exists. Partial cursors are refused before tenant state is read. Focused API
-and workspace evidence passes 31/31; affected-file lint and repository
+and workspace evidence passes 32/32. A selected project whose exact GitHub
+binding is Not Connected keeps its history readable but disables new-goal
+submission and links to project connections instead of failing after a durable
+session was created. Affected-file lint and repository
 typecheck pass. This is a repository candidate only and does not change worker,
 autonomy, automatic-action, or kill-switch state.
 

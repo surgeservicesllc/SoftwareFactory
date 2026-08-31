@@ -136,7 +136,9 @@ the algorithm needs exists.
   organization-wide top-20 list in the browser. Expose the existing stable
   `(created_at, id)` cursor, prove complete-cursor validation and bounded
   look-ahead, add `Load older sessions`, and retain direct links that fall
-  outside the first project page (ADR-228; focused 31/31).
+  outside the first project page. Keep disconnected-project history readable
+  while disabling new goals before any session is created (ADR-228; focused
+  32/32).
 - [x] Connect the session to the exact canonical `full_lifecycle` v2 bridge —
   Claude planning -> HUMAN architecture approval -> Codex Phase 1C ->
   CI/Vercel/health — while persisting planned identity separately from actual

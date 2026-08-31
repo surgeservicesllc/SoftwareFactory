@@ -7,7 +7,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GrokWorkspace } from "@/components/grok/grok-workspace";
 import type { GrokSession, GrokSessionCursor, GrokSessionDetail } from "@/lib/grok/contracts";
 
-const PROJECT = { id: "11111111-1111-4111-8111-111111111111", name: "Software Factory" };
+const PROJECT = {
+  id: "11111111-1111-4111-8111-111111111111",
+  name: "Software Factory",
+  connectionStatus: "connected",
+};
 const SESSION: GrokSessionDetail = {
   session: {
     id: "22222222-2222-4222-8222-222222222222",
@@ -105,6 +109,7 @@ function installFetch(
     controlHttpFailures?: number;
     historyCursor?: GrokSessionCursor;
     olderSessions?: readonly GrokSession[];
+    project?: typeof PROJECT;
   }> = {},
 ) {
   let remainingDetailFailures = options.detailFailures ?? 0;
@@ -115,7 +120,7 @@ function installFetch(
   let controlFailureOccurred = false;
   const mock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input);
-    if (url === "/api/projects") return json({ projects: [PROJECT] });
+    if (url === "/api/projects") return json({ projects: [options.project ?? PROJECT] });
     if (url === "/api/grok/sessions" && init?.method === "POST") {
       if (remainingPostFailures > 0) {
         remainingPostFailures -= 1;
@@ -241,6 +246,23 @@ describe("GrokWorkspace", () => {
       + `&beforeCreatedAt=${encodeURIComponent(historyCursor.createdAt)}`
       + `&beforeId=${historyCursor.id}`,
       { cache: "no-store" },
+    );
+  });
+
+  it("keeps disconnected project history readable but refuses to start a new goal", async () => {
+    const project = { ...PROJECT, connectionStatus: "not_connected" };
+    const user = userEvent.setup();
+    installFetch(SESSION, { project });
+    render(<GrokWorkspace initialSelection={{ projectId: PROJECT.id }} />);
+
+    expect(await screen.findByText(/This project is Not Connected to an exact active GitHub repository/i)).toBeInTheDocument();
+    expect(screen.getByText("I recorded the plan.")).toBeInTheDocument();
+    const prompt = screen.getByRole("textbox", { name: "Tell Grok Bot what you want done" });
+    await user.type(prompt, "Fix checkout");
+    expect(screen.getByRole("button", { name: "Start goal" })).toBeDisabled();
+    expect(screen.getByRole("link", { name: "Open project connections" })).toHaveAttribute(
+      "href",
+      `/solutions/projects?projectId=${PROJECT.id}`,
     );
   });
 

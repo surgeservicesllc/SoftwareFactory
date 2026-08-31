@@ -67,7 +67,9 @@ A `sessionId`-only deep link may point outside the first page or even the
 initially guessed project. Render the scoped first page immediately, read the
 exact session through the owner boundary, then reload its correct project page
 without losing the directly loaded session. Focused route/workspace tests pass
-31/31; affected lint and repository typecheck pass. No migration or safety-state
+32/32. A Not Connected project remains selectable for history but cannot submit
+a new goal; the composer links to the project connection surface. Affected lint
+and repository typecheck pass. No migration or safety-state
 change is involved.
 
 ## Newest (2026-08-31, latest+45): site-wide dark/light theme (ADR-225)

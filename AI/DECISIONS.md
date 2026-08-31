@@ -5944,4 +5944,7 @@ continues to enforce owner, organization, and project isolation. A direct
 session link remains authoritative even when it is outside the first page: the
 workspace reads that immutable session identity, then reconciles the sidebar
 to its actual project. Session-list membership is navigation data; it must
-never decide whether an owner-scoped session may be resumed.
+never decide whether an owner-scoped session may be resumed. Repository
+readiness is a separate live input: a Not Connected project may show its
+history, but the composer must disable new-goal submission before it creates a
+durable session and direct the owner to repair the project binding.

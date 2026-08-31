@@ -37,13 +37,15 @@ E2E still remain; workers/autonomy/actions are OFF and the kill switch is ON.
 **GROK BOT: PRODUCTION READY is not declared.**
 
 **Addendum, 2026-08-31 latest+47 - project-complete Grok history (ADR-228):**
-Grok workspace + session-route focused evidence passes 31/31. New route cases
+Grok workspace + session-route focused evidence passes 32/32. New route cases
 prove exact project scoping, one-row look-ahead, stable `(created_at, id)`
 continuation, honest end-of-list, and rejection of a half cursor before tenant
 lookup. The browser component case follows the returned cursor and appends an
 older session; the pre-existing deep-link case continues to recover a session
-outside page one while its pending-detail case does not claim a plan. Affected
-ESLint and repository TypeScript checks pass. Full CI/build/browser gates remain
+outside page one while its pending-detail case does not claim a plan. The
+readiness case proves disconnected-project history stays visible while the
+new-goal button fails closed and exposes the connection route. ESLint and
+repository TypeScript checks pass. Full CI/build/browser gates remain
 required when this lane is integrated with the active Grok context release.
 
 **Addendum, 2026-08-31 latest+44 - copilot + acceptance journey (ADR-224):**

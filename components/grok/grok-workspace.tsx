@@ -561,6 +561,8 @@ export function GrokWorkspace({
     () => sessions.filter((session) => !projectId || session.projectId === projectId),
     [projectId, sessions],
   );
+  const activeProject = projects.find((project) => project.id === projectId) ?? null;
+  const projectCanStartGoal = activeProject?.connectionStatus === "connected";
   const selectedSession = detail?.session.id === sessionId
     ? detail.session
     : sessions.find((session) => session.id === sessionId) ?? null;
@@ -626,7 +628,7 @@ export function GrokWorkspace({
   async function submit(event: FormEvent) {
     event.preventDefault();
     const goal = prompt.trim();
-    if (!goal || !projectId || submitting) return;
+    if (!goal || !projectId || !projectCanStartGoal || submitting) return;
     setSubmitting(true);
     detailRequest.current += 1;
     setErrorMessage("");
@@ -780,7 +782,7 @@ export function GrokWorkspace({
                 <p className="label">Sessions</p>
                 <button type="button" className="grid size-8 place-items-center rounded-lg border border-[var(--border)] text-muted hover:text-foreground" aria-label="Start a new goal" onClick={() => { detailRequest.current += 1; setSessionId(""); setDetail(null); setPrompt(""); setErrorMessage(""); setNotice(""); updateUrl({ projectId: projectId || undefined }); }}><MessageSquarePlus className="size-4" aria-hidden="true" /></button>
               </div>
-              <label className="mt-3 block"><span className="sr-only">Project</span><select className="input w-full text-sm" value={projectId} onChange={(event) => void selectProject(event.target.value)}><option value="">Choose project</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select></label>
+              <label className="mt-3 block"><span className="sr-only">Project</span><select className="input w-full text-sm" value={projectId} onChange={(event) => void selectProject(event.target.value)}><option value="">Choose project</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.name}{project.connectionStatus === "connected" ? "" : " · Not Connected"}</option>)}</select></label>
               <ul className="mt-3 max-h-52 space-y-1 overflow-y-auto xl:max-h-[calc(70vh-7rem)]">
                 {filteredSessions.map((session) => (
                   <li key={session.id}><button type="button" aria-current={session.id === sessionId ? "true" : undefined} className={cn("w-full rounded-lg px-3 py-2.5 text-left transition-colors", session.id === sessionId ? "bg-[var(--accent-surface)]" : "hover:bg-[var(--surface-raised)]")} onClick={() => void selectSession(session.id)}><span className="flex items-center gap-2"><span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{session.title}</span><ChevronRight className="size-3.5 shrink-0 text-faint" /></span><span className="mt-1 flex items-center justify-between gap-2 text-[11px] text-muted"><span>{sessionListStatus(session, detail)}</span><time>{clock(session.updatedAt)}</time></span></button></li>
@@ -811,8 +813,8 @@ export function GrokWorkspace({
               </div>
               <form onSubmit={submit} className="border-t border-[var(--border)] p-3 sm:p-4">
                 {errorMessage ? <p role="alert" className="mb-2 text-xs text-[var(--danger)]">{errorMessage}</p> : null}
-                <div className="flex items-end gap-2 rounded-xl border border-[var(--border-strong)] bg-[var(--surface-inset)] p-2 focus-within:border-[var(--accent-border)]"><textarea className="min-h-12 max-h-36 flex-1 resize-y bg-transparent px-2 py-2 text-sm text-foreground outline-none placeholder:text-faint" rows={2} value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder="Build me…  Fix…  Research…  Test…  Deploy…" aria-label="Tell Grok Bot what you want done" /><button type="submit" className="grid size-10 shrink-0 place-items-center rounded-lg bg-[var(--accent)] text-[var(--accent-ink)] disabled:cursor-not-allowed disabled:opacity-50" disabled={!prompt.trim() || !projectId || submitting} aria-label="Start goal">{submitting ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}</button></div>
-                <p className="mt-2 text-[11px] text-muted">A request saves a session; a plan is recorded only when planning succeeds. Neither implies that a graph, worker, or provider started.</p>
+                <div className="flex items-end gap-2 rounded-xl border border-[var(--border-strong)] bg-[var(--surface-inset)] p-2 focus-within:border-[var(--accent-border)]"><textarea className="min-h-12 max-h-36 flex-1 resize-y bg-transparent px-2 py-2 text-sm text-foreground outline-none placeholder:text-faint" rows={2} value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder="Build me…  Fix…  Research…  Test…  Deploy…" aria-label="Tell Grok Bot what you want done" /><button type="submit" className="grid size-10 shrink-0 place-items-center rounded-lg bg-[var(--accent)] text-[var(--accent-ink)] disabled:cursor-not-allowed disabled:opacity-50" disabled={!prompt.trim() || !projectId || !projectCanStartGoal || submitting} aria-label="Start goal">{submitting ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}</button></div>
+                {projectId && !projectCanStartGoal ? <p className="mt-2 text-[11px] text-[var(--warning)]" role="status">This project is Not Connected to an exact active GitHub repository. Existing history remains readable, but a new goal cannot start. <a className="font-medium underline" href={`/solutions/projects?projectId=${encodeURIComponent(projectId)}`}>Open project connections</a>.</p> : <p className="mt-2 text-[11px] text-muted">A request saves a session; a plan is recorded only when planning succeeds. Neither implies that a graph, worker, or provider started.</p>}
               </form>
             </div>
 
