@@ -1,5 +1,36 @@
 # SoftwareFactory — shared working status
 
+## GROK CANONICAL EVIDENCE + RESUME WAKE CANDIDATE (2026-08-30 — RELEASE IN PROGRESS)
+
+- Local candidate projects exact linked graph-run/node/artifact/event evidence
+  plus shared PR/CI/preview/deployment/health evidence into the Chief-of-Staff
+  workspace. It keeps planned bot identity separate from observed execution,
+  retains bounded newest graph/session event windows with explicit truncation,
+  and leaves Rollback and automatic continuation **Not Connected**.
+- Graph control now commits intent creation/replay, immutable requested/applied
+  events, Pause/Resume/Withdraw, and resolution in one owner-authenticated
+  transaction. Same-key replay does not duplicate mutation or evidence; newer
+  same-graph event sequence or opposite generic graph state supersedes older
+  keys; only the graph durably launched for that session is eligible; and
+  unavailable fresh actions roll back without residue. Resume has exact tenant/project/graph/repository
+  guards and can retry a lost wake only while
+  the graph is unpaused and not withdrawn; stale state-cycle keys, repository
+  handoffs, and unavailable fresh actions fail closed. Graph state does not
+  advertise Phase 1C Cancel/Retry.
+- Forward migration `20260830010000_atomic_grok_graph_control.sql`
+  (`bbd664a7b556a07ab31b84b155725ea8a1b1c5a7f6a6afb1cfe1bae8c07f06b7`)
+  supplies the authenticated owner-only atomic boundary without a table grant.
+  Database-first hosted apply and independent verification are pending; this
+  timestamp intentionally avoids already-used Services migrations through
+  `20260830001900`.
+- This is a wake/recovery path, not complete provider-identity admission. The
+  database claim still does not pin the selected bot/account/provider/model or
+  immutable assignment revisions; MODEL execution uses ambient worker
+  identity. Keep workers/autonomy/automatic actions OFF and the global kill
+  switch ON. Do not declare `GROK BOT: PRODUCTION READY`.
+- Release gates, exact commit, CI run, Vercel deployment, public health, and
+  read-only stopped-safety verification are pending in this section.
+
 ## GROK BOT FAILURE CONTAINMENT ACCEPTED; PROVIDER LOOP STILL OPEN (2026-08-30 — PICK UP HERE)
 
 - Phase 2 application release is exact commit

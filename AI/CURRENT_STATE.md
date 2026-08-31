@@ -46,6 +46,60 @@ remains ON; no safety state changed. The containment release is accepted, but
 the provider-backed loop still requires legitimate ready bot coverage and
 separately authorized execution. **GROK BOT: PRODUCTION READY is not declared.**
 
+The local follow-on now gives owner Resume a bounded, recoverable wake path
+without widening authority. One owner-authenticated database transaction
+serializes the session, creates or replays the exact graph-control intent,
+records `control.requested`, applies Pause/Resume/Withdraw, resolves the intent,
+and records `control.applied`; any refusal rolls the whole transition back. Only
+after an audited Resume commits does the route resolve the project's exact
+Phase 1C repository binding and send the graph UUID through the existing
+target-bound graph-worker dispatch, and only when the graph's immutable
+`github_repository_id` equals that resolved target's internal repository id.
+An exact applied-Resume replay retries the wake only while the graph is unpaused
+and not withdrawn. A legacy requested graph control can finish only when the
+durable graph state already reflects its action and no later same-graph
+`control.requested` event exists; recovery never reruns the mutation. An
+applied key is rejected after any later opposite graph control. New unavailable graph
+actions roll back without an intent or event. Pause and stop never dispatch.
+Disabled, invalid, conflicting, or unavailable dispatch remains truthful **Not
+Connected**. Dispatch acceptance is not represented as a successful claim or
+execution. This is local candidate
+behavior only; no worker switch, autonomous action, kill switch, hosted state,
+or production execution changed.
+
+Forward migration `20260830010000_atomic_grok_graph_control.sql`
+(SHA-256 `bbd664a7b556a07ab31b84b155725ea8a1b1c5a7f6a6afb1cfe1bae8c07f06b7`)
+adds one authenticated, owner-only atomic graph-control boundary. It is
+tenant/session/project/exact-launched-graph/key bound, exposes no table grant, preserves
+`SECURITY DEFINER` with `search_path=pg_catalog`, and orders supersession by
+the immutable per-session `grok_events.sequence_no`. The bounded transcript is
+evidence, never an idempotency index. Hosted apply and exact catalog/ACL/
+runtime/rollback/lint/health verification remain release gates.
+
+Direct Cancel and Retry are intentionally absent from this endpoint. Their
+existing Phase 1C action functions do not provide one atomic action-plus-audit
+resolution boundary for every lost-response replay, so exposing them here
+could misstate a committed action as failed. The workspace does not advertise
+them; a future forward database boundary must make those transitions
+correlated and replay-safe before they return.
+
+The Grok workspace now projects canonical linked graph-run evidence instead of
+simulated progress: exact node state/provider/model/attempt, tokens, cost,
+closure, artifacts, the newest 500 graph events with explicit truncation, the
+newest 200 session events when its history is longer, and release evidence
+derived through the shared PR/CI/preview/deployment/health adapter. Planned bot
+identity remains separate from observed execution routes; no worker or bot
+account identity is inferred when the runtime did not persist one. Rollback and
+automatic continuation remain explicitly **Not Connected**, and Cancel/Retry
+are not advertised from graph state alone.
+
+This is a wake/recovery boundary, not complete provider-identity admission.
+The downstream database claim still does not pin the selected Grok bot,
+connected account, provider/model, or immutable assignment revisions, and the
+graph MODEL executor still uses ambient worker identity. Keep workers OFF and
+the global kill switch ON until that separate runtime admission is implemented
+and accepted.
+
 ## Services CRM (task #63, ADR-185 — newest product)
 
 `/Services` is the pest-services CRM's own product (route group, own

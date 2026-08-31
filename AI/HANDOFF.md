@@ -498,6 +498,67 @@ compliance.
 ## Newest (2026-08-30, latest+12): Grok Bot local release candidate (ADR-190)
 ## Newest (2026-08-30, latest+14): Grok database phase accepted; application pending (ADR-190)
 ## Newest (2026-08-30, latest+15): Grok failure containment production accepted (ADR-190)
+## Follow-on (2026-08-30, latest+20): atomic Grok control and bounded Resume wake/recovery (ADR-204)
+
+The local follow-on closes the graph-control and first Resume wake/recovery gaps
+without changing the safety envelope. One owner-authenticated database
+transaction locks the scoped session, creates or replays the exact intent,
+records the request, applies the graph transition, resolves the intent, and
+records immutable applied evidence. A refusal rolls back all of it. Once an
+owner Resume commits, the route resolves the exact current Phase 1C repository
+binding and calls the existing exact-target graph dispatcher with only the
+linked graph UUID. An already-applied idempotent Resume retries
+that wake, closing the commit-before-dispatch recovery gap; target-bound claim
+locking remains downstream execution authority and makes duplicate wakes
+idempotent rather than proof of execution.
+Before dispatch, the route tenant-reads the exact graph and requires its
+immutable `github_repository_id` to equal the resolved target's internal
+repository id. A same-key applied Resume is recovery-only while the graph is
+already unpaused; if it has been paused again, that older key is refused and a
+new Resume cycle needs a new key. A new Resume against an unpaused graph is
+also refused before intent creation. This state-cycle rule applies to pause and
+withdraw/stop as well. A legacy exact `requested` graph-control key is
+resolution-only recoverable when durable graph state already reflects its
+action and no later same-graph `control.requested` event exists. Event
+`sequence_no`, not wall-clock order, is the supersession authority; generic
+opposite graph controls are caught by the locked durable state check.
+Pause and stop never dispatch. Resume wake is refused when the graph is paused
+or permanently withdrawn. A disabled worker, invalid target, or dispatch
+failure returns `workerWoken: false` and says **Not Connected**; an accepted
+repository dispatch is not described as a successful claim.
+
+The transition is a forward additive database boundary, not a bounded-list
+search. `20260830010000_atomic_grok_graph_control.sql` (SHA-256
+`bbd664a7b556a07ab31b84b155725ea8a1b1c5a7f6a6afb1cfe1bae8c07f06b7`)
+adds one authenticated, owner-only RPC, exactly tenant/session/project/launched-graph/
+key scoped with no table grant and pinned definer/search path. Replay does not
+duplicate events; a newer same-graph event or opposite generic graph state
+supersedes an older key; an unlinked graph is refused without residue; and a fresh
+unavailable action leaves no intent, graph mutation, or event. Hosted apply and
+exact catalog/ACL/runtime/rollback/lint/health verification remain release gates.
+
+Direct Cancel/Retry are intentionally refused by this Grok endpoint. The
+existing Phase 1C functions do not atomically correlate every action with its
+Grok audit resolution, so lost-response replay could otherwise misstate a
+committed transition as failed. Keep both **Not Connected** until a forward
+database boundary makes action and audit replay-safe together.
+
+The workspace also projects canonical linked graph-run and shared release
+evidence: node route/state/attempt, token/cost/closure, newest bounded graph and
+session events with explicit truncation, artifacts, PR/files/diffs, exact CI,
+preview, deployment, and health. It does not manufacture bot/worker identity.
+Rollback and automatic continuation say **Not Connected**, and graph state
+alone no longer exposes Phase 1C Cancel/Retry.
+
+This is an uncommitted local candidate only. Both worker switches remain OFF,
+autonomy and automatic actions remain OFF, and the global kill switch remains
+ON. No hosted state or external provider was mutated; production acceptance
+and legitimate Ready bot coverage remain required. The downstream claim does
+not yet pin the selected bot/account/provider/model or immutable assignment
+revisions, and MODEL execution still uses ambient worker identity. Do not call
+this complete provider admission or declare `GROK BOT: PRODUCTION READY`.
+
+## Older (2026-08-30, latest+15): Grok failure containment production accepted (ADR-190)
 
 Phase 2 application containment is accepted at exact commit
 `d4040fee445079e34b2e062bfc234b708f802d9b`. All four required jobs passed in

@@ -331,6 +331,46 @@ hosted-grants eleven crm tables; runbook 188; workflow scope pest-ipm
 postflight. Lint zero warnings, tsc clean; full vitest + production
 build before shipping.
 
+**Addendum, 2026-08-30 latest+20 — atomic Grok control and bounded Resume wake
+candidate (ADR-204):** one owner-authenticated transaction serializes the
+session, creates/replays the exact intent, records requested evidence, applies
+Pause/Resume/Withdraw, resolves the intent, and records applied evidence. After
+that transaction commits, only Resume resolves the exact project/repository
+binding and sends the linked graph
+UUID through the existing target-bound graph-worker dispatcher. Applied-Resume
+replay retries that best-effort wake only when the exact applied key is replayed
+while already unpaused and not withdrawn; a prior key cannot start a later Resume cycle, and a
+new key cannot Resume an already-unpaused graph. The graph's immutable
+repository id must match the resolved target before dispatch. Pause and stop
+do not dispatch. Legacy exact requested pause/Resume/withdraw controls are
+resolution-only recoverable when graph state already reflects their action and
+no later same-graph `control.requested` event exists, while an
+applied key is rejected whenever that action is available again in a later
+state cycle. Disabled, invalid, conflicting, and failed dispatch paths return
+`workerWoken: false` with **Not Connected** language. Dispatch acceptance is
+not counted as a successful claim or execution. Direct Cancel/Retry are refused
+and remain **Not Connected** because the current Phase 1C actions do not yet
+atomically correlate their state transition with Grok audit resolution across
+lost-response replay.
+Atomic control is supplied by forward migration `20260830010000` (SHA-256
+`bbd664a7b556a07ab31b84b155725ea8a1b1c5a7f6a6afb1cfe1bae8c07f06b7`):
+authenticated owner only, tenant/session/project/launched-graph/action/key scoped, no
+table grant, definer/search-path pinned, and later-control ordered by immutable
+event sequence. Migrated Postgres behavior covers atomic request/mutation/
+resolution/events, exact replay without duplicates, supersession despite
+inverted timestamps, generic-control supersession, unlinked-graph and
+unavailable-action rollback, member/anonymous and cross-tenant refusal, ACL,
+owner, and search path.
+The UI consumes canonical graph-run and shared release evidence, keeps planned
+identity separate from observed routes, reports bounded graph/session event
+truncation, and leaves Rollback/automatic continuation **Not Connected**. Graph
+state alone no longer advertises Phase 1C Cancel/Retry. This is local candidate
+evidence, not complete runtime-identity admission or production acceptance:
+the downstream claim does not pin the selected bot/account/provider/model and
+immutable assignment revisions, MODEL execution uses ambient worker identity,
+and worker switches, autonomy, automatic actions, and the kill switch remain
+unchanged.
+
 **Addendum, 2026-08-30 latest+15 — Grok Phase 2 containment production
 accepted (ADR-190):** exact app commit
 `d4040fee445079e34b2e062bfc234b708f802d9b` passed all four jobs in CI run

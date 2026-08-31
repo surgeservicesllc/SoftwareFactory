@@ -21,7 +21,7 @@ const SESSION: GrokSessionDetail = {
     graphRunId: "44444444-4444-4444-8444-444444444444",
     createdAt: "2026-08-30T12:00:00.000Z",
     updatedAt: "2026-08-30T12:01:00.000Z",
-    allowedActions: ["pause", "cancel"],
+    allowedActions: ["pause"],
   },
   messages: [
     { id: "m1", role: "user", content: "Fix checkout", createdAt: "2026-08-30T12:00:00.000Z" },
@@ -29,11 +29,30 @@ const SESSION: GrokSessionDetail = {
     { id: "m3", role: "tool", content: "CI evidence was recorded.", createdAt: "2026-08-30T12:00:02.000Z" },
   ],
   tasks: [
-    { id: "t1", taskKey: "research", title: "Inspect checkout", status: "running", provider: "anthropic", model: "claude-sonnet", agentName: null, dependsOn: [] },
-    { id: "t2", taskKey: "implement", title: "Apply the repair", status: "pending", provider: "openai", model: "gpt-codex", agentName: null, dependsOn: ["research"] },
+    { id: "t1", taskKey: "research", title: "Inspect checkout", status: "completed", provider: "anthropic", model: "claude-sonnet", agentName: null, attempt: 1, dependsOn: [] },
+    { id: "t2", taskKey: "implement", title: "Apply the repair", status: "running", provider: "openai", model: "gpt-codex", agentName: null, attempt: 2, dependsOn: ["research"] },
   ],
-  events: [{ id: "e1", type: "session.started", detail: "Planning began.", createdAt: "2026-08-30T12:00:02.000Z" }],
+  events: [{ id: "e1", type: "session.started", detail: "Planning began.", createdAt: "2026-08-30T12:00:04.000Z" }],
   artifacts: [{ id: "a1", kind: "test_run", label: "Focused tests", uri: null, createdAt: "2026-08-30T12:00:03.000Z" }],
+  runEvidence: {
+    state: "RUNNING",
+    closureNote: null,
+    startedAt: "2026-08-30T12:00:01.000Z",
+    completedAt: null,
+    tokensUsed: 12_345,
+    costMicros: 456_700,
+    progress: { completed: 1, total: 2, percent: 50 },
+    events: [{ id: "ge1", type: "node.completed", detail: "Repository inspection completed.", nodeKey: "research", createdAt: "2026-08-30T12:00:02.000Z" }],
+    eventsTruncated: false,
+    release: {
+      pullRequest: { url: "https://github.com/example/factory/pull/42", number: 42, repository: "example/factory" },
+      producedCommit: "a".repeat(40),
+      baseBranch: "main",
+      checks: [{ name: "unit / linux", conclusion: "success", url: "https://github.com/example/factory/actions/runs/9" }],
+      deployment: { environment: "production", state: "success", url: "https://preview.example.dev" },
+      health: { url: "https://preview.example.dev/health", healthy: true, postDeployValidation: "availability probe passed" },
+    },
+  },
 };
 
 const BLOCKED_SESSION: GrokSessionDetail = {
@@ -82,11 +101,16 @@ function installFetch(
     planningFailure?: Readonly<{ message: string; sessionId: string }>;
     postFailures?: number;
     postHttpFailures?: number;
+    controlBodyFailures?: number;
+    controlHttpFailures?: number;
   }> = {},
 ) {
   let remainingDetailFailures = options.detailFailures ?? 0;
   let remainingPostFailures = options.postFailures ?? 0;
   let remainingPostHttpFailures = options.postHttpFailures ?? 0;
+  let remainingControlBodyFailures = options.controlBodyFailures ?? 0;
+  let remainingControlHttpFailures = options.controlHttpFailures ?? 0;
+  let controlFailureOccurred = false;
   const mock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input);
     if (url === "/api/projects") return json({ projects: [PROJECT] });
@@ -122,20 +146,31 @@ function installFetch(
       return json({ sessions: detail && options.includeDetailInList !== false ? [detail.session] : [] });
     }
     if (url.endsWith("/control") && init?.method === "POST") {
-      const action = JSON.parse(String(init.body)).action as "pause" | "cancel";
-      const cancelled = action === "cancel";
+      const action = JSON.parse(String(init.body)).action as "pause" | "resume";
+      if (remainingControlBodyFailures > 0) {
+        remainingControlBodyFailures -= 1;
+        controlFailureOccurred = true;
+        return new Response("{", { status: 200, headers: { "content-type": "application/json" } });
+      }
+      if (remainingControlHttpFailures > 0) {
+        remainingControlHttpFailures -= 1;
+        controlFailureOccurred = true;
+        return json({ error: { message: "The server lost the response after the durable control attempt." } }, 500);
+      }
+      const source = detail ?? SESSION;
+      const resumed = action === "resume";
       return json({
-        ...SESSION,
+        ...source,
         session: {
-          ...SESSION.session,
-          status: cancelled ? "cancelled" : "paused",
-          allowedActions: cancelled ? [] : ["resume", "stop"],
+          ...source.session,
+          status: resumed ? "planned" : "paused",
+          allowedActions: resumed ? ["pause", "stop"] : ["resume", "stop"],
         },
         control: { intentId: "control-1", action, state: "applied" },
-        replayed: false,
-        workerWoken: false,
-        note: cancelled
-          ? "Cancellation was recorded at the safe runtime boundary."
+        replayed: resumed && controlFailureOccurred,
+        workerWoken: resumed,
+        note: resumed
+          ? "The resume was already applied and the exact graph worker wake was accepted again for recovery."
           : "The control was durably applied by the existing audited runtime boundary.",
       });
     }
@@ -183,7 +218,9 @@ describe("GrokWorkspace", () => {
     );
     const controlCenter = screen.getByRole("complementary", { name: "Session inspector" });
     expect(within(controlCenter).getByRole("button", { name: "pause session" })).toBeEnabled();
-    expect(within(controlCenter).getByRole("button", { name: "cancel session" })).toBeEnabled();
+    expect(within(controlCenter).queryByRole("button", { name: /stop/i })).not.toBeInTheDocument();
+    expect(within(controlCenter).queryByRole("button", { name: /cancel/i })).not.toBeInTheDocument();
+    expect(within(controlCenter).queryByRole("button", { name: /retry/i })).not.toBeInTheDocument();
     expect(within(controlCenter).getByRole("button", { name: "resume unavailable in running" })).toBeDisabled();
 
     await userEvent.click(within(controlCenter).getByRole("tab", { name: "Plan" }));
@@ -191,11 +228,38 @@ describe("GrokWorkspace", () => {
     expect(within(controlCenter).getByText(/after research/)).toBeInTheDocument();
 
     await userEvent.click(within(controlCenter).getByRole("tab", { name: "Agents" }));
-    expect(within(controlCenter).getByText("Observed execution identity")).toBeInTheDocument();
-    expect(within(controlCenter).getByText(/recorded node-run evidence/i)).toBeInTheDocument();
+    expect(within(controlCenter).getByText("Observed node execution route")).toBeInTheDocument();
+    expect(within(controlCenter).getByText(/no bot account or worker-process identity was recorded/i)).toBeInTheDocument();
+    expect(within(controlCenter).getByText(/attempt 2/)).toBeInTheDocument();
+
+    await userEvent.click(within(controlCenter).getByRole("tab", { name: "Progress" }));
+    expect(within(controlCenter).getByText("1 of 2 nodes complete")).toBeInTheDocument();
+    expect(within(controlCenter).getByText("12,345")).toBeInTheDocument();
+    expect(within(controlCenter).getByText("$0.4567")).toBeInTheDocument();
+    expect(within(controlCenter).getByText(/node.completed · research/)).toBeInTheDocument();
+    const progressItems = within(controlCenter).getAllByRole("listitem");
+    expect(progressItems[0]).toHaveTextContent("node.completed · research");
+    expect(progressItems[1]).toHaveTextContent("session.started");
 
     await userEvent.click(within(controlCenter).getByRole("tab", { name: "Tests" }));
-    expect(within(controlCenter).getByText("Focused tests")).toBeInTheDocument();
+    expect(within(controlCenter).getByRole("link", { name: "unit / linux" })).toHaveAttribute(
+      "href", "https://github.com/example/factory/actions/runs/9",
+    );
+
+    await userEvent.click(within(controlCenter).getByRole("tab", { name: "Files / Diffs" }));
+    expect(within(controlCenter).getByRole("link", { name: "Open files and diffs" })).toHaveAttribute(
+      "href", "https://github.com/example/factory/pull/42/files",
+    );
+
+    await userEvent.click(within(controlCenter).getByRole("tab", { name: "Preview" }));
+    expect(within(controlCenter).getByRole("link", { name: "https://preview.example.dev" })).toBeInTheDocument();
+
+    await userEvent.click(within(controlCenter).getByRole("tab", { name: "Deployment" }));
+    expect(within(controlCenter).getByText("production · success")).toBeInTheDocument();
+    expect(within(controlCenter).getByText("availability probe passed")).toBeInTheDocument();
+    expect(within(controlCenter).getByText("Rollback")).toBeInTheDocument();
+    expect(within(controlCenter).getByText("Automatic continuation")).toBeInTheDocument();
+    expect(within(controlCenter).getAllByText("Not Connected")).toHaveLength(2);
   });
 
   it("renders a 202 durable-but-blocked plan without implying execution", async () => {
@@ -223,6 +287,15 @@ describe("GrokWorkspace", () => {
     expect(screen.getByText("Durable session · plan saved; execution not linked")).toBeInTheDocument();
     expect(screen.getAllByText("blocked").length).toBeGreaterThan(0);
     expect(window.location.search).toContain(`sessionId=${SESSION.session.id}`);
+  });
+
+  it("truthfully labels a truncated Grok session-event tail", async () => {
+    installFetch({ ...SESSION, eventsTruncated: true });
+    render(<GrokWorkspace initialSelection={{ sessionId: SESSION.session.id }} />);
+
+    const inspector = await screen.findByRole("complementary", { name: "Session inspector" });
+    await userEvent.click(within(inspector).getByRole("tab", { name: "Progress" }));
+    expect(within(inspector).getByText("Newest 200 Grok session events shown.")).toBeInTheDocument();
   });
 
   it("reopens a durable request when planning returns 409 without claiming a plan exists", async () => {
@@ -360,7 +433,8 @@ describe("GrokWorkspace", () => {
 
     expect(await screen.findByText("The session and plan are saved, but no graph or worker execution has started.")).toBeInTheDocument();
     const inspector = screen.getByRole("complementary", { name: "Session inspector" });
-    expect(within(inspector).getByRole("button", { name: "cancel unavailable in blocked" })).toBeDisabled();
+    expect(within(inspector).queryByRole("button", { name: /cancel/i })).not.toBeInTheDocument();
+    expect(within(inspector).queryByRole("button", { name: /retry/i })).not.toBeInTheDocument();
     await userEvent.click(within(inspector).getByRole("tab", { name: "Agents" }));
     expect(within(inspector).getByText("Planned routing intent")).toBeInTheDocument();
     expect(within(inspector).getByText(/do not prove execution/i)).toBeInTheDocument();
@@ -382,22 +456,73 @@ describe("GrokWorkspace", () => {
     expect(screen.getByRole("status")).toHaveTextContent("durably applied");
   });
 
-  it("sends the runtime cancel action and renders the returned durable state", async () => {
-    const fetchMock = installFetch(SESSION);
+  it("reuses the exact Resume key after an indeterminate 500 and recovers the wake", async () => {
+    const pausedSession: GrokSessionDetail = {
+      ...SESSION,
+      session: {
+        ...SESSION.session,
+        status: "paused",
+        allowedActions: ["resume", "stop"],
+      },
+    };
+    const fetchMock = installFetch(pausedSession, { controlHttpFailures: 1 });
     const user = userEvent.setup();
+    render(<GrokWorkspace initialSelection={{ sessionId: pausedSession.session.id }} />);
+
+    const inspector = await screen.findByRole("complementary", { name: "Session inspector" });
+    await user.click(within(inspector).getByRole("button", { name: "resume session" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "server lost the response after the durable control attempt",
+    );
+    await user.click(within(inspector).getByRole("button", { name: "resume session" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("accepted again for recovery");
+
+    const bodies = fetchMock.mock.calls
+      .filter(([url, init]) => String(url).endsWith("/control") && init?.method === "POST")
+      .map(([, init]) => JSON.parse(String(init?.body)) as {
+        action: string; idempotencyKey: string;
+      });
+    expect(bodies).toHaveLength(2);
+    expect(bodies.map((body) => body.action)).toEqual(["resume", "resume"]);
+    expect(bodies[0]?.idempotencyKey).toBe(bodies[1]?.idempotencyKey);
+  });
+
+  it("reuses the exact Resume key after a successful response body cannot be read", async () => {
+    const pausedSession: GrokSessionDetail = {
+      ...SESSION,
+      session: {
+        ...SESSION.session,
+        status: "paused",
+        allowedActions: ["resume", "stop"],
+      },
+    };
+    const fetchMock = installFetch(pausedSession, { controlBodyFailures: 1 });
+    const user = userEvent.setup();
+    render(<GrokWorkspace initialSelection={{ sessionId: pausedSession.session.id }} />);
+
+    const inspector = await screen.findByRole("complementary", { name: "Session inspector" });
+    await user.click(within(inspector).getByRole("button", { name: "resume session" }));
+    await screen.findByRole("alert");
+    await user.click(within(inspector).getByRole("button", { name: "resume session" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("accepted again for recovery");
+
+    const bodies = fetchMock.mock.calls
+      .filter(([url, init]) => String(url).endsWith("/control") && init?.method === "POST")
+      .map(([, init]) => JSON.parse(String(init?.body)) as { idempotencyKey: string });
+    expect(bodies).toHaveLength(2);
+    expect(bodies[0]?.idempotencyKey).toBe(bodies[1]?.idempotencyKey);
+  });
+
+  it("never advertises Cancel or Retry even when a stale payload lists them", async () => {
+    installFetch({
+      ...SESSION,
+      session: { ...SESSION.session, allowedActions: ["pause", "cancel", "retry"] },
+    });
     render(<GrokWorkspace initialSelection={{ sessionId: SESSION.session.id }} />);
 
     const inspector = await screen.findByRole("complementary", { name: "Session inspector" });
-    await user.click(within(inspector).getByRole("button", { name: "cancel session" }));
-
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
-      `/api/grok/sessions/${SESSION.session.id}/control`,
-      expect.objectContaining({
-        method: "POST",
-        body: expect.stringContaining('"action":"cancel"'),
-      }),
-    ));
-    expect(screen.getAllByText("cancelled").length).toBeGreaterThan(0);
-    expect(screen.getByRole("status")).toHaveTextContent("Cancellation was recorded");
+    expect(within(inspector).queryByRole("button", { name: /cancel/i })).not.toBeInTheDocument();
+    expect(within(inspector).queryByRole("button", { name: /retry/i })).not.toBeInTheDocument();
+    expect(within(inspector).getByRole("button", { name: "pause session" })).toBeEnabled();
   });
 });
