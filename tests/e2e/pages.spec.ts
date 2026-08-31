@@ -14,6 +14,7 @@ const routes = [
   // The console home moved to /solutions when / became the marketing landing.
   { path: "/solutions", heading: "Dashboard" },
   { path: "/solutions/build", heading: "Build" },
+  { path: "/solutions/factory/grok", heading: "Grok Bot" },
   { path: "/solutions/ai-factory", heading: "01. Factory Setup" },
   { path: "/solutions/operations", heading: "Operations" },
   { path: "/solutions/projects", heading: "All Projects" },
@@ -43,8 +44,61 @@ const routes = [
   { path: "/auth/sign-up", heading: "Create your account" },
 ] as const;
 
+const grokProject = {
+  id: "11111111-1111-4111-8111-111111111111",
+  name: "Software Factory",
+};
+const grokSession = {
+  id: "22222222-2222-4222-8222-222222222222",
+  projectId: grokProject.id,
+  projectName: grokProject.name,
+  title: "Repair checkout",
+  goal: "Fix checkout and prove the result.",
+  status: "blocked",
+  commandId: null,
+  graphId: null,
+  graphRunId: null,
+  createdAt: "2026-08-30T12:00:00.000Z",
+  updatedAt: "2026-08-30T12:01:00.000Z",
+  allowedActions: [],
+};
+
 for (const { path, heading } of routes) {
   test(`${path} renders its heading, stays in the viewport, and passes axe`, async ({ page }) => {
+    if (path === "/solutions/factory/grok") {
+      // Exercise the populated three-column workspace instead of letting a
+      // missing local Supabase configuration reduce this to its error gate.
+      await page.route("**/api/projects", (route) => route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({ projects: [grokProject] }),
+      }));
+      await page.route("**/api/grok/sessions", (route) => route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({ sessions: [grokSession] }),
+      }));
+      await page.route("**/api/grok/sessions/*", (route) => route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          session: grokSession,
+          messages: [
+            { id: "message-1", role: "user", content: grokSession.goal, createdAt: grokSession.createdAt },
+            { id: "message-2", role: "assistant", content: "The deterministic plan was recorded.", createdAt: grokSession.updatedAt },
+          ],
+          tasks: [{
+            id: "task-1",
+            taskKey: "inspect",
+            title: "Inspect checkout",
+            status: "pending_graph",
+            provider: "anthropic",
+            model: "claude-sonnet",
+            agentName: "Claude reviewer",
+            dependsOn: [],
+          }],
+          events: [],
+          artifacts: [],
+        }),
+      }));
+    }
     const response = await page.goto(path, { waitUntil: "domcontentloaded" });
     expect(response?.ok(), `${path} returned ${response?.status()}`).toBe(true);
 
@@ -65,6 +119,12 @@ for (const { path, heading } of routes) {
     // Client consoles settle into a signed-out or unconfigured state; wait for
     // the loading spinner to clear so axe sees the real content.
     await expect(page.locator('[aria-label*="Loading"]')).toHaveCount(0, { timeout: 15_000 });
+    if (path === "/solutions/factory/grok") {
+      await expect(page.getByText("Durable session · plan saved; execution not linked")).toBeVisible();
+      await page.getByRole("tab", { name: "Agents" }).click();
+      await expect(page.getByText("Planned routing intent")).toBeVisible();
+      await expect(page.getByText(/do not prove execution/i)).toBeVisible();
+    }
 
     /*
      * One global navigation, on every page.

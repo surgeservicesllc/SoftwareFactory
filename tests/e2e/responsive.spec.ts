@@ -63,6 +63,9 @@ const ROUTES = [
   // One factory step: the ten pages share one console, and the harness case
   // "factory-step" measures the populated layout.
   "/solutions/factory/requirement",
+  // The three-column Grok workspace stacks below xl and keeps its controls
+  // usable at the supported phone widths.
+  "/solutions/factory/grok",
   "/solutions/admin",
   "/auth/onboarding",
   "/offline",
