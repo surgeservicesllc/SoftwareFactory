@@ -1,6 +1,32 @@
 # Quality scorecard
 
-Last reviewed: 2026-08-30
+Last reviewed: 2026-08-31
+
+**Addendum, 2026-08-31 latest+17 - documents, canvassing, marketing
+(ADR-195):** services-marketing-canvassing.behavior 9 on the real chain
+under hosted-style default privileges (a URL, an s3 scheme and a leading
+slash each refused as a storage path while a real private path is accepted;
+a document filed about nothing refused; knocks and messages append-only at
+the GRANT — update and delete both denied outright rather than matching zero
+rows; a sold door forced to name its customer and a follow-up date confined
+to callbacks and appointments; an unsubscribe reason refused without an
+unsubscribe and the withdrawal keeping both moment and reason; a dynamic
+list forced to state its criteria; the message funnel refusing an open with
+no delivery and a bounce with no reason, then accepting the whole ordered
+funnel; an email campaign refused without a subject; a sending rule refused
+without its template; a rule refused for claiming runs it never had;
+anon/service_role shut out with no DELETE anywhere and no UPDATE on the
+three append-only tables; tenant isolation both ways). Seed extended to 35
+tables — 38,728 rows, 35/35 PASS, zero orphans. RLS census 182; hosted
+service-role grants at 35 crm tables; runbook 193; workflow scope
+`documents-canvassing-marketing` postflight proves forced RLS on nine
+tables, append-only facts, no delete, the shutout, and that a URL is still
+refused as a storage path in production.
+**And the guard that was missing:** `migration-regex-repetition` fails any
+migration using a regex repetition count above PostgreSQL's limit of 255 —
+the defect that has now cost two releases, because a CHECK's regex compiles
+only when a row carries a value and therefore survives every null-column
+test. Lint zero warnings, tsc clean.
 
 **Addendum, 2026-08-30 latest+16 - the company (ADR-194):**
 services-org-sales.behavior 9 on the real chain under hosted-style default

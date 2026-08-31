@@ -556,3 +556,147 @@ export type LeaderboardPayload = {
     unownedOpportunities: number;
   };
 };
+
+export type DocumentView = {
+  id: string;
+  accountId: string | null;
+  propertyId: string | null;
+  workOrderId: string | null;
+  title: string;
+  kind: string;
+  storagePath: string;
+  contentType: string | null;
+  byteSize: number | null;
+  notes: string | null;
+  uploadedAt: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CanvassRouteView = {
+  id: string;
+  territoryId: string | null;
+  repId: string | null;
+  name: string;
+  status: string;
+  walkedOn: string;
+  startedAt: string | null;
+  endedAt: string | null;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+  knockCount: number;
+  productiveCount: number;
+};
+
+export type KnockView = {
+  id: string;
+  canvassRouteId: string;
+  accountId: string | null;
+  address: string;
+  disposition: string;
+  knockedAt: string;
+  followUpOn: string | null;
+  note: string | null;
+};
+
+export type MarketingListView = {
+  id: string;
+  name: string;
+  description: string | null;
+  isDynamic: boolean;
+  criteria: string | null;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+  subscriberCount: number;
+  unsubscribedCount: number;
+};
+
+export type CampaignView = {
+  id: string;
+  listId: string | null;
+  name: string;
+  channel: string;
+  status: string;
+  subject: string | null;
+  body: string | null;
+  budgetCents: number | null;
+  scheduledAt: string | null;
+  sentAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  sent: number;
+  delivered: number;
+  opened: number;
+  clicked: number;
+  failed: number;
+  openRate: number | null;
+  clickRate: number | null;
+};
+
+export type AutomationView = {
+  id: string;
+  name: string;
+  triggerOn: string;
+  action: string;
+  delayHours: number;
+  template: string | null;
+  active: boolean;
+  lastRunAt: string | null;
+  runCount: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type DocumentsPayload = {
+  documents: DocumentView[];
+  counts: { total: number; byKind: Record<string, number>; bytes: number };
+};
+
+export type CanvassingPayload = {
+  routes: CanvassRouteView[];
+  knocks: KnockView[];
+  counts: {
+    routes: number;
+    knocks: number;
+    productive: number;
+    sold: number;
+    productiveRate: number | null;
+    byDisposition: Record<string, number>;
+  };
+};
+
+export type MarketingListsPayload = {
+  lists: MarketingListView[];
+  counts: { total: number; active: number; members: number; unsubscribed: number };
+};
+
+export type CampaignsPayload = {
+  campaigns: CampaignView[];
+  counts: { total: number; messages: number; providerConnected: boolean };
+};
+
+export type AutomationsPayload = {
+  automations: AutomationView[];
+  counts: { total: number; active: number; runs: number };
+  executorConnected: boolean;
+};
+
+export type AttributionPayload = {
+  touches: {
+    id: string;
+    accountId: string;
+    opportunityId: string | null;
+    campaignId: string | null;
+    knockId: string | null;
+    source: string;
+    medium: string | null;
+    position: string;
+    touchedAt: string;
+    note: string | null;
+  }[];
+  firstTouch: Record<string, number>;
+  lastTouch: Record<string, number>;
+  counts: { total: number; accounts: number };
+};

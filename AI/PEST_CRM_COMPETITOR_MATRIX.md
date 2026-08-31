@@ -80,7 +80,7 @@ built.
 | **Technician mobile app** | all | **GAP** |
 | **Offline mode — full capacity without signal** | PestPac | **GAP** |
 | **Signature capture** | PestPac, GorillaDesk (Pro) | **PARTIAL** — contracts record a signatory name and moment; nothing is captured |
-| **Photos, files and diagrams attached to orders and accounts** | PestPac | **GAP** |
+| Photos, files and documents attached to orders and accounts | PestPac | **HAVE** (ADR-195) — diagrams still a GAP |
 | **In-field card payment** | PestPac | **GAP** |
 
 ### D. Inspections and forms
@@ -125,9 +125,9 @@ built.
 | Per-rep and per-territory performance, leaderboards | Briostack | **HAVE** (ADR-194) |
 | Commission management | Briostack | **HAVE** (ADR-194) |
 | Branches / multi-office | PestPac, FieldRoutes, ServSuite | **HAVE** (ADR-194) |
-| **Door-to-door canvassing routes and knock dispositions** | FieldRoutes, Briostack | **GAP** |
-| **Campaigns, lists, email/SMS sends, consent** | FieldRoutes, Briostack, PestPac | **GAP** |
-| **Marketing automation and attribution** | FieldRoutes, Briostack | **GAP** |
+| Door-to-door canvassing routes and knock dispositions | FieldRoutes, Briostack | **HAVE** (ADR-195) |
+| Campaigns, lists, consent | FieldRoutes, Briostack, PestPac | **HAVE** (ADR-195); the *send* is a GAP — no provider is connected |
+| Marketing automation and attribution | FieldRoutes, Briostack | **HAVE** (ADR-195) as records; no executor runs the rules |
 | **Reviews / reputation management** | FieldRoutes, Jobber | **GAP** |
 
 ### H. Reporting and analytics
@@ -155,8 +155,7 @@ built.
 Ranked by what a buyer comparing us to PestPac or Briostack would notice
 first, and tracked in `AI/BACKLOG.md`:
 
-1. **Documents, canvassing, marketing** (increment 8, drafted) — closes
-   photos/files, door-to-door, campaigns/lists/consent/automation/attribution.
+1. ~~Documents, canvassing, marketing~~ — **SHIPPED** as ADR-195.
 2. **Digital forms and inspections engine** (increment 9) — PestPac's
    strongest differentiator; also carries technician timesheets and licence
    expiry tracking.

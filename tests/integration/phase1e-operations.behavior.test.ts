@@ -210,9 +210,13 @@ describe("Phase 1E production operations behavior", () => {
     // crm_contracts, crm_invoices, crm_invoice_lines and the append-only
     // crm_payments and crm_refunds; 173 since the company arrived (ADR-194)
     // with crm_branches, crm_employees, crm_territories and
-    // crm_commissions. Each is RLS-enabled and forced, which
+    // crm_commissions; 182 since documents, canvassing and the marketing
+    // hub (ADR-195) added crm_documents, crm_canvass_routes, the
+    // append-only crm_knocks, crm_marketing_lists, crm_list_members,
+    // crm_campaigns, the append-only crm_messages, crm_automations and the
+    // append-only crm_attributions. Each is RLS-enabled and forced, which
     // the filter on the next line is what actually proves.
-    expect(rlsRows).toHaveLength(173);
+    expect(rlsRows).toHaveLength(182);
     expect(rlsRows.filter((row) => !row.relrowsecurity || !row.relforcerowsecurity)).toEqual([]);
 
     const { rows: grantRows } = await db.query<{ table_name: string }>(

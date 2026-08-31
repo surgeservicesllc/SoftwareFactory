@@ -75,13 +75,20 @@ the full seeded E2E journey passes — increment 10 of the plan.
 - [ ] Increment 7 follow-on (canvassing): door-to-door routes, knock
   dispositions and per-rep canvassing stats. The territory map and the
   leaderboard now exist to hang them on; the knocking itself does not.
-- [ ] Increment 8: documents, canvassing and the marketing hub —
+- [x] Increment 8 (ADR-195): documents, canvassing and the marketing hub —
   crm_documents (a storage PATH, never a URL, never bytes),
   crm_canvass_routes + append-only crm_knocks with dispositions,
   crm_marketing_lists + crm_list_members with consent as a record that
   keeps its moment, crm_campaigns, append-only crm_messages,
-  crm_automations and crm_attributions. No provider is wired: the
-  email/SMS surfaces ship labelled **Not Connected**.
+  crm_automations and append-only crm_attributions; /Services/canvassing
+  and /Services/marketing. No provider is wired and no executor runs the
+  rules: both surfaces carry **Not Connected**. 20260830001500; hosted
+  apply: scope=documents-canvassing-marketing after merge.
+- [ ] Increment 8 follow-on: wire an email/SMS provider behind
+  owner-supplied credentials, and an executor for the automation rules.
+  Until then `sending`/`sent` stay unreachable from the API and
+  run_count/last_run_at stay unsettable, which is what keeps the page
+  honest.
 - [ ] Increment 9: the forms and inspections engine (PestPac's strongest
   differentiator per AI/PEST_CRM_COMPETITOR_MATRIX.md) — a form template
   builder, assignable instances, typed answers, signature capture, and

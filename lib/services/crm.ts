@@ -1124,3 +1124,363 @@ export function toCommissionView(row: CrmCommissionRow) {
 export function employeeName(row: { firstName: string; lastName: string | null }): string {
   return `${row.firstName} ${row.lastName ?? ""}`.trim();
 }
+
+/* -------------------------------------------------------------------------
+ * Documents, canvassing and the marketing hub. Three rules run through this
+ * vocabulary: a document is a reference and never bytes, a knock and a
+ * message are facts rather than drafts, and consent is a record with a
+ * moment attached.
+ * ---------------------------------------------------------------------- */
+
+export const CRM_DOCUMENT_KINDS = [
+  "contract", "estimate", "photo", "inspection_report", "service_report",
+  "permit", "license", "invoice", "other",
+] as const;
+export type CrmDocumentKind = (typeof CRM_DOCUMENT_KINDS)[number];
+
+export const CRM_CANVASS_STATUSES = ["planned", "walking", "complete", "cancelled"] as const;
+export type CrmCanvassStatus = (typeof CRM_CANVASS_STATUSES)[number];
+
+export const CRM_KNOCK_DISPOSITIONS = [
+  "no_answer", "not_home", "not_interested", "callback", "appointment_set",
+  "sold", "do_not_knock",
+] as const;
+export type CrmKnockDisposition = (typeof CRM_KNOCK_DISPOSITIONS)[number];
+/** The dispositions that leave something to come back to. */
+export const CRM_PENDING_DISPOSITIONS = ["callback", "appointment_set"] as const;
+
+export const CRM_CHANNELS = ["email", "sms", "postcard"] as const;
+export type CrmChannel = (typeof CRM_CHANNELS)[number];
+
+export const CRM_CAMPAIGN_STATUSES = ["draft", "scheduled", "sending", "sent", "cancelled"] as const;
+export type CrmCampaignStatus = (typeof CRM_CAMPAIGN_STATUSES)[number];
+
+export const CRM_MESSAGE_STATUSES = [
+  "queued", "sent", "delivered", "opened", "clicked", "bounced", "failed", "unsubscribed",
+] as const;
+export type CrmMessageStatus = (typeof CRM_MESSAGE_STATUSES)[number];
+/** The statuses that carry a failure reason, and only those. */
+export const CRM_FAILED_MESSAGE_STATUSES = ["bounced", "failed"] as const;
+
+export const CRM_AUTOMATION_TRIGGERS = [
+  "lead_created", "service_completed", "invoice_overdue", "contract_renewing",
+  "sighting_recorded", "estimate_sent",
+] as const;
+export type CrmAutomationTrigger = (typeof CRM_AUTOMATION_TRIGGERS)[number];
+
+export const CRM_AUTOMATION_ACTIONS = [
+  "send_email", "send_sms", "create_task", "notify_manager", "schedule_followup",
+] as const;
+export type CrmAutomationAction = (typeof CRM_AUTOMATION_ACTIONS)[number];
+/** The actions that carry the text they would send. */
+export const CRM_SENDING_ACTIONS = ["send_email", "send_sms"] as const;
+
+export const CRM_TOUCH_POSITIONS = ["first", "assist", "last"] as const;
+export type CrmTouchPosition = (typeof CRM_TOUCH_POSITIONS)[number];
+
+/**
+ * A private storage path, matching the schema's CHECK. Deliberately refuses
+ * anything containing a scheme: a public URL stored as a document reference
+ * would be an access-control hole wearing a column name.
+ */
+export const CRM_STORAGE_PATH_PATTERN = /^[a-z0-9][a-z0-9._/-]*$/;
+export function isStoragePath(value: string): boolean {
+  // Shape, length and the absence of a scheme, checked apart exactly as the
+  // schema checks them — PostgreSQL will not compile a repetition count
+  // above 255, so the length cannot live inside the pattern.
+  return (
+    CRM_STORAGE_PATH_PATTERN.test(value)
+    && value.length >= 3
+    && value.length <= 301
+    && !value.includes("://")
+  );
+}
+export const CRM_CONTENT_TYPE_PATTERN = /^[a-z]+\/[a-zA-Z0-9.+-]{1,80}$/;
+
+export const CRM_DOCUMENT_COLUMNS =
+  "id, account_id, property_id, work_order_id, title, kind, storage_path, content_type, byte_size, notes, uploaded_at, created_at, updated_at";
+export const CRM_CANVASS_ROUTE_COLUMNS =
+  "id, territory_id, rep_id, name, status, walked_on, started_at, ended_at, notes, created_at, updated_at";
+export const CRM_KNOCK_COLUMNS =
+  "id, canvass_route_id, account_id, address, disposition, knocked_at, follow_up_on, note";
+export const CRM_MARKETING_LIST_COLUMNS =
+  "id, name, description, is_dynamic, criteria, active, created_at, updated_at";
+export const CRM_LIST_MEMBER_COLUMNS =
+  "id, list_id, account_id, source, added_at, unsubscribed_at, unsubscribe_reason";
+export const CRM_CAMPAIGN_COLUMNS =
+  "id, list_id, name, channel, status, subject, body, budget_cents, scheduled_at, sent_at, created_at, updated_at";
+export const CRM_MESSAGE_COLUMNS =
+  "id, campaign_id, account_id, channel, status, destination, queued_at, sent_at, delivered_at, opened_at, clicked_at, failure_reason";
+export const CRM_AUTOMATION_COLUMNS =
+  "id, name, trigger_on, action, delay_hours, template, active, last_run_at, run_count, created_at, updated_at";
+export const CRM_ATTRIBUTION_COLUMNS =
+  "id, account_id, opportunity_id, campaign_id, knock_id, source, medium, position, touched_at, note";
+
+export type CrmDocumentRow = {
+  id: string;
+  account_id: string | null;
+  property_id: string | null;
+  work_order_id: string | null;
+  title: string;
+  kind: CrmDocumentKind;
+  storage_path: string;
+  content_type: string | null;
+  byte_size: number | null;
+  notes: string | null;
+  uploaded_at: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CrmCanvassRouteRow = {
+  id: string;
+  territory_id: string | null;
+  rep_id: string | null;
+  name: string;
+  status: CrmCanvassStatus;
+  walked_on: string;
+  started_at: string | null;
+  ended_at: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CrmKnockRow = {
+  id: string;
+  canvass_route_id: string;
+  account_id: string | null;
+  address: string;
+  disposition: CrmKnockDisposition;
+  knocked_at: string;
+  follow_up_on: string | null;
+  note: string | null;
+};
+
+export type CrmMarketingListRow = {
+  id: string;
+  name: string;
+  description: string | null;
+  is_dynamic: boolean;
+  criteria: string | null;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CrmListMemberRow = {
+  id: string;
+  list_id: string;
+  account_id: string;
+  source: string | null;
+  added_at: string;
+  unsubscribed_at: string | null;
+  unsubscribe_reason: string | null;
+};
+
+export type CrmCampaignRow = {
+  id: string;
+  list_id: string | null;
+  name: string;
+  channel: CrmChannel;
+  status: CrmCampaignStatus;
+  subject: string | null;
+  body: string | null;
+  budget_cents: number | null;
+  scheduled_at: string | null;
+  sent_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CrmMessageRow = {
+  id: string;
+  campaign_id: string;
+  account_id: string;
+  channel: CrmChannel;
+  status: CrmMessageStatus;
+  destination: string | null;
+  queued_at: string;
+  sent_at: string | null;
+  delivered_at: string | null;
+  opened_at: string | null;
+  clicked_at: string | null;
+  failure_reason: string | null;
+};
+
+export type CrmAutomationRow = {
+  id: string;
+  name: string;
+  trigger_on: CrmAutomationTrigger;
+  action: CrmAutomationAction;
+  delay_hours: number;
+  template: string | null;
+  active: boolean;
+  last_run_at: string | null;
+  run_count: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CrmAttributionRow = {
+  id: string;
+  account_id: string;
+  opportunity_id: string | null;
+  campaign_id: string | null;
+  knock_id: string | null;
+  source: string;
+  medium: string | null;
+  position: CrmTouchPosition;
+  touched_at: string;
+  note: string | null;
+};
+
+export function toDocumentView(row: CrmDocumentRow) {
+  return {
+    id: row.id,
+    accountId: row.account_id,
+    propertyId: row.property_id,
+    workOrderId: row.work_order_id,
+    title: row.title,
+    kind: row.kind,
+    // The path is reported, never a link: whoever renders this has to ask
+    // storage for a signed URL, which is where the access check lives.
+    storagePath: row.storage_path,
+    contentType: row.content_type,
+    byteSize: row.byte_size,
+    notes: row.notes,
+    uploadedAt: row.uploaded_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function toCanvassRouteView(row: CrmCanvassRouteRow) {
+  return {
+    id: row.id,
+    territoryId: row.territory_id,
+    repId: row.rep_id,
+    name: row.name,
+    status: row.status,
+    walkedOn: row.walked_on,
+    startedAt: row.started_at,
+    endedAt: row.ended_at,
+    notes: row.notes,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function toKnockView(row: CrmKnockRow) {
+  return {
+    id: row.id,
+    canvassRouteId: row.canvass_route_id,
+    accountId: row.account_id,
+    address: row.address,
+    disposition: row.disposition,
+    knockedAt: row.knocked_at,
+    followUpOn: row.follow_up_on,
+    note: row.note,
+  };
+}
+
+export function toMarketingListView(row: CrmMarketingListRow) {
+  return {
+    id: row.id,
+    name: row.name,
+    description: row.description,
+    isDynamic: row.is_dynamic,
+    criteria: row.criteria,
+    active: row.active,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function toListMemberView(row: CrmListMemberRow) {
+  return {
+    id: row.id,
+    listId: row.list_id,
+    accountId: row.account_id,
+    source: row.source,
+    addedAt: row.added_at,
+    unsubscribedAt: row.unsubscribed_at,
+    unsubscribeReason: row.unsubscribe_reason,
+    // Consent as the page needs to read it: a fact with a moment behind it.
+    subscribed: row.unsubscribed_at === null,
+  };
+}
+
+export function toCampaignView(row: CrmCampaignRow) {
+  return {
+    id: row.id,
+    listId: row.list_id,
+    name: row.name,
+    channel: row.channel,
+    status: row.status,
+    subject: row.subject,
+    body: row.body,
+    budgetCents: row.budget_cents,
+    scheduledAt: row.scheduled_at,
+    sentAt: row.sent_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function toMessageView(row: CrmMessageRow) {
+  return {
+    id: row.id,
+    campaignId: row.campaign_id,
+    accountId: row.account_id,
+    channel: row.channel,
+    status: row.status,
+    destination: row.destination,
+    queuedAt: row.queued_at,
+    sentAt: row.sent_at,
+    deliveredAt: row.delivered_at,
+    openedAt: row.opened_at,
+    clickedAt: row.clicked_at,
+    failureReason: row.failure_reason,
+  };
+}
+
+export function toAutomationView(row: CrmAutomationRow) {
+  return {
+    id: row.id,
+    name: row.name,
+    triggerOn: row.trigger_on,
+    action: row.action,
+    delayHours: row.delay_hours,
+    template: row.template,
+    active: row.active,
+    lastRunAt: row.last_run_at,
+    runCount: row.run_count,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function toAttributionView(row: CrmAttributionRow) {
+  return {
+    id: row.id,
+    accountId: row.account_id,
+    opportunityId: row.opportunity_id,
+    campaignId: row.campaign_id,
+    knockId: row.knock_id,
+    source: row.source,
+    medium: row.medium,
+    position: row.position,
+    touchedAt: row.touched_at,
+    note: row.note,
+  };
+}
+
+/**
+ * The knock dispositions that produced something worth counting. A
+ * canvassing report that treats "no answer" and "sold" as the same kind of
+ * outcome is not a report.
+ */
+export function isProductiveKnock(disposition: CrmKnockDisposition): boolean {
+  return disposition === "sold" || disposition === "appointment_set" || disposition === "callback";
+}

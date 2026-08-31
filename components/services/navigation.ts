@@ -5,9 +5,11 @@ import {
   Trophy,
   HardHat,
   IdCard,
+  Megaphone,
   KanbanSquare,
   LayoutDashboard,
   Radar,
+  ScanLine,
   ShieldCheck,
   Users,
   type LucideIcon,
@@ -102,6 +104,18 @@ export const SERVICES_NAVIGATION: readonly ServicesNavItem[] = [
     label: "Team",
     description: "The org chart and the field roster",
     icon: IdCard,
+  },
+  {
+    href: `${SERVICES_ROOT}/canvassing`,
+    label: "Canvassing",
+    description: "Door routes and what each door said",
+    icon: ScanLine,
+  },
+  {
+    href: `${SERVICES_ROOT}/marketing`,
+    label: "Marketing",
+    description: "Lists, consent, campaigns, attribution",
+    icon: Megaphone,
   },
 ];
 

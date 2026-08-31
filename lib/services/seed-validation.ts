@@ -82,6 +82,85 @@ const SPECS: Spec[] = [
     parents: [{ column: "employee_id", table: "crm_employees" }],
   },
   {
+    table: "crm_documents",
+    optional: ["account_id", "property_id", "work_order_id", "content_type", "byte_size", "notes"],
+    enumColumn: "kind",
+    parents: [
+      { column: "account_id", table: "crm_accounts" },
+      { column: "property_id", table: "crm_properties" },
+      { column: "work_order_id", table: "crm_work_orders" },
+    ],
+  },
+  {
+    table: "crm_canvass_routes",
+    optional: ["territory_id", "rep_id", "started_at", "ended_at", "notes"],
+    enumColumn: "status",
+    parents: [
+      { column: "territory_id", table: "crm_territories" },
+      { column: "rep_id", table: "crm_employees" },
+    ],
+  },
+  {
+    table: "crm_knocks",
+    optional: ["account_id", "follow_up_on", "note"],
+    enumColumn: "disposition",
+    parents: [
+      { column: "canvass_route_id", table: "crm_canvass_routes" },
+      { column: "account_id", table: "crm_accounts" },
+    ],
+  },
+  {
+    table: "crm_marketing_lists",
+    optional: ["description", "criteria"],
+    parents: [],
+  },
+  {
+    table: "crm_list_members",
+    optional: ["source", "unsubscribed_at", "unsubscribe_reason"],
+    parents: [
+      { column: "list_id", table: "crm_marketing_lists" },
+      { column: "account_id", table: "crm_accounts" },
+    ],
+  },
+  {
+    table: "crm_campaigns",
+    optional: ["list_id", "subject", "body", "budget_cents", "scheduled_at", "sent_at"],
+    enumColumn: "status",
+    parents: [{ column: "list_id", table: "crm_marketing_lists" }],
+  },
+  {
+    table: "crm_messages",
+    optional: ["destination", "sent_at", "delivered_at", "opened_at", "clicked_at", "failure_reason"],
+    enumColumn: "status",
+    parents: [
+      { column: "campaign_id", table: "crm_campaigns" },
+      { column: "account_id", table: "crm_accounts" },
+    ],
+  },
+  {
+    table: "crm_automations",
+    /*
+     * `last_run_at` is deliberately absent from this list. Nothing executes
+     * an automation yet, and the schema CHECKs that a run count and a
+     * last-run moment agree — so seeding one would be claiming a rule had
+     * fired. An empty column that is honestly empty is not a coverage gap,
+     * and auditing it as one would push the seed into lying.
+     */
+    optional: ["template"],
+    enumColumn: "action",
+    parents: [],
+  },
+  {
+    table: "crm_attributions",
+    optional: ["opportunity_id", "campaign_id", "knock_id", "medium", "note"],
+    enumColumn: "position",
+    parents: [
+      { column: "account_id", table: "crm_accounts" },
+      { column: "opportunity_id", table: "crm_opportunities" },
+      { column: "campaign_id", table: "crm_campaigns" },
+    ],
+  },
+  {
     table: "crm_accounts",
     optional: [
       "email", "phone", "source", "billing_address", "notes",

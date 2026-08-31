@@ -54,9 +54,17 @@ opportunities gained an owner; technicians gained a branch and a
 supervisor. /Services/branches, /Services/team and /Services/sales read
 them, each naming the uncomfortable number rather than hiding it: the
 book no branch serves, the map nobody works, the deals nobody owns.
+Documents, canvassing and marketing (ADR-195) close the door-to-door and
+campaign rows of the competitor matrix: crm_documents holds a private
+storage PATH and never a URL or bytes, crm_knocks is append-only so a
+disposition cannot be improved after the door closed, consent keeps the
+moment it was withdrawn, and the message funnel is CHECKed one-way so a
+reported open rate cannot exceed its own delivery. Nothing sends: no
+email/SMS provider is connected and no executor runs the automation rules,
+and /Services/marketing carries **Not Connected** above every figure.
 A workspace can populate itself two ways (ADR-192): the curated Demo Data
-book for presenting the product, or the full corpus — 24,688 rows across
-all twenty-six tables, every optional field populated, spanning years —
+book for presenting the product, or the full corpus — 38,728 rows across
+all thirty-five tables, every optional field populated, spanning years —
 for testing dashboards, reports and pagination at the size of a real book.
 GET /api/services/seed-report audits whichever is loaded, table by table,
 PASS or FAIL. Plan of record: AI/SERVICES_CRM_GAP_ANALYSIS.md — ten increments;
@@ -64,7 +72,7 @@ PEST CRM: PRODUCTION READY is declared only after the seeded E2E
 journey (increment 10).
 
 
-Last reviewed: 2026-08-30
+Last reviewed: 2026-08-31
 
 ## 2026-08-29: Budget Tracker — own navigation, dated import, and a plan/history fix
 

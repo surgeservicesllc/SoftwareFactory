@@ -4023,3 +4023,66 @@ undeclared until the goal's full seeded E2E passes.
   `services-org-sales-routes` (18) pins the boundary. The full-scale seed
   covers all four tables; hosted-apply scope `branches-org-sales`
   re-proves the posture against production after every apply.
+
+## ADR-195 - Documents, canvassing and the marketing hub
+
+- **Date**: 2026-08-31
+- **Status**: Accepted (task #64, owner /goal: match the feature set of BOSS
+  and PestPac; audit in `AI/PEST_CRM_COMPETITOR_MATRIX.md`)
+- **Decision**: `20260830001500_documents_canvassing_marketing.sql` adds
+  nine tables — `crm_documents`, `crm_canvass_routes` and `crm_knocks`,
+  `crm_marketing_lists` and `crm_list_members`, `crm_campaigns` and
+  `crm_messages`, `crm_automations`, `crm_attributions` — closing the
+  door-to-door and marketing rows of the competitor matrix, and the
+  photos/files row a technician app depends on.
+- **Four invariants live in the schema**:
+  1. **A document is a storage PATH, never a URL, and never bytes.** The
+     CHECK refuses anything containing a scheme, and the bytes never enter
+     the database. Whatever renders a document asks storage for a signed
+     URL — which is where the access check belongs. A public link stored in
+     a column called `storage_path` would be an access-control hole wearing
+     a column name.
+  2. **A knock is append-only.** `crm_knocks` holds select and insert and
+     nothing else: a canvasser's disposition cannot be improved after the
+     door closed. A door that sold names the customer it produced, and a
+     follow-up date belongs only to a door that asked for one.
+  3. **Consent is a record that keeps its moment.** An unsubscribe stores
+     when and why; the message log is append-only; so "we never sent that"
+     is a claim the database can settle rather than a matter of trust.
+  4. **The message funnel only runs one way.** A click implies an open, an
+     open implies delivery, delivery implies a send — CHECKed — so a
+     reported open rate cannot exceed the delivery it came from. A failure
+     reason belongs to a failure and a failure carries one.
+- **Nothing here sends anything, and the product says so.** No email or SMS
+  provider is connected and no executor runs the automation rules. The
+  `sending` and `sent` campaign statuses are deliberately absent from the
+  API's settable set, `run_count` and `last_run_at` are not settable at all
+  (and the schema CHECKs that the two agree), and `/Services/marketing`
+  carries a **Not Connected** notice above every figure. A rule is created
+  switched OFF: arming something that will act on real customers is a
+  deliberate second step.
+- **Two reporting rules carried over from the sales board**: a rate over
+  nothing is null rather than zero, and the uncomfortable denominator is
+  shown — unsubscribes beside subscribers, unproductive doors beside
+  productive ones, first touch beside last touch with neither called "the"
+  answer.
+- **A defect this found, for the second time**: `crm_documents.storage_path`
+  used `~ '...{2,300}$'`. PostgreSQL refuses a regex repetition count above
+  255, and a CHECK's regex only compiles when a row carries a value — so it
+  sat harmless through every null-column test and would have thrown at the
+  first real document, exactly as ADR-192's `{4,500}` did. Shape and length
+  are separate checks now, and **`tests/unit/migration-regex-repetition.test.ts`
+  fails any future migration that reintroduces a count above 255** — the
+  guard that was missing the first time.
+- **Surfaces**: `/Services/canvassing`, `/Services/marketing`, and
+  `/api/services/{documents,canvassing,canvassing/knocks,marketing/lists,marketing/campaigns,marketing/automations,attribution}`.
+- **Verification**: `services-marketing-canvassing.behavior` (9) proves the
+  path-not-URL refusal across three shapes with a real path accepted, the
+  subject-less document refusal, append-only knocks and messages at the
+  grant level, the sold-names-its-account and follow-up rules, consent
+  keeping its moment and a reason refused without one, the one-way funnel,
+  the email-subject and template rules, a rule refused when it claims runs
+  it never had, the anon/service_role shutout with no DELETE and no UPDATE
+  on the three append-only tables, and tenant isolation in both directions.
+  The full-scale seed covers all nine; hosted-apply scope
+  `documents-canvassing-marketing` re-proves the posture after every apply.

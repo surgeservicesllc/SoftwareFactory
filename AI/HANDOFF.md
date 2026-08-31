@@ -1,6 +1,45 @@
 # Handoff
 
-Last updated: 2026-08-30
+Last updated: 2026-08-31
+
+## Newest (2026-08-31, latest+17): documents, canvassing, marketing (ADR-195)
+
+Owner /goal: match BOSS and PestPac. The audit is
+`AI/PEST_CRM_COMPETITOR_MATRIX.md` — ten products, per-capability
+HAVE/PARTIAL/GAP, source-linked. This increment closes the photos/files,
+door-to-door and campaigns rows.
+
+`20260830001500` adds crm_documents, crm_canvass_routes + crm_knocks,
+crm_marketing_lists + crm_list_members, crm_campaigns + crm_messages,
+crm_automations, crm_attributions.
+
+FOUR INVARIANTS IN THE SCHEMA:
+1. A document is a storage PATH — the CHECK refuses anything with a scheme
+   in it, and bytes never enter the database. Render via a signed URL.
+2. crm_knocks holds select+insert only. A sold door must name its account;
+   a follow-up date is confined to callback/appointment_set.
+3. Consent keeps its moment: unsubscribed_at + reason, with the reason
+   refused when there is no unsubscribe. crm_messages is append-only.
+4. The message funnel is one-way by CHECK: clicked→opened→delivered→sent.
+
+READ THIS BEFORE "FINISHING" MARKETING: nothing sends. No provider, no
+executor. `sending`/`sent` are deliberately absent from the campaign API's
+settable set; run_count/last_run_at are not settable at all and the schema
+CHECKs they agree; the page carries Not Connected. Wiring a provider is the
+follow-on item in BACKLOG — do not fake it in the meantime.
+
+THE 255-REPETITION TRAP, SECOND OCCURRENCE: storage_path used `{2,300}`.
+PostgreSQL refuses a repetition count above 255 and a CHECK's regex only
+compiles when a row carries a value, so it survived every null-column test —
+exactly as ADR-192's `{4,500}` did. Fixed by splitting shape (regex) from
+length (char_length), and now guarded by
+`tests/unit/migration-regex-repetition.test.ts`, which strips comments
+first because the two ADR notes have to quote the counts that caused it.
+
+SEED: 35 tables, 38,728 rows, 35/35 PASS. Note one deliberate omission —
+`crm_automations.last_run_at` is NOT in the validator's optional list,
+because nothing runs an automation and seeding a moment would be claiming
+one had fired. An honestly empty column is not a coverage gap.
 
 ## Newest (2026-08-30, latest+16): the company arrives (ADR-194, task #64)
 

@@ -51,6 +51,15 @@ export type SeedCounts = {
   employees: number;
   territories: number;
   commissions: number;
+  documents: number;
+  canvassRoutes: number;
+  knocks: number;
+  marketingLists: number;
+  listMembers: number;
+  campaigns: number;
+  messages: number;
+  automations: number;
+  attributions: number;
   timelineEvents: number;
 };
 
@@ -947,6 +956,254 @@ export async function runSeed(
   const commissions = await insertAll(client, "crm_commissions", commissionRows, "id");
   if ("error" in commissions) return commissions;
 
+  /* ------------------------------- documents, canvassing and marketing (8) */
+
+  // Documents are metadata and a private storage path. No bytes travel here,
+  // and the path is not a URL — the schema refuses one with a scheme in it.
+  const documentRows = dataset.accounts.flatMap((account) => {
+    const accountId = accountIdByName.get(account.name);
+    if (accountId === undefined) return [];
+    const visitOffset = visitOffsets.get(account.name) ?? 0;
+    return (account.documents ?? []).map((document) => ({
+      organization_id: org,
+      account_id: accountId,
+      property_id:
+        document.propertySeat === undefined ? null : propertyFor(account.name, document.propertySeat),
+      work_order_id:
+        document.visitSeat === undefined ? null : visitIds[visitOffset + document.visitSeat] ?? null,
+      title: document.title,
+      kind: document.kind,
+      storage_path: document.storagePath,
+      content_type: document.contentType,
+      byte_size: document.byteSize,
+      notes: document.notes,
+      uploaded_at: daysAgoIso(document.uploadedDaysAgo),
+      created_by: userId,
+    }));
+  });
+  const documents = await insertAll(client, "crm_documents", documentRows, "id");
+  if ("error" in documents) return documents;
+
+  const canvassRouteRows = dataset.canvassRoutes.map((route) => {
+    const walkedAt = daysAgoIso(route.walkedDaysAgo);
+    return {
+      organization_id: org,
+      territory_id: territoryId(route.territoryIndex),
+      rep_id: employeeId(route.repIndex),
+      name: route.name,
+      status: route.status,
+      walked_on: dateInDays(-route.walkedDaysAgo),
+      // A walked route has a start; a complete one has both moments.
+      started_at: route.status === "planned" || route.status === "cancelled" ? null : walkedAt,
+      ended_at: route.status === "complete" ? walkedAt : null,
+      notes: route.notes,
+      created_by: userId,
+    };
+  });
+  const canvassRoutes = await insertAll(client, "crm_canvass_routes", canvassRouteRows, "id");
+  if ("error" in canvassRoutes) return canvassRoutes;
+  const canvassRouteIds = canvassRoutes.data.map((row) => row.id as string);
+
+  const knockRows = dataset.canvassRoutes.flatMap((route, routeIndex) =>
+    route.knocks.map((knock) => ({
+      organization_id: org,
+      canvass_route_id: canvassRouteIds[routeIndex],
+      // Only a sale names the customer it produced; the CHECK requires it.
+      account_id:
+        knock.accountIndex === undefined
+          ? null
+          : accountIdByName.get(dataset.accounts[knock.accountIndex]?.name ?? "") ?? null,
+      address: knock.address,
+      disposition: knock.disposition,
+      knocked_at: daysAgoIso(Math.max(1, route.walkedDaysAgo)),
+      follow_up_on:
+        knock.followUpInDays === undefined ? null : dateInDays(knock.followUpInDays),
+      note: knock.note,
+      created_by: userId,
+    })),
+  ).filter((row) => row.disposition !== "sold" || row.account_id !== null);
+  const knocks = await insertAll(client, "crm_knocks", knockRows, "id");
+  if ("error" in knocks) return knocks;
+
+  // Which door produced which customer, so a door-knock touch can name the
+  // knock it came from rather than gesturing at the channel.
+  const knockIds = knocks.data.map((row) => row.id as string);
+  const soldKnockByAccount = new Map<string, string>();
+  for (const [position, row] of knockRows.entries()) {
+    const accountId = row.account_id;
+    if (typeof accountId !== "string") continue;
+    if (soldKnockByAccount.has(accountId)) continue;
+    const id = knockIds[position];
+    if (id !== undefined) soldKnockByAccount.set(accountId, id);
+  }
+
+  const listRows = dataset.marketingLists.map((list) => ({
+    organization_id: org,
+    name: list.name,
+    description: list.description,
+    is_dynamic: list.isDynamic,
+    criteria: list.criteria ?? null,
+    active: list.active,
+    created_by: userId,
+  }));
+  const lists = await insertAll(client, "crm_marketing_lists", listRows, "id, name");
+  if ("error" in lists) return lists;
+  const listIdByName = new Map(lists.data.map((row) => [row.name as string, row.id as string]));
+  const listId = (index: number | undefined) =>
+    index === undefined ? null : listIdByName.get(dataset.marketingLists[index]?.name ?? "") ?? null;
+
+  // Consent, with the moment it was withdrawn kept rather than the row
+  // removed. One membership per account per list, which the index enforces.
+  const memberRows: SeedRow[] = [];
+  {
+    const seen = new Set<string>();
+    for (const account of dataset.accounts) {
+      const accountId = accountIdByName.get(account.name);
+      if (accountId === undefined) continue;
+      for (const seat of account.listSeats ?? []) {
+        const list = listId(seat.listIndex);
+        if (list === null) continue;
+        const key = `${list}:${accountId}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        memberRows.push({
+          organization_id: org,
+          list_id: list,
+          account_id: accountId,
+          source: seat.source,
+          added_at: daysAgoIso(seat.addedDaysAgo),
+          unsubscribed_at:
+            seat.unsubscribedDaysAgo === undefined ? null : daysAgoIso(seat.unsubscribedDaysAgo),
+          unsubscribe_reason: seat.unsubscribeReason ?? null,
+          created_by: userId,
+        });
+      }
+    }
+  }
+  const listMembers = await insertAll(client, "crm_list_members", memberRows, "id");
+  if ("error" in listMembers) return listMembers;
+
+  const campaignRows = dataset.campaigns.map((campaign) => ({
+    organization_id: org,
+    list_id: listId(campaign.listIndex),
+    name: campaign.name,
+    channel: campaign.channel,
+    status: campaign.status,
+    subject: campaign.subject ?? null,
+    body: campaign.body,
+    budget_cents: campaign.budgetCents,
+    scheduled_at:
+      campaign.scheduledDaysAgo === undefined ? null : daysAgoIso(campaign.scheduledDaysAgo),
+    sent_at: campaign.sentDaysAgo === undefined ? null : daysAgoIso(campaign.sentDaysAgo),
+    created_by: userId,
+  }));
+  const campaigns = await insertAll(client, "crm_campaigns", campaignRows, "id, name");
+  if ("error" in campaigns) return campaigns;
+  const campaignIdByName = new Map(
+    campaigns.data.map((row) => [row.name as string, row.id as string]),
+  );
+
+  /*
+   * The message log. The funnel only runs one way — a click implies an open,
+   * an open implies delivery, delivery implies a send — so each message is
+   * built by walking forward from queued and stopping where its outcome
+   * says it stopped.
+   */
+  const messageRows = dataset.campaigns.flatMap((campaign, campaignIndex) => {
+    const id = campaignIdByName.get(campaign.name);
+    if (id === undefined || campaign.recipientCount === 0) return [];
+    const sentDaysAgo = campaign.sentDaysAgo ?? 30;
+    return Array.from({ length: campaign.recipientCount }, (_, seat) => {
+      const account = dataset.accounts[(seat * campaign.recipientStride + campaignIndex) % dataset.accounts.length];
+      const accountId = accountIdByName.get(account.name);
+      if (accountId === undefined) return null;
+      const outcome = (campaignIndex + seat) % 8;
+      const sentAt = daysAgoIso(sentDaysAgo);
+      const deliveredAt = daysAgoIso(Math.max(1, sentDaysAgo - 1));
+      const openedAt = daysAgoIso(Math.max(1, sentDaysAgo - 2));
+      const clickedAt = daysAgoIso(Math.max(1, sentDaysAgo - 3));
+      const status =
+        outcome === 0 ? "bounced"
+        : outcome === 1 ? "failed"
+        : outcome === 2 ? "unsubscribed"
+        : outcome === 3 ? "sent"
+        : outcome === 4 ? "delivered"
+        : outcome <= 6 ? "opened"
+        : "clicked";
+      const reached = status !== "bounced" && status !== "failed";
+      const delivered = reached && status !== "sent";
+      const opened = status === "opened" || status === "clicked";
+      const clicked = status === "clicked";
+      return {
+        organization_id: org,
+        campaign_id: id,
+        account_id: accountId,
+        channel: campaign.channel,
+        status,
+        destination: campaign.channel === "sms" ? account.phone : account.email,
+        queued_at: daysAgoIso(Math.min(900, sentDaysAgo + 1)),
+        sent_at: reached || status === "bounced" ? sentAt : null,
+        delivered_at: delivered ? deliveredAt : null,
+        opened_at: opened ? openedAt : null,
+        clicked_at: clicked ? clickedAt : null,
+        // A reason belongs to a failure, and only to one.
+        failure_reason:
+          status === "bounced" ? "Mailbox does not exist."
+          : status === "failed" ? "The carrier rejected the message."
+          : null,
+        created_by: userId,
+      };
+    }).filter((row): row is NonNullable<typeof row> => row !== null);
+  });
+  const messages = await insertAll(client, "crm_messages", messageRows, "id");
+  if ("error" in messages) return messages;
+
+  const automationRows = dataset.automations.map((automation) => ({
+    organization_id: org,
+    name: automation.name,
+    trigger_on: automation.triggerOn,
+    action: automation.action,
+    delay_hours: automation.delayHours,
+    template: automation.template ?? null,
+    active: automation.active,
+    // Deliberately zero: no executor runs these, and the schema CHECKs that
+    // a run count and a last-run moment agree. Seeding a count would be
+    // claiming something ran.
+    run_count: 0,
+    last_run_at: null,
+    created_by: userId,
+  }));
+  const automations = await insertAll(client, "crm_automations", automationRows, "id");
+  if ("error" in automations) return automations;
+
+  const attributionRows = dataset.accounts.flatMap((account) => {
+    const accountId = accountIdByName.get(account.name);
+    if (accountId === undefined) return [];
+    return (account.touches ?? []).map((touch) => ({
+      organization_id: org,
+      account_id: accountId,
+      opportunity_id:
+        account.opportunities.length > 0
+          ? opportunityIdByName.get(account.opportunities[0].name) ?? null
+          : null,
+      campaign_id:
+        touch.campaignIndex === undefined
+          ? null
+          : campaignIdByName.get(dataset.campaigns[touch.campaignIndex]?.name ?? "") ?? null,
+      // A canvassing touch names the door it came from, where that door is
+      // one this book actually recorded.
+      knock_id: touch.source === "door knock" ? soldKnockByAccount.get(accountId) ?? null : null,
+      source: touch.source,
+      medium: touch.medium,
+      position: touch.position,
+      touched_at: daysAgoIso(touch.touchedDaysAgo),
+      note: touch.note,
+      created_by: userId,
+    }));
+  });
+  const attributions = await insertAll(client, "crm_attributions", attributionRows, "id");
+  if ("error" in attributions) return attributions;
+
   /* --------------------------------------------------- hand-recorded history */
 
   const eventRows = dataset.accounts.flatMap((account) =>
@@ -998,6 +1255,15 @@ export async function runSeed(
       employees: employees.data.length,
       territories: territories.data.length,
       commissions: commissions.data.length,
+      documents: documents.data.length,
+      canvassRoutes: canvassRoutes.data.length,
+      knocks: knocks.data.length,
+      marketingLists: lists.data.length,
+      listMembers: listMembers.data.length,
+      campaigns: campaigns.data.length,
+      messages: messages.data.length,
+      automations: automations.data.length,
+      attributions: attributions.data.length,
       timelineEvents: timelineTotal.count ?? 0,
     },
   };

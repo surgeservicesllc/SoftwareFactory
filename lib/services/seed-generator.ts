@@ -41,9 +41,17 @@ export const SEED_TARGETS: Record<
     branches: number;
     employees: number;
     territories: number;
+    canvassRoutes: number;
+    marketingLists: number;
+    campaigns: number;
+    automations: number;
   }
 > = {
-  demo: { accounts: 40, technicians: 12, products: 14, jurisdictions: 8, branches: 4, employees: 14, territories: 8 },
+  demo: {
+    accounts: 40, technicians: 12, products: 14, jurisdictions: 8, branches: 4,
+    employees: 14, territories: 8, canvassRoutes: 10, marketingLists: 6,
+    campaigns: 8, automations: 8,
+  },
   full: {
     accounts: 320,
     technicians: 260,
@@ -52,6 +60,10 @@ export const SEED_TARGETS: Record<
     branches: 260,
     employees: 340,
     territories: 300,
+    canvassRoutes: 300,
+    marketingLists: 260,
+    campaigns: 280,
+    automations: 260,
   },
 };
 
@@ -264,6 +276,29 @@ export type SeedAccount = {
   ownerEmployeeIndex?: number;
   /** The owner's own rate, so a commission is earned at the rate they carry. */
   ownerCommissionBps?: number;
+  /** Increment 8: what is filed about this customer, and how they arrived. */
+  documents?: {
+    title: string;
+    kind:
+      | "contract" | "estimate" | "photo" | "inspection_report" | "service_report"
+      | "permit" | "license" | "invoice" | "other";
+    storagePath: string;
+    contentType: string;
+    byteSize: number;
+    notes: string;
+    propertySeat?: number;
+    visitSeat?: number;
+    uploadedDaysAgo: number;
+  }[];
+  listSeats?: { listIndex: number; source: string; addedDaysAgo: number; unsubscribedDaysAgo?: number; unsubscribeReason?: string }[];
+  touches?: {
+    source: string;
+    medium: string;
+    position: "first" | "assist" | "last";
+    touchedDaysAgo: number;
+    campaignIndex?: number;
+    note: string;
+  }[];
 };
 
 export type SeedTechnician = {
@@ -349,6 +384,60 @@ export type SeedJurisdiction = {
   active: boolean;
 };
 
+export type SeedCanvassRoute = {
+  name: string;
+  territoryIndex?: number;
+  repIndex?: number;
+  status: "planned" | "walking" | "complete" | "cancelled";
+  walkedDaysAgo: number;
+  notes: string;
+  knocks: {
+    address: string;
+    disposition:
+      | "no_answer" | "not_home" | "not_interested" | "callback"
+      | "appointment_set" | "sold" | "do_not_knock";
+    minutesIn: number;
+    /** Only a door that sold names the customer it produced. */
+    accountIndex?: number;
+    followUpInDays?: number;
+    note: string;
+  }[];
+};
+
+export type SeedMarketingList = {
+  name: string;
+  description: string;
+  isDynamic: boolean;
+  criteria?: string;
+  active: boolean;
+};
+
+export type SeedCampaign = {
+  name: string;
+  listIndex?: number;
+  channel: "email" | "sms" | "postcard";
+  status: "draft" | "scheduled" | "sending" | "sent" | "cancelled";
+  subject?: string;
+  body: string;
+  budgetCents: number;
+  scheduledDaysAgo?: number;
+  sentDaysAgo?: number;
+  /** Recipients are taken from the book at this stride, deterministically. */
+  recipientStride: number;
+  recipientCount: number;
+};
+
+export type SeedAutomation = {
+  name: string;
+  triggerOn:
+    | "lead_created" | "service_completed" | "invoice_overdue"
+    | "contract_renewing" | "sighting_recorded" | "estimate_sent";
+  action: "send_email" | "send_sms" | "create_task" | "notify_manager" | "schedule_followup";
+  delayHours: number;
+  template?: string;
+  active: boolean;
+};
+
 export type SeedDataset = {
   scale: SeedScale;
   accounts: SeedAccount[];
@@ -358,6 +447,10 @@ export type SeedDataset = {
   branches: SeedBranch[];
   employees: SeedEmployee[];
   territories: SeedTerritory[];
+  canvassRoutes: SeedCanvassRoute[];
+  marketingLists: SeedMarketingList[];
+  campaigns: SeedCampaign[];
+  automations: SeedAutomation[];
 };
 
 /* ---------------------------------------------------------------- generators */
@@ -634,6 +727,84 @@ export function generateSeedDataset(scale: SeedScale, seed = 20260830): SeedData
     technician.hiredDaysAgo = between(random, 45, 3600);
   }
 
+  const marketingLists = Array.from({ length: targets.marketingLists }, (_, index) =>
+    generateMarketingList(random, index),
+  );
+  const campaigns = Array.from({ length: targets.campaigns }, (_, index) =>
+    generateCampaign(random, index, marketingLists.length),
+  );
+  const automations = Array.from({ length: targets.automations }, (_, index) =>
+    generateAutomation(random, index),
+  );
+  const canvassRoutes = Array.from({ length: targets.canvassRoutes }, (_, index) =>
+    generateCanvassRoute(random, index, territories.length, salesReps, accounts.length),
+  );
+
+  /*
+   * The paper each customer carries, the lists they consented to, and how
+   * they arrived. Attached in a second pass because a touch can name a
+   * campaign, and campaigns did not exist when the accounts were built.
+   */
+  for (const account of accounts) {
+    const serviced = account.statusPath.includes("customer");
+    account.documents = Array.from(
+      { length: serviced ? between(random, 1, 4) : between(random, 0, 1) },
+      (_, seat) => {
+        const kind = DOCUMENT_KINDS[(account.index + seat) % DOCUMENT_KINDS.length];
+        return {
+          title: `${DOCUMENT_TITLES[kind]} ${pad(seat + 1, 2)}`,
+          kind,
+          // A private path, never a link — the schema refuses anything with
+          // a scheme in it.
+          storagePath: `services/${pad(account.index, 4)}/${kind}-${pad(seat, 2)}.pdf`,
+          contentType: pick(random, CONTENT_TYPES),
+          byteSize: between(random, 12, 9000) * 1024,
+          notes: `Filed ${pick(random, ["after the site walk", "by the office", "from the technician's phone", "at signature"])}.`,
+          ...(account.properties.length > 0 ? { propertySeat: seat % account.properties.length } : {}),
+          ...(serviced && seat % 2 === 0 ? { visitSeat: seat } : {}),
+          uploadedDaysAgo: between(random, 1, 800),
+        };
+      },
+    );
+
+    account.listSeats =
+      marketingLists.length === 0
+        ? []
+        : Array.from({ length: 1 + (account.index % 2) }, (_, seat) => {
+            const addedDaysAgo = between(random, 30, 900);
+            // Roughly one in nine has withdrawn consent, and the moment it
+            // happened is kept rather than the row being removed.
+            const gone = (account.index + seat) % 9 === 0;
+            return {
+              listIndex: (account.index * 3 + seat) % marketingLists.length,
+              source: pick(random, ["website form", "phone intake", "door knock", "referral", "import"]),
+              addedDaysAgo,
+              ...(gone
+                ? {
+                    unsubscribedDaysAgo: Math.max(1, addedDaysAgo - between(random, 10, 400)),
+                    unsubscribeReason: pick(random, [
+                      "Asked to be removed by phone.",
+                      "Clicked unsubscribe.",
+                      "No longer a customer.",
+                      "Too many messages.",
+                    ]),
+                  }
+                : {}),
+            };
+          });
+
+    account.touches = Array.from({ length: between(random, 1, 3) }, (_, seat) => ({
+      source: pick(random, ["google", "referral", "door knock", "yard sign", "facebook", "repeat customer"]),
+      medium: pick(random, ["organic", "paid", "canvassing", "word of mouth", "email"]),
+      position: (seat === 0 ? "first" : seat === 1 ? "assist" : "last") as "first" | "assist" | "last",
+      touchedDaysAgo: between(random, 5, 1100),
+      ...(campaigns.length > 0 && (account.index + seat) % 4 === 0
+        ? { campaignIndex: (account.index + seat) % campaigns.length }
+        : {}),
+      note: `${pick(random, ["First contact", "Nurtured through the season", "Closed on this touch", "Re-engaged after a lapse"])}.`,
+    }));
+  }
+
   return {
     scale,
     accounts,
@@ -643,6 +814,10 @@ export function generateSeedDataset(scale: SeedScale, seed = 20260830): SeedData
     branches,
     employees,
     territories,
+    canvassRoutes,
+    marketingLists,
+    campaigns,
+    automations,
   };
 }
 
@@ -1392,5 +1567,175 @@ function generateTerritory(
     postalCodes: Array.from({ length: span }, (_, step) => pad(base + step * 3, 5)),
     active: index % 14 !== 0,
     notes: `${pick(random, ["Dense residential", "Mixed commercial and residential", "Rural route, long drives", "Downtown core"])}.`,
+  };
+}
+
+/* --------------------------------- documents, canvassing and marketing (8) */
+
+const DOCUMENT_KINDS = [
+  "contract", "estimate", "photo", "inspection_report", "service_report",
+  "permit", "license", "invoice", "other",
+] as const;
+const DOCUMENT_TITLES: Record<(typeof DOCUMENT_KINDS)[number], string> = {
+  contract: "Signed annual agreement",
+  estimate: "Quoted proposal",
+  photo: "Site photo — dock doors",
+  inspection_report: "Quarterly IPM inspection",
+  service_report: "Service visit summary",
+  permit: "Municipal treatment permit",
+  license: "Applicator licence on file",
+  invoice: "Invoice copy",
+  other: "Correspondence",
+};
+const CONTENT_TYPES = ["application/pdf", "image/jpeg", "image/png", "text/csv"] as const;
+
+/** The disposition vocabulary, as a type — the values are chosen by roll below. */
+type KnockDisposition = SeedCanvassRoute["knocks"][number]["disposition"];
+const KNOCK_NOTES = [
+  "Left a door hanger", "Spoke with the homeowner", "Dog in the yard, came back later",
+  "Neighbour said they use someone already", "Asked us to call after six",
+  "Wants a quote for the crawl space", "Renting — landlord decides",
+] as const;
+
+const LIST_THEMES = [
+  "Quarterly renewals", "Lapsed customers", "Commercial kitchens", "New movers",
+  "Termite warranty holders", "Rodent season reminder", "Mosquito program",
+  "Bed bug follow-up", "Annual inspection due", "Referral advocates",
+] as const;
+const CAMPAIGN_THEMES = [
+  "Spring rodent sweep", "Summer mosquito program", "Termite inspection reminder",
+  "Winter exclusion offer", "Quarterly service renewal", "Referral thank-you",
+  "Commercial audit season", "Bed bug awareness",
+] as const;
+const AUTOMATION_TRIGGERS = [
+  "lead_created", "service_completed", "invoice_overdue",
+  "contract_renewing", "sighting_recorded", "estimate_sent",
+] as const;
+const AUTOMATION_ACTIONS = [
+  "send_email", "send_sms", "create_task", "notify_manager", "schedule_followup",
+] as const;
+
+/**
+ * A day of doors. Roughly a third of a route's knocks land on somebody, and
+ * only a handful sell — which is what a canvassing report should look like.
+ * A door that sold names the customer it produced, because the schema will
+ * not hold one that does not.
+ */
+function generateCanvassRoute(
+  random: Random,
+  index: number,
+  territoryCount: number,
+  salesRepIndices: number[],
+  accountCount: number,
+): SeedCanvassRoute {
+  const [city, region] = CITIES[index % CITIES.length];
+  const status = (
+    index % 11 === 0 ? "cancelled"
+    : index % 7 === 0 ? "planned"
+    : index % 5 === 0 ? "walking"
+    : "complete"
+  ) as SeedCanvassRoute["status"];
+  const knockCount = status === "planned" || status === "cancelled" ? 0 : between(random, 8, 26);
+  let cursor = 0;
+  return {
+    name: `${city} ${region} door route ${pad(index, 4)}`,
+    ...(territoryCount > 0 ? { territoryIndex: index % territoryCount } : {}),
+    ...(salesRepIndices.length > 0
+      ? { repIndex: salesRepIndices[index % salesRepIndices.length] }
+      : {}),
+    status,
+    walkedDaysAgo: between(random, 1, 900),
+    notes: `${pick(random, ["Two blocks either side of the arterial", "Apartment complex, front desk first", "New build subdivision", "Older housing stock, heavy rodent pressure"])}.`,
+    knocks: Array.from({ length: knockCount }, (_, seat) => {
+      cursor += between(random, 3, 14);
+      const roll = (index + seat) % 12;
+      const disposition = (
+        roll === 0 ? "sold"
+        : roll === 1 ? "appointment_set"
+        : roll === 2 ? "callback"
+        : roll === 3 ? "do_not_knock"
+        : roll <= 6 ? "not_interested"
+        : roll <= 9 ? "no_answer"
+        : "not_home"
+      ) as KnockDisposition;
+      return {
+        address: `${between(random, 100, 9800)} ${pick(random, STREETS)}, ${city}, ${region}`,
+        disposition,
+        minutesIn: cursor,
+        // Only a sale names an account, exactly as the CHECK requires.
+        ...(disposition === "sold" && accountCount > 0
+          ? { accountIndex: (index * 7 + seat) % accountCount }
+          : {}),
+        ...(disposition === "callback" || disposition === "appointment_set"
+          ? { followUpInDays: between(random, 1, 21) }
+          : {}),
+        note: `${pick(random, KNOCK_NOTES)}.`,
+      };
+    }),
+  };
+}
+
+function generateMarketingList(random: Random, index: number): SeedMarketingList {
+  const theme = LIST_THEMES[index % LIST_THEMES.length];
+  const dynamic = index % 3 === 0;
+  return {
+    name: `${theme} ${pad(index, 4)}`,
+    description: `${pick(random, ["Built for the seasonal push", "Maintained by the office", "Kept for the renewal cycle", "Used by the commercial team"])}.`,
+    isDynamic: dynamic,
+    // A dynamic list says what it selects; a static one carries nothing.
+    ...(dynamic
+      ? { criteria: pick(random, [
+          "status = customer and last service older than 180 days",
+          "kind = commercial and territory in the north branch",
+          "contract ends within 60 days",
+          "sighting recorded in the last 90 days",
+        ]) }
+      : {}),
+    active: index % 13 !== 0,
+  };
+}
+
+function generateCampaign(random: Random, index: number, listCount: number): SeedCampaign {
+  const theme = CAMPAIGN_THEMES[index % CAMPAIGN_THEMES.length];
+  const channel = (["email", "email", "sms", "postcard"] as const)[index % 4];
+  const roll = index % 7;
+  const status = (
+    roll === 0 ? "draft"
+    : roll === 1 ? "scheduled"
+    : roll === 2 ? "cancelled"
+    : roll === 3 ? "sending"
+    : "sent"
+  ) as SeedCampaign["status"];
+  const sentDaysAgo = between(random, 5, 800);
+  return {
+    name: `${theme} ${pad(index, 4)}`,
+    ...(listCount > 0 ? { listIndex: index % listCount } : {}),
+    channel,
+    status,
+    // The schema refuses an email campaign with no subject.
+    ...(channel === "email" ? { subject: `${theme} — book your visit` } : {}),
+    body: `${theme}. ${pick(random, ["Reply STOP to opt out.", "Call the branch to book.", "Reply to schedule a free inspection.", "Your technician can add this on the next visit."])}`,
+    budgetCents: between(random, 5, 400) * 10_000,
+    ...(status === "scheduled" ? { scheduledDaysAgo: -between(random, 1, 45) } : {}),
+    ...(status === "sent" || status === "sending" ? { sentDaysAgo } : {}),
+    recipientStride: 3 + (index % 9),
+    recipientCount: status === "draft" || status === "cancelled" ? 0 : between(random, 10, 60),
+  };
+}
+
+function generateAutomation(random: Random, index: number): SeedAutomation {
+  const action = AUTOMATION_ACTIONS[index % AUTOMATION_ACTIONS.length];
+  const sending = action === "send_email" || action === "send_sms";
+  return {
+    name: `${pick(random, ["Follow up on", "Remind about", "Escalate", "Chase", "Thank after"])} ${AUTOMATION_TRIGGERS[index % AUTOMATION_TRIGGERS.length].replace(/_/g, " ")} ${pad(index, 4)}`,
+    triggerOn: AUTOMATION_TRIGGERS[index % AUTOMATION_TRIGGERS.length],
+    action,
+    delayHours: [0, 1, 4, 24, 48, 72, 168][index % 7],
+    // A rule that sends something carries the text it would send.
+    ...(sending
+      ? { template: `${pick(random, ["Hi {{first_name}}, ", "Hello from the branch — ", "Quick note: "])}${pick(random, ["your next service is due.", "we noticed activity at your site.", "your agreement renews soon.", "thanks for having us out."])}` }
+      : {}),
+    // Armed rules are the minority, and nothing executes them yet in any case.
+    active: index % 4 === 0,
   };
 }
