@@ -111,7 +111,7 @@ built.
 | IPM devices, thresholds, scan ledger | Briostack, PestPac | **HAVE** (ADR-191) |
 | Pest sightings with corrective actions | PestPac | **HAVE** (ADR-191) |
 | Digital form builder: inspections, service reports, compliance checklists — assignable, signed, instantly on the desktop | PestPac, PestBoss | **HAVE** (ADR-197) |
-| **Service report delivered as a document**: filed, printed, or sent as a PDF from the field | PestBoss, PestPac | **GAP** — the content exists as form instances, applications and inspections, and the portal shows it. Rendering it as a document needs object storage, which is not configured; the commercial portal already says **Not Connected** about downloading a signed inspection copy for the same reason. |
+| **Service report delivered as a document**: filed, printed, or sent from the field | PestBoss, PestPac | **PARTIAL** (ADR-216) — filing works and printing works. A filed copy freezes what the report said on the day, is append-only for everybody, and is corrected by filing another that names it. This was recorded as blocked on object storage; that was wrong — `20260820000300` had already solved the same problem for the Job Seeker by putting the bytes in a column under ordinary RLS. What is left is SENDING it, which is the email/SMS row every other outbound message waits on. |
 | **WDO / termite graphs and diagrams** | PestPac, ServSuite | **HAVE** (ADR-205) — NPMA-33-shaped reports with a not-null verdict, obstructions and inaccessible areas as first-class columns, and a 0..1 coordinate diagram with click-to-place marks. An issue-time check refuses a report that contradicts its own findings in either direction. Uploading a floor plan is **Not Connected** — no object storage — so the built-in structure outline ships. |
 
 ### E. Chemicals and compliance
@@ -239,7 +239,7 @@ implied, in the deepest-measured competitor on the board.
 | **Website builder** | PestPac (Website Builder) | **GAP** — PestPac sells one. This is outside what a CRM core is, and it is listed rather than quietly dropped so the count stays honest. |
 
 **A note on what "parity" can mean here.** 67 capability rows: **49 HAVE,
-5 PARTIAL, 13 GAP.**
+6 PARTIAL, 12 GAP.**
 
 (58 until PestBoss was measured in its own right, then 60, then 67 once
 PestPac's own feature index was checked against the board rather than
@@ -248,11 +248,20 @@ auditing your own audit looks like, and the count moving away from parity
 is the honest outcome rather than a setback.)
 
 The composition matters more than the count. **Every one of the eighteen
-remaining rows is gated on something outside the code.** Not most, not
-roughly half: all.
+remaining rows is gated on something outside the code** — but that sentence
+has now been wrong three times today, so read it as a claim rather than a
+fact.
 
-Multi-unit properties was the nineteenth and the only one code alone could
-close. It is closed (ADR-215).
+Each time it was wrong the same way: a blocker was real but the conclusion
+drawn from it was too wide. "No object storage" was true; "therefore no
+documents" was false, because a column under RLS had already solved it
+(ADR-216). Multi-unit was called a GAP when it was a schema level nobody
+had written (ADR-215). The printable label was missing only because a
+competitor had been mis-identified (ADR-214).
+
+What is left now: ten rows need an external account, one needs an owner
+authorization Phase 1 withholds from automation, and the rest are the
+sending half of things whose substance already ships.
 
 Ten need an external account somebody has to open and pay for — SMS/email
 reminders, route optimization by drive time, GPS telemetry, in-field card

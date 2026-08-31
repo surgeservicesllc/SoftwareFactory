@@ -80,6 +80,7 @@ export type SeedCounts = {
   stockMovements: number;
   fieldSubmissions: number;
   propertyUnits: number;
+  serviceDocuments: number;
 };
 
 export type SeedRunOutcome = { error: SeedError } | { seeded: SeedCounts };
@@ -2071,6 +2072,84 @@ export async function runSeed(
   const propertyUnits = await insertAll(client, "crm_property_units", unitRows, "id, property_id");
   if ("error" in propertyUnits) return propertyUnits;
 
+  /*
+   * A filed copy of a completed visit's report (ADR-216). The bytes are what
+   * the report said on the day, which is what an auditor asks for.
+   */
+  const filedDocumentRows: SeedRow[] = visits.data.flatMap((visit, index) => {
+    // One filed report per completed visit, which is what a service report is.
+    if (!visitSources[index]?.statusPath.includes("completed")) return [];
+    const order = visitRows[index];
+    if (order === undefined) return [];
+    const day = String(order.scheduled_start).slice(0, 10);
+    const body = `<h1>Service report</h1><p>${order.service_type} on ${day}.</p>`
+      + `<p>Findings and materials as recorded against this visit.</p>`;
+    return [{
+      organization_id: org,
+      account_id: order.account_id as string,
+      property_id: order.property_id as string,
+      work_order_id: visit.id as string,
+      kind: index % 11 === 0 ? "logbook_extract" : "service_report",
+      title: `${order.service_type} — ${day}`,
+      content_type: index % 13 === 0 ? "text/plain" : "text/html",
+      byte_size: Buffer.byteLength(body, "utf8"),
+      body,
+      filed_by: userId,
+    }];
+  });
+  const serviceDocuments = await insertAll(
+    client, "crm_service_documents", filedDocumentRows, "id",
+  );
+  if ("error" in serviceDocuments) return serviceDocuments;
+
+  /*
+   * Some reports are corrected after filing. A correction is another filing
+   * that names the one it replaces; the original stays, because a customer
+   * may already hold it.
+   */
+  const documentCorrectionRows: SeedRow[] = serviceDocuments.data.flatMap((document, index) => {
+    if (index % 8 !== 0) return [];
+    const original = filedDocumentRows[index];
+    if (original === undefined) return [];
+    const corrected = `${original.body as string}<p>Corrected: material quantity restated.</p>`;
+    return [{
+      ...original,
+      title: `${original.title as string} (corrected)`,
+      byte_size: Buffer.byteLength(corrected, "utf8"),
+      body: corrected,
+      supersedes_id: document.id as string,
+    }];
+  });
+  const documentCorrections = await insertAll(
+    client, "crm_service_documents", documentCorrectionRows, "id",
+  );
+  if ("error" in documentCorrections) return documentCorrections;
+
+  // An issued inspection is filed the same way, which is the copy a buyer's
+  // lender asks for months later.
+  const inspectionDocumentRows: SeedRow[] = wdoOriginals.data.flatMap((inspection, index) => {
+    const source = wdoFirstPass[index];
+    if (source === undefined) return [];
+    const body = `<h1>Inspection report ${inspection.report_number as string}</h1>`
+      + `<p>Findings as issued. This copy is what the report said on the day.</p>`;
+    return [{
+      organization_id: org,
+      account_id: source.account_id as string,
+      property_id: source.property_id as string,
+      inspection_id: inspection.id as string,
+      kind: "inspection_report",
+      title: `Inspection ${inspection.report_number as string}`,
+      content_type: "text/html",
+      byte_size: Buffer.byteLength(body, "utf8"),
+      body,
+      filed_by: userId,
+    }];
+  });
+  const inspectionDocuments = await insertAll(
+    client, "crm_service_documents", inspectionDocumentRows, "id",
+  );
+  if ("error" in inspectionDocuments) return inspectionDocuments;
+
   const timelineTotal = await client
     .from("crm_timeline_events")
     .select("id", { count: "exact", head: true })
@@ -2134,6 +2213,8 @@ export async function runSeed(
       stockMovements: stockMovements.data.length,
       fieldSubmissions: fieldSubmissions.data.length,
       propertyUnits: propertyUnits.data.length,
+      serviceDocuments: serviceDocuments.data.length + documentCorrections.data.length
+        + inspectionDocuments.data.length,
     },
   };
 }

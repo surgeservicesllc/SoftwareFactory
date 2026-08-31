@@ -5361,3 +5361,50 @@ from. `order by` is positional because `last_serviced_at` names an OUT
 parameter, the same trap as ADR-203.
 
 Hosted apply scope `multi-unit-properties`.
+
+## ADR-216 - The blocker was never storage; it was that nobody looked
+
+The competitor board carried "service report delivered as a document" as a
+GAP blocked on object storage, and I repeated that in three separate places
+today as a reason no more rows could be closed by code.
+
+It was wrong, and this repository already said so. `20260820000300` hit
+exactly this wall for the Job Seeker: hosted Supabase's `storage.objects` is
+owned by `supabase_storage_admin`, so this repository's psql apply path
+cannot create policies on it, and the web tier deliberately holds no
+service-role key that could bypass them. Rather than smuggle a privileged
+key into the browser-facing server or ship a bucket nobody can write to,
+that increment put the bytes in a column under ordinary RLS.
+
+The pattern was there the whole time. I had taken "no object storage is
+configured" — true — and drawn "therefore documents are impossible" — false.
+
+**What a filed document is for.** An auditor asks what the report SAID on
+the day, not what the database would render from today's rows. A report
+assembled live is a different document every time somebody corrects a note.
+This freezes it.
+
+**Which is why it is append-only**: `select, insert` and nothing else, for
+anybody. A filed copy that can be edited is not evidence, and a correction
+is another filing naming the one it replaces — the same shape as the
+compliance log. The original stays, because a customer may already hold it.
+
+**TEXT, not bytea, and that mattered.** The content types this column
+accepts are both text, so bytea bought nothing — and it cost a real
+incompatibility discovered in the seed: PostgREST wants a `\x` hex string
+for a bytea while the local PGlite harness wants bytes, so the seed path and
+the product path would have disagreed about the same column.
+`job_seeker_uploads` is bytea because it holds PDFs and DOCX; this holds
+HTML it can print.
+
+**The content type cannot lie.** `application/pdf` is refused, because this
+product has no PDF writer and a column claiming otherwise would be a
+falsehood the schema enforces.
+
+**What it still does not do is send.** Email and SMS remain the gated row
+they always were; printing already works from the browser (ADR-214). So the
+row moves from GAP to PARTIAL rather than to HAVE, and its reason changes
+from "needs object storage" to "needs a sender" — which is the truthful
+version of a blocker I had overstated.
+
+Hosted apply scope `service-documents`.

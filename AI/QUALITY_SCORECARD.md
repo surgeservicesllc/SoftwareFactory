@@ -2,6 +2,24 @@
 
 Last reviewed: 2026-08-31
 
+**Addendum, 2026-08-31 latest+36 - filed service documents (ADR-216):**
+services-documents.behavior 9 on the real chain: bytes kept exactly as
+filed; the copy unable to be updated or deleted by anybody, which is the
+whole value; a correction filed as another document naming the one it
+replaces, with the original still readable and marked superseded; a
+document about nothing refused; a size that disagrees with the body refused
+so a truncated file cannot claim to be whole; a content type this product
+cannot produce refused; the index carrying sizes rather than bodies so
+listing does not move megabytes; one book's filings invisible to another;
+the reader still an invoker. The row was recorded as blocked on object
+storage and that was wrong — job_seeker_uploads had solved the same problem
+already. bytea became TEXT after the seed exposed a real incompatibility:
+PostgREST wants a hex string for a bytea and the PGlite harness wants
+bytes, so the two paths would have disagreed about one column. RLS census
+208 -> 209; grants 53 -> 54 crm tables; runbook 213; seed report 52/52 ->
+53/53 and 51,281 -> 51,800 rows, with 519 filed documents including
+corrections and inspection copies. Matrix: 13 GAP -> 12, 5 PARTIAL -> 6.
+
 **Addendum, 2026-08-31 latest+35 - multi-unit properties (ADR-215):**
 services-multi-unit.behavior 9 on the real chain, most of them about the
 wrong door rather than the right one: a visit refused when it names a unit

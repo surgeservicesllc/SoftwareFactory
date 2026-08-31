@@ -440,7 +440,14 @@ property, with visits, stations, sightings and plans referencing
 door in another building, and a coverage reader that names the doors a
 sweep missed rather than counting the ones it reached.
 
-No buildable row is left. Of the remaining eighteen, ten are gated on an
+A service report can now be FILED as a document (ADR-216): the bytes frozen
+as issued, append-only for everybody, corrected by filing another that names
+it. That row had been recorded as blocked on object storage, which was
+wrong — `20260820000300` had already solved the same problem for the Job
+Seeker by putting the bytes in a column under ordinary RLS. Sending it is
+still the email/SMS row.
+
+Of the remaining eighteen rows, ten are gated on an
 external account nobody has opened: card/ACH processing, SMS/email
 delivery, GPS telemetry, QuickBooks sync, telephony, reviews and
 drive-time routing. Those ship labelled **Not Connected** and are never

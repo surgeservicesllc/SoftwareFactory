@@ -365,9 +365,16 @@ the full seeded E2E journey passes — increment 10 of the plan.
   marketing fulfilment, customer surveys (the form model exists; sending is
   the email/SMS row), and a website builder, which is outside a CRM core and
   is listed rather than quietly dropped.
-- [ ] Deliver a service report as a document (PestBoss, PestPac parity).
-  Blocked on object storage being configured, the same thing that makes the
-  commercial portal say Not Connected about downloading a signed inspection.
+- [x] File a service report as a document (PestBoss, PestPac parity,
+  ADR-216): frozen bytes, append-only, corrected by superseding.
+  20260831000600; hosted apply: scope=service-documents after merge. This
+  was recorded as blocked on object storage, which was wrong — a column
+  under RLS had already solved it for the Job Seeker.
+- [ ] Send a filed document to a customer. The email/SMS provider row, same
+  as every other outbound message.
+- [ ] Offer the filed copy for download in the customer portal, replacing
+  the two Not Connected notices that cite object storage — those sentences
+  are now out of date and should be corrected when that path is wired.
 - [ ] BLOCKED ON OWNER AUTHORIZATION, not on code: running recurring
   invoicing on a schedule. A timer that raises invoices against real
   customers is a billing action executed autonomously, which

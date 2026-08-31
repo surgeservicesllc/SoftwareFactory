@@ -117,6 +117,7 @@ const publicTables = [
   "crm_properties",
   "crm_property_units",
   "crm_refunds",
+  "crm_service_documents",
   "crm_service_integrations",
   "crm_service_plans",
   "crm_stock_movements",

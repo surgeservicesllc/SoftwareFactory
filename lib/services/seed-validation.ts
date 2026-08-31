@@ -495,6 +495,12 @@ const SPECS: Spec[] = [
     optional: ["unit_type", "occupant_name", "access_notes"],
     parents: [{ column: "property_id", table: "crm_properties" }],
   },
+  {
+    table: "crm_service_documents",
+    optional: ["work_order_id", "inspection_id", "property_id", "supersedes_id"],
+    enumColumn: "kind",
+    parents: [{ column: "account_id", table: "crm_accounts" }],
+  },
 ];
 
 /**
