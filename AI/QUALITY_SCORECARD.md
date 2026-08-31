@@ -2,6 +2,17 @@
 
 Last reviewed: 2026-08-31
 
+**Addendum, 2026-08-31 latest+45 - the close-out tail:**
+budget-transactions-editing 5 (PATCH never carries the stated balance;
+delete asks first; breaks rendered with stated vs computed; transfer
+Link here offered only to the exact counterpart; Unlink sends the group
+id); budget-categories-panel 3 with the month-plan card in frame;
+services-wdo-print 3 and services-invoice-print 2 (banners, the
+browser-rendering statement, absence-as-claim); services-canvassing-panel
+4 (route POST, follow-up date only where the schema allows, knock POST,
+unassigned rows kept). Node-version row closed with the full gate set
+green on v22.22.2. Every remaining open backlog row names its unparker.
+
 **Addendum, 2026-08-31 latest+44 - copilot + acceptance journey (ADR-224):**
 services-copilot unit 6 (each skill recognized from its own example; the
 refusal names every example and never guesses; composed sentences carry
