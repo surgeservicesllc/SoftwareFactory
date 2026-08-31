@@ -12,6 +12,7 @@ on:
           - probe
           - typed-input
           - grok-persistence
+          - planning-failure
           - verify
       confirm:
         description: "Type apply for a mutation scope; probe and verify are read-only."
@@ -43,6 +44,8 @@ jobs:
       MIGRATION_00900_SHA256: 08f4c618954d4fe65384f396a881f6546591a413c6fd3facacaaaa9ce8d984f5
       MIGRATION_01000: supabase/migrations/20260830001000_grok_chief_of_staff_persistence.sql
       MIGRATION_01000_SHA256: cf17ece506e30beb08163c8bc5888b6b18341bb4e66f61bafaabd6912f225aa6
+      MIGRATION_01100: supabase/migrations/20260830001100_grok_planning_failure.sql
+      MIGRATION_01100_SHA256: 22c035897cb51c611aa373c83e637dc4e033352d9079059521eda7fefa35e8f7
       PRODUCTION_HEALTH_URL: https://www.theagoras.com/api/health
       VERCEL_PROJECT_ID: prj_pAsrhftaVWI4SyaqstgRVSWHJkdD
     steps:
@@ -54,7 +57,7 @@ jobs:
         run: |
           case "$SCOPE" in
             probe|verify) exit 0 ;;
-            typed-input|grok-persistence) ;;
+            typed-input|grok-persistence|planning-failure) ;;
             *) echo "::error::Unknown Grok release scope."; exit 1 ;;
           esac
           if [ "$CONFIRM" != "apply" ]; then
@@ -215,7 +218,7 @@ jobs:
           echo "::error::Could not connect to exact Supabase project ${PROJECT_REF}."
           exit 1
 
-      - name: Verify the two exact forward files
+      - name: Verify the three exact forward files
         run: |
           verify_file() {
             FILE=$1
@@ -229,6 +232,7 @@ jobs:
           }
           verify_file "$MIGRATION_00900" "$MIGRATION_00900_SHA256"
           verify_file "$MIGRATION_01000" "$MIGRATION_01000_SHA256"
+          verify_file "$MIGRATION_01100" "$MIGRATION_01100_SHA256"
 
       - name: Verify prerequisite ledger catalog and stopped database state
         env:
@@ -238,16 +242,18 @@ jobs:
             select
               (select count(*) from supabase_migrations.schema_migrations where version='20260828000300')||'|'||
               (select count(*) from supabase_migrations.schema_migrations where version='20260830000900')||'|'||
-              (select count(*) from supabase_migrations.schema_migrations where version='20260830001000');")
+              (select count(*) from supabase_migrations.schema_migrations where version='20260830001000')||'|'||
+              (select count(*) from supabase_migrations.schema_migrations where version='20260830001100');")
           case "$SCOPE:$LEDGER" in
-            probe:1\|0\|0|probe:1\|1\|0|probe:1\|1\|1) ;;
-            typed-input:1\|0\|0) ;;
-            grok-persistence:1\|1\|0) ;;
-            verify:1\|1\|1) ;;
+            probe:1\|0\|0\|0|probe:1\|1\|0\|0|probe:1\|1\|1\|0|probe:1\|1\|1\|1) ;;
+            typed-input:1\|0\|0\|0) ;;
+            grok-persistence:1\|1\|0\|0) ;;
+            planning-failure:1\|1\|1\|0) ;;
+            verify:1\|1\|1\|1) ;;
             *) echo "::error::Prerequisite ledger is not the exact ordered state for scope=${SCOPE} (${LEDGER})."; exit 1 ;;
           esac
 
-          if [ "$LEDGER" = "1|0|0" ]; then
+          if [ "$LEDGER" = "1|0|0|0" ]; then
             EXPECTED_TYPED="
               ('public.create_graph_from_plan_with_release_identity_as_server(uuid,uuid,uuid,text,public.graph_topology,jsonb,public.risk_level,boolean,jsonb,jsonb,jsonb,text,integer,uuid,text,text,jsonb)','878b6df53f450d723a4ef7da9dd677b2',true,false),
               ('public.complete_graph_run_with_validated_release_as_worker(text,uuid,public.graph_run_state,boolean,bigint,bigint,text,text)','8c127b52d5961d49cba980e276edf414',true,false)"
@@ -317,13 +323,45 @@ jobs:
                'grok_sessions','grok_messages','grok_task_links','grok_graph_launches',
                'grok_events','grok_artifact_links','grok_control_intents');")
           case "$SCOPE:$LEDGER:$GROK_TABLES" in
-            probe:1\|0\|0:0|probe:1\|1\|0:0|probe:1\|1\|1:7|typed-input:1\|0\|0:0|grok-persistence:1\|1\|0:0|verify:1\|1\|1:7) ;;
+            probe:1\|0\|0\|0:0|probe:1\|1\|0\|0:0|probe:1\|1\|1\|0:7|probe:1\|1\|1\|1:7|typed-input:1\|0\|0\|0:0|grok-persistence:1\|1\|0\|0:0|planning-failure:1\|1\|1\|0:7|verify:1\|1\|1\|1:7) ;;
             *) echo "::error::Grok ledger and catalog identity disagree (${SCOPE}:${LEDGER}:${GROK_TABLES})."; exit 1 ;;
           esac
+
+          if [ "$LEDGER" = "1|1|1|0" ]; then
+            PLANNING_FAILURE_CATALOG=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+              select
+                to_regprocedure('public.record_grok_planning_failure_as_server(uuid,uuid,uuid,text,text,bigint)') is null
+                and coalesce((select strpos(pg_get_constraintdef(constraint_row.oid),'''blocked''')=0
+                  from pg_constraint constraint_row
+                 where constraint_row.conrelid='public.grok_sessions'::regclass
+                   and constraint_row.conname='grok_sessions_status_check'),false)
+                and coalesce((select strpos(pg_get_constraintdef(constraint_row.oid),'''blocked''')=0
+                  from pg_constraint constraint_row
+                 where constraint_row.conrelid='public.grok_sessions'::regclass
+                   and constraint_row.conname='grok_sessions_closed_state'),false);")
+          elif [ "$LEDGER" = "1|1|1|1" ]; then
+            PLANNING_FAILURE_CATALOG=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+              select
+                to_regprocedure('public.record_grok_planning_failure_as_server(uuid,uuid,uuid,text,text,bigint)') is not null
+                and coalesce((select strpos(pg_get_constraintdef(constraint_row.oid),'''blocked''')>0
+                  from pg_constraint constraint_row
+                 where constraint_row.conrelid='public.grok_sessions'::regclass
+                   and constraint_row.conname='grok_sessions_status_check'),false)
+                and coalesce((select strpos(pg_get_constraintdef(constraint_row.oid),'''blocked''')>0
+                  from pg_constraint constraint_row
+                 where constraint_row.conrelid='public.grok_sessions'::regclass
+                   and constraint_row.conname='grok_sessions_closed_state'),false);")
+          else
+            PLANNING_FAILURE_CATALOG=t
+          fi
+          if [ "$PLANNING_FAILURE_CATALOG" != "t" ]; then
+            echo "::error::Planning-failure ledger and prerequisite catalog identity disagree."
+            exit 1
+          fi
           echo "::notice::Ledger=${LEDGER}; catalog and stopped containment are exact."
 
       - name: Apply exactly one ordered forward migration
-        if: ${{ inputs.scope == 'typed-input' || inputs.scope == 'grok-persistence' }}
+        if: ${{ inputs.scope == 'typed-input' || inputs.scope == 'grok-persistence' || inputs.scope == 'planning-failure' }}
         env:
           SCOPE: ${{ inputs.scope }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -348,6 +386,7 @@ jobs:
               VERSION=20260830000900
               E900=0
               E1000=0
+              E1100=0
               CATALOG_GUARD="do \$guard\$ begin
                 if not exists (
                   select 1 from pg_proc routine
@@ -387,6 +426,7 @@ jobs:
               VERSION=20260830001000
               E900=1
               E1000=0
+              E1100=0
               CATALOG_GUARD="do \$guard\$ begin
                 if exists (select 1 from pg_class relation join pg_namespace space on space.oid=relation.relnamespace where space.nspname='public' and relation.relname like 'grok_%')
                   or exists (select 1 from pg_proc routine join pg_namespace space on space.oid=routine.pronamespace where space.nspname='public' and routine.proname like '%grok%')
@@ -395,6 +435,46 @@ jobs:
                   or to_regclass('public.phase1c_run_artifacts') is null
                   or to_regclass('public.graph_artifacts') is null
                 then raise exception 'Grok persistence prerequisite graph catalog is missing'; end if;
+              end \$guard\$;"
+              ;;
+            planning-failure)
+              FILE=$MIGRATION_01100
+              EXPECTED=$MIGRATION_01100_SHA256
+              VERSION=20260830001100
+              E900=1
+              E1000=1
+              E1100=0
+              CATALOG_GUARD="do \$guard\$ begin
+                if to_regprocedure('public.record_grok_planning_failure_as_server(uuid,uuid,uuid,text,text,bigint)') is not null
+                then raise exception 'planning-failure RPC catalog is not pristine'; end if;
+                if not exists (
+                  select 1 from pg_proc routine
+                   where routine.oid=to_regprocedure('public.enforce_grok_session_update()')
+                     and pg_get_userbyid(routine.proowner)='postgres' and routine.prosecdef
+                     and routine.proconfig=array['search_path=pg_catalog']::text[]
+                     and md5(replace(replace(routine.prosrc,E'\\r\\n',E'\\n'),E'\\r',E'\\n'))='1e56d993c74f0981f6366a223fb88322'
+                     and routine.proacl is not null and (select count(*) from aclexplode(routine.proacl))=1
+                     and not has_function_privilege('service_role',routine.oid,'EXECUTE')
+                     and not has_function_privilege('authenticated',routine.oid,'EXECUTE')
+                     and not has_function_privilege('anon',routine.oid,'EXECUTE')
+                ) or not exists (
+                  select 1 from pg_proc routine
+                   where routine.oid=to_regprocedure('public.set_grok_session_status_as_server(uuid,uuid,text,bigint)')
+                     and pg_get_userbyid(routine.proowner)='postgres' and routine.prosecdef
+                     and routine.proconfig=array['search_path=pg_catalog']::text[]
+                     and md5(replace(replace(routine.prosrc,E'\\r\\n',E'\\n'),E'\\r',E'\\n'))='15e4d93bf5b4507691052bca792e9523'
+                     and routine.proacl is not null and (select count(*) from aclexplode(routine.proacl))=2
+                     and has_function_privilege('service_role',routine.oid,'EXECUTE')
+                     and not has_function_privilege('authenticated',routine.oid,'EXECUTE')
+                     and not has_function_privilege('anon',routine.oid,'EXECUTE')
+                ) then raise exception 'planning-failure prerequisite function identity/catalog/ACL drifted'; end if;
+                if not coalesce((select strpos(pg_get_constraintdef(constraint_row.oid),'''blocked''')=0
+                    from pg_constraint constraint_row where constraint_row.conrelid='public.grok_sessions'::regclass
+                      and constraint_row.conname='grok_sessions_status_check'),false)
+                  or not coalesce((select strpos(pg_get_constraintdef(constraint_row.oid),'''blocked''')=0
+                    from pg_constraint constraint_row where constraint_row.conrelid='public.grok_sessions'::regclass
+                      and constraint_row.conname='grok_sessions_closed_state'),false)
+                then raise exception 'planning-failure prerequisite constraints drifted'; end if;
               end \$guard\$;"
               ;;
           esac
@@ -442,7 +522,8 @@ jobs:
                     ('public.link_grok_artifact_as_server(uuid,uuid,uuid,uuid,uuid,uuid,text)',null),
                     ('public.request_grok_control_intent(uuid,uuid,text,uuid,text,text,text)',null),
                     ('public.resolve_grok_control_intent_as_server(uuid,uuid,text,text,text)',null),
-                    ('public.set_grok_session_status_as_server(uuid,uuid,text,bigint)',null)
+                    ('public.set_grok_session_status_as_server(uuid,uuid,text,bigint)',null),
+                    ('public.record_grok_planning_failure_as_server(uuid,uuid,uuid,text,text,bigint)',null)
                   ), available as (
                     select expected.signature,to_regprocedure(expected.signature) routine_oid,
                            to_regclass(expected.trigger_relation) trigger_relation_oid
@@ -484,6 +565,7 @@ jobs:
                   if (select count(*) from supabase_migrations.schema_migrations where version='20260828000300')<>1
                     or (select count(*) from supabase_migrations.schema_migrations where version='20260830000900')<>${E900}
                     or (select count(*) from supabase_migrations.schema_migrations where version='20260830001000')<>${E1000}
+                    or (select count(*) from supabase_migrations.schema_migrations where version='20260830001100')<>${E1100}
                   then raise exception 'locked Grok release ledger changed'; end if;
                   if exists (select 1 from public.organizations where coalesce(autonomous_mode,false)
                       or autonomy_kill_switch_active is distinct from true
@@ -506,7 +588,7 @@ jobs:
             -c "insert into supabase_migrations.schema_migrations(version) values ('${VERSION}');"
 
       - name: Reload the PostgREST schema cache
-        if: ${{ inputs.scope == 'typed-input' || inputs.scope == 'grok-persistence' }}
+        if: ${{ inputs.scope == 'typed-input' || inputs.scope == 'grok-persistence' || inputs.scope == 'planning-failure' }}
         run: psql "$DB_URL" -v ON_ERROR_STOP=1 -X -c "NOTIFY pgrst, 'reload schema';"
 
       - name: Verify ledger catalog ACL runtime lint health and stopped safety
@@ -523,15 +605,17 @@ jobs:
             select
               (select count(*) from supabase_migrations.schema_migrations where version='20260828000300')||'|'||
               (select count(*) from supabase_migrations.schema_migrations where version='20260830000900')||'|'||
-              (select count(*) from supabase_migrations.schema_migrations where version='20260830001000');")
+              (select count(*) from supabase_migrations.schema_migrations where version='20260830001000')||'|'||
+              (select count(*) from supabase_migrations.schema_migrations where version='20260830001100');")
           case "$SCOPE:$LEDGER" in
-            probe:1\|0\|0|probe:1\|1\|0|probe:1\|1\|1) ;;
-            typed-input:1\|1\|0) ;;
-            grok-persistence:1\|1\|1|verify:1\|1\|1) ;;
+            probe:1\|0\|0\|0|probe:1\|1\|0\|0|probe:1\|1\|1\|0|probe:1\|1\|1\|1) ;;
+            typed-input:1\|1\|0\|0) ;;
+            grok-persistence:1\|1\|1\|0) ;;
+            planning-failure:1\|1\|1\|1|verify:1\|1\|1\|1) ;;
             *) echo "::error::Postflight ledger is not scope-exact (${SCOPE}:${LEDGER})."; exit 1 ;;
           esac
 
-          if [ "$LEDGER" = "1|0|0" ]; then
+          if [ "$LEDGER" = "1|0|0|0" ]; then
             echo "::notice::Probe found the exact pre-release ledger; no Grok catalog postflight is due."
           else
             TYPED_READY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
@@ -580,7 +664,7 @@ jobs:
               \$typed_runtime\$;"
           fi
 
-          if [ "$LEDGER" = "1|1|1" ]; then
+          if [ "$LEDGER" = "1|1|1|0" ] || [ "$LEDGER" = "1|1|1|1" ]; then
             GROK_TABLE_READY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
               with expected(name) as (values
                 ('grok_sessions'),('grok_messages'),('grok_task_links'),('grok_graph_launches'),
@@ -627,10 +711,21 @@ jobs:
               exit 1
             fi
 
+            if [ "$LEDGER" = "1|1|1|1" ]; then
+              SESSION_UPDATE_SOURCE="'6a2c4bc103081a22672c9821c228665f'"
+              STATUS_SOURCE="'d5056a47bac42c495dff7b0593cbf1a9'"
+              PLANNING_FAILURE_FUNCTION=",('public.record_grok_planning_failure_as_server(uuid,uuid,uuid,text,text,bigint)','service_role','148341fdd59b01103e22687813d2e3ba','v','plpgsql')"
+              EXPECTED_GROK_FUNCTIONS=17
+            else
+              SESSION_UPDATE_SOURCE="'1e56d993c74f0981f6366a223fb88322'"
+              STATUS_SOURCE="'15e4d93bf5b4507691052bca792e9523'"
+              PLANNING_FAILURE_FUNCTION=""
+              EXPECTED_GROK_FUNCTIONS=16
+            fi
             GROK_FUNCTION_READY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
               with expected(signature,execute_role,source_md5,volatility,language_name) as (values
                 ('public.reject_grok_evidence_mutation()','none','20f0ed5db994773371be8cb167fb2cf3','v','plpgsql'),
-                ('public.enforce_grok_session_update()','none','1e56d993c74f0981f6366a223fb88322','v','plpgsql'),
+                ('public.enforce_grok_session_update()','none',${SESSION_UPDATE_SOURCE},'v','plpgsql'),
                 ('public.enforce_grok_control_intent_update()','none','4ce2cdcb48dc1e5bcc77a609e9c6f425','v','plpgsql'),
                 ('public.create_grok_session(uuid,uuid,text,text)','authenticated','be9cd7bb75766b9f05c898665ca91797','v','plpgsql'),
                 ('public.list_grok_sessions(uuid,uuid,integer,timestamptz,uuid)','authenticated','9a429e1ce48d9caf4a1dc604c4f5aaf4','s','plpgsql'),
@@ -644,7 +739,8 @@ jobs:
                 ('public.link_grok_artifact_as_server(uuid,uuid,uuid,uuid,uuid,uuid,text)','service_role','23a3cca226675c99b31211549ce576d5','v','plpgsql'),
                 ('public.request_grok_control_intent(uuid,uuid,text,uuid,text,text,text)','authenticated','05adb140368fa0f59cc0bf1cad31caee','v','plpgsql'),
                 ('public.resolve_grok_control_intent_as_server(uuid,uuid,text,text,text)','service_role','bd952acdffd457e1ac03e64380284bec','v','plpgsql'),
-                ('public.set_grok_session_status_as_server(uuid,uuid,text,bigint)','service_role','15e4d93bf5b4507691052bca792e9523','v','plpgsql')
+                ('public.set_grok_session_status_as_server(uuid,uuid,text,bigint)','service_role',${STATUS_SOURCE},'v','plpgsql')
+                ${PLANNING_FAILURE_FUNCTION}
               ), state as (
                 select expected.*,routine.oid,routine.proowner,routine.prosecdef,routine.proconfig,routine.proacl,
                        routine.provolatile,language.lanname,
@@ -653,7 +749,7 @@ jobs:
                   left join pg_proc routine on routine.oid=to_regprocedure(expected.signature)
                   left join pg_language language on language.oid=routine.prolang
               )
-              select count(oid)=16 and count(distinct oid)=16 and bool_and(
+              select count(oid)=${EXPECTED_GROK_FUNCTIONS} and count(distinct oid)=${EXPECTED_GROK_FUNCTIONS} and bool_and(
                 pg_get_userbyid(proowner)='postgres' and lanname=language_name and prosecdef
                 and actual_source_md5=source_md5 and provolatile::text=volatility
                 and proconfig=array['search_path=pg_catalog']::text[] and proacl is not null
@@ -670,11 +766,151 @@ jobs:
                       'create_grok_session','list_grok_sessions','read_grok_session','append_grok_message_internal',
                       'append_grok_user_message','append_grok_message_as_server','link_grok_task_as_server',
                       'record_grok_event_as_server','launch_grok_full_lifecycle_as_server','link_grok_artifact_as_server',
-                      'request_grok_control_intent','resolve_grok_control_intent_as_server','set_grok_session_status_as_server'))=16
+                       'request_grok_control_intent','resolve_grok_control_intent_as_server','set_grok_session_status_as_server',
+                       'record_grok_planning_failure_as_server'))=${EXPECTED_GROK_FUNCTIONS}
               from state;")
             if [ "$GROK_FUNCTION_READY" != "t" ]; then
               echo "::error::Grok function signature, owner, SECURITY DEFINER, search_path, overload, or raw ACL postflight failed."
               exit 1
+            fi
+
+            if [ "$LEDGER" = "1|1|1|1" ]; then
+              PLANNING_FAILURE_READY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+                select
+                  exists (
+                    select 1 from pg_proc routine
+                     where routine.oid=to_regprocedure('public.record_grok_planning_failure_as_server(uuid,uuid,uuid,text,text,bigint)')
+                       and routine.prorettype='jsonb'::regtype
+                       and routine.proargnames=array['p_organization_id','p_session_id','p_user_message_id','p_error_code','p_idempotency_key','p_expected_version']::text[]
+                       and strpos(routine.prosrc,'''INVALID_INPUT''')>0
+                       and strpos(routine.prosrc,'''SENSITIVE_DATA''')>0
+                       and strpos(routine.prosrc,'''NO_CONFIGURED_AGENTS''')>0
+                       and strpos(routine.prosrc,'''MISSING_CLAUDE_AGENT''')>0
+                       and strpos(routine.prosrc,'''MISSING_CODEX_AGENT''')>0
+                       and strpos(routine.prosrc,'''GRAPH_INVALID''')>0
+                       and strpos(routine.prosrc,'''grok.planning_error''')>0
+                       and strpos(routine.prosrc,'''session.planning_failed''')>0
+                       and strpos(routine.prosrc,'''workerWoken'', false')>0
+                       and strpos(routine.prosrc,'''executionStarted'', false')>0
+                       and strpos(lower(routine.prosrc),'graph_runs')=0
+                       and strpos(lower(routine.prosrc),'node_runs')=0
+                       and strpos(lower(routine.prosrc),'agent_runs')=0
+                       and strpos(lower(routine.prosrc),'grok_graph_launches')=0
+                       and strpos(lower(routine.prosrc),'grok_task_links')=0
+                  )
+                  and (select count(*) from pg_proc routine join pg_namespace space on space.oid=routine.pronamespace
+                        where space.nspname='public' and routine.proname='record_grok_planning_failure_as_server')=1
+                  and exists (select 1 from pg_proc routine
+                               where routine.oid=to_regprocedure('public.enforce_grok_session_update()')
+                                 and strpos(routine.prosrc,'''blocked''')>0)
+                  and exists (select 1 from pg_proc routine
+                               where routine.oid=to_regprocedure('public.set_grok_session_status_as_server(uuid,uuid,text,bigint)')
+                                 and strpos(routine.prosrc,'''blocked''')>0)
+                  and coalesce((select strpos(pg_get_constraintdef(constraint_row.oid),'''blocked''')>0
+                    from pg_constraint constraint_row where constraint_row.conrelid='public.grok_sessions'::regclass
+                      and constraint_row.conname='grok_sessions_status_check'),false)
+                  and coalesce((select strpos(pg_get_constraintdef(constraint_row.oid),'''blocked''')>0
+                    from pg_constraint constraint_row where constraint_row.conrelid='public.grok_sessions'::regclass
+                      and constraint_row.conname='grok_sessions_closed_state'),false);")
+              if [ "$PLANNING_FAILURE_READY" != "t" ]; then
+                echo "::error::Planning-failure constraint, trigger, signature, return type, or fail-closed source identity is not exact."
+                exit 1
+              fi
+
+              psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q \
+                -c "begin;" \
+                -c "do \$planning_failure_runtime\$
+                    declare
+                      v_organization_id uuid;
+                      v_project_id uuid;
+                      v_owner_id uuid;
+                      v_session public.grok_sessions;
+                      v_user_message public.grok_messages;
+                      v_session_before public.grok_sessions;
+                      v_session_after public.grok_sessions;
+                      v_failure jsonb;
+                      v_replay jsonb;
+                      v_key text := 'grok-release-' || pg_catalog.replace(pg_catalog.gen_random_uuid()::text,'-','');
+                      runtime_message text;
+                    begin
+                      select member.organization_id,project.id,member.user_id
+                        into v_organization_id,v_project_id,v_owner_id
+                        from public.organization_members member
+                        join public.projects project on project.organization_id=member.organization_id
+                       where member.role='owner'::public.organization_member_role
+                         and project.status='active'
+                       order by member.created_at,project.created_at
+                       limit 1;
+                      if not found then raise exception 'planning-failure runtime fixture identity is unavailable'; end if;
+                      perform pg_catalog.set_config('request.jwt.claim.sub',v_owner_id::text,true);
+                      select * into v_session from public.create_grok_session(
+                        v_organization_id,v_project_id,'Grok planning refusal release check',v_key
+                      );
+                      select * into v_user_message from public.append_grok_user_message(
+                        v_organization_id,v_session.id,'Plan a bounded release check',
+                        '{\"schemaVersion\":1,\"kind\":\"grok.prompt\"}'::jsonb,v_key || ':user',0,null
+                      );
+                      select * into v_session_before from public.grok_sessions session where session.id=v_session.id;
+                      select public.record_grok_planning_failure_as_server(
+                        v_organization_id,v_session.id,v_user_message.id,'MISSING_CODEX_AGENT',
+                        v_key || ':planning-failure',v_session_before.version
+                      ) into v_failure;
+                      select * into v_session_after from public.grok_sessions session where session.id=v_session.id;
+                      if v_failure #>> '{session,id}' is distinct from v_session.id::text
+                        or v_failure #>> '{session,status}' is distinct from 'blocked'
+                        or v_failure #>> '{session,closed_at}' is not null
+                        or v_failure #>> '{message,session_id}' is distinct from v_session.id::text
+                        or v_failure #>> '{message,role}' is distinct from 'assistant'
+                        or v_failure #>> '{message,reply_to_message_id}' is distinct from v_user_message.id::text
+                        or v_failure #>> '{message,metadata,kind}' is distinct from 'grok.planning_error'
+                        or v_failure #>> '{message,metadata,code}' is distinct from 'MISSING_CODEX_AGENT'
+                        or v_failure #>> '{message,metadata,workerWoken}' is distinct from 'false'
+                        or v_failure #>> '{message,metadata,executionStarted}' is distinct from 'false'
+                        or public.text_has_likely_secret(v_failure #>> '{message,content}')
+                        or v_failure #>> '{event,session_id}' is distinct from v_session.id::text
+                        or v_failure #>> '{event,event_type}' is distinct from 'session.planning_failed'
+                        or v_failure #>> '{event,correlation_id}' is distinct from v_session.id::text
+                        or v_failure #>> '{event,payload,workerWoken}' is distinct from 'false'
+                        or v_failure #>> '{event,payload,executionStarted}' is distinct from 'false'
+                        or v_session_after.status is distinct from 'blocked'
+                        or v_session_after.closed_at is not null
+                        or v_session_after.last_message_sequence<>2
+                        or v_session_after.last_event_sequence<>5
+                        or v_session_after.version<>v_session_before.version+3
+                        or (select count(*) from public.grok_messages message where message.session_id=v_session.id)<>2
+                        or (select count(*) from public.grok_events event where event.session_id=v_session.id)<>5
+                        or exists (select 1 from public.grok_task_links task_link where task_link.session_id=v_session.id)
+                        or exists (select 1 from public.grok_graph_launches launch where launch.session_id=v_session.id)
+                      then raise exception 'planning-failure atomic runtime result drifted'; end if;
+
+                      select public.record_grok_planning_failure_as_server(
+                        v_organization_id,v_session.id,v_user_message.id,'MISSING_CODEX_AGENT',
+                        v_key || ':planning-failure',v_session_before.version
+                      ) into v_replay;
+                      if v_replay is distinct from v_failure
+                        or (select count(*) from public.grok_messages message where message.session_id=v_session.id)<>2
+                        or (select count(*) from public.grok_events event where event.session_id=v_session.id)<>5
+                      then raise exception 'planning-failure exact replay drifted'; end if;
+
+                      begin
+                        perform public.record_grok_planning_failure_as_server(
+                          v_organization_id,v_session.id,v_user_message.id,'MISSING_CLAUDE_AGENT',
+                          v_key || ':planning-failure',v_session_before.version
+                        );
+                        raise exception 'planning-failure mismatched replay did not refuse';
+                      exception when sqlstate '22023' then null;
+                      end;
+                      begin
+                        perform public.record_grok_planning_failure_as_server(
+                          pg_catalog.gen_random_uuid(),v_session.id,v_user_message.id,'MISSING_CODEX_AGENT',
+                          v_key || ':tenant-refusal',v_session_before.version
+                        );
+                        raise exception 'planning-failure tenant mismatch did not refuse';
+                      exception when sqlstate 'P0002' then null;
+                      end;
+                    end;
+                    \$planning_failure_runtime\$;" \
+                -c "rollback;"
             fi
 
             GROK_EXECUTION_BOUNDARY_READY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
@@ -798,7 +1034,8 @@ jobs:
                     ('public.link_grok_artifact_as_server(uuid,uuid,uuid,uuid,uuid,uuid,text)',null),
                     ('public.request_grok_control_intent(uuid,uuid,text,uuid,text,text,text)',null),
                     ('public.resolve_grok_control_intent_as_server(uuid,uuid,text,text,text)',null),
-                    ('public.set_grok_session_status_as_server(uuid,uuid,text,bigint)',null)
+                    ('public.set_grok_session_status_as_server(uuid,uuid,text,bigint)',null),
+                    ('public.record_grok_planning_failure_as_server(uuid,uuid,uuid,text,text,bigint)',null)
                   ), available as (
                     select expected.signature,to_regprocedure(expected.signature) routine_oid,
                            to_regclass(expected.trigger_relation) trigger_relation_oid

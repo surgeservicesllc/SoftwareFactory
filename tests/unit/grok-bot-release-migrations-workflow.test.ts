@@ -22,6 +22,12 @@ const migrations = [
     path: "supabase/migrations/20260830001000_grok_chief_of_staff_persistence.sql",
     hash: "cf17ece506e30beb08163c8bc5888b6b18341bb4e66f61bafaabd6912f225aa6",
   },
+  {
+    version: "20260830001100",
+    stem: "MIGRATION_01100",
+    path: "supabase/migrations/20260830001100_grok_planning_failure.sql",
+    hash: "22c035897cb51c611aa373c83e637dc4e033352d9079059521eda7fefa35e8f7",
+  },
 ] as const;
 
 const source = readFileSync(resolve(root, workflowPath), "utf8");
@@ -73,7 +79,13 @@ describe("Grok Bot hosted release workflow", () => {
       default: "probe",
       required: true,
       type: "choice",
-      options: ["probe", "typed-input", "grok-persistence", "verify"],
+      options: [
+        "probe",
+        "typed-input",
+        "grok-persistence",
+        "planning-failure",
+        "verify",
+      ],
     });
     expect(workflow.on.workflow_dispatch.inputs.confirm).toMatchObject({
       default: "",
@@ -84,6 +96,11 @@ describe("Grok Bot hosted release workflow", () => {
       required: true,
       type: "string",
     });
+    expect(Object.keys(workflow.on.workflow_dispatch.inputs)).toEqual([
+      "scope",
+      "confirm",
+      "release_sha",
+    ]);
     expect(workflow.permissions).toEqual({
       actions: "read",
       checks: "read",
@@ -101,28 +118,24 @@ describe("Grok Bot hosted release workflow", () => {
     );
   });
 
-  it("pins both reviewed migration byte identities", () => {
+  it("pins all three reviewed migration byte identities", () => {
     for (const migration of migrations) {
       expect(workflow.jobs.release.env[migration.stem]).toBe(migration.path);
       expect(workflow.jobs.release.env[`${migration.stem}_SHA256`]).toBe(
         migration.hash,
       );
       const absolute = resolve(root, migration.path);
-      // 01000 lands with its schema commit before this workflow is integrated.
-      if (existsSync(absolute)) {
-        const normalized = readFileSync(absolute, "utf8").replace(
-          /\r\n?/g,
-          "\n",
-        );
-        expect(createHash("sha256").update(normalized).digest("hex")).toBe(
-          migration.hash,
-        );
-      }
+      expect(existsSync(absolute)).toBe(true);
+      const normalized = readFileSync(absolute, "utf8").replace(/\r\n?/g, "\n");
+      expect(createHash("sha256").update(normalized).digest("hex")).toBe(
+        migration.hash,
+      );
     }
-    const identity = stepByName("Verify the two exact forward files").run ?? "";
-    expect(identity.match(/verify_file/g)).toHaveLength(3);
+    const identity = stepByName("Verify the three exact forward files").run ?? "";
+    expect(identity.match(/verify_file/g)).toHaveLength(4);
     expect(identity).toContain("sha256sum");
     expect(identity).toContain("^[0-9a-f]{64}$");
+    expect(source).not.toContain("planning_failure_sha256");
   });
 
   it("requires explicit actor, confirmation, exact green main, and READY production", () => {
@@ -134,7 +147,9 @@ describe("Grok Bot hosted release workflow", () => {
     });
     const authorize = authorization.run ?? "";
     expect(authorize).toContain("probe|verify) exit 0");
-    expect(authorize).toContain("typed-input|grok-persistence)");
+    expect(authorize).toContain(
+      "typed-input|grok-persistence|planning-failure)",
+    );
     expect(authorize).toContain('[ "$CONFIRM" != "apply" ]');
     expect(authorize).toContain('[ "$GITHUB_ACTOR" != "$AUTHORIZED_ACTOR" ]');
     expect(authorize).toContain(
@@ -260,9 +275,10 @@ describe("Grok Bot hosted release workflow", () => {
       expect(preflight).toContain(version);
     }
     for (const state of [
-      "typed-input:1\\|0\\|0",
-      "grok-persistence:1\\|1\\|0",
-      "verify:1\\|1\\|1",
+      "typed-input:1\\|0\\|0\\|0",
+      "grok-persistence:1\\|1\\|0\\|0",
+      "planning-failure:1\\|1\\|1\\|0",
+      "verify:1\\|1\\|1\\|1",
     ]) {
       expect(preflight).toContain(state);
     }
@@ -271,9 +287,10 @@ describe("Grok Bot hosted release workflow", () => {
         "Verify ledger catalog ACL runtime lint health and stopped safety",
       ).run ?? "";
     for (const state of [
-      "typed-input:1\\|1\\|0",
-      "grok-persistence:1\\|1\\|1",
-      "verify:1\\|1\\|1",
+      "typed-input:1\\|1\\|0\\|0",
+      "grok-persistence:1\\|1\\|1\\|0",
+      "planning-failure:1\\|1\\|1\\|1",
+      "verify:1\\|1\\|1\\|1",
     ]) {
       expect(postflight).toContain(state);
     }
@@ -282,7 +299,7 @@ describe("Grok Bot hosted release workflow", () => {
   it("stages and applies exactly one file in one locked forward-only transaction", () => {
     const step = stepByName("Apply exactly one ordered forward migration");
     expect(step.if).toBe(
-      "${{ inputs.scope == 'typed-input' || inputs.scope == 'grok-persistence' }}",
+      "${{ inputs.scope == 'typed-input' || inputs.scope == 'grok-persistence' || inputs.scope == 'planning-failure' }}",
     );
     const command = step.run ?? "";
     for (const evidence of [
@@ -290,6 +307,8 @@ describe("Grok Bot hosted release workflow", () => {
       "VERSION=20260830000900",
       "grok-persistence)",
       "VERSION=20260830001000",
+      "planning-failure)",
+      "VERSION=20260830001100",
       "STAGE_DIR=$(mktemp -d)",
       'find "$STAGE_DIR" -maxdepth 1 -type f',
       "plpgsql_check_function_tb",
@@ -328,7 +347,8 @@ describe("Grok Bot hosted release workflow", () => {
       "state.relrowsecurity and state.relforcerowsecurity",
       "not has_table_privilege('service_role'",
       "attribute.attacl is not null",
-      "count(oid)=16",
+      "EXPECTED_GROK_FUNCTIONS=16",
+      "EXPECTED_GROK_FUNCTIONS=17",
       "pg_get_userbyid(proowner)='postgres'",
       "lanname=language_name",
       "prosecdef",
@@ -355,6 +375,12 @@ describe("Grok Bot hosted release workflow", () => {
       "grok_messages_content_no_secret",
       "grok_events_payload_no_secret",
       "grok_session_not_found",
+      "public.record_grok_planning_failure_as_server(uuid,uuid,uuid,text,text,bigint)",
+      "session.planning_failed",
+      "grok.planning_error",
+      "MISSING_CODEX_AGENT",
+      "planning-failure exact replay drifted",
+      "planning-failure tenant mismatch did not refuse",
       "plpgsql_check_function_tb",
       "Postflight linked-database lint",
     ]) {
@@ -372,9 +398,16 @@ describe("Grok Bot hosted release workflow", () => {
       "9a429e1ce48d9caf4a1dc604c4f5aaf4",
       "bd952acdffd457e1ac03e64380284bec",
       "49438e7ef00cf0d7034e0016e75f74f8",
+      "6a2c4bc103081a22672c9821c228665f",
+      "d5056a47bac42c495dff7b0593cbf1a9",
+      "148341fdd59b01103e22687813d2e3ba",
     ]) {
       expect(postflight).toContain(sourceHash);
     }
+    expect(postflight).not.toContain("source_md5 is null");
+    expect(postflight).toContain(
+      "('public.record_grok_planning_failure_as_server(uuid,uuid,uuid,text,text,bigint)','service_role','148341fdd59b01103e22687813d2e3ba','v','plpgsql')",
+    );
     expect(postflight).toContain(
       `('${canonicalGrokLauncher}','service_role','49438e7ef00cf0d7034e0016e75f74f8','v','plpgsql')`,
     );

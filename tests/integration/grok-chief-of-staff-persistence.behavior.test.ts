@@ -40,6 +40,7 @@ type SessionRow = {
   last_message_sequence: number;
   last_event_sequence: number;
   version: number;
+  closed_at: string | null;
 };
 
 type MessageRow = {
@@ -331,6 +332,174 @@ describe("Grok Chief-of-Staff persistence", () => {
       "session.created", "message.appended", "message.appended", "session.planned",
     ]);
     expect(body.task_links).toEqual([]);
+  });
+
+  it("atomically records and exactly replays a nonclosed blocked planning failure", async () => {
+    const { session } = await createSession("Planning cannot start");
+    await assumeRole(db, "authenticated", ownerId);
+    const user = await db.query<MessageRow>(
+      `select * from public.append_grok_user_message(
+         $1::uuid,$2::uuid,$3::text,$4::jsonb,$5::text,0,null
+       )`,
+      [organizationId, session.id, "Implement the goal", "{}", "planning-user-0001"],
+    );
+    const failureCall = `select public.record_grok_planning_failure_as_server(
+      $1::uuid,$2::uuid,$3::uuid,$4::text,$5::text,$6::bigint
+    ) as result`;
+    const failureParameters = [
+      organizationId,
+      session.id,
+      user.rows[0].id,
+      "MISSING_CODEX_AGENT",
+      "planning-failure-0001",
+      2,
+    ] as const;
+
+    await expect(db.query(failureCall, [...failureParameters])).rejects.toThrow(
+      /permission denied/i,
+    );
+
+    type FailureBundle = {
+      session: SessionRow;
+      message: MessageRow;
+      event: {
+        id: string;
+        sequence_no: number;
+        event_type: string;
+        payload: Record<string, unknown>;
+      };
+    };
+    await assumeRole(db, "service_role");
+    const failure = await db.query<{ result: FailureBundle }>(
+      failureCall,
+      [...failureParameters],
+    );
+    expect(failure.rows[0].result.session).toMatchObject({
+      id: session.id,
+      status: "blocked",
+      closed_at: null,
+      last_message_sequence: 2,
+      last_event_sequence: 5,
+      version: 5,
+    });
+    expect(failure.rows[0].result.message).toMatchObject({
+      sequence_no: 2,
+      role: "assistant",
+      reply_to_message_id: user.rows[0].id,
+      metadata: {
+        schemaVersion: 1,
+        kind: "grok.planning_error",
+        code: "MISSING_CODEX_AGENT",
+        workerWoken: false,
+        executionStarted: false,
+      },
+    });
+    expect(failure.rows[0].result.event).toMatchObject({
+      sequence_no: 4,
+      event_type: "session.planning_failed",
+      payload: expect.objectContaining({
+        schemaVersion: 1,
+        code: "MISSING_CODEX_AGENT",
+        workerWoken: false,
+        executionStarted: false,
+      }),
+    });
+
+    await resetRole(db);
+    const evidence = await db.query<{
+      sequence_no: number;
+      event_type: string;
+    }>(
+      `select sequence_no, event_type
+         from public.grok_events
+        where session_id = $1
+        order by sequence_no`,
+      [session.id],
+    );
+    expect(evidence.rows).toEqual([
+      { sequence_no: 1, event_type: "session.created" },
+      { sequence_no: 2, event_type: "message.appended" },
+      { sequence_no: 3, event_type: "message.appended" },
+      { sequence_no: 4, event_type: "session.planning_failed" },
+      { sequence_no: 5, event_type: "session.blocked" },
+    ]);
+
+    // Exact replay ignores a current or otherwise stale expected version only
+    // after all immutable evidence and the blocked/nonclosed state match.
+    await assumeRole(db, "service_role");
+    const replay = await db.query<{ result: FailureBundle }>(
+      failureCall,
+      [...failureParameters.slice(0, 5), 5],
+    );
+    expect(replay.rows[0].result).toEqual(failure.rows[0].result);
+    await expect(db.query(
+      failureCall,
+      [
+        organizationId,
+        session.id,
+        user.rows[0].id,
+        "GRAPH_INVALID",
+        "planning-failure-0001",
+        999,
+      ],
+    )).rejects.toThrow(/reused with different input/i);
+    await expect(db.query(
+      failureCall,
+      [
+        organizationId,
+        session.id,
+        user.rows[0].id,
+        "MISSING_CODEX_AGENT",
+        "planning-failure-0002",
+        5,
+      ],
+    )).rejects.toThrow(/not active/i);
+    await expect(db.query(
+      `select * from public.append_grok_message_as_server(
+         $1::uuid,$2::uuid,'assistant','late write','{}'::jsonb,$3::text,2,$4::uuid
+       )`,
+      [organizationId, session.id, "planning-late-0001", user.rows[0].id],
+    )).rejects.toThrow(/not_active/i);
+    await expect(db.query(
+      "select * from public.set_grok_session_status_as_server($1::uuid,$2::uuid,'archived',5)",
+      [organizationId, session.id],
+    )).rejects.toThrow(/state transition/i);
+    const statusReplay = await db.query<SessionRow>(
+      "select * from public.set_grok_session_status_as_server($1::uuid,$2::uuid,'blocked',999)",
+      [organizationId, session.id],
+    );
+    expect(statusReplay.rows[0]).toMatchObject({
+      status: "blocked",
+      closed_at: null,
+      last_event_sequence: 5,
+      version: 5,
+    });
+
+    await resetRole(db);
+    const residue = await db.query<{ messages: number; events: number }>(
+      `select
+         (select count(*)::integer from public.grok_messages where session_id = $1) as messages,
+         (select count(*)::integer from public.grok_events where session_id = $1) as events`,
+      [session.id],
+    );
+    expect(residue.rows[0]).toEqual({ messages: 2, events: 5 });
+
+    const direct = await createSession("Direct blocked transition");
+    await assumeRole(db, "service_role");
+    const directlyBlocked = await db.query<SessionRow>(
+      "select * from public.set_grok_session_status_as_server($1::uuid,$2::uuid,'blocked',1)",
+      [organizationId, direct.session.id],
+    );
+    expect(directlyBlocked.rows[0]).toMatchObject({
+      status: "blocked",
+      closed_at: null,
+      last_event_sequence: 2,
+      version: 2,
+    });
+    await expect(db.query(
+      "select * from public.set_grok_session_status_as_server($1::uuid,$2::uuid,'completed',2)",
+      [organizationId, direct.session.id],
+    )).rejects.toThrow(/state transition/i);
   });
 
   it("atomically links one exact canonical v2 graph paused, with no run or custom-plan execution", async () => {

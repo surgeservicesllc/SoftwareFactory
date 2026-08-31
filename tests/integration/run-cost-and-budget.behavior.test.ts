@@ -21,7 +21,7 @@ const migrationsRoot = resolve(import.meta.dirname, "../../supabase/migrations")
  * migration added after this was written should make somebody re-read this
  * case rather than let it pass unexamined.
  */
-const latestMigration = "20260830001000_grok_chief_of_staff_persistence.sql";
+const latestMigration = "20260830001100_grok_planning_failure.sql";
 
 const ownerId = "00000000-0000-4000-8000-00000000c001";
 const organizationId = "10000000-0000-4000-8000-00000000c001";

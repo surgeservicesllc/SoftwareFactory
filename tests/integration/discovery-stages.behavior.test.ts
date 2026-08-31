@@ -50,7 +50,7 @@ beforeAll(async () => {
   const migrationFiles = (await readdir(migrationsRoot))
     .filter((name) => /^\d+.*\.sql$/.test(name))
     .sort();
-  expect(migrationFiles.at(-1)).toBe("20260830001000_grok_chief_of_staff_persistence.sql");
+  expect(migrationFiles.at(-1)).toBe("20260830001100_grok_planning_failure.sql");
   for (const file of migrationFiles) {
     await db.exec(await readFile(resolve(migrationsRoot, file), "utf8"));
   }

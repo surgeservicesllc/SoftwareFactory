@@ -339,7 +339,7 @@ describe("SECURITY DEFINER functions", () => {
       // timing, never the sealed relay code.
       "inspect_ai_auth_sessions",
       "jsonb_has_sensitive_keys",
-      // Grok has no service_role table grants. Six bounded evidence writers
+      // Grok has no service_role table grants. Seven bounded evidence writers
       // plus one canonical Full Lifecycle v2 launcher are pinned by exact
       // overload below; the launcher atomically pauses before visibility.
       "launch_grok_full_lifecycle_as_server",
@@ -400,6 +400,7 @@ describe("SECURITY DEFINER functions", () => {
       "record_bot_readiness_preserving_disabled",
       "record_graph_artifact_as_worker",
       "record_grok_event_as_server",
+      "record_grok_planning_failure_as_server",
       "record_job_seeker_alert_scan",
       "record_node_state_as_worker",
       "record_phase1c_run_artifact",
@@ -440,6 +441,7 @@ describe("SECURITY DEFINER functions", () => {
           'link_grok_artifact_as_server',
           'link_grok_task_as_server',
           'record_grok_event_as_server',
+          'record_grok_planning_failure_as_server',
           'resolve_grok_control_intent_as_server',
           'set_grok_session_status_as_server'
         )
@@ -473,6 +475,11 @@ describe("SECURITY DEFINER functions", () => {
         identity_arguments:
           "p_organization_id uuid, p_session_id uuid, p_event_type text, p_correlation_id uuid, p_payload jsonb, p_expected_sequence bigint, p_message_id uuid, p_task_link_id uuid",
         proname: "record_grok_event_as_server",
+      },
+      {
+        identity_arguments:
+          "p_organization_id uuid, p_session_id uuid, p_user_message_id uuid, p_error_code text, p_idempotency_key text, p_expected_version bigint",
+        proname: "record_grok_planning_failure_as_server",
       },
       {
         identity_arguments:
