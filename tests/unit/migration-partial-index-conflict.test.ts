@@ -40,6 +40,65 @@ function normalize(columns: string): string {
   return columns.replace(/\s+/g, " ").trim().toLowerCase();
 }
 
+/**
+ * Read the parenthesised group that starts at `open`, and say where it ends.
+ *
+ * A `[^)]*` character class cannot do this, and the difference is not
+ * cosmetic. A column list may contain a function call — this chain has
+ * `coalesce(work_order_id, invoice_id, plan_id)` in a deduplication index —
+ * and the class stops at that call's OWN closing paren. That truncates the
+ * key, and it leaves the real closing paren and everything after it,
+ * INCLUDING THE PREDICATE, outside the match. The guard then reports a
+ * correct clause as missing its WHERE; and had the truncation landed a few
+ * characters earlier, it would just as happily have reported a clause that
+ * really was missing one as fine. A guard that is wrong in both directions
+ * on a shape the schema actually contains is worse than no guard.
+ */
+function readGroup(sql: string, open: number): { inner: string; end: number } | null {
+  if (sql[open] !== "(") return null;
+  let depth = 1;
+  let index = open + 1;
+  while (index < sql.length && depth > 0) {
+    if (sql[index] === "(") depth += 1;
+    else if (sql[index] === ")") depth -= 1;
+    index += 1;
+  }
+  return depth === 0 ? { inner: sql.slice(open + 1, index - 1), end: index } : null;
+}
+
+/** Every `create unique index ... on public.<table> (...) [where ...]`. */
+function uniqueIndexes(sql: string): { table: string; columns: string; rest: string }[] {
+  const found: { table: string; columns: string; rest: string }[] = [];
+  for (const match of sql.matchAll(
+    /create\s+unique\s+index[\s\S]{0,120}?\s+on\s+public\.(\w+)\s*(?=\()/gi,
+  )) {
+    const group = readGroup(sql, match.index + match[0].length);
+    if (group === null) continue;
+    const semicolon = sql.indexOf(";", group.end);
+    found.push({
+      table: match[1].toLowerCase(),
+      columns: group.inner,
+      rest: sql.slice(group.end, semicolon === -1 ? sql.length : semicolon),
+    });
+  }
+  return found;
+}
+
+/** Every `on conflict (...)`, with the text that immediately follows it. */
+function onConflicts(sql: string): { at: number; columns: string; trailing: string }[] {
+  const found: { at: number; columns: string; trailing: string }[] = [];
+  for (const match of sql.matchAll(/\bon\s+conflict\s*(?=\()/gi)) {
+    const group = readGroup(sql, match.index + match[0].length);
+    if (group === null) continue;
+    found.push({
+      at: match.index,
+      columns: group.inner,
+      trailing: sql.slice(group.end, group.end + 40),
+    });
+  }
+  return found;
+}
+
 /** Every `create table public.<name> ( ... )` body, keyed by table. */
 function tableBodies(sql: string): Map<string, string> {
   const bodies = new Map<string, string>();
@@ -72,11 +131,9 @@ describe("ON CONFLICT against a partial unique index", () => {
       const sql = withoutComments(readFileSync(resolve(migrationsDirectory, file), "utf8"));
       sources.set(file, sql);
 
-      for (const match of sql.matchAll(
-        /create\s+unique\s+index[\s\S]{0,120}?\s+on\s+public\.(\w+)\s*\(([^)]*)\)([^;]*)/gi,
-      )) {
-        const key = `${match[1].toLowerCase()}(${normalize(match[2])})`;
-        (/\bwhere\b/i.test(match[3]) ? partial : total).add(key);
+      for (const index of uniqueIndexes(sql)) {
+        const key = `${index.table}(${normalize(index.columns)})`;
+        (/\bwhere\b/i.test(index.rest) ? partial : total).add(key);
       }
 
       // Table-level UNIQUE constraints and PRIMARY KEY are always total.
@@ -110,8 +167,8 @@ describe("ON CONFLICT against a partial unique index", () => {
      */
     const findings: string[] = [];
     for (const [file, sql] of sources) {
-      for (const match of sql.matchAll(/\bon\s+conflict\s*\(([^)]*)\)([\s\S]{0,40})/gi)) {
-        const before = sql.slice(0, match.index);
+      for (const clause of onConflicts(sql)) {
+        const before = sql.slice(0, clause.at);
         const insert = before.lastIndexOf("insert into");
         if (insert === -1) continue;
         // Same statement only: a semicolon between them means this ON
@@ -120,9 +177,9 @@ describe("ON CONFLICT against a partial unique index", () => {
         const target = /insert\s+into\s+public\.(\w+)/i.exec(before.slice(insert));
         if (target === null) continue;
 
-        const key = `${target[1].toLowerCase()}(${normalize(match[1])})`;
+        const key = `${target[1].toLowerCase()}(${normalize(clause.columns)})`;
         if (!partial.has(key) || total.has(key)) continue;
-        if (/^\s*where\s/i.test(match[2])) continue;
+        if (/^\s*where\s/i.test(clause.trailing)) continue;
         findings.push(`${file}: on conflict ${key} names a partial unique index but has no WHERE`);
       }
     }
@@ -133,6 +190,56 @@ describe("ON CONFLICT against a partial unique index", () => {
         + "cannot infer the index, so this raises at runtime on the first row that reaches it — "
         + "the migration applies clean and the failure waits for a real user.",
     ).toEqual([]);
+  });
+
+  it("still reads the predicate when the column list contains a function call", () => {
+    /*
+     * The regression this file's depth-aware reader exists for. The
+     * deduplication index on crm_notices (ADR-217) carries
+     * `coalesce(work_order_id, invoice_id, plan_id)` in its column list,
+     * and a `[^)]*` class stops at that call's own closing paren — hiding
+     * the real end of the list AND the predicate beyond it.
+     *
+     * Both directions are checked, because the truncating version was
+     * wrong in both: it flagged a correct clause, and it could equally
+     * have waved through one that really had no predicate.
+     */
+    const withPredicate = withoutComments(`
+      create unique index crm_notices_org_kind_subject_day_key
+        on public.crm_notices (
+          organization_id, kind, coalesce(work_order_id, invoice_id, plan_id), due_on
+        )
+        where state <> 'cancelled';
+      insert into public.crm_notices (organization_id, kind) values (1, 2)
+      on conflict (organization_id, kind, coalesce(work_order_id, invoice_id, plan_id), due_on)
+        where state <> 'cancelled'
+      do nothing;
+    `);
+    const withoutPredicate = withPredicate.replace(
+      /\)\s*where state <> 'cancelled'\s*\n\s*do nothing;/,
+      ")\n      do nothing;",
+    );
+
+    function flagged(sql: string): boolean {
+      const partial = new Set(
+        uniqueIndexes(sql)
+          .filter((index) => /\bwhere\b/i.test(index.rest))
+          .map((index) => `${index.table}(${normalize(index.columns)})`),
+      );
+      return onConflicts(sql).some((clause) => {
+        const table = /insert\s+into\s+public\.(\w+)/i.exec(sql.slice(0, clause.at));
+        if (table === null) return false;
+        const key = `${table[1].toLowerCase()}(${normalize(clause.columns)})`;
+        return partial.has(key) && !/^\s*where\s/i.test(clause.trailing);
+      });
+    }
+
+    // The whole column list survives, function call and all.
+    expect(normalize(uniqueIndexes(withPredicate)[0].columns))
+      .toBe("organization_id, kind, coalesce(work_order_id, invoice_id, plan_id), due_on");
+
+    expect(flagged(withPredicate), "a correct clause must not be reported").toBe(false);
+    expect(flagged(withoutPredicate), "a missing predicate must still be caught").toBe(true);
   });
 
   it("would catch the real one", () => {

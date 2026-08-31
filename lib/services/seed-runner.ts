@@ -2150,6 +2150,151 @@ export async function runSeed(
   );
   if ("error" in inspectionDocuments) return inspectionDocuments;
 
+  /*
+   * Contact preferences (ADR-217). Transactional permission is kept apart
+   * from marketing permission on purpose: leaving a newsletter is not a
+   * request to stop being told a technician is arriving tomorrow.
+   */
+  const preferenceRows: SeedRow[] = dataset.accounts.flatMap((account, index) => {
+    const accountId = accountIdByName.get(account.name);
+    if (accountId === undefined) return [];
+    return (["email", "sms"] as const).map((channel, slot) => {
+      const position = index * 2 + slot;
+      // A small minority have asked to be left alone entirely, and a few
+      // more want only the money conversations. Both are ordinary.
+      const stopped = position % 17 === 0;
+      const transactionalOff = !stopped && position % 23 === 0;
+      return {
+        organization_id: org,
+        account_id: accountId,
+        channel,
+        transactional_allowed: !stopped && !transactionalOff,
+        // A do-not-contact forces both false; the schema refuses any other
+        // combination, so this cannot drift into a contradiction.
+        marketing_allowed: !stopped && position % 5 !== 0,
+        do_not_contact_at: stopped ? daysAgoIso(90 + (position % 120)) : null,
+        do_not_contact_reason: stopped
+          ? ["Asked by phone", "Written request", "Asked at the door"][position % 3]
+            + " to stop all contact."
+          : null,
+        updated_by: userId,
+      };
+    });
+  });
+  const contactPreferences = await insertAll(
+    client, "crm_contact_preferences", preferenceRows, "id",
+  );
+  if ("error" in contactPreferences) return contactPreferences;
+
+  // Which (account, channel) pairs may not be written to, so the notices
+  // below suppress for the SAME reason the composer would have.
+  const noticeBlocked = new Set(
+    preferenceRows
+      .filter((row) => row.do_not_contact_at !== null || row.transactional_allowed === false)
+      .map((row) => `${row.account_id as string}:${row.channel as string}`),
+  );
+
+  // Plainly synthetic on both channels: `example.test` is reserved and can
+  // never route, and the number is inside the 555 range kept for fiction.
+  const noticeDestination = (channel: string, index: number) =>
+    channel === "email"
+      ? `account${index}@example.test`
+      : `+1555${String(100000 + (index % 899999)).slice(0, 6)}`;
+
+  /*
+   * Transactional notices (ADR-217).
+   *
+   * NOT ONE OF THESE IS `sent`, deliberately. No SMS or email provider is
+   * connected in a seeded workspace, so a seeded `sent` row would be the
+   * exact falsehood this increment exists to make impossible — and it
+   * could not be written anyway: the state is reachable only through
+   * crm_notice_mark_dispatched, which asks whether a provider is live.
+   */
+  const noticeRows: SeedRow[] = [];
+  visits.data.forEach((visit, index) => {
+    const order = visitRows[index];
+    if (order === undefined) return;
+    const accountId = order.account_id as string;
+    const day = String(order.scheduled_start).slice(0, 10);
+    const completed = visitSources[index]?.statusPath.includes("completed") ?? false;
+
+    const reminderBlocked = noticeBlocked.has(`${accountId}:sms`);
+    noticeRows.push({
+      organization_id: org,
+      account_id: accountId,
+      kind: "visit_reminder",
+      channel: "sms",
+      state: reminderBlocked ? "suppressed" : index % 29 === 0 ? "cancelled" : "composed",
+      work_order_id: visit.id as string,
+      subject_line: null,
+      body: `Your ${String(order.service_type)} is on ${day}. Reply to reschedule.`,
+      destination: noticeDestination("sms", index),
+      due_on: day,
+      due_at: `${day}T16:00:00Z`,
+      suppressed_at: reminderBlocked ? daysAgoIso(30) : null,
+      suppression_reason: reminderBlocked
+        ? "The customer asked not to be contacted on sms."
+        : null,
+      cancelled_at: !reminderBlocked && index % 29 === 0 ? daysAgoIso(20) : null,
+      created_by: userId,
+    });
+
+    if (!completed) return;
+    const followBlocked = noticeBlocked.has(`${accountId}:email`);
+    noticeRows.push({
+      organization_id: org,
+      account_id: accountId,
+      kind: "visit_completed",
+      channel: "email",
+      // A handful never left, and the reason is kept rather than guessed at.
+      state: followBlocked ? "suppressed" : index % 37 === 0 ? "failed" : "composed",
+      work_order_id: visit.id as string,
+      subject_line: `Your ${String(order.service_type)} on ${day}`,
+      body: `<p>Thank you — your ${String(order.service_type)} was completed on ${day}. `
+        + `The service report is on your portal.</p>`,
+      destination: noticeDestination("email", index),
+      due_on: day,
+      due_at: `${day}T18:00:00Z`,
+      suppressed_at: followBlocked ? daysAgoIso(30) : null,
+      suppression_reason: followBlocked
+        ? "The customer asked not to be contacted on email."
+        : null,
+      failure_reason: !followBlocked && index % 37 === 0
+        ? "The address on file bounced; no forwarding address."
+        : null,
+      created_by: userId,
+    });
+  });
+
+  // Money notices, against the invoices that are actually outstanding.
+  invoices.data.forEach((invoice, index) => {
+    const source = invoiceRows[index];
+    if (source === undefined || source.status !== "open") return;
+    const accountId = source.account_id as string | undefined;
+    if (accountId === undefined) return;
+    const blocked = noticeBlocked.has(`${accountId}:email`);
+    const dueOn = String(source.due_on);
+    noticeRows.push({
+      organization_id: org,
+      account_id: accountId,
+      kind: index % 3 === 0 ? "invoice_overdue" : "invoice_due",
+      channel: "email",
+      state: blocked ? "suppressed" : "composed",
+      invoice_id: invoice.id as string,
+      subject_line: `Invoice ${invoice.number as string}`,
+      body: `<p>Invoice ${invoice.number as string} for `
+        + `$${((source.total_cents as number) / 100).toFixed(2)} is due ${dueOn}.</p>`,
+      destination: noticeDestination("email", index),
+      due_on: dueOn,
+      due_at: `${dueOn}T09:00:00Z`,
+      suppressed_at: blocked ? daysAgoIso(30) : null,
+      suppression_reason: blocked ? "The customer asked not to be contacted on email." : null,
+      created_by: userId,
+    });
+  });
+  const notices = await insertAll(client, "crm_notices", noticeRows, "id");
+  if ("error" in notices) return notices;
+
   const timelineTotal = await client
     .from("crm_timeline_events")
     .select("id", { count: "exact", head: true })

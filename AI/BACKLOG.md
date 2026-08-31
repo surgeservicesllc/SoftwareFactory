@@ -1,5 +1,42 @@
 # Backlog
 
+## Two competitor rows that are NOT provider-gated (found 2026-08-31)
+
+Checked while writing ADR-217, because "everything remaining is gated
+outside the code" had been wrong three times in two days and was worth
+testing rather than repeating. Of the eleven GAP rows, nine name a real
+external account nobody has opened. Two do not, and both carry a bare
+**GAP** with no gating reason attached — because there isn't one:
+
+- [ ] **Route optimization / visual route manager.** PARTLY buildable, and
+  the first version of this entry overstated it — corrected here before it
+  reached main. `crm_route_density` (ADR-199) is an analytics read, not a
+  sequencer, and the sequencing arithmetic itself is genuinely ungated:
+  haversine plus nearest-neighbour and a 2-opt improvement pass is
+  something this repository can compute and test offline.
+  But `crm_properties` stores an `address` and NO COORDINATES, so a
+  distance sequencer currently has nothing to sort, and turning an address
+  into a point is geocoding — which needs a provider. Claiming the row was
+  simply "not gated" was the same over-broad move this file exists to
+  discourage, made in the opposite direction.
+  What is actually shippable: nullable `latitude`/`longitude` on
+  `crm_properties`, a sequencer over whatever coordinates exist, and honest
+  degradation — a property with no point is LISTED as unsequenceable rather
+  than silently dropped from the day. That would move the row to PARTIAL.
+  Still gated afterwards: bulk geocoding, drive time, traffic and time
+  windows.
+- [ ] **QuickBooks sync.** The API sync is gated on an Intuit account. A
+  QuickBooks-readable EXPORT FILE is not, and is what many small shops
+  actually use — the invoice and payment ledgers already hold everything it
+  needs. Would move the row to PARTIAL.
+
+Neither is started. They are recorded here rather than left as an
+unexamined "gated" so the next reader treats that word as a claim to check
+— and the route entry above is a reminder that "buildable" is equally a
+claim to check, since the first version of it did not verify that the data
+the algorithm needs exists.
+
+
 ## Grok Bot -> truthful Chief-of-Staff workspace (ADR-190, 2026-08-30)
 
 - [x] Deterministic Chief-of-Staff planner: owner prompt -> intent,

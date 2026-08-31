@@ -2,6 +2,41 @@
 
 Last updated: 2026-08-31
 
+## Newest (2026-08-31, latest+37): transactional notices (ADR-217, #79)
+
+`20260831000700` adds crm_notices and crm_contact_preferences.
+
+THE MISSING GRANT IS THE FEATURE. crm_notices has SELECT and INSERT and no
+UPDATE, for anybody. Do not add one "so the page can mark things sent" —
+that absence is the only reason `sent` cannot be written by hand, and
+crm_notice_mark_dispatched (definer, asks crm_integration_live first) is
+deliberately the sole route to that column. The postflight checks for the
+grant's absence on every hosted apply, because hosted default privileges
+grant ALL on new tables and would silently restore it.
+
+`composed`, NOT `queued`. There is no drainer. A status implying something
+will pick it up would be the lie ADR-200 warned about.
+
+A SUPPRESSED NOTICE IS KEPT. Do not "clean up" rows nobody received: the
+row with its reason is the only way to answer whether a customer was told.
+
+TRANSACTIONAL CONSENT IS NOT MARKETING CONSENT. crm_list_members
+.unsubscribed_at is about mailing lists. Do not make a newsletter
+unsubscribe suppress a visit reminder — the customer booked the visit. Only
+an explicit do-not-contact stops both, and the schema forces both
+permissions false when it is set so the contradictory state cannot exist.
+
+`due_on` IS SUPPLIED, NOT DERIVED. It is the deduplication grain and a
+local business decision. Deriving it from `due_at` in UTC would file
+evening reminders on the wrong day — and `at time zone` is STABLE, so the
+CHECK constraint that tried it was rejected outright.
+
+TWO TRAPS RE-CONFIRMED HERE. A trigger must not read `OLD` on INSERT behind
+an `and` guard; SQL does not promise to short-circuit, so nest it under
+`tg_op = 'UPDATE'`. And every OUT parameter in a `returns table` function is
+prefixed, because an unprefixed one shadows the table column everywhere in
+the body.
+
 ## Newest (2026-08-31, latest+32): truck stock (ADR-213, #77)
 
 `20260831000400` adds crm_stock_movements, a derived balance function and

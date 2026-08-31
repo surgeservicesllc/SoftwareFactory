@@ -447,6 +447,18 @@ wrong — `20260820000300` had already solved the same problem for the Job
 Seeker by putting the bytes in a column under ordinary RLS. Sending it is
 still the email/SMS row.
 
+A customer can now be TOLD things (ADR-217). A visit reminder, an en-route
+text or an overdue notice is composed, addressed, deduplicated one-per-day,
+and either kept as `composed` or kept as `suppressed` with the reason the
+customer asked not to be contacted — kept either way, because "was this
+customer told?" needs an answer. Account-level do-not-contact is separate
+from marketing consent on purpose: leaving a newsletter is not a request to
+stop hearing that a technician is coming tomorrow. Nothing can claim to
+have been SENT: `crm_notices` carries no UPDATE grant for anybody, so
+`sent` is reachable only through a dispatch that asks
+`crm_integration_live()` first. The seed writes 1,827 notices and not one
+of them is sent.
+
 Of the remaining eighteen rows, ten are gated on an
 external account nobody has opened: card/ACH processing, SMS/email
 delivery, GPS telemetry, QuickBooks sync, telephony, reviews and
