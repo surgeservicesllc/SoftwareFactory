@@ -5487,3 +5487,64 @@ Row 81 moves GAP → PARTIAL for the same reason ADR-216 did: the substance
 ships, and only the send is gated.
 
 Hosted apply scope `transactional-notices`.
+
+## ADR-218 - The charge is gated; the authorisation never was
+
+"Autopay, stored payment methods, card + ACH" sat at GAP with the reason
+"the ledger records money that moved; it does not move money." That is true
+of the CHARGE, and it is the fourth time this week a real blocker has been
+stretched to cover more than it does.
+
+Moving money needs a processor. Everything that has to be true BEFORE money
+moves does not — and in this feature that "everything" is the legally
+significant half.
+
+**The mandate is the point of this increment.** A charge without a recorded
+authorisation is, to a bank, a charge the customer did not agree to. What
+has to survive is not "we ticked a box" but THE WORDS THEY WERE SHOWN,
+frozen, with the moment and the channel — because wording changes and the
+question is always what it said on the day. It is append-only for
+everybody, exactly like a filed service document (ADR-216): a mandate that
+can be edited afterwards is not evidence. A shop with mandates and no
+processor can still answer the email a bank sends eight months later, which
+is the question that actually arrives.
+
+**Nothing can say money moved.** `crm_charge_attempts` carries SELECT and
+INSERT and no UPDATE, for anybody; `succeeded` is reachable only through
+`crm_autopay_record_settlement`, which asks `crm_integration_live(org,
+'card_payments')` first. The same construction as ADR-217 and for the same
+reason. The tests prove it refuses while disconnected, refuses with the
+owner's switch on but no sealed credential, and settles for real once both
+halves exist — because a gate that never opens is a wall.
+
+**A card number cannot be stored here, even by mistake.** Not "we don't put
+it there": `text_has_likely_pan` refuses any run of 12-19 digits, ignoring
+the spaces and dashes people type between groups, on every field a person
+types into. Deliberately blunt — a false refusal costs somebody a retype, a
+false accept puts a card number in a database dump and this repository into
+PCI scope. The browser mirrors the rule EXACTLY, pinned by a parity test
+that runs both implementations over the same table: a looser browser rule
+would wave a PAN onto the wire trusting a server check that will not fire,
+and a stricter one would refuse what the database accepts.
+
+**The cap is why an enrollment is not a boolean.** "Charge me
+automatically" is not consent to charge any amount. A plan that quietly
+doubles must stop at the ceiling and be looked at by a person, so the
+ceiling is stored and a trigger enforces it against every caller rather
+than only the scheduler.
+
+**Two things caught by the tests rather than by a customer.** `%.2f` is not
+valid in RAISE — PostgreSQL substitutes `%` and nothing else — so the cap
+message printed "450.0000000000000000" in the one sentence whose whole job
+is to state two amounts clearly; `to_char` fixes it. And the seed read an
+invoice status of `paid` that does not exist in this schema, where
+settlement is `paid_cents` reaching `total_cents` with the status still
+`open`; reading a status that was never there is how the first draft
+quietly produced nothing.
+
+The seed writes 351 charge attempts and not one of them is `succeeded`.
+
+Row moves GAP -> PARTIAL. What remains gated is the movement of money, and
+only that.
+
+Hosted apply scope `autopay-authorization`.

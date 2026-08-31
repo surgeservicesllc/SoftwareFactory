@@ -2,6 +2,44 @@
 
 Last reviewed: 2026-08-31
 
+**Addendum, 2026-08-31 latest+38 - autopay authorisation (ADR-218):**
+services-autopay.behavior 15 on the real chain, most about what cannot
+happen: a card number refused in the holder name, spaced or dashed, and in
+the brand; a last_four longer than four refused; an expiry on a bank
+account refused and its absence on a card refused; autopay refused when the
+mandate belongs to the customer's OTHER card; a mandate unable to be edited
+or deleted by anybody; a charge scheduled against the OUTSTANDING balance
+rather than the whole bill again; a charge over the authorised ceiling
+refused naming both amounts; an invoice belonging to another account
+refused; a second live charge on one invoice refused; a settlement refused
+while no processor is connected AND unable to be hand-written, with a
+direct insert claiming `succeeded` refused by constraint; two live
+enrollments per account refused; a removed instrument unable to be
+enrolled; one workspace's instruments, mandates and charges invisible to
+another. And the gate proved to OPEN: with the owner's switch on AND a
+sealed credential present a real settlement lands and records the
+processor's reference, while the switch alone does not, and a settled
+charge cannot then be cancelled. payment-instruments unit 10, including a
+parity table run through BOTH the browser rule and text_has_likely_pan so
+the two cannot drift, and a card alive through the last day of its expiry
+month rather than dying on the first. Two defects caught by tests rather
+than a customer: `%.2f` is not valid in RAISE, so the cap message printed
+"450.0000000000000000"; and the seed read an invoice status of `paid` that
+does not exist in this schema, which is how its first draft quietly
+produced 72 rows instead of 351. RLS census 211 -> 215; grants 56 -> 60 crm
+tables; runbook 214 -> 215; seed report 55/55 -> 59/59 and 54,331 ->
+55,628 rows, with 320 instruments, 320 mandates, 306 enrollments and 351
+charge attempts of which exactly zero are `succeeded`. Matrix: 11 GAP ->
+10, 7 PARTIAL -> 8.
+
+Also in this increment, measured rather than assumed: 51 suites each
+replayed all 215 migrations at 5,378ms apiece. Dumping the finished data
+directory costs 217ms and restoring one costs 981ms, so
+tests/support/migrated-database.ts builds the chain once and hands out
+restored copies. The autopay suite went 8.20s cold to 2.17s warm — 3.8x —
+and the CI `quality` job had finished #480 with 41 seconds to spare under
+its twenty-minute ceiling, so this was the increment that needed it.
+
 **Addendum, 2026-08-31 latest+37 - transactional notices (ADR-217):**
 services-notices.behavior 16 on the real chain, most of them about what
 CANNOT happen: a notice refused a dispatch while no provider is connected;

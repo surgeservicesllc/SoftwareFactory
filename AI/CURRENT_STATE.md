@@ -459,6 +459,19 @@ have been SENT: `crm_notices` carries no UPDATE grant for anybody, so
 `crm_integration_live()` first. The seed writes 1,827 notices and not one
 of them is sent.
 
+A customer can now AUTHORISE being charged (ADR-218), which is not the
+same as being charged. A stored instrument is metadata — brand, last four,
+and the NAME of the vault purpose a processor token would live under; the
+schema refuses anything PAN-shaped in any field a person types into, and
+the browser refuses it first so it never crosses the network. The mandate
+keeps the words the customer was shown, frozen and append-only, which is
+the record a bank asks for months later. The enrollment carries the ceiling
+they authorised, enforced by a trigger against every caller. Nothing can
+say money moved: `crm_charge_attempts` has no UPDATE grant, so `succeeded`
+is reachable only through a settlement that asks whether a processor is
+really connected. The seed writes 351 charge attempts and not one is
+settled.
+
 Of the remaining eighteen rows, ten are gated on an
 external account nobody has opened: card/ACH processing, SMS/email
 delivery, GPS telemetry, QuickBooks sync, telephony, reviews and

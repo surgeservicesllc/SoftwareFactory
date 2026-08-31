@@ -133,7 +133,7 @@ built.
 | Contracts with terms and signature record | FieldRoutes, PestPac | **HAVE** (ADR-194) |
 | Invoices, payments, refunds, void | all | **HAVE** (ADR-194) |
 | Service details and chemical usage pulled onto the invoice | PestPac, FieldRoutes | **HAVE** (ADR-212) — a draft invoice is built from the completed visit: the service at the plan's agreed value, then one line per current application naming product, amount, target pest and EPA number. Chemicals are priced at zero because the material is part of the service, and the exact amount is printed at the scale the compliance log recorded it. One visit bills once, across the whole book; a built invoice is voided and reissued rather than rebuilt. |
-| **Autopay, stored payment methods, card + ACH** | PestPac, FieldRoutes, Briostack | **GAP** — the ledger records money that moved; it does not move money |
+| **Autopay, stored payment methods, card + ACH** | PestPac, FieldRoutes, Briostack | **PARTIAL** — autopay authorisation (ADR-218) ships: a stored instrument as metadata only (brand, last four, a vault purpose NAME — the schema refuses anything PAN-shaped), the customer's MANDATE with the frozen words they agreed to, an enrollment carrying the ceiling they authorised, and scheduled charge attempts. Only the movement of money is gated: `crm_charge_attempts` holds no UPDATE grant, so `succeeded` is reachable only through a settlement that asks whether a processor is really connected. |
 | **Recurring/subscription auto-invoicing** | Briostack, FieldRoutes | **PARTIAL** (ADR-200) — invoices are raised from due service plans, idempotently, and a plan cannot be billed twice for a period. Running it on a SCHEDULE is the gap: nothing in this product runs on a timer, so generation is operator-triggered and the page says **Not Connected** about the rest. |
 | **AR aging, dunning, automated reminders** | Briostack, PestPac | **PARTIAL** — aging by bucket (ADR-199) and a collections worklist with recorded actions (ADR-200) both ship. The remaining gap is narrower than it was: overdue notices are now composed and addressed as transactional notices (ADR-217), and `crm_dunning_notices` still records what a person did. Only the send is gated. |
 | **QuickBooks sync** | Briostack, GorillaDesk, Jobber | **GAP** |
@@ -239,7 +239,7 @@ implied, in the deepest-measured competitor on the board.
 | **Website builder** | PestPac (Website Builder) | **GAP** — PestPac sells one. This is outside what a CRM core is, and it is listed rather than quietly dropped so the count stays honest. |
 
 **A note on what "parity" can mean here.** 67 capability rows: **49 HAVE,
-7 PARTIAL, 11 GAP.**
+8 PARTIAL, 10 GAP.**
 
 (58 until PestBoss was measured in its own right, then 60, then 67 once
 PestPac's own feature index was checked against the board rather than

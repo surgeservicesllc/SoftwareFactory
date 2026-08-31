@@ -2295,6 +2295,191 @@ export async function runSeed(
   const notices = await insertAll(client, "crm_notices", noticeRows, "id");
   if ("error" in notices) return notices;
 
+  /*
+   * Autopay authorization (ADR-218). The instrument is metadata only — a
+   * brand, four digits and the NAME of the vault purpose a processor token
+   * would be filed under. Nothing here is or resembles a card number, and
+   * the schema refuses one if it ever were.
+   */
+  const instrumentRows: SeedRow[] = dataset.accounts.flatMap((account, index) => {
+    const accountId = accountIdByName.get(account.name);
+    if (accountId === undefined) return [];
+    // Roughly one household in six pays by bank debit rather than card.
+    const bank = index % 6 === 0;
+    return [{
+      organization_id: org,
+      account_id: accountId,
+      kind: bank ? "bank_account" : "card",
+      display_brand: bank
+        ? ["Cascadia Credit Union", "Harbor Savings", "Mercantile Bank"][index % 3]
+        : ["Visa", "Mastercard", "American Express", "Discover"][index % 4],
+      last_four: String(1000 + (index * 7) % 9000),
+      // Expiry belongs to a card and only to a card; the schema checks both
+      // ways, so a bank account carrying one would be refused.
+      expires_month: bank ? null : 1 + (index % 12),
+      expires_year: bank ? null : 2027 + (index % 4),
+      holder_name: account.name,
+      vault_purpose: bank ? "crm_ach_processor_token" : "crm_card_processor_token",
+      // A few were retired — a lost card, a closed account — and are kept
+      // rather than deleted, because mandates and charges point at them.
+      removed_at: index % 23 === 0 ? daysAgoIso(40 + (index % 90)) : null,
+      removed_reason: index % 23 === 0
+        ? ["Card reported lost", "Bank account closed", "Replaced by the customer"][index % 3]
+        : null,
+      created_by: userId,
+    }];
+  });
+  const instruments = await insertAll(
+    client, "crm_payment_instruments", instrumentRows, "id",
+  );
+  if ("error" in instruments) return instruments;
+
+  /*
+   * The mandate: what the customer agreed to, in the words they were shown,
+   * frozen. This is the row that answers a bank's question months later,
+   * and it is append-only for exactly that reason.
+   */
+  const AGREEMENT_TEXT =
+    "I authorise this company to charge the payment method on file for each "
+    + "invoice as it falls due, up to the limit recorded on my account, until "
+    + "I withdraw this authorisation in writing or by telephone.";
+  const mandateRows: SeedRow[] = instruments.data.map((instrument, index) => {
+    const source = instrumentRows[index];
+    return {
+      organization_id: org,
+      account_id: source.account_id as string,
+      instrument_id: instrument.id as string,
+      channel: (["web", "phone", "paper", "in_person"] as const)[index % 4],
+      agreement_text: AGREEMENT_TEXT,
+      // Two wordings in circulation, because a shop that revised its terms
+      // needs to find every mandate taken under the old one.
+      agreement_version: index % 5 === 0 ? "v2.0" : "v2.1",
+      authorized_by_name: String(source.holder_name),
+      authorized_at: daysAgoIso(120 + (index % 400)),
+      recorded_by: userId,
+    };
+  });
+  const mandates = await insertAll(client, "crm_payment_mandates", mandateRows, "id");
+  if ("error" in mandates) return mandates;
+
+  // One live enrollment per account, which the schema enforces: two would
+  // race to charge the same invoice twice.
+  const enrollmentRows: SeedRow[] = mandates.data.flatMap((mandate, index) => {
+    const source = mandateRows[index];
+    const instrumentSource = instrumentRows[index];
+    // An instrument that was retired cannot carry a live enrollment; the
+    // trigger refuses it, so the seed must not attempt one.
+    if (instrumentSource.removed_at !== null) return [];
+    return [{
+      organization_id: org,
+      account_id: source.account_id as string,
+      instrument_id: source.instrument_id as string,
+      mandate_id: mandate.id as string,
+      plan_id: null,
+      charge_offset_days: [0, 1, 3, 5, 7][index % 5],
+      // The ceiling the customer authorized, comfortably above an ordinary
+      // invoice so a routine charge fits and an unusual one does not.
+      max_amount_cents: [50000, 120000, 250000, 500000][index % 4],
+      revoked_at: index % 19 === 0 ? daysAgoIso(15 + (index % 60)) : null,
+      revoke_reason: index % 19 === 0
+        ? ["Customer asked to pay by cheque", "Card repeatedly declined",
+           "Account moved to invoice terms"][index % 3]
+        : null,
+      created_by: userId,
+    }];
+  });
+  const enrollments = await insertAll(
+    client, "crm_autopay_enrollments", enrollmentRows, "id",
+  );
+  if ("error" in enrollments) return enrollments;
+
+  const liveEnrollmentByAccount = new Map<string, { id: string; cap: number }>();
+  enrollments.data.forEach((enrollment, index) => {
+    const source = enrollmentRows[index];
+    if (source.revoked_at !== null) return;
+    liveEnrollmentByAccount.set(source.account_id as string, {
+      id: enrollment.id as string,
+      cap: source.max_amount_cents as number,
+    });
+  });
+
+  /*
+   * Charge attempts.
+   *
+   * NOT ONE IS `succeeded`, deliberately. No card processor is connected in
+   * a seeded workspace, so a settled row would be the exact falsehood
+   * ADR-218 exists to make impossible — and it could not be written anyway:
+   * the state has no writer but crm_autopay_record_settlement, which asks
+   * whether a processor is live before it acts.
+   */
+  /*
+   * The balances are read BACK from the database rather than taken from the
+   * rows this function built. `paid_cents` and `status` are maintained by
+   * the payment triggers, so the objects assembled up in this file never
+   * saw a payment land — computing an outstanding balance from them would
+   * be arithmetic on a number that was always zero.
+   */
+  const invoiceState = await client
+    .from("crm_invoices")
+    .select("id, account_id, status, total_cents, paid_cents, due_on")
+    .eq("organization_id", org);
+  if (invoiceState.error) return { error: invoiceState.error };
+
+  const chargeRows: SeedRow[] = [];
+  (invoiceState.data ?? []).forEach((invoice, index) => {
+    const accountId = invoice.account_id as string | null;
+    if (accountId === null) return;
+    const enrollment = liveEnrollmentByAccount.get(accountId);
+    if (enrollment === undefined) return;
+    if (invoice.due_on === null) return;
+
+    const total = Number(invoice.total_cents);
+    const outstanding = total - Number(invoice.paid_cents);
+
+    /*
+     * A SCHEDULED charge is still waiting, so it needs an invoice with
+     * something outstanding. A FAILED or CANCELLED one is history, and
+     * history sits on invoices settled some other way — a declined card
+     * followed by a cheque. An `uncollectible` invoice is that story with a
+     * worse ending, and a failed charge is usually how it got there.
+     *
+     * There is no "paid" status in this schema: an invoice is settled when
+     * paid_cents reaches total_cents while the status stays `open`.
+     */
+    const waiting = invoice.status === "open" && outstanding > 0;
+    const settled = invoice.status === "open" && outstanding <= 0;
+    const writtenOff = invoice.status === "uncollectible";
+    // A draft has not been issued and a void never existed; neither is
+    // something a customer can be charged for.
+    if (!waiting && !settled && !writtenOff) return;
+
+    const amount = waiting ? outstanding : total;
+    // A charge may never exceed the ceiling the customer authorised; the
+    // trigger refuses it, so the seed does not attempt one.
+    if (amount <= 0 || amount > enrollment.cap) return;
+
+    const failed = writtenOff || (settled ? index % 2 === 0 : index % 11 === 0);
+    const cancelled = !failed && (settled || index % 17 === 0);
+    chargeRows.push({
+      organization_id: org,
+      enrollment_id: enrollment.id,
+      invoice_id: invoice.id as string,
+      amount_cents: amount,
+      // A date column comes back as a Date, and String() on one yields
+      // "Wed Jul 23 2025 ..." rather than a date literal Postgres accepts.
+      scheduled_on: new Date(invoice.due_on as string).toISOString().slice(0, 10),
+      state: failed ? "failed" : cancelled ? "cancelled" : "scheduled",
+      failure_reason: failed
+        ? ["The card was declined by the issuer", "Insufficient funds",
+           "The card on file has expired"][index % 3]
+        : null,
+      cancelled_at: cancelled ? daysAgoIso(5 + (index % 30)) : null,
+      created_by: userId,
+    });
+  });
+  const chargeAttempts = await insertAll(client, "crm_charge_attempts", chargeRows, "id");
+  if ("error" in chargeAttempts) return chargeAttempts;
+
   const timelineTotal = await client
     .from("crm_timeline_events")
     .select("id", { count: "exact", head: true })
