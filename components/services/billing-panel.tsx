@@ -7,6 +7,7 @@ import { Card, Notice, PageHeader, SectionTitle } from "@/components/ui";
 import { dollars } from "@/components/services/ui";
 import type {
   AccountsPayload,
+  WorkOrdersPayload,
   ContractsPayload,
   EstimatesPayload,
   InvoicesPayload,
@@ -74,17 +75,21 @@ export function ServicesBillingPanel() {
   const [actError, setActError] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("invoices");
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [workOrders, setWorkOrders] = useState<WorkOrdersPayload | null>(null);
+  const [visitFor, setVisitFor] = useState<Record<string, string>>({});
 
   const refresh = useCallback(async () => {
     try {
-      const [invoicesRes, estimatesRes, contractsRes, paymentsRes, refundsRes, accountsRes] =
-        await Promise.all([
+      const [
+        invoicesRes, estimatesRes, contractsRes, paymentsRes, refundsRes, accountsRes, ordersRes,
+      ] = await Promise.all([
           fetch("/api/services/invoices", { headers: { accept: "application/json" } }),
           fetch("/api/services/estimates", { headers: { accept: "application/json" } }),
           fetch("/api/services/contracts", { headers: { accept: "application/json" } }),
           fetch("/api/services/payments", { headers: { accept: "application/json" } }),
           fetch("/api/services/refunds", { headers: { accept: "application/json" } }),
           fetch("/api/services/accounts", { headers: { accept: "application/json" } }),
+          fetch("/api/services/work-orders", { headers: { accept: "application/json" } }),
         ]);
       const invoicesBody = (await invoicesRes.json()) as InvoicesPayload & {
         error?: { message?: string };
@@ -100,6 +105,7 @@ export function ServicesBillingPanel() {
       if (paymentsRes.ok) setPayments((await paymentsRes.json()) as PaymentsPayload);
       if (refundsRes.ok) setRefunds((await refundsRes.json()) as RefundsPayload);
       if (accountsRes.ok) setAccounts((await accountsRes.json()) as AccountsPayload);
+      if (ordersRes.ok) setWorkOrders((await ordersRes.json()) as WorkOrdersPayload);
     } catch {
       setListError("Billing could not be read.");
     }
@@ -127,6 +133,56 @@ export function ServicesBillingPanel() {
     for (const payment of payments?.payments ?? []) map.set(payment.id, payment);
     return map;
   }, [payments]);
+
+  /**
+   * Build a draft invoice's lines from the visit it bills (ADR-212).
+   *
+   * Every refusal the database makes here is meaningful — an unfinished
+   * visit, one already billed, a document the customer already holds — so
+   * the message is shown as it came back rather than replaced with a
+   * generic failure.
+   */
+  const buildFromVisit = useCallback(
+    async (invoiceId: string, workOrderId: string) => {
+      setBusyId(invoiceId);
+      setActError(null);
+      try {
+        const response = await fetch(`/api/services/invoices/${invoiceId}/from-visit`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ workOrderId }),
+        });
+        if (!response.ok) {
+          const body = (await response.json()) as { error?: { message?: string } };
+          setActError(body.error?.message ?? "The invoice could not be built from that visit.");
+          return;
+        }
+        await refresh();
+      } catch {
+        setActError("The invoice could not be built from that visit.");
+      } finally {
+        setBusyId(null);
+      }
+    },
+    [refresh],
+  );
+
+  /** Completed visits for one account that no invoice has billed yet. */
+  const billableVisits = useCallback(
+    (accountId: string) => {
+      const billed = new Set(
+        (invoices?.invoices ?? [])
+          .map((invoice) => invoice.workOrderId)
+          .filter((id): id is string => id !== null),
+      );
+      return (workOrders?.workOrders ?? []).filter(
+        (order) => order.accountId === accountId
+          && order.status === "completed"
+          && !billed.has(order.id),
+      );
+    },
+    [invoices, workOrders],
+  );
 
   /** Record the balance of one invoice as received. */
   const settle = useCallback(
@@ -278,6 +334,9 @@ export function ServicesBillingPanel() {
                         <span className="block font-mono text-xs text-foreground">{invoice.number}</span>
                         <span className="block text-xs text-faint">
                           {invoice.lines.length} {invoice.lines.length === 1 ? "line" : "lines"}
+                          {invoice.lines.some((line) => line.source !== "manual")
+                            ? " · from the visit"
+                            : ""}
                         </span>
                       </td>
                       <td className="py-2.5 pr-3 text-foreground">
@@ -319,6 +378,38 @@ export function ServicesBillingPanel() {
                           >
                             {busyId === invoice.id ? "Recording…" : "Record payment"}
                           </button>
+                        ) : invoice.status === "draft"
+                          && invoice.lines.every((line) => line.source === "manual") ? (
+                          <span className="flex flex-wrap items-center gap-1.5">
+                            <select
+                              aria-label={`Visit to bill on ${invoice.number}`}
+                              className="rounded-md border border-line bg-surface px-2 py-1 text-xs"
+                              value={visitFor[invoice.id] ?? ""}
+                              onChange={(event) =>
+                                setVisitFor((current) => ({
+                                  ...current,
+                                  [invoice.id]: event.target.value,
+                                }))
+                              }
+                            >
+                              <option value="">Choose a visit…</option>
+                              {billableVisits(invoice.accountId).map((order) => (
+                                <option key={order.id} value={order.id}>
+                                  {order.serviceType} · {order.scheduledStart.slice(0, 10)}
+                                </option>
+                              ))}
+                            </select>
+                            <button
+                              type="button"
+                              className="btn btn-secondary px-2.5 py-1 text-xs"
+                              disabled={busyId === invoice.id || !visitFor[invoice.id]}
+                              onClick={() =>
+                                void buildFromVisit(invoice.id, visitFor[invoice.id] as string)
+                              }
+                            >
+                              {busyId === invoice.id ? "Building…" : "Build from visit"}
+                            </button>
+                          </span>
                         ) : (
                           <span className="text-xs text-faint">—</span>
                         )}

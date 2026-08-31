@@ -2,6 +2,36 @@
 
 Last updated: 2026-08-31
 
+## Newest (2026-08-31, latest+31): invoices built from the visit (ADR-212, #76)
+
+`20260831000300` adds two columns to crm_invoice_lines, a partial unique
+index and one function.
+
+IT BUILDS ONCE. Do not "improve" this into a regenerate. crm_invoice_lines
+carries `select, insert` and NO DELETE, deliberately — a line is part of a
+financial record. My first design deleted a "generated block" and re-inserted
+it; it failed on a permission error, and that error was the schema being
+right. Adding the delete grant to make regeneration work would quietly turn
+every built invoice into something that can mean two things on two days.
+
+EVERY OUT PARAMETER IS PREFIXED (line_position, line_source, …). An
+unprefixed `source` shadows the column everywhere in the body, so
+`where source <> 'manual'` compares a null and matches nothing. Same trap
+as ADR-203's positional ORDER BY. It fails loudly in PGlite; it would have
+failed silently if the body had only ever inserted.
+
+A CHEMICAL LINE'S QUANTITY IS 1. The amount applied is in the description,
+at three decimals. crm_invoice_lines.quantity is numeric(12,2): 0.005 oz
+rounds to 0.00 and trips the line's own `quantity > 0`; 0.125 becomes 0.13
+on a document a customer keeps. Do not "tidy" the real amount into the
+quantity column.
+
+USE trim_scale, NOT trim(trailing '0'). The latter renders 100.000 as "1".
+That one nearly shipped.
+
+SUPERSEDED APPLICATIONS ARE EXCLUDED. The compliance log corrects by
+superseding, not editing, so billing every row restates a fixed mistake.
+
 ## Newest (2026-08-31, latest+30): plan sequencing (ADR-211, #75)
 
 `20260831000200` adds crm_plan_steps, a cycle length on the plan, five

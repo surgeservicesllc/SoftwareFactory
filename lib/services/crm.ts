@@ -758,7 +758,11 @@ export const CRM_CONTRACT_COLUMNS =
 export const CRM_INVOICE_COLUMNS =
   "id, account_id, contract_id, work_order_id, number, status, subtotal_cents, tax_cents, total_cents, paid_cents, issued_on, due_on, memo, voided_at, void_reason, created_at, updated_at";
 export const CRM_INVOICE_LINE_COLUMNS =
-  "id, invoice_id, position, description, quantity, unit_price_cents, amount_cents, created_at";
+  "id, invoice_id, position, description, quantity, unit_price_cents, amount_cents, source, created_at";
+
+/** Where a line came from (ADR-212). Everything typed by a person is manual. */
+export const CRM_INVOICE_LINE_SOURCES = ["manual", "work_order", "application"] as const;
+export type CrmInvoiceLineSource = (typeof CRM_INVOICE_LINE_SOURCES)[number];
 export const CRM_PAYMENT_COLUMNS =
   "id, account_id, invoice_id, amount_cents, method, reference, received_at, recorded_at, note";
 export const CRM_REFUND_COLUMNS =
@@ -794,7 +798,10 @@ export type CrmLineRow = {
 };
 
 export type CrmEstimateLineRow = CrmLineRow & { estimate_id: string };
-export type CrmInvoiceLineRow = CrmLineRow & { invoice_id: string };
+export type CrmInvoiceLineRow = CrmLineRow & {
+  invoice_id: string;
+  source: CrmInvoiceLineSource;
+};
 
 export type CrmContractRow = {
   id: string;
@@ -888,6 +895,15 @@ export function toLineView(row: CrmLineRow) {
     amountCents: row.amount_cents,
     createdAt: row.created_at,
   };
+}
+
+/**
+ * An invoice line carries one thing an estimate line does not: whether a
+ * person typed it or the visit produced it. A reader who cannot tell the
+ * difference cannot tell a priced service from a chemical recorded at zero.
+ */
+export function toInvoiceLineView(row: CrmInvoiceLineRow) {
+  return { ...toLineView(row), source: row.source };
 }
 
 export function toContractView(row: CrmContractRow) {

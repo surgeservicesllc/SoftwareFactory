@@ -110,7 +110,7 @@ built.
 | Estimates / proposals | PestPac, FieldRoutes | **HAVE** (ADR-194) |
 | Contracts with terms and signature record | FieldRoutes, PestPac | **HAVE** (ADR-194) |
 | Invoices, payments, refunds, void | all | **HAVE** (ADR-194) |
-| Service details and chemical usage pulled onto the invoice | PestPac, FieldRoutes | **PARTIAL** — invoices reference a work order; lines are not generated from it |
+| Service details and chemical usage pulled onto the invoice | PestPac, FieldRoutes | **HAVE** (ADR-212) — a draft invoice is built from the completed visit: the service at the plan's agreed value, then one line per current application naming product, amount, target pest and EPA number. Chemicals are priced at zero because the material is part of the service, and the exact amount is printed at the scale the compliance log recorded it. One visit bills once, across the whole book; a built invoice is voided and reissued rather than rebuilt. |
 | **Autopay, stored payment methods, card + ACH** | PestPac, FieldRoutes, Briostack | **GAP** — the ledger records money that moved; it does not move money |
 | **Recurring/subscription auto-invoicing** | Briostack, FieldRoutes | **PARTIAL** (ADR-200) — invoices are raised from due service plans, idempotently, and a plan cannot be billed twice for a period. Running it on a SCHEDULE is the gap: nothing in this product runs on a timer, so generation is operator-triggered and the page says **Not Connected** about the rest. |
 | **AR aging, dunning, automated reminders** | Briostack, PestPac | **PARTIAL** — aging by bucket (ADR-199) and a collections worklist with recorded actions (ADR-200) both ship. AUTOMATED reminders are the gap: no email/SMS provider is connected, so a notice records what a person did rather than what a machine sent. |
@@ -199,8 +199,8 @@ SMS/email delivery (which also gates automated reminders and campaign
 sending), GPS/fleet telemetry, QuickBooks sync, call-centre/telephony
 integration, and reviews/reputation platforms.
 
-**A note on what "parity" can mean here.** 58 capability rows: **45 HAVE,
-5 PARTIAL, 8 GAP.**
+**A note on what "parity" can mean here.** 58 capability rows: **46 HAVE,
+4 PARTIAL, 8 GAP.**
 
 The composition matters more than the count. As of ADR-210 **every
 remaining GAP is provider-gated — all eight of them.** Not most, not
@@ -216,8 +216,10 @@ call are the only remaining steps, and `/Services/integrations` reports
 whether each is live from a sealed credential actually existing rather than
 a hard-coded label.
 
-The five PARTIALs are capabilities where the data ships and a piece of what
+The four PARTIALs are capabilities where the data ships and a piece of what
 the competitors sell does not — automated sending on a schedule, drag
-sequencing, truck stock, invoice lines generated from a work order. Those
-are buildable, and each is an increment rather than a row. Appointment
-sequencing was the sixth until ADR-211 closed it.
+sequencing, truck stock, and paying online. Those first three are
+buildable, and each is an increment rather than a row; paying online is
+provider-gated like the GAPs beside it. Appointment sequencing (ADR-211)
+and invoice lines from the visit (ADR-212) were on this list until they
+were built.

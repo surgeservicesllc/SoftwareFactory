@@ -1,5 +1,26 @@
 # Current state
 
+## 2026-08-31: An invoice can be built from the visit it bills (ADR-212)
+
+A draft invoice raised against a completed work order can now be built from
+it: the service at the plan's agreed value, then one line per current
+chemical application naming the product, the amount at the scale the
+compliance log recorded it, the target pest and the EPA registration
+number. Chemicals are priced at zero because the material is part of the
+service; a zero line says "included, and here is what it was" rather than
+inventing a figure nobody agreed to.
+
+It builds once. Invoice lines are insert-only in this schema, so changing a
+built invoice uses the verb already provided — void it and raise another,
+leaving both documents for an audit. One visit bills once across the whole
+workspace, and an invoice already sent cannot be rebuilt underneath the
+customer holding it.
+
+The control lives on `/Services/billing` beside the invoice it belongs to,
+offering only completed visits for that account that no invoice has billed.
+
+Repository only: the migration is not yet applied to hosted.
+
 ## 2026-08-31: A plan now runs on a calendar, not an interval (ADR-211)
 
 A service plan may carry an ordered list of visit steps and a cycle length,

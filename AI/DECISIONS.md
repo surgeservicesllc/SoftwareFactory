@@ -5148,3 +5148,63 @@ over the same steps across three years and fails on a single differing
 date — the same arrangement the secret detectors use.
 
 Hosted apply scope `plan-sequencing`.
+
+## ADR-212 - The invoice says what was actually done
+
+An invoice could already NAME a work order. Its lines were still typed by
+hand, which made the document a customer receives and the record of the
+visit two independent stories that agree only while somebody keeps them
+agreeing. PestPac and FieldRoutes both pull the service and the chemical
+usage onto the invoice; this closes that row.
+
+Four outcomes had to be impossible, and each is a constraint rather than a
+convention: billing a visit that has not happened, billing one visit twice,
+restating a document the customer already holds, and printing a quantity
+that is not the one the compliance log recorded.
+
+**Generation happens once per invoice, and a second attempt is refused.**
+That is not a simplification — it is the schema's existing boundary.
+`crm_invoice_lines` carries `select, insert` and no delete, because a line
+is part of a financial record rather than a draft somebody keeps editing.
+The first design deleted and re-inserted a "generated block" so that
+regeneration would preserve hand-typed lines; it failed on a permission
+error, which was the schema telling me the feature was wrong rather than
+the grant being too narrow. Changing a built invoice uses the verb this
+schema already provides: void it and raise another, leaving both documents
+for an audit of the account.
+
+**Chemical lines are priced at zero on purpose.** In a pest program the
+material is part of the service, and the customer is entitled to see what
+was applied at their site — product, EPA number, amount, target pest. A
+zero line says "included, and here is what it was". Inventing a per-ounce
+price to make the arithmetic look busier would be a number nobody agreed
+to. A one-off visit with no plan behind it is priced at zero for the same
+reason: an operator prices it, and a figure this function guessed would be
+indistinguishable from one they chose.
+
+**Only current applications are billed.** The compliance log is
+append-only and a correction supersedes an original rather than editing it
+(increment 6), so an invoice built from every row would restate a mistake
+the log has already corrected.
+
+**A chemical line's quantity is 1, not the amount applied.**
+`crm_invoice_lines.quantity` is `numeric(12,2)` and an application is
+recorded at three decimals. 0.005 oz of bait would round to 0.00 and trip
+the line's own `quantity > 0` check; 0.125 would silently become 0.13 on a
+document the customer keeps. The line counts one application and the exact
+amount lives in the description, at the scale it was recorded.
+
+Two defects were caught in review before this ever ran. `trim(trailing '0')`
+on a quantity turns 100.000 into **"1"**, because it strips the integer's
+zeros along with the scale's — `trim_scale` is the correct tool. And the
+service date rendered in whichever timezone the session happened to carry,
+which would have put two different days on two copies of one invoice; it
+is now explicitly UTC.
+
+Every output column of `crm_invoice_lines_from_visit` is prefixed, because
+an unprefixed one would shadow the table column of the same name
+throughout the body — the same OUT-parameter trap as ADR-203's positional
+`order by`, and here it would have made a `where source <> 'manual'`
+compare a null and match nothing.
+
+Hosted apply scope `invoice-from-visit`.
