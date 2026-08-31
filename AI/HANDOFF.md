@@ -2,6 +2,28 @@
 
 Last updated: 2026-08-31
 
+## Running a full local suite: do not touch supabase/migrations while it runs
+
+Twice in one session a full `npx vitest run` came back with a dozen-plus
+failures that were entirely self-inflicted, and both times the cause was
+identical: a migration file created (or created and then deleted) WHILE the
+run was in flight.
+
+`tests/support/latest-migration.ts` resolves LATEST_MIGRATION once at module
+load. Suites that assert `migrationFiles.at(-1)` re-read the directory later.
+Change the directory in between and the two disagree, so every chain-replay
+suite fails with a message naming a file you just added or removed.
+
+The tell is unmistakable and worth recognising fast: MANY failures, ONE
+assertion message, and it names a migration filename. That is never a real
+defect.
+
+The rule: start a full suite only against a committed, quiet tree, and do
+other work somewhere that is not `supabase/migrations/`. If you must add a
+migration, kill the run first — a contaminated run is worse than no run,
+because it costs a re-run and it tempts you to read real failures out of
+noise.
+
 ## Newest (2026-08-31, latest+27): the integration registry (ADR-207)
 
 `20260830010200` adds crm_service_integrations plus two definers. It is the
