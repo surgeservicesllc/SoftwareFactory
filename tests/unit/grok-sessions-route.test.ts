@@ -22,6 +22,7 @@ const harness = vi.hoisted(() => ({
   appendAssistant: vi.fn(),
   recordRoster: vi.fn(),
   recordEvent: vi.fn(),
+  recordContext: vi.fn(),
   mapDetail: vi.fn(),
   listRows: vi.fn(),
   mapList: vi.fn(),
@@ -75,6 +76,7 @@ vi.mock("@/lib/grok/session-store", async () => {
     grokSpecialistRosterIdempotencyKey: (base: string) => `${base}:specialist-roster`,
     recordGrokSpecialistRoster: harness.recordRoster,
     recordGrokEvent: harness.recordEvent,
+    recordGrokContextEnvelope: harness.recordContext,
     mapGrokSessionDetail: harness.mapDetail,
     listGrokSessionRows: harness.listRows,
     mapGrokSessionList: harness.mapList,
@@ -132,6 +134,7 @@ const canonicalPlan = {
 const bundle = {
   session: { id: sessionId, project_id: projectId, status: "active", version: 2 },
   messages: [],
+  next: { message_sequence: 2, event_sequence: 5 },
 };
 
 beforeEach(() => {
@@ -189,6 +192,7 @@ beforeEach(() => {
     replayed: false,
   });
   harness.recordEvent.mockResolvedValue({});
+  harness.recordContext.mockResolvedValue({ envelope: { id: "90000000-0000-4000-8000-000000000009" }, replayed: false });
   harness.mapDetail.mockResolvedValue({
     session: {
       id: sessionId,
@@ -204,7 +208,7 @@ beforeEach(() => {
       updatedAt: "2026-08-30T20:00:00.000Z",
       allowedActions: [],
     },
-    messages: [], tasks: [], events: [], artifacts: [],
+    messages: [], contextEnvelopes: [], tasks: [], events: [], artifacts: [],
   });
 });
 
@@ -298,10 +302,10 @@ describe("Grok sessions POST", () => {
         details: ["implementation/STRONG"],
       },
     });
-    harness.readBundle.mockResolvedValue({
-      ...bundle,
-      session: { ...bundle.session, version: 2 },
-    });
+    harness.readBundle
+      .mockResolvedValueOnce({ ...bundle, session: { ...bundle.session, version: 2 } })
+      .mockResolvedValueOnce({ ...bundle, session: { ...bundle.session, status: "blocked", version: 5 }, next: { message_sequence: 2, event_sequence: 5 } })
+      .mockResolvedValueOnce({ ...bundle, session: { ...bundle.session, status: "blocked", version: 6 }, next: { message_sequence: 2, event_sequence: 6 } });
 
     const response = await POST(new Request("https://factory.example/api/grok/sessions", {
       method: "POST",
@@ -313,7 +317,7 @@ describe("Grok sessions POST", () => {
     expect(response.status).toBe(409);
     expect(body).toMatchObject({
       sessionId,
-      session: { id: sessionId, status: "blocked", version: 5 },
+      session: { id: sessionId, status: "blocked", version: 6 },
       workerWoken: false,
       executionStarted: false,
       error: {
@@ -357,6 +361,22 @@ describe("Grok sessions POST", () => {
       .mockResolvedValueOnce({
         ...bundle,
         session: { ...bundle.session, status: "blocked", version: 5 },
+        next: { message_sequence: 2, event_sequence: 5 },
+      })
+      .mockResolvedValueOnce({
+        ...bundle,
+        session: { ...bundle.session, status: "blocked", version: 6 },
+        next: { message_sequence: 2, event_sequence: 6 },
+      })
+      .mockResolvedValueOnce({
+        ...bundle,
+        session: { ...bundle.session, status: "blocked", version: 6 },
+        next: { message_sequence: 2, event_sequence: 6 },
+      })
+      .mockResolvedValueOnce({
+        ...bundle,
+        session: { ...bundle.session, status: "blocked", version: 6 },
+        next: { message_sequence: 2, event_sequence: 6 },
       });
     harness.storedFailure
       .mockReturnValueOnce(null)
@@ -399,6 +419,12 @@ describe("Grok sessions POST", () => {
       .mockResolvedValueOnce({
         ...bundle,
         session: { ...bundle.session, status: "blocked", version: 5 },
+        next: { message_sequence: 2, event_sequence: 5 },
+      })
+      .mockResolvedValueOnce({
+        ...bundle,
+        session: { ...bundle.session, status: "blocked", version: 6 },
+        next: { message_sequence: 2, event_sequence: 6 },
       });
     harness.storedFailure
       .mockReturnValueOnce(null)
@@ -417,7 +443,7 @@ describe("Grok sessions POST", () => {
     expect(response.status).toBe(409);
     expect(await response.json()).toMatchObject({
       sessionId,
-      session: { status: "blocked", version: 5 },
+      session: { status: "blocked", version: 6 },
       error: {
         code: "MISSING_CLAUDE_AGENT",
         message: expect.stringMatching(/configured Claude agent/),
@@ -425,11 +451,20 @@ describe("Grok sessions POST", () => {
       workerWoken: false,
       executionStarted: false,
     });
-    expect(harness.readBundle).toHaveBeenCalledTimes(2);
+    expect(harness.readBundle).toHaveBeenCalledTimes(3);
     expect(harness.serviceRpc).not.toHaveBeenCalled();
   });
 
   it("records roster and routing intent, launches only canonical v3, and returns paused without dispatch", async () => {
+    harness.readBoundedJson.mockResolvedValueOnce({
+      projectId,
+      prompt: "Build the portal",
+      idempotencyKey: "request-key-123",
+      context: [
+        { kind: "file", label: "brief.md", mediaType: "text/markdown", text: "Use an indigo call to action." },
+        { kind: "url", label: "Source", url: "https://docs.example.com/brief" },
+      ],
+    });
     const response = await POST(new Request("https://factory.example/api/grok/sessions", {
       method: "POST",
       headers: { origin: "https://factory.example", "content-type": "application/json" },
@@ -447,6 +482,9 @@ describe("Grok sessions POST", () => {
     expect(harness.appendUser).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
       prompt: "Build the portal",
       idempotencyKey: "request-key-123",
+    }));
+    expect(harness.buildPlan).toHaveBeenCalledWith(expect.objectContaining({
+      contextSummary: expect.stringMatching(/indigo call to action[\s\S]*docs\.example\.com\/brief[\s\S]*fetched=false/i),
     }));
     expect(harness.appendAssistant).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
       plan,

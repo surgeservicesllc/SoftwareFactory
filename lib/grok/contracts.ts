@@ -26,6 +26,52 @@ export type GrokMessage = Readonly<{
   createdAt: string;
 }>;
 
+export const GROK_CONTEXT_KINDS = [
+  "file",
+  "image",
+  "url",
+  "repository",
+  "project",
+  "integration",
+] as const;
+
+export type GrokContextKind = (typeof GROK_CONTEXT_KINDS)[number];
+
+/** Browser input. File text is bounded before it crosses the API boundary. */
+export type GrokContextDraft = Readonly<{
+  kind: GrokContextKind;
+  label: string;
+  mediaType?: string;
+  text?: string;
+  url?: string;
+  path?: string;
+  connectionId?: string;
+}>;
+
+export type GrokContextItem = Readonly<{
+  id: string;
+  kind: GrokContextKind;
+  label: string;
+  state: "captured" | "reference_only";
+  mediaType: string | null;
+  url: string | null;
+  repositoryPath: string | null;
+  integrationId: string | null;
+  textPreview: string | null;
+  byteSize: number;
+}>;
+
+export type GrokContextEnvelope = Readonly<{
+  id: string;
+  messageId: string;
+  itemCount: number;
+  totalBytes: number;
+  inputSha256: string;
+  replanRequired: boolean;
+  createdAt: string;
+  items: readonly GrokContextItem[];
+}>;
+
 export type GrokTask = Readonly<{
   id: string;
   taskKey: string;
@@ -71,6 +117,7 @@ export type GrokRunEvidence = Readonly<{
 export type GrokSessionDetail = Readonly<{
   session: GrokSession;
   messages: readonly GrokMessage[];
+  contextEnvelopes: readonly GrokContextEnvelope[];
   tasks: readonly GrokTask[];
   events: readonly GrokEvent[];
   /** True when only the newest bounded Grok session-event window is returned. */

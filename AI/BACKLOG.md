@@ -239,6 +239,23 @@ the algorithm needs exists.
   claim requires and revalidates the complete current admission identity;
   legacy unadmitted Grok work cannot enter the worker. Protected apply run
   `33397377838` and independent read-only run `33397710586` accepted it.
+- [x] Implement durable bounded input context and multi-turn composition
+  (ADR-227) through `20260831001100`: exact server-derived project/repository
+  references, safe bounded text capture, URL/image reference-only handling,
+  tenant-linked integration references, forced RLS, append-only audit/hash
+  evidence, exact replay, and an atomic owner follow-up boundary that never
+  dispatches or silently changes the immutable plan. Repository candidate only;
+  the migration is not hosted yet.
+- [ ] Add `20260831001100` to an explicitly reviewed protected forward-only
+  release scope after integration. Require exact hash/ledger/catalog/RLS/ACL/
+  replay/immutability/tenant-isolation/health evidence and signed-in initial +
+  follow-up + reload acceptance. Keep URL/image fetching, binary storage,
+  workers, autonomy, and automatic actions out of that scope.
+- [ ] Connect immutable Grok context to executable Full Lifecycle/Phase 1C
+  through a typed context-reference input that revalidates the exact envelope,
+  tenant, admitted worker, and item bounds at claim/read time. This is **Not
+  Connected**: do not copy captured file contents into or truncate the existing
+  4 KB goal, fetch URL/image references, or broaden worker/storage authority.
 - [x] Publish one exact rebased candidate and require lint, typecheck, the full
   test suite, production build, all three browser/accessibility shards, exact
   green CI, exact READY Vercel identity, and matching public health. Exact main

@@ -642,7 +642,7 @@ describe("Grok session graph persistence", () => {
       next: { message_sequence: 2, event_sequence: 4 },
     };
 
-    const client = { from: vi.fn(), rpc: vi.fn() } as never;
+    const client = { from: vi.fn(), rpc: vi.fn().mockResolvedValue({ data: [], error: null }) } as never;
     const detail = await mapGrokSessionDetail(client, organizationId, "Factory", bundle as never);
 
     expect(detail.session).toMatchObject({ status: "blocked", graphId: null, graphRunId: null });
@@ -673,7 +673,10 @@ describe("Grok session graph persistence", () => {
         Promise.resolve(result).then(resolve, reject);
       return query;
     };
-    const client = { from: vi.fn((table: string) => tableResult(table)) } as never;
+    const client = {
+      from: vi.fn((table: string) => tableResult(table)),
+      rpc: vi.fn().mockResolvedValue({ data: [], error: null }),
+    } as never;
     const bundle = {
       session: {
         id: sessionId, organization_id: organizationId, project_id: projectId,
@@ -774,8 +777,8 @@ describe("Grok session graph persistence", () => {
         queryByTable.set(table, query as Record<string, ReturnType<typeof vi.fn>>);
         return query;
       }),
-      rpc: vi.fn().mockResolvedValue({
-        data: [{
+      rpc: vi.fn().mockImplementation(async (name: string) => ({
+        data: name === "list_grok_context_envelopes" ? [] : [{
           artifact_id: "65000000-0000-4000-8000-000000000006",
           node_run_id: "63000000-0000-4000-8000-000000000006",
           node_key: plannedTask.id,
@@ -789,7 +792,7 @@ describe("Grok session graph persistence", () => {
           created_at: createdAt,
         }],
         error: null,
-      }),
+      })),
     } as never;
     const bundle = {
       session: {
@@ -860,7 +863,7 @@ describe("Grok session graph persistence", () => {
 
   it("maps the database's enriched artifact projection without dropping its URI", async () => {
     const createdAt = "2026-08-30T20:00:00.000Z";
-    const rpc = vi.fn().mockResolvedValue({
+    const sessionRead = {
       data: {
         session: {
           id: sessionId,
@@ -899,7 +902,10 @@ describe("Grok session graph persistence", () => {
         next: { message_sequence: 1, event_sequence: 1 },
       },
       error: null,
-    });
+    };
+    const rpc = vi.fn()
+      .mockResolvedValueOnce(sessionRead)
+      .mockResolvedValueOnce({ data: [], error: null });
     const client = { rpc } as never;
     const bundle = await readGrokBundle(client, organizationId, sessionId);
     const detail = await mapGrokSessionDetail(client, organizationId, "Factory", bundle);
@@ -940,7 +946,7 @@ describe("Grok session graph persistence", () => {
 
     const bundle = await readGrokBundle({ rpc } as never, organizationId, sessionId);
     const detail = await mapGrokSessionDetail(
-      { rpc: vi.fn() } as never,
+      { rpc: vi.fn().mockResolvedValue({ data: [], error: null }) } as never,
       organizationId,
       "Factory",
       bundle,

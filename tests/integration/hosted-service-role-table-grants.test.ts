@@ -166,6 +166,8 @@ const publicTables = [
   // RLS and revokes direct service_role table access; trusted writes use the
   // exact reviewed SECURITY DEFINER functions pinned by the schema invariant.
   "grok_artifact_links",
+  "grok_context_envelopes",
+  "grok_context_items",
   "grok_control_intents",
   "grok_events",
   "grok_execution_admissions",

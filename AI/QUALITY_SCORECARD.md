@@ -58,6 +58,23 @@ manual-only dispatch, read-only GitHub permissions, exact identities, secret-
 only credentials, capture off, one permitted create mutation, no Resume or
 worker dispatch, read-only SQL, and stopped-containment checks before and
 after.
+**Addendum, 2026-08-31 latest+46 - durable Grok context envelopes (ADR-227):**
+The repository candidate now has bounded, append-only Grok input context for
+project, repository, captured text files, public URL/image references, and
+linked integrations. Focused unit, route, component, migration-contract, and
+full-migration-chain behavior tests cover owner/tenant isolation, exact replay,
+secret and private-network rejection, byte/item limits, immutable audit
+evidence, safe projections, atomic follow-up turns, and the explicit
+no-silent-replan/no-worker boundary. Lint and strict typecheck pass. Binary
+uploads, outbound URL/image retrieval, canonical worker consumption of the
+immutable context envelope, and production release evidence remain outside
+this repository checkpoint. The deterministic planner does consume an 8 KB
+secret-scanned canonical summary as an explicit `bounded_context` requirement.
+The final repository suite passes 563 files / 6,443 tests with three files /
+seven tests skipped; the focused Grok/context set passes 120/120. The default
+production build is not claimed from this isolated worktree: Turbopack rejects
+its external `node_modules` junction, while the webpack fallback compiled and
+then exposed existing unrelated App Router export-type failures.
 
 **Addendum, 2026-08-31 latest+44 - copilot + acceptance journey (ADR-224):**
 services-copilot unit 6 (each skill recognized from its own example; the

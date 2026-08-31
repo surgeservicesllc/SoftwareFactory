@@ -11,6 +11,11 @@ import {
   resolveCanonicalFullLifecycleReleaseIdentity,
 } from "@/lib/graph/canonical-full-lifecycle";
 import {
+  GrokContextInputError,
+  normalizeGrokContext,
+  summarizeGrokContextForPlanning,
+} from "@/lib/grok/context";
+import {
   appendGrokAssistantPlan,
   appendGrokUserMessage,
   createGrokSession,
@@ -24,6 +29,7 @@ import {
   plannedGraphLink,
   readGrokBundle,
   readGrokProject,
+  recordGrokContextEnvelope,
   recordGrokPlanningFailure,
   recordGrokEvent,
   recordGrokSpecialistRoster,
@@ -57,6 +63,7 @@ const requestSchema = z.object({
   // Preserve the exact message. The planner performs its own normalized,
   // bounded parse, while the transcript keeps what the owner actually sent.
   prompt: z.string().min(1).max(4_000).refine((value) => value.trim().length > 0),
+  context: z.array(z.unknown()).max(10).default([]),
   idempotencyKey: z.string().min(8).max(128).regex(/^[A-Za-z0-9._:-]+$/).optional(),
 }).strict();
 
@@ -149,10 +156,10 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     assertSameOriginRequest(request);
-    const parsed = requestSchema.safeParse(await readBoundedJson(request, 20 * 1024));
+    const parsed = requestSchema.safeParse(await readBoundedJson(request, 80 * 1024));
     if (!parsed.success) {
       return jsonNoStore(
-        { error: { code: "invalid_grok_request", message: "Provide one bounded prompt and projectId." } },
+        { error: { code: "invalid_grok_request", message: "Provide one bounded prompt, projectId, and valid context references." } },
         { status: 400 },
       );
     }
@@ -187,6 +194,8 @@ export async function POST(request: Request) {
         { status: 409 },
       );
     }
+    const contextItems = normalizeGrokContext(parsed.data.context, project);
+    const planningContextSummary = summarizeGrokContextForPlanning(contextItems);
 
     const idempotencyKey = parsed.data.idempotencyKey ?? `grok:${randomUUID()}`;
     const session = await createGrokSession(context.client, {
@@ -202,9 +211,25 @@ export async function POST(request: Request) {
       idempotencyKey,
     });
 
+    const serviceClient = createSupabaseGitHubWebhookClient();
     let bundle = await readGrokBundle(context.client, context.activeOrganization.id, session.id);
+    const persistInitialContext = async (current: typeof bundle) => {
+      await recordGrokContextEnvelope(serviceClient, {
+        organizationId: context.activeOrganization.id,
+        requestedBy: context.user.id,
+        projectId: project.projectId,
+        sessionId: session.id,
+        messageId: userMessage.id,
+        items: contextItems as unknown as readonly Record<string, unknown>[],
+        idempotencyKey,
+        expectedEventSequence: current.next.event_sequence,
+        replanRequired: false,
+      });
+      return readGrokBundle(context.client, context.activeOrganization.id, session.id);
+    };
     const durablePlanningFailure = storedGrokPlanningFailure(bundle);
     if (durablePlanningFailure) {
+      bundle = await persistInitialContext(bundle);
       return planningFailureResponse({
         sessionId: session.id,
         status: "blocked",
@@ -230,7 +255,6 @@ export async function POST(request: Request) {
       );
     }
 
-    const serviceClient = createSupabaseGitHubWebhookClient();
     let assistantMessage = bundle.messages.find(
       (message) => message.sequence_no === 2 && message.role === "assistant",
     ) ?? null;
@@ -245,6 +269,7 @@ export async function POST(request: Request) {
       const result = buildGrokChiefOfStaffPlan({
         prompt: parsed.data.prompt,
         project: plannerProject,
+        contextSummary: planningContextSummary,
         agents: await loadConfiguredGrokAgents(
           context.client,
           context.activeOrganization.id,
@@ -280,6 +305,7 @@ export async function POST(request: Request) {
           }
           const replayedFailure = storedGrokPlanningFailure(replayBundle);
           if (!replayedFailure) throw failureError;
+          replayBundle = await persistInitialContext(replayBundle);
           return planningFailureResponse({
             sessionId: session.id,
             status: "blocked",
@@ -288,10 +314,12 @@ export async function POST(request: Request) {
             message: replayedFailure.message,
           });
         }
+        bundle = await readGrokBundle(context.client, context.activeOrganization.id, session.id);
+        bundle = await persistInitialContext(bundle);
         return planningFailureResponse({
           sessionId: failure.session.id,
           status: "blocked",
-          version: failure.session.version,
+          version: bundle.session.version,
           code: result.error.code,
           message: failure.message.content,
         });
@@ -358,6 +386,7 @@ export async function POST(request: Request) {
     });
 
     bundle = await readGrokBundle(context.client, context.activeOrganization.id, session.id);
+    bundle = await persistInitialContext(bundle);
     if (!plannedGraphLink(bundle)) {
       if (plan.intent.kind === "research" || plan.intent.kind === "deploy") {
         return jsonNoStore(
@@ -477,6 +506,12 @@ export async function POST(request: Request) {
     }, { status: 202 });
   } catch (error) {
     if (error instanceof ApiRequestError) return requestErrorResponse(error);
+    if (error instanceof GrokContextInputError) {
+      return jsonNoStore(
+        { error: { code: "invalid_grok_context", message: error.message } },
+        { status: 400 },
+      );
+    }
     if (error instanceof GitHubApiError || error instanceof GitHubConfigurationError) {
       return githubRouteErrorResponse(error);
     }

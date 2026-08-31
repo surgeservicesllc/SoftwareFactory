@@ -13,6 +13,7 @@ import {
   Loader2,
   MessageSquarePlus,
   PackageCheck,
+  Paperclip,
   Pause,
   Play,
   RefreshCw,
@@ -21,6 +22,7 @@ import {
   Sparkles,
   Target,
   Users,
+  X,
 } from "lucide-react";
 import {
   useCallback,
@@ -37,6 +39,7 @@ import { StatusBadge } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import type {
   GrokArtifact,
+  GrokContextDraft,
   GrokControlAction,
   GrokSession,
   GrokSessionCursor,
@@ -45,9 +48,15 @@ import type {
 } from "@/lib/grok/contracts";
 import { FACTORY_STEPS } from "@/lib/sdlc/factory-steps";
 
-type Project = { readonly id: string; readonly name: string; readonly connectionStatus?: string };
+type Project = {
+  readonly id: string;
+  readonly name: string;
+  readonly connectionId?: string | null;
+  readonly connectionStatus?: string;
+};
 type LoadState = "loading" | "ready" | "signed-out" | "setup" | "error";
-type InspectorTab = "goal" | "plan" | "agents" | "progress" | "files" | "tests" | "preview" | "artifacts" | "deployment";
+type ReferenceKind = "url" | "image" | "repository" | "integration";
+type InspectorTab = "goal" | "context" | "plan" | "agents" | "progress" | "files" | "tests" | "preview" | "artifacts" | "deployment";
 type GrokCreateResponse = GrokSessionDetail & Readonly<{
   workerWoken: boolean;
   executionStarted: boolean;
@@ -58,6 +67,17 @@ type GrokControlResponse = GrokSessionDetail & Readonly<{
   replayed: boolean;
   workerWoken: boolean;
   note?: string;
+}>;
+type GrokFollowUpResponse = GrokSessionDetail & Readonly<{
+  turn: Readonly<{
+    messageId: string;
+    envelopeId: string;
+    replayed: boolean;
+    planChanged: false;
+    replanRequired: boolean;
+  }>;
+  workerWoken: false;
+  automaticActionStarted: false;
 }>;
 
 export type GrokSelection = {
@@ -86,6 +106,7 @@ const UNPLANNED_FALLBACK = "The request is saved, but no plan was recorded. No g
 
 const tabs: ReadonlyArray<{ key: InspectorTab; label: string; icon: typeof Target }> = [
   { key: "goal", label: "Goal", icon: Target },
+  { key: "context", label: "Context", icon: Paperclip },
   { key: "plan", label: "Plan", icon: Code2 },
   { key: "agents", label: "Agents", icon: Users },
   { key: "progress", label: "Progress", icon: Activity },
@@ -281,6 +302,48 @@ function Inspector({ detail, tab }: { detail: GrokSessionDetail | null; tab: Ins
     );
   }
 
+  if (tab === "context") {
+    if (!detail.contextEnvelopes.length) return <EmptyInspector label="context envelopes" />;
+    return (
+      <ol className="space-y-3">
+        {detail.contextEnvelopes.map((envelope) => (
+          <li key={envelope.id} className="rounded-lg border border-[var(--border)] bg-[var(--surface-inset)] p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs font-semibold text-foreground">
+                {envelope.itemCount} context {envelope.itemCount === 1 ? "item" : "items"}
+              </p>
+              <time className="text-[11px] text-muted">{clock(envelope.createdAt)}</time>
+            </div>
+            {envelope.replanRequired ? (
+              <p className="mt-2 text-xs leading-5 text-[var(--warning)]">
+                Saved after planning. The immutable plan was not changed; start a new goal to replan.
+              </p>
+            ) : null}
+            <ul className="mt-2 space-y-2">
+              {envelope.items.map((item) => (
+                <li key={item.id} className="rounded-md border border-[var(--border)] bg-[var(--surface)] px-2.5 py-2">
+                  <div className="flex items-center justify-between gap-2 text-xs">
+                    <span className="min-w-0 truncate font-medium text-foreground">{item.label}</span>
+                    <StatusBadge tone={item.state === "captured" ? "info" : "neutral"}>
+                      {item.state === "captured" ? "Captured" : "Reference only"}
+                    </StatusBadge>
+                  </div>
+                  <p className="mt-1 break-all text-[11px] text-muted">
+                    {item.kind}
+                    {item.repositoryPath ? ` · ${item.repositoryPath}` : ""}
+                    {item.url ? ` · ${item.url}` : ""}
+                    {item.byteSize ? ` · ${item.byteSize.toLocaleString()} bytes` : ""}
+                  </p>
+                  {item.textPreview ? <pre className="mt-2 max-h-28 overflow-auto whitespace-pre-wrap text-[11px] text-muted">{item.textPreview}</pre> : null}
+                </li>
+              ))}
+            </ul>
+          </li>
+        ))}
+      </ol>
+    );
+  }
+
   if (tab === "plan") {
     if (!detail.tasks.length) return <EmptyInspector label="plan" />;
     return (
@@ -434,6 +497,11 @@ export function GrokWorkspace({
   const [detail, setDetail] = useState<GrokSessionDetail | null>(null);
   const [tab, setTab] = useState<InspectorTab>("goal");
   const [prompt, setPrompt] = useState("");
+  const [contextDrafts, setContextDrafts] = useState<readonly GrokContextDraft[]>([]);
+  const [showReference, setShowReference] = useState(false);
+  const [referenceKind, setReferenceKind] = useState<ReferenceKind>("url");
+  const [referenceLabel, setReferenceLabel] = useState("");
+  const [referenceValue, setReferenceValue] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [notice, setNotice] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -441,7 +509,9 @@ export function GrokWorkspace({
   const detailRequest = useRef(0);
   const submitAttempt = useRef<Readonly<{
     projectId: string;
+    sessionId: string;
     prompt: string;
+    contextKey: string;
     idempotencyKey: string;
   }> | null>(null);
   const controlAttempts = useRef(new Map<string, string>());
@@ -584,11 +654,13 @@ export function GrokWorkspace({
 
   async function selectProject(nextProjectId: string) {
     detailRequest.current += 1;
+    submitAttempt.current = null;
     setProjectId(nextProjectId);
     setSessionId("");
     setDetail(null);
     setSessions([]);
     setSessionCursor(null);
+    setContextDrafts([]);
     setErrorMessage("");
     setNotice("");
     updateUrl({ projectId: nextProjectId || undefined });
@@ -625,6 +697,71 @@ export function GrokWorkspace({
     }
   }
 
+  async function addTextFiles(files: FileList | null) {
+    if (!files?.length) return;
+    const allowed: Readonly<Record<string, string>> = {
+      ".csv": "text/csv",
+      ".json": "application/json",
+      ".md": "text/markdown",
+      ".markdown": "text/markdown",
+      ".txt": "text/plain",
+      ".yaml": "application/yaml",
+      ".yml": "application/yaml",
+    };
+    const next: GrokContextDraft[] = [];
+    for (const file of Array.from(files)) {
+      if (contextDrafts.length + next.length >= 10) {
+        setErrorMessage("Up to 10 added context items are accepted per turn.");
+        break;
+      }
+      const extension = Object.keys(allowed).find((candidate) => file.name.toLowerCase().endsWith(candidate));
+      const mediaType = file.type && Object.values(allowed).includes(file.type)
+        ? file.type
+        : extension ? allowed[extension] : null;
+      if (!mediaType || file.size > 16_384) {
+        setErrorMessage("Attach only plain text, Markdown, JSON, YAML, or CSV files up to 16 KB each.");
+        continue;
+      }
+      next.push({ kind: "file", label: file.name, mediaType, text: await file.text() });
+    }
+    if (next.length) {
+      setContextDrafts((current) => [...current, ...next]);
+      setErrorMessage("");
+    }
+  }
+
+  function addReference() {
+    if (contextDrafts.length >= 10) {
+      setErrorMessage("Up to 10 added context items are accepted per turn.");
+      return;
+    }
+    const label = referenceLabel.trim();
+    const value = referenceValue.trim();
+    if (!label) {
+      setErrorMessage("Give the context reference a short label.");
+      return;
+    }
+    if (referenceKind === "integration") {
+      const connectionId = projects.find((project) => project.id === projectId)?.connectionId;
+      if (!connectionId) {
+        setErrorMessage("This project has no linked primary integration to reference.");
+        return;
+      }
+      setContextDrafts((current) => [...current, { kind: "integration", label, connectionId }]);
+    } else if (!value) {
+      setErrorMessage(referenceKind === "repository" ? "Provide a project-relative repository path." : "Provide a public HTTPS reference.");
+      return;
+    } else if (referenceKind === "repository") {
+      setContextDrafts((current) => [...current, { kind: "repository", label, path: value }]);
+    } else {
+      setContextDrafts((current) => [...current, { kind: referenceKind, label, url: value }]);
+    }
+    setReferenceLabel("");
+    setReferenceValue("");
+    setShowReference(false);
+    setErrorMessage("");
+  }
+
   async function submit(event: FormEvent) {
     event.preventDefault();
     const goal = prompt.trim();
@@ -634,27 +771,45 @@ export function GrokWorkspace({
     setErrorMessage("");
     setNotice("");
     try {
+      const targetSessionId = detail?.session.id === sessionId ? sessionId : "";
+      const contextKey = JSON.stringify(contextDrafts);
       const attempt = submitAttempt.current?.projectId === projectId
+        && submitAttempt.current.sessionId === targetSessionId
         && submitAttempt.current.prompt === goal
+        && submitAttempt.current.contextKey === contextKey
         ? submitAttempt.current
         : {
             projectId,
+            sessionId: targetSessionId,
             prompt: goal,
-            idempotencyKey: `grok-submit:${globalThis.crypto.randomUUID()}`,
+            contextKey,
+            idempotencyKey: `${targetSessionId ? "grok-follow-up" : "grok-submit"}:${globalThis.crypto.randomUUID()}`,
           };
       submitAttempt.current = attempt;
-      const response = await fetch("/api/grok/sessions", {
+      const response = await fetch(targetSessionId
+        ? `/api/grok/sessions/${targetSessionId}/messages`
+        : "/api/grok/sessions", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ projectId, prompt: goal, idempotencyKey: attempt.idempotencyKey }),
+        body: JSON.stringify({
+          ...(targetSessionId ? {} : { projectId }),
+          prompt: goal,
+          context: contextDrafts,
+          idempotencyKey: attempt.idempotencyKey,
+        }),
       });
-      const body = await readJson(response) as GrokCreateResponse;
+      const body = await readJson(response) as GrokCreateResponse | GrokFollowUpResponse;
       submitAttempt.current = null;
       setPrompt("");
+      setContextDrafts([]);
       setDetail(body);
       setSessions((current) => [body.session, ...current.filter((session) => session.id !== body.session.id)]);
       setSessionId(body.session.id);
-      setNotice(body.blocked?.message ?? executionNotice(body));
+      setNotice("turn" in body
+        ? body.turn.replanRequired
+          ? "Follow-up and context saved. The current immutable plan was not changed. Start a new goal to replan."
+          : "Follow-up and context saved. No worker or automatic action started."
+        : body.blocked?.message ?? executionNotice(body));
       updateUrl({ projectId, sessionId: body.session.id, graphId: body.session.graphId ?? undefined, graphRunId: body.session.graphRunId ?? undefined });
     } catch (error) {
       if (error instanceof GrokRequestError) {
@@ -780,7 +935,7 @@ export function GrokWorkspace({
             <aside aria-label="Grok sessions" className="border-b border-[var(--border)] bg-[var(--surface-inset)] p-3 xl:border-b-0 xl:border-r">
               <div className="flex items-center justify-between gap-2">
                 <p className="label">Sessions</p>
-                <button type="button" className="grid size-8 place-items-center rounded-lg border border-[var(--border)] text-muted hover:text-foreground" aria-label="Start a new goal" onClick={() => { detailRequest.current += 1; setSessionId(""); setDetail(null); setPrompt(""); setErrorMessage(""); setNotice(""); updateUrl({ projectId: projectId || undefined }); }}><MessageSquarePlus className="size-4" aria-hidden="true" /></button>
+                <button type="button" className="grid size-8 place-items-center rounded-lg border border-[var(--border)] text-muted hover:text-foreground" aria-label="Start a new goal" onClick={() => { detailRequest.current += 1; submitAttempt.current = null; setSessionId(""); setDetail(null); setPrompt(""); setContextDrafts([]); setErrorMessage(""); setNotice(""); updateUrl({ projectId: projectId || undefined }); }}><MessageSquarePlus className="size-4" aria-hidden="true" /></button>
               </div>
               <label className="mt-3 block"><span className="sr-only">Project</span><select className="input w-full text-sm" value={projectId} onChange={(event) => void selectProject(event.target.value)}><option value="">Choose project</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.name}{project.connectionStatus === "connected" ? "" : " · Not Connected"}</option>)}</select></label>
               <ul className="mt-3 max-h-52 space-y-1 overflow-y-auto xl:max-h-[calc(70vh-7rem)]">
@@ -813,15 +968,47 @@ export function GrokWorkspace({
               </div>
               <form onSubmit={submit} className="border-t border-[var(--border)] p-3 sm:p-4">
                 {errorMessage ? <p role="alert" className="mb-2 text-xs text-[var(--danger)]">{errorMessage}</p> : null}
-                <div className="flex items-end gap-2 rounded-xl border border-[var(--border-strong)] bg-[var(--surface-inset)] p-2 focus-within:border-[var(--accent-border)]"><textarea className="min-h-12 max-h-36 flex-1 resize-y bg-transparent px-2 py-2 text-sm text-foreground outline-none placeholder:text-faint" rows={2} value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder="Build me…  Fix…  Research…  Test…  Deploy…" aria-label="Tell Grok Bot what you want done" /><button type="submit" className="grid size-10 shrink-0 place-items-center rounded-lg bg-[var(--accent)] text-[var(--accent-ink)] disabled:cursor-not-allowed disabled:opacity-50" disabled={!prompt.trim() || !projectId || !projectCanStartGoal || submitting} aria-label="Start goal">{submitting ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}</button></div>
-                {projectId && !projectCanStartGoal ? <p className="mt-2 text-[11px] text-[var(--warning)]" role="status">This project is Not Connected to an exact active GitHub repository. Existing history remains readable, but a new goal cannot start. <a className="font-medium underline" href={`/solutions/projects?projectId=${encodeURIComponent(projectId)}`}>Open project connections</a>.</p> : <p className="mt-2 text-[11px] text-muted">A request saves a session; a plan is recorded only when planning succeeds. Neither implies that a graph, worker, or provider started.</p>}
+                {contextDrafts.length ? (
+                  <ul className="mb-2 flex flex-wrap gap-2" aria-label="Context ready to attach">
+                    {contextDrafts.map((draft, index) => (
+                      <li key={`${draft.kind}:${draft.label}:${index}`} className="flex max-w-full items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface-inset)] py-1 pl-2.5 pr-1 text-[11px] text-muted">
+                        <span className="max-w-52 truncate">{draft.label} · {draft.kind}</span>
+                        <button type="button" className="grid size-5 place-items-center rounded-full hover:bg-[var(--surface-raised)] hover:text-foreground" aria-label={`Remove ${draft.label}`} onClick={() => setContextDrafts((current) => current.filter((_, candidate) => candidate !== index))}><X className="size-3" aria-hidden="true" /></button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+                {showReference ? (
+                  <fieldset className="mb-2 rounded-lg border border-[var(--border)] bg-[var(--surface-inset)] p-2.5">
+                    <legend className="px-1 text-[11px] font-semibold text-foreground">Add a context reference</legend>
+                    <div className="grid gap-2 sm:grid-cols-[8rem_minmax(0,1fr)]">
+                      <label><span className="sr-only">Reference type</span><select className="input w-full text-xs" value={referenceKind} onChange={(event) => { setReferenceKind(event.target.value as ReferenceKind); setReferenceValue(""); }}><option value="url">Web URL</option><option value="image">Image URL</option><option value="repository">Repository path</option><option value="integration">Project integration</option></select></label>
+                      <label><span className="sr-only">Reference label</span><input className="input w-full text-xs" value={referenceLabel} onChange={(event) => setReferenceLabel(event.target.value)} placeholder="Reference label" maxLength={160} /></label>
+                    </div>
+                    {referenceKind === "integration" ? (
+                      <p className="mt-2 text-[11px] text-muted">Uses this project&apos;s linked primary integration. Credentials are never copied.</p>
+                    ) : (
+                      <label className="mt-2 block"><span className="sr-only">{referenceKind === "repository" ? "Project-relative path" : "Public HTTPS URL"}</span><input className="input w-full text-xs" value={referenceValue} onChange={(event) => setReferenceValue(event.target.value)} placeholder={referenceKind === "repository" ? "docs/requirements.md" : "https://example.com/reference"} maxLength={referenceKind === "repository" ? 300 : 208} /></label>
+                    )}
+                    <div className="mt-2 flex justify-end gap-2"><button type="button" className="btn btn-secondary btn-xs" onClick={() => setShowReference(false)}>Cancel</button><button type="button" className="btn btn-primary btn-xs" onClick={addReference}>Add reference</button></div>
+                  </fieldset>
+                ) : null}
+                <div className="flex items-end gap-2 rounded-xl border border-[var(--border-strong)] bg-[var(--surface-inset)] p-2 focus-within:border-[var(--accent-border)]">
+                  <div className="flex shrink-0 items-center gap-1 pb-1">
+                    <label className="grid size-8 cursor-pointer place-items-center rounded-lg text-muted hover:bg-[var(--surface-raised)] hover:text-foreground" aria-label="Attach a bounded text file"><Paperclip className="size-4" aria-hidden="true" /><input type="file" className="sr-only" multiple accept=".txt,.md,.markdown,.json,.yaml,.yml,.csv,text/plain,text/markdown,application/json,application/yaml,text/csv" onChange={(event) => { void addTextFiles(event.currentTarget.files); event.currentTarget.value = ""; }} /></label>
+                    <button type="button" className="grid size-8 place-items-center rounded-lg text-muted hover:bg-[var(--surface-raised)] hover:text-foreground" aria-label="Add a URL, image, repository, or integration reference" aria-expanded={showReference} onClick={() => setShowReference((current) => !current)}><MessageSquarePlus className="size-4" aria-hidden="true" /></button>
+                  </div>
+                  <textarea className="min-h-12 max-h-36 flex-1 resize-y bg-transparent px-2 py-2 text-sm text-foreground outline-none placeholder:text-faint" rows={2} value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder={selectedSession ? "Add a follow-up…" : "Build me…  Fix…  Research…  Test…  Deploy…"} aria-label={selectedSession ? "Add a Grok Bot follow-up" : "Tell Grok Bot what you want done"} />
+                  <button type="submit" className="grid size-10 shrink-0 place-items-center rounded-lg bg-[var(--accent)] text-[var(--accent-ink)] disabled:cursor-not-allowed disabled:opacity-50" disabled={!prompt.trim() || !projectId || !projectCanStartGoal || submitting} aria-label={selectedSession ? "Save follow-up" : "Start goal"}>{submitting ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}</button>
+                </div>
+                {projectId && !projectCanStartGoal ? <p className="mt-2 text-[11px] text-[var(--warning)]" role="status">This project is Not Connected to an exact active GitHub repository. Existing history remains readable, but a new goal or follow-up cannot start. <a className="font-medium underline" href={`/solutions/projects?projectId=${encodeURIComponent(projectId)}`}>Open project connections</a>.</p> : <p className="mt-2 text-[11px] text-muted">Project and repository identity are always attached. Text files are captured within strict limits; URLs and images stay reference-only and are never fetched here. Follow-ups never silently change an immutable plan or start a worker.</p>}
               </form>
             </div>
 
             <aside aria-label="Session inspector" className="min-w-0 p-3">
               <div className="flex items-center justify-between gap-2"><p className="label">Control center</p><button type="button" className="grid size-8 place-items-center rounded-lg border border-[var(--border)] text-muted hover:text-foreground" aria-label="Refresh session" onClick={() => sessionId ? void loadDetail(sessionId) : void load()}><RefreshCw className="size-3.5" /></button></div>
               {selectedSession ? <div className={cn("mt-3 grid gap-1", selectedRunIsRunning ? "grid-cols-2" : "grid-cols-3")}>{renderedControlActions.map((action) => { const Icon = controlIcon(action); const allowed = selectedSession.allowedActions.includes(action); const pending = controlPending === action; return <button key={action} type="button" aria-label={allowed ? `${action} session` : `${action} unavailable in ${selectedSession.status}`} disabled={!allowed || controlPending !== null} title={allowed ? `${action} this session` : `${action} is not available in ${selectedSession.status}`} className="flex min-h-12 flex-col items-center justify-center gap-1 rounded-lg border border-[var(--border)] text-[10px] capitalize text-muted enabled:hover:border-[var(--accent-border)] enabled:hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40" onClick={() => void controlSession(action)}>{pending ? <Loader2 className="size-3.5 animate-spin" aria-hidden="true" /> : <Icon className="size-3.5" aria-hidden="true" />}{action}</button>; })}</div> : null}
-              <div className="mt-3 flex gap-1 overflow-x-auto border-b border-[var(--border)] pb-2 xl:grid xl:grid-cols-4" role="tablist" aria-label="Session evidence">{tabs.map((entry, index) => { const Icon = entry.icon; return <button id={`grok-tab-${entry.key}`} key={entry.key} type="button" role="tab" aria-selected={tab === entry.key} aria-controls="grok-inspector-panel" tabIndex={tab === entry.key ? 0 : -1} className={cn("flex min-w-max items-center justify-center gap-1 rounded-md px-2 py-1.5 text-[10px] font-medium", tab === entry.key ? "bg-[var(--accent-surface)] text-[var(--accent-text)]" : "text-muted hover:text-foreground")} onClick={() => setTab(entry.key)} onKeyDown={(event) => moveEvidenceTab(event, index)}><Icon className="size-3" aria-hidden="true" />{entry.label}</button>; })}</div>
+              <div className="mt-3 flex gap-1 overflow-x-auto border-b border-[var(--border)] pb-2 xl:grid xl:grid-cols-5" role="tablist" aria-label="Session evidence">{tabs.map((entry, index) => { const Icon = entry.icon; return <button id={`grok-tab-${entry.key}`} key={entry.key} type="button" role="tab" aria-selected={tab === entry.key} aria-controls="grok-inspector-panel" tabIndex={tab === entry.key ? 0 : -1} className={cn("flex min-w-max items-center justify-center gap-1 rounded-md px-2 py-1.5 text-[10px] font-medium", tab === entry.key ? "bg-[var(--accent-surface)] text-[var(--accent-text)]" : "text-muted hover:text-foreground")} onClick={() => setTab(entry.key)} onKeyDown={(event) => moveEvidenceTab(event, index)}><Icon className="size-3" aria-hidden="true" />{entry.label}</button>; })}</div>
               <div id="grok-inspector-panel" role="tabpanel" aria-labelledby={`grok-tab-${tab}`} tabIndex={0} className="mt-4 max-h-[calc(70vh-11rem)] overflow-y-auto pr-1"><Inspector detail={detail} tab={tab} /></div>
             </aside>
           </div>

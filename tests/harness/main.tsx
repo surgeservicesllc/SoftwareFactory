@@ -130,7 +130,7 @@ const GROK_HARNESS_SESSION: GrokSessionDetail = {
     updatedAt: "2026-08-30T12:01:00.000Z",
     allowedActions: [],
   },
-  messages: [
+      messages: [
     {
       id: "grok-message-user",
       role: "user",
@@ -143,7 +143,8 @@ const GROK_HARNESS_SESSION: GrokSessionDetail = {
       content: "The deterministic plan is saved. Execution is not connected.",
       createdAt: "2026-08-30T12:01:00.000Z",
     },
-  ],
+      ],
+      contextEnvelopes: [],
   tasks: [
     {
       id: "grok-task-inspect",

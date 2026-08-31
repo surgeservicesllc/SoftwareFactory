@@ -91,6 +91,44 @@ main SHA, four green exact-head checks, exact READY Vercel/health identity, and
 Focused tests pass 8/8; lint/typecheck and Playwright discovery pass. This is a
 local repository candidate only. It has not been pushed, deployed, or run
 against production, so it supplies no signed-in acceptance evidence yet.
+## Newest (2026-08-31, latest+46): Grok context envelopes and follow-up turns (ADR-227)
+
+`20260831001100_grok_context_envelopes.sql` is a repository-only forward
+migration. It creates append-only, forced-RLS `grok_context_envelopes` and
+`grok_context_items`, with no browser/service table grants. The only writers
+are a service-only initial-envelope wrapper and an owner-only atomic follow-up
+RPC; the private writer verifies exact owner, tenant, active project, session,
+user message, linked integration, bounds, secret scan, hash, event CAS, and
+idempotent replay before it records a content-free audit event.
+
+THE FIRST TWO ITEMS ARE SERVER-DERIVED IDENTITY: exact project, then exact
+repository/default branch. Do not accept either from browser authority. Text
+files are capped at 16 KB each, 48 KB per turn, 64 items/256 KB per session,
+and limited to plain text/Markdown/JSON/YAML/CSV. URL and image context is
+**Reference only** and this boundary never fetches it. Integration IDs must
+already be linked to the same project; no connection secret reference crosses
+the RPC or browser projection.
+
+The follow-up RPC is one transaction for message + envelope. A planned session
+returns `planChanged=false`, `replanRequired=true`; the workspace says to start
+a new goal. Never mutate the saved plan in place. Initial planning refusals may
+still record their original user context after the immutable blocked evidence,
+but blocked sessions cannot append later messages.
+
+The initial deterministic Chief of Staff planner consumes one canonical,
+secret-scanned, 8 KB summary and records it as `bounded_context`. THE CANONICAL
+FULL LIFECYCLE/PHASE 1C WORKER DOES NOT RECEIVE IT. That typed executable
+context-reference bridge is **Not Connected**; the current v3 launcher still
+receives only the original 4 KB goal. Do not work around that boundary by
+copying attachment contents into the goal or by fetching reference-only items.
+
+This isolated candidate is not pushed, deployed, or applied. Before release,
+integrate it on the exact current main, re-run full quality/build/browser gates,
+create an explicit protected migration scope, and prove exact hosted ledger,
+catalog, forced RLS, ACL, replay, immutability, tenant isolation, lint, health,
+and signed-in create/follow-up/reload behavior. Keep workers/autonomy/automatic
+actions OFF and the global kill switch ON. **GROK BOT: PRODUCTION READY is not
+declared.**
 
 ## Newest (2026-08-31, latest+45): site-wide dark/light theme (ADR-225)
 

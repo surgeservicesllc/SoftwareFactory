@@ -389,6 +389,10 @@ describe("SECURITY DEFINER functions", () => {
       // Browser-authenticated managers cannot execute this RPC directly.
       "record_bot_readiness_preserving_disabled",
       "record_graph_artifact_as_worker",
+      // Initial Grok context is written only after the server has derived and
+      // normalized its project/repository identity. The definer revalidates
+      // tenant ownership, exact message identity, bounds, hashes, and CAS.
+      "record_grok_context_envelope_as_server",
       "record_grok_event_as_server",
       "record_grok_planning_failure_as_server",
       "record_grok_specialist_roster_v1_as_server",

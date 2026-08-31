@@ -73,6 +73,38 @@ Playwright discovers the single guarded desktop test. The signed-in lane has
 not run, this candidate has not been pushed or deployed, and no production
 acceptance is claimed. Running it later requires the exact fake account and
 project prerequisites plus `GROK_RECORD_ONLY_E2E_PASSWORD`.
+## 2026-08-31: Grok context envelopes and follow-up turns are a repository candidate (ADR-227)
+
+The repository candidate now binds every Grok request to a durable, append-only
+context envelope. The server derives the exact project and repository/default-
+branch references; owners may add bounded text/Markdown/JSON/YAML/CSV files,
+public HTTPS URL or image references, safe project-relative repository paths,
+and integrations already linked to that same tenant project. Images and URLs
+remain **Reference only** and are never fetched by this boundary. Binary input,
+private/credential-bearing URLs, secret-shaped text, unlinked integrations,
+and over-limit envelopes fail closed before persistence.
+
+Forward migration `20260831001100_grok_context_envelopes.sql` creates forced-RLS,
+append-only envelope/item evidence with exact tenant/project/session/message
+foreign keys, immutable content hashes, per-turn and per-session bounds, exact
+idempotent replay, and a content-free `context.recorded` audit event. There are
+no table grants, worker writes, graph/run creation, or automatic actions. A new
+owner-only follow-up RPC atomically records the user message and its context.
+When a plan already exists it records `planChanged=false` and
+`replanRequired=true`; the UI tells the owner to start a new goal instead of
+silently rewriting the immutable plan.
+
+The App Router boundary and responsive Grok workspace now support initial and
+follow-up context, attachment/reference states, safe previews, empty/loading/
+error/authorization truth, and explicit no-dispatch copy. This migration and
+application slice are repository-only and unhosted. Workers, autonomy, and
+automatic actions remain OFF and the global kill switch remains ON. This does
+not close provider-backed execution or declare **GROK BOT: PRODUCTION READY**.
+The initial Chief of Staff planner receives a deterministic, secret-scanned,
+8 KB context summary and records it as the `bounded_context` requirement. The
+canonical Full Lifecycle/Phase 1C worker input still receives only its original
+bounded goal: immutable-envelope resolution by an admitted worker is **Not
+Connected**. Captured file contents are not copied into that 4 KB bridge.
 
 ## 2026-08-31: One persistent dark/light choice now covers every site shell (ADR-225)
 

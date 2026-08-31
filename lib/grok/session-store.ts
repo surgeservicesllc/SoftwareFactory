@@ -21,6 +21,7 @@ import {
 } from "@/lib/factory/chief-of-staff";
 import type {
   GrokArtifact,
+  GrokContextEnvelope,
   GrokControlAction,
   GrokEvent,
   GrokMessage,
@@ -140,6 +141,56 @@ const artifactLinkSchema = z.object({
   label: z.string().min(1).max(160),
   uri: z.string().max(2_000).optional(),
   created_at: z.string().datetime({ offset: true }),
+}).strict();
+
+const contextItemReadSchema = z.object({
+  id: z.string().uuid(),
+  kind: z.enum(["file", "image", "url", "repository", "project", "integration"]),
+  label: z.string().min(1).max(160),
+  state: z.enum(["captured", "reference_only"]),
+  media_type: z.string().min(1).max(120).nullable(),
+  source_url: z.string().max(208).nullable(),
+  repository_path: z.string().max(300).nullable(),
+  integration_id: z.string().uuid().nullable(),
+  text_preview: z.string().max(500).nullable(),
+  byte_size: z.coerce.number().int().min(0).max(16_384),
+}).strict();
+
+const contextEnvelopeReadSchema = z.object({
+  id: z.string().uuid(),
+  message_id: z.string().uuid(),
+  item_count: z.coerce.number().int().min(2).max(12),
+  total_bytes: z.coerce.number().int().min(0).max(49_152),
+  input_sha256: z.string().regex(/^[0-9a-f]{64}$/),
+  replan_required: z.boolean(),
+  created_at: z.string().datetime({ offset: true }),
+  items: z.array(contextItemReadSchema).min(2).max(12),
+}).strict();
+
+const contextEnvelopeWriteSchema = z.object({
+  envelope: z.object({
+    id: z.string().uuid(),
+    organization_id: z.string().uuid(),
+    project_id: z.string().uuid(),
+    session_id: z.string().uuid(),
+    message_id: z.string().uuid(),
+    item_count: z.coerce.number().int().min(2).max(12),
+    total_bytes: z.coerce.number().int().min(0).max(49_152),
+    input_sha256: z.string().regex(/^[0-9a-f]{64}$/),
+    idempotency_key: z.string().min(8).max(128),
+    replan_required: z.boolean(),
+    created_by: z.string().uuid(),
+    created_at: z.string().datetime({ offset: true }),
+  }).passthrough(),
+  replayed: z.boolean(),
+}).strict();
+
+const followUpWriteSchema = z.object({
+  message: messageRowSchema,
+  envelope: contextEnvelopeWriteSchema.shape.envelope,
+  replayed: z.boolean(),
+  plan_changed: z.literal(false),
+  replan_required: z.boolean(),
 }).strict();
 
 const readBundleSchema = z.object({
@@ -578,6 +629,115 @@ export async function appendGrokUserMessage(
     throw new GrokStoreProjectionError("The durable Grok user message did not match the request.");
   }
   return parsed.data;
+}
+
+export async function recordGrokContextEnvelope(
+  client: SupabaseClient,
+  input: Readonly<{
+    organizationId: string;
+    requestedBy: string;
+    projectId: string;
+    sessionId: string;
+    messageId: string;
+    items: readonly Record<string, unknown>[];
+    idempotencyKey: string;
+    expectedEventSequence: number;
+    replanRequired?: boolean;
+  }>,
+) {
+  const value = await rpc<unknown>(client, "record_grok_context_envelope_as_server", {
+    p_organization_id: input.organizationId,
+    p_requested_by: input.requestedBy,
+    p_project_id: input.projectId,
+    p_session_id: input.sessionId,
+    p_message_id: input.messageId,
+    p_items: input.items,
+    p_idempotency_key: childIdempotencyKey(input.idempotencyKey, "context"),
+    p_expected_event_sequence: input.expectedEventSequence,
+    p_replan_required: input.replanRequired ?? false,
+  });
+  const parsed = contextEnvelopeWriteSchema.safeParse(value);
+  if (!parsed.success
+      || parsed.data.envelope.organization_id !== input.organizationId
+      || parsed.data.envelope.project_id !== input.projectId
+      || parsed.data.envelope.session_id !== input.sessionId
+      || parsed.data.envelope.message_id !== input.messageId) {
+    throw new GrokStoreProjectionError("The durable Grok context envelope was malformed.");
+  }
+  return parsed.data;
+}
+
+export async function appendGrokFollowUpContext(
+  client: SupabaseClient,
+  input: Readonly<{
+    organizationId: string;
+    projectId: string;
+    sessionId: string;
+    content: string;
+    items: readonly Record<string, unknown>[];
+    idempotencyKey: string;
+    expectedMessageSequence: number;
+    expectedEventSequence: number;
+    replyToMessageId: string | null;
+  }>,
+) {
+  const value = await rpc<unknown>(client, "append_grok_follow_up_context", {
+    p_organization_id: input.organizationId,
+    p_project_id: input.projectId,
+    p_session_id: input.sessionId,
+    p_content: input.content,
+    p_items: input.items,
+    p_idempotency_key: input.idempotencyKey,
+    p_expected_message_sequence: input.expectedMessageSequence,
+    p_expected_event_sequence: input.expectedEventSequence,
+    p_reply_to_message_id: input.replyToMessageId,
+  });
+  const parsed = followUpWriteSchema.safeParse(value);
+  if (!parsed.success
+      || parsed.data.message.session_id !== input.sessionId
+      || parsed.data.message.content !== input.content
+      || parsed.data.envelope.session_id !== input.sessionId
+      || parsed.data.envelope.message_id !== parsed.data.message.id) {
+    throw new GrokStoreProjectionError("The durable Grok follow-up result was malformed.");
+  }
+  return parsed.data;
+}
+
+export async function listGrokContextEnvelopes(
+  client: SupabaseClient,
+  organizationId: string,
+  sessionId: string,
+): Promise<readonly GrokContextEnvelope[]> {
+  const value = await rpc<unknown>(client, "list_grok_context_envelopes", {
+    p_organization_id: organizationId,
+    p_session_id: sessionId,
+    p_limit: 64,
+  });
+  const parsed = z.array(contextEnvelopeReadSchema).max(64).safeParse(value);
+  if (!parsed.success || parsed.data.some((envelope) => envelope.items.length !== envelope.item_count)) {
+    throw new GrokStoreProjectionError("The bounded Grok context projection was malformed.");
+  }
+  return Object.freeze(parsed.data.map((envelope) => Object.freeze({
+    id: envelope.id,
+    messageId: envelope.message_id,
+    itemCount: envelope.item_count,
+    totalBytes: envelope.total_bytes,
+    inputSha256: envelope.input_sha256,
+    replanRequired: envelope.replan_required,
+    createdAt: envelope.created_at,
+    items: Object.freeze(envelope.items.map((item) => Object.freeze({
+      id: item.id,
+      kind: item.kind,
+      label: item.label,
+      state: item.state,
+      mediaType: item.media_type,
+      url: item.source_url,
+      repositoryPath: item.repository_path,
+      integrationId: item.integration_id,
+      textPreview: item.text_preview,
+      byteSize: item.byte_size,
+    }))),
+  })));
 }
 
 export function assistantPlanContent(plan: GrokChiefOfStaffPlan): string {
@@ -1316,9 +1476,12 @@ export async function mapGrokSessionDetail(
 ): Promise<GrokSessionDetail> {
   const plan = storedGrokPlan(bundle);
   const link = plannedGraphLink(bundle);
-  const evidence = link?.graph_id
-    ? await readGraphEvidence(client, organizationId, link.graph_id, link.graph_run_id)
-    : null;
+  const [evidence, contextEnvelopes] = await Promise.all([
+    link?.graph_id
+      ? readGraphEvidence(client, organizationId, link.graph_id, link.graph_run_id)
+      : Promise.resolve(null),
+    listGrokContextEnvelopes(client, organizationId, bundle.session.id),
+  ]);
   const userMessage = bundle.messages.find((message) => message.role === "user");
   const plannedByKey = new Map(plan?.dag.tasks.map((task) => [task.id, task]) ?? []);
   const taskEvidence = evidence?.tasks ?? [];
@@ -1410,7 +1573,7 @@ export async function mapGrokSessionDetail(
     release: deriveReleaseEvidence(evidence.artifacts),
   }) : null;
   return Object.freeze({
-    session, messages, tasks, events,
+    session, messages, contextEnvelopes, tasks, events,
     eventsTruncated: bundle.events_truncated ?? false,
     artifacts: Object.freeze([...artifacts, ...graphArtifacts]),
     runEvidence,
