@@ -30,7 +30,10 @@ import { listOrganizationMemberships } from "@/lib/supabase/tenant";
 export async function requirePortalViewer(next: string): Promise<void> {
   const viewer = await readViewer();
   if (!viewer.signedIn) {
-    redirect(`/sign-in?next=${encodeURIComponent(next)}`);
+    // Straight to the real page. This used to point at the legacy /sign-in
+    // alias, which itself redirects — a second server hop on every
+    // signed-out visit, and a race the browser suite caught twice.
+    redirect(`/auth/sign-in?next=${encodeURIComponent(next)}`);
   }
 
   /*

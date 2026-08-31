@@ -22,7 +22,7 @@ export default async function CustomerPortalLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   const viewer = await readViewer();
   if (!viewer.signedIn) {
-    redirect(`/sign-in?next=${encodeURIComponent("/customer-portal")}`);
+    redirect(`/auth/sign-in?next=${encodeURIComponent("/customer-portal")}`);
   }
   return <div className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-6 lg:px-8">{children}</div>;
 }
