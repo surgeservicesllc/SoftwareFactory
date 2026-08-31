@@ -103,6 +103,7 @@ const PROTECTED_GROK_RELEASE = [
   "20260831001500_grok_claim_context_projection.sql",
   "20260831001600_grok_phase1c_graph_rewake.sql",
   "20260831001700_grok_read_only_research_runtime.sql",
+  "20260831001800_grok_deploy_readiness_runtime.sql",
   "20260831001900_grok_admission_version_null_fence.sql",
 ] as const;
 
