@@ -217,8 +217,21 @@ whether each is live from a sealed credential actually existing rather than
 a hard-coded label.
 
 The three PARTIALs are capabilities where the data ships and a piece of
-what the competitors sell does not — automated sending on a schedule, drag
-route sequencing, and paying online. Only the first two are buildable;
-paying online is provider-gated like the eight GAPs beside it. Appointment
-sequencing (ADR-211), invoice lines from the visit (ADR-212) and truck
-stock (ADR-213) were on this list until they were built.
+what the competitors sell does not: paying an invoice online, running
+recurring invoicing on a SCHEDULE, and sending dunning reminders
+automatically.
+
+**Only ONE of the three is buildable** — the schedule. Nothing in this
+product runs on a timer, so recurring generation is operator-triggered
+today; giving it a clock is code rather than an account. The other two are
+provider-gated exactly like the eight GAPs: paying online needs card
+processing, and automated reminders need an email or SMS sender. Both ship
+labelled **Not Connected** rather than implied to work.
+
+(An earlier revision of this paragraph listed "drag route sequencing" as a
+PARTIAL. It is not: route optimization is a GAP row above, and it is
+provider-gated on drive-time data. The count was right; the names were
+not.)
+
+Appointment sequencing (ADR-211), invoice lines from the visit (ADR-212)
+and truck stock (ADR-213) were on this list until they were built.
