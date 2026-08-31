@@ -42,7 +42,7 @@ jobs:
       MIGRATION_00900: supabase/migrations/20260830000900_full_lifecycle_typed_input_identity.sql
       MIGRATION_00900_SHA256: 08f4c618954d4fe65384f396a881f6546591a413c6fd3facacaaaa9ce8d984f5
       MIGRATION_01000: supabase/migrations/20260830001000_grok_chief_of_staff_persistence.sql
-      MIGRATION_01000_SHA256: 225344f4d3e891dba6576bb86c78f1a460d5dc86d491652a2121f545a60d5fde
+      MIGRATION_01000_SHA256: cf17ece506e30beb08163c8bc5888b6b18341bb4e66f61bafaabd6912f225aa6
       PRODUCTION_HEALTH_URL: https://www.theagoras.com/api/health
       VERCEL_PROJECT_ID: prj_pAsrhftaVWI4SyaqstgRVSWHJkdD
     steps:
@@ -438,6 +438,7 @@ jobs:
                     ('public.append_grok_user_message(uuid,uuid,text,jsonb,text,bigint,uuid)',null),
                     ('public.link_grok_task_as_server(uuid,uuid,uuid,uuid,uuid,uuid,uuid,text)',null),
                     ('public.record_grok_event_as_server(uuid,uuid,text,uuid,jsonb,bigint,uuid,uuid)',null),
+                    ('public.launch_grok_full_lifecycle_as_server(uuid,uuid,uuid,uuid,uuid,text,text,public.graph_topology,jsonb,public.risk_level,boolean,jsonb,jsonb,jsonb,uuid,text,text,jsonb)',null),
                     ('public.link_grok_artifact_as_server(uuid,uuid,uuid,uuid,uuid,uuid,text)',null),
                     ('public.request_grok_control_intent(uuid,uuid,text,uuid,text,text,text)',null),
                     ('public.resolve_grok_control_intent_as_server(uuid,uuid,text,text,text)',null),
@@ -639,6 +640,7 @@ jobs:
                 ('public.append_grok_message_as_server(uuid,uuid,text,text,jsonb,text,bigint,uuid)','service_role','5175abc05e284dccfcc6773912a4db47','v','sql'),
                 ('public.link_grok_task_as_server(uuid,uuid,uuid,uuid,uuid,uuid,uuid,text)','service_role','7149d87e48eb029194d38130b3ad7cd8','v','plpgsql'),
                 ('public.record_grok_event_as_server(uuid,uuid,text,uuid,jsonb,bigint,uuid,uuid)','service_role','aa62a1e9a3243c953c6ed6d8ff1b018d','v','plpgsql'),
+                ('public.launch_grok_full_lifecycle_as_server(uuid,uuid,uuid,uuid,uuid,text,text,public.graph_topology,jsonb,public.risk_level,boolean,jsonb,jsonb,jsonb,uuid,text,text,jsonb)','service_role','49438e7ef00cf0d7034e0016e75f74f8','v','plpgsql'),
                 ('public.link_grok_artifact_as_server(uuid,uuid,uuid,uuid,uuid,uuid,text)','service_role','23a3cca226675c99b31211549ce576d5','v','plpgsql'),
                 ('public.request_grok_control_intent(uuid,uuid,text,uuid,text,text,text)','authenticated','05adb140368fa0f59cc0bf1cad31caee','v','plpgsql'),
                 ('public.resolve_grok_control_intent_as_server(uuid,uuid,text,text,text)','service_role','bd952acdffd457e1ac03e64380284bec','v','plpgsql'),
@@ -651,7 +653,7 @@ jobs:
                   left join pg_proc routine on routine.oid=to_regprocedure(expected.signature)
                   left join pg_language language on language.oid=routine.prolang
               )
-              select count(oid)=15 and count(distinct oid)=15 and bool_and(
+              select count(oid)=16 and count(distinct oid)=16 and bool_and(
                 pg_get_userbyid(proowner)='postgres' and lanname=language_name and prosecdef
                 and actual_source_md5=source_md5 and provolatile::text=volatility
                 and proconfig=array['search_path=pg_catalog']::text[] and proacl is not null
@@ -667,8 +669,8 @@ jobs:
                       'reject_grok_evidence_mutation','enforce_grok_session_update','enforce_grok_control_intent_update',
                       'create_grok_session','list_grok_sessions','read_grok_session','append_grok_message_internal',
                       'append_grok_user_message','append_grok_message_as_server','link_grok_task_as_server',
-                      'record_grok_event_as_server','link_grok_artifact_as_server',
-                      'request_grok_control_intent','resolve_grok_control_intent_as_server','set_grok_session_status_as_server'))=15
+                      'record_grok_event_as_server','launch_grok_full_lifecycle_as_server','link_grok_artifact_as_server',
+                      'request_grok_control_intent','resolve_grok_control_intent_as_server','set_grok_session_status_as_server'))=16
               from state;")
             if [ "$GROK_FUNCTION_READY" != "t" ]; then
               echo "::error::Grok function signature, owner, SECURITY DEFINER, search_path, overload, or raw ACL postflight failed."
@@ -686,8 +688,23 @@ jobs:
               select to_regprocedure('public.launch_grok_graph_for_session(uuid,uuid,uuid,text,text,public.graph_topology,jsonb,public.risk_level,boolean,jsonb,jsonb,jsonb)') is null
                 and not exists (select 1 from pg_proc routine join pg_namespace space on space.oid=routine.pronamespace
                                  where space.nspname='public' and routine.proname='launch_grok_graph_for_session')
+                and (select count(*) from pg_proc routine join pg_namespace space on space.oid=routine.pronamespace
+                       where space.nspname='public' and routine.proname like '%grok%'
+                         and strpos(routine.prosrc,'public.create_graph_from_plan_with_release_identity_as_server')>0)=1
+                and exists (select 1 from pg_proc routine
+                              where routine.oid=to_regprocedure('public.launch_grok_full_lifecycle_as_server(uuid,uuid,uuid,uuid,uuid,text,text,public.graph_topology,jsonb,public.risk_level,boolean,jsonb,jsonb,jsonb,uuid,text,text,jsonb)')
+                                and strpos(routine.prosrc,'public.create_graph_from_plan_with_release_identity_as_server')>0
+                                and strpos(routine.prosrc,'''full_lifecycle''')>0
+                                and strpos(routine.prosrc,'perform public.set_graph_pause_as_member')>0
+                                and strpos(routine.prosrc,'public.graph_runs')>0
+                                and strpos(routine.prosrc,'''workerWoken'', false')>0
+                                and strpos(routine.prosrc,'''executionStarted'', false')>0
+                                and strpos(lower(routine.prosrc),'insert into public.graph_runs')=0
+                                and strpos(lower(routine.prosrc),'insert into public.node_runs')=0
+                                and strpos(lower(routine.prosrc),'insert into public.agent_runs')=0)
                 and not exists (select 1 from pg_proc routine join pg_namespace space on space.oid=routine.pronamespace
                                  where space.nspname='public' and routine.proname like '%grok%'
+                                   and routine.oid<>to_regprocedure('public.launch_grok_full_lifecycle_as_server(uuid,uuid,uuid,uuid,uuid,text,text,public.graph_topology,jsonb,public.risk_level,boolean,jsonb,jsonb,jsonb,uuid,text,text,jsonb)')
                                    and strpos(routine.prosrc,'public.create_graph_from_plan')>0)
                 and (select count(*) from authenticated_boundary boundary
                       join pg_proc routine on routine.oid=to_regprocedure(boundary.signature)
@@ -777,6 +794,7 @@ jobs:
                     ('public.append_grok_user_message(uuid,uuid,text,jsonb,text,bigint,uuid)',null),
                     ('public.link_grok_task_as_server(uuid,uuid,uuid,uuid,uuid,uuid,uuid,text)',null),
                     ('public.record_grok_event_as_server(uuid,uuid,text,uuid,jsonb,bigint,uuid,uuid)',null),
+                    ('public.launch_grok_full_lifecycle_as_server(uuid,uuid,uuid,uuid,uuid,text,text,public.graph_topology,jsonb,public.risk_level,boolean,jsonb,jsonb,jsonb,uuid,text,text,jsonb)',null),
                     ('public.link_grok_artifact_as_server(uuid,uuid,uuid,uuid,uuid,uuid,text)',null),
                     ('public.request_grok_control_intent(uuid,uuid,text,uuid,text,text,text)',null),
                     ('public.resolve_grok_control_intent_as_server(uuid,uuid,text,text,text)',null),

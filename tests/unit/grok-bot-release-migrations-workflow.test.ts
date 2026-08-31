@@ -20,11 +20,13 @@ const migrations = [
     version: "20260830001000",
     stem: "MIGRATION_01000",
     path: "supabase/migrations/20260830001000_grok_chief_of_staff_persistence.sql",
-    hash: "225344f4d3e891dba6576bb86c78f1a460d5dc86d491652a2121f545a60d5fde",
+    hash: "cf17ece506e30beb08163c8bc5888b6b18341bb4e66f61bafaabd6912f225aa6",
   },
 ] as const;
 
 const source = readFileSync(resolve(root, workflowPath), "utf8");
+const canonicalGrokLauncher =
+  "public.launch_grok_full_lifecycle_as_server(uuid,uuid,uuid,uuid,uuid,text,text,public.graph_topology,jsonb,public.risk_level,boolean,jsonb,jsonb,jsonb,uuid,text,text,jsonb)";
 const workflow = parse(source) as {
   on: {
     workflow_dispatch: {
@@ -326,7 +328,7 @@ describe("Grok Bot hosted release workflow", () => {
       "state.relrowsecurity and state.relforcerowsecurity",
       "not has_table_privilege('service_role'",
       "attribute.attacl is not null",
-      "count(oid)=15",
+      "count(oid)=16",
       "pg_get_userbyid(proowner)='postgres'",
       "lanname=language_name",
       "prosecdef",
@@ -334,11 +336,19 @@ describe("Grok Bot hosted release workflow", () => {
       "aclexplode",
       "acldefault('r',state.relowner)",
       "launch_grok_graph_for_session",
+      "launch_grok_full_lifecycle_as_server",
       "grok_graph_launches",
       "grok_control_intents",
       "public.has_organization_role",
       "organization owner access is required",
       "public.create_graph_from_plan",
+      "public.create_graph_from_plan_with_release_identity_as_server",
+      "perform public.set_graph_pause_as_member",
+      "workerWoken",
+      "executionStarted",
+      "insert into public.graph_runs",
+      "insert into public.node_runs",
+      "insert into public.agent_runs",
       "fail-closed execution boundary",
       "trigger_row.tgfoid='public.reject_grok_evidence_mutation()'",
       "grok_sessions_title_no_secret",
@@ -361,9 +371,43 @@ describe("Grok Bot hosted release workflow", () => {
       "fc25a54b07539b1e94477a0f482f9d11",
       "9a429e1ce48d9caf4a1dc604c4f5aaf4",
       "bd952acdffd457e1ac03e64380284bec",
+      "49438e7ef00cf0d7034e0016e75f74f8",
     ]) {
       expect(postflight).toContain(sourceHash);
     }
+    expect(postflight).toContain(
+      `('${canonicalGrokLauncher}','service_role','49438e7ef00cf0d7034e0016e75f74f8','v','plpgsql')`,
+    );
+  });
+
+  it("admits only the exact service launcher and keeps its canonical graph paused", () => {
+    const apply =
+      stepByName("Apply exactly one ordered forward migration").run ?? "";
+    const postflight =
+      stepByName(
+        "Verify ledger catalog ACL runtime lint health and stopped safety",
+      ).run ?? "";
+
+    expect(apply).toContain(`('${canonicalGrokLauncher}',null)`);
+    expect(postflight).toContain(`('${canonicalGrokLauncher}',null)`);
+    expect(postflight).toContain(
+      `routine.oid=to_regprocedure('${canonicalGrokLauncher}')`,
+    );
+    expect(postflight).toContain(
+      "strpos(routine.prosrc,'public.create_graph_from_plan_with_release_identity_as_server')>0)=1",
+    );
+    expect(postflight).toContain(
+      "routine.oid<>to_regprocedure('public.launch_grok_full_lifecycle_as_server",
+    );
+    expect(postflight).toContain(
+      "strpos(routine.prosrc,'perform public.set_graph_pause_as_member')>0",
+    );
+    expect(postflight).toContain(
+      "strpos(lower(routine.prosrc),'insert into public.graph_runs')=0",
+    );
+    expect(postflight).toContain(
+      "to_regprocedure('public.launch_grok_graph_for_session",
+    );
   });
 
   it("keeps probe and verify read-only", () => {
