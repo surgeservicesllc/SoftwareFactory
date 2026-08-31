@@ -224,12 +224,12 @@ function pgliteStore(client: PGlite): GraphRunStore {
 
 async function claim(): Promise<unknown> {
   await asServiceRole(db);
-  const claimed = await db.query<{ claim_planned_graph_v2: unknown }>(
-    "select public.claim_planned_graph_v2($1, $2::text[], $3, $4::jsonb, 2)",
+  const claimed = await db.query<{ claim_planned_graph_v3: unknown }>(
+    "select public.claim_planned_graph_v3($1, $2::text[], $3, $4::jsonb, 3)",
     [WORKER, WORKER_SUPPORTED_EXECUTORS, REPOSITORY, JSON.stringify(REQUIRED_CHECKS)],
   );
   await reset(db);
-  return claimed.rows[0].claim_planned_graph_v2;
+  return claimed.rows[0].claim_planned_graph_v3;
 }
 
 async function listRunsAs(userId: string): Promise<Array<Record<string, unknown>>> {

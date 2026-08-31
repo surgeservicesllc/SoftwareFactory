@@ -58,7 +58,7 @@ const binding = {
 beforeEach(() => {
   vi.clearAllMocks();
   rpc.mockImplementation((fn: string) => {
-    if (fn === "set_graph_pause_as_member") {
+    if (fn === "set_graph_pause_as_member_v2") {
       return Promise.resolve({
         data: { id: graphId, project_id: projectId, pause_requested_at: "2026-08-30T08:00:00.000Z" },
         error: null,
@@ -66,6 +66,9 @@ beforeEach(() => {
     }
     if (fn === "resolve_phase1c_command_target") {
       return { single: () => Promise.resolve({ data: binding, error: null }) };
+    }
+    if (fn === "assert_grok_graph_admission_as_member") {
+      return Promise.resolve({ data: true, error: null });
     }
     return Promise.resolve({ data: null, error: { message: `unexpected rpc ${fn}` } });
   });
@@ -84,7 +87,7 @@ describe("POST /api/graphs/[graphId]/pause", () => {
     expect(body.graphId).toBe(graphId);
     expect(body.pausedAt).toBe("2026-08-30T08:00:00.000Z");
     expect(body.note).toContain("nothing new starts");
-    expect(rpc).toHaveBeenCalledWith("set_graph_pause_as_member", {
+    expect(rpc).toHaveBeenCalledWith("set_graph_pause_as_member_v2", {
       p_organization_id: organizationId,
       p_graph_id: graphId,
       p_paused: true,
@@ -95,11 +98,14 @@ describe("POST /api/graphs/[graphId]/pause", () => {
 
   it("resumes and wakes the worker through the project's own binding", async () => {
     rpc.mockImplementation((fn: string) => {
-      if (fn === "set_graph_pause_as_member") {
+      if (fn === "set_graph_pause_as_member_v2") {
         return Promise.resolve({
           data: { id: graphId, project_id: projectId, pause_requested_at: null },
           error: null,
         });
+      }
+      if (fn === "assert_grok_graph_admission_as_member") {
+        return Promise.resolve({ data: true, error: null });
       }
       return { single: () => Promise.resolve({ data: binding, error: null }) };
     });
@@ -122,11 +128,14 @@ describe("POST /api/graphs/[graphId]/pause", () => {
 
   it("a resume whose wake fails still reports the resume that happened", async () => {
     rpc.mockImplementation((fn: string) => {
-      if (fn === "set_graph_pause_as_member") {
+      if (fn === "set_graph_pause_as_member_v2") {
         return Promise.resolve({
           data: { id: graphId, project_id: projectId, pause_requested_at: null },
           error: null,
         });
+      }
+      if (fn === "assert_grok_graph_admission_as_member") {
+        return Promise.resolve({ data: true, error: null });
       }
       return { single: () => Promise.resolve({ data: null, error: { message: "no binding" } }) };
     });

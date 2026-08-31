@@ -12,7 +12,7 @@ const repositoryRoot = resolve(import.meta.dirname, "../..");
 const migrationsDirectory = resolve(repositoryRoot, "supabase/migrations");
 
 /**
- * The day route (ADR-220) against the real chain.
+ * The day route (ADR-221) against the real chain.
  *
  * This suite replays the chain rather than restoring the snapshot, and
  * injects hosted-like default privileges before the CRM foundation, because

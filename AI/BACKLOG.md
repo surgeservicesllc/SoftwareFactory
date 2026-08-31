@@ -5,10 +5,10 @@
 Checked while writing ADR-217, because "everything remaining is gated
 outside the code" had been wrong three times in two days and was worth
 testing rather than repeating. Of the eleven GAP rows, nine name a real
-external account nobody has opened. Two do not, and both carry a bare
-**GAP** with no gating reason attached — because there isn't one:
+external account nobody has opened. Two did not, and both have now
+shipped their ungated half:
 
-- [ ] **Route optimization / visual route manager.** PARTLY buildable, and
+- [x] **Route optimization / visual route manager.** PARTLY buildable, and
   the first version of this entry overstated it — corrected here before it
   reached main. `crm_route_density` (ADR-199) is an analytics read, not a
   sequencer, and the sequencing arithmetic itself is genuinely ungated:
@@ -24,13 +24,21 @@ external account nobody has opened. Two do not, and both carry a bare
   degradation — a property with no point is LISTED as unsequenceable rather
   than silently dropped from the day. That would move the row to PARTIAL.
   Still gated afterwards: bulk geocoding, drive time, traffic and time
-  windows.
-- [ ] **QuickBooks sync.** The API sync is gated on an Intuit account. A
+  windows. SHIPPED as the day route (ADR-221, `20260831001200`): the
+  dispatcher's sequence is first-class (routes, stops, resequencing,
+  route sheet), which is the half of "route manager" no provider gates.
+  The optimiser itself remains gated on geocoding exactly as ADR-221
+  records; row is PARTIAL with the optimiser named as the remainder.
+- [x] **QuickBooks sync.** The API sync is gated on an Intuit account. A
   QuickBooks-readable EXPORT FILE is not, and is what many small shops
   actually use — the invoice and payment ledgers already hold everything it
-  needs. Would move the row to PARTIAL.
+  needs. SHIPPED as the accounting export (ADR-220): a balanced
+  general-journal CSV built from the real ledgers, downloadable from the
+  billing panel. Row is PARTIAL; the live API sync stays gated on the
+  Intuit account.
 
-Neither is started. They are recorded here rather than left as an
+Both shipped their ungated half; the provider-gated remainders are
+recorded on their rows. They are recorded here rather than left as an
 unexamined "gated" so the next reader treats that word as a claim to check
 — and the route entry above is a reminder that "buildable" is equally a
 claim to check, since the first version of it did not verify that the data
@@ -123,16 +131,31 @@ the algorithm needs exists.
   `33372115428`; signed-in reload retained the exact durable blocked session
   without starting a graph, worker, or provider. Never rerun, repair, replay,
   or down-migrate the already accepted migration.
-- [ ] Make admission cover every honest prompt/roster without inventing work:
-  preserve research/deploy as durable plan-only sessions or add dedicated
-  canonical templates; persist a deterministic immutable admission roster so
-  evaluation/decision specialists need not be fake DAG tasks; normalize the
-  explicit `*` generalist capability in both TypeScript and a new forward SQL
-  launcher revision. Keep v1/v2 history readable and fail closed for execution.
-- [ ] Before enabling any worker, require a complete admission set in every
-  Resume/wake and worker-claim path, and revalidate the admitted assignment,
-  bot, role, AI account, provider credential rotation, provider/model, and
-  canonical node at claim time. Legacy unadmitted graphs must never be woken.
+- [x] Implement honest prompt/roster admission in the repository through
+  `20260831001000`: planner v3 persists the complete Ready configured posting
+  roster, normalizes `*` to the fixed canonical vocabulary in TypeScript and
+  SQL, keeps v1/v2 readable, and blocks research/deploy before graph creation
+  rather than inventing executable work. This migration is not hosted yet.
+- [x] Implement the repository worker-admission fence through
+  `20260831000900`: every Grok Resume/wake and protocol-v3 graph or Phase 1C
+  claim requires and revalidates the complete current admission identity;
+  legacy unadmitted Grok work cannot enter the worker. This migration is not
+  hosted yet.
+- [ ] Publish one exact rebased candidate and require lint, typecheck, the full
+  test suite, production build, all three browser/accessibility shards, exact
+  green CI, exact READY Vercel identity, and matching public health.
+- [ ] Apply only the protected completion sequence through the dedicated
+  workflow: fresh `probe`, `claim-admission-fence` (`00900`),
+  `specialist-admission-planning` (`01000`), then fresh read-only `verify`.
+  Require exact ledger, catalog, RLS, ACL, runtime, lint, health, and stopped
+  safety evidence; never broad-push, replay, repair, reset, or down-migrate.
+- [ ] Perform signed-in production create/return/reload acceptance with workers
+  still OFF, proving the exact current roster and route persist without
+  claiming that provider execution occurred.
+- [ ] Under a separate authorization, run the real current-base provider path
+  through an admitted claim, repository change, draft pull request, stable
+  exact-head CI, and immutable audit evidence. Only that provider-backed E2E
+  can close `GROK BOT: PRODUCTION READY`.
 - [x] Establish the production baseline before containment: exact main
   `397798921ebda6a4f8e30d2c0d83af36a3dd73a0` is green/READY and hosted
   migrations `20260830000900` and `20260830001000` are each ledgered once.
@@ -159,12 +182,12 @@ the algorithm needs exists.
   wake, or dispatch. Legacy session `74d18263-37ba-4f7d-8230-dc5e41bdc86a`
   now reloads as request saved/no plan.
 - [ ] Complete the separate provider-backed loop only after legitimate ready
-  bot coverage exists and execution receives its own authorization. Keep
-  workers, autonomy, and automatic actions OFF and the global kill switch ON;
-  Phase 2 containment acceptance alone does not declare `GROK BOT: PRODUCTION
-  READY`. Before enabling a worker, make the database claim pin the selected
-  bot, connected account, provider/model, and immutable assignment revisions;
-  do not treat repository-dispatch acceptance as proof of claim or execution.
+  bot coverage exists and execution receives its own authorization. The
+  repository candidate now pins the selected bot, connected account,
+  provider/model, credential rotation, and immutable revisions at claim time,
+  but it is unhosted and has not executed a provider. Keep workers, autonomy,
+  and automatic actions OFF and the global kill switch ON; do not treat a
+  repository dispatch as proof of claim or execution.
 
 ## Services CRM → pest-services platform (task #63, owner /goal 2026-08-30)
 
@@ -409,11 +432,11 @@ the full seeded E2E journey passes — increment 10 of the plan.
   under RLS had already solved it for the Job Seeker.
 - [ ] Send a filed document to a customer. The email/SMS provider row, same
   as every other outbound message.
-- [x] Offer the filed copy for download in the customer portal (ADR-221):
+- [x] Offer the filed copy for download in the customer portal (ADR-222):
   two definers hand a customer their own list and bodies, the panel's
   Documents tab renders per-copy download anchors with a superseded mark,
   and both stale notices citing object storage are corrected.
-  20260831001000; hosted apply: scope=portal-filed-documents after merge.
+  20260831001300; hosted apply: scope=portal-filed-documents after merge.
 - [ ] BLOCKED ON OWNER AUTHORIZATION, not on code: running recurring
   invoicing on a schedule. A timer that raises invoices against real
   customers is a billing action executed autonomously, which
@@ -424,19 +447,21 @@ the full seeded E2E journey passes — increment 10 of the plan.
   clock is missing, and the clock is the part that needs permission.
 - [ ] Then the AI copilot and the seeded E2E acceptance journey — after
   which, and only after which, PEST CRM: PRODUCTION READY may be declared.
-- [x] Queue-diagnosis honesty follow-up (ADR-222): `20260831001100`
+- [x] Queue-diagnosis honesty follow-up (ADR-223): `20260831001400`
   re-creates `diagnose_graph_queue_as_worker_v2` with withdrawn_at +
   pause_requested_at projected, and explainEmptyQueue names both reasons
   ahead of everything else — withdrawn is final, pause waits for a resume.
   Worker-only ACL restated after the forced DROP; postflight proves the
   new columns and the unchanged reach. Hosted apply:
   scope=queue-diagnosis-visibility after merge.
-- [ ] The apply workflow's byte ceiling, again: adding the
-  queue-diagnosis-visibility step left 1,284 bytes under the 478,000
-  guard, so the NEXT scope cannot be added without first shrinking the
-  file (the repeated five-line DB_URL/mask preamble in ~85 steps is the
-  obvious extraction). Do the extraction before the next migration ships,
-  and ratchet the guard down to keep the recovery.
+- [ ] The apply workflow's byte ceiling, again: the Grok-completion merge
+  pushed the file to 478,074 — over the 478,000 guard — so the extraction
+  started early: `Choose the connection` now exports a masked $DB_URL in
+  BOTH modes, the three newest steps (day-route, portal-filed-documents,
+  queue-diagnosis-visibility) carry no preamble, and the file is 477,608.
+  REMAINING: 76 older steps still carry the six-line preamble (~27KB).
+  Convert them to the env $DB_URL in one mechanical pass, then ratchet the
+  guard down to keep the recovery. New steps must never add the preamble.
 - [x] Increment 6 (ADR-176): Changes & release panel —
   `lib/factory/release-evidence.ts` derives the release trail from the
   ANCHOR observations (lineage/review/ci_check_runs/deployment/probe);

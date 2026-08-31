@@ -6,7 +6,7 @@
 -- tests/integration/hosted-scope-replay.behavior.test.ts so a mangled
 -- extraction fails a test rather than a production dispatch.
 --
--- ADR-221 hands a signed-in customer the body of their own filed copy.
+-- ADR-222 hands a signed-in customer the body of their own filed copy.
 -- The checks are therefore about reach: both functions must be
 -- SECURITY DEFINER (the customer is not an organization member and holds
 -- no table grant), reachable by authenticated, and by nobody else — the
@@ -36,7 +36,7 @@ begin
       end if;
     end loop;
   end loop;
-  -- The portal-wide rule ADR-213 established still holds after this
+  -- The portal-wide rule ADR-198 established still holds after this
   -- migration: no crm_portal% function is reachable signed out.
   if exists (
     select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace

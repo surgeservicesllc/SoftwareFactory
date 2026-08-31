@@ -275,7 +275,7 @@ function workerStore(db: PGlite): GraphRunStore {
 async function claim(db: PGlite): Promise<Claim | null> {
   await asWorker(db);
   const result = await db.query<{ c: Claim | null }>(
-    `select public.claim_planned_graph_v2($1, $2, $3, $4::jsonb, 2) as c`,
+    `select public.claim_planned_graph_v3($1, $2, $3, $4::jsonb, 3) as c`,
     [WORKER, EXECUTORS, CLAIM_REPOSITORY, JSON.stringify(CLAIM_REQUIRED_CHECKS)],
   );
   return result.rows[0].c;

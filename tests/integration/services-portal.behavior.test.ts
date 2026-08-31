@@ -506,7 +506,7 @@ describe("the customer portal", { timeout: 240_000 }, () => {
     await reset();
   });
 
-  it("hands a customer their own filed copies, marked when superseded (ADR-221)", async () => {
+  it("hands a customer their own filed copies, marked when superseded (ADR-222)", async () => {
     await as(acmeOwner);
     // A filed copy must name a subject; a property is the lightest one.
     const site = await db.query<{ id: string }>(

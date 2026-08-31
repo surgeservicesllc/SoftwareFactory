@@ -12,7 +12,7 @@ export const runtime = "nodejs";
 
 /**
  * A general-journal file for this workspace, built from its own ledgers
- * (ADR-219).
+ * (ADR-220).
  *
  * THIS IS AN EXPORT, NOT A SYNC. Nothing is pushed to any accounting
  * package; a person downloads a file and imports it. The competitor row
@@ -72,8 +72,6 @@ export async function GET(request: Request) {
     const nameById = new Map(
       (accounts.data ?? []).map((row) => [row.id as string, row.name as string]),
     );
-    const nameOf = (accountId: string) => nameById.get(accountId) ?? "Unknown customer";
-
     const payments = await client
       .from("crm_payments")
       .select("id, invoice_id, amount_cents, method, received_at")

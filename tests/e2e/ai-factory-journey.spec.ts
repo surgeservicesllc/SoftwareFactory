@@ -112,43 +112,72 @@ test.describe("AI Factory live journey", () => {
 
     // ── Step 2: Create Project, every field ───────────────────────────────
     const createStep = stepCard(page, "Create Project");
-    await createStep.getByRole("button", { name: "Create a project" }).click();
-    const projectDialog = page.getByRole("dialog");
-    await expect(projectDialog.getByLabel("Repository")).toBeVisible({ timeout: 20_000 });
-    await projectDialog.getByLabel("Name it").fill("Storefront Rebuild");
-    await projectDialog.getByLabel(/what is it/i).fill("A fake project created by the journey walk.");
-    await projectDialog.getByRole("button", { name: "Add project" }).click();
-    // The form's own confirmation is not the thing to wait for: creating a
-    // project calls back into the page, which closes the overlay and re-reads,
-    // so that message can be gone before an assertion sees it. What must be
-    // true is the step itself, derived from the row the POST created.
-    await expect(projectDialog).toBeHidden({ timeout: 30_000 });
-    await expect(createStep.getByText("Done")).toBeVisible({ timeout: 30_000 });
+    const existingJourneyProject = createStep.getByText("This factory: Storefront Rebuild", {
+      exact: true,
+    });
+    if (await existingJourneyProject.isVisible().catch(() => false)) {
+      // Playwright retries reuse the local database. A prior attempt may have
+      // committed the project before a later assertion failed, so verify that
+      // exact durable project instead of trying to consume the same seeded
+      // repository twice and then misreporting the missing picker as a UI bug.
+      await expect(createStep.getByText("Done")).toBeVisible();
+    } else {
+      await createStep.getByRole("button", { name: "Create a project" }).click();
+      const projectDialog = page.getByRole("dialog");
+      const repository = projectDialog.getByLabel("Repository");
+      const allRepositoriesBound = projectDialog.getByRole("heading", {
+        name: "Add another project",
+      });
+      await expect.poll(async () => (
+        await repository.isVisible() || await allRepositoriesBound.isVisible()
+      ), {
+        message: "the project dialog must expose an unbound repository or its honest all-bound gate",
+        timeout: 20_000,
+      }).toBe(true);
+      if (await allRepositoriesBound.isVisible()) {
+        throw new Error(
+          "AI Factory journey precondition failed: Storefront Rebuild is absent, but every authorized repository is already bound to another project.",
+        );
+      }
+      await projectDialog.getByLabel("Name it").fill("Storefront Rebuild");
+      await projectDialog.getByLabel(/what is it/i).fill("A fake project created by the journey walk.");
+      await projectDialog.getByRole("button", { name: "Add project" }).click();
+      // The form's own confirmation is not the thing to wait for: creating a
+      // project calls back into the page, which closes the overlay and re-reads,
+      // so that message can be gone before an assertion sees it. What must be
+      // true is the step itself, derived from the row the POST created.
+      await expect(projectDialog).toBeHidden({ timeout: 30_000 });
+      await expect(createStep.getByText("Done")).toBeVisible({ timeout: 30_000 });
+    }
 
     // ── Step 3: Configure Pipeline ────────────────────────────────────────
     const pipelineStep = stepCard(page, "Configure Pipeline");
-    await pipelineStep.getByRole("button", { name: /choose a pipeline|change pipelines/i }).click();
-    const pipelineDialog = page.getByRole("dialog");
-    // The accessible name names the template ("Use Agentic SDLC"); the visible
-    // label is just "Use".
-    const use = pipelineDialog.getByRole("button", { name: /^Use / }).first();
-    await expect(use).toBeVisible({ timeout: 20_000 });
-    await use.click();
-    await page.keyboard.press("Escape");
-    // The selection has to survive the overlay closing, or "Use" meant nothing.
-    await expect(pipelineStep.getByText("Done")).toBeVisible({ timeout: 30_000 });
+    if (!(await pipelineStep.getByText("Done").isVisible().catch(() => false))) {
+      await pipelineStep.getByRole("button", { name: /choose a pipeline|change pipelines/i }).click();
+      const pipelineDialog = page.getByRole("dialog");
+      // The accessible name names the template ("Use Agentic SDLC"); the visible
+      // label is just "Use".
+      const use = pipelineDialog.getByRole("button", { name: /^Use / }).first();
+      await expect(use).toBeVisible({ timeout: 20_000 });
+      await use.click();
+      await page.keyboard.press("Escape");
+      // The selection has to survive the overlay closing, or "Use" meant nothing.
+      await expect(pipelineStep.getByText("Done")).toBeVisible({ timeout: 30_000 });
+    }
     await expect(pipelineStep.getByRole("list", { name: "Selected pipelines" })).toBeVisible();
 
     // ── Step 4: Select Agents ─────────────────────────────────────────────
     const agentsStep = stepCard(page, "Select Agents");
-    await agentsStep.getByRole("button", { name: /choose agents|change agents/i }).click();
-    const agentsDialog = page.getByRole("dialog", { name: "Select Agents" });
-    const includeAgent = agentsDialog.getByRole("button", { name: "Include in AI Factory" }).first();
-    await expect(includeAgent).toBeVisible({ timeout: 20_000 });
-    await includeAgent.click();
-    await expect(agentsDialog.getByText("Included").first()).toBeVisible({ timeout: 20_000 });
-    await page.keyboard.press("Escape");
-    await expect(agentsStep.getByText("Done")).toBeVisible({ timeout: 30_000 });
+    if (!(await agentsStep.getByText("Done").isVisible().catch(() => false))) {
+      await agentsStep.getByRole("button", { name: /choose agents|change agents/i }).click();
+      const agentsDialog = page.getByRole("dialog", { name: "Select Agents" });
+      const includeAgent = agentsDialog.getByRole("button", { name: "Include in AI Factory" }).first();
+      await expect(includeAgent).toBeVisible({ timeout: 20_000 });
+      await includeAgent.click();
+      await expect(agentsDialog.getByText("Included").first()).toBeVisible({ timeout: 20_000 });
+      await page.keyboard.press("Escape");
+      await expect(agentsStep.getByText("Done")).toBeVisible({ timeout: 30_000 });
+    }
     await expect(agentsStep.getByRole("list", { name: "Included agents" })).toBeVisible();
 
     // ── Step 5: Connect Bots ──────────────────────────────────────────────
@@ -156,18 +185,25 @@ test.describe("AI Factory live journey", () => {
     // so the runner seeds the account row that sign-in would have recorded.
     // Creating the bot on top of it is done here, in the browser.
     const botsStep = stepCard(page, "Connect Bots");
-    await expect(botsStep.getByText("Done")).toHaveCount(0);
-    await expect(botsStep.getByText(/no bot linked to those accounts yet/i)).toBeVisible();
-    await botsStep.getByRole("button", { name: "Create a bot" }).click();
-    const connectDialog = page.getByRole("dialog", { name: "Connect Bots" });
-    await connectDialog.getByRole("button", { name: "Create Bot" }).click();
-    await expect(page.getByRole("dialog")).toHaveCount(1);
-    const accountChoice = connectDialog.getByRole("button", { name: /Fake Claude Account/ });
-    await expect(accountChoice).toBeVisible({ timeout: 20_000 });
-    await accountChoice.click();
-    await expect(connectDialog.getByText(/Active Bots/)).toBeVisible({ timeout: 20_000 });
-    await page.keyboard.press("Escape");
-    await expect(botsStep.getByText("Done")).toBeVisible({ timeout: 30_000 });
+    if (!(await botsStep.getByText("Done").isVisible().catch(() => false))) {
+      await expect(botsStep.getByText(/no bot linked to those accounts yet/i)).toBeVisible();
+      await botsStep.getByRole("button", { name: "Create a bot" }).click();
+      const connectDialog = page.getByRole("dialog", { name: "Connect Bots" });
+      await connectDialog.getByRole("button", { name: "Create Bot" }).click();
+      await expect(page.getByRole("dialog")).toHaveCount(1);
+      const accountChoice = connectDialog.getByRole("button", { name: /Fake Claude Account/ });
+      await expect(accountChoice).toBeVisible({ timeout: 20_000 });
+      await accountChoice.click();
+      // The bot manager renamed this persisted roster from "Active Bots" to
+      // "Your AI Team". Assert the real current surface and the exact success
+      // result; neither selector is allowed to stand in for readiness below.
+      await expect(connectDialog.getByRole("heading", { name: "Your AI Team" }))
+        .toBeVisible({ timeout: 20_000 });
+      await expect(connectDialog.getByRole("status"))
+        .toContainText(/Bot created|now linked|already has a bot/);
+      await page.keyboard.press("Escape");
+      await expect(botsStep.getByText("Done")).toBeVisible({ timeout: 30_000 });
+    }
     await expect(botsStep.getByText(/ready bot.*linked to.*connected account/i)).toBeVisible();
 
     // ── Step 6: Assign Bots, through the Select → Configure → Review wizard ─

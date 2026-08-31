@@ -52,7 +52,7 @@ export async function POST(
     }
 
     const { activeOrganization, client } = await requireActiveOrganization();
-    const { data, error } = await client.rpc("set_graph_pause_as_member", {
+    const { data, error } = await client.rpc("set_graph_pause_as_member_v2", {
       p_organization_id: activeOrganization.id,
       p_graph_id: parsed.data.graphId,
       p_paused: body.data.paused,
@@ -88,6 +88,11 @@ export async function POST(
     let workerWoken = false;
     if (!body.data.paused && graph?.project_id) {
       try {
+        const admission = await client.rpc("assert_grok_graph_admission_as_member", {
+          p_organization_id: activeOrganization.id,
+          p_graph_id: parsed.data.graphId,
+        });
+        if (admission.error) throw admission.error;
         const target = await client.rpc("resolve_phase1c_command_target", {
           p_organization_id: activeOrganization.id,
           p_project_id: graph.project_id,

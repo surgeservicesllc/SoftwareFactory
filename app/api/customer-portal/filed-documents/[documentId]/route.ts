@@ -8,7 +8,7 @@ export const runtime = "nodejs";
 const paramsSchema = z.object({ documentId: z.string().uuid() });
 
 /**
- * One filed copy, as the file it is (ADR-221).
+ * One filed copy, as the file it is (ADR-222).
  *
  * The projection returns the row only when it belongs to the caller's own
  * account; anybody else's id comes back empty, which is deliberately the

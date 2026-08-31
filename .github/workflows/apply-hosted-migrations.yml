@@ -297,6 +297,14 @@ jobs:
           if [[ "$SUPABASE_ACCESS_TOKEN" =~ ^sbp_[A-Za-z0-9]{16,}$ ]]; then
             echo "MODE=token" >> "$GITHUB_ENV"
             echo "Using the personal access token (linked project flow)."
+            # Export the psql URL once, masked, exactly as every apply step
+            # used to rebuild it inline. New steps read $DB_URL from env and
+            # carry no preamble; the byte guard is why (see the backlog).
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$URL"
+            echo "DB_URL=$URL" >> "$GITHUB_ENV"
           elif [ -n "$SUPABASE_DB_PASSWORD" ]; then
             echo "SUPABASE_ACCESS_TOKEN is missing or not shaped like a personal access token (they look like sbp_0102...1920; generate one at supabase.com -> Account -> Access Tokens)."
             echo "Falling back to the direct database connection using SUPABASE_DB_PASSWORD only."
@@ -2081,13 +2089,7 @@ jobs:
       - name: Apply the day route (scope=day-route)
         if: ${{ inputs.scope == 'day-route' }}
         run: |
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
-          fi
-          VERSION=20260831000900_day_route
+          VERSION=20260831001200_day_route
           FILE="supabase/migrations/${VERSION}.sql"
           sha256sum "$FILE"
           psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
@@ -2103,13 +2105,7 @@ jobs:
       - name: Apply portal filed-copy downloads (scope=portal-filed-documents)
         if: ${{ inputs.scope == 'portal-filed-documents' }}
         run: |
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
-          fi
-          VERSION=20260831001000_portal_filed_documents
+          VERSION=20260831001300_portal_filed_documents
           FILE="supabase/migrations/${VERSION}.sql"
           sha256sum "$FILE"
           psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
@@ -2125,13 +2121,7 @@ jobs:
       - name: Widen the queue diagnosis projection (scope=queue-diagnosis-visibility)
         if: ${{ inputs.scope == 'queue-diagnosis-visibility' }}
         run: |
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
-          fi
-          VERSION=20260831001100_queue_diagnosis_withdraw_pause
+          VERSION=20260831001400_queue_diagnosis_withdraw_pause
           FILE="supabase/migrations/${VERSION}.sql"
           sha256sum "$FILE"
           psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
@@ -7032,11 +7022,34 @@ jobs:
           fi
           PROTECTED_GRAPH_PROTOCOL_READY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
             set search_path = pg_catalog;
+            with cutover(applied) as (
+              select count(*) from supabase_migrations.schema_migrations where version='20260831000900'
+            ), expected(signature,protocol) as (values
+              ('public.claim_planned_graph_v2(text,text[],text,jsonb,integer)',2),
+              ('public.claim_planned_graph_by_id_v2(text,text[],text,jsonb,uuid,integer)',2),
+              ('public.claim_phase1c_run_v2(text,text,text,integer,integer)',2),
+              ('public.claim_phase1c_run_by_command_v2(text,text,text,integer,uuid,integer)',2),
+              ('public.claim_planned_graph_v3(text,text[],text,jsonb,integer)',3),
+              ('public.claim_planned_graph_by_id_v3(text,text[],text,jsonb,uuid,integer)',3),
+              ('public.claim_phase1c_run_v3(text,text,text,integer,integer)',3),
+              ('public.claim_phase1c_run_by_command_v3(text,text,text,integer,uuid,integer)',3)
+            ), claim_acl as (
+              select cutover.applied,expected.protocol,to_regprocedure(expected.signature) routine
+                from cutover cross join expected
+            )
             select
-              to_regprocedure('public.claim_planned_graph_v2(text,text[],text,jsonb,integer)') is not null
-              and has_function_privilege('service_role', 'public.claim_planned_graph_v2(text,text[],text,jsonb,integer)', 'EXECUTE')
-              and not has_function_privilege('anon', 'public.claim_planned_graph_v2(text,text[],text,jsonb,integer)', 'EXECUTE')
-              and not has_function_privilege('authenticated', 'public.claim_planned_graph_v2(text,text[],text,jsonb,integer)', 'EXECUTE')
+              (select applied in (0,1) from cutover)
+              and (select bool_and(case
+                when protocol=2 then routine is not null
+                  and has_function_privilege('service_role',routine,'EXECUTE')=(applied=0)
+                  and not has_function_privilege('anon',routine,'EXECUTE')
+                  and not has_function_privilege('authenticated',routine,'EXECUTE')
+                when applied=0 then routine is null
+                else routine is not null
+                  and has_function_privilege('service_role',routine,'EXECUTE')
+                  and not has_function_privilege('anon',routine,'EXECUTE')
+                  and not has_function_privilege('authenticated',routine,'EXECUTE')
+              end) from claim_acl)
               and to_regprocedure('public.diagnose_graph_queue_as_worker_v2(text,text,jsonb,uuid,integer)') is not null
               and has_function_privilege('service_role', 'public.diagnose_graph_queue_as_worker_v2(text,text,jsonb,uuid,integer)', 'EXECUTE')
               and not has_function_privilege('service_role', 'public.diagnose_graph_queue_as_worker(text)', 'EXECUTE')

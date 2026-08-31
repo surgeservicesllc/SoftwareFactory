@@ -68,14 +68,14 @@ export class SupabaseGraphStore implements GraphRunStore {
       p_supported_executors: [...WORKER_SUPPORTED_EXECUTORS],
       p_repository_full_name: this.repositoryFullName,
       p_required_check_names: [...this.requiredCheckNames],
-      p_protocol_version: 2,
+      p_protocol_version: 3,
     };
     const { data, error } = this.targetGraphId
-      ? await this.client.rpc("claim_planned_graph_by_id_v2", {
+      ? await this.client.rpc("claim_planned_graph_by_id_v3", {
         ...claimRequest,
         p_target_graph_id: this.targetGraphId,
       })
-      : await this.client.rpc("claim_planned_graph_v2", claimRequest);
+      : await this.client.rpc("claim_planned_graph_v3", claimRequest);
     if (error) throw new Error(`Claiming a planned graph failed: ${error.message ?? "unknown error"}`);
     return data ?? null;
   }

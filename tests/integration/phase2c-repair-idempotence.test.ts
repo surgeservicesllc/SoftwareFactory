@@ -93,6 +93,14 @@ const FULL_LIFECYCLE_RELEASE = [
   "20260830000900_full_lifecycle_typed_input_identity.sql",
 ] as const;
 
+// These protected Grok releases enforce current protocol-v3 admission and
+// planning identities. Historical/partial reconstruction fixtures omit them;
+// the ordinary full-chain cases below still replay both files end to end.
+const PROTECTED_GROK_RELEASE = [
+  "20260831000900_grok_claim_admission_fence.sql",
+  "20260831001000_grok_specialist_admission_planning.sql",
+] as const;
+
 async function applyChain(db: PGlite, options: { skip?: readonly string[] } = {}): Promise<void> {
   const skip = new Set(options.skip ?? []);
   const files = (await readdir(migrationsDirectory))
@@ -151,7 +159,9 @@ describe("the graph anchors repair", () => {
     // this legacy function/catalog is missing. They are downstream consumers,
     // not prerequisites for reconstructing and repairing the historical
     // half-applied state under test here.
-    await applyChain(db, { skip: [ANCHORS, ...HOSTED_CATALOG_CONTAINMENT] });
+    await applyChain(db, {
+      skip: [ANCHORS, ...HOSTED_CATALOG_CONTAINMENT, ...PROTECTED_GROK_RELEASE],
+    });
 
     // Reproduce the hosted state: the enums landed, nothing after them did.
     const original = await readFile(resolve(migrationsDirectory, ANCHORS), "utf8");
@@ -213,7 +223,13 @@ describe("the phase2c repair", () => {
     // Everything except the target, then only the first table it creates —
     // reconstructing the exact state hosted is in.
     await applyChain(db, {
-      skip: [TARGET, DEPENDS_ON_TARGET, ...LATER_DEPENDANTS, ...FULL_LIFECYCLE_RELEASE],
+      skip: [
+        TARGET,
+        DEPENDS_ON_TARGET,
+        ...LATER_DEPENDANTS,
+        ...FULL_LIFECYCLE_RELEASE,
+        ...PROTECTED_GROK_RELEASE,
+      ],
     });
 
     const original = await readFile(resolve(migrationsDirectory, TARGET), "utf8");

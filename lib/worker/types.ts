@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { githubWebUrlSchema } from "@/lib/github/schemas";
+import { executionAdmissionSchema } from "@/lib/worker/execution-admission";
 
 export const workerRiskSchema = z.enum(["green", "yellow", "red"]);
 export type WorkerRisk = z.infer<typeof workerRiskSchema>;
@@ -56,7 +57,7 @@ export const workerJobSchema = z.object({
   acceptanceCriteria: z.array(z.string().trim().min(1).max(1_000)).max(30).default([]),
   agentRole: logicalAgentRoleSchema,
   provider: z.literal("openai"),
-  model: z.string().trim().min(1).max(120),
+  model: z.string().trim().min(1).max(128),
   risk: workerRiskSchema,
   repository: z.object({
     appId: z.number().int().positive(),
@@ -100,6 +101,7 @@ export const workerJobSchema = z.object({
     (value) => (value.pullRequestNumber === null) === (value.pullRequestUrl === null),
     { message: "Recovery pull request evidence must be complete or absent." },
   ).nullable().default(null),
+  executionAdmission: executionAdmissionSchema.nullable().default(null),
 }).strict();
 
 export type WorkerJob = z.infer<typeof workerJobSchema>;

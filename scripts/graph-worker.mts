@@ -8,6 +8,7 @@ import { buildAnchorNodeExecutor } from "@/lib/worker/anchor-node-executor";
 import { parseRequiredCheckNames } from "@/lib/graph/release-policy";
 import { compileClaimedGraph, parseClaimedGraph, repositoryMismatch, runClaimedGraph } from "@/lib/worker/graph-run";
 import { SupabaseGraphStore } from "@/lib/worker/graph-store";
+import { resolveAdmittedClaudeAuth } from "@/lib/worker/execution-admission";
 
 /**
  * The graph executor worker.
@@ -26,7 +27,7 @@ const once = process.argv.includes("--once");
 const drain = process.argv.includes("--drain");
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const CLAIM_ABORT_DETAIL = Object.freeze({
-  invalidProjection: "The claimed graph projection failed protocol-v2 validation.",
+  invalidProjection: "The claimed graph projection failed protocol-v3 validation.",
   repositoryMismatch: "The claimed graph repository did not match this worker checkout.",
   compileFailure: "The claimed graph failed the execution contract before any node started.",
 });
@@ -56,12 +57,6 @@ async function main() {
   const workerId = process.env.SOFTWAREFACTORY_WORKER_ID?.trim() || `graph-worker-${process.pid}`;
   const pollMs = Number(process.env.SOFTWAREFACTORY_GRAPH_WORKER_POLL_MS ?? "15000");
 
-  const auth = tryResolveClaudeAuth();
-  if ("failure" in auth) {
-    // No credential is a stop, not a mock: nodes will not pretend to run.
-    throw new Error(`The Claude subscription credential is not usable: ${auth.failure.message}`);
-  }
-
   const repositoryIdentity = requiredEnv("GITHUB_REPOSITORY");
   const workerRequiredChecks = parseRequiredCheckNames(
     requiredEnv("SOFTWAREFACTORY_REQUIRED_CHECKS"),
@@ -79,9 +74,11 @@ async function main() {
   if (targetGraphId && drain) {
     throw new Error("An exact-target graph dispatch must use --once, not --drain.");
   }
+  const supabaseUrl = requiredEnv("NEXT_PUBLIC_SUPABASE_URL");
+  const serviceRoleKey = requiredEnv("SUPABASE_SERVICE_ROLE_KEY");
   const store = SupabaseGraphStore.create({
-    url: requiredEnv("NEXT_PUBLIC_SUPABASE_URL"),
-    serviceRoleKey: requiredEnv("SUPABASE_SERVICE_ROLE_KEY"),
+    url: supabaseUrl,
+    serviceRoleKey,
     workerId,
     repositoryFullName: repositoryIdentity,
     requiredCheckNames: workerRequiredChecks,
@@ -140,13 +137,6 @@ async function main() {
     );
 
     const repositoryFullName = parsed.graph.project_repository;
-    const executor = buildClaudeNodeExecutor(auth.resolution, {
-      goal: parsed.graph.goal,
-      projectName: parsed.graph.project_name,
-      repositoryFullName,
-      defaultBranch: parsed.graph.base_branch ?? parsed.graph.project_default_branch,
-      workingDirectory: process.cwd(),
-    });
     // Observations, not actions. Every release identity below came from the
     // service-role claim's graph-scoped Phase 1C bridge projection. GITHUB_SHA,
     // the checkout branch, and any ambient production URL describe worker
@@ -182,7 +172,43 @@ async function main() {
         ? executeDeterministicNode(node, inputs)
         : node.executor === "ANCHOR"
           ? await anchorExecutor(node)
-          : await executor(node, attempt, inputs);
+          : await (async () => {
+            const claimedNode = parsed.graph.nodes.find((entry) => entry.node_key === node.nodeKey);
+            const admission = claimedNode?.execution_admission ?? null;
+            let resolvedAuth;
+            let exactModel: string | null = null;
+            if (admission) {
+              // Re-read and open only this immutable admission immediately
+              // before provider use. The database revalidates every mutable
+              // revision again; no ambient or neighboring account slot can
+              // substitute for it.
+              resolvedAuth = await resolveAdmittedClaudeAuth({
+                supabaseUrl,
+                serviceRoleKey,
+                organizationId: parsed.graph.organization_id,
+                admission,
+              });
+              exactModel = admission.model;
+            } else {
+              // Retained only for pre-admission non-Grok graphs. Canonical
+              // Full Lifecycle claims cannot reach this branch: their parser
+              // requires one exact admission on every MODEL node.
+              const legacy = tryResolveClaudeAuth();
+              if ("failure" in legacy) {
+                throw new Error(`The Claude subscription credential is not usable: ${legacy.failure.message}`);
+              }
+              resolvedAuth = legacy.resolution;
+            }
+            const executor = buildClaudeNodeExecutor(resolvedAuth, {
+              goal: parsed.graph.goal,
+              projectName: parsed.graph.project_name,
+              repositoryFullName,
+              defaultBranch: parsed.graph.base_branch ?? parsed.graph.project_default_branch,
+              workingDirectory: process.cwd(),
+              ...(exactModel ? { modelForNode: () => exactModel } : {}),
+            });
+            return executor(node, attempt, inputs);
+          })();
       if (outcome.status === "FAILED") {
         // The database keeps the error on the node_run; the log keeps it
         // where a person reading the drain can see it without a query.

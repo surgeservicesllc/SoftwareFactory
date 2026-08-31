@@ -1,5 +1,5 @@
 /**
- * A general-journal export a bookkeeper can post (ADR-219).
+ * A general-journal export a bookkeeper can post (ADR-220).
  *
  * "QuickBooks sync" is a competitor row this product does not have, and
  * the API sync genuinely needs an Intuit account nobody has opened. But

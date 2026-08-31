@@ -4,6 +4,7 @@ import path from "node:path";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { resolveCodexAuth } from "@/lib/worker/auth";
 import type { CodexSession } from "@/lib/worker/codex";
 import {
   workerJobSchema,
@@ -559,7 +560,22 @@ describe("SoftwareFactoryWorker lifecycle", () => {
       providerRunReference: "thread-1",
       usage: { turns: 1, inputTokens: 100, cachedInputTokens: 20, outputTokens: 30, reasoningOutputTokens: 10 },
     } as const;
-    const claimed = job({ attempt: 2, recovery });
+    const claimed = job({
+      attempt: 2,
+      recovery,
+      executionAdmission: {
+        id: "20000000-0000-4000-8000-000000000001",
+        lane: "phase1c",
+        provider: "openai",
+        model: "gpt-5.3-codex",
+        credential_purpose: "codex_2",
+        credential_ref: "SOFTWAREFACTORY_CODEX_AUTH_JSON_2",
+        provider_credential_id: "20000000-0000-4000-8000-000000000002",
+        provider_credential_rotated_at: "2026-08-31T10:00:00.000Z",
+        ai_account_id: "20000000-0000-4000-8000-000000000003",
+        admission_sha256: "b".repeat(64),
+      },
+    });
     const store = storeFor(claimed);
     const createSession = vi.fn();
     const commit = vi.fn();
@@ -570,6 +586,12 @@ describe("SoftwareFactoryWorker lifecycle", () => {
       number: 12,
       url: recovery.pullRequestUrl,
       headSha: recovery.commitSha,
+    });
+    const prepareCodex = vi.fn().mockResolvedValue(undefined);
+    const codexFactory = vi.fn().mockResolvedValue({
+      createSession,
+      initialPrompt: vi.fn(),
+      prepare: prepareCodex,
     });
     const worker = new SoftwareFactoryWorker("worker-1", 60_000, {
       store,
@@ -583,7 +605,7 @@ describe("SoftwareFactoryWorker lifecycle", () => {
         assertRemoteBaseSha,
         push,
       },
-      codex: { createSession, initialPrompt: vi.fn(), prepare: vi.fn().mockResolvedValue(undefined) },
+      codex: codexFactory,
       validator: { bootstrap: vi.fn(), run: vi.fn() },
       publisher: {
         createOrRecoverDraft,
@@ -597,6 +619,10 @@ describe("SoftwareFactoryWorker lifecycle", () => {
 
     await expect(worker.runOnce()).resolves.toBe("processed");
 
+    expect(codexFactory).toHaveBeenCalledWith(claimed);
+    expect(codexFactory.mock.invocationCallOrder[0]!)
+      .toBeLessThan(verifyExistingDraft.mock.invocationCallOrder[0]!);
+    expect(prepareCodex).not.toHaveBeenCalled();
     expect(verifyExistingDraft).toHaveBeenCalledWith(
       claimed, 12, recovery.pullRequestUrl, recovery.commitSha, "installation-token", expect.any(AbortSignal),
     );
@@ -616,6 +642,60 @@ describe("SoftwareFactoryWorker lifecycle", () => {
       commitSha: recovery.commitSha,
       pullRequestNumber: 12,
       threadId: "thread-1",
+    }));
+  });
+
+  it.each([
+    ["missing", {}],
+    ["malformed", { SOFTWAREFACTORY_CODEX_AUTH_JSON: "not-json" }],
+  ])("fails a legacy recovery with %s ambient auth before any external side effect", async (_case, environment) => {
+    const recovery = {
+      branch: "factory/10000000-0000-4000-8000-000000000001-fix-navigation",
+      commitSha: "b".repeat(40),
+      pullRequestNumber: 12,
+      pullRequestUrl: "https://github.com/example/repository/pull/12",
+      providerRunReference: "thread-1",
+      usage: { turns: 1, inputTokens: 100, cachedInputTokens: 20, outputTokens: 30, reasoningOutputTokens: 10 },
+    } as const;
+    const claimed = job({ attempt: 2, recovery, executionAdmission: null });
+    const store = storeFor(claimed);
+    const createToken = vi.fn();
+    const prepareWorkspace = vi.fn();
+    const codexFactory = vi.fn(async () => {
+      resolveCodexAuth(environment);
+      throw new Error("unreachable after a missing or malformed credential");
+    });
+    const worker = new SoftwareFactoryWorker("worker-1", 60_000, {
+      store,
+      tokenProvider: { createToken },
+      workspace: {
+        prepare: prepareWorkspace,
+        currentHead: vi.fn(),
+        changedFiles: vi.fn(),
+        commit: vi.fn(),
+        assertImmutableCommit: vi.fn(),
+        assertRemoteBaseSha: vi.fn(),
+        push: vi.fn(),
+      },
+      codex: codexFactory,
+      validator: { bootstrap: vi.fn(), run: vi.fn() },
+      publisher: {
+        createOrRecoverDraft: vi.fn(),
+        verifyExistingDraft: vi.fn(),
+        waitForChecks: vi.fn(),
+      },
+    });
+
+    await expect(worker.runOnce()).resolves.toBe("processed");
+
+    expect(codexFactory).toHaveBeenCalledWith(claimed);
+    expect(createToken).not.toHaveBeenCalled();
+    expect(prepareWorkspace).not.toHaveBeenCalled();
+    expect(store.event).not.toHaveBeenCalled();
+    expect(store.artifact).not.toHaveBeenCalled();
+    expect(store.complete).not.toHaveBeenCalled();
+    expect(store.fail).toHaveBeenCalledWith(claimed, "worker-1", expect.objectContaining({
+      retryable: false,
     }));
   });
 

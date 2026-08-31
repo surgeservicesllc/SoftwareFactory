@@ -129,7 +129,7 @@ describe("the empty-queue diagnosis", () => {
     expect(reasonOf(explainEmptyQueue([graph({})], SUPPORTED))).toContain("contradicts");
   });
 
-  it("names withdrawal instead of accusing the claim (20260831001100)", () => {
+  it("names withdrawal instead of accusing the claim (20260831001400)", () => {
     const reason = reasonOf(explainEmptyQueue(
       [graph({ withdrawn_at: "2026-08-30T10:00:00Z" })], SUPPORTED));
     expect(reason).toContain("withdrawn by a member at 2026-08-30T10:00:00Z");

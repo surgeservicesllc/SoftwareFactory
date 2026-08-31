@@ -342,6 +342,8 @@ export class CodexSdkAdapter {
 
   createSession(job: WorkerJob, workspace: PreparedWorkspace): CodexSession {
     const client = this.clientFactory(this.auth, workspace);
+    const hasExactPhase1cAdmission = job.executionAdmission?.lane === "phase1c"
+      && job.executionAdmission.provider === "openai";
     const threadOptions: ThreadOptions = {
       model: job.model,
       workingDirectory: workspace.directory,
@@ -349,7 +351,10 @@ export class CodexSdkAdapter {
       approvalPolicy: "never",
       networkAccessEnabled: false,
       webSearchMode: "disabled",
-      modelReasoningEffort: "high",
+      // A current Phase 1C admission binds the exact model. Some admitted
+      // OpenAI models do not accept the legacy high-effort override, so let
+      // the model/CLI select its supported default for that exact route.
+      ...(hasExactPhase1cAdmission ? {} : { modelReasoningEffort: "high" }),
     };
     let thread: ThreadLike | null = null;
     let attemptUsage = zeroUsage();

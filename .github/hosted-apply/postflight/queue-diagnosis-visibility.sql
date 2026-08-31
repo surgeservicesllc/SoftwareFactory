@@ -3,7 +3,7 @@
 -- Extracted like every other file here and executed against the fully
 -- migrated chain by tests/integration/hosted-scope-replay.behavior.test.ts.
 --
--- 20260831001100 DROPs and recreates diagnose_graph_queue_as_worker_v2 to
+-- 20260831001400 DROPs and recreates diagnose_graph_queue_as_worker_v2 to
 -- widen its projection, so what must be re-proved is that the drop did not
 -- loosen anything: still a definer, still worker-only, and the two new
 -- columns actually present (a stale cached definition would pass a mere

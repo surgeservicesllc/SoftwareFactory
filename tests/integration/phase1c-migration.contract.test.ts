@@ -171,26 +171,33 @@ async function registerWorker(db: PGlite, workerId: string) {
   ]);
 }
 
-async function claimRun(db: PGlite, workerId: string) {
-  return db.query<{
-    attempt_number: number;
-    command_id: string;
-    lease_token: string;
-    maximum_duration_ms: number;
-    maximum_input_tokens: number;
-    maximum_output_tokens: number;
-    maximum_turns: number;
-    recovery_head_branch: string | null;
-    recovery_head_sha: string | null;
-    recovery_provider_run_reference: string | null;
-    recovery_pull_request_number: number | null;
-    recovery_pull_request_url: string | null;
-    recovery_usage: Record<string, unknown>;
-    run_id: string;
-    task_id: string;
-  }>("select * from public.claim_phase1c_run_v2($1,$2,$3,$4,2)", [
-    workerId, "openai", "gpt-5.3-codex", 120,
-  ]);
+interface Phase1cClaim {
+  attempt_number: number;
+  command_id: string;
+  lease_token: string;
+  maximum_duration_ms: number;
+  maximum_input_tokens: number;
+  maximum_output_tokens: number;
+  maximum_turns: number;
+  recovery_head_branch: string | null;
+  recovery_head_sha: string | null;
+  recovery_provider_run_reference: string | null;
+  recovery_pull_request_number: number | null;
+  recovery_pull_request_url: string | null;
+  recovery_usage: Record<string, unknown>;
+  run_id: string;
+  task_id: string;
+}
+
+async function claimRun(db: PGlite, workerId: string): Promise<{ rows: Phase1cClaim[] }> {
+  const result = await db.query<{ claim: Phase1cClaim | null }>(
+    "select public.claim_phase1c_run_v3($1,$2,$3,$4,3) as claim",
+    [
+      workerId, "openai", "gpt-5.3-codex", 120,
+    ],
+  );
+  const claim = result.rows[0]?.claim ?? null;
+  return { rows: claim ? [claim] : [] };
 }
 
 async function submitAudit(db: PGlite, key: string, prompt = "Audit the dashboard behavior.") {
@@ -258,7 +265,7 @@ const workerFunctions = [
   "register_phase1c_worker(text,text,jsonb)",
   "heartbeat_phase1c_worker(text,uuid)",
   "finish_phase1c_worker(text,text)",
-  "claim_phase1c_run_v2(text,text,text,integer,integer)",
+  "claim_phase1c_run_v3(text,text,text,integer,integer)",
   "heartbeat_phase1c_run(text,uuid,uuid,integer)",
   "append_phase1c_run_event(text,uuid,uuid,text,text,jsonb)",
   "record_phase1c_validation(text,uuid,uuid,integer,text,text,text,integer,text)",
@@ -345,9 +352,13 @@ describe("Phase 1C migration contract", { timeout: 120_000 }, () => {
       );
       await assumeRole(db, "service_role");
       await expect(db.query(
-        "select * from public.claim_phase1c_run_v2($1,$2,$3,$4,$5)",
-        ["worker.protocol", "openai", "gpt-5.3-codex", 120, 1],
-      )).rejects.toThrow(/Phase 1C worker protocol version 2 is required/i);
+        "select public.claim_phase1c_run_v3($1,$2,$3,$4,$5)",
+        ["worker.protocol", "openai", "gpt-5.3-codex", 120, 2],
+      )).rejects.toThrow(/Phase 1C worker protocol version 3 is required/i);
+      await expect(db.query(
+        "select * from public.claim_phase1c_run_v2($1,$2,$3,$4,2)",
+        ["worker.protocol", "openai", "gpt-5.3-codex", 120],
+      )).rejects.toThrow(/permission denied/i);
       await expect(db.query(
         "select * from public.claim_phase1c_run($1,$2,$3,$4)",
         ["worker.protocol", "openai", "gpt-5.3-codex", 120],
@@ -736,11 +747,13 @@ describe("Phase 1C migration contract", { timeout: 120_000 }, () => {
       await db.query("select * from public.register_phase1c_worker($1,$2,$3::jsonb)", [
         "worker.contract", "1.0.0", JSON.stringify({ providers: ["openai"] }),
       ]);
-      const claim = await db.query<{ lease_token: string; run_id: string }>(
-        "select run_id, lease_token from public.claim_phase1c_run_v2($1,$2,$3,$4,2)",
+      const claim = await db.query<{
+        claim: { lease_token: string; run_id: string } | null;
+      }>(
+        "select public.claim_phase1c_run_v3($1,$2,$3,$4,3) as claim",
         ["worker.contract", "openai", "gpt-5.3-codex", 120],
       );
-      const run = claim.rows[0]!;
+      const run = claim.rows[0]!.claim!;
 
       const firstValidation = await db.query<{ id: string }>(`
         select public.record_phase1c_validation($1,$2,$3,$4,$5,$6,$7,$8,$9) as id

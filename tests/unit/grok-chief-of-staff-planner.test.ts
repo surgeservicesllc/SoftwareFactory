@@ -8,6 +8,7 @@ import {
   type GrokConfiguredAgent,
   type GrokPlannerInput,
 } from "@/lib/factory/chief-of-staff";
+import { NODE_CAPABILITIES } from "@/lib/graph/contracts";
 
 const project = Object.freeze({
   projectId: "10000000-0000-4000-8000-000000000001",
@@ -94,7 +95,7 @@ describe("buildGrokChiefOfStaffPlan", () => {
     if (!first.ok) return;
     expect(first.plan.planner).toEqual({
       id: "grok-chief-of-staff",
-      version: 2,
+      version: 3,
       deterministic: true,
       executionStarted: false,
     });
@@ -102,9 +103,21 @@ describe("buildGrokChiefOfStaffPlan", () => {
     expect(Object.isFrozen(first.plan.dag.tasks)).toBe(true);
     expect(first.plan.delivery.mode).toBe("HANDOFF_ONLY");
     expect(JSON.parse(JSON.stringify(first.plan))).toMatchObject({
-      planner: { version: 2, executionStarted: false },
+      planner: { version: 3, executionStarted: false },
       intent: { kind: "build" },
     });
+    expect(first.plan.admissionRoster.map((entry) => entry.assignmentId)).toEqual([
+      claude.assignmentId,
+      codex.assignmentId,
+    ]);
+    expect(first.plan.admissionRoster[0]).toMatchObject({
+      version: 1,
+      assignmentId: claude.assignmentId,
+      capabilities: [...NODE_CAPABILITIES].sort(),
+    });
+    expect(first.plan.admissionRoster[0]?.capabilities).not.toContain("*");
+    expect(Object.isFrozen(first.plan.admissionRoster)).toBe(true);
+    expect(Object.isFrozen(first.plan.admissionRoster[0]?.capabilities)).toBe(true);
   });
 
   it("is pure: planning performs no network, clock, randomness, provider, or execution work", () => {

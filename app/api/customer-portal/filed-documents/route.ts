@@ -14,7 +14,7 @@ type FiledRow = {
 };
 
 /**
- * The customer's FILED copies (ADR-216 via ADR-221): frozen bytes, each one
+ * The customer's FILED copies (ADR-216 via ADR-222): frozen bytes, each one
  * exactly what the report said on the day it was filed. Unlike the
  * metadata-only uploads list, every row here can actually be downloaded —
  * the bytes live in a column under RLS, and no object storage is involved.

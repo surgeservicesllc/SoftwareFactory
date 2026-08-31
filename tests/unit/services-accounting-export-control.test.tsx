@@ -6,7 +6,7 @@ import { ServicesBillingPanel } from "@/components/services/billing-panel";
 
 /**
  * The download that makes the accounting export a capability rather than a
- * module (ADR-219).
+ * module (ADR-220).
  *
  * The competitor row moved from GAP to PARTIAL on the strength of a person
  * being able to GET THE FILE. A journal builder nobody can reach would not

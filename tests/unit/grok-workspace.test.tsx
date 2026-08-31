@@ -262,6 +262,36 @@ describe("GrokWorkspace", () => {
     expect(within(controlCenter).getAllByText("Not Connected")).toHaveLength(2);
   });
 
+  it("keeps one evidence tab in the keyboard order and supports arrow, Home, and End navigation", async () => {
+    installFetch(BLOCKED_SESSION);
+    const user = userEvent.setup();
+    render(<GrokWorkspace initialSelection={{ sessionId: BLOCKED_SESSION.session.id }} />);
+
+    const inspector = await screen.findByRole("complementary", { name: "Session inspector" });
+    const goal = within(inspector).getByRole("tab", { name: "Goal" });
+    const plan = within(inspector).getByRole("tab", { name: "Plan" });
+    const deployment = within(inspector).getByRole("tab", { name: "Deployment" });
+    const panel = within(inspector).getByRole("tabpanel");
+
+    expect(goal).toHaveAttribute("tabindex", "0");
+    expect(plan).toHaveAttribute("tabindex", "-1");
+    expect(panel).toHaveAttribute("tabindex", "0");
+    goal.focus();
+    await user.keyboard("{ArrowRight}");
+    await waitFor(() => expect(plan).toHaveFocus());
+    expect(plan).toHaveAttribute("aria-selected", "true");
+    expect(goal).toHaveAttribute("tabindex", "-1");
+
+    await user.keyboard("{End}");
+    await waitFor(() => expect(deployment).toHaveFocus());
+    expect(deployment).toHaveAttribute("aria-selected", "true");
+    expect(within(inspector).getAllByText("Not Connected")).toHaveLength(2);
+
+    await user.keyboard("{Home}");
+    await waitFor(() => expect(goal).toHaveFocus());
+    expect(goal).toHaveAttribute("aria-selected", "true");
+  });
+
   it("renders a 202 durable-but-blocked plan without implying execution", async () => {
     const fetchMock = installFetch();
     const user = userEvent.setup();

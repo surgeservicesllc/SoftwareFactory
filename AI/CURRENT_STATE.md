@@ -1,5 +1,55 @@
 # Current state
 
+## 2026-08-31: Grok claim-time admission and specialist planning are a repository candidate (ADR-219)
+
+The next Grok boundary is implemented in the repository but is not hosted or
+production accepted. Forward migration
+`20260831000900_grok_claim_admission_fence.sql` (canonical LF SHA-256
+`795d49b41b2de34819272a45a837d50aa6c3808db5a2c85e6a4ad769d5deff6b`;
+92,659 LF bytes) makes protocol v3 the only service-role Grok claim path. Every
+Grok Resume, wake, graph claim, and Phase 1C claim revalidates the complete
+immutable admission set against the current graph node, assignment, bot, role,
+AI account, credential rotation, provider, and model. The worker receives only
+the exact admitted credential projection after claim; credential values are
+never stored in launch or roster evidence. A private, one-use Phase 1C
+submission guard derives the command provider/model from the current admission
+instead of browser or ambient worker configuration. The v2 service-role claim
+and legacy Grok control entry points are revoked while non-Grok historical
+compatibility remains bounded.
+
+The runtime now resolves exact admitted Claude authentication per MODEL node and
+exact admitted Codex authentication per Phase 1C job. An admitted OpenAI model
+uses its model/CLI-supported reasoning default rather than an incompatible
+hard-coded effort; a legacy job without an admission retains the existing
+`high` behavior. Admission-backed bootstrap and claim do not read ambient Codex
+credentials, while the legacy path still fails closed when its configured
+credential is absent or unsafe.
+
+Forward migration
+`20260831001000_grok_specialist_admission_planning.sql` (canonical LF SHA-256
+`728628f0368e1f715d8c786ffb536d2d3fcc3a859a177a0665a00ea98a8386f1`;
+56,636 LF bytes) advances new plans to version 3. It persists an append-only,
+forced-RLS, deterministic snapshot of every Ready configured project posting,
+normalizes an explicit `*` to the same fixed canonical capability vocabulary in
+TypeScript and PostgreSQL, and exposes only the v3 launcher for new Grok work.
+Version 1 and 2 plans remain readable history. Research and deploy plans remain
+blocked before graph creation because no intent-specific canonical executable
+bridge exists; the planner does not manufacture tasks to make them look ready.
+
+Current focused evidence is 17/17 for the protected completion workflow,
+10/10 for claim behavior/contracts, and 69/69 for worker/auth runtime. The
+earlier combined planner/admission/release lanes were 164/164 before the final
+rebase and are supporting evidence only, not a final-tree release gate. Full
+lint, typecheck, test, build, browser/accessibility, exact CI, deployment,
+hosted ledger/catalog/ACL/runtime/lint, and signed-in acceptance still have to
+run against one final release identity.
+
+Both migrations are repository-only and unhosted. Workers, autonomy, and every
+automatic action remain OFF, and the global kill switch remains ON. No actual
+provider-backed run, repository change, draft pull request, or exact-head CI
+chain has passed through this boundary. **GROK BOT: PRODUCTION READY is not
+declared.**
+
 ## 2026-08-31: Stock has a place, not just a quantity (ADR-213)
 
 A lot has always known how much of it is left. It now also knows where the
@@ -133,16 +183,13 @@ truthfully remained `request saved; no plan recorded` with no graph, worker,
 or provider start. Do not rerun, repair, replay, or down-migrate
 `20260831000100`.
 
-This is launch admission, not worker admission. Existing graph Resume/wake and
-worker-claim paths do not yet require or revalidate an admission row, so
-workers, autonomy, and every automatic action remain OFF and the global kill
-switch remains ON. Research/deploy prompts currently fail closed at canonical
-admission, specialist-only rosters can lack canonical evaluation/decision
-coverage, and wildcard role normalization still needs a new forward migration.
-Those are explicit follow-ups; **GROK BOT: PRODUCTION READY is not declared.**
-The launch-admission slice and its verifier are accepted. The worker-admission,
-prompt/roster, wildcard-normalization, and real provider-backed E2E slices
-remain open.
+At ADR-208 acceptance this was launch admission, not worker admission: the
+Resume/wake, claim, specialist-roster, and wildcard follow-ups were still open.
+ADR-219 now implements those follow-ups as a repository candidate only; its
+two forward migrations, exact production release, signed-in acceptance, and a
+real provider-backed E2E remain open. Workers, autonomy, and every automatic
+action remain OFF, the global kill switch remains ON, and **GROK BOT:
+PRODUCTION READY is not declared.**
 
 ## 2026-08-31: Grok atomic control is production accepted; provider loop remains open (ADR-204)
 
@@ -472,7 +519,7 @@ is reachable only through a settlement that asks whether a processor is
 really connected. The seed writes 351 charge attempts and not one is
 settled.
 
-The books can now leave the building (ADR-219). A general-journal CSV
+The books can now leave the building (ADR-220). A general-journal CSV
 carries invoices raised, payments taken, refunds given and uncollectible
 invoices written off as balanced double-entry lines, downloadable from the
 ledger tab. It is an EXPORT a bookkeeper imports, not a sync, and the code
@@ -481,7 +528,7 @@ Intuit account. Every entry balances by construction — an unbalanced one
 throws rather than rendering — because a journal file that does not balance
 is rejected at the import screen, or worse, accepted.
 
-A dispatcher can now say what order a technician drives (ADR-220). A route
+A dispatcher can now say what order a technician drives (ADR-221). A route
 is one technician's day from a branch, with stops numbered from one;
 resequencing replaces the whole set so a drag cannot collide, and it
 carries the planned arrival and notes somebody typed. Nothing computes the
@@ -489,7 +536,7 @@ order from geography — crm_properties holds an address and no coordinates,
 and turning one into the other is geocoding. Drive time, traffic, time
 windows and bulk geocoding all still need a mapping provider.
 
-A portal customer can download their own filed copies (ADR-221). Two
+A portal customer can download their own filed copies (ADR-222). Two
 definer projections list and serve crm_service_documents bodies scoped
 through crm_portal_account_for; the Documents tab renders per-copy
 download anchors (attachment, nosniff, no-store — never inline), marks
@@ -498,7 +545,7 @@ object storage for the missing link are corrected — that blocker ended
 with ADR-216.
 
 The worker's empty-queue diagnosis now names withdrawal and pause
-(ADR-222) instead of printing its accuse-the-claim contradiction line for
+(ADR-223) instead of printing its accuse-the-claim contradiction line for
 a graph that was excluded on purpose. Read-only restatement of
 diagnose_graph_queue_as_worker_v2; protocol unchanged.
 

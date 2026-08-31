@@ -80,12 +80,12 @@ const CONTROL_TABLE = "projects";
  * probe works. Without it, an empty or privilege-filtered description would
  * read as "every function is missing".
  *
- * The protocol-v2 claim is the strongest control available: it is the exact
- * service-role-only entrypoint used by current workers. The legacy unversioned
- * claim is intentionally private after the cutover and must not be used as a
- * health probe (doing so would make a correct hardening look broken).
+ * The newest service-role claim protocol is the strongest control available.
+ * Protocol v3 replaced v2 at the admission-fence cutover, while v2 remains the
+ * valid control before that forward migration. The legacy unversioned claim is
+ * intentionally private and must never be used as a health probe.
  */
-const CONTROL_FUNCTION = "claim_planned_graph_v2";
+const CONTROL_FUNCTIONS = ["claim_planned_graph_v3", "claim_planned_graph_v2"] as const;
 
 function requireEnvironment(name: string): string {
   const value = process.env[name]?.trim();
@@ -268,22 +268,25 @@ async function main(): Promise<void> {
 
   // Read once, before the loop: one description covers every function.
   const callable = await readCallableFunctions(baseUrl, key);
+  const controlFunction = callable === null
+    ? null
+    : CONTROL_FUNCTIONS.find((candidate) => callable.has(candidate)) ?? null;
   if (callable === null) {
     console.log(
       "PostgREST did not return its description, so this run can speak only to tables. "
       + "Every function-defining migration is reported as not probeable below.\n",
     );
-  } else if (!callable.has(CONTROL_FUNCTION)) {
+  } else if (controlFunction === null) {
     // Same guard as the control table, for the same reason. This function is
     // reachable in production today; if the description omits it, the
     // description is not answering the question asked of it, and reading
     // absences out of it would report most of the schema as missing.
     console.error(
-      `The control function \`${CONTROL_FUNCTION}\` is absent from PostgREST's description, so `
+      `Neither supported control function (${CONTROL_FUNCTIONS.join(", ")}) is present in PostgREST's description, so `
       + "function verdicts from it cannot be trusted. Tables are still reported.",
     );
   }
-  const trustFunctions = callable !== null && callable.has(CONTROL_FUNCTION);
+  const trustFunctions = controlFunction !== null;
 
   for (const expectation of expectations) {
     const probedFunctions = trustFunctions ? expectation.functions : [];

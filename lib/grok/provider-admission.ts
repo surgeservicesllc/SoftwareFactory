@@ -1,9 +1,12 @@
-import type { GrokChiefOfStaffPlan, GrokTask } from "@/lib/factory/chief-of-staff";
+import type {
+  GrokChiefOfStaffPlan,
+  GrokSpecialistAdmission,
+} from "@/lib/factory/chief-of-staff";
 
-export const GROK_PROVIDER_ADMISSION_VERSION = 1 as const;
+export const GROK_PROVIDER_ADMISSION_VERSION = 2 as const;
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const CREDENTIAL_REF_PATTERN = /^[A-Z][A-Z0-9_]{2,119}$/;
+const CREDENTIAL_REF_PATTERN = /^[A-Z][A-Z0-9_]{2,63}$/;
 const MODEL_TIER_RANK = Object.freeze({ ECONOMY: 1, STANDARD: 2, STRONG: 3 });
 
 export type GrokCanonicalAdmissionNode = Readonly<{
@@ -17,7 +20,7 @@ export type GrokProviderAdmissionInput = Readonly<{
   version: typeof GROK_PROVIDER_ADMISSION_VERSION;
   lane: "graph_model" | "phase1c";
   nodeKey: string;
-  sourceTaskKey: string;
+  sourceRosterAssignmentId: string;
   assignmentId: string;
   assignmentRevision: number;
   botId: string;
@@ -43,70 +46,39 @@ export class GrokProviderAdmissionError extends Error {
   }
 }
 
-type IdentityTask = GrokTask & Readonly<{
-  assignmentId?: string;
-  assignmentRevision?: number;
-  botId?: string;
-  botRevision?: number;
-  aiAccountId?: string;
-  accountUpdatedAt?: string;
-  roleId?: string;
-  roleUpdatedAt?: string;
-  credentialPurpose?: string;
-  credentialRef?: string;
-  providerIdentity?: string | null;
-  agentCapabilities?: readonly string[];
-  agentMaxModelTier?: "ECONOMY" | "STANDARD" | "STRONG";
-}>;
-
-function hasIdentity(task: IdentityTask): task is IdentityTask & Required<Pick<
-  IdentityTask,
-  | "assignmentId"
-  | "assignmentRevision"
-  | "botId"
-  | "botRevision"
-  | "aiAccountId"
-  | "accountUpdatedAt"
-  | "roleId"
-  | "roleUpdatedAt"
-  | "credentialPurpose"
-  | "credentialRef"
-  | "agentCapabilities"
-  | "agentMaxModelTier"
->> {
-  return typeof task.assignmentId === "string" && UUID_PATTERN.test(task.assignmentId)
-    && Number.isSafeInteger(task.assignmentRevision) && (task.assignmentRevision ?? 0) > 0
-    && typeof task.botId === "string" && UUID_PATTERN.test(task.botId)
-    && Number.isSafeInteger(task.botRevision) && (task.botRevision ?? 0) > 0
-    && typeof task.aiAccountId === "string" && UUID_PATTERN.test(task.aiAccountId)
-    && typeof task.accountUpdatedAt === "string" && !Number.isNaN(Date.parse(task.accountUpdatedAt))
-    && typeof task.roleId === "string" && UUID_PATTERN.test(task.roleId)
-    && typeof task.roleUpdatedAt === "string" && !Number.isNaN(Date.parse(task.roleUpdatedAt))
-    && typeof task.credentialPurpose === "string" && /^[a-z][a-z0-9_]{1,79}$/.test(task.credentialPurpose)
-    && typeof task.credentialRef === "string" && CREDENTIAL_REF_PATTERN.test(task.credentialRef)
-    && Array.isArray(task.agentCapabilities) && task.agentCapabilities.length > 0
-    && (task.agentMaxModelTier === "ECONOMY"
-      || task.agentMaxModelTier === "STANDARD"
-      || task.agentMaxModelTier === "STRONG");
+function hasIdentity(entry: GrokSpecialistAdmission): boolean {
+  return UUID_PATTERN.test(entry.assignmentId)
+    && Number.isSafeInteger(entry.assignmentRevision) && entry.assignmentRevision > 0
+    && UUID_PATTERN.test(entry.botId)
+    && Number.isSafeInteger(entry.botRevision) && entry.botRevision > 0
+    && UUID_PATTERN.test(entry.aiAccountId)
+    && !Number.isNaN(Date.parse(entry.accountUpdatedAt))
+    && UUID_PATTERN.test(entry.roleId)
+    && !Number.isNaN(Date.parse(entry.roleUpdatedAt))
+    && /^[a-z][a-z0-9_]{1,62}$/.test(entry.credentialPurpose)
+    && CREDENTIAL_REF_PATTERN.test(entry.credentialRef)
+    && Array.isArray(entry.capabilities) && entry.capabilities.length > 0
+    && !entry.capabilities.includes("*" as never)
+    && (entry.maxModelTier === "ECONOMY"
+      || entry.maxModelTier === "STANDARD"
+      || entry.maxModelTier === "STRONG");
 }
 
-function supportsCapability(task: IdentityTask, capability: string): boolean {
-  return task.agentCapabilities?.includes(capability) === true
-    || task.agentCapabilities?.includes("*") === true;
+function supportsCapability(entry: GrokSpecialistAdmission, capability: string): boolean {
+  return entry.capabilities.includes(capability as never);
 }
 
-function supportsTier(task: IdentityTask, tier: string | null | undefined): boolean {
+function supportsTier(entry: GrokSpecialistAdmission, tier: string | null | undefined): boolean {
   if (tier !== "ECONOMY" && tier !== "STANDARD" && tier !== "STRONG") return false;
-  if (!task.agentMaxModelTier) return false;
-  return MODEL_TIER_RANK[task.agentMaxModelTier] >= MODEL_TIER_RANK[tier];
+  return MODEL_TIER_RANK[entry.maxModelTier] >= MODEL_TIER_RANK[tier];
 }
 
-function admissionFromTask(
-  task: IdentityTask,
+function admissionFromRoster(
+  entry: GrokSpecialistAdmission,
   node: GrokCanonicalAdmissionNode,
   lane: GrokProviderAdmissionInput["lane"],
 ): GrokProviderAdmissionInput {
-  if (!hasIdentity(task)) {
+  if (!hasIdentity(entry)) {
     throw new GrokProviderAdmissionError(
       `The selected agent for ${node.node_key} lacks an immutable bot, posting, account, or credential-reference snapshot. Re-plan this goal.`,
     );
@@ -115,23 +87,23 @@ function admissionFromTask(
     version: GROK_PROVIDER_ADMISSION_VERSION,
     lane,
     nodeKey: node.node_key,
-    sourceTaskKey: task.id,
-    assignmentId: task.assignmentId,
-    assignmentRevision: task.assignmentRevision,
-    botId: task.botId,
-    botRevision: task.botRevision,
-    aiAccountId: task.aiAccountId,
-    accountUpdatedAt: task.accountUpdatedAt,
-    roleId: task.roleId,
-    roleUpdatedAt: task.roleUpdatedAt,
-    agentCapabilities: Object.freeze([...task.agentCapabilities].sort()),
-    provider: task.provider,
-    model: task.model,
-    credentialPurpose: task.credentialPurpose,
-    credentialRef: task.credentialRef,
-    providerIdentity: task.providerIdentity ?? null,
+    sourceRosterAssignmentId: entry.assignmentId,
+    assignmentId: entry.assignmentId,
+    assignmentRevision: entry.assignmentRevision,
+    botId: entry.botId,
+    botRevision: entry.botRevision,
+    aiAccountId: entry.aiAccountId,
+    accountUpdatedAt: entry.accountUpdatedAt,
+    roleId: entry.roleId,
+    roleUpdatedAt: entry.roleUpdatedAt,
+    agentCapabilities: Object.freeze([...entry.capabilities]),
+    provider: entry.provider,
+    model: entry.model,
+    credentialPurpose: entry.credentialPurpose,
+    credentialRef: entry.credentialRef,
+    providerIdentity: entry.providerIdentity,
     capability: node.capability,
-    agentMaxModelTier: task.agentMaxModelTier,
+    agentMaxModelTier: entry.maxModelTier,
   });
 }
 
@@ -149,12 +121,17 @@ export function buildGrokProviderAdmissions(
   plan: GrokChiefOfStaffPlan,
   nodes: readonly GrokCanonicalAdmissionNode[],
 ): readonly GrokProviderAdmissionInput[] {
-  if (plan.planner.version !== 2) {
+  if (plan.planner.version !== 3 || !Array.isArray(plan.admissionRoster)) {
     throw new GrokProviderAdmissionError(
-      "This goal uses a legacy plan without immutable provider admission. Re-plan it before execution.",
+      "This goal uses a legacy plan without an immutable specialist admission roster. Re-plan it before execution.",
     );
   }
-  const tasks = plan.dag.tasks as readonly IdentityTask[];
+  if (plan.intent.kind === "research" || plan.intent.kind === "deploy") {
+    throw new GrokProviderAdmissionError(
+      `The ${plan.intent.kind} plan has no intent-specific executable bridge. Its deterministic plan remains blocked before graph creation.`,
+    );
+  }
+  const roster = plan.admissionRoster;
   const admissions: GrokProviderAdmissionInput[] = [];
 
   for (const node of nodes) {
@@ -174,17 +151,14 @@ export function buildGrokProviderAdmissions(
       continue;
     }
 
-    const candidates = tasks
-      .filter((task) => task.provider === provider && hasIdentity(task))
-      .filter((task) => lane === "phase1c"
-        ? task.capability === "implementation"
-        : supportsCapability(task, node.capability) && supportsTier(task, node.model_tier))
+    const candidates = roster
+      .filter((entry) => entry.provider === provider && hasIdentity(entry))
+      .filter((entry) => lane === "phase1c"
+        ? supportsCapability(entry, "implementation")
+        : supportsCapability(entry, node.capability) && supportsTier(entry, node.model_tier))
       .sort((left, right) => {
-        const leftExact = left.capability === node.capability ? 0 : 1;
-        const rightExact = right.capability === node.capability ? 0 : 1;
-        return leftExact - rightExact
-          || (left.assignmentId ?? "").localeCompare(right.assignmentId ?? "")
-          || left.id.localeCompare(right.id);
+        return left.capabilities.length - right.capabilities.length
+          || left.assignmentId.localeCompare(right.assignmentId);
       });
     const selected = candidates[0];
     if (!selected) {
@@ -192,7 +166,7 @@ export function buildGrokProviderAdmissions(
         `No immutable ${provider} posting can execute canonical node ${node.node_key} (${node.capability}). Re-plan with a Ready capable bot.`,
       );
     }
-    admissions.push(admissionFromTask(selected, node, lane));
+    admissions.push(admissionFromRoster(selected, node, lane));
   }
 
   const expected = nodes.filter((node) => node.executor === "MODEL"

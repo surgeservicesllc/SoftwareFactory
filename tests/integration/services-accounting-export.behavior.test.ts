@@ -15,7 +15,7 @@ import {
 import { createMigratedDatabase } from "../support/migrated-database";
 
 /**
- * The accounting export (ADR-219) against the real schema.
+ * The accounting export (ADR-220) against the real schema.
  *
  * The unit suite proves the entries balance for values chosen by hand.
  * This one proves it for rows the DATABASE produced — including

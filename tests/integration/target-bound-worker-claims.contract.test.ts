@@ -121,10 +121,10 @@ describe("target-bound worker claim contract", () => {
 
   it("routes target-bearing stores through the target-bound RPCs", () => {
     expect(graphStore).toMatch(
-      /this\.targetGraphId[\s\S]*?claim_planned_graph_by_id_v2[\s\S]*?p_target_graph_id: this\.targetGraphId/,
+      /this\.targetGraphId[\s\S]*?claim_planned_graph_by_id_v3[\s\S]*?p_target_graph_id: this\.targetGraphId/,
     );
     expect(phaseStore).toMatch(
-      /this\.targetCommandId[\s\S]*?claim_phase1c_run_by_command_v2[\s\S]*?p_target_command_id: this\.targetCommandId/,
+      /this\.targetCommandId[\s\S]*?claim_phase1c_run_by_command_v3[\s\S]*?p_target_command_id: this\.targetCommandId/,
     );
   });
 

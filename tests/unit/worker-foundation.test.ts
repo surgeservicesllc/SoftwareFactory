@@ -414,6 +414,8 @@ describe("Codex SDK adapter", () => {
 
     expect(observedOptions).toMatchObject({
       approvalPolicy: "never",
+      model: "codex-test-model",
+      modelReasoningEffort: "high",
       networkAccessEnabled: false,
       sandboxMode: "workspace-write",
       webSearchMode: "disabled",
@@ -424,6 +426,75 @@ describe("Codex SDK adapter", () => {
       summary: "Done",
       usage: { turns: 1, inputTokens: 100, outputTokens: 30, reasoningOutputTokens: 10 },
     });
+  });
+
+  it("lets an exact admitted Phase 1C model use the Codex reasoning default", async () => {
+    let observedOptions: ThreadOptions | null = null;
+    const client: CodexClientLike = {
+      startThread(options) {
+        observedOptions = options;
+        return {
+          id: "thread-admitted",
+          async runStreamed() {
+            async function* stream(): AsyncGenerator<ThreadEvent> {
+              yield { type: "thread.started", thread_id: "thread-admitted" };
+              yield {
+                type: "item.completed",
+                item: {
+                  id: "message-admitted",
+                  type: "agent_message",
+                  text: JSON.stringify({ summary: "Done", tests: [], risks: [] }),
+                },
+              };
+              yield {
+                type: "turn.completed",
+                usage: {
+                  input_tokens: 10,
+                  cached_input_tokens: 0,
+                  cache_write_input_tokens: 0,
+                  output_tokens: 5,
+                  reasoning_output_tokens: 0,
+                },
+              };
+            }
+            return { events: stream() };
+          },
+        };
+      },
+      resumeThread: vi.fn(),
+    };
+    const admittedJob = job({
+      model: "gpt-5.6-luna",
+      executionAdmission: {
+        id: "20000000-0000-4000-8000-000000000001",
+        lane: "phase1c",
+        provider: "openai",
+        model: "gpt-5.6-luna",
+        credential_purpose: "codex_2",
+        credential_ref: "SOFTWAREFACTORY_CODEX_AUTH_JSON_2",
+        provider_credential_id: "20000000-0000-4000-8000-000000000002",
+        provider_credential_rotated_at: "2026-08-31T10:00:00.000Z",
+        ai_account_id: "20000000-0000-4000-8000-000000000003",
+        admission_sha256: "b".repeat(64),
+      },
+    });
+    const adapter = new CodexSdkAdapter(billedAuth("test-api-key-not-used"), () => client);
+    const workspace: PreparedWorkspace = {
+      branch: branchForJob(admittedJob),
+      directory: process.cwd(),
+      gitDirectory: path.join(process.cwd(), ".git"),
+      hooksDirectory: path.join(process.cwd(), ".git", "empty-hooks"),
+      runDirectory: process.cwd(),
+    };
+
+    await expect(adapter.createSession(admittedJob, workspace).run(
+      "Do the admitted work.",
+      new AbortController().signal,
+      vi.fn(),
+    )).resolves.toMatchObject({ threadId: "thread-admitted", summary: "Done" });
+
+    expect(observedOptions).toMatchObject({ model: "gpt-5.6-luna" });
+    expect(observedOptions).not.toHaveProperty("modelReasoningEffort");
   });
 
   it("enforces a retry's remaining budget while preserving cumulative prior usage", async () => {

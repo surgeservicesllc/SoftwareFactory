@@ -28,6 +28,7 @@ import type {
   GrokSessionDetail,
   GrokTask,
 } from "@/lib/grok/contracts";
+import { normalizeGrokCapabilities } from "@/lib/grok/capabilities";
 import { MODEL_TIERS, NODE_CAPABILITIES } from "@/lib/graph/contracts";
 import { GRAPH_TOPOLOGIES } from "@/lib/graph/types";
 import { containsLikelySecret } from "@/lib/security/sensitive-data";
@@ -221,15 +222,43 @@ const storedTaskSchema = z.object({
   dependsOn: z.array(z.string().min(1).max(120)).max(50),
 }).passthrough();
 
+const specialistAdmissionSchema = z.object({
+  version: z.literal(1),
+  assignmentId: z.string().uuid(),
+  assignmentRevision: z.number().int().positive(),
+  botId: z.string().uuid(),
+  botRevision: z.number().int().positive(),
+  roleId: z.string().uuid(),
+  roleUpdatedAt: z.string().datetime({ offset: true }),
+  aiAccountId: z.string().uuid(),
+  credentialRef: z.string().regex(/^[A-Z][A-Z0-9_]{2,63}$/),
+  credentialPurpose: z.string().regex(/^[a-z][a-z0-9_]{1,62}$/),
+  providerIdentity: z.string().trim().min(1).max(120).nullable(),
+  accountUpdatedAt: z.string().datetime({ offset: true }),
+  provider: z.enum(["anthropic", "openai"]),
+  model: z.string().trim().min(1).max(128),
+  capabilities: z.array(z.enum(NODE_CAPABILITIES)).min(1).max(NODE_CAPABILITIES.length),
+  maxModelTier: z.enum(["ECONOMY", "STANDARD", "STRONG"]),
+}).strict();
+
 const storedPlanSchema = z.object({
   planner: z.object({
-    version: z.union([z.literal(1), z.literal(GROK_PLAN_VERSION)]),
+    version: z.union([z.literal(1), z.literal(2), z.literal(GROK_PLAN_VERSION)]),
   }).passthrough(),
   intent: z.object({ prompt: z.string().trim().min(1).max(4_000) }).passthrough(),
   project: z.object({ projectId: z.string().uuid() }).passthrough(),
   dag: z.object({ tasks: z.array(storedTaskSchema).min(1).max(50) }).passthrough(),
   graphLaunch: graphLaunchSchema,
-}).passthrough();
+  admissionRoster: z.array(specialistAdmissionSchema).min(1).max(64).optional(),
+}).passthrough().superRefine((plan, context) => {
+  if (plan.planner.version === GROK_PLAN_VERSION && !plan.admissionRoster) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["admissionRoster"],
+      message: "A current Grok plan requires its immutable specialist admission roster.",
+    });
+  }
+});
 
 type ReadBundle = z.infer<typeof readBundleSchema>;
 type SessionRow = z.infer<typeof sessionRowSchema>;
@@ -284,7 +313,7 @@ export async function applyGrokGraphControl(
     idempotencyKey: string;
   }>,
 ): Promise<GrokAppliedGraphControl> {
-  const value = await rpc<unknown>(client, "apply_grok_graph_control_as_owner", {
+  const value = await rpc<unknown>(client, "apply_grok_graph_control_v2_as_owner", {
     p_organization_id: input.organizationId,
     p_session_id: input.sessionId,
     p_graph_id: input.graphId,
@@ -293,7 +322,7 @@ export async function applyGrokGraphControl(
     p_idempotency_key: input.idempotencyKey,
   });
   const parsed = appliedGraphControlSchema.safeParse(
-    oneRow(value, "apply_grok_graph_control_as_owner"),
+    oneRow(value, "apply_grok_graph_control_v2_as_owner"),
   );
   if (!parsed.success) {
     throw new GrokStoreProjectionError("The atomic Grok graph control result was malformed.");
@@ -395,28 +424,8 @@ export async function readGrokProject(
   });
 }
 
-const CAPABILITY_ALIASES: Readonly<Record<string, readonly GrokConfiguredAgent["capabilities"][number][]>> =
-  Object.freeze({
-    planning: ["planning"], architecture: ["architecture"], implementation: ["implementation"],
-    coding: ["implementation"], api: ["implementation"], backend: ["implementation"],
-    frontend: ["implementation"], ui: ["implementation"], migrations: ["implementation"],
-    extraction: ["extraction"], review: ["review"], audit: ["review"],
-    "security-review": ["security_review"], security: ["security_review"],
-    authorization: ["security_review"], secrets: ["security_review"],
-    qa: ["qa"], testing: ["qa"], tests: ["qa"], validation: ["qa"],
-    regression: ["qa"], coverage: ["qa"], synthesis: ["synthesis"],
-    summarization: ["synthesis"], reporting: ["reporting"], discovery: ["discovery"],
-    research: ["discovery"], evaluation: ["evaluation"], decision: ["decision"],
-  });
-
 function rosterCapabilities(role: SerializedBotRole): GrokConfiguredAgent["capabilities"] {
-  const capabilities = new Set<GrokConfiguredAgent["capabilities"][number]>();
-  for (const declared of role.capabilities) {
-    for (const capability of CAPABILITY_ALIASES[declared.trim().toLowerCase()] ?? []) {
-      capabilities.add(capability);
-    }
-  }
-  return Object.freeze([...capabilities].sort());
+  return normalizeGrokCapabilities(role.capabilities);
 }
 
 function tierForWorkEffort(workEffort: string): GrokConfiguredAgent["maxModelTier"] {
@@ -428,6 +437,7 @@ function tierForWorkEffort(workEffort: string): GrokConfiguredAgent["maxModelTie
 const grokAiAccountSchema = z.object({
   account_id: z.string().uuid(),
   provider: z.enum(["anthropic", "openai"]),
+  auth_method: z.enum(["subscription", "api_key"]),
   status: z.string().min(1).max(64),
   credential_purpose: z.string().regex(/^[a-z][a-z0-9_]{1,62}$/),
   provider_identity: z.string().trim().min(1).max(120)
@@ -445,7 +455,7 @@ function connectedAiAccounts(
   }
   const connected = new Map<string, z.infer<typeof grokAiAccountSchema>>();
   for (const account of parsed.data) {
-    if (account.status !== "connected") continue;
+    if (account.auth_method !== "subscription" || account.status !== "connected") continue;
     if (connected.has(account.account_id)) {
       throw new GrokStoreProjectionError("The connected AI-account roster contained a duplicate identity.");
     }
@@ -599,6 +609,52 @@ export async function appendGrokAssistantPlan(
   const parsed = messageRowSchema.safeParse(oneRow(value, "append_grok_message_as_server"));
   if (!parsed.success || parsed.data.role !== "assistant" || parsed.data.content !== content) {
     throw new GrokStoreProjectionError("The durable Grok assistant plan message was malformed.");
+  }
+  return parsed.data;
+}
+
+const specialistRosterResultSchema = z.object({
+  message_id: z.string().uuid(),
+  roster_count: z.coerce.number().int().positive().max(64),
+  roster_sha256: z.string().regex(/^[0-9a-f]{64}$/),
+  replayed: z.boolean(),
+}).strict();
+
+export type GrokSpecialistRosterResult = z.infer<typeof specialistRosterResultSchema>;
+
+export function grokSpecialistRosterIdempotencyKey(base: string): string {
+  return childIdempotencyKey(base, "specialist-roster");
+}
+
+/**
+ * Persist and revalidate the plan's exact Ready-agent roster. The RPC derives
+ * its input from the immutable assistant message and accepts no credential
+ * values or caller-supplied replacement roster.
+ */
+export async function recordGrokSpecialistRoster(
+  client: SupabaseClient,
+  input: Readonly<{
+    organizationId: string;
+    projectId: string;
+    sessionId: string;
+    messageId: string;
+    requestedBy: string;
+    idempotencyKey: string;
+    expectedEventSequence: number;
+  }>,
+): Promise<GrokSpecialistRosterResult> {
+  const value = await rpc<unknown>(client, "record_grok_specialist_roster_v1_as_server", {
+    p_organization_id: input.organizationId,
+    p_requested_by: input.requestedBy,
+    p_project_id: input.projectId,
+    p_session_id: input.sessionId,
+    p_message_id: input.messageId,
+    p_idempotency_key: grokSpecialistRosterIdempotencyKey(input.idempotencyKey),
+    p_expected_event_sequence: input.expectedEventSequence,
+  });
+  const parsed = specialistRosterResultSchema.safeParse(value);
+  if (!parsed.success || parsed.data.message_id !== input.messageId) {
+    throw new GrokStoreProjectionError("The immutable Grok specialist roster result was malformed.");
   }
   return parsed.data;
 }

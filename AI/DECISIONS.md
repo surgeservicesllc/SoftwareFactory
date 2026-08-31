@@ -5549,7 +5549,62 @@ only that.
 
 Hosted apply scope `autopay-authorization`.
 
-## ADR-219 - A file the bookkeeper can post, which is not a sync
+## ADR-219 - Claim the admitted identity, not the worker's ambient identity
+
+- Date: 2026-08-31
+- Status: Accepted for repository implementation; hosted and provider-backed
+  acceptance pending
+
+**Decision.** A Grok launch admission is necessary but no longer sufficient by
+itself. Every Resume, wake, graph claim, Phase 1C submission, and Phase 1C
+claim must revalidate the complete immutable admission against the current
+canonical node and mutable assignment, bot, role, AI account, credential
+rotation, provider, and model. Only protocol-v3 Grok claim functions receive
+service-role execution. A worker opens only the exact credential row named by
+the validated admission and only after claim; ambient provider credentials are
+not a fallback for admitted work and credential values never enter the
+admission, roster, event, or browser projection.
+
+**Phase 1C is admission-derived too.** Its command provider/model is derived
+inside one transaction from the current implementation-node admission through
+a private, one-use guard. That permits any exact admitted supported OpenAI
+model without turning a browser model string or a general worker setting into
+authority. The Codex adapter therefore lets an admitted model use the
+model/CLI-supported reasoning default instead of forcing `high`, which some
+models reject. A legacy job without an admission retains its existing bounded
+credential and high-effort behavior; this compatibility does not admit legacy
+Grok execution.
+
+**A complete roster is evidence, not invented work.** Planner v3 snapshots
+every Ready configured project posting in deterministic order and PostgreSQL
+re-derives that roster from the immutable assistant message. An explicit `*`
+is expanded to the fixed canonical capability vocabulary in both TypeScript
+and SQL before it is stored. Canonical MODEL/Phase 1C nodes select from this
+roster by capability and tier, so evaluation and decision specialists need not
+be represented by fake graph tasks. Research and deploy remain blocked before
+graph creation because no intent-specific canonical executable bridge exists.
+Version 1 and 2 plans remain readable history but cannot launch new Grok work.
+
+**Delivery boundary.** The claim fence is forward migration
+`20260831000900_grok_claim_admission_fence.sql` (canonical LF SHA-256
+`795d49b41b2de34819272a45a837d50aa6c3808db5a2c85e6a4ad769d5deff6b`)
+and the roster/launcher revision is
+`20260831001000_grok_specialist_admission_planning.sql` (canonical LF SHA-256
+`728628f0368e1f715d8c786ffb536d2d3fcc3a859a177a0665a00ea98a8386f1`).
+They may be applied only in that order through the dedicated protected
+workflow after exact release gates. V1/v2 history and non-Grok compatibility
+remain readable; old Grok service-role launch/claim/control authority is
+revoked rather than silently reused.
+
+**Consequence.** This decision narrows execution authority; it does not enable
+execution. Both migrations are repository-only and unhosted at this decision.
+Workers, autonomy, and every automatic action remain OFF, the global kill
+switch remains ON, and no provider-backed run or draft-PR/CI journey has passed.
+Exact publication, hosted catalog/runtime verification, signed-in acceptance,
+and a separately authorized real provider E2E remain independent gates.
+`GROK BOT: PRODUCTION READY` is not declared.
+
+## ADR-220 - A file the bookkeeper can post, which is not a sync
 
 "QuickBooks sync" carried a bare GAP with no gating reason written beside
 it, and that absence was the tell. The API sync genuinely needs an Intuit
@@ -5610,7 +5665,7 @@ Row moves GAP -> PARTIAL. The API sync stays gated, and stays named.
 
 No migration; no hosted apply scope.
 
-## ADR-220 - Geocoding gates the optimiser, not the route manager
+## ADR-221 - Geocoding gates the optimiser, not the route manager
 
 "Route optimization / visual route manager / dynamic planner" has been a
 GAP against four competitors, and I have now been wrong about it in both
@@ -5665,7 +5720,7 @@ Row moves GAP -> PARTIAL, with the optimiser named as the remainder.
 
 Hosted apply scope `day-route`.
 
-## ADR-221 - The filed copy is the download, so the portal stops apologizing for storage
+## ADR-222 - The filed copy is the download, so the portal stops apologizing for storage
 
 The portal's Documents tab and the inspections tab both carried a **Not
 Connected** notice blaming object storage for the absence of a download
@@ -5699,12 +5754,12 @@ download is inert until the customer opens it deliberately, in whatever
 their machine considers safe.
 
 The postflight proves reach, not shape: both functions stable definers,
-executable by `authenticated` and by nobody else, and the ADR-213 rule
+executable by `authenticated` and by nobody else, and the ADR-198 rule
 re-checked — no `crm_portal%` function reachable by `anon`.
 
 Hosted apply scope `portal-filed-documents`.
 
-## ADR-222 - The two nameless filters in the queue diagnosis
+## ADR-223 - The two nameless filters in the queue diagnosis
 
 `diagnose_graph_queue_as_worker_v2` exists to name WHICH filter excluded
 the graph somebody is watching. Withdrawal (20260830000200) and pause
@@ -5716,7 +5771,7 @@ real inconsistency; printing it for a graph that was excluded on purpose
 is the diagnosis crying wolf, and the day it cries wolf is the day nobody
 reads it.
 
-`20260831001100` re-creates the function with `withdrawn_at` and
+`20260831001400` re-creates the function with `withdrawn_at` and
 `pause_requested_at` projected straight off `public.graphs` — DROP +
 CREATE because a return-type change refuses CREATE OR REPLACE, with the
 worker-only ACL restated. Protocol stays 2: nothing about claiming

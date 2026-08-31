@@ -10,7 +10,7 @@ const priorUsage = {
   reasoningOutputTokens: 40,
 };
 
-function claimRow() {
+function claimRow(overrides: Record<string, unknown> = {}) {
   return {
     run_id: "10000000-0000-4000-8000-000000000001",
     organization_id: "10000000-0000-4000-8000-000000000002",
@@ -54,10 +54,69 @@ function claimRow() {
     recovery_pull_request_url: null,
     recovery_provider_run_reference: null,
     recovery_usage: priorUsage,
+    ...overrides,
   };
 }
 
 describe("SupabaseWorkerStore retry usage", () => {
+  it("accepts the exact 128-character admitted model even when the worker ambient model differs", async () => {
+    const admittedModel = `g${"x".repeat(127)}`;
+    const rpc = vi.fn()
+      .mockResolvedValueOnce({
+        data: [claimRow({
+          model: admittedModel,
+          execution_admission: {
+            id: "20000000-0000-4000-8000-000000000001",
+            lane: "phase1c",
+            provider: "openai",
+            model: admittedModel,
+            credential_purpose: "codex_47",
+            credential_ref: "SOFTWAREFACTORY_CODEX_AUTH_JSON_47",
+            provider_credential_id: "20000000-0000-4000-8000-000000000002",
+            provider_credential_rotated_at: "2026-08-31T12:00:00.000Z",
+            ai_account_id: "20000000-0000-4000-8000-000000000003",
+            admission_sha256: "a".repeat(64),
+          },
+        })],
+        error: null,
+      })
+      .mockResolvedValueOnce({ data: null, error: null });
+    const targetCommandId = "10000000-0000-4000-8000-000000000004";
+    const store = new SupabaseWorkerStore(
+      { rpc } as never,
+      "openai",
+      "gpt-5.3-codex",
+      120,
+      targetCommandId,
+    );
+
+    const claimed = await store.claim("worker-1");
+
+    expect(claimed?.model).toBe(admittedModel);
+    expect(claimed?.executionAdmission?.model).toBe(admittedModel);
+    expect(rpc).toHaveBeenNthCalledWith(1, "claim_phase1c_run_by_command_v3", expect.objectContaining({
+      p_model: "gpt-5.3-codex",
+      p_target_command_id: targetCommandId,
+    }));
+  });
+
+  it("rejects a claimed model beyond the 128-character admission boundary", async () => {
+    const oversizedModel = `g${"x".repeat(128)}`;
+    const rpc = vi.fn().mockResolvedValueOnce({
+      data: [claimRow({ model: oversizedModel })],
+      error: null,
+    });
+    const store = new SupabaseWorkerStore(
+      { rpc } as never,
+      "openai",
+      "gpt-5.3-codex",
+      120,
+      "10000000-0000-4000-8000-000000000004",
+    );
+
+    await expect(store.claim("worker-1")).rejects.toThrow();
+  });
+
   it("makes the dispatched command UUID part of the database claim", async () => {
     const rpc = vi.fn()
       .mockResolvedValueOnce({ data: [claimRow()], error: null })
@@ -72,13 +131,13 @@ describe("SupabaseWorkerStore retry usage", () => {
     );
 
     await expect(store.claim("worker-1")).resolves.not.toBeNull();
-    expect(rpc).toHaveBeenNthCalledWith(1, "claim_phase1c_run_by_command_v2", {
+    expect(rpc).toHaveBeenNthCalledWith(1, "claim_phase1c_run_by_command_v3", {
       p_worker_id: "worker-1",
       p_provider: "openai",
       p_model: "gpt-5.3-codex",
       p_lease_seconds: 120,
       p_target_command_id: targetCommandId,
-      p_protocol_version: 2,
+      p_protocol_version: 3,
     });
   });
 
@@ -93,12 +152,12 @@ describe("SupabaseWorkerStore retry usage", () => {
 
     const claimed = await store.claim("worker-1");
 
-    expect(rpc).toHaveBeenNthCalledWith(1, "claim_phase1c_run_v2", {
+    expect(rpc).toHaveBeenNthCalledWith(1, "claim_phase1c_run_v3", {
       p_worker_id: "worker-1",
       p_provider: "openai",
       p_model: "gpt-5.3-codex",
       p_lease_seconds: 120,
-      p_protocol_version: 2,
+      p_protocol_version: 3,
     });
     expect(claimed).toMatchObject({
       attempt: 2,
