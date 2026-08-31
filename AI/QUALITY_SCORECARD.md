@@ -2,6 +2,30 @@
 
 Last reviewed: 2026-08-31
 
+**Addendum, 2026-08-31 latest+20 - the operating dashboards (ADR-199):**
+services-dashboards.behavior 13 on the real chain: a draft invoice excluded
+from revenue while the issued one counts; eleven months of null collection
+rate beside one real zero, which is the distinction the whole file exists to
+keep; a rate that rises when a payment lands and falls when part of it is
+refunded; one tenant's 900,000 absent from the other's total through an
+aggregate, proving RLS holds through a sum as it holds through a list; an
+invoice aged into the bucket its due date puts it in, with every empty
+bucket still naming itself and an undated invoice refusing to be aged as
+current; retention null for a book with nobody in it; the technician with
+nothing scheduled kept on the list with a null rate rather than dropped; a
+finished shift's 450 minutes counted while a running one adds none and a
+technician whose every shift is open reporting null; a two-hour hole
+measured between two stops and a one-stop day's idle left unknown; a
+cancelled visit absent from the route because nobody drove to it; and no
+definer among the five. services-dashboards-routes 8 pins the boundary:
+nulls surviving to JSON, caller windows bounded before they become scans,
+overdue excluding both not-yet-due and undated, and exactly five aggregate
+calls with no table reads at all. No new tables, so the RLS census stays
+196 and service-role grants stay at 42 crm tables; runbook 198; workflow
+scope `operating-dashboards` postflight re-proves all five are reachable by
+authenticated, by neither anon nor service_role, and — the check that
+matters — that none of them is a definer.
+
 **Addendum, 2026-08-31 latest+19 - the customer portal (ADR-198):**
 services-portal.behavior 13 on the real chain under hosted-style default
 privileges, written from the attacker's side: a rival's customer reading our

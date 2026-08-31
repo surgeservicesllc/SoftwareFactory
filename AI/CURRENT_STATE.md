@@ -132,6 +132,19 @@ their own words rather than over them. Paying an invoice and opening a
 document are both labelled **Not Connected**: no card processor and no
 object storage are configured, so the balance and the filing are stated
 and nothing pretends to be a button.
+The operating dashboards (ADR-199) close the reporting gap, and they are
+built on one decision worth restating: every figure is aggregated in the
+database by a SECURITY INVOKER function. In SQL, because the corpus is
+44,837 rows and a route that tallies a bounded fetch reports a number that
+is right only while a workspace is small. As an invoker, because these read
+across a whole book — a definer would read across every tenant's at once,
+the exact inverse of the portal, where a definer is what narrows. The
+migration adds no new visibility; it adds arithmetic over visibility that
+already existed. A rate with an empty denominator is null end to end rather
+than zero, a running shift contributes no worked minutes, and idle time on
+a one-stop day is unknown rather than none. Route DENSITY ships from real
+scheduled windows; drive-time sequencing needs a mapping provider and is
+labelled **Not Connected**.
 A workspace can populate itself two ways (ADR-193): the curated Demo Data
 book for presenting the product, or the full corpus — 44,837 rows across
 all forty-two tables, every optional field populated, spanning years —

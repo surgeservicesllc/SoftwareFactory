@@ -2,6 +2,39 @@
 
 Last updated: 2026-08-31
 
+## Newest (2026-08-31, latest+20): the operating dashboards (ADR-199, #65)
+
+`20260830001900` adds FIVE FUNCTIONS AND NO TABLES: crm_revenue_by_month,
+crm_receivable_aging, crm_retention_summary, crm_technician_productivity
+and crm_route_density, plus two indexes.
+
+THE ONE THING NOT TO CHANGE: every one of them is SECURITY INVOKER, and
+that is the whole security argument. They aggregate across a book of
+business; a definer would aggregate across every tenant's book at once —
+the exact inverse of the portal, where a definer is what narrows. If one
+of these looks slow, the fix is an index, never `security definer`. The
+hosted postflight asserts `not prosecdef` on all five precisely because
+that change would leak silently, with no other symptom.
+
+Second thing not to change: there is no `.limit()` in
+`app/api/services/dashboards/route.ts`, on purpose. The rest of the CRM
+tallies a bounded fetch in the handler, which is right for a roster and
+wrong for a book — the seeded corpus is 44,837 rows, so a tallied fetch
+would be right only while a workspace is small and silently wrong after.
+
+Two reporting rules, both easy to "tidy" into a bug:
+- A rate with an empty denominator is NULL end to end — in SQL, through
+  the route, to an em dash on the page. Never 0.
+- A running shift contributes no worked minutes and is counted separately.
+  All-open shifts report null worked minutes, not zero.
+- And idle time on a single-stop day is null: one stop has no gaps, so a
+  zero would read as a full day.
+
+Route DENSITY, not route optimization. No mapping provider is connected,
+so drive time is not computed and not estimated; the shape of the day comes
+from real scheduled windows and the sequencing that needs distances is
+labelled Not Connected.
+
 ## Newest (2026-08-31, latest+19): the customer portal (ADR-198, task #64)
 
 TWO COLLISIONS WITH `main` WERE RESOLVED IN THIS MERGE, both from parallel

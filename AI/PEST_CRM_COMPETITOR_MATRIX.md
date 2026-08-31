@@ -161,7 +161,9 @@ first, and tracked in `AI/BACKLOG.md`:
 3. ~~Customer portal, residential view~~ — **SHIPPED** as ADR-198. The
    commercial view (device summaries, trend heat maps, sighting tickets)
    is still open.
-4. **Dashboards and route optimization** (increment 11).
+4. ~~Operating dashboards~~ — **SHIPPED** as ADR-199 (revenue, receivable
+   aging, retention, technician productivity, route density). Route
+   OPTIMIZATION by drive time is still open and needs a mapping provider.
 5. **Recurring auto-invoicing, AR aging and dunning** (increment 12).
 
 Three capabilities need an external provider and will ship labelled **Not

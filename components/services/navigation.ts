@@ -12,6 +12,7 @@ import {
   ClipboardCheck,
   ScanLine,
   ShieldCheck,
+  TrendingUp,
   Users,
   UserRoundCheck,
   type LucideIcon,
@@ -130,6 +131,12 @@ export const SERVICES_NAVIGATION: readonly ServicesNavItem[] = [
     label: "Customer Portal",
     description: "Invitations, and what customers asked for",
     icon: UserRoundCheck,
+  },
+  {
+    href: `${SERVICES_ROOT}/dashboards`,
+    label: "Dashboards",
+    description: "Revenue, receivable, productivity, route density",
+    icon: TrendingUp,
   },
 ];
 

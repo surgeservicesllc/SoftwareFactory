@@ -4270,3 +4270,77 @@ undeclared until the goal's full seeded E2E passes.
   — 42/42, 44,837 rows. Hosted-apply scope `customer-portal` re-proves
   forced RLS, no DELETE, the sealed resolver, the activation guard and the
   nine caller-scoped definers after every apply.
+
+## ADR-199 - The operating dashboards: aggregation belongs in the database
+
+- **Status**: accepted (increment 11 of task #65, owner /goal). PestPac,
+  FieldRoutes and Briostack all lead with a revenue and productivity view;
+  `AI/PEST_CRM_COMPETITOR_MATRIX.md` marks it the largest remaining gap
+  after the portal.
+- **Decision: every dashboard figure is aggregated in SQL, by a SECURITY
+  INVOKER function.** Both halves of that sentence are load-bearing and
+  each rules out an easier implementation that this ADR rejects.
+  - **In SQL, not in a route.** The established pattern in this codebase
+    for a counted figure is to fetch rows with `.limit(5000)` and tally
+    them in the handler. That is correct for a branch roster and wrong for
+    a book: the seeded corpus is already 44,837 rows, so a tallied fetch
+    reports a number that is right only while the workspace is small and
+    silently wrong afterwards, with nothing to signal the transition. A
+    dashboard built on a truncated fetch is a dashboard that lies. There is
+    no `.limit()` anywhere in `app/api/services/dashboards/route.ts`.
+  - **Invoker, not definer.** These read across a whole book, so a definer
+    would read across every tenant's book at once — the exact inverse of
+    the portal's case (ADR-198), where a definer is what *narrows*. Running
+    as the caller means RLS is evaluated normally, so a dashboard can only
+    aggregate rows its reader could already have listed one at a time.
+    **This migration introduces no new visibility; it introduces arithmetic
+    over visibility that already existed.** The hosted apply postflight
+    asserts `not prosecdef` on all five, because a later change adding
+    `security definer` "for speed" would turn five dashboards into five
+    cross-tenant leaks with no other symptom.
+- **Two reporting rules live in the SQL rather than in the page**, so no
+  caller can get them wrong:
+  1. **A RATE OVER NOTHING IS NULL.** Collection rate with nothing
+     invoiced, completion rate with nothing scheduled, retention with no
+     book — all null, never zero. Zero is a measurement; null is the
+     absence of one, and "0.0%" for "we did not bill anybody" tells the
+     reader the opposite of what happened. The route passes nulls straight
+     through and the panel renders an em dash.
+  2. **A RUNNING SHIFT HAS NO WORKED TOTAL.** Open timesheets are excluded
+     from labour minutes and counted separately, on the same reasoning as
+     ADR-197. A technician whose every shift is still open reports null
+     worked minutes, not zero.
+- **Three uncomfortable numbers are first-class**, because they are the
+  ones worth acting on: what is open **but not yet due** (kept out of
+  "overdue", which is how an aging report usually overstates itself, along
+  with invoices carrying no due date at all), **customers with no active
+  service plan**, and **technicians with nothing scheduled** — reported
+  rather than filtered out, since dropping those rows would flatter every
+  average above them.
+- **Route density, not route optimization.** No mapping provider is
+  connected, so drive time cannot be computed and nothing here estimates
+  it. What *can* be computed from real scheduled windows is the shape of a
+  day: stops, span, booked minutes and the hole between them. A three-hour
+  gap at eleven is a dispatcher's finding whether or not anybody knows the
+  mileage. Idle time on a **single-stop day is null**, not zero — one stop
+  has no gaps, and a zero there would read as a full day. Sequencing that
+  needs distances is labelled **Not Connected**.
+- **Two indexes, and only two.** Payments, work orders and timesheets are
+  already indexed for what these functions walk; adding a second copy under
+  a new name costs every write and buys no read. Invoices grouped by issue
+  month and refunds grouped by refund date genuinely had none.
+- **Surfaces**: `/Services/dashboards` over `/api/services/dashboards`,
+  which bounds every caller-supplied window before it becomes a scan.
+- **Verification**: `services-dashboards.behavior` (13) on the real chain —
+  a draft invoice excluded from revenue, eleven null rates beside one real
+  zero, a collection rate that moves when money arrives and falls when it
+  is refunded, one tenant's 900,000 absent from the other's total, an
+  invoice aged into the bucket its due date puts it in with every empty
+  bucket still naming itself, retention null for a book with nobody in it,
+  the idle technician kept on the list, a finished shift's 450 minutes
+  counted while a running one adds none, a two-hour hole measured and a
+  single-stop day's idle left unknown, a cancelled visit absent from the
+  route, and no definer among the five.
+  `services-dashboards-routes` (8) pins the boundary: nulls surviving to
+  JSON, windows bounded, overdue excluding not-yet-due and undated, and
+  five aggregate calls with no table reads at all.
