@@ -68,10 +68,13 @@ bridge exists; the planner does not manufacture tasks to make them look ready.
 Current focused evidence is 17/17 for the protected completion workflow,
 10/10 for claim behavior/contracts, and 69/69 for worker/auth runtime. The
 earlier combined planner/admission/release lanes were 164/164 before the final
-rebase and are supporting evidence only, not a final-tree release gate. Full
-lint, typecheck, test, build, browser/accessibility, exact CI, deployment,
-hosted ledger/catalog/ACL/runtime/lint, and signed-in acceptance still have to
-run against one final release identity.
+rebase and are supporting evidence only. Consolidated local lint, typecheck,
+557 test files / 6,400 tests, and the 273-page production build now pass on the
+final combined tree; the separate site-theme browser journey passes 6/6. Those
+local gates do not substitute for the still-pending migration chain/catalog/
+RLS/ACL/replay/rollback checks, exact-head CI and deployment identity, hosted
+ledger/catalog/ACL/runtime/lint postflight, signed-in acceptance, or real
+provider-backed end-to-end evidence.
 
 Both migrations are repository-only and unhosted. Workers, autonomy, and every
 automatic action remain OFF, and the global kill switch remains ON. No actual

@@ -62,9 +62,11 @@ named decision, a named authorization, or production itself.
 - [x] Verify dark/light persistence and palettes in desktop, tablet, and mobile
   browser projects; require no horizontal overflow, no page errors, no serious
   or critical axe findings, and >=4.5:1 palette-token text contrast.
-- [ ] Require the final combined exact-head lint, typecheck, full test, build,
-  four CI jobs, Vercel READY identity, health, and signed-out production theme
-  acceptance before calling the change production accepted.
+- [x] Pass consolidated local lint, typecheck, 557 test files / 6,400 tests,
+  the 273-page production build, and the 6/6 desktop/tablet/mobile theme journey.
+- [ ] Require all four exact-head CI jobs, Vercel READY identity, matching
+  health, and signed-out production theme acceptance before calling the change
+  production accepted.
 
 ## Two competitor rows that are NOT provider-gated (found 2026-08-31)
 

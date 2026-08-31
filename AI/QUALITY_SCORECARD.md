@@ -119,10 +119,12 @@ supporting evidence only and is not counted as a final-tree release gate.
 The implementation also adds deterministic planner-v3 complete-roster evidence,
 identical TypeScript/PostgreSQL wildcard normalization, append-only forced-RLS
 specialist rows, v3-only new launch/claim authority, and fail-closed
-research/deploy planning where no canonical executable bridge exists. Final
-full lint, typecheck, test, production build, browser/accessibility, migration
-chain/catalog/RLS/ACL/replay/rollback, secret scan, exact CI, deployment,
-hosted postflight, and signed-in acceptance evidence is still pending.
+research/deploy planning where no canonical executable bridge exists.
+Consolidated local lint, typecheck, 557 test files / 6,400 tests, and the
+273-page production build pass on the final combined tree; the separate
+site-theme browser journey passes 6/6. Migration chain/catalog/RLS/ACL/replay/
+rollback, exact CI and deployment identity, hosted postflight, signed-in
+acceptance, and provider-backed end-to-end evidence remain pending.
 
 **Status:** repository candidate only. Migrations 009/010 are unhosted; workers,
 autonomy, and all automatic actions are OFF; the global kill switch is ON; no

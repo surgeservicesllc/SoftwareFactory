@@ -185,9 +185,11 @@ behavior/contracts 10/10, and worker/auth runtime 69/69. The earlier combined
 planner/admission/release focused lanes were 164/164 before the final rebase;
 do not present them as final full-release evidence.
 
-PICK UP HERE: run the complete final-tree gates, publish one exact commit, wait
-for all four exact-head CI jobs and exact READY deployment/health, then apply
-only 009 and 010 through the ordered protected scopes and repeat read-only
+Consolidated local lint, typecheck, 557 test files / 6,400 tests, and the
+273-page production build are green on the final combined tree; the separate
+site-theme browser journey is 6/6. PICK UP HERE: publish one final exact commit,
+wait for all four exact-head CI jobs and exact READY deployment/health, then
+apply only 009 and 010 through the ordered protected scopes and repeat read-only
 verification. Perform signed-in create/return/reload acceptance with workers
 OFF. A separately authorized real provider-backed run through an admitted
 claim, draft PR, exact-head CI, and immutable audit remains mandatory before a

@@ -38,10 +38,11 @@
   behavior/contracts 10/10, worker/auth runtime 69/69. Earlier combined
   planner/admission/release lanes were 164/164 before final rebase and are not
   final full-release evidence.
-- NEXT 1: run final lint, typecheck, full tests, production build,
-  browser/accessibility, migration/catalog/RLS/ACL/runtime/rollback, secret,
-  and diff checks; publish one exact candidate; require all four exact-head CI
-  jobs plus exact READY Vercel and matching health.
+- NEXT 1: consolidated local lint, typecheck, 557 test files / 6,400 tests,
+  273-page production build, 6/6 site-theme browser journey, secret scan, and
+  diff check are green. Publish one final exact candidate; require all four
+  exact-head CI jobs plus exact READY Vercel and matching health, and separately
+  run the migration/catalog/RLS/ACL/runtime/rollback gates before hosting 009/010.
 - NEXT 2: use only `.github/workflows/grok-bot-completion-migrations.yml` for
   fresh `probe` -> 009 `claim-admission-fence` -> 010
   `specialist-admission-planning` -> fresh `verify`. Never broad-push, replay,
