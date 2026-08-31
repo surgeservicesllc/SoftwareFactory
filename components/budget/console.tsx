@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { BudgetAccountsPanel } from "@/components/budget/accounts-panel";
 import { BudgetBillsPanel } from "@/components/budget/bills-panel";
+import { BudgetCategoriesPanel } from "@/components/budget/categories-panel";
 import { BudgetImportPanel } from "@/components/budget/import-panel";
 import { BudgetOverviewPanel } from "@/components/budget/overview-panel";
 import { BudgetTransactionsPanel } from "@/components/budget/transactions-panel";
@@ -25,7 +26,7 @@ import type { PayoffStrategy } from "@/lib/budget/analytics";
  * exactly when a person most needs to know where they are.
  */
 
-export type BudgetSection = "overview" | "accounts" | "transactions" | "bills" | "import";
+export type BudgetSection = "overview" | "accounts" | "transactions" | "categories" | "bills" | "import";
 
 const SECTION_HEADING: Readonly<Record<BudgetSection, { title: string; description: string }>> = {
   overview: {
@@ -39,6 +40,10 @@ const SECTION_HEADING: Readonly<Record<BudgetSection, { title: string; descripti
   transactions: {
     title: "Transactions",
     description: "The ledger, searchable and paged.",
+  },
+  categories: {
+    title: "Categories",
+    description: "What spending is called here — renameable, ceilinged, archivable; never silently reclassified.",
   },
   bills: {
     title: "Bills & Debt",
@@ -172,6 +177,7 @@ export function BudgetTrackerConsole({ section }: { section: BudgetSection }) {
         <BudgetAccountsPanel accounts={data.accounts} onAdded={() => void load()} />
       ) : null}
       {section === "transactions" ? <BudgetTransactionsPanel accounts={data.accounts} /> : null}
+      {section === "categories" ? <BudgetCategoriesPanel /> : null}
       {section === "bills" ? (
         <BudgetBillsPanel
           obligations={data.obligations}

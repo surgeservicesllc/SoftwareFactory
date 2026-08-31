@@ -1,5 +1,6 @@
 import {
   CalendarClock,
+  Tags,
   FileSpreadsheet,
   Landmark,
   LayoutDashboard,
@@ -47,6 +48,12 @@ export const BUDGET_NAVIGATION: readonly BudgetNavItem[] = [
     label: "Transactions",
     description: "The ledger, searchable and paged",
     icon: Receipt,
+  },
+  {
+    href: `${BUDGET_ROOT}/categories`,
+    label: "Categories",
+    description: "What spending is called, and each name's monthly ceiling",
+    icon: Tags,
   },
   {
     href: `${BUDGET_ROOT}/bills`,

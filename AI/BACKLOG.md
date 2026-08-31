@@ -1780,9 +1780,15 @@ outstanding:
 - [x] **Hosted apply, owner-directed.** Both migrations applied 2026-08-29 via
   the `budget-tracker` scope (run 33257354301); postflights verified RLS
   forced, no `anon` or `service_role` grants, and both reads INVOKER.
-- [ ] Categories are written and read but have no editing surface; the monthly
-  plan table (`budget_month_plans`) has a schema and analytics
-  (`compareToPlan`) with no panel on top of it yet.
+- [x] Categories now have their own page (/BudgetTracker/categories): rename,
+  retone, set or clear the monthly ceiling, archive/restore. Kind is
+  deliberately not editable (history was classified under it — the PATCH
+  route refuses the field) and there is no delete (ledger rows reference
+  categories `on delete set null`; archiving keeps history honest). The
+  monthly plan table (`budget_month_plans`) still has no panel on top of
+  its schema and `compareToPlan` analytics; that remains open below.
+- [ ] A panel on top of `budget_month_plans` + `compareToPlan` — the plan
+  table has schema and analytics and no surface yet.
 - [ ] Transfers get a `transfer_group_id` column and nothing populates it. Both
   sides of a move between the person's own accounts are typed correctly and
   excluded from spend, but they are not yet linked to each other.
