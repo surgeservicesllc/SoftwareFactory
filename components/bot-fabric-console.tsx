@@ -279,7 +279,7 @@ export function BotFabricConsole() {
               "inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 text-xs font-semibold transition-colors",
               tab === entry.id
                 ? "border-[var(--accent-border)] bg-[var(--accent)]/[0.08] text-[var(--accent-text)]"
-                : "border-[var(--border)] bg-[var(--surface-raised)] text-[var(--text-muted)] hover:text-white",
+                : "border-[var(--border)] bg-[var(--surface-raised)] text-[var(--text-muted)] hover:text-[var(--text)]",
             )}
           >
             {entry.label}
@@ -412,7 +412,7 @@ function FleetBoard({
       <Card className="p-5 sm:p-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 className="text-sm font-semibold text-white">Bench</h2>
+            <h2 className="text-sm font-semibold text-[var(--text)]">Bench</h2>
             <p className="mt-1 text-xs leading-5 text-[var(--text-muted)]">
               Unposted bots. Pick a project and role, then assign.
             </p>
@@ -554,7 +554,7 @@ function ProjectColumn({
     <Card className="p-5">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h2 className="truncate text-sm font-semibold text-white">{project.name}</h2>
+          <h2 className="truncate text-sm font-semibold text-[var(--text)]">{project.name}</h2>
           <p className="mt-1 truncate font-mono text-xs text-[var(--text-faint)]">
             {project.githubRepository ?? "No repository linked"}
           </p>
@@ -1232,7 +1232,7 @@ function ProviderSetupSteps({
           friction: it turns a login into a decision. The sign-in above is the
           answer for almost everyone, so the rest waits until asked for. */}
       <details className="mt-3 group">
-        <summary className="cursor-pointer list-none text-xs font-medium text-[var(--text-muted)] hover:text-white">
+        <summary className="cursor-pointer list-none text-xs font-medium text-[var(--text-muted)] hover:text-[var(--text)]">
           <span className="inline-flex items-center gap-1.5">
             <ChevronDown
               className="size-3.5 transition-transform group-open:rotate-180"
@@ -1321,7 +1321,7 @@ function BotDirectory({
             <Sparkles className="size-4" aria-hidden="true" />
           </span>
           <div>
-            <h2 className="text-sm font-semibold text-white">Connect a bot</h2>
+            <h2 className="text-sm font-semibold text-[var(--text)]">Connect a bot</h2>
             <p className="mt-1 text-xs leading-5 text-[var(--text-muted)]">
               Pick a provider. Anything already set up connects in one click — no typing.
               Keys live in server-side environment variables and never pass through this page.
@@ -1471,7 +1471,7 @@ function BotDirectory({
                 type="button"
                 onClick={() => setShowAdvanced((open) => !open)}
                 aria-expanded={showAdvanced}
-                className="mt-4 inline-flex items-center gap-1.5 text-xs font-medium text-[var(--text-muted)] hover:text-white"
+                className="mt-4 inline-flex items-center gap-1.5 text-xs font-medium text-[var(--text-muted)] hover:text-[var(--text)]"
               >
                 <ChevronDown
                   className={cn("size-3.5 transition-transform", showAdvanced && "rotate-180")}
@@ -1756,7 +1756,7 @@ function RoleWorkshop({
       <Card className="p-5 sm:p-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 className="text-sm font-semibold text-white">Starter roles</h2>
+            <h2 className="text-sm font-semibold text-[var(--text)]">Starter roles</h2>
             <p className="mt-1 text-xs leading-5 text-[var(--text-muted)]">
               Adopt one in a click, then edit it however you like. Roles you author are the source of
               truth.
@@ -1822,7 +1822,7 @@ function RoleWorkshop({
 
       {draft ? (
         <Card className="p-5 sm:p-6">
-          <h2 className="text-sm font-semibold text-white">
+          <h2 className="text-sm font-semibold text-[var(--text)]">
             {draft.roleId ? "Edit role" : "Create a role"}
           </h2>
           <form
@@ -1936,7 +1936,7 @@ function RoleWorkshop({
 
       {fabric.roles.length ? (
         <Card className="p-5">
-          <h2 className="text-sm font-semibold text-white">Your roles</h2>
+          <h2 className="text-sm font-semibold text-[var(--text)]">Your roles</h2>
           <ul className="mt-4 space-y-3">
             {fabric.roles.map((role) => (
               <RoleRow
@@ -2054,7 +2054,7 @@ function BotIdentity({ bot }: { bot: SerializedBot }) {
         >
           {provider?.monogram ?? "??"}
         </span>
-        <h3 className="truncate text-sm font-semibold text-white">{bot.name}</h3>
+        <h3 className="truncate text-sm font-semibold text-[var(--text)]">{bot.name}</h3>
         <StatusBadge tone={bot.readinessTone}>{bot.readinessLabel}</StatusBadge>
       </div>
       <p className="mt-1.5 truncate font-mono text-xs text-[var(--text-faint)]">
@@ -2141,7 +2141,7 @@ function EmptyPrompt({
     <Card className="grid min-h-64 place-items-center p-6 text-center">
       <div className="max-w-md">
         <Icon className="mx-auto size-7 text-[var(--accent)]" aria-hidden="true" />
-        <h2 className="mt-4 text-base font-semibold text-white">{title}</h2>
+        <h2 className="mt-4 text-base font-semibold text-[var(--text)]">{title}</h2>
         <p className="mt-2 text-xs leading-5 text-[var(--text-muted)]">{description}</p>
         {actionHref ? (
           <Link href={actionHref} className="btn btn-primary mt-4 justify-center">
@@ -2504,7 +2504,7 @@ function FirstConnectPrompt({
     <Card className="grid min-h-64 place-items-center p-6 text-center">
       <div className="w-full max-w-md">
         <Sparkles className="mx-auto size-7 text-[var(--accent)]" aria-hidden="true" />
-        <h2 className="mt-4 text-base font-semibold text-white">Connect a bot in one click</h2>
+        <h2 className="mt-4 text-base font-semibold text-[var(--text)]">Connect a bot in one click</h2>
         <p className="mt-2 text-xs leading-5 text-[var(--text-muted)]">
           Sign in once and your first bot is ready. No key, no variable name.
         </p>
@@ -2552,7 +2552,7 @@ function FabricNotice({
     <Card className="grid min-h-64 place-items-center p-6 text-center">
       <div className="max-w-md">
         <Bot className="mx-auto size-7 text-[var(--accent)]" aria-hidden="true" />
-        <h2 className="mt-4 text-base font-semibold text-white">{title}</h2>
+        <h2 className="mt-4 text-base font-semibold text-[var(--text)]">{title}</h2>
         <p className="mt-2 text-xs leading-5 text-[var(--text-muted)]">{description}</p>
         <Link href={href} className="btn btn-primary mt-4 justify-center">
           {label}

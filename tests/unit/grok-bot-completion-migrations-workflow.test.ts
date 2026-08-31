@@ -28,7 +28,7 @@ const migrations = [
   {
     stem: "MIGRATION_CLAIM_ADMISSION",
     path: "supabase/migrations/20260831000900_grok_claim_admission_fence.sql",
-    hash: "795d49b41b2de34819272a45a837d50aa6c3808db5a2c85e6a4ad769d5deff6b",
+    hash: "7f2dc3b80e466b3c06f589ac6383fd768df847d66e02ec0cab53b8d8431ab737",
   },
   {
     stem: "MIGRATION_SPECIALIST_PLANNING",

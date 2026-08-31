@@ -17,11 +17,11 @@ import { cn } from "@/lib/cn";
  * The Services CRM's own chrome, on the Budget Tracker's pattern: a product
  * in its own route group with its own rail, never the console's sidebar —
  * and, uniquely, its own `services-theme` scope: this is the product a pest
- * company's own staff and customers see, so it trades the console's dark
- * workspace for a light client-facing ground. A labelled left rail on large
- * screens, a drawer under them, and a brand block that names the product
- * once. The global header above moves a person between products; this moves
- * them inside one.
+ * company's own staff and customers see, with an emerald identity in either
+ * the default dark workspace or the saved light workspace. A labelled left
+ * rail on large screens, a drawer under them, and a brand block that names the
+ * product once. The global header above moves a person between products; this
+ * moves them inside one.
  */
 export function ServicesShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();

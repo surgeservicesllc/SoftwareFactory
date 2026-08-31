@@ -12,6 +12,8 @@
  */
 
 :root {
+  color-scheme: dark;
+
   /* Surfaces, from furthest back to closest to the reader. */
   --bg: #0b0f14;
   --surface: #131920;
@@ -29,6 +31,7 @@
 
   /* Brand accent, used for the primary action and healthy status only. */
   --accent: #c6f135;
+  --accent-hover: #d5fb52;
   --accent-ink: #10160a;
   --accent-text: #d5f96a;
   --accent-border: #4c5f22;
@@ -47,8 +50,86 @@
   --danger-surface: rgba(255, 154, 161, 0.09);
   --danger-border: #5c2f35;
 
+  /* Shared aliases used by the older product surfaces. */
+  --foreground: var(--text);
+  --muted: var(--text-muted);
+  --surface-2: var(--surface-raised);
+  --subtle: var(--surface-raised);
+  --canvas: var(--bg);
+  --accent-contrast: var(--accent-ink);
+  --accent-soft: var(--accent-surface);
+  --safe: var(--accent-text);
+  --safe-border: var(--accent-border);
+  --safe-surface: var(--accent-surface);
+  --success: var(--accent-text);
+  --success-border: var(--accent-border);
+  --success-surface: var(--accent-surface);
+  --danger-text: var(--danger);
+
+  /* Global product header / public-site chrome. */
+  --site-bg: #080b10;
+  --site-header: rgba(8, 11, 16, 0.94);
+  --site-surface: #0f1520;
+  --site-surface-raised: #171233;
+  --site-border: #161d2a;
+  --site-border-strong: #2b3547;
+  --site-text: #d3dbe6;
+  --site-muted: #96a2b4;
+  --site-faint: #758298;
+  --site-accent: #7c5cff;
+  --site-accent-secondary: #4d8dff;
+  --site-accent-text: #a78bfa;
+  --site-accent-surface: #171233;
+  --site-admin-border: #4a3d80;
+  --site-admin-surface: #161230;
+  --site-admin-text: #c9bcff;
+
   --radius: 0.75rem;
   --radius-sm: 0.5rem;
+}
+
+html[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f5f7fa;
+  --surface: #ffffff;
+  --surface-raised: #edf1f5;
+  --surface-inset: #f8fafc;
+  --border: #d8e0e8;
+  --border-strong: #aab8c5;
+  --text: #17202b;
+  --text-muted: #526273;
+  --text-faint: #5c6d80;
+  --accent: #557600;
+  --accent-hover: #456100;
+  --accent-ink: #ffffff;
+  --accent-text: #456100;
+  --accent-border: #a7be63;
+  --accent-surface: rgba(85, 118, 0, 0.1);
+  --info: #075f83;
+  --info-surface: rgba(7, 95, 131, 0.08);
+  --info-border: #9bc8dc;
+  --warning: #87510b;
+  --warning-surface: rgba(135, 81, 11, 0.09);
+  --warning-border: #dfc18f;
+  --danger: #a51d3d;
+  --danger-surface: rgba(165, 29, 61, 0.07);
+  --danger-border: #e2a9b7;
+  --site-bg: #ffffff;
+  --site-header: rgba(255, 255, 255, 0.94);
+  --site-surface: #f3f5f8;
+  --site-surface-raised: #ede9fe;
+  --site-border: #d8dee8;
+  --site-border-strong: #aeb9c8;
+  --site-text: #202938;
+  --site-muted: #59687c;
+  --site-faint: #5b6b7f;
+  --site-accent: #6d28d9;
+  --site-accent-secondary: #2563eb;
+  --site-accent-text: #6d28d9;
+  --site-accent-surface: #ede9fe;
+  --site-admin-border: #c4b5fd;
+  --site-admin-surface: #f3efff;
+  --site-admin-text: #5b21b6;
 }
 
 @theme inline {
@@ -57,6 +138,9 @@
   --color-surface: var(--surface);
   --color-surface-raised: var(--surface-raised);
   --color-surface-inset: var(--surface-inset);
+  --color-surface-2: var(--surface-raised);
+  --color-subtle: var(--surface-raised);
+  --color-canvas: var(--bg);
   --color-line: var(--border);
   --color-line-strong: var(--border-strong);
   --color-muted: var(--text-muted);
@@ -116,8 +200,8 @@
   }
 
   ::selection {
-    background: rgba(198, 241, 53, 0.3);
-    color: #ffffff;
+    background: var(--accent-surface);
+    color: var(--text);
   }
 
   ::-webkit-scrollbar {
@@ -181,7 +265,7 @@
   }
 
   .btn-primary:hover:not(:disabled) {
-    background: #d5fb52;
+    background: var(--accent-hover);
   }
 
   .btn-secondary {
@@ -342,8 +426,9 @@
   --border-strong: #2d2d4a;
   --text: #f4f4fa;
   --text-muted: #9d9db4;
-  --text-faint: #6c6c86;
+  --text-faint: #80809b;
   --accent: #8b5cf6;
+  --accent-hover: #7c3aed;
   --accent-ink: #ffffff;
   --accent-text: #a78bfa;
   --accent-border: #453390;
@@ -357,14 +442,58 @@
   --danger: #f87171;
   --danger-surface: rgba(248, 113, 113, 0.1);
   --danger-border: #6e2f2f;
+  --foreground: var(--text);
+  --muted: var(--text-muted);
+  --surface-2: var(--surface-raised);
+  --subtle: var(--surface-raised);
+  --canvas: var(--bg);
+  --accent-contrast: var(--accent-ink);
+  --accent-soft: var(--accent-surface);
+  --safe: #34d399;
+  --safe-border: #1f5d47;
+  --safe-surface: rgba(52, 211, 153, 0.12);
+  --success: var(--safe);
+  --success-border: var(--safe-border);
+  --success-surface: var(--safe-surface);
+  --danger-text: var(--danger);
   background: var(--bg);
   color: var(--text);
+}
+
+html[data-theme="light"] .factory-theme {
+  --bg: #f7f6fb;
+  --surface: #ffffff;
+  --surface-raised: #f0edf8;
+  --surface-inset: #faf9fd;
+  --border: #ddd7e9;
+  --border-strong: #b5a9c8;
+  --text: #1d1728;
+  --text-muted: #5d536d;
+  --text-faint: #70657d;
+  --accent: #6d28d9;
+  --accent-hover: #5b21b6;
+  --accent-ink: #ffffff;
+  --accent-text: #6d28d9;
+  --accent-border: #bfa9e8;
+  --accent-surface: rgba(109, 40, 217, 0.1);
+  --info: #1d4ed8;
+  --info-surface: rgba(29, 78, 216, 0.08);
+  --info-border: #a9c2ee;
+  --warning: #8a5700;
+  --warning-surface: rgba(138, 87, 0, 0.08);
+  --warning-border: #ddc28c;
+  --danger: #a51d3d;
+  --danger-surface: rgba(165, 29, 61, 0.07);
+  --danger-border: #e2a9b7;
+  --safe: #047857;
+  --safe-border: #9bcbb4;
+  --safe-surface: rgba(4, 120, 87, 0.09);
 }
 
 /* The lime hover is hard-coded for the console's primary button; the
    factory's violet needs its own. */
 .factory-theme .btn-primary:hover:not(:disabled) {
-  background: #7c3aed;
+  background: var(--accent-hover);
 }
 
 /* Section headings read purple small-caps on the boards. */
@@ -373,17 +502,58 @@
 }
 
 /*
- * The Services CRM palette — a client-facing product, scoped.
+ * The Services CRM palette — one product identity in both site themes.
  *
- * The pest-services CRM is presented to customers, not operators, so inside
- * `.services-theme` the console's dark lime workspace gives way to a light,
- * airy ground with an emerald identity: white cards on a soft sage field,
- * green as the brand and the "healthy account" colour. Every token-reading
- * component inside the scope re-skins itself; everything outside keeps the
- * console's own palette, and the global header above stays the console's,
- * framing the product.
+ * Dark is the first-visit default, aligned with Software Factory while keeping
+ * Services' emerald identity. A saved light choice restores the original soft
+ * sage client-facing palette. Every token-reading child, including the
+ * customer portal, follows the document theme.
  */
 .services-theme {
+  --bg: #0b0f14;
+  --surface: #111a17;
+  --surface-raised: #18231f;
+  --surface-inset: #0c1411;
+  --border: #25352f;
+  --border-strong: #3b5149;
+  --text: #f2f7f5;
+  --text-muted: #a7b8b1;
+  --text-faint: #7f928a;
+  --accent: #34d399;
+  --accent-hover: #6ee7b7;
+  --accent-ink: #052e20;
+  --accent-text: #6ee7b7;
+  --accent-border: #1f5d47;
+  --accent-surface: rgba(52, 211, 153, 0.11);
+  --info: #7dd3fc;
+  --info-surface: rgba(125, 211, 252, 0.1);
+  --info-border: #1e4a63;
+  --warning: #fcd34d;
+  --warning-surface: rgba(252, 211, 77, 0.1);
+  --warning-border: #5c4318;
+  --danger: #fb7185;
+  --danger-surface: rgba(251, 113, 133, 0.1);
+  --danger-border: #5c2f35;
+  --foreground: var(--text);
+  --muted: var(--text-muted);
+  --surface-2: var(--surface-raised);
+  --subtle: var(--surface-raised);
+  --canvas: var(--bg);
+  --accent-contrast: var(--accent-ink);
+  --accent-soft: var(--accent-surface);
+  --safe: var(--accent-text);
+  --safe-border: var(--accent-border);
+  --safe-surface: var(--accent-surface);
+  --success: var(--accent-text);
+  --success-border: var(--accent-border);
+  --success-surface: var(--accent-surface);
+  --danger-text: var(--danger);
+  --services-card-shadow: 0 1px 2px rgba(0, 0, 0, 0.34), 0 12px 28px -20px rgba(0, 0, 0, 0.72);
+  background: var(--bg);
+  color: var(--text);
+}
+
+html[data-theme="light"] .services-theme {
   --bg: #f4f7f5;
   --surface: #ffffff;
   --surface-raised: #f0f4f1;
@@ -392,38 +562,160 @@
   --border-strong: #c9d4cd;
   --text: #14211b;
   --text-muted: #51625a;
-  --text-faint: #7d8c84;
-  --accent: #059669;
+  --text-faint: #63736a;
+  --accent: #047857;
+  --accent-hover: #065f46;
   --accent-ink: #ffffff;
   --accent-text: #047857;
-  --accent-border: #b5dcc9;
+  --accent-border: #a8d2bd;
   --accent-surface: rgba(5, 150, 105, 0.09);
   --info: #086992;
   --info-surface: rgba(8, 105, 146, 0.07);
   --info-border: #bcdcea;
-  --warning: #96570c;
+  --warning: #87510b;
   --warning-surface: rgba(180, 110, 9, 0.08);
-  --warning-border: #ecd6b2;
-  --danger: #b3123f;
+  --warning-border: #e2c999;
+  --danger: #a80f39;
   --danger-surface: rgba(190, 18, 63, 0.06);
-  --danger-border: #eec6d0;
-  background: var(--bg);
-  color: var(--text);
+  --danger-border: #e6b7c4;
+  --services-card-shadow: 0 1px 2px rgba(18, 38, 29, 0.05), 0 8px 24px -16px rgba(18, 38, 29, 0.12);
 }
 
-/* White cards on the sage field need a real (soft) elevation to separate. */
 .services-theme .card {
-  box-shadow:
-    0 1px 2px rgba(18, 38, 29, 0.05),
-    0 8px 24px -16px rgba(18, 38, 29, 0.12);
+  box-shadow: var(--services-card-shadow);
 }
 
-/* The console's lime hover is hard-coded; emerald needs its own. */
 .services-theme .btn-primary:hover:not(:disabled) {
-  background: #047857;
+  background: var(--accent-hover);
 }
 
-/* Inputs sit on white cards here, so the inset ground reads as a field. */
 .services-theme .input {
-  background: #ffffff;
+  background: var(--surface-inset);
+}
+
+/*
+ * Legacy Services status chips use Tailwind's light `50/100/200/700/800`
+ * palette directly. Preserve those classes for the light theme and translate
+ * them only in dark mode so every status remains legible without turning each
+ * panel into a second theme engine. Printable barcode/report paper stays
+ * intentionally white and is not included here.
+ */
+html[data-theme="dark"] .services-theme .bg-slate-50,
+html[data-theme="dark"] .services-theme .bg-slate-100 {
+  background-color: var(--surface-raised);
+}
+
+html[data-theme="dark"] .services-theme .hover\:bg-slate-50:hover {
+  background-color: var(--surface-raised);
+}
+
+html[data-theme="dark"] .services-theme .border-slate-200 {
+  border-color: var(--border);
+}
+
+html[data-theme="dark"] .services-theme .text-slate-500 {
+  color: var(--text-faint);
+}
+
+html[data-theme="dark"] .services-theme .text-slate-600 {
+  color: var(--text-muted);
+}
+
+html[data-theme="dark"] .services-theme .bg-amber-50,
+html[data-theme="dark"] .services-theme .bg-amber-50\/60,
+html[data-theme="dark"] .services-theme .bg-amber-100 {
+  background-color: var(--warning-surface);
+}
+
+html[data-theme="dark"] .services-theme .border-amber-200 {
+  border-color: var(--warning-border);
+}
+
+html[data-theme="dark"] .services-theme .text-amber-700,
+html[data-theme="dark"] .services-theme .text-amber-800,
+html[data-theme="dark"] .services-theme .text-amber-800\/80,
+html[data-theme="dark"] .services-theme .text-amber-900 {
+  color: var(--warning);
+}
+
+html[data-theme="dark"] .services-theme .bg-emerald-50,
+html[data-theme="dark"] .services-theme .bg-emerald-100 {
+  background-color: var(--accent-surface);
+}
+
+html[data-theme="dark"] .services-theme .border-emerald-200 {
+  border-color: var(--accent-border);
+}
+
+html[data-theme="dark"] .services-theme .text-emerald-700,
+html[data-theme="dark"] .services-theme .text-emerald-800 {
+  color: var(--accent-text);
+}
+
+html[data-theme="dark"] .services-theme .bg-sky-50,
+html[data-theme="dark"] .services-theme .bg-sky-100 {
+  background-color: var(--info-surface);
+}
+
+html[data-theme="dark"] .services-theme .border-sky-200 {
+  border-color: var(--info-border);
+}
+
+html[data-theme="dark"] .services-theme .text-sky-700,
+html[data-theme="dark"] .services-theme .text-sky-800 {
+  color: var(--info);
+}
+
+html[data-theme="dark"] .services-theme .bg-rose-50,
+html[data-theme="dark"] .services-theme .bg-rose-100 {
+  background-color: var(--danger-surface);
+}
+
+html[data-theme="dark"] .services-theme .border-rose-200,
+html[data-theme="dark"] .services-theme .border-rose-300 {
+  border-color: var(--danger-border);
+}
+
+html[data-theme="dark"] .services-theme .text-rose-600,
+html[data-theme="dark"] .services-theme .text-rose-600\/90,
+html[data-theme="dark"] .services-theme .text-rose-700,
+html[data-theme="dark"] .services-theme .text-rose-800 {
+  color: var(--danger);
+}
+
+html[data-theme="dark"] .services-theme .bg-violet-50,
+html[data-theme="dark"] .services-theme .bg-violet-100 {
+  background-color: rgba(167, 139, 250, 0.12);
+}
+
+html[data-theme="dark"] .services-theme .border-violet-200 {
+  border-color: #55417d;
+}
+
+html[data-theme="dark"] .services-theme .text-violet-700 {
+  color: #c4b5fd;
+}
+
+html[data-theme="dark"] .services-theme .bg-indigo-50 {
+  background-color: rgba(129, 140, 248, 0.12);
+}
+
+html[data-theme="dark"] .services-theme .border-indigo-200 {
+  border-color: #434e83;
+}
+
+html[data-theme="dark"] .services-theme .text-indigo-700 {
+  color: #a5b4fc;
+}
+
+html[data-theme="dark"] .services-theme .bg-orange-50 {
+  background-color: rgba(251, 146, 60, 0.11);
+}
+
+html[data-theme="dark"] .services-theme .border-orange-200 {
+  border-color: #6f411f;
+}
+
+html[data-theme="dark"] .services-theme .text-orange-700 {
+  color: #fdba74;
 }

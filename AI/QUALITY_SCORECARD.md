@@ -25,6 +25,20 @@ balanced journal over the whole book (>500 entries), and copilot overdue
 arithmetic agreeing with the SQL. Budget categories panel 3. Suite total
 after the close-out conversions: 6,40x passing locally in ~9 minutes.
 
+**Addendum, 2026-08-31 latest+45 - site-wide dark/light theme (ADR-225):**
+Focused theme/component contracts are green. The expanded Playwright journey
+passes 6/6 tests across desktop, tablet, and mobile and exercises dark default, accessible
+label/pressed state, light switch, reload, local-storage and cross-product
+persistence, exact root/Factory/Services/Budget/customer palettes, scoped
+Services status chips, intentional white print paper, horizontal overflow,
+page errors, and serious/critical axe in both modes. A separate deterministic
+contract checks text/muted/faint against background/surface/raised for root,
+site chrome, Factory, and Services dark/light palettes at >=4.5:1. Consolidated
+lint and typecheck pass; the full suite passes 559 files / 6,415 tests with
+three files / seven tests skipped; and the production build generates 276
+pages. Exact-head CI, Vercel identity, health, and production-browser evidence
+remain pending at this repository checkpoint.
+
 **Addendum, 2026-08-31 latest+43 - queue-diagnosis visibility (ADR-223):**
 queue-diagnosis unit 16 (withdrawn names the timestamp and never says
 "contradicts", pause says waiting-for-a-resume, withdrawal outranks pause);
@@ -67,7 +81,7 @@ on a correct schema. RLS census 215 -> 217; grants 60 -> 62 crm tables;
 runbook 215 -> 216; seed report 59/59 -> 61/61 and 55,723 -> 57,447 rows,
 with 857 routes and 867 stops. Matrix: 9 GAP -> 8, 9 PARTIAL -> 10.
 
-**Addendum, 2026-08-31 latest+39 - accounting export (ADR-219):**
+**Addendum, 2026-08-31 latest+40 - accounting export (ADR-220):**
 accounting-export unit 14 and services-accounting-export.behavior 6 on the
 real chain. The unit suite pins what an accountant checks: every entry
 balances, an unbalanced one throws rather than rendering, a draft and a
@@ -99,10 +113,10 @@ every suite run.
 
 **Addendum, 2026-08-31 latest+39 - Grok claim and specialist admission
 (ADR-219):** The rebased repository candidate carries two forward-only files:
-009 claim fence (`795d49b41b2de34819272a45a837d50aa6c3808db5a2c85e6a4ad769d5deff6b`,
-92,659 canonical-LF bytes) and 010 specialist planning
+009 claim fence (`7f2dc3b80e466b3c06f589ac6383fd768df847d66e02ec0cab53b8d8431ab737`,
+92,648 canonical-LF bytes) and 010 specialist planning
 (`728628f0368e1f715d8c786ffb536d2d3fcc3a859a177a0665a00ea98a8386f1`,
-56,636 canonical-LF bytes). The integrated migration inventory is 217.
+56,636 canonical-LF bytes). The integrated migration inventory is 220.
 
 Measured focused evidence on this rebased candidate is 17/17 for the dedicated
 release-workflow contract, 10/10 for claim behavior/contracts, and 69/69 for
@@ -116,10 +130,12 @@ supporting evidence only and is not counted as a final-tree release gate.
 The implementation also adds deterministic planner-v3 complete-roster evidence,
 identical TypeScript/PostgreSQL wildcard normalization, append-only forced-RLS
 specialist rows, v3-only new launch/claim authority, and fail-closed
-research/deploy planning where no canonical executable bridge exists. Final
-full lint, typecheck, test, production build, browser/accessibility, migration
-chain/catalog/RLS/ACL/replay/rollback, secret scan, exact CI, deployment,
-hosted postflight, and signed-in acceptance evidence is still pending.
+research/deploy planning where no canonical executable bridge exists.
+Consolidated local lint, typecheck, 559 test files / 6,415 tests, and the
+276-page production build pass on the final combined tree; the separate
+site-theme browser journey passes 6/6. Migration chain/catalog/RLS/ACL/replay/
+rollback, exact CI and deployment identity, hosted postflight, signed-in
+acceptance, and provider-backed end-to-end evidence remain pending.
 
 **Status:** repository candidate only. Migrations 009/010 are unhosted; workers,
 autonomy, and all automatic actions are OFF; the global kill switch is ON; no

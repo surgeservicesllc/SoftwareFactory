@@ -32,7 +32,7 @@ export function BrandMark({
   href = "/",
   label = "AI Factory home",
   className,
-  /** The header sits on dark chrome at every breakpoint; the console follows its theme. */
+  /** The global header follows the saved site theme; the console follows its product theme. */
   tone = "chrome",
   /**
    * Glyph only, for the collapsed console rail.
@@ -58,11 +58,18 @@ export function BrandMark({
         // account controls, and a brand that refuses to give is what pushes
         // them off the right edge. The glyph holds its size; the words yield.
         "flex min-w-0 items-center gap-2.5 rounded-lg focus-visible:outline-2",
-        "focus-visible:outline-offset-2 focus-visible:outline-[#7c5cff]",
+        "focus-visible:outline-offset-2 focus-visible:outline-[var(--site-accent)]",
         className,
       )}
     >
-      <svg viewBox="0 0 40 44" className="size-9 shrink-0 sm:size-10" aria-hidden="true">
+      <svg
+        viewBox="0 0 40 44"
+        className={cn(
+          "size-9 shrink-0 sm:size-10",
+          tone === "chrome" ? "text-[var(--site-text)]" : "text-foreground",
+        )}
+        aria-hidden="true"
+      >
         <defs>
           {/*
             A gradient id must be unique per document: two elements sharing one
@@ -88,8 +95,7 @@ export function BrandMark({
           textAnchor="middle"
           fontSize="13"
           fontWeight="700"
-          fill={tone === "chrome" ? "#ffffff" : "currentColor"}
-          className={tone === "console" ? "text-foreground" : undefined}
+          fill="currentColor"
         >
           AI
         </text>
@@ -101,7 +107,7 @@ export function BrandMark({
         className={cn(
           "min-w-0 truncate text-[17px] font-extrabold uppercase leading-none",
           "tracking-[-0.005em] sm:text-[19px]",
-          tone === "chrome" ? "text-white" : "text-foreground",
+          tone === "chrome" ? "text-[var(--site-text)]" : "text-foreground",
         )}
       >
         Factory

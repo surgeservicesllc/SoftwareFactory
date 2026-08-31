@@ -46,7 +46,7 @@ jobs:
       MIGRATION_AUTOPAY_AUTHORIZATION: supabase/migrations/20260831000800_autopay_authorization.sql
       MIGRATION_AUTOPAY_AUTHORIZATION_SHA256: 41875a16a58deb6945affa24ecf0adf6493875788ef8da3a1c7cd03f98afb4b2
       MIGRATION_CLAIM_ADMISSION: supabase/migrations/20260831000900_grok_claim_admission_fence.sql
-      MIGRATION_CLAIM_ADMISSION_SHA256: 795d49b41b2de34819272a45a837d50aa6c3808db5a2c85e6a4ad769d5deff6b
+      MIGRATION_CLAIM_ADMISSION_SHA256: 7f2dc3b80e466b3c06f589ac6383fd768df847d66e02ec0cab53b8d8431ab737
       MIGRATION_SPECIALIST_PLANNING: supabase/migrations/20260831001000_grok_specialist_admission_planning.sql
       MIGRATION_SPECIALIST_PLANNING_SHA256: 728628f0368e1f715d8c786ffb536d2d3fcc3a859a177a0665a00ea98a8386f1
       PRODUCTION_HEALTH_URL: https://www.theagoras.com/api/health
@@ -527,7 +527,7 @@ jobs:
                     ('public.grok_current_execution_admission_hash(public.grok_execution_admissions)','5d3611423811e3609dd9f2fc3f2f981a','sql',false,'i','none',null),
                     ('public.assert_current_grok_execution_admissions(uuid)','b5dc9166e99634eaa409801055a27d4b','plpgsql',true,'v','none',null),
                     ('public.grok_execution_admission_projection(public.grok_execution_admissions)','a85f407323a331e54d8d16123c46281f','sql',false,'i','none',null),
-                    ('public.attach_current_grok_admissions_to_claim(jsonb)','0e4a0ba5d0941f6cb43ecee3a23aecbb','plpgsql',true,'v','none',null),
+                    ('public.attach_current_grok_admissions_to_claim(jsonb)','427294dac55a06b5ca1f9a1c89b0cdfa','plpgsql',true,'v','none',null),
                     ('public.claim_planned_graph_v3(text,text[],text,jsonb,integer)','4a6da8bed8d1fdda17f11df00d549817','plpgsql',true,'v','service_role',null),
                     ('public.claim_planned_graph_by_id_v3(text,text[],text,jsonb,uuid,integer)','f83873aa19703d2c61553026d4141a4c','plpgsql',true,'v','service_role',null),
                     ('public.attach_current_grok_admission_to_phase1c_claim(jsonb)','48f84aba274b2e6316331de8e3fca796','plpgsql',true,'v','none',null),
@@ -838,7 +838,7 @@ jobs:
                 ('public.grok_current_execution_admission_hash(public.grok_execution_admissions)','${CURRENT_HASH_MD5}','${CURRENT_LANGUAGE}',false,'${CURRENT_VOLATILITY}',true,'${CURRENT_PARALLEL}','none'),
                 ('public.assert_current_grok_execution_admissions(uuid)','b5dc9166e99634eaa409801055a27d4b','plpgsql',true,'v',false,'u','none'),
                 ('public.grok_execution_admission_projection(public.grok_execution_admissions)','a85f407323a331e54d8d16123c46281f','sql',false,'i',true,'s','none'),
-                ('public.attach_current_grok_admissions_to_claim(jsonb)','0e4a0ba5d0941f6cb43ecee3a23aecbb','plpgsql',true,'v',false,'u','none'),
+                ('public.attach_current_grok_admissions_to_claim(jsonb)','427294dac55a06b5ca1f9a1c89b0cdfa','plpgsql',true,'v',false,'u','none'),
                 ('public.claim_planned_graph_v3(text,text[],text,jsonb,integer)','4a6da8bed8d1fdda17f11df00d549817','plpgsql',true,'v',false,'u','service_role'),
                 ('public.claim_planned_graph_by_id_v3(text,text[],text,jsonb,uuid,integer)','f83873aa19703d2c61553026d4141a4c','plpgsql',true,'v',false,'u','service_role'),
                 ('public.attach_current_grok_admission_to_phase1c_claim(jsonb)','48f84aba274b2e6316331de8e3fca796','plpgsql',true,'v',false,'u','none'),

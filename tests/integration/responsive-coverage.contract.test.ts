@@ -211,8 +211,13 @@ describe("every component's layout is measured in a browser", () => {
         + "them from one that exists:\n" + unmeasured.join("\n"),
     ).toEqual([]);
 
-    // And the harness must actually be wired into the spec that measures it.
-    const spec = await readFile(resolve(repositoryRoot, "tests/e2e/component-layout.spec.ts"), "utf8");
+    // And the harness must actually be wired into a browser spec that measures
+    // it. Theme probes live in their focused dark/light journey instead of the
+    // exhaustive width sweep, but still run in all three Playwright projects.
+    const spec = (await Promise.all([
+      readFile(resolve(repositoryRoot, "tests/e2e/component-layout.spec.ts"), "utf8"),
+      readFile(resolve(repositoryRoot, "tests/e2e/theme.spec.ts"), "utf8"),
+    ])).join("\n");
     for (const name of harness.matchAll(/^\s{2}"?([a-z-]+)"?:\s*\(\)\s*=>/gm)) {
       expect(spec, `harness case "${name[1]}" is never measured`).toContain(`"${name[1]}"`);
     }

@@ -1430,7 +1430,7 @@ export function CustomerPortalPanel() {
                         <p className="mt-1 text-xs text-faint">Waiting on a reply.</p>
                       ) : null
                     ) : (
-                      <p className="mt-1 rounded-lg bg-slate-50 p-2 text-sm text-foreground">
+                      <p className="mt-1 rounded-lg bg-surface-inset p-2 text-sm text-foreground">
                         {request.response}
                       </p>
                     )}
@@ -1447,7 +1447,7 @@ export function CustomerPortalPanel() {
 
 function Figure({ label, value, tone }: { label: string; value: string; tone?: "amber" | "rose" }) {
   return (
-    <div className="rounded-xl border border-line bg-white p-4">
+    <div className="rounded-xl border border-line bg-surface p-4">
       <dt className="flex items-center gap-2 text-xs uppercase tracking-wide text-faint">
         <Receipt className="size-3.5" aria-hidden="true" />
         {label}

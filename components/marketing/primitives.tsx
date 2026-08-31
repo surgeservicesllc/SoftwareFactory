@@ -56,7 +56,7 @@ export function SurfacePanel({
   return (
     <div
       className={cn(
-        "rounded-2xl border border-[#1c2433] bg-[#0c111a] shadow-[0_24px_60px_rgba(0,0,0,0.28)]",
+        "rounded-2xl border border-line bg-surface shadow-[0_24px_60px_rgba(0,0,0,0.28)]",
         className,
       )}
     >
@@ -84,11 +84,11 @@ export function SectionHeading({
       )}
     >
       <div className={cn(align === "center" && "max-w-2xl")}>
-        <h2 className="text-balance text-[22px] font-semibold tracking-[-0.03em] text-white sm:text-[28px]">
+        <h2 className="text-balance text-[22px] font-semibold tracking-[-0.03em] text-foreground sm:text-[28px]">
           {title}
         </h2>
         {description ? (
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-[#8593a5]">{description}</p>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-muted">{description}</p>
         ) : null}
       </div>
       {action}
@@ -131,7 +131,7 @@ export function SecondaryCta({
     <Link
       href={href}
       className={cn(
-        "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[#2b3547] bg-[#0f1520] px-5 text-sm font-semibold text-[#c8d2df] transition-colors hover:border-[#44536a] hover:text-white",
+        "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-line-strong bg-surface-raised px-5 text-sm font-semibold text-muted transition-colors hover:border-[var(--text-faint)] hover:text-foreground",
         className,
       )}
     >
@@ -150,11 +150,11 @@ export function StatRow({ stats }: { stats: readonly MarketingStat[] }) {
           key={stat.label}
           className={cn(
             "flex min-w-[132px] flex-col-reverse",
-            index > 0 && "border-l border-[#1e2634] pl-10",
+            index > 0 && "border-l border-line pl-10",
           )}
         >
-          <dt className="mt-2 pl-1 text-xs text-[#7f8c9e]">{stat.label}</dt>
-          <dd className="flex items-center gap-2 text-[26px] font-semibold leading-none tracking-[-0.03em] text-white">
+          <dt className="mt-2 pl-1 text-xs text-faint">{stat.label}</dt>
+          <dd className="flex items-center gap-2 text-[26px] font-semibold leading-none tracking-[-0.03em] text-foreground">
             <IconTile
               icon={stat.icon}
               accent="violet"
@@ -192,10 +192,10 @@ export function CtaBand({
       />
       <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
         <div className="max-w-2xl">
-          <h2 className="text-balance text-xl font-semibold tracking-[-0.03em] text-white sm:text-[24px]">
+          <h2 className="text-balance text-xl font-semibold tracking-[-0.03em] text-foreground sm:text-[24px]">
             {title}
           </h2>
-          <p className="mt-2 text-sm leading-6 text-[#8593a5]">{description}</p>
+          <p className="mt-2 text-sm leading-6 text-muted">{description}</p>
         </div>
         <div className="flex flex-wrap gap-3">
           {secondaryHref && secondaryLabel ? (
@@ -222,10 +222,10 @@ export function ContentSourceNotice({ source }: { source: MarketingSource }) {
   if (source === "supabase") return null;
 
   return (
-    <div className="flex items-start gap-3 rounded-xl border border-[#34414f] bg-[#111822] px-4 py-3 text-xs leading-5 text-[#8e9bab]">
-      <Info className="mt-0.5 size-4 shrink-0 text-[#ffbe55]" aria-hidden="true" />
+    <div className="flex items-start gap-3 rounded-xl border border-line-strong bg-surface-raised px-4 py-3 text-xs leading-5 text-muted">
+      <Info className="mt-0.5 size-4 shrink-0 text-[var(--warning)]" aria-hidden="true" />
       <p>
-        <span className="mr-2 inline-flex items-center rounded border border-[#324050] bg-[#141b25] px-1.5 py-0.5 font-mono text-[8px] font-bold uppercase tracking-[0.13em] text-[#8290a1]">
+        <span className="mr-2 inline-flex items-center rounded border border-line-strong bg-surface-inset px-1.5 py-0.5 font-mono text-[8px] font-bold uppercase tracking-[0.13em] text-faint">
           Demo data
         </span>
         This page is rendering seeded content. Connect Supabase and apply the marketing content

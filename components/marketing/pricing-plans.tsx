@@ -81,7 +81,7 @@ export function PricingPlans({
         <span
           className={cn(
             "text-sm font-medium transition-colors",
-            cadence === "monthly" ? "text-white" : "text-[#7f8c9e]",
+            cadence === "monthly" ? "text-foreground" : "text-faint",
           )}
         >
           Pay Monthly
@@ -97,12 +97,12 @@ export function PricingPlans({
             "relative h-7 w-14 rounded-full border transition-colors",
             cadence === "yearly"
               ? "border-[#4d5cff] bg-gradient-to-r from-[#7c5cff] to-[#4d8dff]"
-              : "border-[#2b3547] bg-[#151c2a]",
+              : "border-line-strong bg-surface-raised",
           )}
         >
           <span
             className={cn(
-              "absolute top-1 size-5 rounded-full bg-white transition-transform",
+              "absolute top-1 size-5 rounded-full bg-foreground transition-transform",
               cadence === "yearly" ? "translate-x-8" : "translate-x-1",
             )}
             aria-hidden="true"
@@ -111,7 +111,7 @@ export function PricingPlans({
         <span
           className={cn(
             "text-sm font-medium transition-colors",
-            cadence === "yearly" ? "text-white" : "text-[#7f8c9e]",
+            cadence === "yearly" ? "text-foreground" : "text-faint",
           )}
         >
           Pay Yearly
@@ -124,7 +124,7 @@ export function PricingPlans({
       </div>
 
       {checkoutMessage ? (
-        <p role="alert" className="text-center text-sm text-red-400">
+        <p role="alert" className="text-center text-sm text-[var(--danger)]">
           {checkoutMessage}
         </p>
       ) : null}
@@ -147,26 +147,26 @@ export function PricingPlans({
                   plan.highlighted && "border-[#4d5cff] shadow-[0_0_50px_rgba(93,92,255,0.18)]",
                 )}
               >
-                <h3 className={cn("text-lg font-semibold", tone.text)}>{plan.name}</h3>
+                <h3 className="text-lg font-semibold text-[var(--site-accent-text)]">{plan.name}</h3>
 
                 <p className="mt-4 flex flex-wrap items-baseline gap-1.5">
-                  <span className="text-[38px] font-bold leading-none tracking-[-0.04em] text-white">
+                  <span className="text-[38px] font-bold leading-none tracking-[-0.04em] text-foreground">
                     {formatPlanPrice(plan, cadence)}
                   </span>
                   {plan.priceNote ? (
-                    <span className="text-xs text-[#7f8c9e]">
+                    <span className="text-xs text-faint">
                       {plan.monthlyPriceCents === 0 ? "/ " : ""}
                       {plan.priceNote}
                     </span>
                   ) : null}
                 </p>
                 {cadence === "yearly" && yearlySavingPercent(plan) ? (
-                  <p className="mt-1 text-[10px] font-medium text-[#34d399]">
+                  <p className="mt-1 text-[10px] font-medium text-[var(--accent-text)]">
                     billed yearly · saves {yearlySavingPercent(plan)}%
                   </p>
                 ) : null}
 
-                <p className="mt-4 text-xs leading-5 text-[#8593a5]">{plan.blurb}</p>
+                <p className="mt-4 text-xs leading-5 text-muted">{plan.blurb}</p>
 
                 {purchasable[plan.slug]?.[cadence] ? (
                   <button
@@ -177,7 +177,7 @@ export function PricingPlans({
                       "mt-5 inline-flex min-h-11 items-center justify-center rounded-xl px-4 text-sm font-semibold transition-opacity hover:opacity-90 disabled:opacity-60",
                       plan.highlighted
                         ? "bg-gradient-to-r from-[#7c5cff] to-[#4d8dff] text-white"
-                        : cn("border bg-transparent", tone.border, tone.text),
+                        : "border border-[var(--site-accent)] bg-transparent text-[var(--site-accent-text)]",
                     )}
                   >
                     {pendingSlug === plan.slug ? "Opening checkout…" : plan.ctaLabel}
@@ -189,7 +189,7 @@ export function PricingPlans({
                       "mt-5 inline-flex min-h-11 items-center justify-center rounded-xl px-4 text-sm font-semibold transition-opacity hover:opacity-90",
                       plan.highlighted
                         ? "bg-gradient-to-r from-[#7c5cff] to-[#4d8dff] text-white"
-                        : cn("border bg-transparent", tone.border, tone.text),
+                        : "border border-[var(--site-accent)] bg-transparent text-[var(--site-accent-text)]",
                     )}
                   >
                     {plan.ctaLabel}
@@ -208,7 +208,7 @@ export function PricingPlans({
                       >
                         <Check className="size-3" strokeWidth={3} aria-hidden="true" />
                       </span>
-                      <span className="text-[11px] leading-5 text-[#c1cbd8]">{feature.label}</span>
+                      <span className="text-[11px] leading-5 text-muted">{feature.label}</span>
                     </li>
                   ))}
                 </ul>
@@ -235,7 +235,7 @@ export function PricingPlans({
           <div className="space-y-4 md:hidden">
             {plans.map((plan) => (
               <SurfacePanel key={plan.slug} className="p-5">
-                <h3 className={cn("text-sm font-semibold", resolveAccent(plan.accent).text)}>
+                <h3 className="text-sm font-semibold text-[var(--site-accent-text)]">
                   {plan.name}
                 </h3>
                 <dl className="mt-3 space-y-2">
@@ -244,12 +244,12 @@ export function PricingPlans({
                     return (
                       <div
                         key={`${plan.slug}-${row}`}
-                        className="flex items-start justify-between gap-3 border-b border-[#151c28] pb-2 last:border-b-0 last:pb-0"
+                        className="flex items-start justify-between gap-3 border-b border-line pb-2 last:border-b-0 last:pb-0"
                       >
-                        <dt className="min-w-0 text-xs leading-5 text-[#c1cbd8]">{row}</dt>
+                        <dt className="min-w-0 text-xs leading-5 text-muted">{row}</dt>
                         <dd className="shrink-0 text-xs leading-5">
                           {cell.value ? (
-                            <span className="text-[#c1cbd8]">{cell.value}</span>
+                            <span className="text-muted">{cell.value}</span>
                           ) : cell.included ? (
                             <>
                               <Check
@@ -260,7 +260,7 @@ export function PricingPlans({
                             </>
                           ) : (
                             <>
-                              <Minus className="size-4 text-[#3d4a5c]" aria-hidden="true" />
+                              <Minus className="size-4 text-faint" aria-hidden="true" />
                               <span className="sr-only">Not included</span>
                             </>
                           )}
@@ -276,7 +276,7 @@ export function PricingPlans({
           <SurfacePanel className="hidden overflow-hidden md:block">
           {/* Focusable so the comparison can be scrolled without a pointer. */}
           <div
-            className="overflow-x-auto focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#7c5cff]"
+            className="overflow-x-auto focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent)]"
             tabIndex={0}
             role="region"
             aria-label="Plan comparison, scrolls horizontally"
@@ -286,17 +286,17 @@ export function PricingPlans({
                 Feature comparison across every plan, at {cadence} billing
               </caption>
               <thead>
-                <tr className="border-b border-[#1c2433]">
-                  <th scope="col" className="px-5 py-4 text-sm font-semibold text-white">
+                <tr className="border-b border-line">
+                  <th scope="col" className="px-5 py-4 text-sm font-semibold text-foreground">
                     Compare Plans
                   </th>
                   {plans.map((plan) => (
                     <th key={plan.slug} scope="col" className="px-5 py-4 text-center">
-                      <span className={cn("block text-sm font-semibold", resolveAccent(plan.accent).text)}>
+                      <span className="block text-sm font-semibold text-[var(--site-accent-text)]">
                         {plan.name}
                       </span>
                       {plan.highlightLabel ? (
-                        <span className="mt-0.5 block text-[10px] font-normal text-[#7f8c9e]">
+                        <span className="mt-0.5 block text-[10px] font-normal text-faint">
                           {plan.highlightLabel}
                         </span>
                       ) : null}
@@ -306,8 +306,8 @@ export function PricingPlans({
               </thead>
               <tbody>
                 {rows.map((row) => (
-                  <tr key={row} className="border-b border-[#151c28] last:border-b-0">
-                    <th scope="row" className="px-5 py-3 text-xs font-normal text-[#c1cbd8]">
+                  <tr key={row} className="border-b border-line last:border-b-0">
+                    <th scope="row" className="px-5 py-3 text-xs font-normal text-muted">
                       {row}
                     </th>
                     {plans.map((plan) => {
@@ -315,7 +315,7 @@ export function PricingPlans({
                       return (
                         <td key={`${plan.slug}-${row}`} className="px-5 py-3 text-center">
                           {cell.value ? (
-                            <span className="text-xs text-[#c1cbd8]">{cell.value}</span>
+                            <span className="text-xs text-muted">{cell.value}</span>
                           ) : cell.included ? (
                             <>
                               <Check
@@ -326,7 +326,7 @@ export function PricingPlans({
                             </>
                           ) : (
                             <>
-                              <Minus className="mx-auto size-4 text-[#3d4a5c]" aria-hidden="true" />
+                              <Minus className="mx-auto size-4 text-faint" aria-hidden="true" />
                               <span className="sr-only">Not included</span>
                             </>
                           )}

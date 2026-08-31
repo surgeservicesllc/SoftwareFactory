@@ -5587,7 +5587,7 @@ Version 1 and 2 plans remain readable history but cannot launch new Grok work.
 
 **Delivery boundary.** The claim fence is forward migration
 `20260831000900_grok_claim_admission_fence.sql` (canonical LF SHA-256
-`795d49b41b2de34819272a45a837d50aa6c3808db5a2c85e6a4ad769d5deff6b`)
+`7f2dc3b80e466b3c06f589ac6383fd768df847d66e02ec0cab53b8d8431ab737`)
 and the roster/launcher revision is
 `20260831001000_grok_specialist_admission_planning.sql` (canonical LF SHA-256
 `728628f0368e1f715d8c786ffb536d2d3fcc3a859a177a0665a00ea98a8386f1`).
@@ -5826,3 +5826,38 @@ READY is met for everything the repository can do alone. The eight
 provider-gated rows stay **Not Connected** and the RED actions stay
 owner-gated — the matrix and backlog record each by name, and the
 declaration covers neither.
+
+## ADR-225 - Theme is a document preference; products keep identities through tokens
+
+- **Date**: 2026-08-31
+- **Status**: Accepted for the repository candidate; exact-head production
+  acceptance remains required
+- **Supersedes**: ADR-188 only where it required Services to be light rather
+  than theme-responsive. Its CRM vocabulary and emerald product identity stay.
+
+The site had two visual truths: Software Factory was dark and Services was
+light. That made navigation between products feel like leaving the application,
+and a page-level fix could never satisfy a person who expected the same choice
+on the next route. The theme is therefore a DOCUMENT preference, not a route or
+account preference. The root `data-theme` is authoritative, dark is the
+deterministic first-visit fallback, and only the explicit stored value `light`
+can replace it. A small head bootstrap applies that value before paint; the
+client control owns changes, persistence, same-document notification, browser
+chrome color, and cross-tab storage synchronization.
+
+Products keep identity by overriding one semantic contract. Root tokens style
+the public site, console, Budget Tracker, and Job Search. Factory and Services
+scope their own dark/light values for those same token names. Services remains
+emerald, but dark becomes its default and the prior sage/white design becomes
+its light variant. Structural fixed colors were converted; fixed colors remain
+when they are meaning rather than chrome — provider brands, status/chart data,
+artwork, modal scrims, destructive contrast, avatars, and printable paper.
+
+Every visual layout must reach a toggle through shared SiteHeader, FactoryShell,
+the customer header, or offline chrome. The coverage contract fails if a new
+visual layout has no owner. Browser acceptance spans desktop/tablet/mobile and
+both modes, including persistence across products, exact computed palettes,
+Services legacy status translation, horizontal overflow, page errors, and
+serious/critical axe. A deterministic contract independently prevents palette
+text, muted text, or faint text from falling below 4.5:1 on background, surface,
+or raised surface.

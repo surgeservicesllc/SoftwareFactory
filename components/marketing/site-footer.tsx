@@ -35,7 +35,7 @@ export function SiteFooter() {
   const year = new Date().getFullYear();
 
   return (
-    <footer className="mt-20 border-t border-[#161d2a] bg-[#070a0f]">
+    <footer className="mt-20 border-t border-line bg-surface-inset">
       <div className="mx-auto w-full max-w-[1400px] px-4 py-12 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 gap-10 lg:grid-cols-[1.4fr_repeat(3,minmax(0,1fr))]">
           <div className="max-w-sm">
@@ -45,13 +45,13 @@ export function SiteFooter() {
                 <span className="absolute font-mono text-[8px] font-bold text-[#c9d2ff]">AI</span>
               </span>
               <span className="leading-none">
-                <span className="block text-[15px] font-bold text-white">AI SOFTWARE</span>
-                <span className="mt-1 block font-mono text-[9px] font-semibold uppercase tracking-[0.42em] text-[#8fa0ff]">
+                <span className="block text-[15px] font-bold text-foreground">AI SOFTWARE</span>
+                <span className="mt-1 block font-mono text-xs font-semibold uppercase tracking-[0.32em] text-[var(--site-accent-text)]">
                   Factory
                 </span>
               </span>
             </div>
-            <p className="mt-4 text-sm leading-6 text-[#7f8c9e]">
+            <p className="mt-4 text-sm leading-6 text-faint">
               An end-to-end platform that helps teams plan, build, deploy and scale better
               software—faster, with AI at the core.
             </p>
@@ -59,7 +59,7 @@ export function SiteFooter() {
 
           {FOOTER_COLUMNS.map((column) => (
             <nav key={column.heading} aria-label={column.heading}>
-              <h2 className="font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-[#7f8c9e]">
+              <h2 className="font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-faint">
                 {column.heading}
               </h2>
               {/*
@@ -74,7 +74,7 @@ export function SiteFooter() {
                   <li key={`${column.heading}-${link.label}`}>
                     <Link
                       href={link.href}
-                      className="inline-flex min-h-11 items-center py-1 text-sm text-[#93a0b2] transition-colors hover:text-white"
+                      className="inline-flex min-h-11 items-center py-1 text-sm text-muted transition-colors hover:text-foreground"
                     >
                       {link.label}
                     </Link>
@@ -85,9 +85,9 @@ export function SiteFooter() {
           ))}
         </div>
 
-        <div className="mt-10 flex flex-col gap-3 border-t border-[#151c28] pt-6 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-xs text-[#7f8c9e]">© {year} AI Software Factory. All rights reserved.</p>
-          <p className="text-xs text-[#7f8c9e]">
+        <div className="mt-10 flex flex-col gap-3 border-t border-line pt-6 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-xs text-faint">© {year} AI Software Factory. All rights reserved.</p>
+          <p className="text-xs text-faint">
             Autonomous production execution is disabled. Workers remain Not Connected.
           </p>
         </div>

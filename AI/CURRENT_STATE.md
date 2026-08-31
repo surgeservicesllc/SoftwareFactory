@@ -1,12 +1,41 @@
 # Current state
 
+## 2026-08-31: One persistent dark/light choice now covers every site shell (ADR-225)
+
+The repository candidate makes dark the first-visit default for the public
+site, control plane, AI Factory, Services CRM, Budget Tracker, Job Search,
+customer portal, authentication/decision surfaces, and offline page. An
+accessible sun/moon control is reachable from every visual shell, persists one
+explicit choice in local storage, synchronizes it across open tabs, and applies
+it before first paint on later navigations so a saved light choice does not
+flash dark.
+
+Root, Factory, and Services palettes now expose the same semantic surface,
+text, border, action, and status contracts in both modes. Services retains its
+emerald identity but is dark by default; its prior sage/white presentation is
+the light variant. Legacy Services status classes receive a scoped dark
+translation. Intentional inverse artwork, provider-brand tiles, modal scrims,
+destructive-action contrast, and printable white reports/labels remain fixed
+by design rather than being mistaken for application chrome.
+
+Focused component/contract evidence is green. Repository lint and typecheck,
+559 test files / 6,415 tests (three files / seven tests skipped), and the
+276-page production build pass on the consolidated candidate. The expanded
+theme browser journey passes 6/6 across desktop, tablet, and mobile with
+persistence, exact
+computed palettes, no horizontal overflow, no page errors, and no serious or
+critical axe findings. The token contract independently requires at least
+4.5:1 for text, muted text, and faint text against each palette's background,
+surface, and raised surface. Exact-head CI and Vercel production identity
+remain release gates; this section does not claim deployment yet.
+
 ## 2026-08-31: Grok claim-time admission and specialist planning are a repository candidate (ADR-219)
 
 The next Grok boundary is implemented in the repository but is not hosted or
 production accepted. Forward migration
 `20260831000900_grok_claim_admission_fence.sql` (canonical LF SHA-256
-`795d49b41b2de34819272a45a837d50aa6c3808db5a2c85e6a4ad769d5deff6b`;
-92,659 LF bytes) makes protocol v3 the only service-role Grok claim path. Every
+`7f2dc3b80e466b3c06f589ac6383fd768df847d66e02ec0cab53b8d8431ab737`;
+92,648 LF bytes) makes protocol v3 the only service-role Grok claim path. Every
 Grok Resume, wake, graph claim, and Phase 1C claim revalidates the complete
 immutable admission set against the current graph node, assignment, bot, role,
 AI account, credential rotation, provider, and model. The worker receives only
@@ -39,10 +68,13 @@ bridge exists; the planner does not manufacture tasks to make them look ready.
 Current focused evidence is 17/17 for the protected completion workflow,
 10/10 for claim behavior/contracts, and 69/69 for worker/auth runtime. The
 earlier combined planner/admission/release lanes were 164/164 before the final
-rebase and are supporting evidence only, not a final-tree release gate. Full
-lint, typecheck, test, build, browser/accessibility, exact CI, deployment,
-hosted ledger/catalog/ACL/runtime/lint, and signed-in acceptance still have to
-run against one final release identity.
+rebase and are supporting evidence only. Consolidated local lint, typecheck,
+559 test files / 6,415 tests, and the 276-page production build now pass on the
+final combined tree; the separate site-theme browser journey passes 6/6. Those
+local gates do not substitute for the still-pending migration chain/catalog/
+RLS/ACL/replay/rollback checks, exact-head CI and deployment identity, hosted
+ledger/catalog/ACL/runtime/lint postflight, signed-in acceptance, or real
+provider-backed end-to-end evidence.
 
 Both migrations are repository-only and unhosted. Workers, autonomy, and every
 automatic action remain OFF, and the global kill switch remains ON. No actual

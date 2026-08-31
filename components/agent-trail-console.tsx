@@ -149,7 +149,7 @@ export function AgentTrailConsole() {
 
   if (state === "loading") {
     return (
-      <Card className="flex items-center gap-3 p-6 text-slate-300">
+      <Card className="flex items-center gap-3 p-6 text-muted">
         <Loader2 className="size-4 animate-spin" aria-hidden="true" /> Loading the trail…
       </Card>
     );
@@ -198,8 +198,8 @@ export function AgentTrailConsole() {
               className={cn(
                 "max-w-56 truncate rounded-lg border px-3 py-1.5 text-left text-xs",
                 run.graphRunId === selected.graphRunId
-                  ? "border-violet-500 text-white"
-                  : "border-slate-700 text-slate-400 hover:text-slate-200",
+                  ? "border-[var(--accent)] text-foreground"
+                  : "border-line text-muted hover:text-foreground",
               )}
               title={run.goal}
             >
@@ -207,7 +207,7 @@ export function AgentTrailConsole() {
                 "mr-1.5 inline-block size-1.5 rounded-full align-middle",
                 run.state === "RUNNING" ? "animate-pulse bg-violet-400"
                   : run.state === "COMPLETED" ? "bg-emerald-500"
-                  : run.state === "FAILED" ? "bg-red-500" : "bg-slate-500",
+                  : run.state === "FAILED" ? "bg-red-500" : "bg-faint",
               )} aria-hidden="true" />
               {run.goal}
             </button>
@@ -248,7 +248,7 @@ export function AgentTrailConsole() {
                   <path
                     key={`${edge.from}->${edge.to}`}
                     d={`M ${x1} ${y1} C ${x1 + bend} ${y1}, ${x2 - bend} ${y2}, ${x2} ${y2}`}
-                    className="fill-none stroke-slate-600"
+                    className="fill-none stroke-[var(--border-strong)]"
                     strokeWidth="1.5"
                     markerEnd="url(#trail-arrow)"
                   >
@@ -258,7 +258,7 @@ export function AgentTrailConsole() {
               })}
               <defs>
                 <marker id="trail-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
-                  <path d="M0,0 L8,4 L0,8 z" className="fill-slate-500" />
+                  <path d="M0,0 L8,4 L0,8 z" className="fill-[var(--text-faint)]" />
                 </marker>
               </defs>
               {layout.nodes.map((placed) => {
@@ -280,10 +280,10 @@ export function AgentTrailConsole() {
                       className={cn(tone.fill, tone.ring, node.state === "RUNNING" && "animate-pulse")}
                       strokeWidth="1.5"
                     />
-                    <text x="12" y="24" className="fill-white text-[12px] font-semibold">
+                    <text x="12" y="24" className="fill-[var(--text)] text-[12px] font-semibold">
                       {placed.nodeKey.length > 18 ? `${placed.nodeKey.slice(0, 17)}…` : placed.nodeKey}
                     </text>
-                    <text x="12" y="42" className="fill-slate-400 text-[10px]">
+                    <text x="12" y="42" className="fill-[var(--text-muted)] text-[10px]">
                       {tone.label}
                       {node.gate_state ? ` · gate ${node.gate_state.toLowerCase()}` : ""}
                     </text>
@@ -294,10 +294,10 @@ export function AgentTrailConsole() {
             </svg>
           </div>
         ) : (
-          <p className="text-sm text-slate-400">This run recorded no nodes.</p>
+          <p className="text-sm text-muted">This run recorded no nodes.</p>
         )}
         {selected.closureNote ? (
-          <p className="rounded-lg border border-slate-700 p-3 text-sm text-slate-300">
+          <p className="rounded-lg border border-line p-3 text-sm text-muted">
             {selected.closureNote}
           </p>
         ) : null}
@@ -308,16 +308,16 @@ export function AgentTrailConsole() {
           <SectionTitle title={focusNode ?? ""} description="Declared vs observed" />
           <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
             <div>
-              <dt className="text-slate-400">Declared</dt>
-              <dd className="text-slate-200">
+              <dt className="text-muted">Declared</dt>
+              <dd className="text-foreground">
                 {focused.capability ?? "—"}
                 {focused.lifecycle_stage ? ` · ${focused.lifecycle_stage}` : ""}
                 {focused.executor ? ` · runs on ${focused.executor}` : ""}
               </dd>
             </div>
             <div>
-              <dt className="text-slate-400">Observed</dt>
-              <dd className="text-slate-200">
+              <dt className="text-muted">Observed</dt>
+              <dd className="text-foreground">
                 {stateTone(focused).label}
                 {typeof focused.latency_ms === "number" && focused.latency_ms > 0
                   ? ` · ${Math.round(focused.latency_ms / 1000)}s`
@@ -327,15 +327,15 @@ export function AgentTrailConsole() {
             </div>
             {focused.error_message ? (
               <div className="sm:col-span-2">
-                <dt className="text-slate-400">Recorded error</dt>
-                <dd className="break-words text-red-300">{focused.error_message}</dd>
+                <dt className="text-muted">Recorded error</dt>
+                <dd className="break-words text-danger">{focused.error_message}</dd>
               </div>
             ) : null}
           </dl>
         </Card>
       ) : null}
 
-      <p className="text-xs text-slate-500">
+      <p className="text-xs text-faint">
         Map style adapted from{" "}
         <Link href="https://github.com/sodiumsun/agenttrail" className="underline-offset-2 hover:underline">
           agenttrail

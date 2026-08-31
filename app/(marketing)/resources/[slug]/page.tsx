@@ -69,24 +69,24 @@ export default async function ResourcePage(
     <article className="mx-auto w-full max-w-3xl px-4 py-10 sm:px-6 lg:px-8">
       <Link
         href="/resources"
-        className="inline-flex min-h-11 items-center gap-2 text-sm font-medium text-[#a78bfa] hover:text-[#c4b5fd]"
+        className="inline-flex min-h-11 items-center gap-2 text-sm font-medium text-[var(--accent-text)] hover:text-[var(--accent)]"
       >
         <ArrowLeft className="size-4" aria-hidden="true" />
         All resources
       </Link>
 
-      <p className="mt-6 font-mono text-[11px] font-bold uppercase tracking-[0.16em] text-[#8b9bff]">
+      <p className="mt-6 font-mono text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--accent-text)]">
         {KIND_LABELS[resource.kind] ?? resource.kind}
         {resource.topic ? ` · ${resource.topic}` : ""}
       </p>
 
-      <h1 className="mt-3 text-balance text-2xl font-semibold tracking-[-0.02em] text-white sm:text-3xl">
+      <h1 className="mt-3 text-balance text-2xl font-semibold tracking-[-0.02em] text-foreground sm:text-3xl">
         {resource.title}
       </h1>
 
-      <p className="mt-4 text-pretty text-[15px] leading-7 text-[#c1cbd8]">{resource.summary}</p>
+      <p className="mt-4 text-pretty text-[15px] leading-7 text-muted">{resource.summary}</p>
 
-      <dl className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-2 border-y border-[#1c2433] py-4 text-sm text-[#7f8c9e]">
+      <dl className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-2 border-y border-line py-4 text-sm text-faint">
         {resource.readTime ? (
           <div className="flex items-center gap-2">
             <dt className="sr-only">Reading time</dt>
@@ -107,11 +107,11 @@ export default async function ResourcePage(
         The whole point of this page. Saying "coming soon" would be a promise
         with no date behind it; this states what exists and what does not.
       */}
-      <section className="mt-8 rounded-2xl border border-[#2b3547] bg-[#0c111a] p-5 sm:p-6">
-        <h2 className="text-base font-semibold text-white">
+      <section className="mt-8 rounded-2xl border border-line-strong bg-surface p-5 sm:p-6">
+        <h2 className="text-base font-semibold text-foreground">
           This one is not written yet
         </h2>
-        <p className="mt-2 text-sm leading-6 text-[#8593a5]">
+        <p className="mt-2 text-sm leading-6 text-muted">
           The library lists it because it is planned, and this page shows
           everything we currently hold about it. There is no article behind it
           yet, and we would rather say so than show you a page pretending
@@ -119,7 +119,7 @@ export default async function ResourcePage(
         </p>
         <Link
           href="/resources"
-          className="mt-5 inline-flex min-h-11 items-center rounded-xl border border-[#2b3547] bg-[#0f1520] px-4 text-sm font-semibold text-[#d3dbe6] transition-colors hover:border-[#44536a] hover:text-white"
+          className="mt-5 inline-flex min-h-11 items-center rounded-xl border border-line-strong bg-surface-raised px-4 text-sm font-semibold text-muted transition-colors hover:border-[var(--text-faint)] hover:text-foreground"
         >
           Browse what is published
         </Link>

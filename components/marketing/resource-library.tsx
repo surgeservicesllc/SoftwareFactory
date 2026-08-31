@@ -56,7 +56,7 @@ export function ResourceLibrary({ resources }: { resources: readonly MarketingRe
           Search guides, templates, docs and more
         </label>
         <Search
-          className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-[#5c6878]"
+          className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-faint"
           aria-hidden="true"
         />
         <input
@@ -65,15 +65,15 @@ export function ResourceLibrary({ resources }: { resources: readonly MarketingRe
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           placeholder="Search guides, templates, docs and more..."
-          className="h-12 w-full rounded-xl border border-[#2b3547] bg-[#0a0f18] pl-11 pr-4 text-sm text-[#dce2e8] placeholder:text-[#5c6878] focus:border-[#5d6bff] focus:outline-none"
+          className="h-12 w-full rounded-xl border border-line-strong bg-surface-inset pl-11 pr-4 text-sm text-foreground placeholder:text-faint focus:border-[var(--accent)] focus:outline-none"
         />
       </div>
 
       <div className="mt-10 flex items-end justify-between gap-4">
-        <h2 className="text-[22px] font-semibold tracking-[-0.03em] text-white sm:text-[26px]">
+        <h2 className="text-[22px] font-semibold tracking-[-0.03em] text-foreground sm:text-[26px]">
           {trimmed ? `Results for “${query.trim()}”` : "Featured Resources"}
         </h2>
-        <p className="shrink-0 text-xs text-[#7f8c9e]" aria-live="polite">
+        <p className="shrink-0 text-xs text-faint" aria-live="polite">
           {matches.length} {matches.length === 1 ? "resource" : "resources"}
         </p>
       </div>
@@ -106,7 +106,7 @@ export function ResourceLibrary({ resources }: { resources: readonly MarketingRe
                 </div>
 
                 <div className="flex flex-1 flex-col p-4">
-                  <h3 className="text-[13px] font-semibold leading-5 text-white">
+                  <h3 className="text-[13px] font-semibold leading-5 text-foreground">
                     {/*
                       The link wrapped the title text alone, leaving a 15px-tall
                       tap target on a card several hundred pixels tall. The
@@ -122,12 +122,12 @@ export function ResourceLibrary({ resources }: { resources: readonly MarketingRe
                     */}
                     <Link
                       href={resource.href}
-                      className="after:absolute after:inset-0 after:z-10 after:content-[''] hover:text-[#c4b5fd] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7c5cff]"
+                      className="after:absolute after:inset-0 after:z-10 after:content-[''] hover:text-[var(--accent-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
                     >
                       {resource.title}
                     </Link>
-                  </h3>                  <p className="mt-2 flex-1 text-[11px] leading-5 text-[#7f8c9e]">{resource.summary}</p>
-                  <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-[#151c28] pt-3 text-[10px] text-[#7f8c9e]">
+                  </h3>                  <p className="mt-2 flex-1 text-[11px] leading-5 text-faint">{resource.summary}</p>
+                  <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-line pt-3 text-[10px] text-faint">
                     {resource.readTime ? (
                       <span className="flex items-center gap-1.5">
                         <Clock className="size-3" aria-hidden="true" />
@@ -149,14 +149,14 @@ export function ResourceLibrary({ resources }: { resources: readonly MarketingRe
       ) : (
         <SurfacePanel className="mt-5 grid min-h-40 place-items-center p-8 text-center">
           <div>
-            <p className="text-sm font-semibold text-white">No resources match “{query.trim()}”</p>
-            <p className="mt-2 text-xs text-[#7f8c9e]">
+            <p className="text-sm font-semibold text-foreground">No resources match “{query.trim()}”</p>
+            <p className="mt-2 text-xs text-faint">
               Try a broader term, or clear the search to see what is featured.
             </p>
             <button
               type="button"
               onClick={() => setQuery("")}
-              className="mt-4 inline-flex min-h-9 items-center rounded-xl border border-[#2b3547] px-4 text-xs font-semibold text-[#c8d2df] hover:border-[#44536a] hover:text-white"
+              className="mt-4 inline-flex min-h-9 items-center rounded-xl border border-line-strong px-4 text-xs font-semibold text-muted hover:border-[var(--text-faint)] hover:text-foreground"
             >
               Clear search
             </button>

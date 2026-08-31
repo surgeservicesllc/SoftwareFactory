@@ -22,6 +22,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { cn } from "@/lib/cn";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { FACTORY_STEPS, type FactoryStep } from "@/lib/sdlc/factory-steps";
 import { shortRunId } from "@/lib/graph/run-label";
 import { budgetActionIsNotable, budgetActionLabel, formatCost } from "@/lib/graph/run-spend";
@@ -170,7 +171,7 @@ export function FactoryShell({
                   className={cn(
                     "grid size-5 shrink-0 place-items-center rounded-full border text-[10px] font-semibold",
                     mark === "complete"
-                      ? "border-[#1f5d47] bg-[rgba(52,211,153,0.12)] text-[#34d399]"
+                      ? "border-[var(--safe-border)] bg-[var(--safe-surface)] text-[var(--safe)]"
                       : current
                         ? "border-[var(--accent-border)] text-[var(--accent-text)]"
                         : "border-[var(--border-strong)] text-muted",
@@ -247,6 +248,7 @@ export function FactoryShell({
       <div className="min-w-0 flex-1">
         <header className="flex min-h-14 items-center gap-3 border-b border-[var(--border)] bg-[var(--surface-inset)] px-4 sm:px-6">
           <div className="min-w-0 flex-1">{breadcrumb}</div>
+          <ThemeToggle />
           <nav aria-label="Primary">
             <Link href="/solutions" aria-label="AI Factory console home" className="btn btn-secondary btn-sm inline-flex">
               <span className="hidden sm:inline">Open Console</span>

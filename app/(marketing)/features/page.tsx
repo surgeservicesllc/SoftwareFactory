@@ -34,12 +34,12 @@ export default async function FeaturesPage() {
       <MarketingSection className="pt-10 sm:pt-14">
         <div className="max-w-3xl">
           {page?.eyebrow ? <Eyebrow>{page.eyebrow}</Eyebrow> : null}
-          <h1 className="mt-5 text-balance text-[38px] font-bold leading-[1.06] tracking-[-0.04em] text-white sm:text-[52px]">
+          <h1 className="mt-5 text-balance text-[38px] font-bold leading-[1.06] tracking-[-0.04em] text-foreground sm:text-[52px]">
             {page?.headline}{" "}
             {page?.headlineAccent ? <GradientText>{page.headlineAccent}</GradientText> : null}
           </h1>
           {page?.subheadline ? (
-            <p className="mt-6 text-[15px] leading-7 text-[#8593a5]">{page.subheadline}</p>
+            <p className="mt-6 text-[15px] leading-7 text-muted">{page.subheadline}</p>
           ) : null}
         </div>
       </MarketingSection>
@@ -52,10 +52,10 @@ export default async function FeaturesPage() {
         <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {pillars.map((pillar) => (
             <li key={pillar.title}>
-              <SurfacePanel className="h-full p-5 transition-colors hover:border-[#33405a]">
+              <SurfacePanel className="h-full p-5 transition-colors hover:border-line-strong">
                 <IconTile icon={pillar.icon} accent={pillar.accent} size="lg" />
-                <h2 className="mt-4 text-base font-semibold text-white">{pillar.title}</h2>
-                <p className="mt-2 text-xs leading-6 text-[#8593a5]">{pillar.body}</p>
+                <h2 className="mt-4 text-base font-semibold text-foreground">{pillar.title}</h2>
+                <p className="mt-2 text-xs leading-6 text-muted">{pillar.body}</p>
               </SurfacePanel>
             </li>
           ))}
@@ -73,14 +73,14 @@ export default async function FeaturesPage() {
               <SurfacePanel className="flex h-full gap-4 p-5">
                 <div className="flex flex-col items-center gap-2">
                   <IconTile icon={stage.icon} accent={stage.accent} size="lg" />
-                  <span className="font-mono text-xs text-[#7f8c9e]">
+                  <span className="font-mono text-xs text-faint">
                     {String(index + 1).padStart(2, "0")}
                   </span>
                 </div>
                 <div className="min-w-0">
-                  <h3 className="text-sm font-semibold text-white">{stage.title}</h3>
-                  <p className="mt-2 text-xs leading-6 text-[#8593a5]">{stage.body}</p>
-                  <p className={`mt-3 text-sm font-medium ${resolveAccent(stage.accent).text}`}>
+                  <h3 className="text-sm font-semibold text-foreground">{stage.title}</h3>
+                  <p className="mt-2 text-xs leading-6 text-muted">{stage.body}</p>
+                  <p className="mt-3 text-sm font-medium text-[var(--site-accent-text)]">
                     Included in every plan
                   </p>
                 </div>
@@ -105,8 +105,8 @@ export default async function FeaturesPage() {
                   <Check className="size-3" strokeWidth={3} aria-hidden="true" />
                 </span>
                 <div>
-                  <h3 className="text-[13px] font-semibold text-white">{item.title}</h3>
-                  <p className="mt-1.5 text-sm leading-5 text-[#7f8c9e]">{item.body}</p>
+                  <h3 className="text-[13px] font-semibold text-foreground">{item.title}</h3>
+                  <p className="mt-1.5 text-sm leading-5 text-faint">{item.body}</p>
                 </div>
               </li>
             ))}
@@ -126,7 +126,7 @@ export default async function FeaturesPage() {
       </MarketingSection>
 
       <MarketingSection className="mt-6">
-        <p className="flex items-center gap-2 text-sm text-[#7f8c9e]">
+        <p className="flex items-center gap-2 text-sm text-faint">
           <ArrowRight className="size-3.5" aria-hidden="true" />
           Capability descriptions are marketing content. Execution remains disabled in this build.
         </p>

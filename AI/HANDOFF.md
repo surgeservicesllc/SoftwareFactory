@@ -2,7 +2,7 @@
 
 Last updated: 2026-08-31
 
-## Newest (2026-08-31, latest+45): the close-out tail
+## Newest (2026-08-31, latest+46): the close-out tail
 
 Eight rows in one stretch, all UI over machinery that already existed —
 the pattern of this tail is "the schema shipped, the page didn't":
@@ -25,6 +25,32 @@ callback/appointment (the schema's rule, mirrored so the refusal never
 fires blind); per-rep stats keep unassigned routes as their own row. A
 sold door is recorded from its account; do not add an account picker to
 the knock form.
+
+## Newest (2026-08-31, latest+45): site-wide dark/light theme (ADR-225)
+
+Dark is now the repository candidate's deterministic first-visit default for
+every product. `lib/theme.ts` owns the storage/default/bootstrap contract;
+`components/theme-toggle.tsx` owns the accessible control and cross-tab
+synchronization. Shared SiteHeader chrome, FactoryShell, the customer header,
+and the offline page make the control reachable from every visual layout.
+
+ROOT, FACTORY, AND SERVICES EACH HAVE DARK AND LIGHT SEMANTIC PALETTES. Services
+keeps its emerald identity and its old sage/white presentation as the light
+variant. Do not reintroduce fixed structural white/dark classes. Fixed colors
+remain only where the color itself is the content: artwork, provider brands,
+status/chart data, modal scrims, destructive contrast, avatars, and printable
+white report/label paper.
+
+The focused browser journey runs in desktop/tablet/mobile and proves dark
+default, accessible toggle state, reload and cross-product persistence, exact
+computed palettes, scoped Services status translation, intentional print
+paper, overflow, page errors, and serious/critical axe. The deterministic
+contrast contract requires >=4.5:1 for text/muted/faint across all palette
+surfaces. Consolidated lint/typecheck, 559 test files / 6,415 tests (three
+files / seven tests skipped), the 276-page production build, and the expanded
+6/6 browser journey pass.
+Exact-head CI, Vercel READY/health, and production browser acceptance still
+gate release.
 
 ## Newest (2026-08-31, latest+44): copilot + acceptance journey (ADR-224)
 
@@ -142,12 +168,13 @@ hops, and getting it wrong drops every refund silently rather than failing.
 THE MAPPING LIVES IN THE SERVICE (journalFromLedgers), shared by the route
 and the behaviour suite. A mapping only the route knew would be a mapping
 only production ever exercised.
+
 ## Newest (2026-08-31, latest+39): Grok claim and specialist admission release candidate (ADR-219)
 
 The implementation is complete in the repository, not in hosted Supabase.
 `20260831000900_grok_claim_admission_fence.sql` has canonical LF SHA-256
-`795d49b41b2de34819272a45a837d50aa6c3808db5a2c85e6a4ad769d5deff6b`
-and 92,659 LF bytes. `20260831001000_grok_specialist_admission_planning.sql`
+`7f2dc3b80e466b3c06f589ac6383fd768df847d66e02ec0cab53b8d8431ab737`
+and 92,648 LF bytes. `20260831001000_grok_specialist_admission_planning.sql`
 has canonical LF SHA-256
 `728628f0368e1f715d8c786ffb536d2d3fcc3a859a177a0665a00ea98a8386f1`
 and 56,636 LF bytes.
@@ -182,9 +209,11 @@ behavior/contracts 10/10, and worker/auth runtime 69/69. The earlier combined
 planner/admission/release focused lanes were 164/164 before the final rebase;
 do not present them as final full-release evidence.
 
-PICK UP HERE: run the complete final-tree gates, publish one exact commit, wait
-for all four exact-head CI jobs and exact READY deployment/health, then apply
-only 009 and 010 through the ordered protected scopes and repeat read-only
+Consolidated local lint, typecheck, 559 test files / 6,415 tests, and the
+276-page production build are green on the final combined tree; the separate
+site-theme browser journey is 6/6. PICK UP HERE: publish one final exact commit,
+wait for all four exact-head CI jobs and exact READY deployment/health, then
+apply only 009 and 010 through the ordered protected scopes and repeat read-only
 verification. Perform signed-in create/return/reload acceptance with workers
 OFF. A separately authorized real provider-backed run through an admitted
 claim, draft PR, exact-head CI, and immutable audit remains mandatory before a

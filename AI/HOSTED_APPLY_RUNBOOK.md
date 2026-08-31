@@ -9,7 +9,7 @@ Use only `.github/workflows/grok-bot-completion-migrations.yml` for these two
 forward files, in order:
 
 - `20260831000900_grok_claim_admission_fence.sql` — canonical LF SHA-256
-  `795d49b41b2de34819272a45a837d50aa6c3808db5a2c85e6a4ad769d5deff6b`;
+  `7f2dc3b80e466b3c06f589ac6383fd768df847d66e02ec0cab53b8d8431ab737`;
 - `20260831001000_grok_specialist_admission_planning.sql` — canonical LF
   SHA-256
   `728628f0368e1f715d8c786ffb536d2d3fcc3a859a177a0665a00ea98a8386f1`.

@@ -148,7 +148,7 @@ export function ServicesTeamPanel() {
                 ))}
             </select>
           </label>
-          <div className="rounded-xl border border-line bg-white p-4">
+          <div className="rounded-xl border border-line bg-surface p-4">
             <p className="flex items-center gap-2 text-xs uppercase tracking-wide text-faint">
               <UserRound className="size-3.5" aria-hidden="true" />
               Org chart
@@ -157,7 +157,7 @@ export function ServicesTeamPanel() {
               {employees?.counts.active ?? "—"}
             </p>
           </div>
-          <div className="rounded-xl border border-line bg-white p-4">
+          <div className="rounded-xl border border-line bg-surface p-4">
             <p className="flex items-center gap-2 text-xs uppercase tracking-wide text-faint">
               <HardHat className="size-3.5" aria-hidden="true" />
               Field roster

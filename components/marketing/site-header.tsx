@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 
 import { BrandMark } from "@/components/brand-mark";
 import { SignOutButton } from "@/components/sign-out-button";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/cn";
 import { globalNavigation, globalNavigationMatches, PUBLIC_NAV } from "@/lib/navigation";
 
@@ -84,7 +85,7 @@ export function SiteHeader({
   }
 
   return (
-    <header className="sticky top-0 z-50 border-b border-[#161d2a] bg-[#080b10]/90 backdrop-blur-xl">
+    <header className="sticky top-0 z-50 border-b border-[var(--site-border)] bg-[var(--site-header)] backdrop-blur-xl">
       <div className="flex h-[68px] w-full items-center justify-between gap-4 px-4 sm:h-[76px] sm:gap-6 sm:px-6 lg:px-8 2xl:px-10">
         <BrandMark />
 
@@ -106,14 +107,14 @@ export function SiteHeader({
                 "relative whitespace-nowrap rounded-lg px-2.5 py-2 text-[15px] font-medium",
                 "transition-colors xl:px-3.5",
                 isActive(item.href)
-                  ? "text-[#a78bfa]"
-                  : "text-[#96a2b4] hover:text-white",
+                  ? "text-[var(--site-accent-text)]"
+                  : "text-[var(--site-muted)] hover:text-[var(--site-text)]",
               )}
             >
               {item.label}
               {isActive(item.href) ? (
                 <span
-                  className="absolute inset-x-2.5 -bottom-[9px] h-[3px] rounded-full bg-[#7c5cff] xl:inset-x-3.5"
+                  className="absolute inset-x-2.5 -bottom-[9px] h-[3px] rounded-full bg-[var(--site-accent)] xl:inset-x-3.5"
                   aria-hidden="true"
                 />
               ) : null}
@@ -122,10 +123,17 @@ export function SiteHeader({
         </nav>
 
         <div className="flex shrink-0 items-center gap-2 sm:gap-2.5">
+          <ThemeToggle
+            className={cn(
+              "border-[var(--site-border-strong)] bg-[var(--site-surface)] text-[var(--site-muted)]",
+              "hover:border-[var(--site-muted)] hover:bg-[var(--site-surface-raised)] hover:text-[var(--site-text)]",
+              showMobileMenu && "hidden sm:grid",
+            )}
+          />
           {viewer.signedIn ? (
             <>
               {viewer.isSuperAdmin ? (
-                <span className="hidden items-center gap-1.5 rounded-xl border border-[#4a3d80] bg-[#161230] px-3 py-1.5 text-[10px] font-bold uppercase leading-[1.15] tracking-[0.14em] text-[#c9bcff] xl:inline-flex">
+                <span className="hidden items-center gap-1.5 rounded-xl border border-[var(--site-admin-border)] bg-[var(--site-admin-surface)] px-3 py-1.5 text-[10px] font-bold uppercase leading-[1.15] tracking-[0.14em] text-[var(--site-admin-text)] xl:inline-flex">
                   <ShieldCheck className="size-3.5 shrink-0" aria-hidden="true" />
                   {/*
                     Two lines by width rather than a <br>. The break is
@@ -137,18 +145,18 @@ export function SiteHeader({
                 </span>
               ) : null}
               <span
-                className="hidden max-w-[150px] truncate text-sm text-[#96a2b4] xl:inline"
+                className="hidden max-w-[150px] truncate text-sm text-[var(--site-muted)] xl:inline"
                 title={viewer.email ?? undefined}
               >
                 {accountLabel}
               </span>
               <Link
                 href="/solutions"
-                className="hidden min-h-10 items-center rounded-xl bg-gradient-to-r from-[#7c5cff] to-[#5b7cff] px-4 text-sm font-bold leading-tight text-white transition-opacity hover:opacity-90 sm:inline-flex"
+                className="hidden min-h-10 items-center rounded-xl bg-[linear-gradient(90deg,var(--site-accent),var(--site-accent-secondary))] px-4 text-sm font-bold leading-tight text-white transition-opacity hover:opacity-90 sm:inline-flex"
               >
                 Open Console
               </Link>
-              <SignOutButton className="hidden min-h-10 items-center rounded-xl border border-[#2b3547] bg-[#0f1520] px-4 text-sm font-semibold text-[#d3dbe6] transition-colors hover:border-[#44536a] hover:text-white sm:inline-flex" />
+              <SignOutButton className="hidden min-h-10 items-center rounded-xl border border-[var(--site-border-strong)] bg-[var(--site-surface)] px-4 text-sm font-semibold text-[var(--site-text)] transition-colors hover:border-[var(--site-muted)] hover:text-[var(--site-text)] sm:inline-flex" />
             </>
           ) : (
             <>
@@ -160,7 +168,7 @@ export function SiteHeader({
           */}
           <Link
             href="/auth/sign-in"
-            className="hidden min-h-10 items-center rounded-xl border border-[#2b3547] bg-[#0f1520] px-4 text-sm font-semibold text-[#d3dbe6] transition-colors hover:border-[#44536a] hover:text-white sm:inline-flex"
+            className="hidden min-h-10 items-center rounded-xl border border-[var(--site-border-strong)] bg-[var(--site-surface)] px-4 text-sm font-semibold text-[var(--site-text)] transition-colors hover:border-[var(--site-muted)] hover:text-[var(--site-text)] sm:inline-flex"
           >
             Sign In
           </Link>
@@ -172,7 +180,7 @@ export function SiteHeader({
           */}
           <Link
             href="/auth/sign-up"
-            className="inline-flex min-h-10 items-center rounded-xl bg-gradient-to-r from-[#7c5cff] to-[#4d8dff] px-4 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+            className="inline-flex min-h-10 items-center rounded-xl bg-[linear-gradient(90deg,var(--site-accent),var(--site-accent-secondary))] px-4 text-sm font-semibold text-white transition-opacity hover:opacity-90"
           >
             Get Started Free
           </Link>
@@ -184,7 +192,7 @@ export function SiteHeader({
               onClick={() => setMobileOpen(true)}
               aria-label="Open site navigation"
               aria-expanded={mobileOpen}
-              className="grid size-10 place-items-center rounded-xl border border-[#2b3547] bg-[#0f1520] text-[#aab5c3] lg:hidden"
+              className="grid size-10 place-items-center rounded-xl border border-[var(--site-border-strong)] bg-[var(--site-surface)] text-[var(--site-muted)] lg:hidden"
             >
               <Menu className="size-5" aria-hidden="true" />
             </button>
@@ -203,17 +211,20 @@ export function SiteHeader({
             aria-hidden="true"
             tabIndex={-1}
           />
-          <div className="absolute inset-x-0 top-0 border-b border-[#1c2433] bg-[#0a0e15] p-4 pb-6">
+          <div className="absolute inset-x-0 top-0 border-b border-[var(--site-border)] bg-[var(--site-bg)] p-4 pb-6">
             <div className="flex items-center justify-between">
               <BrandMark />
-              <button
-                type="button"
-                onClick={() => setMobileOpen(false)}
-                aria-label="Close site navigation"
-                className="grid size-10 place-items-center rounded-xl border border-[#2b3547] text-[#aab5c3]"
-              >
-                <X className="size-5" aria-hidden="true" />
-              </button>
+              <div className="flex items-center gap-2">
+                <ThemeToggle className="border-[var(--site-border-strong)] bg-[var(--site-surface)] text-[var(--site-muted)]" />
+                <button
+                  type="button"
+                  onClick={() => setMobileOpen(false)}
+                  aria-label="Close site navigation"
+                  className="grid size-10 place-items-center rounded-xl border border-[var(--site-border-strong)] text-[var(--site-muted)]"
+                >
+                  <X className="size-5" aria-hidden="true" />
+                </button>
+              </div>
             </div>
             <nav aria-label="Mobile" className="mt-5 grid grid-cols-1 gap-1">
               {navItems.map((item) => (
@@ -225,8 +236,8 @@ export function SiteHeader({
                   className={cn(
                     "rounded-xl px-3 py-3 text-sm font-medium",
                     isActive(item.href)
-                      ? "bg-[#171233] text-[#c4b5fd]"
-                      : "text-[#9aa6b8] hover:bg-[#101620] hover:text-white",
+                      ? "bg-[var(--site-accent-surface)] text-[var(--site-accent-text)]"
+                      : "text-[var(--site-muted)] hover:bg-[var(--site-surface)] hover:text-[var(--site-text)]",
                   )}
                 >
                   {item.label}
@@ -234,32 +245,32 @@ export function SiteHeader({
               ))}
               {viewer.signedIn ? (
                 <>
-                  <p className="mt-2 truncate px-3 text-xs text-[#6f7c90]">
+                  <p className="mt-2 truncate px-3 text-xs text-[var(--site-faint)]">
                     Signed in as {accountLabel}
                     {viewer.isSuperAdmin ? " · Super admin" : ""}
                   </p>
                   <Link
                     href="/solutions"
                     onClick={() => setMobileOpen(false)}
-                    className="rounded-xl bg-gradient-to-r from-[#7c5cff] to-[#4d8dff] px-3 py-3 text-center text-sm font-semibold text-white"
+                    className="rounded-xl bg-[linear-gradient(90deg,var(--site-accent),var(--site-accent-secondary))] px-3 py-3 text-center text-sm font-semibold text-white"
                   >
                     Open Console
                   </Link>
-                  <SignOutButton className="w-full rounded-xl border border-[#2b3547] px-3 py-3 text-center text-sm font-semibold text-[#d3dbe6]" />
+                  <SignOutButton className="w-full rounded-xl border border-[var(--site-border-strong)] px-3 py-3 text-center text-sm font-semibold text-[var(--site-text)]" />
                 </>
               ) : (
                 <>
               <Link
                 href="/auth/sign-up"
                 onClick={() => setMobileOpen(false)}
-                className="mt-2 rounded-xl bg-gradient-to-r from-[#7c5cff] to-[#4d8dff] px-3 py-3 text-center text-sm font-semibold text-white"
+                className="mt-2 rounded-xl bg-[linear-gradient(90deg,var(--site-accent),var(--site-accent-secondary))] px-3 py-3 text-center text-sm font-semibold text-white"
               >
                 Get Started Free
               </Link>
               <Link
                 href="/auth/sign-in"
                 onClick={() => setMobileOpen(false)}
-                className="rounded-xl border border-[#2b3547] px-3 py-3 text-center text-sm font-semibold text-[#d3dbe6]"
+                className="rounded-xl border border-[var(--site-border-strong)] px-3 py-3 text-center text-sm font-semibold text-[var(--site-text)]"
               >
                 Sign In
               </Link>

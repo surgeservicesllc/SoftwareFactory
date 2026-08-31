@@ -1,10 +1,26 @@
 # SoftwareFactory — shared working status
 
+## SITE-WIDE DARK/LIGHT THEME REPOSITORY CANDIDATE; RELEASE OPEN (2026-08-31 — PICK UP HERE)
+
+- Dark is the first-visit default everywhere. A valid saved light choice is
+  applied before paint and persists across products, reloads, and tabs.
+- Theme controls are wired through SiteHeader, FactoryShell, customer portal,
+  and offline chrome; every visual layout reaches one of those owners.
+- Root, Factory, and Services palettes support both modes. Services is now dark
+  by default and keeps its prior sage/white design as light mode.
+- Focused contracts and the 6/6 desktop/tablet/mobile browser theme journey are green,
+  including persistence, responsive overflow, exact palettes, axe, and >=4.5:1
+  token contrast.
+- Consolidated lint/typecheck, 559 test files / 6,415 tests, the 276-page
+  production build, diff check, and changed-file secret scan are green.
+- NEXT: publish one exact head, require all four exact-head CI jobs, then verify exact READY
+  Vercel/health and production dark/light persistence before acceptance.
+
 ## GROK CLAIM/SPECIALIST ADMISSION REPOSITORY CANDIDATE; RELEASE, HOSTED, AND E2E OPEN (2026-08-31 — PICK UP HERE)
 
 - `20260831000900_grok_claim_admission_fence.sql` is frozen at canonical LF
-  SHA-256 `795d49b41b2de34819272a45a837d50aa6c3808db5a2c85e6a4ad769d5deff6b`
-  (92,659 LF bytes). Protocol v3 is the only service-role Grok claim path;
+  SHA-256 `7f2dc3b80e466b3c06f589ac6383fd768df847d66e02ec0cab53b8d8431ab737`
+  (92,648 LF bytes). Protocol v3 is the only service-role Grok claim path;
   Resume/wake and graph/Phase 1C claims revalidate the complete current
   admission, and a worker receives only the exact admitted credential after
   claim.
@@ -22,10 +38,11 @@
   behavior/contracts 10/10, worker/auth runtime 69/69. Earlier combined
   planner/admission/release lanes were 164/164 before final rebase and are not
   final full-release evidence.
-- NEXT 1: run final lint, typecheck, full tests, production build,
-  browser/accessibility, migration/catalog/RLS/ACL/runtime/rollback, secret,
-  and diff checks; publish one exact candidate; require all four exact-head CI
-  jobs plus exact READY Vercel and matching health.
+- NEXT 1: consolidated local lint, typecheck, 559 test files / 6,415 tests,
+  276-page production build, 6/6 site-theme browser journey, secret scan, and
+  diff check are green. Publish one final exact candidate; require all four
+  exact-head CI jobs plus exact READY Vercel and matching health, and separately
+  run the migration/catalog/RLS/ACL/runtime/rollback gates before hosting 009/010.
 - NEXT 2: use only `.github/workflows/grok-bot-completion-migrations.yml` for
   fresh `probe` -> 009 `claim-admission-fence` -> 010
   `specialist-admission-planning` -> fresh `verify`. Never broad-push, replay,

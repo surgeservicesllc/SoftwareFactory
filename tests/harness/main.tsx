@@ -1,4 +1,5 @@
 import { BudgetTrackerConsole } from "@/components/budget/console";
+import { BudgetShell } from "@/components/budget/shell";
 import { FactoryStepConsole } from "@/components/graph/factory-step-console";
 import { factoryStep } from "@/lib/sdlc/factory-steps";
 import { LifecycleConsole } from "@/components/graph/lifecycle-console";
@@ -49,6 +50,8 @@ import { AppShell } from "@/components/app-shell";
 import { DecisionOverview } from "@/components/decision-overview";
 import { DecisionProductCards } from "@/components/decision-products";
 import { SiteHeader } from "@/components/marketing/site-header";
+import { ServicesShell } from "@/components/services/shell";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { BacklogConsole } from "@/components/backlog-console";
 import { ConnectionsConsole } from "@/components/connections-console";
 import { ProjectBots } from "@/components/project-bots";
@@ -401,7 +404,92 @@ function InShell({ children }: { children: React.ReactNode }) {
   );
 }
 
+/**
+ * Small theme probes for the browser contract.
+ *
+ * They use the same semantic classes and product scopes as the real shells,
+ * but carry no server data. That keeps the dark/light check fast and makes a
+ * colour failure name the token boundary that failed rather than an unrelated
+ * fixture request.
+ */
+function ThemeProbe({ title }: { title: string }) {
+  return (
+    <section
+      className="mx-auto w-full max-w-3xl bg-background p-4 text-foreground sm:p-6"
+      data-testid="theme-surface"
+    >
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-xl font-semibold text-foreground">{title}</h1>
+          <p className="mt-1 text-sm text-muted">The selected semantic palette is visible here.</p>
+        </div>
+        <ThemeToggle />
+      </div>
+      <article className="card mt-5 p-4" data-testid="theme-card">
+        <h2 className="font-semibold text-foreground">Semantic surface</h2>
+        <p className="mt-1 text-sm text-muted">Background, border and text come from tokens.</p>
+      </article>
+    </section>
+  );
+}
+
+function ServicesThemeProbe() {
+  return (
+    <ServicesShell>
+      <ThemeProbe title="Services theme probe" />
+      <div className="mx-auto grid w-full max-w-3xl gap-4 px-4 pb-6 sm:px-6">
+        <span
+          className="w-fit rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800"
+          data-testid="theme-status-chip"
+        >
+          Needs review
+        </span>
+        {/* Printed labels and reports are paper, not application chrome. They
+            intentionally remain white in both themes. */}
+        <article
+          className="rounded-md border border-slate-200 bg-white p-4 text-slate-900"
+          data-testid="theme-print-surface"
+        >
+          <h2 className="font-semibold">Printable station label</h2>
+          <p className="mt-1 font-mono text-xs">STATION-1042</p>
+        </article>
+      </div>
+    </ServicesShell>
+  );
+}
+
+function CustomerThemeProbe() {
+  return (
+    <div className="services-theme min-h-screen bg-canvas" data-testid="customer-theme-shell">
+      <header className="border-b border-line bg-surface">
+        <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
+          <span className="text-sm font-semibold text-foreground">Your service</span>
+          <ThemeToggle />
+        </div>
+      </header>
+      <main className="mx-auto w-full max-w-3xl p-4 sm:p-6">
+        <article className="card p-4" data-testid="theme-card">
+          <h1 className="text-xl font-semibold text-foreground">Customer portal</h1>
+          <p className="mt-1 text-sm text-muted">Visits, invoices and service requests.</p>
+        </article>
+      </main>
+    </div>
+  );
+}
+
 const CASES: Record<string, () => React.ReactElement> = {
+  "theme-root": () => (
+    <main className="min-h-screen bg-background text-foreground">
+      <ThemeProbe title="Root theme probe" />
+    </main>
+  ),
+  "theme-services": () => <ServicesThemeProbe />,
+  "theme-customer": () => <CustomerThemeProbe />,
+  "theme-budget": () => (
+    <BudgetShell>
+      <ThemeProbe title="Budget Tracker theme probe" />
+    </BudgetShell>
+  ),
   runs: () => <InShell><RunsConsole /></InShell>,
   reports: () => <InShell><ReportsConsole /></InShell>,
   agents: () => <InShell><AgentsConsole /></InShell>,
