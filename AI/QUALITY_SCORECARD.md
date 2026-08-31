@@ -2,7 +2,7 @@
 
 Last reviewed: 2026-08-31
 
-**Addendum, 2026-08-31 latest+46 - Grok hosted completion and verifier ACL
+**Addendum, 2026-08-31 latest+46 - Grok hosted completion and verifier catalog
 containment (ADR-226):** Exact main
 `85a7fed15ad876be4e56fd74903e41b68d4488b4` passed all four jobs in CI
 `33395309085`, reached READY deployment
@@ -14,8 +14,11 @@ applied and ledgered only 010 and reloaded PostgREST, then stopped on its
 combined specialist verifier. The verifier treated one table ACL item as one
 `aclexplode` privilege row; PostgreSQL expands the item to seven table
 privileges. The corrected workflow requires one ACL item, seven exact expanded
-owner privileges, and no non-owner or grantable row. Its focused contract is
-12/12. Fresh read-only `verify`, signed-in acceptance, and real provider-backed
+owner privileges, and no non-owner or grantable row. PostgreSQL 18 also adds
+28 `contype='n'` rows for the table's NOT NULL declarations; the corrected
+verifier excludes those from the 24 named business constraints and attests all
+28 required NOT NULL attributes separately. Its focused contract is 12/12.
+Fresh read-only `verify`, signed-in acceptance, and real provider-backed
 E2E still remain; workers/autonomy/actions are OFF and the kill switch is ON.
 **GROK BOT: PRODUCTION READY is not declared.**
 

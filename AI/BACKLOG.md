@@ -223,7 +223,8 @@ the algorithm needs exists.
   safety evidence; never broad-push, replay, repair, reset, or down-migrate.
   Both one-file applies are complete and ledger is now `1|1`; 010 postflight
   stopped before acceptance because its verifier counted expanded table
-  privileges as ACL items. Ship ADR-226's verifier-only correction, then run
+  privileges as ACL items and PostgreSQL 18 NOT NULL constraints as named
+  business constraints. Ship ADR-226's verifier-only corrections, then run
   only fresh read-only `verify`.
 - [ ] Perform signed-in production create/return/reload acceptance with workers
   still OFF, proving the exact current roster and route persist without

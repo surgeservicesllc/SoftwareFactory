@@ -1,6 +1,6 @@
 # Current state
 
-## 2026-08-31: Grok completion DDL is hosted; acceptance is stopped on a verifier-only ACL fix (ADR-226)
+## 2026-08-31: Grok completion DDL is hosted; acceptance is stopped on verifier-only catalog fixes (ADR-226)
 
 Exact main `85a7fed15ad876be4e56fd74903e41b68d4488b4` passed all four
 required jobs in CI run `33395309085`, reached READY Vercel deployment
@@ -13,12 +13,14 @@ runtime, lint, health, and stopped containment.
 
 Protected run `33397811324` applied and ledgered only hash-pinned
 `20260831001000` and reloaded PostgREST, then stopped at its postflight. The
-failure is in the workflow's table-ACL verifier: it required one row from
+failure is in two workflow predicates, not the hosted DDL. The table-ACL check required one row from
 `aclexplode(relacl)` for one owner ACL item, but PostgreSQL expands that table
-ACL item into the seven standard table privileges. The migration is never to
-be replayed, reset, repaired in history, or down-migrated. ADR-226 changes the
-verifier to require exactly one ACL item, exactly seven expanded privileges,
-and owner-only/non-grantable posture before a fresh read-only `verify` run.
+ACL item into the seven standard table privileges. PostgreSQL 18 also exposes
+the table's 28 NOT NULL declarations as `pg_constraint` rows; they must not be
+mistaken for the 24 named business constraints and are verified separately
+through `pg_attribute`. The migration is never to be replayed, reset, repaired
+in history, or down-migrated. ADR-226 corrects both predicates before a fresh
+read-only `verify` run.
 
 Workers, autonomy, and every automatic action stayed OFF; the global kill
 switch stayed ON. Signed-in create/return/reload acceptance and a real
@@ -110,7 +112,7 @@ provider-backed end-to-end evidence.
 Migration `00900` was accepted by protected apply run `33397377838` and
 independent read-only run `33397710586`. Migration `01000` was applied and
 ledgered by run `33397811324`; that run then stopped on the verifier-only ACL
-cardinality defect described in ADR-226. Workers, autonomy, and every automatic
+and PostgreSQL-18 constraint-enumeration defects described in ADR-226. Workers, autonomy, and every automatic
 action remain OFF, and the global kill switch remains ON. No actual
 provider-backed run, repository change, draft pull request, or exact-head CI
 chain has passed through this boundary. **GROK BOT: PRODUCTION READY is not

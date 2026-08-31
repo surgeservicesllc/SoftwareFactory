@@ -2,7 +2,7 @@
 
 Last updated: 2026-08-31
 
-## Newest (2026-08-31, latest+46): Grok 009/010 hosted; verifier-only ACL containment (ADR-226)
+## Newest (2026-08-31, latest+46): Grok 009/010 hosted; verifier-only catalog containment (ADR-226)
 
 Exact main `85a7fed15ad876be4e56fd74903e41b68d4488b4` is green in all four
 jobs of CI `33395309085`, READY as Vercel deployment
@@ -15,8 +15,11 @@ Run `33397811324` applied and ledgered only 010 and reloaded PostgREST, then
 stopped at the combined specialist postflight. Do not replay 010. The failure
 is verifier-only: one owner table ACL item expands through `aclexplode` into
 seven privilege rows, while the workflow incorrectly expected one expanded
-row. The candidate changes that check to exact `cardinality(relacl)=1`, seven
-expanded table privileges, and no non-owner or grantable ACL row. After this
+row; PostgreSQL 18 also exposes 28 NOT NULL declarations as constraint rows,
+while the verifier expected only the 24 named business constraints. The
+candidate verifies exact ACL item and privilege posture, filters `contype='n'`
+from the named-constraint set, and separately proves all 28 required NOT NULL
+attributes. After this
 workflow-only correction reaches exact green main/READY production, run only
 the fresh read-only `scope=verify`; it must prove ledger `1|1`, exact
 catalog/RLS/ACL/runtime/rollback/lint/health, and stopped containment.

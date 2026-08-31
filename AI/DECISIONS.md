@@ -5863,7 +5863,7 @@ serious/critical axe. A deterministic contract independently prevents palette
 text, muted text, or faint text from falling below 4.5:1 on background, surface,
 or raised surface.
 
-## ADR-226 - Count an ACL item as an item and its privileges as privileges
+## ADR-226 - Verify ACL items, privileges, and PostgreSQL 18 constraints by their own semantics
 
 - **Date**: 2026-08-31
 - **Status**: Accepted; verifier correction pending exact-head release and
@@ -5878,11 +5878,20 @@ verifier defect is the new table ACL predicate: it treated the row count from
 table ACL item but expands it into seven rows, one for each standard table
 privilege.
 
+The same combined predicate assumed `pg_constraint` contained only the 24
+named primary/foreign/unique/check constraints. PostgreSQL 18 additionally
+represents this table's 28 NOT NULL declarations as `contype='n'` rows. Those
+rows are neither drift nor substitutes for the named constraints. The exact
+named set therefore filters `contype='n'`, while `pg_attribute` independently
+proves that all 28 columns other than nullable `provider_identity` are NOT
+NULL.
+
 The exact table posture is therefore verified on both levels: `relacl` must
 contain exactly one ACL item; `aclexplode(relacl)` must contain exactly seven
 privilege rows; and every expanded row must be owner-to-owner and
 non-grantable. Existing explicit denials for `anon`, `authenticated`, and
-`service_role` remain mandatory. This is a verifier-only correction: it does
+`service_role` remain mandatory. This and the PostgreSQL 18 constraint split
+are verifier-only corrections: they do
 not replay 010, change its ledger row, alter hosted catalog, enable a worker,
 weaken RLS, or change autonomy. After the corrected workflow itself passes
 exact-head CI and READY deployment identity, only a fresh read-only `verify`

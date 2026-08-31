@@ -426,6 +426,8 @@ describe("Grok Bot completion migration workflow", () => {
       "cardinality(relation.relacl)=1",
       "count(*) from aclexplode(relation.relacl))=7",
       "count(*)=29 from pg_attribute",
+      "count(*)=28 from pg_attribute",
+      "attnotnull<>(attname<>'provider_identity')",
       "grok_specialist_admissions_select_members",
       "count(*)=2 and bool_and(tgfoid='public.reject_grok_evidence_mutation()'::regprocedure)",
       "count(*)=24 and bool_and(convalidated)",
@@ -439,6 +441,7 @@ describe("Grok Bot completion migration workflow", () => {
     ]) {
       expect(postflight).toContain(evidence);
     }
+    expect(postflight.match(/contype<>'n'/g)).toHaveLength(4);
     expect(postflight).not.toContain(
       "count(*) from aclexplode(relation.relacl))=1",
     );
