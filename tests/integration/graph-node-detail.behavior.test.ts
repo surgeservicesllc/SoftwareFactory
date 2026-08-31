@@ -8,10 +8,11 @@ import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { describeNode, type DetailedNode } from "@/lib/graph/node-detail";
+import { LATEST_MIGRATION } from "../support/latest-migration";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const migrationsDirectory = resolve(repositoryRoot, "supabase/migrations");
-const latestMigration = "20260830001800_customer_portal.sql";
+const latestMigration = LATEST_MIGRATION;
 
 const ownerId = "00000000-0000-4000-8000-00000000ad01";
 const organizationId = "10000000-0000-4000-8000-00000000ad01";

@@ -8,6 +8,7 @@ import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { SDLC_STAGES } from "@/lib/sdlc/lifecycle";
+import { LATEST_MIGRATION } from "../support/latest-migration";
 
 /**
  * The three stages ADR-136 held back, now earned.
@@ -50,7 +51,7 @@ beforeAll(async () => {
   const migrationFiles = (await readdir(migrationsRoot))
     .filter((name) => /^\d+.*\.sql$/.test(name))
     .sort();
-  expect(migrationFiles.at(-1)).toBe("20260830001800_customer_portal.sql");
+  expect(migrationFiles.at(-1)).toBe(LATEST_MIGRATION);
   for (const file of migrationFiles) {
     await db.exec(await readFile(resolve(migrationsRoot, file), "utf8"));
   }

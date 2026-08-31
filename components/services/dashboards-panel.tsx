@@ -1,0 +1,389 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { TrendingUp } from "lucide-react";
+
+import { Card, Notice, PageHeader, SectionTitle } from "@/components/ui";
+import type { DashboardsPayload } from "@/components/services/types";
+import { cn } from "@/lib/cn";
+
+/**
+ * How the business is actually running.
+ *
+ * Every figure on this page is aggregated in the database over the whole
+ * book, not over the first page of a fetch, so the totals are totals. And
+ * every rate that has no denominator reads as an em dash rather than a
+ * zero — a month nobody was billed in has no collection rate, and printing
+ * "0.0%" there would say the opposite of what happened.
+ *
+ * Three things are shown that a dashboard usually leaves out, because they
+ * are the ones worth acting on: what is open but not yet due (kept apart
+ * from what is overdue), customers with no active service plan, and shifts
+ * still running — which contribute no worked minutes rather than being
+ * counted as though they had ended.
+ */
+
+const BUCKET_LABELS: Record<string, string> = {
+  current: "Not yet due",
+  "1-30": "1–30 days",
+  "31-60": "31–60 days",
+  "61-90": "61–90 days",
+  "90+": "Over 90 days",
+  undated: "No due date",
+};
+
+type Tab = "revenue" | "receivable" | "technicians" | "routes";
+
+function money(cents: number): string {
+  return `$${(cents / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+}
+
+/** An em dash where there is no measurement, never a zero. */
+function rate(bps: number | null): string {
+  return bps === null ? "—" : `${(bps / 100).toFixed(1)}%`;
+}
+
+function hours(minutes: number | null): string {
+  return minutes === null ? "—" : `${(minutes / 60).toFixed(1)}h`;
+}
+
+export function ServicesDashboardsPanel() {
+  const [data, setData] = useState<DashboardsPayload | null>(null);
+  const [listError, setListError] = useState<string | null>(null);
+  const [tab, setTab] = useState<Tab>("revenue");
+
+  const refresh = useCallback(async () => {
+    try {
+      const response = await fetch("/api/services/dashboards", {
+        headers: { accept: "application/json" },
+      });
+      const body = (await response.json()) as DashboardsPayload & { error?: { message?: string } };
+      if (!response.ok) {
+        setListError(body.error?.message ?? "The dashboards could not be read.");
+        return;
+      }
+      setListError(null);
+      setData(body);
+    } catch {
+      setListError("The dashboards could not be read.");
+    }
+  }, []);
+
+  useEffect(() => {
+    const kickoff = window.setTimeout(() => void refresh(), 0);
+    return () => window.clearTimeout(kickoff);
+  }, [refresh]);
+
+  /*
+   * The tallest month, used to scale the bars. Null when nothing was ever
+   * invoiced, which renders as an empty chart rather than as bars of
+   * arbitrary height.
+   */
+  const peak = useMemo(() => {
+    const values = (data?.revenue.months ?? []).map((month) =>
+      Math.max(month.invoicedCents, month.collectedCents),
+    );
+    const highest = Math.max(0, ...values);
+    return highest === 0 ? null : highest;
+  }, [data]);
+
+  return (
+    <div>
+      <PageHeader
+        title="Dashboards"
+        description="Revenue, receivable, retention, technician productivity and how the days are shaped — aggregated over the whole book in the database, not over the first page of a fetch."
+      />
+
+      {listError !== null ? <Notice tone="warning">{listError}</Notice> : null}
+
+      <Card className="mb-6">
+        <SectionTitle
+          title="The numbers worth acting on"
+          description="A rate with no denominator reads as an em dash. A month nobody was billed in has no collection rate, and printing zero there would say the opposite of what happened."
+        />
+        <dl className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4" data-testid="services-dashboard-figures">
+          <Figure
+            label={`Invoiced, ${data?.windows.months ?? 12} months`}
+            value={data === null ? "—" : money(data.revenue.totals.invoicedCents)}
+          />
+          <Figure
+            label="Overdue"
+            value={data === null ? "—" : money(data.receivable.overdueCents)}
+            tone={(data?.receivable.overdueCents ?? 0) > 0 ? "amber" : undefined}
+          />
+          <Figure
+            label="Customers with no plan"
+            value={data?.retention === null || data === undefined ? "—" : String(data?.retention?.customersWithoutPlan ?? "—")}
+            tone={(data?.retention?.customersWithoutPlan ?? 0) > 0 ? "amber" : undefined}
+          />
+          <Figure
+            label="Retention"
+            value={data === null ? "—" : rate(data.retention?.retentionBps ?? null)}
+          />
+        </dl>
+      </Card>
+
+      <div className="mb-4 flex flex-wrap gap-2" role="tablist" aria-label="Dashboards">
+        {(
+          [
+            ["revenue", "Revenue", data?.revenue.months.length],
+            ["receivable", "Receivable", data?.receivable.buckets.length],
+            ["technicians", "Technicians", data?.productivity.technicians.length],
+            ["routes", "Route density", data?.routes.days.length],
+          ] as const
+        ).map(([key, label, count]) => (
+          <button
+            key={key}
+            type="button"
+            role="tab"
+            aria-selected={tab === key}
+            onClick={() => setTab(key)}
+            className={cn("btn px-3 py-2 text-sm", tab === key ? "btn-primary" : "btn-secondary")}
+          >
+            {label}
+            {typeof count === "number" ? <span className="ml-1.5 text-xs opacity-70">{count}</span> : null}
+          </button>
+        ))}
+      </div>
+
+      {tab === "revenue" ? (
+        <Card>
+          <SectionTitle
+            title="Invoiced and collected"
+            description="Two series on purpose. An invoice is billed in the month it was issued; a payment lands in the month it arrived, which is often a different one — and that lag is exactly what a collections desk watches."
+          />
+          {(data?.revenue.months ?? []).length === 0 ? (
+            <p className="mt-4 text-sm text-muted" data-testid="services-dashboard-revenue-empty">
+              Nothing billed yet. Issue an invoice on the Billing page and the month appears here.
+            </p>
+          ) : (
+            <div className="mt-4 overflow-x-auto">
+              <table className="w-full text-left text-sm" data-testid="services-dashboard-revenue-table">
+                <thead>
+                  <tr className="border-b border-line text-xs uppercase tracking-wide text-faint">
+                    <th className="py-2 pr-3 font-medium">Month</th>
+                    <th className="py-2 pr-3 font-medium">Invoices</th>
+                    <th className="py-2 pr-3 font-medium">Invoiced</th>
+                    <th className="py-2 pr-3 font-medium">Collected</th>
+                    <th className="py-2 pr-3 font-medium">Refunded</th>
+                    <th className="py-2 pr-3 font-medium">Collection rate</th>
+                    <th className="py-2 font-medium">Shape</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-line">
+                  {(data?.revenue.months ?? []).map((month) => (
+                    <tr key={month.month}>
+                      <td className="py-2.5 pr-3 text-foreground">{month.month.slice(0, 7)}</td>
+                      <td className="py-2.5 pr-3 tabular-nums text-muted">{month.invoiceCount}</td>
+                      <td className="py-2.5 pr-3 tabular-nums text-muted">{money(month.invoicedCents)}</td>
+                      <td className="py-2.5 pr-3 tabular-nums text-foreground">{money(month.collectedCents)}</td>
+                      <td className="py-2.5 pr-3 tabular-nums text-muted">
+                        {month.refundedCents === 0 ? "—" : money(month.refundedCents)}
+                      </td>
+                      <td className="py-2.5 pr-3 tabular-nums text-muted">
+                        {rate(month.collectionRateBps)}
+                      </td>
+                      <td className="py-2.5">
+                        {peak === null ? (
+                          "—"
+                        ) : (
+                          <span className="flex h-4 w-32 items-end gap-0.5" aria-hidden="true">
+                            <span
+                              className="block w-3 rounded-sm bg-slate-300"
+                              style={{ height: `${Math.round((month.invoicedCents / peak) * 100)}%` }}
+                            />
+                            <span
+                              className="block w-3 rounded-sm bg-emerald-400"
+                              style={{ height: `${Math.round((month.collectedCents / peak) * 100)}%` }}
+                            />
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Card>
+      ) : null}
+
+      {tab === "receivable" ? (
+        <Card>
+          <SectionTitle
+            title="Receivable, by age"
+            description="What is not yet due and what has no due date at all are kept apart from what is late. Folding them in is the usual way an aging report overstates itself."
+          />
+          <div className="mt-4 overflow-x-auto">
+            <table className="w-full text-left text-sm" data-testid="services-dashboard-aging-table">
+              <thead>
+                <tr className="border-b border-line text-xs uppercase tracking-wide text-faint">
+                  <th className="py-2 pr-3 font-medium">Bucket</th>
+                  <th className="py-2 pr-3 font-medium">Invoices</th>
+                  <th className="py-2 font-medium">Balance</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line">
+                {(data?.receivable.buckets ?? []).map((bucket) => (
+                  <tr key={bucket.bucket}>
+                    <td className="py-2.5 pr-3 text-foreground">
+                      {BUCKET_LABELS[bucket.bucket] ?? bucket.bucket}
+                    </td>
+                    <td className="py-2.5 pr-3 tabular-nums text-muted">{bucket.invoiceCount}</td>
+                    <td
+                      className={cn(
+                        "py-2.5 tabular-nums",
+                        bucket.overdue && bucket.balanceCents > 0 ? "text-amber-700" : "text-muted",
+                      )}
+                    >
+                      {money(bucket.balanceCents)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {data !== null && data.receivable.undatedCents > 0 ? (
+            <p className="mt-3 text-sm text-muted">
+              {money(data.receivable.undatedCents)} sits on invoices with no due date, so it cannot
+              be aged. That is a data gap rather than a collections problem — set terms on those
+              invoices and they will fall into a bucket.
+            </p>
+          ) : null}
+        </Card>
+      ) : null}
+
+      {tab === "technicians" ? (
+        <Card>
+          <SectionTitle
+            title="Technician productivity"
+            description="Everybody on the roster appears, including anybody with nothing scheduled — an empty row is the finding, and dropping it would flatter every average above it."
+          />
+          {data !== null && data.productivity.runningShifts > 0 ? (
+            <Notice tone="info">
+              {data.productivity.runningShifts} shift
+              {data.productivity.runningShifts === 1 ? " is" : "s are"} still running and
+              contribute no worked hours. An open shift has no total yet, and counting it as
+              finished would inflate every figure here.
+            </Notice>
+          ) : null}
+          <div className="mt-4 overflow-x-auto">
+            <table className="w-full text-left text-sm" data-testid="services-dashboard-technicians-table">
+              <thead>
+                <tr className="border-b border-line text-xs uppercase tracking-wide text-faint">
+                  <th className="py-2 pr-3 font-medium">Technician</th>
+                  <th className="py-2 pr-3 font-medium">Scheduled</th>
+                  <th className="py-2 pr-3 font-medium">Completed</th>
+                  <th className="py-2 pr-3 font-medium">Cancelled</th>
+                  <th className="py-2 pr-3 font-medium">Completion</th>
+                  <th className="py-2 font-medium">Worked</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line">
+                {(data?.productivity.technicians ?? []).slice(0, 100).map((technician) => (
+                  <tr key={technician.technicianId}>
+                    <td className="py-2.5 pr-3 text-foreground">
+                      {technician.name}
+                      {technician.active ? null : (
+                        <span className="ml-1.5 text-xs text-faint">off roster</span>
+                      )}
+                    </td>
+                    <td className="py-2.5 pr-3 tabular-nums text-muted">{technician.scheduled}</td>
+                    <td className="py-2.5 pr-3 tabular-nums text-foreground">{technician.completed}</td>
+                    <td className="py-2.5 pr-3 tabular-nums text-muted">{technician.cancelled}</td>
+                    <td className="py-2.5 pr-3 tabular-nums text-muted">
+                      {rate(technician.completionRateBps)}
+                    </td>
+                    <td className="py-2.5 tabular-nums text-muted">
+                      {hours(technician.workedMinutes)}
+                      {technician.runningShifts > 0 ? (
+                        <span className="ml-1.5 text-xs text-sky-700">
+                          +{technician.runningShifts} running
+                        </span>
+                      ) : null}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      ) : null}
+
+      {tab === "routes" ? (
+        <Card>
+          <SectionTitle
+            title="Route density"
+            description="How each day is actually shaped: how many stops, how much of the span is booked, and how much of it is a hole."
+          />
+          <Notice tone="info">
+            Drive-time sequencing is <strong>Not Connected</strong> — no mapping provider is
+            configured, so distances cannot be computed and nothing here estimates them. What is
+            shown comes from real scheduled windows.
+          </Notice>
+          {(data?.routes.days ?? []).length === 0 ? (
+            <p className="mt-4 text-sm text-muted" data-testid="services-dashboard-routes-empty">
+              No visits scheduled in this window. Book work on the Schedule page and the days
+              appear here.
+            </p>
+          ) : (
+            <div className="mt-4 overflow-x-auto">
+              <table className="w-full text-left text-sm" data-testid="services-dashboard-routes-table">
+                <thead>
+                  <tr className="border-b border-line text-xs uppercase tracking-wide text-faint">
+                    <th className="py-2 pr-3 font-medium">Day</th>
+                    <th className="py-2 pr-3 font-medium">Stops</th>
+                    <th className="py-2 pr-3 font-medium">Accounts</th>
+                    <th className="py-2 pr-3 font-medium">Span</th>
+                    <th className="py-2 pr-3 font-medium">Booked</th>
+                    <th className="py-2 font-medium">Idle</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-line">
+                  {(data?.routes.days ?? []).slice(0, 100).map((day) => (
+                    <tr key={`${day.day}:${day.technicianId}`}>
+                      <td className="py-2.5 pr-3 text-foreground">{day.day}</td>
+                      <td className="py-2.5 pr-3 tabular-nums text-muted">{day.stops}</td>
+                      <td className="py-2.5 pr-3 tabular-nums text-muted">{day.accounts}</td>
+                      <td className="py-2.5 pr-3 tabular-nums text-muted">{hours(day.spanMinutes)}</td>
+                      <td className="py-2.5 pr-3 tabular-nums text-muted">{hours(day.bookedMinutes)}</td>
+                      <td
+                        className={cn(
+                          "py-2.5 tabular-nums",
+                          (day.idleMinutes ?? 0) >= 120 ? "text-amber-700" : "text-muted",
+                        )}
+                      >
+                        {/* Null on a one-stop day: one stop has no gaps, and a
+                            zero there would read as a full day. */}
+                        {hours(day.idleMinutes)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Card>
+      ) : null}
+    </div>
+  );
+}
+
+function Figure({ label, value, tone }: { label: string; value: string; tone?: "amber" | "rose" }) {
+  return (
+    <div className="rounded-xl border border-line bg-white p-4">
+      <dt className="flex items-center gap-2 text-xs uppercase tracking-wide text-faint">
+        <TrendingUp className="size-3.5" aria-hidden="true" />
+        {label}
+      </dt>
+      <dd
+        className={cn(
+          "mt-1 text-2xl font-semibold tabular-nums",
+          tone === "rose" ? "text-rose-700" : tone === "amber" ? "text-amber-700" : "text-foreground",
+        )}
+      >
+        {value}
+      </dd>
+    </div>
+  );
+}

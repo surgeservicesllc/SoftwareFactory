@@ -1971,3 +1971,152 @@ export function toPortalRequestMineView(row: CrmPortalRequestMineRow) {
     answered: row.response !== null,
   };
 }
+
+/* ---------------------------------------------------------------------------
+ * The operating dashboards (increment 11).
+ *
+ * These row types are the return shapes of the SECURITY INVOKER aggregate
+ * functions in `20260830001900_operating_dashboards.sql`. Numeric columns
+ * arrive from PostgREST as strings when they are bigint, so every one is
+ * narrowed here rather than at each call site — and every NULLABLE one
+ * stays nullable through the mapper. A rate over an empty denominator is
+ * null, and coercing it to zero here would undo the reason it is computed
+ * in SQL at all.
+ * ------------------------------------------------------------------------- */
+
+export type CrmRevenueMonthRow = {
+  month: string;
+  invoiced_cents: number | string;
+  collected_cents: number | string;
+  refunded_cents: number | string;
+  invoice_count: number;
+  collection_rate_bps: number | null;
+};
+
+export type CrmReceivableBucketRow = {
+  bucket: string;
+  invoice_count: number;
+  balance_cents: number | string;
+};
+
+export type CrmRetentionRow = {
+  customers: number;
+  inactive: number;
+  prospects: number;
+  customers_without_plan: number;
+  contracts_active: number;
+  contracts_ended: number;
+  retention_bps: number | null;
+};
+
+export type CrmTechnicianProductivityRow = {
+  technician_id: string;
+  first_name: string;
+  last_name: string | null;
+  branch_id: string | null;
+  active: boolean;
+  scheduled: number;
+  completed: number;
+  cancelled: number;
+  completion_rate_bps: number | null;
+  worked_minutes: number | string | null;
+  running_shifts: number;
+};
+
+export type CrmRouteDayRow = {
+  day: string;
+  technician_id: string;
+  branch_id: string | null;
+  stops: number;
+  first_start: string | null;
+  last_end: string | null;
+  span_minutes: number | null;
+  booked_minutes: number | null;
+  idle_minutes: number | null;
+  accounts: number;
+};
+
+export function toRevenueMonthView(row: CrmRevenueMonthRow) {
+  const invoicedCents = Number(row.invoiced_cents);
+  const collectedCents = Number(row.collected_cents);
+  const refundedCents = Number(row.refunded_cents);
+  return {
+    month: row.month,
+    invoicedCents,
+    collectedCents,
+    refundedCents,
+    /** What actually stayed: collected less anything given back. */
+    netCents: collectedCents - refundedCents,
+    invoiceCount: row.invoice_count,
+    /** Null when nothing was invoiced that month — never 0. */
+    collectionRateBps: row.collection_rate_bps,
+  };
+}
+
+export function toReceivableBucketView(row: CrmReceivableBucketRow) {
+  return {
+    bucket: row.bucket,
+    invoiceCount: row.invoice_count,
+    balanceCents: Number(row.balance_cents),
+    /*
+     * `current` is open but not yet due and `undated` has no due date to
+     * age against; neither is late. The distinction is what stops an aging
+     * report from overstating what is actually overdue.
+     */
+    overdue: row.bucket !== "current" && row.bucket !== "undated",
+  };
+}
+
+export function toRetentionView(row: CrmRetentionRow) {
+  return {
+    customers: row.customers,
+    inactive: row.inactive,
+    prospects: row.prospects,
+    customersWithoutPlan: row.customers_without_plan,
+    contractsActive: row.contracts_active,
+    contractsEnded: row.contracts_ended,
+    /** Null when there is no book to retain. */
+    retentionBps: row.retention_bps,
+  };
+}
+
+export function toTechnicianProductivityView(row: CrmTechnicianProductivityRow) {
+  return {
+    technicianId: row.technician_id,
+    firstName: row.first_name,
+    lastName: row.last_name,
+    name: [row.first_name, row.last_name].filter(Boolean).join(" "),
+    branchId: row.branch_id,
+    active: row.active,
+    scheduled: row.scheduled,
+    completed: row.completed,
+    cancelled: row.cancelled,
+    /** Null when nothing was scheduled in the window. */
+    completionRateBps: row.completion_rate_bps,
+    /** Finished shifts only. Null when every shift in the window is open. */
+    workedMinutes: row.worked_minutes === null ? null : Number(row.worked_minutes),
+    runningShifts: row.running_shifts,
+  };
+}
+
+export function toRouteDayView(row: CrmRouteDayRow) {
+  return {
+    day: row.day,
+    technicianId: row.technician_id,
+    branchId: row.branch_id,
+    stops: row.stops,
+    firstStart: row.first_start,
+    lastEnd: row.last_end,
+    spanMinutes: row.span_minutes,
+    bookedMinutes: row.booked_minutes,
+    /** Null on a single-stop day: one stop has no gaps to measure. */
+    idleMinutes: row.idle_minutes,
+    accounts: row.accounts,
+  };
+}
+
+/** Basis points as a percentage string, or an em dash when unmeasured. */
+export function bpsLabel(bps: number | null): string {
+  if (bps === null) return "—";
+  return `${(bps / 100).toFixed(1)}%`;
+}

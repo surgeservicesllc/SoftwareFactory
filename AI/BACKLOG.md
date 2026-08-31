@@ -189,9 +189,16 @@ the full seeded E2E journey passes — increment 10 of the plan.
   migrated chain and proves one of them actually RAISES on a broken
   schema — a postflight that passes on a broken schema is worse than none,
   because it is read as proof.
-- [ ] Increment 11: operating dashboards (revenue, retention/churn,
-  technician productivity, route density) and route optimization —
-  sequencing a day's stops by real geography, not a claim of it.
+- [x] Increment 11 (ADR-199): the operating dashboards — revenue by month
+  with invoiced and collected as separate series, receivable aging that
+  keeps not-yet-due and undated out of overdue, retention with the
+  customers nobody serves, technician productivity with the idle roster
+  kept in, and route DENSITY from real scheduled windows.
+  /Services/dashboards. 20260830001900; hosted apply:
+  scope=operating-dashboards after merge.
+- [ ] Increment 11 follow-on: route OPTIMIZATION, which needs a mapping
+  provider for drive time. Density ships; sequencing by distance is
+  labelled Not Connected until credentials are supplied.
 - [ ] Increment 12: recurring auto-invoicing from service plans, AR aging,
   and dunning schedules.
 - [ ] Provider-gated, ship Not Connected until an owner supplies

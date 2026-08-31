@@ -850,3 +850,85 @@ export type PortalRequestsPayload = {
     byStatus: Record<string, number>;
   };
 };
+
+/* --- the operating dashboards (increment 11) ---------------------------- */
+
+export type RevenueMonthView = {
+  month: string;
+  invoicedCents: number;
+  collectedCents: number;
+  refundedCents: number;
+  netCents: number;
+  invoiceCount: number;
+  collectionRateBps: number | null;
+};
+
+export type ReceivableBucketView = {
+  bucket: string;
+  invoiceCount: number;
+  balanceCents: number;
+  overdue: boolean;
+};
+
+export type RetentionView = {
+  customers: number;
+  inactive: number;
+  prospects: number;
+  customersWithoutPlan: number;
+  contractsActive: number;
+  contractsEnded: number;
+  retentionBps: number | null;
+};
+
+export type TechnicianProductivityView = {
+  technicianId: string;
+  firstName: string;
+  lastName: string | null;
+  name: string;
+  branchId: string | null;
+  active: boolean;
+  scheduled: number;
+  completed: number;
+  cancelled: number;
+  completionRateBps: number | null;
+  workedMinutes: number | null;
+  runningShifts: number;
+};
+
+export type RouteDayView = {
+  day: string;
+  technicianId: string;
+  branchId: string | null;
+  stops: number;
+  firstStart: string | null;
+  lastEnd: string | null;
+  spanMinutes: number | null;
+  bookedMinutes: number | null;
+  idleMinutes: number | null;
+  accounts: number;
+};
+
+export type DashboardsPayload = {
+  organizationId: string;
+  windows: { months: number; productivityDays: number; routeDays: number };
+  revenue: {
+    months: RevenueMonthView[];
+    totals: { invoicedCents: number; collectedCents: number; refundedCents: number };
+  };
+  receivable: {
+    buckets: ReceivableBucketView[];
+    outstandingCents: number;
+    overdueCents: number;
+    undatedCents: number;
+  };
+  retention: RetentionView | null;
+  productivity: {
+    technicians: TechnicianProductivityView[];
+    idle: number;
+    runningShifts: number;
+  };
+  routes: {
+    days: RouteDayView[];
+    optimization: { available: boolean; label: string };
+  };
+};

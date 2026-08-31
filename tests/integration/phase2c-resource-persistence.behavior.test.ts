@@ -8,6 +8,7 @@ import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { FAULT_THRESHOLDS } from "@/lib/resources/breakers";
+import { LATEST_MIGRATION } from "../support/latest-migration";
 
 /**
  * Proof that the Resource Manager's memory works, against the real migrated
@@ -57,7 +58,7 @@ describe("Phase 2C resource persistence", () => {
     `);
 
     const migrationFiles = (await readdir(migrationsDirectory)).filter((file) => file.endsWith(".sql")).sort();
-    expect(migrationFiles.at(-1)).toBe("20260830001800_customer_portal.sql");
+    expect(migrationFiles.at(-1)).toBe(LATEST_MIGRATION);
     for (const file of migrationFiles) {
       await db.exec(await readFile(resolve(migrationsDirectory, file), "utf8"));
     }

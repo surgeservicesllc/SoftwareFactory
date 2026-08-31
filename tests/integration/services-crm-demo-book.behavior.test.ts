@@ -15,10 +15,11 @@ import {
   DEMO_TECHNICIANS,
   demoBookTotals,
 } from "@/lib/services/demo-data";
+import { LATEST_MIGRATION } from "../support/latest-migration";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const migrationsDirectory = resolve(repositoryRoot, "supabase/migrations");
-const latestMigration = "20260830001800_customer_portal.sql";
+const latestMigration = LATEST_MIGRATION;
 
 /**
  * The Demo Data book, replayed against the real migration chain move for

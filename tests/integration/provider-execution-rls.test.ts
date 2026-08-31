@@ -6,6 +6,7 @@ import { resolve } from "node:path";
 import { PGlite } from "@electric-sql/pglite";
 import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { LATEST_MIGRATION } from "../support/latest-migration";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 
@@ -120,7 +121,7 @@ describe("Phase 2A provider execution layer", () => {
     const migrationFiles = (await readdir(migrationsRoot))
       .filter((file) => /^\d+.*\.sql$/.test(file))
       .sort();
-    expect(migrationFiles.at(-1)).toBe("20260830001800_customer_portal.sql");
+    expect(migrationFiles.at(-1)).toBe(LATEST_MIGRATION);
     for (const migrationFile of migrationFiles) {
       await db.exec(await source(`supabase/migrations/${migrationFile}`));
     }

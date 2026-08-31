@@ -68,6 +68,7 @@ on:
           - documents-canvassing-marketing
           - forms-timesheets-licences
           - customer-portal
+          - operating-dashboards
           - probe
 permissions:
   actions: read
@@ -1706,6 +1707,28 @@ jobs:
           #     and by no one else.
           psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/postflight/customer-portal.sql
           echo "Customer portal applied; forced RLS, no-delete, sealed resolver and nine caller-scoped definers verified."
+
+      - name: Apply the operating dashboards (scope=operating-dashboards)
+        if: ${{ inputs.scope == 'operating-dashboards' }}
+        run: |
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+          VERSION=20260830001900_operating_dashboards
+          FILE="supabase/migrations/${VERSION}.sql"
+          sha256sum "$FILE"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied "${VERSION%%_*}"
+          else
+            npx supabase migration repair --status applied "${VERSION%%_*}" --db-url "$DB_URL"
+          fi
+          psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/postflight/operating-dashboards.sql
+          echo "Operating dashboards applied; five invoker aggregates verified as non-definers, reachable only by authenticated."
 
       - name: Normalize exact legacy bot ACLs (scope=bot-legacy-acl-normalization)
         if: ${{ inputs.scope == 'bot-legacy-acl-normalization' }}

@@ -278,7 +278,7 @@ the measured list, not today's total outstanding migration count. Later exact ev
 forward candidates.
 Do not add any of them to the 19-row measurement or
 infer a new overall missing count without another complete ledger probe. As of this release,
-the repository total is 197 migration files after integration with current `origin/main`. Those two numbers do not stand in a prefix relationship, and the reason
+the repository total is 198 migration files after integration with current `origin/main`. Those two numbers do not stand in a prefix relationship, and the reason
 matters: the
 hosted ledger is **not a contiguous prefix** of the local files. It has gaps in the middle and
 rows well past them. Any sentence of the form "everything after `X` is outstanding" is therefore
@@ -287,6 +287,35 @@ false, and every apply decision made from one has been wrong.
 version named below is a real file, and checks that the probe in
 `.github/workflows/apply-hosted-migrations.yml` asks about exactly this set — so the list and the
 probe cannot drift apart.)
+
+## Applied to hosted — 2026-08-31, the Services CRM chain
+
+Dispatched from `main` at `52a2eda` after PR #469 merged with CI green.
+Seven scopes, in dependency order, each reporting `success` and each having
+run its own postflight before reporting it:
+
+| Scope | Version | Run |
+|---|---|---|
+| `pest-ipm` | `20260830001200` | 33351874168 |
+| `chemicals-compliance` | `20260830001300` | 33351958922 |
+| `billing-contracts` | `20260830001400` | 33352013667 |
+| `branches-org-sales` | `20260830001500` | 33352126394 |
+| `documents-canvassing-marketing` | `20260830001600` | 33352184485 |
+| `forms-timesheets-licences` | `20260830001700` | 33352222216 |
+| `customer-portal` | `20260830001800` | 33352257894 |
+
+Each scope's postflight is the evidence, not the exit code: forced RLS on
+every new table, the ABSENCE of DELETE proven rather than assumed (hosted
+default privileges grant ALL at creation, so a capability expressed as a
+missing grant only means something if the grant was there to revoke),
+`anon` and `service_role` shut out, and every trigger the increment relies
+on confirmed present. The portal scope additionally proves its resolver is
+executable by no role at all and that its nine caller-scoped functions are
+definers reachable only by `authenticated`.
+
+`operating-dashboards` (`20260830001900`) is NOT yet applied — it is still
+on a branch. Its postflight asserts the inverse property: that none of its
+five functions is a definer.
 
 ## Historical release tail before ADR-115 — 2026-08-22 (superseded)
 

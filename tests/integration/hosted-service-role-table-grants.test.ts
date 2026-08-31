@@ -6,13 +6,13 @@ import { resolve } from "node:path";
 import { PGlite } from "@electric-sql/pglite";
 import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
 import { describe, expect, it } from "vitest";
+import { LATEST_MIGRATION } from "../support/latest-migration";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const migrationsDirectory = resolve(repositoryRoot, "supabase/migrations");
 const grantsMigration =
   "20260812002600_narrow_hosted_service_role_table_grants.sql";
-const latestMigration =
-  "20260830001800_customer_portal.sql";
+const latestMigration = LATEST_MIGRATION;
 
 const publicTables = [
   // Sorted alphabetically to match the catalogue query. Keep it sorted when

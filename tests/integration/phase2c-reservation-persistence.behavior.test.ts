@@ -8,6 +8,7 @@ import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { DEFAULT_CAPACITY_LIMITS } from "@/lib/resources/capacity";
+import { LATEST_MIGRATION } from "../support/latest-migration";
 
 /**
  * Proof that the concurrency and rate limits hold in the database, against the
@@ -116,7 +117,7 @@ describe("Phase 2C reservation persistence", () => {
     `);
 
     const migrationFiles = (await readdir(migrationsDirectory)).filter((file) => file.endsWith(".sql")).sort();
-    expect(migrationFiles.at(-1)).toBe("20260830001800_customer_portal.sql");
+    expect(migrationFiles.at(-1)).toBe(LATEST_MIGRATION);
     for (const file of migrationFiles) {
       await db.exec(await readFile(resolve(migrationsDirectory, file), "utf8"));
     }
