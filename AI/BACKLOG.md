@@ -307,6 +307,12 @@ the full seeded E2E journey passes — increment 10 of the plan.
   `live` derived from a sealed credential existing rather than stored.
   /Services/integrations. 20260830010200; hosted apply:
   scope=service-integrations after merge.
+- [x] Increment 18 (ADR-210): the technician field app, offline-capable —
+  idempotent field writes on a client-minted token, a queue that never
+  reports sent until the server confirms, and a fix to the completion
+  trigger so an offline visit keeps the moment it actually happened.
+  /Services/field. 20260830010400; hosted apply: scope=field-offline-queue
+  after merge.
 - [ ] Provider-gated, ship Not Connected until an owner supplies
   credentials, never implied as working: card/ACH processing (the ledger
   records money that moved; it does not move money), SMS/email delivery,

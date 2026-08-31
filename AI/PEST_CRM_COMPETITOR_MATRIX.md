@@ -77,8 +77,8 @@ built.
 |---|---|---|
 | Barcode scanning of stations | Briostack, PestPac | **HAVE** (ADR-191) |
 | Materials/chemical logging from the field | PestPac, FieldRoutes, GorillaDesk, Fieldwork | **HAVE** (ADR-192) |
-| **Technician mobile app** | all | **GAP** |
-| **Offline mode — full capacity without signal** | PestPac | **GAP** |
+| **Technician mobile app** | all | **HAVE** (ADR-210) — /Services/field, a phone-shaped surface showing dispatched work and recording completions and station scans. Responsive web rather than a store-published native app. |
+| **Offline mode — full capacity without signal** | PestPac | **HAVE** (ADR-210) — writes are queued on the device against a client-minted token and replayed until the SERVER confirms, so a retry through a tunnel produces one visit rather than six. The screen never says "saved" for something still queued, refusals stay counted as unsent, and nothing unsent is ever pruned. The technician's own clock is what gets recorded, not the sync's. |
 | Signature capture | PestPac, GorillaDesk (Pro) | **HAVE** (ADR-197) on forms — a name, a moment and a stored image, whole or absent |
 | Photos, files and documents attached to orders and accounts | PestPac | **HAVE** (ADR-196) — diagrams still a GAP |
 | **In-field card payment** | PestPac | **GAP** |
@@ -181,9 +181,10 @@ first, and tracked in `AI/BACKLOG.md`:
    drawing surface, as expected, but the hard part turned out to be the
    verdict rather than the drawing: a not-null answer so an unfinished
    inspection cannot read as a clean structure.
-5. **Offline mode for technicians** — a service worker and a write queue.
-   Large, and the correctness bar is high: a queue that silently drops a
-   completed visit is worse than no offline mode.
+5. ~~Offline mode for technicians~~ — **SHIPPED** as ADR-210, together
+   with the technician surface. The correctness bar was the reason it was
+   last, and it earned that: building it found a shipped trigger that
+   would have recorded every offline visit at sync time.
 
 **Needs an external provider.** ADR-207 built the registry these depend on:
 `/Services/integrations` lists every one, says what it unlocks, and reports
@@ -198,8 +199,24 @@ SMS/email delivery (which also gates automated reminders and campaign
 sending), GPS/fleet telemetry, QuickBooks sync, call-centre/telephony
 integration, and reviews/reputation platforms.
 
-**A note on what "parity" can mean here.** Of the 18 rows still
-short of HAVE, roughly half cannot be closed by writing code at all — they
-are accounts somebody has to open and pay for. The honest target is every
-buildable row shipped and every provider-gated row wired to the point where
-supplying a credential is the only remaining step.
+**A note on what "parity" can mean here.** 58 capability rows: **44 HAVE,
+6 PARTIAL, 8 GAP.**
+
+The composition matters more than the count. As of ADR-210 **every
+remaining GAP is provider-gated — all eight of them.** Not most, not
+roughly half: all. SMS/email reminders, route optimization by drive time,
+GPS telemetry, in-field card payment, autopay and card/ACH, QuickBooks
+sync, reviews, and call-centre integration each need an account somebody
+has to open and pay for.
+
+There is no longer a row on this list that could be closed by writing more
+code. ADR-207 built the registry those eight depend on, so each is wired to
+the point where supplying a credential and the provider's own send-or-charge
+call are the only remaining steps, and `/Services/integrations` reports
+whether each is live from a sealed credential actually existing rather than
+a hard-coded label.
+
+The six PARTIALs are capabilities where the data ships and a piece of what
+the competitors sell does not — automated sending on a schedule, drag
+sequencing, truck stock, invoice lines generated from a work order. Those
+are buildable, and each is an increment rather than a row.

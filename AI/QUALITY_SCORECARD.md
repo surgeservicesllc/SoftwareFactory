@@ -2,6 +2,32 @@
 
 Last reviewed: 2026-08-31
 
+**Addendum, 2026-08-31 latest+29 - the offline field queue (ADR-210):**
+services-field-offline.behavior 9 on the real chain: a visit recorded at
+the technician's own moment rather than the sync's; five replays of one
+completion leaving exactly one submission, with neither the timestamp nor
+the note overwritten by a retry carrying different text; four replays of a
+station scan leaving ONE ledger event with the original count of 4 rather
+than five events or a 99 — which matters more than the completion case
+because crm_device_events is append-only and a double count could never be
+corrected; a week-late arrival not overwriting a visit the office already
+closed from a paper ticket; the server answering which tokens it actually
+holds so a device reconciles against authority rather than its own
+storage; two tenants minting the SAME uuid without either seeing the
+other's submission, because the token is unique per organization; a
+refusal for another account's work order that says the same thing whether
+it exists or is not theirs; the submission log undeletable under forced
+RLS; and every field function still an invoker. field-queue 10 pins the
+client decisions — a replay settling rather than erroring, a permanent
+refusal staying counted as unsent, oldest-first ordering, and nothing
+unsent ever pruned at any age. Building it surfaced a shipped defect:
+crm_work_order_set_completed_at stamped now() unconditionally, which would
+have recorded every offline visit at sync time and corrupted productivity,
+route density and recurring invoice service dates; 38 existing tests
+confirm the coalesce fix is backward compatible. RLS census 203 → 204;
+grants 49 → 50 crm tables; runbook 208; workflow scope
+`field-offline-queue`.
+
 **Addendum, 2026-08-31 latest+28 - restricted keys (ADR-209):**
 A Stripe restricted key was invisible to all three secret detectors while
 lib/billing accepted one as a valid STRIPE_SECRET_KEY — the system called

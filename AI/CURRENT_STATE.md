@@ -311,9 +311,9 @@ all forty-eight tables, every optional field populated, spanning years —
 for testing dashboards, reports and pagination at the size of a real book.
 GET /api/services/seed-report audits whichever is loaded, table by table,
 PASS or FAIL. Plan of record: AI/SERVICES_CRM_GAP_ANALYSIS.md and
-AI/PEST_CRM_COMPETITOR_MATRIX.md. Increments 1 through 16 have shipped.
-One buildable row is left — offline mode for technicians — and the rest are
-gated on an external account nobody has opened:
+AI/PEST_CRM_COMPETITOR_MATRIX.md. Increments 1 through 18 have shipped,
+the last of them the offline field queue. No buildable row is left: every
+remaining gap is gated on an external account nobody has opened —
 card/ACH processing, SMS/email delivery, GPS telemetry, QuickBooks sync,
 telephony and reviews. Those ship labelled **Not Connected** and are never
 implied to work.
