@@ -45,7 +45,7 @@ export async function GET() {
         .limit(600),
       client
         .from("crm_opportunities")
-        .select(`${CRM_OPPORTUNITY_COLUMNS}, owner_employee_id`)
+        .select(CRM_OPPORTUNITY_COLUMNS)
         .eq("organization_id", activeOrganization.id)
         .limit(5000),
       client
@@ -59,11 +59,9 @@ export async function GET() {
     if (commissionRows.error) return databaseErrorResponse(commissionRows.error);
 
     const employees = ((employeeRows.data ?? []) as unknown as CrmEmployeeRow[]).map(toEmployeeView);
-    const opportunities = (
-      (opportunityRows.data ?? []) as unknown as (CrmOpportunityRow & {
-        owner_employee_id: string | null;
-      })[]
-    ).map((row) => ({ ...toOpportunityView(row), ownerEmployeeId: row.owner_employee_id }));
+    const opportunities = ((opportunityRows.data ?? []) as unknown as CrmOpportunityRow[]).map(
+      toOpportunityView,
+    );
     const commissions = ((commissionRows.data ?? []) as unknown as CrmCommissionRow[]).map(
       toCommissionView,
     );

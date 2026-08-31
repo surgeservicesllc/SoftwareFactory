@@ -75,9 +75,33 @@ the full seeded E2E journey passes — increment 10 of the plan.
 - [ ] Increment 7 follow-on (canvassing): door-to-door routes, knock
   dispositions and per-rep canvassing stats. The territory map and the
   leaderboard now exist to hang them on; the knocking itself does not.
-- [ ] Increments 8-10 per the gap analysis: marketing hub, AI copilot, and
-  the seeded E2E acceptance journey — after which, and only after which,
-  PEST CRM: PRODUCTION READY may be declared.
+- [ ] Increment 8: documents, canvassing and the marketing hub —
+  crm_documents (a storage PATH, never a URL, never bytes),
+  crm_canvass_routes + append-only crm_knocks with dispositions,
+  crm_marketing_lists + crm_list_members with consent as a record that
+  keeps its moment, crm_campaigns, append-only crm_messages,
+  crm_automations and crm_attributions. No provider is wired: the
+  email/SMS surfaces ship labelled **Not Connected**.
+- [ ] Increment 9: the forms and inspections engine (PestPac's strongest
+  differentiator per AI/PEST_CRM_COMPETITOR_MATRIX.md) — a form template
+  builder, assignable instances, typed answers, signature capture, and
+  completed forms readable from the desktop. Carries technician timesheets
+  (time in/out) and licence expiry tracking with alerts.
+- [ ] Increment 10: the customer portal — residential first (balance, pay
+  request, service history, documents), then the commercial view (open
+  conditions, device summary, sighting tickets, SDS/compliance library,
+  inspection history). Both PestPac and Briostack lead with this.
+- [ ] Increment 11: operating dashboards (revenue, retention/churn,
+  technician productivity, route density) and route optimization —
+  sequencing a day's stops by real geography, not a claim of it.
+- [ ] Increment 12: recurring auto-invoicing from service plans, AR aging,
+  and dunning schedules.
+- [ ] Provider-gated, ship Not Connected until an owner supplies
+  credentials, never implied as working: card/ACH processing (the ledger
+  records money that moved; it does not move money), SMS/email delivery,
+  GPS/fleet telemetry, and QuickBooks sync.
+- [ ] Then the AI copilot and the seeded E2E acceptance journey — after
+  which, and only after which, PEST CRM: PRODUCTION READY may be declared.
 - [ ] Queue-diagnosis honesty follow-up: `diagnose_graph_queue_as_worker_v2`
   predates withdrawal and pause, so a withdrawn or paused graph shows in
   the drain log as "looks claimable — an empty claim contradicts this

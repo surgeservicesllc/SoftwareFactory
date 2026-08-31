@@ -148,7 +148,7 @@ export const CRM_PROPERTY_COLUMNS =
 export const CRM_TIMELINE_COLUMNS =
   "id, account_id, kind, summary, detail, occurred_at, recorded_at, actor_user_id";
 export const CRM_OPPORTUNITY_COLUMNS =
-  "id, account_id, name, stage, value_cents, expected_close_date, notes, lost_reason, closed_at, created_at, updated_at";
+  "id, account_id, name, stage, value_cents, expected_close_date, notes, lost_reason, closed_at, owner_employee_id, created_at, updated_at";
 export const CRM_TECHNICIAN_COLUMNS =
   "id, first_name, last_name, email, phone, license_number, active, branch_id, reports_to_id, hire_date, created_at, updated_at";
 export const CRM_SERVICE_PLAN_COLUMNS =
@@ -216,6 +216,8 @@ export type CrmOpportunityRow = {
   notes: string | null;
   lost_reason: string | null;
   closed_at: string | null;
+  // Increment 7: the rep working the deal, which the leaderboard reads.
+  owner_employee_id: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -465,6 +467,7 @@ export function toOpportunityView(row: CrmOpportunityRow) {
     notes: row.notes,
     lostReason: row.lost_reason,
     closedAt: row.closed_at,
+    ownerEmployeeId: row.owner_employee_id,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

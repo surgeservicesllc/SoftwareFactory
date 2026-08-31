@@ -63,6 +63,7 @@ export type OpportunityView = {
   closedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  ownerEmployeeId: string | null;
 };
 
 export type PipelineReport = {
