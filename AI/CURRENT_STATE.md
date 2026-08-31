@@ -481,7 +481,15 @@ Intuit account. Every entry balances by construction — an unbalanced one
 throws rather than rendering — because a journal file that does not balance
 is rejected at the import screen, or worse, accepted.
 
-Of the remaining eighteen rows, nine are gated on an
+A dispatcher can now say what order a technician drives (ADR-220). A route
+is one technician's day from a branch, with stops numbered from one;
+resequencing replaces the whole set so a drag cannot collide, and it
+carries the planned arrival and notes somebody typed. Nothing computes the
+order from geography — crm_properties holds an address and no coordinates,
+and turning one into the other is geocoding. Drive time, traffic, time
+windows and bulk geocoding all still need a mapping provider.
+
+Of the remaining eighteen rows, eight are gated on an
 external account nobody has opened: card/ACH processing, SMS/email
 delivery, GPS telemetry, QuickBooks sync, telephony, reviews and
 drive-time routing. Those ship labelled **Not Connected** and are never

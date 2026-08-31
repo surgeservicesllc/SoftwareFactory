@@ -2,6 +2,35 @@
 
 Last updated: 2026-08-31
 
+## Newest (2026-08-31, latest+40): the day route (ADR-220, #83)
+
+`20260831000900` adds crm_routes and crm_route_stops.
+
+RESEQUENCE BY REPLACING THE SET, never by renumbering in place. Moving stop
+3 to position 1 one row at a time collides with
+crm_route_stops_route_position_key the moment two rows hold the same
+number — the trap crm_plan_set_sequence hit. crm_route_set_order deletes
+and re-inserts, and carries planned_arrival and note across by work order
+so a drag does not lose what a dispatcher typed.
+
+THE ORDER IS THE DISPATCHER'S. Nothing here computes one and nothing should
+start to without a mapping provider: crm_properties has an address and NO
+COORDINATES. If you add an optimiser, it is a new capability behind
+crm_integration_live, not a quiet upgrade to this function.
+
+THREE INDEXES AND A TRIGGER ARE THE FEATURE. One route per technician per
+day, one route per visit, one stop per position, and a stop's visit must
+fall on the route's own date. Each guards against a person being sent to
+the wrong address.
+
+crm_route_set_order IS AND MUST STAY SECURITY INVOKER. It edits a
+dispatcher's working state; the postflight fails if it becomes a definer.
+
+WHEN WRITING A POSTFLIGHT THAT CHECKS A GRANT, SCOPE IT TO THE BROWSER
+ROLES. information_schema.role_table_grants reports the table owner's
+privileges too, which always include delete, so an unscoped check fails on
+a correct schema. This one did, before it shipped.
+
 ## Newest (2026-08-31, latest+39): accounting export (ADR-219, #82)
 
 lib/services/accounting-export.ts plus app/api/services/accounting-export.

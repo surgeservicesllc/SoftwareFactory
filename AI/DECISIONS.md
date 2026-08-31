@@ -5609,3 +5609,58 @@ are a few more lines and no guesswork.
 Row moves GAP -> PARTIAL. The API sync stays gated, and stays named.
 
 No migration; no hosted apply scope.
+
+## ADR-220 - Geocoding gates the optimiser, not the route manager
+
+"Route optimization / visual route manager / dynamic planner" has been a
+GAP against four competitors, and I have now been wrong about it in both
+directions on the same day.
+
+First I called it "not provider-gated" without checking that
+`crm_properties` holds an address and NO COORDINATES. Turning an address
+into a point is geocoding, and geocoding needs a provider — so that was
+wrong, and I corrected it. Then, having corrected it, I let the blocker
+cover the whole row. That was the second error, and it is the one this
+increment fixes.
+
+**Sorting by scheduled time is not a route.** The appointment times say
+when a customer was promised a visit. The SEQUENCE says the order a
+technician drives them, and the two differ constantly for reasons no
+algorithm here could know: a commercial kitchen has to be done before it
+opens, a gated yard is locked until ten, a difficult call goes last so it
+cannot overrun into anybody else's window. Those are a dispatcher's
+judgements, and this schema had nowhere to put them — `crm_work_orders`
+carries a technician and a start time and nothing else.
+
+**THE ORDER IS THE DISPATCHER'S.** Nothing in this file computes one, and
+that is the honest boundary: what a person decides is stored faithfully,
+and drive time, traffic, time windows and geocoding a whole book of
+addresses are not pretended at.
+
+**Resequencing replaces the whole set.** Moving stop 3 to position 1 by
+updating rows one at a time collides with the unique index the moment two
+rows briefly hold the same number — the trap `crm_plan_set_sequence`
+(ADR-211) hit for the same reason. It also carries the dispatcher's own
+planned arrival and note across the move, because losing a gate code on
+every drag would make the feature unusable.
+
+**Three ways somebody drives to the wrong place, each closed by an index or
+a trigger.** A stop whose visit is scheduled for another day (the trigger
+names both dates). A visit on two routes at once. Two live routes for one
+technician on one morning. None of those is a display bug; each one puts a
+person at the wrong address.
+
+**Putting a visit on a route IS assigning it.** That is what a dispatcher
+is doing, so the sequencer fills a blank technician — and the trigger
+refuses a visit that already belongs to somebody else rather than quietly
+reassigning it.
+
+The postflight caught a bug in itself before it shipped:
+`information_schema.role_table_grants` reports the table OWNER's privileges
+too, which always include delete, so an unscoped check for a delete grant
+fails on a perfectly correct schema. The other postflights already scoped
+theirs to the browser roles; this one now does.
+
+Row moves GAP -> PARTIAL, with the optimiser named as the remainder.
+
+Hosted apply scope `day-route`.

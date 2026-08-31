@@ -87,7 +87,7 @@ built.
 | Work orders, dispatch board, status lifecycle | all | **HAVE** (ADR-189) |
 | Recurring service plans / automated service cadence | Briostack, PestPac, FieldRoutes | **HAVE** (ADR-189) |
 | Twice-monthly and custom appointment sequencing | Briostack | **HAVE** (ADR-211) — a plan carries ordered steps and a cycle, so "the 1st and the 15th" is 24 visits on those days rather than 27 fortnights that drift off the date, "2nd and 4th Tuesday" anchors to the route, and a seasonal program names a different service per visit. Cycles anchor to the calendar, so March/June/September/November stays those months forever. Sequencing moves visits and never billing: `crm_plan_cadence` reports visits a year beside bills a year so level billing reads as the arrangement it is. |
-| **Route optimization / visual route manager / dynamic planner** | FieldRoutes (deepest), PestPac, Briostack, Jobber | **GAP** |
+| **Route optimization / visual route manager / dynamic planner** | FieldRoutes (deepest), PestPac, Briostack, Jobber **PARTIAL** — the day route (ADR-220) ships: one route per technician per day from a branch, stops numbered from one, resequenced as a whole set so a drag cannot collide, carrying the dispatcher's planned arrival and notes. THE ORDER IS THE DISPATCHER'S — nothing computes it from geography, because `crm_properties` holds an address and no coordinates. Drive time, traffic, time windows and bulk geocoding all still need a mapping provider. |
 | Technician time in/out and timesheets | PestPac | **HAVE** (ADR-197) |
 | **GPS / fleet tracking** | GorillaDesk (Pro), FieldRoutes | **GAP** (needs a provider — would ship Not Connected) |
 
@@ -239,7 +239,7 @@ implied, in the deepest-measured competitor on the board.
 | **Website builder** | PestPac (Website Builder) | **GAP** — PestPac sells one. This is outside what a CRM core is, and it is listed rather than quietly dropped so the count stays honest. |
 
 **A note on what "parity" can mean here.** 67 capability rows: **49 HAVE,
-9 PARTIAL, 9 GAP.**
+10 PARTIAL, 8 GAP.**
 
 (58 until PestBoss was measured in its own right, then 60, then 67 once
 PestPac's own feature index was checked against the board rather than

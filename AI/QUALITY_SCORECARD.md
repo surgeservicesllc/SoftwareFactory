@@ -2,6 +2,26 @@
 
 Last reviewed: 2026-08-31
 
+**Addendum, 2026-08-31 latest+40 - the day route (ADR-220):**
+services-day-route.behavior 11 on the real chain, most of them about the
+three ways somebody drives to the wrong place: a stop whose visit is
+scheduled for another day (refused, naming both dates), a visit on two
+routes, two live routes for one technician on one morning. Also that
+resequencing renumbers from one and carries the dispatcher's planned
+arrival and note across a drag; that putting a visit on a route assigns it
+to that technician while a visit already belonging to somebody else is
+refused rather than quietly reassigned; that the same visit twice in one
+order is refused; that a completed route cannot be resequenced; and that
+anon and service_role hold NOTHING on the new tables despite hosted-like
+default privileges being injected before the CRM foundation — this suite
+replays the chain rather than restoring the snapshot for exactly that
+reason, because a revoke only means something if the grant was there to
+revoke. The postflight caught a bug in itself: role_table_grants reports
+the table OWNER's privileges too, so an unscoped delete-grant check fails
+on a correct schema. RLS census 215 -> 217; grants 60 -> 62 crm tables;
+runbook 215 -> 216; seed report 59/59 -> 61/61 and 55,723 -> 57,447 rows,
+with 857 routes and 867 stops. Matrix: 9 GAP -> 8, 9 PARTIAL -> 10.
+
 **Addendum, 2026-08-31 latest+39 - accounting export (ADR-219):**
 accounting-export unit 14 and services-accounting-export.behavior 6 on the
 real chain. The unit suite pins what an accountant checks: every entry
