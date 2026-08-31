@@ -17,6 +17,34 @@ workers, autonomy, and automatic actions remain OFF and the global kill switch
 remains ON. Rollback and provider execution remain **Not Connected** wherever
 their existing adapters or live evidence say so. No production claim is made.
 
+## 2026-08-31: Grok context-envelope 011 protected release lane is a repository candidate (ADR-232)
+
+A dedicated manual `probe` / `apply` / `verify` lane now guards only
+`20260831001100_grok_context_envelopes.sql`, canonical LF SHA-256
+`6ef23581e4d51a1bc4ad1651917e42d52d10e9b7b2c156e9207df682946c3344`
+(35,129 bytes). It requires the exact current-main checkout, four green
+exact-head checks, READY Vercel and matching health/Supabase identity, the
+configured first-attempt release actor, an operation-specific confirmation,
+the full 00100-01000 prerequisite ledger, and an exact hash snapshot of every
+unrelated ledger row. Apply is one database transaction containing only the
+staged hash-pinned 011 file, its one ledger row, and schema-cache notification.
+
+The migration is rehearsed before apply and rolled back with its temporary
+ledger row. The same rehearsal and installed verifier prove exact tables,
+FORCE RLS, select policies, zero browser/service table grants, immutable and
+no-truncate triggers, native `pg_proc.prosrc` identities, function ACLs,
+linked-database lint, exact record/replay/follow-up/list behavior, content-free
+audit evidence, secret/private-URL/unlinked-integration/bounds/replay/tenant
+rejection, direct mutation rejection, and zero graph/node/agent/provider/
+Phase 1C execution. Workers, schedules, autonomy, and automatic actions remain
+OFF and every organization kill switch remains ON before, during, and after.
+
+Full-chain PGlite rehearsal with later 01200-01400 migrations present passes
+and leaves no 011 ledger/catalog residue. Focused workflow, action-pin, and
+secret-boundary suites pass 16/16 and focused ESLint passes. This is repository
+code only: it has not been pushed, deployed, dispatched, or applied to hosted
+Supabase, so no production database claim is made.
+
 ## 2026-08-31: Grok completion DDL is hosted; acceptance awaits a version-safe ACL verifier (ADR-227)
 
 Exact main `24a6313e98023bfc618a921fc563c9f4bde4cad2` passed all four

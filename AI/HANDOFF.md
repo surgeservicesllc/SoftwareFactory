@@ -24,6 +24,30 @@ green CI and READY deployment, dispatch only fresh read-only `scope=verify`.
 Workers/autonomy/automatic actions remain OFF and the global kill switch
 remains ON. Signed-in acceptance and a real provider-backed E2E still remain;
 **GROK BOT: PRODUCTION READY is not declared.**
+## Newest (2026-08-31, latest+52): protected Grok context-envelope 011 lane (ADR-232)
+
+Use `.github/workflows/grok-context-envelopes-migration.yml` for 011 only.
+It has three explicit modes: probe rehearses the exact migration plus runtime
+canary and rolls everything back; apply repeats that rehearsal, then persists
+only the staged 011 file and its ledger row in one transaction; verify is
+read-only except for a rollback-only runtime fixture. Every mode requires the
+exact current-main release, four green checks, READY Vercel/health, the
+configured first-attempt actor, and `qpuofpmagrmyamahqwxw`.
+
+Do not add an ordering inference that 01200-01400 must be absent: those later
+migrations legitimately coexist. The lane instead requires 00100-01000 exactly
+once, snapshots every ledger row other than 011, and fails if that snapshot
+changes. Do not replace native PostgreSQL source hashes with offline delimiter
+hashes; the accepted canonical `md5(pg_proc.prosrc)` values are internal
+`9ab00eb67e8ca22d1dabf1f883ec5f58`, server
+`fee968c9a9864cac4b34f7b258812deb`, follow-up
+`85c5597b6e80a6b39d09f29af04e629d`, and list
+`0bcddcfe4ab8922e3b367dc63ea1fa18`.
+
+Native full-chain rehearsal passes with 01200-01400 installed and leaves zero
+residue; focused safety suites pass 16/16. Nothing here has been pushed,
+deployed, dispatched, or applied to production.
+
 ## Newest (2026-08-31, latest+51): Grok advanced audited controls (ADR-231)
 
 The selected Grok session now has a collapsed **Advanced controls** section.

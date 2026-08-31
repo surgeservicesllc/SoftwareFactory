@@ -6035,3 +6035,31 @@ eligibility before any state change. Merely opening a console never mutates or
 authorizes anything. Existing **Not Connected** and RED gates stay
 authoritative, and this decision changes no worker, autonomy, automatic-action,
 or kill-switch state.
+
+## ADR-232 - Backfill 011 through a one-file lane that preserves unrelated history
+
+- **Date**: 2026-08-31
+- **Status**: Accepted for the repository candidate; hosted apply not run
+
+`20260831001100_grok_context_envelopes.sql` is intentionally a forward-only
+backfill into a repository where later 01200-01400 migrations may already be
+present. Version ordering is therefore not evidence that later rows are wrong.
+The release boundary requires the known 00100-01000 prerequisite lineage,
+captures a canonical digest of every ledger row other than 011, and requires
+that digest to remain identical. The only permitted persistent difference is
+one 011 ledger row plus the exact hash-pinned migration catalog.
+
+Probe and apply both rehearse the migration, native catalog identity, linked
+lint, runtime behavior, adverse cases, and immutability inside rollback. Apply
+then repeats the stopped-state and unrelated-ledger proof while holding the
+ledger and execution tables before one single-transaction `psql` invocation.
+Verify repeats the catalog/runtime evidence without replaying the migration.
+No reset, repair, down, broad migration apply, or automatic workflow dispatch
+is a containment mechanism; any mismatch stops for a new forward change.
+
+Function identity is the line-ending-canonical native PostgreSQL
+`pg_proc.prosrc`, not a source-file slice containing `$function$` delimiter
+text. Runtime fixtures are synthetic and rolled back, audit checks are
+content-free, and the canary proves no graph, node, agent, provider, bridge, or
+Phase 1C execution. Workers, schedules, autonomy, and automatic actions stay
+OFF and the organization kill switch stays ON for the entire lane.

@@ -15,6 +15,20 @@ derived expanded-row count, and retains owner-only, non-grantable, explicit
 role-denial, and PostgreSQL 18 NOT NULL checks. The focused workflow contract
 passes 12/12. Exact-head release and a new read-only
 verify remain pending; no database or safety state changes with this fix.
+**Addendum, 2026-08-31 latest+52 - protected Grok context-envelope 011 lane
+(ADR-232):** The workflow contract, action-pin, and secret-boundary suites pass
+16/16; focused ESLint and whitespace checks pass. A native full-chain PGlite
+probe passes the preflight against the exact unrelated-ledger digest, proves
+the four PostgreSQL `pg_proc.prosrc` identities, executes the complete
+catalog/runtime/adverse postflight, and rehearses 011 with a temporary ledger
+row inside rollback while 01200-01400 coexist. The rehearsal leaves both 011
+tables and its ledger row absent. Static evidence requires manual-only
+operation-specific confirmation, exact release/migration identities, one-file
+transactional apply, linked lint with zero extension residue, exact FORCE RLS/
+policy/grant/trigger/function ACLs, all automatic execution stopped, kill
+switch on, and no reset/replay/down path. Hosted dispatch and production
+acceptance remain pending.
+
 **Addendum, 2026-08-31 latest+51 - Grok advanced audited controls
 (ADR-231):** The focused workspace suite passes 22/22 and proves that the
 collapsed advanced-control panel preserves exact lifecycle project/graph/run

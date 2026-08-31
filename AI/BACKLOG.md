@@ -48,6 +48,26 @@ category/insert-chain/notice truthfulness fixes. Nothing in this file is
 open because work stopped; everything open is waiting on a named key, a
 named decision, a named authorization, or production itself.
 
+## Grok context-envelope 011 protected release lane (ADR-232, 2026-08-31)
+
+- [x] Pin the exact canonical-LF 011 migration path, SHA-256, Supabase project,
+  release SHA, configured actor, operation-specific confirmation, CI, Vercel,
+  and health identities.
+- [x] Permit only one staged migration file plus the 011 ledger row in one
+  forward transaction; prohibit reset, repair, replay, down, broad push, and
+  workflow dispatch paths.
+- [x] Snapshot every unrelated ledger row, require the 00100-01000 lineage, and
+  reprove the snapshot after probe/apply/verify without assuming the valid
+  later 01200-01400 rows are absent.
+- [x] Add rollback-only catalog, RLS/policy/grant/trigger/function-hash/ACL,
+  runtime/replay/audit, adverse-tenant/secret/bounds, immutability, linked-lint,
+  health, and zero-execution evidence with stopped containment before/after.
+- [x] Pass the full migrated-chain native rehearsal and 16/16 focused static
+  safety tests; keep credentials out of source and logs.
+- [ ] Publish or dispatch only as a separately reviewed production release.
+  This repository candidate has not applied 011 and carries no hosted ledger,
+  catalog, lint, runtime, or health acceptance evidence.
+
 ## Grok record-only production acceptance (ADR-229, 2026-08-31)
 
 - [x] Add an env-gated signed-in Playwright journey for one exact RFC-reserved
