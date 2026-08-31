@@ -32,7 +32,7 @@ const BUCKET_LABELS: Record<string, string> = {
   undated: "No due date",
 };
 
-type Tab = "revenue" | "receivable" | "technicians" | "routes";
+type Tab = "revenue" | "forecast" | "receivable" | "technicians" | "routes";
 
 function money(cents: number): string {
   return `$${(cents / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
@@ -127,6 +127,7 @@ export function ServicesDashboardsPanel() {
         {(
           [
             ["revenue", "Revenue", data?.revenue.months.length],
+            ["forecast", "Forecast", data?.forecast.months.length],
             ["receivable", "Receivable", data?.receivable.buckets.length],
             ["technicians", "Technicians", data?.productivity.technicians.length],
             ["routes", "Route density", data?.routes.days.length],
@@ -199,6 +200,72 @@ export function ServicesDashboardsPanel() {
                           </span>
                         )}
                       </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Card>
+      ) : null}
+
+      {tab === "forecast" ? (
+        <Card>
+          <SectionTitle
+            title="What is on the books"
+            description="A projection of active plans and contracts, and nothing else."
+          />
+          <Notice tone="info">
+            No churn rate, growth assumption or seasonality curve is applied — this system has no
+            evidence for any of them, and multiplying a real number by an invented retention rate
+            would look more precise than the truth while being less accurate.
+          </Notice>
+          {data?.forecast.basis === null || data === null ? null : (
+            <p className="mt-3 text-sm text-muted" data-testid="services-forecast-basis">
+              Standing on {data.forecast.basis.activePlans} active plan
+              {data.forecast.basis.activePlans === 1 ? "" : "s"}
+              {data.forecast.basis.unpricedPlans > 0
+                ? ` (${data.forecast.basis.unpricedPlans} with no price, contributing nothing)`
+                : ""}
+              {" and "}
+              {data.forecast.basis.activeContracts} active contract
+              {data.forecast.basis.activeContracts === 1 ? "" : "s"}
+              {data.forecast.basis.openEndedContracts > 0
+                ? ` (${data.forecast.basis.openEndedContracts} open-ended, and therefore absent from the contracted line — a term that does not exist cannot be spread)`
+                : ""}
+              .
+              {data.forecast.basis.customersWithoutPlan > 0
+                ? ` ${data.forecast.basis.customersWithoutPlan} customer${data.forecast.basis.customersWithoutPlan === 1 ? "" : "s"} carry no active plan at all, so they contribute nothing here.`
+                : ""}
+              {" Each of these is a reason the figure below understates."}
+            </p>
+          )}
+          {(data?.forecast.months ?? []).length === 0 ? (
+            <p className="mt-4 text-sm text-muted" data-testid="services-forecast-empty">
+              Nothing recurring on the books yet. Add a priced service plan and it appears here.
+            </p>
+          ) : (
+            <div className="mt-4 overflow-x-auto">
+              <table className="w-full text-left text-sm" data-testid="services-forecast-table">
+                <thead>
+                  <tr className="border-b border-line text-xs uppercase tracking-wide text-faint">
+                    <th className="py-2 pr-3 font-medium">Month</th>
+                    <th className="py-2 pr-3 font-medium">Recurring</th>
+                    <th className="py-2 pr-3 font-medium">Contracted</th>
+                    <th className="py-2 pr-3 font-medium">Plans</th>
+                    <th className="py-2 font-medium">Projected</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-line">
+                  {(data?.forecast.months ?? []).map((month) => (
+                    <tr key={month.month}>
+                      <td className="py-2.5 pr-3 text-foreground">{month.month.slice(0, 7)}</td>
+                      <td className="py-2.5 pr-3 tabular-nums text-muted">{money(month.recurringCents)}</td>
+                      <td className="py-2.5 pr-3 tabular-nums text-muted">
+                        {month.contractedCents === 0 ? "—" : money(month.contractedCents)}
+                      </td>
+                      <td className="py-2.5 pr-3 tabular-nums text-muted">{month.plans}</td>
+                      <td className="py-2.5 tabular-nums text-foreground">{money(month.totalCents)}</td>
                     </tr>
                   ))}
                 </tbody>

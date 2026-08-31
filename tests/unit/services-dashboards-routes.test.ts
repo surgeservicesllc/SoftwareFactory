@@ -50,6 +50,8 @@ const emptyBook = {
   crm_retention_summary: { data: [], error: null },
   crm_technician_productivity: { data: [], error: null },
   crm_route_density: { data: [], error: null },
+  crm_revenue_forecast: { data: [], error: null },
+  crm_forecast_basis: { data: [], error: null },
 };
 
 beforeEach(() => {
@@ -235,15 +237,87 @@ describe("the dashboards route", () => {
   it("never asks the database for a page of rows to tally in JavaScript", async () => {
     client(emptyBook);
     await dashboards(ask());
-    // Five aggregate calls and no table reads: a dashboard built on a
-    // truncated fetch is right only while the book is small.
+    // Aggregate calls and no table reads: a dashboard built on a truncated
+    // fetch is right only while the book is small.
     expect(rpc.mock.calls.map((call) => call[0]).sort()).toEqual([
+      "crm_forecast_basis",
       "crm_receivable_aging",
       "crm_retention_summary",
       "crm_revenue_by_month",
+      "crm_revenue_forecast",
       "crm_route_density",
       "crm_technician_productivity",
     ]);
+  });
+
+  it("says on the payload that it applies no churn or growth assumption", async () => {
+    client({
+      ...emptyBook,
+      crm_revenue_forecast: {
+        data: [
+          {
+            month: "2026-09-01",
+            recurring_cents: "45000",
+            contracted_cents: "10909",
+            total_cents: "55909",
+            plans: 3,
+            contracts: 1,
+          },
+        ],
+        error: null,
+      },
+      crm_forecast_basis: {
+        data: [
+          {
+            active_plans: 4,
+            unpriced_plans: 1,
+            active_contracts: 2,
+            open_ended_contracts: 1,
+            customers_without_plan: 3,
+            priced_share_bps: 7500,
+          },
+        ],
+        error: null,
+      },
+    });
+
+    const body = (await (await dashboards(ask())).json()) as {
+      forecast: {
+        months: { totalCents: number }[];
+        basis: { openEndedContracts: number; pricedShareBps: number | null } | null;
+        assumptions: { churnApplied: boolean; growthApplied: boolean };
+      };
+    };
+    expect(body.forecast.months[0].totalCents).toBe(55_909);
+    // The omissions travel with the number, not behind it.
+    expect(body.forecast.basis?.openEndedContracts).toBe(1);
+    expect(body.forecast.basis?.pricedShareBps).toBe(7500);
+    // Stated on the payload so a consumer cannot mistake this for a model.
+    expect(body.forecast.assumptions.churnApplied).toBe(false);
+    expect(body.forecast.assumptions.growthApplied).toBe(false);
+  });
+
+  it("reads a book with no plans as a null share, not a zero one", async () => {
+    client({
+      ...emptyBook,
+      crm_forecast_basis: {
+        data: [
+          {
+            active_plans: 0,
+            unpriced_plans: 0,
+            active_contracts: 0,
+            open_ended_contracts: 0,
+            customers_without_plan: 0,
+            priced_share_bps: null,
+          },
+        ],
+        error: null,
+      },
+    });
+    const body = (await (await dashboards(ask())).json()) as {
+      forecast: { basis: { pricedShareBps: number | null } | null };
+    };
+    expect(body.forecast.basis?.pricedShareBps).toBeNull();
   });
 
   it("reports a database refusal as a database refusal", async () => {

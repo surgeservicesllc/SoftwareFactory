@@ -212,6 +212,11 @@ the full seeded E2E journey passes — increment 10 of the plan.
   own standing rather than "fine"; and a meter that cannot run backwards.
   /Services/fleet. 20260830002100; hosted apply: scope=equipment-fleet
   after merge.
+- [x] Increment 14 (ADR-202): revenue forecasting — active plans and
+  contracts with a term, projected forward with NO churn or growth model,
+  and every reason the figure understates reported beside it. Forecast tab
+  on /Services/dashboards. 20260830002200; hosted apply:
+  scope=revenue-forecast after merge.
 - [ ] Increment 12 follow-on: UNATTENDED billing. The generator is correct
   and idempotent but nothing calls it on a schedule, because nothing in
   this product runs on a timer. Needs a scheduler or a worker executor —

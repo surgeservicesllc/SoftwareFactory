@@ -2,6 +2,30 @@
 
 Last updated: 2026-08-31
 
+## Newest (2026-08-31, latest+23): revenue forecasting (ADR-202, #69)
+
+`20260830002200` adds crm_revenue_forecast and crm_forecast_basis. No
+tables.
+
+THE THING NOT TO ADD: a churn rate. Or a growth assumption, or a
+seasonality curve. The forecast projects rows somebody signed and applies
+no model, because this system has no evidence for one — a real number times
+an invented retention rate looks more precise than the truth and is less
+accurate, and somebody plans hiring on it. The absence is asserted on the
+payload and pinned by a route test, so adding one means deleting a test
+that says you did not.
+
+Weekly is 365/7/12 a month, NOT 4. A month is not four weeks; twelve
+four-week months lose a cycle a year. It has its own test.
+
+An open-ended contract is deliberately absent from the contracted line: a
+term that does not exist cannot be spread, and the plans underneath it are
+already counted, so inventing a spread would double them.
+
+crm_forecast_basis() must stay beside the forecast on the page, not behind
+it. Unpriced plans, open-ended contracts and customers with no plan are all
+reasons the number understates.
+
 ## Newest (2026-08-31, latest+22): equipment and fleet (ADR-201, #68)
 
 `20260830002100` adds crm_equipment and the append-only

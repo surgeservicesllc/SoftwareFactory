@@ -2,6 +2,22 @@
 
 Last reviewed: 2026-08-31
 
+**Addendum, 2026-08-31 latest+23 - revenue forecasting (ADR-202):**
+services-revenue-forecast.behavior 9 on the real chain: a monthly plan
+contributing once a month, a quarterly a third, and a weekly 365/7/12 —
+not four, which is the arithmetic everybody gets wrong and which would lose
+a whole cycle a year; an inactive plan and an unpriced one both
+contributing nothing; a contract spread across its term while an open-ended
+one stays out, because a term that does not exist cannot be spread and the
+plans underneath it are already counted; the basis reporting both
+omissions; a null priced share for a book with no plans; tenant isolation
+through an aggregate; and neither function a definer.
+services-dashboards-routes grew to 10, and the added one asserts the
+payload states `churnApplied: false` — so adding a churn model later means
+deleting a test that says there isn't one. RLS census unchanged at 200 and
+grants unchanged at 46 crm tables, because this migration creates no
+tables; runbook 201; workflow scope `revenue-forecast`.
+
 **Addendum, 2026-08-31 latest+22 - equipment and fleet (ADR-201):**
 services-equipment-fleet.behavior 13 on the real chain: an asset born with
 its acquisition event written by trigger rather than by the caller

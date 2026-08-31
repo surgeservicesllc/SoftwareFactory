@@ -1,4 +1,6 @@
 import {
+  toForecastBasisView,
+  toForecastMonthView,
   toReceivableBucketView,
   toRetentionView,
   toRevenueMonthView,
@@ -6,6 +8,8 @@ import {
   toTechnicianProductivityView,
   type CrmReceivableBucketRow,
   type CrmRetentionRow,
+  type CrmForecastBasisRow,
+  type CrmForecastMonthRow,
   type CrmRevenueMonthRow,
   type CrmRouteDayRow,
   type CrmTechnicianProductivityRow,
@@ -44,17 +48,20 @@ export async function GET(request: Request) {
     const { client, activeOrganization } = await requireActiveOrganization();
     const params = new URL(request.url).searchParams;
     const months = window(params.get("months"), 12, 36);
+    const forecastMonths = window(params.get("forecastMonths"), 12, 36);
     const productivityDays = window(params.get("productivityDays"), 90, 365);
     const routeDays = window(params.get("routeDays"), 14, 90);
 
-    const [revenue, aging, retention, productivity, routes] = await Promise.all([
+    const [revenue, aging, retention, productivity, routes, forecast, basis] = await Promise.all([
       client.rpc("crm_revenue_by_month", { p_months: months }),
       client.rpc("crm_receivable_aging"),
       client.rpc("crm_retention_summary"),
       client.rpc("crm_technician_productivity", { p_days: productivityDays }),
       client.rpc("crm_route_density", { p_days: routeDays }),
+      client.rpc("crm_revenue_forecast", { p_months: forecastMonths }),
+      client.rpc("crm_forecast_basis"),
     ]);
-    for (const result of [revenue, aging, retention, productivity, routes]) {
+    for (const result of [revenue, aging, retention, productivity, routes, forecast, basis]) {
       if (result.error) return databaseErrorResponse(result.error);
     }
 
@@ -68,7 +75,7 @@ export async function GET(request: Request) {
 
     return jsonNoStore({
       organizationId: activeOrganization.id,
-      windows: { months, productivityDays, routeDays },
+      windows: { months, productivityDays, routeDays, forecastMonths },
       revenue: {
         months: months_,
         totals: {
@@ -101,6 +108,24 @@ export async function GET(request: Request) {
          */
         idle: technicians.filter((technician) => technician.scheduled === 0).length,
         runningShifts: technicians.reduce((sum, technician) => sum + technician.runningShifts, 0),
+      },
+      forecast: {
+        months: ((forecast.data ?? []) as CrmForecastMonthRow[]).map(toForecastMonthView),
+        basis:
+          ((basis.data ?? []) as CrmForecastBasisRow[])[0] === undefined
+            ? null
+            : toForecastBasisView(((basis.data ?? []) as CrmForecastBasisRow[])[0]),
+        /*
+         * Stated on the payload, not just in a comment. This projects what
+         * is on the books: no churn multiplier, no growth assumption, no
+         * seasonality. Multiplying a real number by an invented retention
+         * rate would look more precise than the truth and be less accurate.
+         */
+        assumptions: {
+          churnApplied: false,
+          growthApplied: false,
+          basis: "Active service plans and contracts with a term, as recorded.",
+        },
       },
       routes: {
         days,

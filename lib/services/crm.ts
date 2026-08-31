@@ -2409,3 +2409,55 @@ export function toFleetStatusView(row: CrmFleetStatusRow) {
     unassigned: row.assigned_technician_id === null && row.status !== "retired",
   };
 }
+
+/* ---------------------------------------------------------------------------
+ * Revenue forecasting (increment 14).
+ * ------------------------------------------------------------------------- */
+
+export type CrmForecastMonthRow = {
+  month: string;
+  recurring_cents: number | string;
+  contracted_cents: number | string;
+  total_cents: number | string;
+  plans: number;
+  contracts: number;
+};
+
+export type CrmForecastBasisRow = {
+  active_plans: number;
+  unpriced_plans: number;
+  active_contracts: number;
+  open_ended_contracts: number;
+  customers_without_plan: number;
+  priced_share_bps: number | null;
+};
+
+export function toForecastMonthView(row: CrmForecastMonthRow) {
+  return {
+    month: row.month,
+    recurringCents: Number(row.recurring_cents),
+    contractedCents: Number(row.contracted_cents),
+    totalCents: Number(row.total_cents),
+    plans: row.plans,
+    contracts: row.contracts,
+  };
+}
+
+export function toForecastBasisView(row: CrmForecastBasisRow) {
+  return {
+    activePlans: row.active_plans,
+    /*
+     * Each of these is a reason the forecast UNDERSTATES, which is why they
+     * travel with it rather than behind it. An unpriced plan bills nothing
+     * in the projection; an open-ended contract is absent from the
+     * contracted line entirely; a customer with no plan contributes
+     * nothing at all.
+     */
+    unpricedPlans: row.unpriced_plans,
+    activeContracts: row.active_contracts,
+    openEndedContracts: row.open_ended_contracts,
+    customersWithoutPlan: row.customers_without_plan,
+    /** Null when there are no plans at all — a share of nothing is not zero. */
+    pricedShareBps: row.priced_share_bps,
+  };
+}

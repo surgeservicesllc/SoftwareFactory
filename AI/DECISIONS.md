@@ -4483,3 +4483,48 @@ undeclared until the goal's full seeded E2E passes.
   boundary. Seed covers both tables — 46/46, 47,244 rows. Hosted apply
   scope `equipment-fleet` re-proves the append-only grant, both projection
   triggers, and the case-insensitive tag index.
+
+## ADR-202 - Revenue forecasting: what is on the books, and nothing else
+
+- **Status**: accepted (increment 14 of task #69, owner /goal). Briostack
+  sells it, and `AI/PEST_CRM_COMPETITOR_MATRIX.md` carries it as a gap with
+  no provider dependency — everything it needs is already in
+  `crm_service_plans` and `crm_contracts`.
+- **Decision: the forecast projects rows somebody actually signed, and
+  applies no model to them.** No churn multiplier, no growth assumption, no
+  seasonality curve. Not because they would be hard — because this system
+  has no evidence for any of them. **Multiplying a real number by an
+  invented retention rate produces a figure that looks more precise than
+  the truth and is less accurate**, and a business plans hiring on it. The
+  absence is stated on the payload (`assumptions.churnApplied: false`) so a
+  consumer cannot mistake this for a model, and a route test pins it.
+- **What contributes**: an active, priced service plan contributes its
+  value at its recurrence; an active contract **with a term** contributes
+  its value spread across the months that term covers. An inactive plan, an
+  unpriced plan and a contract with no end date contribute nothing.
+- **Weekly is 365/7/12 per month, not 4.** A month is not four weeks, and
+  billing twelve four-week months loses a whole cycle a year. It has its
+  own test because it is the arithmetic everyone gets wrong.
+- **An open-ended contract is left out rather than guessed at.** A term
+  that does not exist cannot be spread, and the recurring plans underneath
+  such a contract are already counted — inventing a spread would double it.
+- **`crm_forecast_basis()` travels with the forecast, not behind it.** It
+  reports active plans, **unpriced** plans, active contracts, **open-ended**
+  contracts and customers with no plan at all. Every one of those is a
+  reason the projection understates, and **a forecast that hides its own
+  omissions is one nobody should act on**. The panel prints them as a
+  sentence under the figure.
+- **A share of nothing is null.** `priced_share_bps` is null when there are
+  no active plans, on the rule ADR-199 set.
+- **Both functions are SECURITY INVOKER**, on ADR-199's reasoning.
+- **Surfaces**: a Forecast tab on `/Services/dashboards`, over the existing
+  `/api/services/dashboards`.
+- **Verification**: `services-revenue-forecast.behavior` (9) on the real
+  chain — a monthly plan once a month, a quarterly at a third, weekly at
+  365/7/12 rather than four, an inactive and an unpriced plan contributing
+  nothing, a contract spread across its term while an open-ended one stays
+  out, the basis reporting both omissions, a null share for a book with no
+  plans, tenant isolation through an aggregate, and neither function a
+  definer. `services-dashboards-routes` grew to 10, including the
+  assumptions being asserted on the payload. Hosted apply scope
+  `revenue-forecast`.

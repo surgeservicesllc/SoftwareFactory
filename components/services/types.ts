@@ -908,9 +908,27 @@ export type RouteDayView = {
   accounts: number;
 };
 
+export type ForecastMonthView = {
+  month: string;
+  recurringCents: number;
+  contractedCents: number;
+  totalCents: number;
+  plans: number;
+  contracts: number;
+};
+
+export type ForecastBasisView = {
+  activePlans: number;
+  unpricedPlans: number;
+  activeContracts: number;
+  openEndedContracts: number;
+  customersWithoutPlan: number;
+  pricedShareBps: number | null;
+};
+
 export type DashboardsPayload = {
   organizationId: string;
-  windows: { months: number; productivityDays: number; routeDays: number };
+  windows: { months: number; productivityDays: number; routeDays: number; forecastMonths: number };
   revenue: {
     months: RevenueMonthView[];
     totals: { invoicedCents: number; collectedCents: number; refundedCents: number };
@@ -926,6 +944,11 @@ export type DashboardsPayload = {
     technicians: TechnicianProductivityView[];
     idle: number;
     runningShifts: number;
+  };
+  forecast: {
+    months: ForecastMonthView[];
+    basis: ForecastBasisView | null;
+    assumptions: { churnApplied: boolean; growthApplied: boolean; basis: string };
   };
   routes: {
     days: RouteDayView[];

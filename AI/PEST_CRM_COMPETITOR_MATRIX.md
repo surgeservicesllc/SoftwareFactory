@@ -138,7 +138,7 @@ built.
 | Compliance/application report with CSV | PestPac | **HAVE** (ADR-192) |
 | **Operating dashboards: revenue, retention/churn, tech productivity, route density** | all | **HAVE** (ADR-199) — all four, aggregated over the whole book in the database rather than over a bounded fetch. |
 | **Commercial trend reports with heat maps** | PestPac | **GAP** |
-| **Revenue forecasting** | Briostack | **GAP** |
+| **Revenue forecasting** | Briostack | **HAVE** (ADR-202) — projects active plans and contracts with their term, and applies no churn or growth model, because this system has no evidence for one. Every omission is reported beside the figure. |
 
 ### I. Operations
 
@@ -180,8 +180,7 @@ first, and tracked in `AI/BACKLOG.md`:
    `crm_form_instances`); this is projection work over the portal's
    existing definer pattern.
 2. ~~Equipment and fleet/asset management~~ — **SHIPPED** as ADR-201.
-3. **Revenue forecasting** — Briostack sells it, and the contract and
-   service-plan tables already carry everything it needs.
+3. ~~Revenue forecasting~~ — **SHIPPED** as ADR-202.
 4. **WDO/termite graphs and diagrams** — a drawing surface, not a form.
    Large, and honestly the least certain of these four.
 5. **Offline mode for technicians** — a service worker and a write queue.
