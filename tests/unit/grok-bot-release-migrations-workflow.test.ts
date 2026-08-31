@@ -176,6 +176,24 @@ describe("Grok Bot hosted release workflow", () => {
     expect(source).toContain(`'${prosrcMd5}','v','plpgsql'`);
   });
 
+  it("derives provider-admission prosrc fingerprints from the exact migration bodies", () => {
+    for (const [functionName, expectedMd5] of [
+      [
+        "grok_execution_admission_hash",
+        "3c2b855b41873447c738b2b220d10544",
+      ],
+      [
+        "launch_grok_full_lifecycle_v2_as_server",
+        "78055b8bc6d6d44dbb1cbd6e94657a8d",
+      ],
+    ] as const) {
+      const body = storedFunctionBody(migrations[4].path, functionName);
+      const prosrcMd5 = createHash("md5").update(body).digest("hex");
+      expect(prosrcMd5).toBe(expectedMd5);
+      expect(source).toContain(expectedMd5);
+    }
+  });
+
   it("requires explicit actor, confirmation, exact green main, and READY production", () => {
     const authorization = stepByName("Authorize the exact mutation scope");
     expect(authorization.env).toEqual({
@@ -519,8 +537,8 @@ describe("Grok Bot hosted release workflow", () => {
       "6a2c4bc103081a22672c9821c228665f",
       "d5056a47bac42c495dff7b0593cbf1a9",
       "148341fdd59b01103e22687813d2e3ba",
-      "7e7d35830e12cc13f67d07b93cf689ee",
-      "f1e20ffefaadc5fe599789047958e658",
+      "3c2b855b41873447c738b2b220d10544",
+      "78055b8bc6d6d44dbb1cbd6e94657a8d",
     ]) {
       expect(postflight).toContain(sourceHash);
     }

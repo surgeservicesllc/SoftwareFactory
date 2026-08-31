@@ -938,7 +938,7 @@ jobs:
             fi
             if [ "$ADMISSION_LEDGER" = "1" ]; then
               GROK_LAUNCH_ROLE=none
-              PROVIDER_ADMISSION_FUNCTION=",('public.launch_grok_full_lifecycle_v2_as_server(uuid,uuid,uuid,uuid,uuid,text,text,public.graph_topology,jsonb,public.risk_level,boolean,jsonb,jsonb,jsonb,uuid,text,text,jsonb,jsonb)','service_role','f1e20ffefaadc5fe599789047958e658','v','plpgsql')"
+              PROVIDER_ADMISSION_FUNCTION=",('public.launch_grok_full_lifecycle_v2_as_server(uuid,uuid,uuid,uuid,uuid,text,text,public.graph_topology,jsonb,public.risk_level,boolean,jsonb,jsonb,jsonb,uuid,text,text,jsonb,jsonb)','service_role','78055b8bc6d6d44dbb1cbd6e94657a8d','v','plpgsql')"
               EXPECTED_GROK_FUNCTIONS=$((EXPECTED_GROK_FUNCTIONS + 1))
               EXPECTED_GROK_CATALOG_FUNCTIONS=20
             else
@@ -1160,7 +1160,7 @@ jobs:
                     and prorettype='text'::regtype and proargnames=array['p_admission']::text[]
                     and proconfig=array['search_path=pg_catalog']::text[]
                     and provolatile='i' and proisstrict and proparallel='s'
-                    and source_md5='7e7d35830e12cc13f67d07b93cf689ee'
+                    and source_md5='3c2b855b41873447c738b2b220d10544'
                     and proacl is not null and (select count(*) from aclexplode(proacl))=1
                     and not has_function_privilege('anon',oid,'EXECUTE')
                     and not has_function_privilege('authenticated',oid,'EXECUTE')
@@ -1177,7 +1177,7 @@ jobs:
                     ]::text[]
                     and proconfig=array['search_path=pg_catalog']::text[]
                     and provolatile='v' and not proisstrict and proparallel='u'
-                    and source_md5='f1e20ffefaadc5fe599789047958e658'
+                    and source_md5='78055b8bc6d6d44dbb1cbd6e94657a8d'
                     and strpos(prosrc,'public.launch_grok_full_lifecycle_as_server')>0
                     and strpos(lower(prosrc),'insert into public.graph_runs')=0
                     and strpos(lower(prosrc),'insert into public.node_runs')=0
