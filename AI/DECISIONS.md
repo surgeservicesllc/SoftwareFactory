@@ -5083,3 +5083,68 @@ decisions, including that a replay settles, a refusal stays counted, and
 nothing unsent is ever pruned.
 
 Hosted apply scope `field-offline-queue`.
+
+## ADR-211 - A recurrence says how often; a schedule says when
+
+`crm_service_plans.recurrence` has always answered "how often" and has
+never answered "when". Every real pest program is sold as the second one:
+"the 1st and the 15th", "2nd and 4th Tuesday", "March perimeter, June
+mosquito, September rodent, November winterization".
+
+`biweekly` is not any of those. A fortnight is 26 visits per 364 days, so
+a year that opens on a visit closes on one too — 27 dates in 2026 against
+the 24 a twice-monthly customer bought — and it walks off the day of the
+month it started on. By July a "1st and 15th" account is being visited on
+the 2nd and the 16th. The matrix has carried this row at PARTIAL since the
+scheduling increment, and interval arithmetic could never close it.
+
+**The model is an ordered list of steps plus a cycle length.** A step says
+where in the cycle it falls (`month_offset`) and how the day is chosen —
+`day_of_month`, or an nth weekday. Twice-monthly is two steps in a
+one-month cycle; a seasonal program is four steps in a twelve-month cycle,
+each naming its own service. A plan with no steps behaves exactly as it
+did before, which is what keeps this change safe for a loaded book.
+
+**Cycles anchor to the calendar, not to a stored origin date.** A step at
+offset k lands wherever `(month - 1) % cycle = k`, so March/June/September/
+November stays those months forever, whoever edits the plan and whenever.
+An origin column would have drifted the first time somebody paused and
+resumed an account — which is the drift this ADR exists to remove, so
+storing one would have been self-defeating. The price is that only
+divisors of 12 are legal cycle lengths; a five-month cycle would restart
+every January, and the constraint refuses it rather than pretending.
+
+**Two clamps are deliberate.** Day 31 in a 30-day month is the 30th,
+because "the 31st" is how an operator writes "month end". Week 5 means the
+LAST matching weekday, because a route that says "last Friday" means the
+fourth one in a month that has four.
+
+**Sequencing does not touch billing, and a test says so.** The recurrence
+still decides what period an invoice covers (ADR-200). This matters most
+where the two disagree: level billing — pay monthly, serviced quarterly —
+is a normal arrangement in this industry, so a plan with 4 visits and 12
+bills is a sale rather than a fault. `crm_plan_cadence` therefore REPORTS
+both numbers side by side instead of refusing the mismatch, and the
+operator confirms the one they meant.
+
+**Both doors are guarded.** A step's month offset has to fit its plan's
+cycle, and a plan carrying steps has to have a cycle at all. Neither can
+be a CHECK — each reads the other table — so there are triggers on both
+sides. Guarding only the application path would have left a member able to
+PATCH `cycle_months` to null through PostgREST underneath four steps, and
+the generator would then have returned nothing for an account still being
+billed.
+
+`crm_plan_set_sequence` replaces a whole sequence in one statement because
+the guards make the row-at-a-time path genuinely unusable: moving an
+annual program to a monthly one requires clearing four steps before the
+cycle can shrink, and a client that stopped halfway would leave a plan
+with a cycle, no steps, and no visits.
+
+The browser has its own copy of the date arithmetic so the editor can
+preview dates before anything is saved. Two implementations of one rule is
+a liability unless they are pinned together, so the behavior suite runs both
+over the same steps across three years and fails on a single differing
+date — the same arrangement the secret detectors use.
+
+Hosted apply scope `plan-sequencing`.

@@ -66,7 +66,7 @@ built.
 |---|---|---|
 | Work orders, dispatch board, status lifecycle | all | **HAVE** (ADR-189) |
 | Recurring service plans / automated service cadence | Briostack, PestPac, FieldRoutes | **HAVE** (ADR-189) |
-| Twice-monthly and custom appointment sequencing | Briostack | **PARTIAL** — recurrences exist, sequencing does not |
+| Twice-monthly and custom appointment sequencing | Briostack | **HAVE** (ADR-211) — a plan carries ordered steps and a cycle, so "the 1st and the 15th" is 24 visits on those days rather than 27 fortnights that drift off the date, "2nd and 4th Tuesday" anchors to the route, and a seasonal program names a different service per visit. Cycles anchor to the calendar, so March/June/September/November stays those months forever. Sequencing moves visits and never billing: `crm_plan_cadence` reports visits a year beside bills a year so level billing reads as the arrangement it is. |
 | **Route optimization / visual route manager / dynamic planner** | FieldRoutes (deepest), PestPac, Briostack, Jobber | **GAP** |
 | Technician time in/out and timesheets | PestPac | **HAVE** (ADR-197) |
 | **GPS / fleet tracking** | GorillaDesk (Pro), FieldRoutes | **GAP** (needs a provider — would ship Not Connected) |
@@ -199,8 +199,8 @@ SMS/email delivery (which also gates automated reminders and campaign
 sending), GPS/fleet telemetry, QuickBooks sync, call-centre/telephony
 integration, and reviews/reputation platforms.
 
-**A note on what "parity" can mean here.** 58 capability rows: **44 HAVE,
-6 PARTIAL, 8 GAP.**
+**A note on what "parity" can mean here.** 58 capability rows: **45 HAVE,
+5 PARTIAL, 8 GAP.**
 
 The composition matters more than the count. As of ADR-210 **every
 remaining GAP is provider-gated — all eight of them.** Not most, not
@@ -216,7 +216,8 @@ call are the only remaining steps, and `/Services/integrations` reports
 whether each is live from a sealed credential actually existing rather than
 a hard-coded label.
 
-The six PARTIALs are capabilities where the data ships and a piece of what
+The five PARTIALs are capabilities where the data ships and a piece of what
 the competitors sell does not — automated sending on a schedule, drag
 sequencing, truck stock, invoice lines generated from a work order. Those
-are buildable, and each is an increment rather than a row.
+are buildable, and each is an increment rather than a row. Appointment
+sequencing was the sixth until ADR-211 closed it.

@@ -117,6 +117,8 @@ export type ServicePlanView = {
   valueCents: number | null;
   active: boolean;
   notes: string | null;
+  /** Null until the plan is sequenced onto named dates (ADR-211). */
+  cycleMonths: number | null;
   createdAt: string;
   updatedAt: string;
 };

@@ -1,5 +1,32 @@
 # Current state
 
+## 2026-08-31: A plan now runs on a calendar, not an interval (ADR-211)
+
+A service plan may carry an ordered list of visit steps and a cycle length,
+so "the 1st and the 15th" means those days rather than every fourteenth
+one, "2nd and 4th Tuesday" anchors to the route it is driven on, and a
+seasonal program can name a different service for each visit in the year.
+Cycles anchor to the calendar rather than to a stored origin date, so a
+March/June/September/November program stays in those months however often
+somebody edits or pauses it. A plan with no steps behaves exactly as it
+did before.
+
+Two guards are triggers rather than application checks, because PostgREST
+is a door: a step must fit its plan's cycle, and a plan carrying steps must
+have one. `crm_plan_set_sequence` replaces a whole schedule in a single
+statement, so a client that stops halfway cannot leave a plan with a cycle,
+no steps and no visits.
+
+Sequencing moves visits and never billing. Where the two disagree that is
+level billing — pay monthly, serviced quarterly — which is a normal
+arrangement rather than a fault, so the schedule editor reports visits a
+year beside bills a year instead of hiding the difference. The editor lives
+on `/Services/schedule` beside the plan it belongs to, and previews dates
+before anything is saved from a browser copy of the same arithmetic that a
+parity suite pins to the database's.
+
+Repository only: the migration is not yet applied to hosted.
+
 ## 2026-08-31: Grok immutable provider admission is hosted; verifier containment is in progress (ADR-208)
 
 The Grok launch boundary now fails closed unless every executable canonical

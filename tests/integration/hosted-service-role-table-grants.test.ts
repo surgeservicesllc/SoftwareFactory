@@ -109,6 +109,7 @@ const publicTables = [
   "crm_opportunities",
   "crm_payments",
   "crm_pest_sightings",
+  "crm_plan_steps",
   "crm_portal_requests",
   "crm_portal_users",
   "crm_product_lots",

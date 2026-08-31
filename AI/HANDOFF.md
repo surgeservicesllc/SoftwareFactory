@@ -2,6 +2,44 @@
 
 Last updated: 2026-08-31
 
+## Newest (2026-08-31, latest+30): plan sequencing (ADR-211, #75)
+
+`20260831000200` adds crm_plan_steps, a cycle length on the plan, five
+functions, and two cross-table triggers.
+
+WHAT IT IS FOR: a recurrence says how often; a schedule says when. A
+fortnight is not twice a month — it is 26 visits per 364 days, so 27 dates
+land in a calendar year, and it walks off the day the customer was
+promised. Steps put the plan back on named dates.
+
+CYCLES ANCHOR TO THE CALENDAR, deliberately: a step at offset k falls
+wherever (month - 1) % cycle = k. There is no origin column and there must
+not be one — an origin drifts the first time somebody pauses and resumes an
+account, which is the drift this exists to remove. The price is that only
+divisors of 12 are legal cycles, and a constraint says so.
+
+TWO GUARDS ARE TRIGGERS, NOT CHECKS, because each reads the other table:
+a step must fit its plan's cycle, and a plan carrying steps must have one.
+Do not "simplify" either into application code. PostgREST is a door: a
+member can PATCH cycle_months to null underneath four steps, and the
+generator would then return nothing for an account still being billed.
+
+crm_plan_set_sequence REPLACES THE WHOLE SEQUENCE in one statement because
+those guards make row-at-a-time editing unusable — moving an annual
+program to a monthly one needs four steps cleared before the cycle can
+shrink, and a client that stopped halfway leaves a plan with a cycle, no
+steps and no visits.
+
+SEQUENCING NEVER TOUCHES BILLING. The recurrence still decides the invoice
+period, and a test pins it. Where the two disagree that is level billing —
+pay monthly, serviced quarterly — which is a sale, not a fault, so
+crm_plan_cadence reports both numbers rather than refusing the mismatch.
+
+THE BROWSER HAS ITS OWN COPY of the date arithmetic, for previewing unsaved
+schedules. services-plan-sequencing.behavior's "agrees with the browser
+preview" runs SQL and TS over the same steps across three years and fails
+on one differing date. Change one, change the other.
+
 ## Newest (2026-08-31, latest+29): the offline field queue (ADR-210, #74)
 
 `20260830010400` adds crm_field_submissions, two idempotent field
