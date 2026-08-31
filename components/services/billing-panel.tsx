@@ -572,6 +572,24 @@ export function ServicesBillingPanel() {
             title="Payments & credits"
             description="Append-only. A payment recorded in error is corrected by recording the opposite movement, exactly as a ledger is corrected by a contra entry."
           />
+          <div className="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-line bg-subtle/40 p-3">
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium">General journal export</p>
+              <p className="text-xs text-muted">
+                Invoices raised, payments taken, refunds given and uncollectible invoices
+                written off, as balanced double-entry lines. This is a file your bookkeeper
+                imports — nothing is sent to an accounting package from here.
+              </p>
+            </div>
+            <a
+              href="/api/services/accounting-export?format=csv"
+              download="general-journal.csv"
+              data-testid="services-accounting-export"
+              className="shrink-0 rounded-md border border-line px-3 py-2 text-sm font-medium transition hover:bg-subtle"
+            >
+              Download CSV
+            </a>
+          </div>
           {(payments?.payments ?? []).length === 0 ? (
             <p className="mt-4 text-sm text-muted">No payments recorded yet.</p>
           ) : (

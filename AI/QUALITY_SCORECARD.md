@@ -2,6 +2,36 @@
 
 Last reviewed: 2026-08-31
 
+**Addendum, 2026-08-31 latest+39 - accounting export (ADR-219):**
+accounting-export unit 14 and services-accounting-export.behavior 6 on the
+real chain. The unit suite pins what an accountant checks: every entry
+balances, an unbalanced one throws rather than rendering, a draft and a
+void post nothing, the tax line is omitted when there is no tax, a refund
+mirrors a payment rather than negating one, a write-off takes only what is
+still outstanding, cents render by integer arithmetic across values that
+floating division gets wrong, and a customer called "Vance, Marisol" or
+"The \"Pest\" People" stays inside one CSV field. The behaviour suite runs
+the same builder over rows the DATABASE produced and found three things
+fixtures would not have: crm_refunds points at a PAYMENT rather than an
+invoice, so the first draft dropped every refund silently; crm_payments
+carries its own account_id; and the payment triggers NET REFUNDS OUT of
+paid_cents, so a design that also posted refunds separately would
+double-count — this one does not, and Accounts Receivable provably nets to
+zero across raise, payment, refund and write-off. The route's first draft
+reached across composite foreign keys with PostgREST embeddings, which
+cannot be verified without a live PostgREST; four plain selects joined in
+memory replaced them. No migration. Matrix: 10 GAP -> 9, 8 PARTIAL -> 9.
+
+Also in this batch: 17 more suites moved onto the migration snapshot
+(199 tests, test time 83.27s -> 55.39s). The CI quality job went 19m19s on
+#480 to 18m00s on #481 with only two suites converted, so the ceiling
+headroom is back from 41 seconds to about two minutes. Bulk conversion was
+attempted twice with a regex and reverted both times; the shapes differ too
+much (three suites declare the database inside a helper function, one has a
+local name colliding with the import, one has its own chain-applying
+helper). The 17 that stand were done per file with the imports fixed and
+every suite run.
+
 **Addendum, 2026-08-31 latest+38 - autopay authorisation (ADR-218):**
 services-autopay.behavior 15 on the real chain, most about what cannot
 happen: a card number refused in the holder name, spaced or dashed, and in

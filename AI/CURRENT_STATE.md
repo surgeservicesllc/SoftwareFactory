@@ -472,7 +472,16 @@ is reachable only through a settlement that asks whether a processor is
 really connected. The seed writes 351 charge attempts and not one is
 settled.
 
-Of the remaining eighteen rows, ten are gated on an
+The books can now leave the building (ADR-219). A general-journal CSV
+carries invoices raised, payments taken, refunds given and uncollectible
+invoices written off as balanced double-entry lines, downloadable from the
+ledger tab. It is an EXPORT a bookkeeper imports, not a sync, and the code
+says so in the module, the route and the row; the API sync still needs an
+Intuit account. Every entry balances by construction — an unbalanced one
+throws rather than rendering — because a journal file that does not balance
+is rejected at the import screen, or worse, accepted.
+
+Of the remaining eighteen rows, nine are gated on an
 external account nobody has opened: card/ACH processing, SMS/email
 delivery, GPS telemetry, QuickBooks sync, telephony, reviews and
 drive-time routing. Those ship labelled **Not Connected** and are never

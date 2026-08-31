@@ -1,11 +1,8 @@
 // @vitest-environment node
 
-import { readdir, readFile } from "node:fs/promises";
-import { resolve } from "node:path";
-
 import { PGlite } from "@electric-sql/pglite";
-import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { createMigratedDatabase, latestMigration } from "../support/migrated-database";
 import { LATEST_MIGRATION } from "../support/latest-migration";
 
 /**
@@ -20,10 +17,6 @@ import { LATEST_MIGRATION } from "../support/latest-migration";
  * did not think about each of them would either fail on a foreign key or
  * quietly orphan a pull request that still exists on GitHub.
  */
-
-const repositoryRoot = resolve(import.meta.dirname, "../..");
-const migrationsRoot = resolve(repositoryRoot, "supabase/migrations");
-const latestMigration = LATEST_MIGRATION;
 
 const ownerId = "00000000-0000-4000-8000-0000000003a1";
 const adminId = "00000000-0000-4000-8000-0000000003a2";
@@ -169,28 +162,9 @@ async function seed(runStatus = "failed", leaseExpiresAt: string | null = null) 
 
 describe("run review and deletion", { timeout: 180_000 }, () => {
   beforeEach(async () => {
-    db = new PGlite({ extensions: { pgcrypto } });
-    await db.exec(`
-      create schema if not exists auth;
-      create table auth.users (
-        id uuid primary key default gen_random_uuid(),
-        raw_user_meta_data jsonb not null default '{}'::jsonb
-      );
-      create or replace function auth.uid() returns uuid language sql stable as $$
-        select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
-      create or replace function auth.jwt() returns jsonb language sql stable as $$
-        select coalesce(nullif(current_setting('request.jwt.claims', true), '')::jsonb, '{}'::jsonb) $$;
-      create role anon nologin;
-      create role authenticated nologin;
-      create role service_role nologin bypassrls;
-    `);
-    const migrations = (await readdir(migrationsRoot))
-      .filter((file) => /^\d+.*\.sql$/.test(file))
-      .sort();
-    expect(migrations.at(-1)).toBe(latestMigration);
-    for (const migration of migrations) {
-      await db.exec(await readFile(resolve(migrationsRoot, migration), "utf8"));
-    }
+    // The chain, restored from a snapshot rather than replayed.
+    expect(await latestMigration()).toBe(LATEST_MIGRATION);
+    db = await createMigratedDatabase();
   });
 
   afterEach(async () => {

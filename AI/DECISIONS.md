@@ -5548,3 +5548,64 @@ Row moves GAP -> PARTIAL. What remains gated is the movement of money, and
 only that.
 
 Hosted apply scope `autopay-authorization`.
+
+## ADR-219 - A file the bookkeeper can post, which is not a sync
+
+"QuickBooks sync" carried a bare GAP with no gating reason written beside
+it, and that absence was the tell. The API sync genuinely needs an Intuit
+account nobody has opened. A FILE does not, and a file of balanced journal
+entries is what a great many small shops actually hand their accountant.
+
+Every field it needs was already here: `crm_invoices`, `crm_payments`,
+`crm_refunds` and `crm_accounts`. Nothing external is involved, which is
+why this row was never wholly gated.
+
+**It is an export and the code says so** — in the module header, in the
+route, and in the row. Nothing is pushed anywhere; a person downloads a
+file and imports it. Labelling it a sync would be the class of claim this
+repository has spent twenty-four increments refusing.
+
+**EVERY ENTRY BALANCES, BY CONSTRUCTION.** An accountant's first act is to
+check that debits equal credits, and a file that does not balance is
+rejected at the import screen — or worse, accepted, and then it silently
+corrupts a set of books. So entries are built as balanced wholes and
+`balanced()` throws rather than returning something plausible. If it ever
+fires, the bug is in that file and not in anybody's ledger. The whole-file
+total is checked too, because that is the check a person actually performs.
+
+**Integer cents throughout.** `(cents / 100).toFixed(2)` is the obvious
+rendering and it is wrong often enough to matter: floating division puts
+some values a hair under the rounding boundary, and a ledger out by a penny
+is out. `formatAmount` does the division by hand, and a test walks values
+that expose the difference.
+
+**The chart is names, not numbers.** Every package numbers its accounts
+differently; a bookkeeper maps five names in a minute, whereas numbers
+invented here would look authoritative and be wrong everywhere.
+
+**Undeposited Funds, not a bank account**, because this product does not
+know which bank the money landed in and a guess is something an accountant
+then has to unpick.
+
+**Three things the real schema taught me, none of which a fixture would
+have.** `crm_refunds` points at a PAYMENT, not an invoice, so reaching the
+invoice is two hops and my first draft dropped every refund silently.
+`crm_payments` carries its own `account_id`. And the payment triggers NET
+REFUNDS OUT of `paid_cents` — so a design that also posted refunds
+separately could double-count. This one does not: the refund posts as its
+own entry and `paid_cents` is used only for the write-off, and Accounts
+Receivable provably nets to zero across raise, payment, refund and
+write-off.
+
+**The mapping lives in the service, not the route.** A mapping only the
+route knew would be a mapping only production ever exercised; the
+behaviour suite drives the exact code path the download uses.
+
+I also removed a failure mode I could not test. The first draft reached
+across composite foreign keys with PostgREST embeddings, which cannot be
+verified here without a live PostgREST. Four plain selects joined in memory
+are a few more lines and no guesswork.
+
+Row moves GAP -> PARTIAL. The API sync stays gated, and stays named.
+
+No migration; no hosted apply scope.
