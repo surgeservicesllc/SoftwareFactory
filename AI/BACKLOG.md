@@ -1,5 +1,19 @@
 # Backlog
 
+## Grok admission-version null-fence release lane (ADR-237, 2026-08-31)
+
+- [x] Freeze canonical-LF migration 019 at SHA-256
+  `a0dd4da859e5ed6cb65342f2e5b3962c07d672346bd06685052c6446e99c5221`
+  and 8,404 bytes, with one-file manual probe/apply/verify staging.
+- [x] Pin exact ledger lineage, unrelated-history digest, old/new function
+  source/ABI/security/search-path/ACL posture, linked lint, production identity,
+  health, and stopped-safety gates before and after the operation.
+- [x] Prove native null/missing/wrong roster, full-lifecycle-v4, and research-v2
+  rejection before writes, zero residue, valid/replay behavior, and corrected
+  route response labels for the callable v2/v4 boundary.
+- [ ] Publish and run probe/apply/verify only as a separately reviewed
+  production release. No hosted operation or production acceptance is claimed.
+
 ## Close-out triage (2026-08-31, owner /goal: complete the backlog, 100% production ready)
 
 Every box below this section is either checked or parked, and every parked

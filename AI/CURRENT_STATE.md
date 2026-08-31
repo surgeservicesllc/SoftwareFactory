@@ -1,5 +1,39 @@
 # Current state
 
+## 2026-08-31: Grok admission-version null fence has an exact protected lane (ADR-237)
+
+Migration `20260831001900_grok_admission_version_null_fence.sql` is frozen at
+canonical-LF SHA-256
+`a0dd4da859e5ed6cb65342f2e5b3962c07d672346bd06685052c6446e99c5221`
+(8,404 bytes). A dedicated manual `probe` / `apply` / `verify` workflow stages
+only those bytes and permits apply to persist only that file plus one 019
+ledger row in a locked transaction. It requires exact lineage through 017,
+unchanged unrelated history, exact current-main/four-green-job/READY Vercel/
+health/Supabase identity, native function definitions and ABI, linked lint, and
+stopped workers/schedules/autonomy/actions with kill switches ON.
+
+Preflight and rollback-only postflight pin the unchanged v1/v3 source,
+SECURITY DEFINER, `search_path=pg_catalog`, and contracted ACLs as well as the
+new v2/v4 identities. The old roster-v1, lifecycle-v3, and research-v1
+signatures are no longer service-callable; only roster-v2, lifecycle-v4, and
+research-v2 retain exact service-role execute. Native fixtures reject null,
+missing, and wrong roster/admission versions before delegate writes, prove zero
+residue, and prove valid roster/research replay. Existing full-lifecycle native
+coverage proves v4 rejection plus valid exact replay. Route responses now name
+the actual `full_lifecycle_v4` / `read_only_research_v2` boundary instead of
+stale v3/v1 labels.
+
+Focused route/workflow/native/document contracts pass 10 files / 92 tests;
+the complete repository suite passes 577 files / 6,549 tests with three files /
+seven tests skipped. Strict typecheck and repository lint pass when the ignored
+generated `.next-webpack-failed` directory is excluded. The default build is
+blocked by this worktree's external `node_modules` junction; webpack compiles
+and reaches the same seven pre-existing App Router export/signature errors.
+
+This is repository-only release machinery. Nothing was applied, dispatched,
+pushed, deployed, or enabled; workers, autonomy, and all automatic actions
+remain OFF and the global kill switch remains ON.
+
 ## 2026-08-31: Grok 015 and 017 have sequential protected release candidates (ADR-234)
 
 Two manual, serialized `probe` / `apply` / `verify` lanes now cover only

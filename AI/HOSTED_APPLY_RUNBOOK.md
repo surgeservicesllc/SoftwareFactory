@@ -3,6 +3,36 @@
 Written 2026-08-14, after verifying the whole chain on a real PostgreSQL 16 cluster.
 Rebased 2026-08-16 on an owner-measured hosted position (see the section directly below).
 
+## Grok admission-version null fence (ADR-237, repository-only)
+
+Use only `.github/workflows/grok-admission-version-null-fence-migration.yml`
+for `20260831001900_grok_admission_version_null_fence.sql`, canonical-LF
+SHA-256
+`a0dd4da859e5ed6cb65342f2e5b3962c07d672346bd06685052c6446e99c5221`
+and exactly 8,404 bytes. Never apply it through a broad migration command,
+reset, history repair, replay, down migration, or automatic dispatch.
+
+Run a fresh manual `probe`, then `apply`, then `verify` against one unchanged
+reviewed lowercase 40-character current-main release. Supply the exact
+operation confirmation and migration hash each time. The lane requires 00100
+through 01700 exactly once, no later row before apply, an unchanged digest of
+every row other than 019, all four exact-head jobs green, exact READY Vercel
+Production and public health/Supabase identity, configured first-attempt actor,
+all execution/auth workflows stopped, worker/schedule switches OFF, auth broker
+disabled, autonomy and nine automatic actions OFF, kill switches ON, and zero
+running graph/agent/Phase1C-guard state.
+
+Probe must stage only the LF-normalized 019 bytes, rehearse DDL plus a temporary
+ledger row, lint all three new wrappers, execute native catalog/ACL and adverse
+runtime evidence, and roll back without residue. Apply repeats those proofs,
+then persists only 019 and its ledger row in one locked transaction and reloads
+PostgREST. Verify must prove the six exact old/new definitions and ABI,
+SECURITY DEFINER, `search_path=pg_catalog`, old v1/v3 service revocation, new
+v2/v4 service-only grants, null/missing/wrong rejection with zero residue,
+valid/replay behavior, linked lint, health, and unchanged stopped safety.
+Stop on any mismatch and contain only through a separately reviewed forward
+change. Applying 019 alone is not signed-in or provider execution acceptance.
+
 ## Grok Phase 1C exact graph re-wake (ADR-233, repository-only)
 
 Use only `.github/workflows/grok-graph-rewake-migration.yml` for

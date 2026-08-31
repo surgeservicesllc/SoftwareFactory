@@ -2,6 +2,25 @@
 
 Last reviewed: 2026-08-31
 
+**Addendum, 2026-08-31 latest+55 - protected Grok 019 admission-version
+null fence (ADR-237):** Repository evidence freezes canonical-LF migration 019
+at SHA-256
+`a0dd4da859e5ed6cb65342f2e5b3962c07d672346bd06685052c6446e99c5221`
+and 8,404 bytes. The manual one-file lane requires exact lineage/unrelated
+ledger, six native function source/ABI/security/search-path/ACL identities,
+four green jobs, READY Vercel and matching health/Supabase, linked lint, and
+stopped execution/autonomy/actions with kill switches ON. Rollback-only native
+evidence covers null/missing/wrong roster and v2/v4 admission rejection before
+writes, zero residue, valid/replay behavior, exact old-endpoint revocation, and
+new-endpoint service-only grants. Route contracts now report the actual v2/v4
+bridge. Focused evidence passes 10 files / 92 tests, the full repository suite
+passes 577 files / 6,549 tests with three files / seven tests skipped, and
+strict typecheck plus source lint pass. Turbopack remains blocked by the
+worktree's external dependency junction; webpack compiles then reaches the
+same seven pre-existing App Router route-export/signature errors. Hosted
+probe/apply/verify, exact-head CI/build/browser, deployment, and
+signed-in production acceptance remain pending; no production claim is made.
+
 **Addendum, 2026-08-31 latest+47 - version-safe Grok ACL verification
 (ADR-227):** Exact main `24a6313e98023bfc618a921fc563c9f4bde4cad2`
 passed four-job CI `33400336336`, reached READY deployment

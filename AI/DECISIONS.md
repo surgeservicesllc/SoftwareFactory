@@ -6167,3 +6167,32 @@ plan therefore produces `replanRequired=true`. No context or message operation
 wakes a worker, starts a run, dispatches an action, or changes autonomy. Replan
 must be a separately designed and owner-visible transition rather than an
 implicit side effect of conversation.
+
+## ADR-237 - Release the admission-version null fence through one exact-file lane
+
+- **Date**: 2026-08-31
+- **Status**: Accepted for the repository candidate; hosted operations not run
+
+Migration 019 closes PostgreSQL JSON-null three-valued-logic gaps by validating
+the declared protocol version in new wrappers before any older audited
+delegate can write. Because it also contracts the service-role surface from
+roster-v1/lifecycle-v3/research-v1 to roster-v2/lifecycle-v4/research-v2, its
+release identity is both a data-integrity and authority boundary.
+
+The migration is therefore released only through a manual serialized
+`probe` / `apply` / `verify` lane pinned to its canonical-LF SHA-256 and byte
+count. The lane proves exact predecessor and unrelated ledger identity,
+current green/READY production and health/Supabase identity, all six old/new
+native source and ABI fingerprints, SECURITY DEFINER, pinned search paths,
+exact owner/service ACLs, linked lint, and stopped execution safety. Apply may
+persist only the one staged file and one ledger row in one locked transaction.
+
+Rollback-only native fixtures prove null, missing, and wrong roster and launch
+versions reject before delegation, leave no durable graph/launch/admission
+residue, and preserve exact valid/replay behavior. Response bridge labels name
+the callable v2/v4 boundary, while underlying immutable audit events retain
+their already-defined internal bridge identity. This lane does not authorize
+a worker, dispatch, autonomy, automatic action, kill-switch change, merge,
+deploy, or live database operation. Any mismatch requires a separately
+reviewed forward containment change; reset, replay, repair, down, and broad
+migration application are prohibited.

@@ -480,7 +480,7 @@ describe("Grok sessions POST", () => {
       session: { id: sessionId, status: "paused", graphId },
       workerWoken: false,
       executionStarted: false,
-      execution: { state: "paused", bridge: "full_lifecycle_v3" },
+      execution: { state: "paused", bridge: "full_lifecycle_v4" },
     });
     expect(harness.appendUser).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
       prompt: "Build the portal",
@@ -658,7 +658,7 @@ describe("Grok sessions POST", () => {
     expect(responseBody).toMatchObject({
       workerWoken: false,
       executionStarted: false,
-      execution: { bridge: "read_only_research_v1", state: "paused" },
+      execution: { bridge: "read_only_research_v2", state: "paused" },
     });
     expect(harness.buildReadOnlyAdmissions).toHaveBeenCalledWith(
       researchPlan,
@@ -803,7 +803,7 @@ describe("Grok sessions POST", () => {
       executionStarted: true,
       execution: {
         state: "running",
-        bridge: "full_lifecycle_v3",
+        bridge: "full_lifecycle_v4",
         message: expect.stringMatching(/durable graph run is linked.*request did not dispatch/i),
       },
     });

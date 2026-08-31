@@ -65,6 +65,26 @@ const releases = [
       "public.launch_grok_read_only_research_v1_as_server(uuid,uuid,uuid,uuid,uuid,text,text,public.graph_topology,jsonb,public.risk_level,boolean,jsonb,jsonb,jsonb,text,jsonb)",
     ],
   },
+  {
+    label: "admission-version null fence",
+    version: "20260831001900",
+    workflowPath: ".github/workflows/grok-admission-version-null-fence-migration.yml",
+    migrationPath: "supabase/migrations/20260831001900_grok_admission_version_null_fence.sql",
+    preflightPath: ".github/grok-release/grok-admission-version-null-fence-preflight.sql",
+    postflightPath: ".github/grok-release/grok-admission-version-null-fence-postflight.sql",
+    sha256: "a0dd4da859e5ed6cb65342f2e5b3962c07d672346bd06685052c6446e99c5221",
+    confirm: "grok-admission-version-null-fence",
+    preflightMarker: "grok-admission-version-null-fence-release-preflight-ok",
+    postflightMarker: "grok-admission-version-null-fence-release-postflight-ok",
+    functions: [
+      "public.record_grok_specialist_roster_v1_as_server(uuid,uuid,uuid,uuid,uuid,text,bigint)",
+      "public.record_grok_specialist_roster_v2_as_server(uuid,uuid,uuid,uuid,uuid,text,bigint)",
+      "public.launch_grok_full_lifecycle_v3_as_server(uuid,uuid,uuid,uuid,uuid,text,text,public.graph_topology,jsonb,public.risk_level,boolean,jsonb,jsonb,jsonb,uuid,text,text,jsonb,text,jsonb)",
+      "public.launch_grok_full_lifecycle_v4_as_server(uuid,uuid,uuid,uuid,uuid,text,text,public.graph_topology,jsonb,public.risk_level,boolean,jsonb,jsonb,jsonb,uuid,text,text,jsonb,text,jsonb)",
+      "public.launch_grok_read_only_research_v1_as_server(uuid,uuid,uuid,uuid,uuid,text,text,public.graph_topology,jsonb,public.risk_level,boolean,jsonb,jsonb,jsonb,text,jsonb)",
+      "public.launch_grok_read_only_research_v2_as_server(uuid,uuid,uuid,uuid,uuid,text,text,public.graph_topology,jsonb,public.risk_level,boolean,jsonb,jsonb,jsonb,text,jsonb)",
+    ],
+  },
 ] as const;
 
 function load(release: (typeof releases)[number]) {
@@ -222,6 +242,7 @@ describe.each(releases)("protected $label migration lane", (release) => {
 describe("post-context migration release order and adverse behavior", () => {
   const context = load(releases[0]);
   const research = load(releases[1]);
+  const fence = load(releases[2]);
 
   it("requires 015 before every later migration", () => {
     for (const version of [
@@ -259,5 +280,46 @@ describe("post-context migration release order and adverse behavior", () => {
       /^\s*(?:PHASE1C_WORKER_ENABLED|GRAPH_WORKER_ENABLED|GRAPH_WORKER_SCHEDULED):\s*(?:true|"true")\s*$/im,
     );
     expect(research.source).not.toMatch(/autonomy_kill_switch_active\s*=\s*false/i);
+  });
+
+  it("proves the 019 exact null fence ACL contraction and zero-residue runtime", () => {
+    expect(fence.workflow.jobs.release.env).toMatchObject({ MIGRATION_BYTES: "8404" });
+    expect(fence.step("Stage exactly one canonical migration file").run).toContain(
+      'ACTUAL_BYTES=$(wc -c < "$STAGED_MIGRATION"',
+    );
+    for (const version of ["20260831001500", "20260831001600", "20260831001700"]) {
+      expect(fence.preflight).toContain(version);
+    }
+    for (const hash of [
+      "8c8276ef3a0d5bf27204a836788f736f",
+      "4e41c8e312bca5fb13773dd0c9fbf19f",
+      "e028c29915d50f0eb7773affa146fae7",
+      "f9b3b947feccfe16eec03916cb3330fb",
+      "1f4e57b243466f21a67215712307eb76",
+      "2cb5d0d85ecff30add9c7e21711bf434",
+    ]) expect(`${fence.preflight}\n${fence.postflight}`).toContain(hash);
+    for (const proof of [
+      "null_roster_version_was_not_blocked",
+      "missing_roster_version_was_not_blocked",
+      "wrong_roster_version_was_not_blocked",
+      "roster_rejection_left_residue",
+      "null_admission_version_was_not_blocked",
+      "missing_admission_version_was_not_blocked",
+      "wrong_admission_version_was_not_blocked",
+      "v4_null_version_was_not_blocked",
+      "v4_missing_version_was_not_blocked",
+      "v4_wrong_version_was_not_blocked",
+      "admission_rejection_left_residue",
+      "roster_replay_mismatch",
+      "idempotent_replay_mismatch",
+      "aclexplode",
+      "service_role_execute",
+      "workerWoken",
+      "executionStarted",
+    ]) expect(fence.postflight).toContain(proof);
+    expect(fence.source).toContain("record_grok_specialist_roster_v2_as_server");
+    expect(fence.source).toContain("launch_grok_full_lifecycle_v4_as_server");
+    expect(fence.source).toContain("launch_grok_read_only_research_v2_as_server");
+    expect(fence.source).not.toMatch(/autonomy_kill_switch_active\s*=\s*false/i);
   });
 });

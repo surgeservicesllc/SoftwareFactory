@@ -1395,10 +1395,28 @@ describe("Grok Chief-of-Staff persistence", () => {
     const nullVersionAdmissions = admissions.map((entry, index) => index === 0
       ? { ...entry, version: null }
       : entry);
+    const missingVersionAdmissions = admissions.map((entry, index) => index === 0
+      ? { ...entry, version: undefined }
+      : entry);
+    const wrongVersionAdmissions = admissions.map((entry, index) => index === 0
+      ? { ...entry, version: 1 }
+      : entry);
     await expect(
       db.query(call, [
         ...parameters.slice(0, 19),
         JSON.stringify(nullVersionAdmissions),
+      ]),
+    ).rejects.toThrow(/invalid grok v4 provider admission protocol version/i);
+    await expect(
+      db.query(call, [
+        ...parameters.slice(0, 19),
+        JSON.stringify(missingVersionAdmissions),
+      ]),
+    ).rejects.toThrow(/invalid grok v4 provider admission protocol version/i);
+    await expect(
+      db.query(call, [
+        ...parameters.slice(0, 19),
+        JSON.stringify(wrongVersionAdmissions),
       ]),
     ).rejects.toThrow(/invalid grok v4 provider admission protocol version/i);
     const mismatchedParameters = [

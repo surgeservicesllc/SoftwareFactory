@@ -222,9 +222,23 @@ describe("Grok read-only research runtime behavior", () => {
     const nullVersion = admissions.map((entry, index) => index === 0
       ? { ...entry, version: null }
       : entry);
+    const missingVersion = admissions.map((entry, index) => index === 0
+      ? { ...entry, version: undefined }
+      : entry);
+    const wrongVersion = admissions.map((entry, index) => index === 0
+      ? { ...entry, version: 1 }
+      : entry);
     await expect(db.query(call, parameters({
       idempotencyKey: "research-null-version-0001",
       admissions: nullVersion,
+    }))).rejects.toThrow(/invalid grok research v2 admission protocol version/i);
+    await expect(db.query(call, parameters({
+      idempotencyKey: "research-missing-version-0001",
+      admissions: missingVersion,
+    }))).rejects.toThrow(/invalid grok research v2 admission protocol version/i);
+    await expect(db.query(call, parameters({
+      idempotencyKey: "research-wrong-version-0001",
+      admissions: wrongVersion,
     }))).rejects.toThrow(/invalid grok research v2 admission protocol version/i);
     await expect(db.query(call, parameters({
       idempotencyKey: "research-red-risk-0001",

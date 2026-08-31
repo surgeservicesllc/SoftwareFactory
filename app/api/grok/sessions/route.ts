@@ -567,8 +567,8 @@ export async function POST(request: Request) {
       execution: {
         state: executionState,
         bridge: plan.intent.kind === "research"
-          ? "read_only_research_v1"
-          : "full_lifecycle_v3",
+          ? "read_only_research_v2"
+          : "full_lifecycle_v4",
         message: executionMessage,
       },
     }, { status: 202 });

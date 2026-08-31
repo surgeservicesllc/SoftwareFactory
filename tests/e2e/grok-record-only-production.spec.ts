@@ -58,7 +58,7 @@ const createSchema = detailSchema.extend({
   executionStarted: z.literal(false),
   execution: z.object({
     state: z.string().min(1),
-    bridge: z.literal("full_lifecycle_v3"),
+    bridge: z.literal("full_lifecycle_v4"),
     message: z.string().min(1),
   }).strict(),
 });

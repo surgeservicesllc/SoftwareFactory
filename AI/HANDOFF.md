@@ -2,6 +2,42 @@
 
 Last updated: 2026-08-31
 
+## Newest (2026-08-31, latest+55): protected Grok 019 null-fence lane (ADR-237)
+
+Use only `.github/workflows/grok-admission-version-null-fence-migration.yml`
+for `20260831001900_grok_admission_version_null_fence.sql`. Its immutable
+canonical-LF identity is SHA-256
+`a0dd4da859e5ed6cb65342f2e5b3962c07d672346bd06685052c6446e99c5221`,
+8,404 bytes. Probe rehearses the exact one file, temporary ledger row, native
+postflight, and all three new wrapper lint targets under rollback. Apply may
+persist only that file and one 019 row in one locked transaction; verify never
+replays DDL.
+
+Preserve the exact callable boundary: service role has execute only on
+`record_grok_specialist_roster_v2_as_server`,
+`launch_grok_full_lifecycle_v4_as_server`, and
+`launch_grok_read_only_research_v2_as_server`. The corresponding v1/v3
+signatures remain defined for internal delegation but have no service/browser
+execute grant. Native source MD5s are old roster/v1
+`8c8276ef3a0d5bf27204a836788f736f`, lifecycle/v3
+`4e41c8e312bca5fb13773dd0c9fbf19f`, research/v1
+`e028c29915d50f0eb7773affa146fae7`, new roster/v2
+`f9b3b947feccfe16eec03916cb3330fb`, lifecycle/v4
+`1f4e57b243466f21a67215712307eb76`, and research/v2
+`2cb5d0d85ecff30add9c7e21711bf434`.
+
+The rollback fixture proves null/missing/wrong versions fail before writes,
+leaving no graph/launch/execution-admission residue, then proves exact valid
+roster and read-only launch replay. Full-lifecycle behavior coverage also
+proves v4 malformed-version rejection and valid replay. The session route now
+returns `full_lifecycle_v4` / `read_only_research_v2`; do not restore stale
+v3/v1 response labels. Focused evidence is 10 files / 92 tests and the full
+suite is 577 files / 6,549 tests with three files / seven tests skipped;
+typecheck and source lint are green. The ordinary build retains the known
+isolated-worktree dependency-junction blocker and seven existing webpack route
+export/signature failures. Nothing here was applied, dispatched, pushed, deployed,
+or enabled. Keep all execution switches OFF and kill switches ON.
+
 ## Newest (2026-08-31, latest+47): Grok ACL verification follows the server's owner default (ADR-227)
 
 PR #487 merged as exact main `24a6313e98023bfc618a921fc563c9f4bde4cad2`.
