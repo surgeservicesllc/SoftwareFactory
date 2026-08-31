@@ -27,7 +27,7 @@ parity suite pins to the database's.
 
 Repository only: the migration is not yet applied to hosted.
 
-## 2026-08-31: Grok immutable provider admission is hosted; verifier containment is in progress (ADR-208)
+## 2026-08-31: Grok immutable provider admission is hosted; runtime verifier containment is in progress (ADR-208)
 
 The Grok launch boundary now fails closed unless every executable canonical
 node carries an immutable, safe provider admission. New planner version-2
@@ -57,11 +57,24 @@ deployment `dpl_FeUuBGBeQBDEieFtquUoHRCBPWbc`. Protected apply run
 exactly once, and reloaded PostgREST, then stopped at postflight because the
 workflow's two new `prosrc` hashes accidentally included delimiter text.
 Independent exact-body/PGlite catalog checks prove the hosted functions and
-ACLs are correct. The verifier now derives the PostgreSQL-stored body hashes:
+ACLs are correct. Verifier commit
+`d5e91c78e7696072eba72cb744d747c724b73eec` derives the PostgreSQL-stored body hashes:
 `3c2b855b41873447c738b2b220d10544` for the admission hash helper and
-`78055b8bc6d6d44dbb1cbd6e94657a8d` for the v2 launcher. Do not rerun,
-repair, replay, or down-migrate `20260831000100`; publish this verifier-only
-containment and run only the independent read-only `verify` scope.
+`78055b8bc6d6d44dbb1cbd6e94657a8d` for the v2 launcher. Then-current-main commit
+`25f39c45b15e1089d829150143a4ed6ee78acd36` inherited that fix, passed all
+four exact-head jobs in CI `33368051986`, and reached exact READY deployment
+`dpl_Hazwv3nZwHnNer7FAKSfkMqGThUU`.
+
+Read-only run `33369343687` then passed exact main/CI/Vercel/health, compiler,
+project/file identity, ledger, catalog, and stopped-containment preflight. It
+correctly skipped migration apply and schema reload, but failed before the
+rollback canary because `psql -c` sent its three `:'variable'` tokens to the
+server without client interpolation. The open forward containment moves that
+fixture input into `.github/grok-release/provider-admission-runtime-input.sql`
+and regression-tests that it is consumed through `psql -f`. The failed run
+made no durable database change. Do not rerun, repair, replay, or down-migrate
+`20260831000100`; publish this verifier-only containment and run only the
+independent read-only `verify` scope.
 
 This is launch admission, not worker admission. Existing graph Resume/wake and
 worker-claim paths do not yet require or revalidate an admission row, so
@@ -70,7 +83,7 @@ switch remains ON. Research/deploy prompts currently fail closed at canonical
 admission, specialist-only rosters can lack canonical evaluation/decision
 coverage, and wildcard role normalization still needs a new forward migration.
 Those are explicit follow-ups; **GROK BOT: PRODUCTION READY is not declared.**
-The hosted migration is awaiting the corrected exact-main verifier release,
+The hosted migration is awaiting the corrected runtime-input verifier release,
 independent read-only verification, and signed-in production acceptance.
 
 ## 2026-08-31: Grok atomic control is production accepted; provider loop remains open (ADR-204)
