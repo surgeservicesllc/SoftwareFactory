@@ -1,35 +1,57 @@
 # Current state
 
-## 2026-08-30: Grok Bot local release candidate (ADR-190)
+## 2026-08-30: Grok Bot database containment accepted; application pending (ADR-190)
 
 Grok Bot is a SoftwareFactory product label and Chief-of-Staff experience, not
-an xAI provider or model. The local candidate turns an owner prompt into a
-deterministic, JSON-safe Intent -> Requirements -> Plan -> Task Graph record
-using the project's configured Claude and Codex bot roster. Its responsive
-workspace restores durable sessions and renders conversation, goal, plan,
-agents, progress, files/diffs, tests, artifacts, and deployment evidence.
-Planned provider/model/agent fields remain routing intent and are never
-presented as observed execution evidence.
+an xAI provider or model. Production currently serves exact database-first
+main `f6292c8ec359fd8e39c5463e4039b3388cf2056f`; all four jobs in CI run
+`33348187052` passed, Vercel deployment
+`dpl_A35nZhbJQMJWLtUSroG9zXLWhXBw` is READY, and public health matches that
+identity. That
+baseline turns an owner prompt into a deterministic, JSON-safe Intent ->
+Requirements -> Plan -> Task Graph record using the project's configured
+Claude and Codex bot roster. Its responsive workspace restores durable
+sessions and renders conversation, goal, plan, agents, progress, files/diffs,
+tests, artifacts, and deployment evidence. Planned provider/model/agent fields
+remain routing intent and are never presented as observed execution evidence.
 
 Migration `20260830001000_grok_chief_of_staff_persistence.sql` adds the durable
 owner-only Supabase boundary: sessions, append-only messages and events,
 immutable task/graph/artifact links, and monotonic control intents, all tenant
 and project scoped under forced RLS with bounded definer functions. The owner
 session APIs create, list, read, and control that durable state. Replays are
-idempotent, and status/reload truth is projected from persisted state.
+idempotent, and status/reload truth is projected from persisted state. The
+service-only execution bridge creates the exact canonical `full_lifecycle` v2
+graph — Claude planning -> HUMAN architecture gate -> Codex Phase 1C -> exact
+CI, Vercel, and health evidence — and pauses it in the same transaction before
+it becomes visible. The custom provider-labelled DAG remains planning data and
+is never launched; graph and node runs remain absent, and no worker is
+dispatched.
 
-The service-only execution bridge creates the exact canonical
-`full_lifecycle` v2 graph — Claude planning -> HUMAN architecture gate ->
-Codex Phase 1C -> exact CI, Vercel, and health evidence — and pauses it in the
-same transaction before it becomes visible. The custom provider-labelled DAG
-remains planning data and is never launched; graph and node runs remain absent,
-and no worker is dispatched. Focused bridge tests are green, and the prior full
-suite at `a26caec` was green with 5,705 passing tests and 7 skipped. Final
-post-release-workflow full gates, the exact push/deployment, hosted ledger
-application of migrations `20260830000900` and `20260830001000`, and signed-in
-production acceptance remain pending. Workers, autonomy, and automatic actions
-remain OFF, and the global kill switch remains ON. **GROK BOT: PRODUCTION
-READY is not declared.**
+Earlier signed-in production acceptance found one truthful failure-path defect. A
+legitimate connected Claude bot is ready, but no Codex bot is available, so
+the deterministic planner correctly refuses the roster. The existing route
+persisted the owner message while leaving the session active, and the UI then
+misreported that a plan had been saved. The forward-only database containment
+in `20260830001100_grok_planning_failure.sql` adds a service-role-only atomic
+boundary records a fixed safe assistant response and immutable failure events,
+then leaves the session `blocked` and nonclosed without creating a graph, run,
+or dispatch. The API candidate replays that durable failure as a structured
+409 carrying the session identity and stopped-execution flags. The workspace
+keeps that identity in the URL, reloads the recorded evidence, and explicitly
+shows that no plan, routing identity, provider call, or worker execution was
+created.
+
+Database-first Phase 1 is complete. Migration apply run `33348980504` and
+independent read-only verify run `33349033378` passed against the exact release:
+the required ledger vector is `1|1|1|1`, and catalog, ACL, atomic runtime and
+replay, linked lint, health, and stopped-safety checks are exact. Phase 2 remains
+pending: publish the API/store/UI caller, require exact-head CI and Vercel
+identity, then complete signed-in create/return/reload acceptance. The new
+application behavior is not yet claimed live. Workers, autonomy, and automatic
+actions remain OFF, and the global kill switch remains ON. This containment
+does not fabricate a missing Codex route or authorize execution. **GROK BOT:
+PRODUCTION READY is not declared.**
 
 ## Services CRM (task #63, ADR-185 — newest product)
 

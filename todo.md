@@ -1,26 +1,29 @@
 # SoftwareFactory — shared working status
 
-## GROK BOT LOCAL RELEASE CANDIDATE (2026-08-30 — PICK UP HERE)
+## GROK BOT DATABASE PHASE ACCEPTED; APPLICATION PHASE NEXT (2026-08-30 — PICK UP HERE)
 
-- Durable deterministic Chief-of-Staff planning, owner-scoped Supabase
-  persistence, and the responsive Grok workspace are complete in the local
-  candidate. `Grok Bot` is a product label over configured Claude and Codex
-  agents; no xAI provider was added.
-- The service-only bridge creates the exact canonical `full_lifecycle` v2
-  graph and pauses it atomically before it becomes visible. The custom
-  provider-labelled planning DAG is never launched, no graph or node run is
-  created, and no worker is dispatched. Replay is idempotent and reload/status
-  come from durable records rather than simulated progress.
-- Focused bridge tests are green. The prior full-suite checkpoint at
-  `a26caec` was green with 5,705 passing tests and 7 skipped; final full gates
-  must be rerun against the post-release-workflow exact head.
-- Still pending: finish and verify the guarded release workflow, push the exact
-  accepted head, apply only hosted ledger migrations `20260830000900` and
-  `20260830001000` in order, verify the exact deployment, and complete signed-in
-  production create/return/reload acceptance. Do not claim production ready
-  before those gates pass.
+- Database-first release is exact commit
+  `f6292c8ec359fd8e39c5463e4039b3388cf2056f`. CI run `33348187052` passed all
+  four jobs; Vercel deployment `dpl_A35nZhbJQMJWLtUSroG9zXLWhXBw` is READY and
+  health matches the release.
+- Guarded apply run `33348980504` applied the hash-pinned
+  `20260830001100_grok_planning_failure.sql`; independent read-only verify run
+  `33349033378` passed. Required ledger is `1|1|1|1`, with exact catalog, ACL,
+  atomic runtime/replay, linked lint, health, and stopped safety. Do not rerun
+  the mutation scope.
+- Hosted `record_grok_planning_failure_as_server` now atomically records the
+  fixed safe assistant response and immutable failure evidence, leaving the
+  session `blocked` and nonclosed with no graph, run, dispatch, provider call,
+  or worker wake.
+- PICK UP HERE: push the Phase 2 API/store/UI caller plus tests/docs, require
+  all exact-head CI jobs and matching Vercel/health, then perform signed-in
+  create/return/reload acceptance against the legitimate connected Claude/no-
+  Codex roster. Verify durable structured 409 identity, URL return/reload, no
+  plan or routing claims, and no graph/run/dispatch. The application behavior
+  is not yet claimed live.
 - Keep workers, autonomy, and automatic actions OFF and the global kill switch
-  ON throughout release and acceptance.
+  ON. Use forward-only containment on any mismatch. Do not claim `GROK BOT:
+  PRODUCTION READY` before Phase 2 and signed-in evidence pass.
 
 ## JOB SEEKER — JOB DISCOVERY MATCHES THE DESIGN, AND FOUR FIGURES GOT REAL DATA (2026-08-28 — PICK UP HERE)
 

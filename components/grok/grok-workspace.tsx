@@ -73,6 +73,7 @@ const POLLING_STATUSES = new Set([
 ]);
 const CONTROL_ACTIONS: readonly GrokControlAction[] = ["pause", "resume", "cancel", "stop", "retry"];
 const BLOCKED_FALLBACK = "The session and plan are saved, but no graph or worker execution has started.";
+const UNPLANNED_FALLBACK = "The request is saved, but no plan was recorded. No graph, worker, or provider started.";
 
 const tabs: ReadonlyArray<{ key: InspectorTab; label: string; icon: typeof Target }> = [
   { key: "goal", label: "Goal", icon: Target },
@@ -112,9 +113,14 @@ function statusTone(status: string): "safe" | "info" | "warning" | "danger" | "n
 
 function executionNotice(detail: GrokSessionDetail | null) {
   if (!detail) return "";
-  if (detail.session.status.toLowerCase() === "blocked") return BLOCKED_FALLBACK;
+  const hasPlan = detail.tasks.length > 0;
+  if (detail.session.status.toLowerCase() === "blocked") {
+    return hasPlan ? BLOCKED_FALLBACK : UNPLANNED_FALLBACK;
+  }
   if (!detail.session.graphId) {
-    return "This durable session has no linked graph. A saved plan is not evidence that a worker or provider started.";
+    return hasPlan
+      ? "This durable session has no linked graph. A saved plan is not evidence that a worker or provider started."
+      : UNPLANNED_FALLBACK;
   }
   if (!detail.session.graphRunId) {
     return "The graph is recorded, but no durable run evidence is linked yet.";
@@ -144,13 +150,47 @@ function updateUrl(selection: GrokSelection) {
   window.history.replaceState(null, "", `/solutions/factory/grok${query}`);
 }
 
+class GrokRequestError extends Error {
+  readonly status: number;
+  readonly sessionId: string | null;
+
+  constructor(message: string, status: number, sessionId: string | null) {
+    super(message);
+    this.name = "GrokRequestError";
+    this.status = status;
+    this.sessionId = sessionId;
+  }
+}
+
 async function readJson(response: Response) {
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
     const message = (body as { error?: { message?: string } }).error?.message;
-    throw new Error(message ?? "Grok Bot could not complete that request.");
+    const sessionId = (body as { sessionId?: unknown }).sessionId;
+    throw new GrokRequestError(
+      message ?? "Grok Bot could not complete that request.",
+      response.status,
+      typeof sessionId === "string" ? sessionId : null,
+    );
   }
   return body;
+}
+
+function sessionHeadline(session: GrokSession, detail: GrokSessionDetail | null) {
+  if (session.graphRunId) return "Durable session · run evidence linked";
+  if (session.graphId) return "Durable session · graph recorded; no run evidence yet";
+  if (detail?.session.id === session.id) {
+    return detail.tasks.length === 0
+      ? "Durable session · request saved; no plan recorded"
+      : "Durable session · plan saved; execution not linked";
+  }
+  return "Durable session · loading recorded evidence";
+}
+
+function sessionListStatus(session: GrokSession, detail: GrokSessionDetail | null) {
+  return detail?.session.id === session.id && detail.tasks.length === 0
+    ? "request saved; no plan recorded"
+    : session.status;
 }
 
 function EmptyInspector({ label }: { label: string }) {
@@ -159,7 +199,7 @@ function EmptyInspector({ label }: { label: string }) {
       <div>
         <PackageCheck className="mx-auto size-5 text-faint" aria-hidden="true" />
         <p className="mt-2 text-sm font-medium text-foreground">No {label.toLowerCase()} recorded</p>
-        <p className="mt-1 text-xs text-muted">This pane fills only from durable run evidence.</p>
+        <p className="mt-1 text-xs text-muted">This pane fills only from durable recorded evidence.</p>
       </div>
     </div>
   );
@@ -227,16 +267,23 @@ function Inspector({ detail, tab }: { detail: GrokSessionDetail | null; tab: Ins
 
   if (tab === "agents") {
     const hasObservedRun = Boolean(detail.session.graphRunId);
+    const hasPlan = detail.tasks.length > 0;
     const assigned = detail.tasks.filter((task) => task.provider || task.agentName);
     return (
       <div>
         <p className="text-xs font-semibold text-foreground">
-          {hasObservedRun ? "Observed execution identity" : "Planned routing intent"}
+          {hasObservedRun
+            ? "Observed execution identity"
+            : hasPlan
+              ? "Planned routing intent"
+              : "No routing plan recorded"}
         </p>
         <p className="mt-1 text-xs leading-5 text-muted">
           {hasObservedRun
             ? "Provider and model values below come from recorded node-run evidence."
-            : "Provider, model, and agent values below come from the saved plan; they do not prove execution."}
+            : hasPlan
+              ? "Provider, model, and agent values below come from the saved plan; they do not prove execution."
+              : "No provider, model, or agent routing identity was recorded, and no provider started."}
         </p>
         {assigned.length ? (
           <ul className="mt-3 space-y-2">
@@ -247,7 +294,7 @@ function Inspector({ detail, tab }: { detail: GrokSessionDetail | null; tab: Ins
               </li>
             ))}
           </ul>
-        ) : <div className="mt-3"><EmptyInspector label={hasObservedRun ? "observed execution identities" : "planned routing identities"} /></div>}
+        ) : <div className="mt-3"><EmptyInspector label={hasObservedRun ? "observed execution identities" : hasPlan ? "planned routing identities" : "routing identities"} /></div>}
       </div>
     );
   }
@@ -444,6 +491,23 @@ export function GrokWorkspace({
       setNotice(body.blocked?.message ?? executionNotice(body));
       updateUrl({ projectId, sessionId: body.session.id, graphId: body.session.graphId ?? undefined, graphRunId: body.session.graphRunId ?? undefined });
     } catch (error) {
+      if (error instanceof GrokRequestError) {
+        // A client response is a completed attempt. A server response is still
+        // indeterminate: durable evidence may have committed before the server
+        // failed to project it, so preserve the key and let retry recover that
+        // exact attempt rather than creating another session.
+        if (error.status < 500) submitAttempt.current = null;
+        if (error.status === 409 && error.sessionId) {
+          setSessionId(error.sessionId);
+          // The POST already committed this durable identity. Preserve it in
+          // the address bar before the follow-up read so a transient GET
+          // failure can be recovered with a normal page reload.
+          updateUrl({ projectId, sessionId: error.sessionId });
+          await loadDetail(error.sessionId);
+          setErrorMessage(error.message);
+          return;
+        }
+      }
       setErrorMessage(error instanceof Error ? error.message : "The goal could not be recorded.");
     } finally {
       setSubmitting(false);
@@ -532,7 +596,7 @@ export function GrokWorkspace({
               <label className="mt-3 block"><span className="sr-only">Project</span><select className="input w-full text-sm" value={projectId} onChange={(event) => { detailRequest.current += 1; setProjectId(event.target.value); setSessionId(""); setDetail(null); setErrorMessage(""); setNotice(""); updateUrl({ projectId: event.target.value || undefined }); }}><option value="">Choose project</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select></label>
               <ul className="mt-3 max-h-52 space-y-1 overflow-y-auto xl:max-h-[calc(70vh-7rem)]">
                 {filteredSessions.map((session) => (
-                  <li key={session.id}><button type="button" aria-current={session.id === sessionId ? "true" : undefined} className={cn("w-full rounded-lg px-3 py-2.5 text-left transition-colors", session.id === sessionId ? "bg-[var(--accent-surface)]" : "hover:bg-[var(--surface-raised)]")} onClick={() => void selectSession(session.id)}><span className="flex items-center gap-2"><span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{session.title}</span><ChevronRight className="size-3.5 shrink-0 text-faint" /></span><span className="mt-1 flex items-center justify-between gap-2 text-[11px] text-muted"><span>{session.status}</span><time>{clock(session.updatedAt)}</time></span></button></li>
+                  <li key={session.id}><button type="button" aria-current={session.id === sessionId ? "true" : undefined} className={cn("w-full rounded-lg px-3 py-2.5 text-left transition-colors", session.id === sessionId ? "bg-[var(--accent-surface)]" : "hover:bg-[var(--surface-raised)]")} onClick={() => void selectSession(session.id)}><span className="flex items-center gap-2"><span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{session.title}</span><ChevronRight className="size-3.5 shrink-0 text-faint" /></span><span className="mt-1 flex items-center justify-between gap-2 text-[11px] text-muted"><span>{sessionListStatus(session, detail)}</span><time>{clock(session.updatedAt)}</time></span></button></li>
                 ))}
                 {!filteredSessions.length ? <li className="rounded-lg border border-dashed border-[var(--border-strong)] p-3 text-xs text-muted">No persisted sessions for this project.</li> : null}
               </ul>
@@ -540,7 +604,7 @@ export function GrokWorkspace({
 
             <div className="flex min-h-[34rem] min-w-0 flex-col border-b border-[var(--border)] xl:border-b-0 xl:border-r">
               <header className="flex min-h-14 items-center justify-between gap-3 border-b border-[var(--border)] px-4">
-                <div className="min-w-0"><p className="truncate text-sm font-semibold text-foreground">{selectedSession?.title ?? "What should we accomplish?"}</p><p className="truncate text-xs text-muted">{selectedSession ? selectedSession.graphRunId ? "Durable session · run evidence linked" : selectedSession.graphId ? "Durable session · graph recorded; no run evidence yet" : "Durable session · plan saved; execution not linked" : "New durable goal"}</p></div>
+                <div className="min-w-0"><p className="truncate text-sm font-semibold text-foreground">{selectedSession?.title ?? "What should we accomplish?"}</p><p className="truncate text-xs text-muted">{selectedSession ? sessionHeadline(selectedSession, detail) : "New durable goal"}</p></div>
                 {selectedSession ? <StatusBadge tone={statusTone(selectedSession.status)}>{selectedSession.status}</StatusBadge> : null}
               </header>
               <div className="flex-1 space-y-4 overflow-y-auto p-4 sm:p-6">
@@ -555,12 +619,12 @@ export function GrokWorkspace({
                     <article key={entry.id} aria-label={`${messageRoleLabel(entry.role)} message`} className={cn("max-w-[88%] rounded-2xl px-4 py-3 text-sm leading-6", entry.role === "user" ? "ml-auto bg-foreground text-background" : "border border-[var(--border)] bg-[var(--surface-raised)] text-foreground")}><p className={cn("text-[10px] font-semibold uppercase tracking-wide", entry.role === "user" ? "text-background/80" : "text-muted")}>{messageRoleLabel(entry.role)}</p><p className="mt-1 whitespace-pre-wrap">{entry.content}</p><time className={cn("mt-2 block text-[10px]", entry.role === "user" ? "text-background/80" : "text-muted")}>{clock(entry.createdAt)}</time></article>
                   ))}
                 </div>
-                {!detail ? <div className="grid min-h-64 place-items-center text-center"><div className="max-w-lg"><span className="mx-auto grid size-12 place-items-center rounded-2xl bg-[var(--accent-surface)] text-[var(--accent-text)]"><Sparkles className="size-6" aria-hidden="true" /></span><h2 className="mt-4 text-xl font-semibold text-foreground">Ask for the outcome</h2><p className="mt-2 text-sm leading-6 text-muted">Grok Bot records plain language and a deterministic plan. Graph, agent, test, and delivery evidence appears here only after the runtime records it.</p><div className="mt-4 flex flex-wrap justify-center gap-2">{STARTERS.map((starter) => <button key={starter} type="button" className="rounded-full border border-[var(--border-strong)] px-3 py-1.5 text-xs text-muted hover:text-foreground" onClick={() => setPrompt(starter)}>{starter}</button>)}</div></div></div> : null}
+                {!detail ? <div className="grid min-h-64 place-items-center text-center"><div className="max-w-lg"><span className="mx-auto grid size-12 place-items-center rounded-2xl bg-[var(--accent-surface)] text-[var(--accent-text)]"><Sparkles className="size-6" aria-hidden="true" /></span><h2 className="mt-4 text-xl font-semibold text-foreground">Ask for the outcome</h2><p className="mt-2 text-sm leading-6 text-muted">Grok Bot records plain language first and adds a deterministic plan only when planning succeeds. Graph, agent, test, and delivery evidence appears here only after the runtime records it.</p><div className="mt-4 flex flex-wrap justify-center gap-2">{STARTERS.map((starter) => <button key={starter} type="button" className="rounded-full border border-[var(--border-strong)] px-3 py-1.5 text-xs text-muted hover:text-foreground" onClick={() => setPrompt(starter)}>{starter}</button>)}</div></div></div> : null}
               </div>
               <form onSubmit={submit} className="border-t border-[var(--border)] p-3 sm:p-4">
                 {errorMessage ? <p role="alert" className="mb-2 text-xs text-[var(--danger)]">{errorMessage}</p> : null}
                 <div className="flex items-end gap-2 rounded-xl border border-[var(--border-strong)] bg-[var(--surface-inset)] p-2 focus-within:border-[var(--accent-border)]"><textarea className="min-h-12 max-h-36 flex-1 resize-y bg-transparent px-2 py-2 text-sm text-foreground outline-none placeholder:text-faint" rows={2} value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder="Build me…  Fix…  Research…  Test…  Deploy…" aria-label="Tell Grok Bot what you want done" /><button type="submit" className="grid size-10 shrink-0 place-items-center rounded-lg bg-[var(--accent)] text-black disabled:cursor-not-allowed disabled:opacity-50" disabled={!prompt.trim() || !projectId || submitting} aria-label="Start goal">{submitting ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}</button></div>
-                <p className="mt-2 text-[11px] text-muted">A request saves a session and plan. It does not imply that a graph, worker, or provider started.</p>
+                <p className="mt-2 text-[11px] text-muted">A request saves a session; a plan is recorded only when planning succeeds. Neither implies that a graph, worker, or provider started.</p>
               </form>
             </div>
 

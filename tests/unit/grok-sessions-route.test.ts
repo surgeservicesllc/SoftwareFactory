@@ -14,7 +14,9 @@ const harness = vi.hoisted(() => ({
   readProject: vi.fn(),
   createSession: vi.fn(),
   appendUser: vi.fn(),
+  recordPlanningFailure: vi.fn(),
   readBundle: vi.fn(),
+  storedFailure: vi.fn(),
   storedPlan: vi.fn(),
   loadAgents: vi.fn(),
   appendAssistant: vi.fn(),
@@ -57,7 +59,9 @@ vi.mock("@/lib/grok/session-store", async () => {
     readGrokProject: harness.readProject,
     createGrokSession: harness.createSession,
     appendGrokUserMessage: harness.appendUser,
+    recordGrokPlanningFailure: harness.recordPlanningFailure,
     readGrokBundle: harness.readBundle,
+    storedGrokPlanningFailure: harness.storedFailure,
     storedGrokPlan: harness.storedPlan,
     loadConfiguredGrokAgents: harness.loadAgents,
     appendGrokAssistantPlan: harness.appendAssistant,
@@ -84,6 +88,8 @@ const graphId = "70000000-0000-4000-8000-000000000007";
 const repositoryId = "80000000-0000-4000-8000-000000000008";
 const baseSha = "a".repeat(40);
 const requiredChecks = ["Lint, typecheck, test, and build"];
+const planningFailureMessage =
+  "Planning is blocked until a Ready configured Codex agent covers the repository-writing task.";
 
 const plan = {
   planner: { version: 1 },
@@ -105,7 +111,7 @@ const canonicalPlan = {
 };
 
 const bundle = {
-  session: { id: sessionId, project_id: projectId },
+  session: { id: sessionId, project_id: projectId, status: "active", version: 2 },
   messages: [],
 };
 
@@ -132,7 +138,13 @@ beforeEach(() => {
   });
   harness.createSession.mockResolvedValue({ id: sessionId });
   harness.appendUser.mockResolvedValue({ id: userMessageId });
+  harness.recordPlanningFailure.mockResolvedValue({
+    session: { id: sessionId, status: "blocked", version: 5 },
+    message: { id: assistantMessageId, content: planningFailureMessage },
+    event: { event_type: "session.planning_failed" },
+  });
   harness.readBundle.mockResolvedValue(bundle);
+  harness.storedFailure.mockReturnValue(null);
   harness.storedPlan.mockReturnValue(null);
   harness.plannedGraphLink.mockReturnValue(null);
   harness.loadAgents.mockResolvedValue([]);
@@ -172,6 +184,145 @@ beforeEach(() => {
 });
 
 describe("Grok sessions POST", () => {
+  it("durably blocks a planning failure without persisting prompt or planner details", async () => {
+    harness.buildPlan.mockReturnValue({
+      ok: false,
+      error: {
+        code: "MISSING_CODEX_AGENT",
+        message: "No ready configured Codex agent can cover the repository-writing task.",
+        details: ["implementation/STRONG"],
+      },
+    });
+    harness.readBundle.mockResolvedValue({
+      ...bundle,
+      session: { ...bundle.session, version: 2 },
+    });
+
+    const response = await POST(new Request("https://factory.example/api/grok/sessions", {
+      method: "POST",
+      headers: { origin: "https://factory.example", "content-type": "application/json" },
+      body: JSON.stringify({ projectId, prompt: "Build the portal" }),
+    }));
+    const body = await response.json();
+
+    expect(response.status).toBe(409);
+    expect(body).toMatchObject({
+      sessionId,
+      session: { id: sessionId, status: "blocked", version: 5 },
+      workerWoken: false,
+      executionStarted: false,
+      error: {
+        code: "MISSING_CODEX_AGENT",
+        message: planningFailureMessage,
+      },
+    });
+    expect(body.error.details).toBeUndefined();
+    expect(harness.recordPlanningFailure).toHaveBeenCalledWith(
+      expect.anything(),
+      {
+        organizationId,
+        sessionId,
+        userMessageId,
+        idempotencyKey: "request-key-123",
+        code: "MISSING_CODEX_AGENT",
+        expectedVersion: 2,
+      },
+    );
+    expect(harness.recordEvent).not.toHaveBeenCalled();
+    expect(harness.appendAssistant).not.toHaveBeenCalled();
+    expect(harness.buildCanonicalPlan).not.toHaveBeenCalled();
+    expect(harness.resolveRelease).not.toHaveBeenCalled();
+    expect(harness.serviceRpc).not.toHaveBeenCalled();
+    expect(JSON.stringify(harness.recordPlanningFailure.mock.calls)).not.toContain("Build the portal");
+    expect(JSON.stringify(harness.recordPlanningFailure.mock.calls)).not.toContain("implementation/STRONG");
+  });
+
+  it("replays a durable refusal without re-planning after the bot roster changes", async () => {
+    harness.buildPlan.mockReturnValueOnce({
+      ok: false,
+      error: {
+        code: "MISSING_CODEX_AGENT",
+        message: "No ready configured Codex agent can cover the repository-writing task.",
+        details: ["implementation/STRONG"],
+      },
+    }).mockReturnValue({ ok: true, plan });
+    harness.readBundle
+      .mockResolvedValueOnce(bundle)
+      .mockResolvedValueOnce({
+        ...bundle,
+        session: { ...bundle.session, status: "blocked", version: 5 },
+      });
+    harness.storedFailure
+      .mockReturnValueOnce(null)
+      .mockReturnValueOnce({
+        code: "MISSING_CODEX_AGENT",
+        message: planningFailureMessage,
+        messageId: assistantMessageId,
+      });
+
+    const request = () => POST(new Request("https://factory.example/api/grok/sessions", {
+      method: "POST",
+      headers: { origin: "https://factory.example", "content-type": "application/json" },
+      body: JSON.stringify({ projectId, prompt: "Build the portal" }),
+    }));
+    const first = await request();
+    const second = await request();
+
+    expect(first.status).toBe(409);
+    expect(second.status).toBe(409);
+    expect(await first.json()).toEqual(await second.json());
+    expect(harness.recordPlanningFailure).toHaveBeenCalledTimes(1);
+    expect(harness.buildPlan).toHaveBeenCalledTimes(1);
+    expect(harness.loadAgents).toHaveBeenCalledTimes(1);
+    expect(harness.recordEvent).not.toHaveBeenCalled();
+    expect(harness.serviceRpc).not.toHaveBeenCalled();
+  });
+
+  it("returns a concurrent durable refusal when another planner result wins the same request", async () => {
+    harness.buildPlan.mockReturnValue({
+      ok: false,
+      error: {
+        code: "MISSING_CODEX_AGENT",
+        message: "No ready configured Codex agent can cover the repository-writing task.",
+        details: ["implementation/STRONG"],
+      },
+    });
+    harness.recordPlanningFailure.mockRejectedValueOnce(new Error("grok planning failure idempotency key was reused with different input"));
+    harness.readBundle
+      .mockResolvedValueOnce(bundle)
+      .mockResolvedValueOnce({
+        ...bundle,
+        session: { ...bundle.session, status: "blocked", version: 5 },
+      });
+    harness.storedFailure
+      .mockReturnValueOnce(null)
+      .mockReturnValueOnce({
+        code: "MISSING_CLAUDE_AGENT",
+        message: "Planning is blocked until a Ready configured Claude agent covers every required planning and verification task.",
+        messageId: assistantMessageId,
+      });
+
+    const response = await POST(new Request("https://factory.example/api/grok/sessions", {
+      method: "POST",
+      headers: { origin: "https://factory.example", "content-type": "application/json" },
+      body: JSON.stringify({ projectId, prompt: "Build the portal" }),
+    }));
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({
+      sessionId,
+      session: { status: "blocked", version: 5 },
+      error: {
+        code: "MISSING_CLAUDE_AGENT",
+        message: expect.stringMatching(/configured Claude agent/),
+      },
+      workerWoken: false,
+      executionStarted: false,
+    });
+    expect(harness.readBundle).toHaveBeenCalledTimes(2);
+    expect(harness.serviceRpc).not.toHaveBeenCalled();
+  });
+
   it("records routing intent, launches only canonical v2, and returns paused without dispatch", async () => {
     const response = await POST(new Request("https://factory.example/api/grok/sessions", {
       method: "POST",

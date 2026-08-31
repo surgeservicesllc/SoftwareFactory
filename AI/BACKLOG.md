@@ -26,14 +26,26 @@
   the graph atomically before visibility, produces no graph/node run, dispatches
   no worker, and replays idempotently from durable state. Focused bridge tests
   are green.
-- [ ] Run the complete release gates, publish the exact accepted identity,
-  apply only hosted ledger migrations `20260830000900` and `20260830001000`
-  in order under their guarded scope, and perform signed-in production
-  persistence/return/reload acceptance. The prior full suite at `a26caec` was
-  green with 5,705 passing tests and 7 skipped, but final gates must run on the
-  post-release-workflow exact head. Keep workers, autonomy, and automatic
-  actions OFF and the global kill switch ON; do not declare `GROK BOT:
-  PRODUCTION READY` before this evidence exists.
+- [x] Establish the production baseline before containment: exact main
+  `397798921ebda6a4f8e30d2c0d83af36a3dd73a0` is green/READY and hosted
+  migrations `20260830000900` and `20260830001000` are each ledgered once.
+  Signed-in acceptance reproduced the truthful no-Codex planning refusal and
+  proved that it persisted an active session while the UI falsely claimed a
+  saved plan; it created no graph, run, or dispatch.
+- [x] Release the database-first planning-failure phase at exact commit
+  `f6292c8ec359fd8e39c5463e4039b3388cf2056f`: all four jobs in CI run
+  `33348187052` green; Vercel deployment
+  `dpl_A35nZhbJQMJWLtUSroG9zXLWhXBw` READY with matching health; migration
+  apply run `33348980504` and read-only verify run `33349033378` passed. The
+  required ledger vector is `1|1|1|1`, with exact catalog, ACL, atomic
+  runtime/replay, linked lint, health, and stopped safety.
+- [ ] Release Phase 2 only now that the database capability is accepted:
+  publish the API/store/UI caller, require exact-head CI and Vercel identity,
+  then prove signed-in failure create/return/reload truth — durable `blocked`
+  nonclosed session, fixed safe assistant response and immutable events, no
+  invented plan or routing identity, and no graph/run/dispatch. Keep workers,
+  autonomy, and automatic actions OFF and the global kill switch ON; do not
+  declare `GROK BOT: PRODUCTION READY` before this evidence exists.
 
 ## Services CRM → pest-services platform (task #63, owner /goal 2026-08-30)
 

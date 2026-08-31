@@ -52,15 +52,41 @@ const BLOCKED_SESSION: GrokSessionDetail = {
   })),
 };
 
+const UNPLANNED_SESSION: GrokSessionDetail = {
+  ...SESSION,
+  session: {
+    ...SESSION.session,
+    title: "Fix checkout",
+    goal: "Fix checkout",
+    status: "blocked",
+    graphId: null,
+    graphRunId: null,
+    allowedActions: [],
+  },
+  messages: [SESSION.messages[0]!],
+  tasks: [],
+  events: [],
+  artifacts: [],
+};
+
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 }
 
 function installFetch(
   detail: GrokSessionDetail | null = null,
-  options: Readonly<{ includeDetailInList?: boolean; postFailures?: number }> = {},
+  options: Readonly<{
+    includeDetailInList?: boolean;
+    detailFailures?: number;
+    detailPending?: boolean;
+    planningFailure?: Readonly<{ message: string; sessionId: string }>;
+    postFailures?: number;
+    postHttpFailures?: number;
+  }> = {},
 ) {
+  let remainingDetailFailures = options.detailFailures ?? 0;
   let remainingPostFailures = options.postFailures ?? 0;
+  let remainingPostHttpFailures = options.postHttpFailures ?? 0;
   const mock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input);
     if (url === "/api/projects") return json({ projects: [PROJECT] });
@@ -68,6 +94,19 @@ function installFetch(
       if (remainingPostFailures > 0) {
         remainingPostFailures -= 1;
         throw new TypeError("The network connection was interrupted.");
+      }
+      if (remainingPostHttpFailures > 0) {
+        remainingPostHttpFailures -= 1;
+        return json({ error: { message: "The server could not project the durable attempt." } }, 503);
+      }
+      if (options.planningFailure) {
+        return json({
+          sessionId: options.planningFailure.sessionId,
+          error: {
+            code: "MISSING_CODEX_AGENT",
+            message: options.planningFailure.message,
+          },
+        }, 409);
       }
       return json({
         ...BLOCKED_SESSION,
@@ -100,7 +139,14 @@ function installFetch(
           : "The control was durably applied by the existing audited runtime boundary.",
       });
     }
-    if (url.includes("/api/grok/sessions/")) return json(detail ?? SESSION);
+    if (url.includes("/api/grok/sessions/")) {
+      if (options.detailPending) return new Promise<Response>(() => undefined);
+      if (remainingDetailFailures > 0) {
+        remainingDetailFailures -= 1;
+        return json({ error: { message: "The durable planning record could not be reloaded." } }, 503);
+      }
+      return json(detail ?? SESSION);
+    }
     return json({ error: { message: "unexpected request" } }, 500);
   });
   vi.stubGlobal("fetch", mock);
@@ -179,6 +225,54 @@ describe("GrokWorkspace", () => {
     expect(window.location.search).toContain(`sessionId=${SESSION.session.id}`);
   });
 
+  it("reopens a durable request when planning returns 409 without claiming a plan exists", async () => {
+    const planningMessage = "No ready configured Codex agent can cover the repository-writing task.";
+    const fetchMock = installFetch(UNPLANNED_SESSION, {
+      includeDetailInList: false,
+      planningFailure: { message: planningMessage, sessionId: UNPLANNED_SESSION.session.id },
+    });
+    const user = userEvent.setup();
+    render(<GrokWorkspace initialSelection={{}} />);
+    await screen.findByRole("heading", { name: "Ask for the outcome" });
+
+    await user.type(screen.getByRole("textbox", { name: "Tell Grok Bot what you want done" }), "Fix checkout");
+    await user.click(screen.getByRole("button", { name: "Start goal" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(planningMessage);
+    expect(fetchMock).toHaveBeenCalledWith(
+      `/api/grok/sessions/${UNPLANNED_SESSION.session.id}`,
+      { cache: "no-store" },
+    );
+    expect(screen.getByText("The request is saved, but no plan was recorded. No graph, worker, or provider started.")).toBeInTheDocument();
+    expect(screen.getAllByText(/request saved; no plan recorded/i).length).toBeGreaterThanOrEqual(2);
+    expect(screen.queryByText(/plan saved; execution not linked/i)).not.toBeInTheDocument();
+    expect(window.location.search).toContain(`sessionId=${UNPLANNED_SESSION.session.id}`);
+
+    const inspector = screen.getByRole("complementary", { name: "Session inspector" });
+    await user.click(within(inspector).getByRole("tab", { name: "Agents" }));
+    expect(within(inspector).getByText("No routing plan recorded")).toBeInTheDocument();
+    expect(within(inspector).getByText(/no provider, model, or agent routing identity was recorded/i)).toBeInTheDocument();
+  });
+
+  it("keeps a committed planning-failure session in the URL when its follow-up read fails", async () => {
+    const planningMessage = "Planning is blocked until a Ready configured Codex agent covers the repository-writing task.";
+    installFetch(UNPLANNED_SESSION, {
+      detailFailures: 1,
+      includeDetailInList: false,
+      planningFailure: { message: planningMessage, sessionId: UNPLANNED_SESSION.session.id },
+    });
+    const user = userEvent.setup();
+    render(<GrokWorkspace initialSelection={{}} />);
+    await screen.findByRole("heading", { name: "Ask for the outcome" });
+
+    await user.type(screen.getByRole("textbox", { name: "Tell Grok Bot what you want done" }), "Fix checkout");
+    await user.click(screen.getByRole("button", { name: "Start goal" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(planningMessage);
+    expect(window.location.search).toContain(`projectId=${PROJECT.id}`);
+    expect(window.location.search).toContain(`sessionId=${UNPLANNED_SESSION.session.id}`);
+  });
+
   it("restores a deep-linked session even when it is outside the first list page", async () => {
     const fetchMock = installFetch(BLOCKED_SESSION, { includeDetailInList: false });
     render(<GrokWorkspace initialSelection={{ sessionId: BLOCKED_SESSION.session.id }} />);
@@ -192,6 +286,14 @@ describe("GrokWorkspace", () => {
     expect(window.location.search).toContain(`sessionId=${BLOCKED_SESSION.session.id}`);
   });
 
+  it("does not claim a saved plan while recorded session detail is still loading", async () => {
+    installFetch(UNPLANNED_SESSION, { detailPending: true });
+    render(<GrokWorkspace initialSelection={{ sessionId: UNPLANNED_SESSION.session.id }} />);
+
+    expect(await screen.findByText("Durable session · loading recorded evidence")).toBeInTheDocument();
+    expect(screen.queryByText(/plan saved; execution not linked/i)).not.toBeInTheDocument();
+  });
+
   it("reuses the create idempotency key after an uncertain network failure", async () => {
     const fetchMock = installFetch(null, { postFailures: 1 });
     const user = userEvent.setup();
@@ -202,6 +304,28 @@ describe("GrokWorkspace", () => {
     await user.type(prompt, "Fix checkout");
     await user.click(screen.getByRole("button", { name: "Start goal" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("network connection");
+    await user.click(screen.getByRole("button", { name: "Start goal" }));
+    expect(await screen.findByText("I recorded the plan.")).toBeInTheDocument();
+
+    const bodies = fetchMock.mock.calls
+      .filter(([url, init]) => String(url) === "/api/grok/sessions" && init?.method === "POST")
+      .map(([, init]) => JSON.parse(String(init?.body)) as { idempotencyKey: string });
+    expect(bodies).toHaveLength(2);
+    expect(bodies[0]?.idempotencyKey).toBe(bodies[1]?.idempotencyKey);
+  });
+
+  it("reuses the create idempotency key after an indeterminate HTTP 503", async () => {
+    const fetchMock = installFetch(null, { postHttpFailures: 1 });
+    const user = userEvent.setup();
+    render(<GrokWorkspace initialSelection={{}} />);
+    await screen.findByRole("heading", { name: "Ask for the outcome" });
+
+    const prompt = screen.getByRole("textbox", { name: "Tell Grok Bot what you want done" });
+    await user.type(prompt, "Fix checkout");
+    await user.click(screen.getByRole("button", { name: "Start goal" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "server could not project the durable attempt",
+    );
     await user.click(screen.getByRole("button", { name: "Start goal" }));
     expect(await screen.findByText("I recorded the plan.")).toBeInTheDocument();
 
