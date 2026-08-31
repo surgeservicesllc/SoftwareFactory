@@ -44,7 +44,7 @@ describe("requireJobSeekerViewer", () => {
     harness.readViewer.mockResolvedValue({ signedIn: false });
 
     await expect(requireJobSeekerViewer("/Job-Search"))
-      .rejects.toThrow("REDIRECT:/sign-in?next=%2FJob-Search");
+      .rejects.toThrow("REDIRECT:/auth/sign-in?next=%2FJob-Search");
   });
 
   it("sends a signed-in person with no workspace through onboarding, and back", async () => {

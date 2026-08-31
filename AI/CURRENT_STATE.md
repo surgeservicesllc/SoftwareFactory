@@ -626,6 +626,15 @@ alone; the eight provider-gated rows remain **Not Connected** and the RED
 actions remain owner-gated, each named on its own backlog row. Nothing in
 this declaration authorizes autonomous production changes.
 
+The close-out tail finished the pattern "the schema shipped, the page
+didn't": the Budget Tracker's ledger edits/deletes with reconciliation
+on the page, linked transfers and the month plan; printable WDO reports
+and invoices (browser print-to-PDF, DRAFT/VOID banners, no pretended
+server renderer); and canvassing's route planning, knock recording and
+per-rep figures. Every backlog row still open names an owner-held
+credential, an owner decision, a RED authorization, live-production
+observation, or owner-direction-gated design as its unparker.
+
 Of the remaining eighteen rows, eight are gated on an
 external account nobody has opened: card/ACH processing, SMS/email
 delivery, GPS telemetry, QuickBooks sync, telephony, reviews and

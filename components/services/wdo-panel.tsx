@@ -376,6 +376,21 @@ export function WdoPanel() {
               description="Click the outline to place the next finding. Coordinates are recorded as a fraction of the drawing, so a mark keeps its place at any size."
             />
 
+            {selected !== null ? (
+              <p className="mt-2 text-sm">
+                <a
+                  className="underline"
+                  href={`/Services/wdo/print/${selected.id}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Open the printable report
+                </a>{" "}
+                <span className="text-muted">
+                  — print-to-PDF happens in your browser; a draft prints with a DRAFT banner.
+                </span>
+              </p>
+            ) : null}
             {selected === null ? (
               <p className="mt-4 text-sm text-muted">Choose a report.</p>
             ) : (

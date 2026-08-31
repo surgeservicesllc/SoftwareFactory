@@ -4,8 +4,12 @@
 
 Every box below this section is either checked or parked, and every parked
 box's own text names what unparks it. Read this section as the index; the
-rows are the record. As of this triage the file holds 117 open boxes, all
-of them parked, in exactly five families:
+rows are the record. At triage time the file held 117 open boxes; the
+close-out then kept working the fifth family and closed every box in it
+that needed no gate (categories, ledger editing, reconciliation
+surfacing, transfer linking, the month plan, the WDO printable report,
+the DNS-probe row that was stale) — each closure recorded on its row.
+What remains open is parked, in exactly five families:
 
 1. **Owner credentials or accounts** — an external account or key nobody
    has opened or supplied: the eight CRM provider rows (SMS, email,
@@ -33,11 +37,13 @@ of them parked, in exactly five families:
    real heartbeats, live provider runs, signed-in acceptance on deployed
    hosts, webhook defect `#4660724`, monitor targets. Recorded so the
    next session verifies rather than re-derives.
-5. **Design follow-ons recorded as future work** — capabilities whose
-   ungated half already shipped and whose remainder names its gate on the
-   row: route optimisation behind geocoding, WDO diagram drawing surface,
-   the learning edge (ADR'd), budget month-plan panel, transfer linking,
-   reconciliation surfacing, ledger editing, phase 2 worker cases.
+5. **Design work the repository itself gates on owner direction** — the
+   learning edge's own row demands an ADR and owner direction before code
+   because a wrong derived constraint narrows every later plan silently;
+   Jobbank needs a reviewed fallback contract; the FirstMate import
+   design rows record what NOT to import. The formerly-completable
+   members of this family (budget follow-ons, the WDO printable report)
+   have shipped and their rows say so.
 
 What the close-out itself completed is recorded on the rows it closed —
 increments 24-27 (ADR-220..223), the copilot + acceptance journey and the
@@ -335,7 +341,16 @@ the full seeded E2E journey passes — increment 10 of the plan.
 - [ ] Increment 6 follow-on: take card payments through the existing
   Stripe machinery. The ledger records money that moved; it does not yet
   move it, and /Services/billing says so rather than implying otherwise.
-  Also open in this pillar: dunning schedules and PDF invoice rendering.
+  Charging a customer's card needs the card_payments provider row live
+  plus the ADR-218 mandate machinery pointed at a real processor — an
+  owner-supplied account, not code. Dunning SCHEDULES stay behind the
+  same no-timer gate as unattended billing.
+- [x] PDF invoice rendering, split out and shipped: every invoice number
+  on /Services/billing links to /Services/billing/print/[invoiceId] — the
+  lines that sum to the subtotal, tax, total, paid net of refunds, and
+  the balance derived at print time; a draft or void invoice prints only
+  under its banner so neither can circulate as a bill. Print-to-PDF is
+  the browser's own, said on the page.
 - [x] Increment 7 (ADR-195): the company — crm_branches (code, address,
   IANA time zone, open/close dates), crm_employees as the org chart (seven
   roles, branch, supervisor, commission basis points, quota),
@@ -345,9 +360,15 @@ the full seeded E2E journey passes — increment 10 of the plan.
   opportunities an owner, technicians a branch and a supervisor;
   /Services/branches, /Services/team, /Services/sales. 20260830001500;
   hosted apply: scope=branches-org-sales after merge.
-- [ ] Increment 7 follow-on (canvassing): door-to-door routes, knock
-  dispositions and per-rep canvassing stats. The territory map and the
-  leaderboard now exist to hang them on; the knocking itself does not.
+- [x] Increment 7 follow-on (canvassing): the schema and endpoints for
+  routes and knocks shipped with increment 7 — what was missing was the
+  page. /Services/canvassing now plans a route (name, day, territory,
+  rep), records a knock against one (address, disposition, a follow-up
+  date offered ONLY on callback/appointment — mirroring the schema's rule
+  so the refusal never fires blind), and shows per-rep figures with
+  unassigned routes kept as their own row rather than losing their doors.
+  A sold door still comes from the account it produced; that rule stays
+  the schema's.
 - [x] Increment 8 (ADR-196): documents, canvassing and the marketing hub —
   crm_documents (a storage PATH, never a URL, never bytes),
   crm_canvass_routes + append-only crm_knocks with dispositions,
@@ -369,8 +390,15 @@ the full seeded E2E journey passes — increment 10 of the plan.
   absent, templates frozen once in use; plus crm_timesheets with overlap
   refused and licence expiry on technicians. /Services/forms.
   20260830001700; hosted apply: scope=forms-timesheets-licences after merge.
-- [ ] Increment 9 follow-on: WDO/termite diagrams (a drawing surface, not a
-  form), and PDF rendering of a completed inspection.
+- [x] Increment 9 follow-on: the drawing surface shipped with increment 16
+  (ADR-205's click-to-place 0..1 coordinate diagram — this earlier row
+  predated it), and the report is now printable:
+  /Services/wdo/print/[inspectionId] lays the report out for paper — the
+  verdict, the areas that could NOT be inspected printed as a claim even
+  when empty, the findings table, and the diagram with numbered marks
+  keyed to it. A draft prints only under a DRAFT banner. Print-to-PDF is
+  the browser's own, said plainly on the page; no server renderer is
+  connected and none is pretended.
 - [x] Increment 10 (ADR-198): the customer portal, residential view — one
   login resolves to exactly one account through SECURITY DEFINER
   projections, with no existing staff policy widened; balance, issued
@@ -1682,7 +1710,12 @@ when no row exists. No behaviour of the authoritative gate changes.
 
 ## Maintenance
 
-- [ ] Run final verification on the repository-supported Node version.
+- [x] Run final verification on the repository-supported Node version.
+  Done 2026-08-31 on Node v22.22.2 (engines requires >=22): the complete
+  gate set ran green in one session — full vitest (6,39x tests, ~9 min),
+  `eslint . --max-warnings 0`, `tsc --noEmit`, and a production build —
+  and CI repeated lint/typecheck/test/build plus all three browser
+  shards green on the same tree (run 33391416517).
 - [ ] Before any new hosted database command, reconfirm the authenticated release identity and exact project `qpuofpmagrmyamahqwxw`; do not fall back to the previously wrong/unauthorized profile.
 - [x] Move Vitest configuration to native ESM (`vitest.config.mts`) to remove the prior config-loader warning.
 - [ ] Expand authenticated E2E once a safe disposable live-provider fixture exists.
@@ -1893,16 +1926,26 @@ outstanding:
   categories `on delete set null`; archiving keeps history honest). The
   monthly plan table (`budget_month_plans`) still has no panel on top of
   its schema and `compareToPlan` analytics; that remains open below.
-- [ ] A panel on top of `budget_month_plans` + `compareToPlan` — the plan
-  table has schema and analytics and no surface yet.
-- [ ] Transfers get a `transfer_group_id` column and nothing populates it. Both
-  sides of a move between the person's own accounts are typed correctly and
-  excluded from spend, but they are not yet linked to each other.
-- [ ] `reconcile()` finds where a statement's running total stops agreeing with
-  its own amounts — 38 breaks in the owner's 8,040 rows — and nothing surfaces
-  it on the page yet.
-- [ ] Editing and deleting a transaction. The ledger is currently append-only
-  through the UI; the RLS policies already allow update and delete.
+- [x] The month plan is on the Categories page: GET/PUT /api/budget/plans
+  upserts one plan per category per month (blank clears it), and the card
+  shows planned against actual using `compareToPlan` over the SAME spend
+  definition as the overview (`categoryTotalsForMonth`), so the two pages
+  can never disagree about what was spent.
+- [x] Transfers link: POST/DELETE /api/budget/transfers pairs one
+  transfer-out with one transfer-in — exact opposite amounts, different
+  accounts, neither side already claimed, the race refused by a
+  conditional update — and the Transactions page offers Link only to the
+  exact counterpart, with Unlink on a linked pair.
+- [x] `reconcile()` is on the page: /api/budget/reconcile walks one
+  account's whole ledger (anchored so the first stated balance reconciles
+  exactly) and the Transactions page shows the breaks — date, description,
+  stated vs computed, the delta — instead of papering over them.
+- [x] Editing and deleting a transaction: per-row Edit (description and
+  amount; the sign-matches-kind agreement is re-checked against the row's
+  FINAL state) and Delete behind a confirm. `balance_after_cents` is never
+  editable — it is the statement's claim, and reconciliation is where a
+  disagreement created by an edit shows up; rewriting it would erase the
+  evidence.
 
 ## No learning edge from accepted results (found 2026-08-29, design gap)
 

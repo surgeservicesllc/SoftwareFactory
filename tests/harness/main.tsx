@@ -241,6 +241,15 @@ function serveFixtures() {
     }
     if (url.includes("/api/job-seeker/profile")) return json({ profile: JOB_SEEKER_PROFILE });
     if (url.includes("/api/job-seeker/preferences")) return json({ preferences: JOB_SEEKER_PREFERENCES });
+    if (url.includes("/api/budget/plans")) {
+      return json({
+        month: "2026-08-01",
+        comparisons: [
+          { categoryId: "11111111-1111-4111-8111-111111111111", plannedCents: 60000,
+            spentCents: 41250, remainingCents: 18750, usedPercent: 69, overspent: false },
+        ],
+      });
+    }
     if (url.includes("/api/budget/categories")) {
       return json({ categories: [
         { id: "11111111-1111-4111-8111-111111111111", name: "Groceries", kind: "expense",

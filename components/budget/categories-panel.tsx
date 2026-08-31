@@ -41,6 +41,15 @@ export function BudgetCategoriesPanel() {
   const [newKind, setNewKind] = useState<(typeof KINDS)[number]>("expense");
   const [newTone, setNewTone] = useState<(typeof TONES)[number]>("neutral");
   const [newLimit, setNewLimit] = useState("");
+  const [planMonth, setPlanMonth] = useState(`${new Date().toISOString().slice(0, 7)}-01`);
+  const [comparisons, setComparisons] = useState<ReadonlyArray<{
+    categoryId: string;
+    plannedCents: number;
+    spentCents: number;
+    remainingCents: number;
+    overspent: boolean;
+  }>>([]);
+  const [planDrafts, setPlanDrafts] = useState<Record<string, string>>({});
 
   const load = useCallback(async () => {
     try {
@@ -59,10 +68,59 @@ export function BudgetCategoriesPanel() {
     }
   }, []);
 
+  const loadPlan = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/budget/plans?month=${planMonth}`, { cache: "no-store" });
+      if (!response.ok) return;
+      const body = (await response.json()) as { comparisons?: typeof comparisons };
+      setComparisons(body.comparisons ?? []);
+    } catch {
+      // The plan card degrades to empty; the categories above still work.
+    }
+  }, [planMonth]);
+
   useEffect(() => {
-    const kickoff = window.setTimeout(() => void load(), 0);
+    const kickoff = window.setTimeout(() => {
+      void load();
+      void loadPlan();
+    }, 0);
     return () => window.clearTimeout(kickoff);
-  }, [load]);
+  }, [load, loadPlan]);
+
+  async function savePlan(categoryId: string) {
+    const draft = (planDrafts[categoryId] ?? "").trim();
+    let plannedCents: number | null = null;
+    if (draft !== "") {
+      const parsed = parseMoneyToCents(draft);
+      if (!parsed.ok || parsed.cents < 0) {
+        setMessage("That planned figure could not be read. Try 250.00, or blank to clear.");
+        return;
+      }
+      plannedCents = parsed.cents;
+    }
+    setBusy(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/budget/plans", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ categoryId, month: planMonth, plannedCents }),
+      });
+      if (!response.ok) {
+        const failure = (await response.json().catch(() => null)) as
+          | { error?: { message?: string } }
+          | null;
+        setMessage(failure?.error?.message ?? "The plan could not be saved.");
+        return;
+      }
+      setPlanDrafts((drafts) => ({ ...drafts, [categoryId]: "" }));
+      await loadPlan();
+    } catch {
+      setMessage("The plan could not be saved.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   function beginEdit(category: CategoryView) {
     setEditing(category.id);
@@ -314,6 +372,67 @@ export function BudgetCategoriesPanel() {
           Kind cannot be changed later — history is classified under it. Archive a category instead
           of deleting it; past rows keep their classification either way.
         </p>
+      </Card>
+
+      <Card>
+        <SectionTitle
+          title="This month's plan"
+          description="Planned against actual, using the same spend definition as the overview: money out, transfers excluded."
+        />
+        <label className="mt-3 block text-sm">
+          <span className="mb-1 block text-xs text-muted">Month</span>
+          <input
+            type="month"
+            className="rounded border border-[var(--border)] bg-transparent px-2 py-1"
+            value={planMonth.slice(0, 7)}
+            onChange={(event) => {
+              if (event.target.value) setPlanMonth(`${event.target.value}-01`);
+            }}
+          />
+        </label>
+        {active.length === 0 ? (
+          <p className="mt-3 text-sm text-muted">Add a category above to plan against it.</p>
+        ) : (
+          <ul className="mt-3 divide-y divide-[var(--border)]" data-testid="budget-month-plan">
+            {active.map((category) => {
+              const comparison = comparisons.find((entry) => entry.categoryId === category.id);
+              return (
+                <li key={category.id} className="flex flex-wrap items-center gap-3 py-2.5 text-sm">
+                  <span className="min-w-32 font-medium">{category.name}</span>
+                  {comparison ? (
+                    <span className={comparison.overspent ? "text-[var(--danger)]" : "text-muted"}>
+                      {formatCents(comparison.spentCents)} of {formatCents(comparison.plannedCents)}
+                      {comparison.overspent
+                        ? ` — over by ${formatCents(Math.abs(comparison.remainingCents))}`
+                        : ` — ${formatCents(comparison.remainingCents)} left`}
+                    </span>
+                  ) : (
+                    <span className="text-muted">No plan for this month.</span>
+                  )}
+                  <span className="ml-auto flex items-center gap-2">
+                    <input
+                      aria-label={`Planned for ${category.name}`}
+                      className="w-24 rounded border border-[var(--border)] bg-transparent px-2 py-1"
+                      placeholder={comparison ? (comparison.plannedCents / 100).toFixed(2) : "Plan"}
+                      value={planDrafts[category.id] ?? ""}
+                      onChange={(event) =>
+                        setPlanDrafts((drafts) => ({ ...drafts, [category.id]: event.target.value }))
+                      }
+                    />
+                    <button
+                      type="button"
+                      disabled={busy}
+                      className="text-sm underline disabled:opacity-50"
+                      onClick={() => void savePlan(category.id)}
+                    >
+                      {(planDrafts[category.id] ?? "").trim() === "" && comparison ? "Clear" : "Set"}
+                    </button>
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </Card>
 
       {archived.length > 0 ? (

@@ -331,7 +331,17 @@ export function ServicesBillingPanel() {
                   {(invoices?.invoices ?? []).slice(0, 100).map((invoice) => (
                     <tr key={invoice.id}>
                       <td className="py-2.5 pr-3">
-                        <span className="block font-mono text-xs text-foreground">{invoice.number}</span>
+                        <span className="block font-mono text-xs text-foreground">
+                          <a
+                            className="underline"
+                            href={`/Services/billing/print/${invoice.id}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            title="Open the printable invoice — print-to-PDF happens in your browser"
+                          >
+                            {invoice.number}
+                          </a>
+                        </span>
                         <span className="block text-xs text-faint">
                           {invoice.lines.length} {invoice.lines.length === 1 ? "line" : "lines"}
                           {invoice.lines.some((line) => line.source !== "manual")

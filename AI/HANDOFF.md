@@ -2,6 +2,30 @@
 
 Last updated: 2026-08-31
 
+## Newest (2026-08-31, latest+48): the close-out tail
+
+Eight rows in one stretch, all UI over machinery that already existed —
+the pattern of this tail is "the schema shipped, the page didn't":
+
+BUDGET: ledger rows edit/delete (balance_after_cents is NEVER editable —
+it is the statement's claim and reconciliation is where an edit-created
+disagreement shows up); /api/budget/reconcile anchors so the first
+stated balance reconciles exactly; transfers link under exact checks
+with the two-tab race refused by a conditional update; the month plan
+computes spend with categoryTotalsForMonth so it can never disagree with
+the overview.
+
+PRINTABLES: /Services/wdo/print/[id] and /Services/billing/print/[id].
+BOTH say print-to-PDF is the browser's own — never claim a server
+renderer. DRAFT and VOID banners are load-bearing: without them a
+work-in-progress circulates as a report or a bill.
+
+CANVASSING: the knock form offers a follow-up date ONLY on
+callback/appointment (the schema's rule, mirrored so the refusal never
+fires blind); per-rep stats keep unassigned routes as their own row. A
+sold door is recorded from its account; do not add an account picker to
+the knock form.
+
 ## Newest (2026-08-31, latest+47): Grok ACL verification follows the server's owner default (ADR-227)
 
 PR #487 merged as exact main `24a6313e98023bfc618a921fc563c9f4bde4cad2`.
