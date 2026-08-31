@@ -141,12 +141,7 @@ async function wakeResumedGraph(
       || target.data.project_id !== projectId
       || target.data.repository_id !== graph.data.github_repository_id
     ) return record("failed", "TARGET_MISMATCH");
-    const dispatchWithWake = dispatchGraphWorker as unknown as (
-      exactTarget: Phase1CDispatchTarget,
-      exactGraphId: string,
-      wake: Readonly<{ wakeIntentId: string; controlRevision: number }>,
-    ) => ReturnType<typeof dispatchGraphWorker>;
-    const result = await dispatchWithWake(dispatchTarget(target.data), graphId, {
+    const result = await dispatchGraphWorker(dispatchTarget(target.data), graphId, {
       wakeIntentId,
       controlRevision,
     });
