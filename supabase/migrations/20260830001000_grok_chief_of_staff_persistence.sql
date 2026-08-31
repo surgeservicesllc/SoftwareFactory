@@ -1322,6 +1322,256 @@ grant execute on function public.record_grok_event_as_server(
   uuid, uuid, text, uuid, jsonb, bigint, uuid, uuid
 ) to service_role;
 
+-- ---------------------------------------------------------------------------
+-- Grok -> canonical Full Lifecycle bridge.
+--
+-- Grok's provider-labelled task graph is durable routing intent, not a graph
+-- the Claude-only MODEL worker may reinterpret. This server-only transaction
+-- launches exactly the repository's Full Lifecycle v2 template, pauses it
+-- before the new graph can become visible to another transaction, and binds
+-- the transcript to that exact graph. It never creates a graph run, a node
+-- run, or a worker dispatch.
+-- ---------------------------------------------------------------------------
+
+create function public.launch_grok_full_lifecycle_as_server(
+  p_organization_id uuid,
+  p_requested_by uuid,
+  p_project_id uuid,
+  p_session_id uuid,
+  p_message_id uuid,
+  p_idempotency_key text,
+  p_goal text,
+  p_topology public.graph_topology,
+  p_topology_reasons jsonb,
+  p_risk_level public.risk_level,
+  p_requires_owner_approval boolean,
+  p_nodes jsonb,
+  p_edges jsonb,
+  p_budget jsonb,
+  p_github_repository_id uuid,
+  p_base_branch text,
+  p_base_sha text,
+  p_required_check_names jsonb
+)
+returns public.grok_graph_launches
+language plpgsql
+security definer
+set search_path = pg_catalog
+as $function$
+declare
+  v_session public.grok_sessions;
+  v_message public.grok_messages;
+  v_existing public.grok_graph_launches;
+  v_launch public.grok_graph_launches;
+  v_link public.grok_task_links;
+  v_graph public.graphs;
+  v_input_sha256 text;
+begin
+  if p_requested_by is null or p_message_id is null
+      or p_idempotency_key is null
+      or p_idempotency_key !~ '^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$'
+      or p_goal is null or pg_catalog.char_length(pg_catalog.btrim(p_goal)) not between 1 and 4000
+  then
+    raise exception using errcode = '22023', message = 'invalid canonical grok launch input';
+  end if;
+  if public.text_has_likely_secret(p_goal)
+      or public.text_has_likely_secret(coalesce(p_topology_reasons, '[]'::jsonb)::text)
+      or public.text_has_likely_secret(coalesce(p_nodes, '[]'::jsonb)::text)
+      or public.text_has_likely_secret(coalesce(p_edges, '[]'::jsonb)::text)
+      or public.text_has_likely_secret(coalesce(p_budget, '{}'::jsonb)::text)
+  then
+    raise exception using errcode = '22023', message = 'canonical grok launch contains likely secret material';
+  end if;
+  if not exists (
+    select 1
+      from public.organization_members member
+     where member.organization_id = p_organization_id
+       and member.user_id = p_requested_by
+       and member.role = 'owner'::public.organization_member_role
+  ) then
+    raise exception using errcode = '42501', message = 'an exact organization owner request identity is required';
+  end if;
+
+  select session.* into v_session
+    from public.grok_sessions session
+   where session.id = p_session_id
+     and session.organization_id = p_organization_id
+   for update;
+  if not found then
+    raise exception using errcode = 'P0002', message = 'grok_session_not_found';
+  end if;
+  if v_session.project_id is distinct from p_project_id
+      or v_session.created_by is distinct from p_requested_by
+      or v_session.status is distinct from 'active'
+  then
+    raise exception using errcode = '42501', message = 'grok launch owner, project, or active-session identity mismatch';
+  end if;
+
+  select message.* into v_message
+    from public.grok_messages message
+   where message.id = p_message_id
+     and message.organization_id = p_organization_id
+     and message.project_id = p_project_id
+     and message.session_id = p_session_id
+     and message.role = 'assistant'
+     and message.metadata ->> 'kind' = 'grok.plan';
+  if not found then
+    raise exception using errcode = 'P0002', message = 'grok_plan_message_not_found';
+  end if;
+
+  v_input_sha256 := pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(
+    pg_catalog.jsonb_build_object(
+      'organizationId', p_organization_id,
+      'requestedBy', p_requested_by,
+      'projectId', p_project_id,
+      'sessionId', p_session_id,
+      'messageId', p_message_id,
+      'goal', pg_catalog.btrim(p_goal),
+      'topology', p_topology::text,
+      'topologyReasons', p_topology_reasons,
+      'riskLevel', p_risk_level::text,
+      'requiresOwnerApproval', p_requires_owner_approval,
+      'nodes', p_nodes,
+      'edges', p_edges,
+      'budget', p_budget,
+      'templateKey', 'full_lifecycle',
+      'templateVersion', 2,
+      'githubRepositoryId', p_github_repository_id,
+      'baseBranch', pg_catalog.btrim(p_base_branch),
+      'baseSha', p_base_sha,
+      'requiredCheckNames', p_required_check_names
+    )::text,
+    'UTF8'
+  )), 'hex');
+
+  select launch.* into v_existing
+    from public.grok_graph_launches launch
+   where launch.session_id = p_session_id
+     and launch.organization_id = p_organization_id
+     and launch.idempotency_key = p_idempotency_key;
+  if found then
+    select graph.* into v_graph
+      from public.graphs graph
+     where graph.id = v_existing.graph_id
+       and graph.organization_id = p_organization_id
+       and graph.project_id = p_project_id;
+    if v_existing.project_id is not distinct from p_project_id
+        and v_existing.message_id is not distinct from p_message_id
+        and v_existing.created_by is not distinct from p_requested_by
+        and v_existing.input_sha256 is not distinct from v_input_sha256
+        and found
+        and v_graph.template_key is not distinct from 'full_lifecycle'
+        and v_graph.template_version is not distinct from 2
+        and v_graph.pause_requested_at is not null
+        and not exists (
+          select 1 from public.graph_runs graph_run
+           where graph_run.graph_id = v_existing.graph_id
+             and graph_run.organization_id = p_organization_id
+        )
+    then
+      return v_existing;
+    end if;
+    raise exception using errcode = '22023', message = 'grok launch idempotency key was reused with different input or evidence';
+  end if;
+
+  -- The nested exact-release boundary also sets this transaction-local owner
+  -- identity. Set it here first so the immediately following pause boundary is
+  -- explicit even if the nested implementation later changes internally.
+  perform pg_catalog.set_config('request.jwt.claim.sub', p_requested_by::text, true);
+
+  v_graph.id := public.create_graph_from_plan_with_release_identity_as_server(
+    p_organization_id,
+    p_requested_by,
+    p_project_id,
+    pg_catalog.btrim(p_goal),
+    p_topology,
+    p_topology_reasons,
+    p_risk_level,
+    p_requires_owner_approval,
+    p_nodes,
+    p_edges,
+    p_budget,
+    'full_lifecycle',
+    2,
+    p_github_repository_id,
+    pg_catalog.btrim(p_base_branch),
+    p_base_sha,
+    p_required_check_names
+  );
+
+  perform public.set_graph_pause_as_member(
+    p_organization_id,
+    v_graph.id,
+    true
+  );
+  select graph.* into v_graph
+    from public.graphs graph
+   where graph.id = v_graph.id
+     and graph.organization_id = p_organization_id
+     and graph.project_id = p_project_id;
+  if not found or v_graph.pause_requested_at is null
+      or v_graph.pause_requested_by is distinct from p_requested_by
+      or exists (
+        select 1 from public.graph_runs graph_run
+         where graph_run.graph_id = v_graph.id
+           and graph_run.organization_id = p_organization_id
+      )
+  then
+    raise exception using errcode = '55000', message = 'canonical grok graph was not atomically paused before execution';
+  end if;
+
+  v_link := public.link_grok_task_as_server(
+    p_organization_id,
+    p_session_id,
+    p_message_id,
+    null,
+    null,
+    v_graph.id,
+    null,
+    'planned'
+  );
+
+  insert into public.grok_graph_launches (
+    organization_id, project_id, session_id, message_id, idempotency_key,
+    input_sha256, graph_id, task_link_id, created_by
+  ) values (
+    p_organization_id, p_project_id, p_session_id, p_message_id,
+    p_idempotency_key, v_input_sha256, v_graph.id, v_link.id, p_requested_by
+  ) returning * into v_launch;
+
+  perform public.record_grok_event_as_server(
+    p_organization_id,
+    p_session_id,
+    'graph.planned',
+    v_graph.id,
+    pg_catalog.jsonb_build_object(
+      'schemaVersion', 1,
+      'detail', 'The canonical Full Lifecycle v2 graph was recorded and paused before execution.',
+      'graphId', v_graph.id,
+      'templateKey', 'full_lifecycle',
+      'templateVersion', 2,
+      'baseSha', p_base_sha,
+      'workerWoken', false,
+      'executionStarted', false
+    ),
+    v_session.last_event_sequence,
+    p_message_id,
+    v_link.id
+  );
+
+  return v_launch;
+end;
+$function$;
+
+revoke all on function public.launch_grok_full_lifecycle_as_server(
+  uuid, uuid, uuid, uuid, uuid, text, text, public.graph_topology, jsonb,
+  public.risk_level, boolean, jsonb, jsonb, jsonb, uuid, text, text, jsonb
+) from public, anon, authenticated, service_role;
+grant execute on function public.launch_grok_full_lifecycle_as_server(
+  uuid, uuid, uuid, uuid, uuid, text, text, public.graph_topology, jsonb,
+  public.risk_level, boolean, jsonb, jsonb, jsonb, uuid, text, text, jsonb
+) to service_role;
+
 create function public.link_grok_artifact_as_server(
   p_organization_id uuid,
   p_session_id uuid,

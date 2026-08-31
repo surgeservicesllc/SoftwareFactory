@@ -4,6 +4,10 @@ import { z } from "zod";
 
 import { buildGrokChiefOfStaffPlan } from "@/lib/factory/chief-of-staff";
 import {
+  buildCanonicalFullLifecyclePlan,
+  resolveCanonicalFullLifecycleReleaseIdentity,
+} from "@/lib/graph/canonical-full-lifecycle";
+import {
   appendGrokAssistantPlan,
   appendGrokUserMessage,
   createGrokSession,
@@ -13,11 +17,15 @@ import {
   loadConfiguredGrokAgents,
   mapGrokSessionDetail,
   mapGrokSessionList,
+  plannedGraphLink,
   readGrokBundle,
   readGrokProject,
   recordGrokEvent,
   storedGrokPlan,
 } from "@/lib/grok/session-store";
+import { GitHubApiError } from "@/lib/github/client";
+import { GitHubConfigurationError } from "@/lib/github/config";
+import { githubRouteErrorResponse } from "@/lib/github/errors";
 import { createSupabaseGitHubWebhookClient } from "@/lib/github/service-role";
 import { findSensitiveData } from "@/lib/security/sensitive-data";
 import {
@@ -220,19 +228,72 @@ export async function POST(request: Request) {
         taskCount: plan.dag.tasks.length,
       },
       // Both durable messages emitted their own message.appended events first.
-      expectedSequence: 2,
+      expectedSequence: 3,
       messageId: assistantMessage.id,
       taskLinkId: null,
     });
 
-    /*
-     * The current graph boundary persists capability and model tier, but not
-     * the exact provider, model, or configured assignment selected above.
-     * Launching any custom plan would let the worker re-route it and break the
-     * immutable plan identity. Keep the exact transcript and plan durable and
-     * return a normal blocked workspace response until that bridge exists.
-     */
     bundle = await readGrokBundle(context.client, context.activeOrganization.id, session.id);
+    if (!plannedGraphLink(bundle)) {
+      /*
+       * The provider-labelled Grok DAG remains routing intent. Executing it as
+       * a custom graph would let the worker silently reinterpret its provider,
+       * model, and configured-agent assignments. Launch only the already
+       * enforced canonical Full Lifecycle v2 plan, then pause it atomically at
+       * the database boundary. No worker is dispatched from this route.
+       */
+      const canonical = buildCanonicalFullLifecyclePlan(parsed.data.prompt);
+      if (!canonical.ok) {
+        return jsonNoStore(
+          {
+            sessionId: session.id,
+            error: {
+              code: canonical.code,
+              message: canonical.message,
+              details: canonical.details,
+            },
+          },
+          { status: canonical.status },
+        );
+      }
+      const release = await resolveCanonicalFullLifecycleReleaseIdentity(
+        context.client,
+        context.activeOrganization.id,
+        project.projectId,
+      );
+      if (!release.ok) {
+        if (release.databaseError) return databaseErrorResponse(release.databaseError);
+        return jsonNoStore(
+          { error: { code: release.code, message: release.message } },
+          { status: release.status },
+        );
+      }
+      const { error: launchError } = await serviceClient.rpc(
+        "launch_grok_full_lifecycle_as_server",
+        {
+          p_organization_id: context.activeOrganization.id,
+          p_requested_by: context.user.id,
+          p_project_id: project.projectId,
+          p_session_id: session.id,
+          p_message_id: assistantMessage.id,
+          p_idempotency_key: idempotencyKey,
+          p_goal: canonical.plan.goal,
+          p_topology: canonical.plan.topology,
+          p_topology_reasons: canonical.plan.topologyReasons,
+          p_risk_level: canonical.plan.riskLevel,
+          p_requires_owner_approval: canonical.plan.requiresOwnerApproval,
+          p_nodes: canonical.plan.nodes,
+          p_edges: canonical.plan.edges,
+          p_budget: canonical.plan.budget,
+          p_github_repository_id: release.target.repository_id,
+          p_base_branch: release.target.base_branch,
+          p_base_sha: release.baseSha,
+          p_required_check_names: release.requiredChecks,
+        },
+      );
+      if (launchError) return databaseErrorResponse(launchError);
+      bundle = await readGrokBundle(context.client, context.activeOrganization.id, session.id);
+    }
     const detail = await mapGrokSessionDetail(
       context.client,
       context.activeOrganization.id,
@@ -241,16 +302,19 @@ export async function POST(request: Request) {
     );
     return jsonNoStore({
       ...detail,
-      session: { ...detail.session, status: "blocked" },
       workerWoken: false,
       executionStarted: false,
-      blocked: {
-        code: "execution_bridge_not_connected",
-        message: "The exact provider, model, and agent execution bridge is not connected. The plan is saved; no graph or worker was launched.",
+      execution: {
+        state: "paused",
+        bridge: "full_lifecycle_v2",
+        message: "The canonical release graph is durable and paused. No worker was dispatched.",
       },
     }, { status: 202 });
   } catch (error) {
     if (error instanceof ApiRequestError) return requestErrorResponse(error);
+    if (error instanceof GitHubApiError || error instanceof GitHubConfigurationError) {
+      return githubRouteErrorResponse(error);
+    }
     return storeFailure(error, "grok_session_failed", "The Grok session could not be planned safely.");
   }
 }

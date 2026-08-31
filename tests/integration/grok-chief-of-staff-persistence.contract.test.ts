@@ -32,6 +32,7 @@ const serverFunctions = [
   "append_grok_message_as_server",
   "link_grok_task_as_server",
   "record_grok_event_as_server",
+  "launch_grok_full_lifecycle_as_server",
   "link_grok_artifact_as_server",
   "resolve_grok_control_intent_as_server",
   "set_grok_session_status_as_server",
@@ -105,10 +106,22 @@ describe("Grok Chief-of-Staff migration contract", () => {
     }
   });
 
-  it("does not expose or invoke a custom graph-launch boundary", () => {
+  it("launches only canonical Full Lifecycle v2 and atomically pauses it without a run", () => {
     expect(sql).not.toMatch(/create function public\.launch_grok_graph_for_session\s*\(/i);
     expect(sql).not.toMatch(/grant execute on function public\.launch_grok_graph_for_session\s*\(/i);
-    expect(sql).not.toContain("public.create_graph_from_plan(");
+    const start = sql.indexOf("create function public.launch_grok_full_lifecycle_as_server");
+    const end = sql.indexOf("create function public.link_grok_artifact_as_server", start);
+    const body = sql.slice(start, end);
+    expect(start).toBeGreaterThan(-1);
+    expect(body).toContain("public.create_graph_from_plan_with_release_identity_as_server(");
+    expect(body).toMatch(/'full_lifecycle',\s*2,/i);
+    expect(body).toContain("public.set_graph_pause_as_member(");
+    expect(body.indexOf("public.set_graph_pause_as_member(")).toBeLessThan(
+      body.indexOf("insert into public.grok_graph_launches"),
+    );
+    expect(body).toContain("public.link_grok_task_as_server(");
+    expect(body).toContain("v_graph.pause_requested_at is null");
+    expect(body).toContain("select 1 from public.graph_runs");
     expect(sql).not.toMatch(/insert into public\.graphs/i);
     expect(sql).not.toMatch(/insert into public\.graph_runs/i);
     expect(sql).not.toMatch(/insert into public\.node_runs/i);

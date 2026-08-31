@@ -339,9 +339,10 @@ describe("SECURITY DEFINER functions", () => {
       // timing, never the sealed relay code.
       "inspect_ai_auth_sessions",
       "jsonb_has_sensitive_keys",
-      // Grok's durable evidence bridge has no service_role table grants. Its
-      // six reviewed server writes are narrow, tenant-validating RPCs whose
-      // exact overload identities are pinned below.
+      // Grok has no service_role table grants. Six bounded evidence writers
+      // plus one canonical Full Lifecycle v2 launcher are pinned by exact
+      // overload below; the launcher atomically pauses before visibility.
+      "launch_grok_full_lifecycle_as_server",
       "link_grok_artifact_as_server",
       "link_grok_task_as_server",
       // The verification sweep's two hands: enumerate connected subscription

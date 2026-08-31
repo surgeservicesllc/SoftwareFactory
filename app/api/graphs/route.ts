@@ -3,25 +3,21 @@ import { z } from "zod";
 import { checkGraphLaunch } from "@/lib/billing/entitlements";
 import { buildCustomTemplate, parseStoredDefinition } from "@/lib/graph/custom-templates";
 import { dispatchGraphWorker } from "@/lib/orchestration/dispatch";
-import { buildLaunchPlan } from "@/lib/graph/launch-plan";
 import {
-  parseRepositoryReleasePolicy,
-  RELEASE_POLICY_PATH,
-} from "@/lib/graph/release-policy";
+  buildCanonicalFullLifecyclePlan,
+  resolveCanonicalFullLifecycleReleaseIdentity,
+} from "@/lib/graph/canonical-full-lifecycle";
+import { buildLaunchPlan } from "@/lib/graph/launch-plan";
 import {
   FULL_LIFECYCLE_TEMPLATE_KEY,
   FULL_LIFECYCLE_TEMPLATE_VERSION,
   phase1CTargetSchema,
 } from "@/lib/graph/phase1c-gate-bridge";
 import { budgetForTemplate, findTemplate, type GraphTemplate } from "@/lib/graph/templates";
-import { createGitHubInstallationToken, GitHubApiError } from "@/lib/github/client";
-import {
-  getGitHubAppConfigurationForAppId,
-  GitHubConfigurationError,
-} from "@/lib/github/config";
+import { GitHubApiError } from "@/lib/github/client";
+import { GitHubConfigurationError } from "@/lib/github/config";
 import { githubRouteErrorResponse } from "@/lib/github/errors";
 import { createSupabaseGitHubWebhookClient } from "@/lib/github/service-role";
-import { getGitHubBranchReference, getGitHubFile } from "@/lib/github/repository";
 import {
   invalidRequest,
   operationsContext,
@@ -174,39 +170,29 @@ export async function POST(request: Request) {
      * ceiling for a graph that declared it needs a hundred and fifty — the
      * guard would pass, and production would stop the run as overspending.
      */
-    const built = buildLaunchPlan(
-      { ...template, summary: goal },
-      budgetForTemplate(template),
-    );
+    const isReleaseLifecycle = template.key === FULL_LIFECYCLE_TEMPLATE_KEY;
+    const built = isReleaseLifecycle
+      ? buildCanonicalFullLifecyclePlan(goal)
+      : buildLaunchPlan({ ...template, summary: goal }, budgetForTemplate(template));
     if (!built.ok) {
+      const canonicalFailure = "code" in built ? built : null;
       // The compiler refused. That is a real answer about the template, not a
       // server fault, so it reaches the caller intact.
       return jsonNoStore(
         {
           error: {
-            code: "template_does_not_compile",
-            message: "The template could not be compiled into a graph.",
-            details: built.errors,
+            code: canonicalFailure?.code ?? "template_does_not_compile",
+            message: canonicalFailure
+              ? canonicalFailure.message
+              : "The template could not be compiled into a graph.",
+            details: canonicalFailure?.details ?? ("errors" in built ? built.errors : undefined),
           },
         },
-        { status: 422 },
+        { status: canonicalFailure?.status ?? 422 },
       );
     }
 
     const plan = built.plan;
-
-    const isReleaseLifecycle = template.key === FULL_LIFECYCLE_TEMPLATE_KEY;
-    if (isReleaseLifecycle && template.version !== FULL_LIFECYCLE_TEMPLATE_VERSION) {
-      return jsonNoStore(
-        {
-          error: {
-            code: "full_lifecycle_version_mismatch",
-            message: "Full Lifecycle must launch from the current release-lineage template version.",
-          },
-        },
-        { status: 409 },
-      );
-    }
 
     let releaseTarget: z.infer<typeof phase1CTargetSchema> | null = null;
     let releaseBaseSha: string | null = null;
@@ -223,78 +209,21 @@ export async function POST(request: Request) {
           { status: 403 },
         );
       }
-      const targetRead = await context.client.rpc("resolve_phase1c_command_target", {
-        p_organization_id: context.activeOrganization.id,
-        p_project_id: parsed.data.projectId,
-      }).single();
-      if (targetRead.error) return databaseErrorResponse(targetRead.error);
-      const target = phase1CTargetSchema.safeParse(targetRead.data);
-      if (!target.success || target.data.project_id !== parsed.data.projectId) {
-        return jsonNoStore(
-          {
-            error: {
-              code: "release_repository_not_connected",
-              message: "Full Lifecycle requires one exact active GitHub repository binding.",
-            },
-          },
-          { status: 409 },
-        );
-      }
-      const coordinates = target.data.repository_full_name.split("/");
-      if (coordinates.length !== 2 || !coordinates[0] || !coordinates[1]) {
-        return jsonNoStore(
-          { error: { code: "release_repository_invalid", message: "The release repository identity is invalid." } },
-          { status: 409 },
-        );
-      }
-      const installationToken = await createGitHubInstallationToken(
-        getGitHubAppConfigurationForAppId(target.data.app_id),
-        target.data.external_installation_id,
-        {
-          permissions: { contents: "read", metadata: "read" },
-          repositoryIds: [target.data.external_repository_id],
-        },
+      const release = await resolveCanonicalFullLifecycleReleaseIdentity(
+        context.client,
+        context.activeOrganization.id,
+        parsed.data.projectId,
       );
-      const reference = await getGitHubBranchReference(
-        installationToken.token,
-        coordinates[0],
-        coordinates[1],
-        target.data.base_branch,
-      );
-      const exactSha = reference.object.sha.toLowerCase();
-      if (!/^[0-9a-f]{40}$/.test(exactSha)) {
+      if (!release.ok) {
+        if (release.databaseError) return databaseErrorResponse(release.databaseError);
         return jsonNoStore(
-          {
-            error: {
-              code: "release_base_identity_invalid",
-              message: "GitHub did not return an exact release base commit identity.",
-            },
-          },
-          { status: 503 },
+          { error: { code: release.code, message: release.message } },
+          { status: release.status },
         );
       }
-      const policyFile = await getGitHubFile(
-        installationToken.token,
-        coordinates[0],
-        coordinates[1],
-        exactSha,
-        RELEASE_POLICY_PATH,
-      );
-      const policy = parseRepositoryReleasePolicy(policyFile.content);
-      if (!policy) {
-        return jsonNoStore(
-          {
-            error: {
-              code: "release_policy_invalid",
-              message: `The exact base commit must contain a valid ${RELEASE_POLICY_PATH}.`,
-            },
-          },
-          { status: 409 },
-        );
-      }
-      releaseTarget = target.data;
-      releaseBaseSha = exactSha;
-      releaseRequiredChecks = policy.requiredChecks;
+      releaseTarget = release.target;
+      releaseBaseSha = release.baseSha;
+      releaseRequiredChecks = release.requiredChecks;
     }
 
     const commonPlanArguments = {
