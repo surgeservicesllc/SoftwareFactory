@@ -352,6 +352,17 @@ the full seeded E2E journey passes — increment 10 of the plan.
   cannot carry prints without a symbol and says why, because barcodes are
   case-sensitive and an uppercased one would scan as a different station.
   This was the last row on the competitor board that code alone could close.
+- [ ] Multi-unit properties (PestPac parity): a unit level below a property,
+  serviced and billed individually. An account has properties and a property
+  has stations, but a 200-unit apartment block is currently one row and 200
+  service points in reality. The only row left on the competitor board that
+  code alone can close.
+- [ ] Provider- or vendor-gated PestPac modules found by auditing the audit:
+  smart traps (a sensor feed), online sales (a self-serve purchase flow on
+  top of estimates and contracts, and the payment row it depends on), print
+  marketing fulfilment, customer surveys (the form model exists; sending is
+  the email/SMS row), and a website builder, which is outside a CRM core and
+  is listed rather than quietly dropped.
 - [ ] Deliver a service report as a document (PestBoss, PestPac parity).
   Blocked on object storage being configured, the same thing that makes the
   commercial portal say Not Connected about downloading a signed inspection.

@@ -428,7 +428,18 @@ Code 39 cannot carry prints without a symbol and says why — barcodes are
 case-sensitive here, so uppercasing one would produce a label that scans as
 a different station.
 
-No buildable row is left. Ten of the remaining twelve are gated on an
+Checking PestPac's own feature index against the board — the same doubt
+that found the BOSS error — turned up seven named modules with no row at
+all, in the deepest-measured competitor here. The board is now 67 rows:
+48 HAVE, 5 PARTIAL, 14 GAP. Two rounds of checking added nine rows and no
+HAVEs, which is what auditing your own audit looks like.
+
+One buildable row is left: **multi-unit properties**. An account has
+properties and a property has stations, but nothing sits below a property,
+so a 200-unit apartment block is one row here and 200 service points in
+reality. That is a schema level and it is code, not an account.
+
+Of the remaining eighteen, ten are gated on an
 external account nobody has opened: card/ACH processing, SMS/email
 delivery, GPS telemetry, QuickBooks sync, telephony, reviews and
 drive-time routing. Those ship labelled **Not Connected** and are never

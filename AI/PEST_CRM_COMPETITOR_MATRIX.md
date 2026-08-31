@@ -221,16 +221,39 @@ SMS/email delivery (which also gates automated reminders and campaign
 sending), GPS/fleet telemetry, QuickBooks sync, call-centre/telephony
 integration, and reviews/reputation platforms.
 
-**A note on what "parity" can mean here.** 60 capability rows: **48 HAVE,
-3 PARTIAL, 9 GAP.**
+### H. PestPac modules this audit had not measured
 
-(58 until PestBoss was measured in its own right. Correcting a mis-named
-competitor added two rows and no HAVEs, which is what an honest re-count
-of a wrong assumption tends to look like.)
+Checking PestPac's own feature index against this matrix — prompted by the
+same doubt that found the BOSS mis-identification — turned up seven named
+modules with no row at all. The audit was less complete than its row count
+implied, in the deepest-measured competitor on the board.
 
-The composition matters more than the count. **Every one of the twelve
-remaining rows is gated on something outside the code.** Not most, not
-roughly half: all.
+| Capability | Who has it | Us |
+|---|---|---|
+| **Multi-unit properties**: units inside one site, serviced and billed individually | PestPac (Multi-Unit) | **GAP** — an account has properties and a property has stations, but nothing below a property. A 200-unit apartment block is one row here and 200 service points in reality. Buildable: this is a schema level, not an account. |
+| **On-site compliance logbook** for auditors (AIB, SQF, BRC) | PestPac (CustomerConnect+ Logbook) | **PARTIAL** — the commercial portal already carries what a logbook holds: SDS and label library, inspection history, device summary, open conditions and the scan ledger (ADR-198, ADR-203). What it cannot do is hand an auditor the binder, which is the document GAP above. |
+| **Post-service customer surveys** | PestPac (Customer Surveys) | **PARTIAL** — the form builder (ADR-197) already models a questionnaire with typed answers. Sending one to a customer and collecting a reply needs the email/SMS provider, so it is gated where every other outbound message is. |
+| **Smart traps**: remote-sensing devices that report activity without a visit | PestPac (Smart Traps), FieldRoutes | **GAP** — stations and their append-only scan ledger exist (ADR-191); a sensor that files its own events needs a device vendor's feed. |
+| **Online sales**: a customer buys a plan from the website without a call | PestPac (Online Sales, Sales Center) | **GAP** — estimates, contracts and plans all exist, and paying online is already a gated row; the self-serve purchase flow on top of them does not. |
+| **Print marketing fulfilment**: postcards and letters actually mailed | PestPac (Print Marketing) | **GAP** — campaigns and audiences ship (ADR-196); handing a print vendor a mailing list is a vendor relationship, not code. |
+| **Website builder** | PestPac (Website Builder) | **GAP** — PestPac sells one. This is outside what a CRM core is, and it is listed rather than quietly dropped so the count stays honest. |
+
+**A note on what "parity" can mean here.** 67 capability rows: **48 HAVE,
+5 PARTIAL, 14 GAP.**
+
+(58 until PestBoss was measured in its own right, then 60, then 67 once
+PestPac's own feature index was checked against the board rather than
+assumed. Two rounds of checking added nine rows and no HAVEs. That is what
+auditing your own audit looks like, and the count moving away from parity
+is the honest outcome rather than a setback.)
+
+The composition matters more than the count. **Eighteen of the nineteen
+remaining rows are gated on something outside the code.**
+
+The nineteenth is not: **multi-unit properties**. An account has properties
+and a property has stations, but there is nothing below a property, so a
+200-unit apartment block is one row here and 200 service points in reality.
+That is a schema level, and it is buildable.
 
 Ten need an external account somebody has to open and pay for — SMS/email
 reminders, route optimization by drive time, GPS telemetry, in-field card
@@ -240,11 +263,12 @@ owner authorization that Phase 1 deliberately withholds from automation;
 see the schedule below. One needs object storage to be configured before a
 service report can become a document.
 
-The printable station label was the thirteenth, and the only one code
-alone could close. It is closed (ADR-214).
+The printable station label was closed the same way (ADR-214), after the
+first round of checking added it.
 
-No row on this list can now be closed by writing code. What remains is an
-account to open, an authorization to give, or object storage to configure.
+One row on this list can be closed by writing code: multi-unit properties.
+Everything else needs an account to open, an authorization to give, or
+object storage to configure.
 
 ADR-207 built the registry the provider-gated rows depend on, so each is
 wired to the point where supplying a credential and the provider's own
