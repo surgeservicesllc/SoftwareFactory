@@ -436,6 +436,7 @@ describe("SECURITY DEFINER functions", () => {
         and proc.proname in (
           'append_grok_message_as_server',
           'launch_grok_full_lifecycle_v3_as_server',
+          'launch_grok_read_only_research_v1_as_server',
           'link_grok_artifact_as_server',
           'link_grok_task_as_server',
           'read_grok_execution_credential_as_worker',
@@ -460,6 +461,11 @@ describe("SECURITY DEFINER functions", () => {
         identity_arguments:
           "p_organization_id uuid, p_requested_by uuid, p_project_id uuid, p_session_id uuid, p_message_id uuid, p_idempotency_key text, p_goal text, p_topology graph_topology, p_topology_reasons jsonb, p_risk_level risk_level, p_requires_owner_approval boolean, p_nodes jsonb, p_edges jsonb, p_budget jsonb, p_github_repository_id uuid, p_base_branch text, p_base_sha text, p_required_check_names jsonb, p_roster_idempotency_key text, p_admissions jsonb",
         proname: "launch_grok_full_lifecycle_v3_as_server",
+      },
+      {
+        identity_arguments:
+          "p_organization_id uuid, p_requested_by uuid, p_project_id uuid, p_session_id uuid, p_message_id uuid, p_idempotency_key text, p_goal text, p_topology graph_topology, p_topology_reasons jsonb, p_risk_level risk_level, p_requires_owner_approval boolean, p_nodes jsonb, p_edges jsonb, p_budget jsonb, p_roster_idempotency_key text, p_admissions jsonb",
+        proname: "launch_grok_read_only_research_v1_as_server",
       },
       {
         identity_arguments:
