@@ -89,12 +89,13 @@ named decision, a named authorization, or production itself.
 
 - [x] Keep advanced control complexity collapsed by default in the selected
   Grok session inspector.
-- [x] Preserve exact project/graph/run identity when opening the canonical
-  lifecycle Approve / Reject console; withhold that link until a graph exists.
+- [x] Open the canonical lifecycle controls for the exact immutable run, where
+  Approve / Reject appears on its actual open gate; withhold that link until
+  exact run evidence exists.
 - [x] Link Retry / Cancel, rollback, and automatic continuation to the existing
   audited Runs, Operations, and Autonomy consoles without adding a second
   mutation path or changing any safety state.
-- [x] Prove exact destinations, no-graph refusal copy, and the no-mutation
+- [x] Prove exact destinations, no-run refusal copy, and the no-mutation
   boundary in the 22/22 focused workspace suite; affected lint/typecheck pass.
 - [ ] Require exact-head CI, READY Vercel identity, health, and signed-in
   production navigation acceptance before calling this slice production

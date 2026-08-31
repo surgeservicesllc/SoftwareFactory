@@ -51,10 +51,11 @@ deployed, dispatched, or applied to production.
 ## Newest (2026-08-31, latest+51): Grok advanced audited controls (ADR-231)
 
 The selected Grok session now has a collapsed **Advanced controls** section.
-Approve / Reject opens the canonical lifecycle console with the exact
-project/graph and optional run in the URL; no exact graph means no approval
-link. Retry / Cancel, Rollback, and Continue Automatically open the existing
-Runs, Operations, and Autonomy consoles. These are navigation links only. Do
+Open lifecycle controls targets the exact immutable run, where Approve /
+Reject appears only on its actual open gate; no exact run evidence means no
+lifecycle-control link. Retry / Cancel, Rollback, and Continue Automatically
+open the existing Runs, Operations, and Autonomy consoles. These are navigation
+links only. Do
 not replace them with direct client mutations: every destination owns its
 authorization, eligibility, idempotency, audit, and risk boundary.
 

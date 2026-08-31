@@ -312,10 +312,9 @@ describe("GrokWorkspace", () => {
     expect(within(controlCenter).getByRole("button", { name: "resume unavailable in running" })).toBeDisabled();
 
     await userEvent.click(within(controlCenter).getByText("Advanced controls"));
-    expect(within(controlCenter).getByRole("link", { name: /Approve \/ Reject/i })).toHaveAttribute(
+    expect(within(controlCenter).getByRole("link", { name: /Open lifecycle controls/i })).toHaveAttribute(
       "href",
-      `/solutions/factory/requirement?projectId=${PROJECT.id}`
-      + `&graphId=${SESSION.session.graphId}&graphRunId=${SESSION.session.graphRunId}`,
+      `/solutions/lifecycle/run/${SESSION.session.graphRunId}`,
     );
     expect(within(controlCenter).getByRole("link", { name: /Retry \/ Cancel/i })).toHaveAttribute(
       "href", "/solutions/runs",
@@ -464,14 +463,18 @@ describe("GrokWorkspace", () => {
     expect(goal).toHaveAttribute("aria-selected", "true");
   });
 
-  it("withholds lifecycle approval navigation until an exact graph exists", async () => {
-    installFetch(BLOCKED_SESSION);
-    render(<GrokWorkspace initialSelection={{ sessionId: BLOCKED_SESSION.session.id }} />);
+  it("withholds lifecycle control navigation until exact run evidence exists", async () => {
+    const graphOnly = {
+      ...BLOCKED_SESSION,
+      session: { ...BLOCKED_SESSION.session, graphId: SESSION.session.graphId },
+    };
+    installFetch(graphOnly);
+    render(<GrokWorkspace initialSelection={{ sessionId: graphOnly.session.id }} />);
 
     const inspector = await screen.findByRole("complementary", { name: "Session inspector" });
     await userEvent.click(within(inspector).getByText("Advanced controls"));
-    expect(within(inspector).queryByRole("link", { name: /Approve \/ Reject/i })).not.toBeInTheDocument();
-    expect(within(inspector).getByText(/Approve \/ Reject becomes available after an exact graph/i)).toBeInTheDocument();
+    expect(within(inspector).queryByRole("link", { name: /Open lifecycle controls/i })).not.toBeInTheDocument();
+    expect(within(inspector).getByText(/Lifecycle controls become available after exact run evidence/i)).toBeInTheDocument();
   });
 
   it("renders a 202 durable-but-blocked plan without implying execution", async () => {

@@ -31,8 +31,8 @@ acceptance remain pending.
 
 **Addendum, 2026-08-31 latest+51 - Grok advanced audited controls
 (ADR-231):** The focused workspace suite passes 22/22 and proves that the
-collapsed advanced-control panel preserves exact lifecycle project/graph/run
-identity, withholds approval navigation without a graph, and routes Retry /
+collapsed advanced-control panel preserves exact lifecycle-run identity,
+withholds lifecycle navigation without run evidence, and routes Retry /
 Cancel, Rollback, and Continue Automatically only to their existing audited
 consoles. Affected-file ESLint and repository typecheck pass. These links do
 not mutate state or grant authority; exact-head CI/build/browser, Vercel,

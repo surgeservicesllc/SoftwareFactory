@@ -124,13 +124,8 @@ function clock(value: string) {
 }
 
 function lifecycleControlHref(session: GrokSession): string | null {
-  if (!session.graphId) return null;
-  const params = new URLSearchParams({
-    projectId: session.projectId,
-    graphId: session.graphId,
-  });
-  if (session.graphRunId) params.set("graphRunId", session.graphRunId);
-  return `/solutions/factory/requirement?${params.toString()}`;
+  if (!session.graphRunId) return null;
+  return `/solutions/lifecycle/run/${encodeURIComponent(session.graphRunId)}`;
 }
 
 function safeArtifactHref(value: string | null): string | null {
@@ -1026,10 +1021,10 @@ export function GrokWorkspace({
                   <div className="mt-3 grid gap-2">
                     {lifecycleControls ? (
                       <Link prefetch={false} href={lifecycleControls} className="flex items-center justify-between gap-3 rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-foreground hover:border-[var(--accent-border)]">
-                        <span><strong className="block text-xs">Approve / Reject</strong><span className="mt-0.5 block text-[10px] text-muted">Exact lifecycle gate and evidence</span></span><ChevronRight className="size-3.5 shrink-0 text-faint" aria-hidden="true" />
+                        <span><strong className="block text-xs">Open lifecycle controls</strong><span className="mt-0.5 block text-[10px] text-muted">Exact run · Approve / Reject at its open gate</span></span><ChevronRight className="size-3.5 shrink-0 text-faint" aria-hidden="true" />
                       </Link>
                     ) : (
-                      <p className="rounded-md border border-dashed border-[var(--border-strong)] px-3 py-2 text-[10px] text-muted">Approve / Reject becomes available after an exact graph is recorded.</p>
+                      <p className="rounded-md border border-dashed border-[var(--border-strong)] px-3 py-2 text-[10px] text-muted">Lifecycle controls become available after exact run evidence is linked.</p>
                     )}
                     <Link prefetch={false} href="/solutions/runs" className="flex items-center justify-between gap-3 rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-foreground hover:border-[var(--accent-border)]">
                       <span><strong className="block text-xs">Retry / Cancel</strong><span className="mt-0.5 block text-[10px] text-muted">Eligible recorded Phase 1C runs only</span></span><ChevronRight className="size-3.5 shrink-0 text-faint" aria-hidden="true" />

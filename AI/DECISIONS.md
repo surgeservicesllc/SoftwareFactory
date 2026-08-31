@@ -6027,10 +6027,11 @@ the Grok client would create competing authorization, risk, idempotency, and
 audit semantics.
 
 The Grok inspector therefore hides these controls in a collapsed section and
-navigates to their existing consoles. Lifecycle navigation carries the exact
-project, graph, and optional graph-run identity; it is absent until an exact
-graph exists. The other links open the canonical Runs, Operations, and
-Autonomy consoles, which must resolve and recheck their own target and current
+navigates to their existing consoles. Lifecycle navigation targets the exact
+immutable graph run, whose stage console renders Approve / Reject only on the
+actual open gate; it is absent until exact run evidence exists. The other links
+open the canonical Runs, Operations, and Autonomy consoles, which must resolve
+and recheck their own target and current
 eligibility before any state change. Merely opening a console never mutates or
 authorizes anything. Existing **Not Connected** and RED gates stay
 authoritative, and this decision changes no worker, autonomy, automatic-action,
