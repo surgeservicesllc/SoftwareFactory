@@ -66,10 +66,13 @@ describe("hosted graph protocol cutover scopes", () => {
     // The ceiling ratchets DOWN, never up. It reached ~2KB of headroom while
     // the CRM increments each carried their verification inline; extracting
     // those postflights to .github/hosted-apply/postflight/ recovered 16KB,
-    // and lowering the number is what keeps the recovery. A new scope should
-    // now cost ~30 lines here and a file there. If this fails, extract —
+    // and lowering the number is what keeps the recovery. The commercial
+    // portal scope breached 480,000 outright, and extracting the three
+    // remaining inline heredoc guards to .github/hosted-apply/guard/
+    // recovered another 4.8KB — so the number comes down again. A new scope
+    // should cost ~22 lines here and a file there. If this fails, extract —
     // do not raise it.
-    expect(Buffer.byteLength(workflowSource, "utf8")).toBeLessThan(480_000);
+    expect(Buffer.byteLength(workflowSource, "utf8")).toBeLessThan(478_000);
   });
 
   it("exposes each protected phase exactly once and grants Actions read for the fleet check", () => {

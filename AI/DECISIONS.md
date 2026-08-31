@@ -4528,3 +4528,103 @@ undeclared until the goal's full seeded E2E passes.
   definer. `services-dashboards-routes` grew to 10, including the
   assumptions being asserted on the payload. Hosted apply scope
   `revenue-forecast`.
+
+## ADR-203 - The commercial portal view: the binder, and the nulls that keep it honest
+
+**Increment 15.** A residential customer asks when somebody is coming and
+what they owe; increment 10 answers that. A food plant's quality manager
+asks six different questions, and the answers are what an auditor is handed
+in a binder: what is open right now, where are my stations and what did
+they catch, is the trend going the wrong way, what did you put down and
+where is its safety sheet, and what did the last inspection say.
+
+- **No tables.** Every input already existed — `crm_devices` and the
+  append-only `crm_device_events`, `crm_pest_sightings`, `crm_products` and
+  `crm_applications`, `crm_form_instances`. What was missing was the
+  projection. So `20260830002300_commercial_portal.sql` is seven functions,
+  four indexes and one column.
+- **Every projection is a SECURITY DEFINER, and that is the opposite of
+  ADR-199 and ADR-202 on purpose.** A portal user is not a member of the
+  organization whose data they are reading, so an invoker would return
+  nothing at all. What makes a definer safe here is not the flag but
+  ADR-198's sealed resolver: `crm_portal_account_for(uuid)` is executable
+  by no role, so no caller can name an account. The postflight re-proves
+  that at every apply, because these two polarities are the single easiest
+  thing in the chain to get backwards, and both failures are silent.
+- **The projections list their columns.** Anything internal is ABSENT
+  rather than filtered — `access_notes` (the branch's dispatch
+  instructions) and `signature_path` (a storage path) are simply not
+  selected. The portal is told a signature EXISTS; fetching it is the
+  storage layer's business, and no storage provider is connected.
+- **`barcode` IS projected, deliberately.** It is the sticker on the bait
+  box. A customer walking their floor with this page open needs to match
+  the row to the wall, and an identifier for a bait station is not a
+  secret.
+
+**The nulls are the point.** A compliance binder is exactly where a
+comfortable zero does damage, so four of them are stated in SQL and
+asserted in tests:
+
+- A station with **no service scan** has a null last service and a null
+  reading. It is not a station that caught nothing.
+- A station with **no `activity_threshold`** has a null `over_threshold`.
+  There is no threshold, so it is not "under" one.
+- A trend cell with **no scan carrying a count** reports null activity and
+  shows `scans` beside it — so an empty month reads as "nobody looked" and
+  never as "nothing found". `scans` and `scans_with_count` are both
+  returned because a dark cell with two scans behind it and a dark cell
+  with none mean opposite things.
+- A product with **no SDS on file** returns null, and the page says so. The
+  route counts `missingSds` rather than hiding it: an auditor finds that
+  gap either way, and finding it here first is the whole value of the
+  library.
+
+`stationStanding()` in `lib/services/crm.ts` and `standingOf()` in the
+panel encode the same three-way answer — flagged, clear, **not
+established** — and the route counts `unknown` separately from `clear`.
+Rolling those together would be the single most damaging rounding on the
+page.
+
+**One write, and one new column.** `crm_portal_report_sighting` lets a
+customer file a sighting against their own site: a roach seen at 06:00
+should not wait for the branch to open, and it lands in the same table a
+technician writes to, so the trend and the open-conditions list see it
+immediately. `crm_pest_sightings.reported_by_portal_user_id` records who
+filed it — null for everything staff wrote. It is a composite key against
+`(organization_id, id)`, so a stamp can never name another tenant's portal
+user. The site named must be the caller's own, on the check ADR-198's
+request flow already makes.
+
+**Surfaces**: three tabs on `/customer-portal` — Open conditions (with the
+report form), Stations (site filter, station table, monthly trend) and
+Compliance (safety library, inspection history) — over four new routes
+under `/api/customer-portal`. The staff-side `toSightingView` grew
+`reportedByCustomer` in the same change, because a branch triaging the
+morning list needs to know which sightings have a customer waiting on a
+call back.
+
+**Verification**: `services-commercial-portal.behavior` (15) on the real
+chain — the latest scan rather than the first or a sum, a scanned station
+with no count reporting null, a counted station with no threshold reporting
+null, a trend cell showing one scan and no activity, a corrected sighting
+absent from open conditions, a library holding only what was applied here,
+completed inspections only with the signature path unprojected, the
+customer's own report stamped and visible to staff, a refusal for another
+account's site, the rival tenant seeing its own binder and nothing else,
+a stranger getting nothing on all six reads, a deactivated login closing
+the binder mid-session, and the resolver still unreachable.
+`services-commercial-portal-routes` (9) pins the boundary. The seed stamps
+a deterministic third of each account's sightings and
+`services-crm-seed.behavior` proves both kinds exist and that no stamp
+crosses an account.
+
+**Two guards came out of this increment.** The workflow breached its
+480,000-byte ceiling, so the three remaining inline heredoc guards moved to
+`.github/hosted-apply/guard/` and the ceiling ratcheted down to 478,000 —
+the rule stays "if this fails, extract, do not raise it". And
+`migration-path-references` now checks `.github/hosted-apply/**` in both
+directions: a workflow naming a file that is gone dies at a dispatch, and a
+file nothing names is verification that silently stopped running, which is
+worse because the scope still reports success.
+
+Hosted apply scope `commercial-portal`.

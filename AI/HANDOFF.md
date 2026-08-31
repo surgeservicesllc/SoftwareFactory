@@ -2,6 +2,51 @@
 
 Last updated: 2026-08-31
 
+## Newest (2026-08-31, latest+24): the commercial portal view (ADR-203, #67)
+
+`20260830002300` adds seven portal projections, four indexes and one
+column. No tables — every input already existed.
+
+THE POLARITY IS THE OPPOSITE OF THE DASHBOARDS, AND BOTH FAILURES ARE
+SILENT. Every function here MUST be a definer: a portal user is not a
+member of the organization they are reading, so an invoker returns nothing
+and the page just looks empty. Meanwhile ADR-199's and ADR-202's functions
+must NOT be definers, or they aggregate across every tenant at once.
+Neither mistake raises. The postflights assert both directions; do not
+"harmonize" them.
+
+What makes a definer safe here is not the flag. It is ADR-198's sealed
+resolver: `crm_portal_account_for(uuid)` is executable by NO role, so no
+caller can name an account. If you add a portal projection, reach the
+resolver — never take an account id as an argument.
+
+The four nulls are load-bearing and each has a test:
+- No service scan → null last service, null reading. Not "caught nothing".
+- No `activity_threshold` → null `over_threshold`. Not "under" one.
+- No scan carried a count → null activity, with `scans` shown beside it.
+  A dark cell with two scans and a dark cell with none are opposite facts.
+- No SDS on file → null, and the route COUNTS `missingSds` rather than
+  hiding it.
+
+`unknown` is never folded into `clear` — `stationStanding()` in
+lib/services/crm.ts and `standingOf()` in the panel must keep agreeing.
+
+`barcode` is projected on purpose. It is the sticker on the box; a customer
+walking the floor matches the row to the wall. `access_notes` and
+`signature_path` are absent from the projections entirely, not filtered.
+
+The one write stamps `crm_pest_sightings.reported_by_portal_user_id` via a
+composite key, so a stamp can never name another tenant's portal user. The
+staff `toSightingView` surfaces it as `reportedByCustomer` — that customer
+is waiting on a call back.
+
+WORKFLOW SIZE: adding this scope breached the 480,000-byte ceiling. The
+three remaining inline heredoc guards moved to
+`.github/hosted-apply/guard/` and the ceiling came DOWN to 478,000. The
+rule is unchanged: if it fails, extract, do not raise it.
+`migration-path-references` now checks `.github/hosted-apply/**` both ways
+— a file nothing runs is verification that silently stopped.
+
 ## Newest (2026-08-31, latest+23): revenue forecasting (ADR-202, #69)
 
 `20260830002200` adds crm_revenue_forecast and crm_forecast_basis. No

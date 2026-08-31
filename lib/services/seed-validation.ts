@@ -359,7 +359,14 @@ const SPECS: Spec[] = [
   },
   {
     table: "crm_pest_sightings",
-    optional: ["location_note", "note", "corrective_action", "corrected_at"],
+    optional: [
+      "location_note",
+      "note",
+      "corrective_action",
+      "corrected_at",
+      // Increment 15: set on the sightings the customer filed themselves.
+      "reported_by_portal_user_id",
+    ],
     enumColumn: "severity",
     parents: [
       { column: "account_id", table: "crm_accounts" },

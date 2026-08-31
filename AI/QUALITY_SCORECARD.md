@@ -2,6 +2,36 @@
 
 Last reviewed: 2026-08-31
 
+**Addendum, 2026-08-31 latest+24 - the commercial portal view (ADR-203):**
+services-commercial-portal.behavior 15 on the real chain: the LATEST scan
+reported rather than the first or a sum of both; a station scanned with no
+number written down reporting null, never 0; a station with a real count
+and no threshold reporting a null `over_threshold`, because there is no
+question to answer; a trend cell showing one scan and no activity, so an
+empty month cannot read as a clean one; a corrected sighting absent from
+open conditions while the open one stays; a safety library holding only
+what was applied at this customer's own sites and not what the branch
+stocks; completed inspections only, with `signature_path` absent from the
+projection rather than filtered; a customer's own report stamped with their
+portal seat and visible to staff as such; a refusal for another account's
+site and for a null one; the rival tenant seeing its own binder and getting
+zero rows even when it names Acme's site id explicitly; a signed-in
+stranger getting nothing on all six reads; a deactivated login closing the
+binder mid-session; and `crm_portal_account_for` still executable by
+nobody. services-commercial-portal-routes 9 pins the boundary — the null
+activity total surviving to JSON, `unknown` counted apart from `clear`, the
+same property filter reaching BOTH the table and the trend, the window
+bounded at 422 before it becomes a scan, `missingSds` counted rather than
+hidden, and the database's refusal arriving as a 404 rather than a 500.
+services-crm-seed grew a provenance test: both kinds of sighting exist and
+no stamp crosses an account; the seed report now shows crm_pest_sightings
+at 5/5 optional fields. RLS census unchanged at 200 and grants unchanged at
+46 crm tables — this migration creates no tables; runbook 202; workflow
+scope `commercial-portal`. The workflow ceiling ratcheted 480,000 → 478,000
+after three inline heredoc guards were extracted, and
+migration-path-references now checks `.github/hosted-apply/**` in both
+directions.
+
 **Addendum, 2026-08-31 latest+23 - revenue forecasting (ADR-202):**
 services-revenue-forecast.behavior 9 on the real chain: a monthly plan
 contributing once a month, a quarterly a third, and a weekly 365/7/12 —

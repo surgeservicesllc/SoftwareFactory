@@ -36,6 +36,8 @@ export type SeedCounts = {
   devices: number;
   deviceScans: number;
   sightings: number;
+  /* Of those sightings, the ones the customer filed themselves. */
+  customerReportedSightings: number;
   products: number;
   lots: number;
   applications: number;
@@ -613,7 +615,14 @@ export async function runSeed(
       created_by: userId,
     })),
   );
-  const sightings = await insertAll(client, "crm_pest_sightings", sightingRows, "id");
+  // account_id comes back so the portal can claim a share of these below,
+  // once the invitations that would have reported them exist.
+  const sightings = await insertAll(
+    client,
+    "crm_pest_sightings",
+    sightingRows,
+    "id, account_id",
+  );
   if ("error" in sightings) return sightings;
 
   /* --------------------------------------------------------- applications */
@@ -1161,6 +1170,50 @@ export async function runSeed(
     portalUsers.data.map((row) => [`${row.account_id as string}:${row.email as string}`, row.id as string]),
   );
 
+  /*
+   * Provenance on a share of the sightings (increment 15).
+   *
+   * Some sightings are a technician's observation and some are the
+   * customer walking their own floor at 06:00 and filing it before the
+   * branch opens. Both are real, and the branch triaging the morning list
+   * needs to tell them apart — so a deterministic third of each account's
+   * sightings are stamped with that account's first portal seat.
+   *
+   * This is an UPDATE rather than part of the insert because the portal
+   * invitations do not exist yet at the point the sightings are written,
+   * and a stamp pointing at a row that is not there is not provenance.
+   */
+  const sightingIdsBySeat = new Map<string, string[]>();
+  {
+    const seenPerAccount = new Map<string, number>();
+    for (const row of sightings.data) {
+      const sightingAccount = row.account_id as string;
+      const seen = seenPerAccount.get(sightingAccount) ?? 0;
+      seenPerAccount.set(sightingAccount, seen + 1);
+      if (seen % 3 !== 0) continue;
+      const account = dataset.accounts.find(
+        (candidate) => accountIdByName.get(candidate.name) === sightingAccount,
+      );
+      const seat = account?.portalUsers?.[0];
+      if (seat === undefined) continue;
+      const portalUserId = portalUserIdByKey.get(`${sightingAccount}:${seat.email}`);
+      if (portalUserId === undefined) continue;
+      const bucket = sightingIdsBySeat.get(portalUserId);
+      if (bucket === undefined) sightingIdsBySeat.set(portalUserId, [row.id as string]);
+      else bucket.push(row.id as string);
+    }
+  }
+  let customerReportedSightings = 0;
+  for (const [portalUserId, ids] of sightingIdsBySeat) {
+    const stamped = await client
+      .from("crm_pest_sightings")
+      .update({ reported_by_portal_user_id: portalUserId } as never)
+      .in("id", ids)
+      .select("id");
+    if (stamped.error) return { error: stamped.error };
+    customerReportedSightings += (stamped.data ?? []).length;
+  }
+
   const portalRequestRows = dataset.accounts.flatMap((account) => {
     const accountId = accountIdByName.get(account.name);
     if (accountId === undefined) return [];
@@ -1701,6 +1754,7 @@ export async function runSeed(
       // hand-recorded scans above.
       deviceScans: devices.data.length + scans.data.length,
       sightings: sightings.data.length,
+      customerReportedSightings,
       products: products.data.length,
       lots: lots.data.length,
       applications: applications.data.length + corrections.data.length,

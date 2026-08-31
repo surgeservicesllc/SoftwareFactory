@@ -217,6 +217,12 @@ the full seeded E2E journey passes — increment 10 of the plan.
   and every reason the figure understates reported beside it. Forecast tab
   on /Services/dashboards. 20260830002200; hosted apply:
   scope=revenue-forecast after merge.
+- [x] Increment 15 (ADR-203): the commercial portal view — open conditions,
+  a station table and a monthly activity trend, an SDS/label library
+  covering only what was applied at the customer's own sites, and
+  completed-inspection history, plus a sighting the customer can file
+  themselves. Three tabs on /customer-portal. 20260830002300; hosted apply:
+  scope=commercial-portal after merge.
 - [ ] Increment 12 follow-on: UNATTENDED billing. The generator is correct
   and idempotent but nothing calls it on a schedule, because nothing in
   this product runs on a timer. Needs a scheduler or a worker executor —

@@ -278,7 +278,7 @@ the measured list, not today's total outstanding migration count. Later exact ev
 forward candidates.
 Do not add any of them to the 19-row measurement or
 infer a new overall missing count without another complete ledger probe. As of this release,
-the repository total is 201 migration files after integration with current `origin/main`. Those two numbers do not stand in a prefix relationship, and the reason
+the repository total is 202 migration files after integration with current `origin/main`. Those two numbers do not stand in a prefix relationship, and the reason
 matters: the
 hosted ledger is **not a contiguous prefix** of the local files. It has gaps in the middle and
 rows well past them. Any sentence of the form "everything after `X` is outstanding" is therefore
@@ -319,11 +319,29 @@ the portal's: that none of its five functions is a definer, because these
 aggregate across a whole book and a definer would aggregate across every
 tenant's at once.
 
-`recurring-billing` (`20260830002000`) is NOT yet applied — it is still on
-a branch. Its postflight asserts that
-`crm_invoices_plan_period_key` exists **and is partial**: a total index over
-the same columns would look right in a catalogue listing while refusing
-every hand-raised invoice.
+Four scopes are NOT yet applied — they are still on a branch, and each
+carries its own postflight file under `.github/hosted-apply/postflight/`:
+
+| Scope | Version | What its postflight proves |
+|---|---|---|
+| `recurring-billing` | `20260830002000` | `crm_invoices_plan_period_key` exists **and is partial**. A total index over the same columns would look right in a catalogue listing while refusing every hand-raised invoice. |
+| `equipment-fleet` | `20260830002100` | The ledger takes select and insert only, and the meter trigger is present — a meter that can run backwards is a maintenance record that cannot be trusted. |
+| `revenue-forecast` | `20260830002200` | Neither function is a definer. Both read across a whole book, and a definer would read across every tenant's at once. |
+| `commercial-portal` | `20260830002300` | The inverse: all seven projections **are** definers, because a portal user is not a member of the organization they are reading and an invoker would return nothing. What makes that safe is re-proved beside it — `crm_portal_account_for` is executable by no role at all. It also checks that adding `reported_by_portal_user_id` to `crm_pest_sightings` did not loosen that table: forced RLS still on, the same-organization key present, and DELETE still absent for `authenticated`.  |
+
+Apply them in that order; each depends on the tables the ones above it
+created. Note the two postflight polarities in the table above are
+deliberate and are the single easiest thing to get backwards in this
+chain: a dashboard or forecast function that became a definer would
+silently aggregate every tenant, and a portal projection that became an
+invoker would silently return nothing.
+
+The extracted SQL under `.github/hosted-apply/` — both `postflight/` and
+`guard/` — is executed by nothing but a production dispatch, so
+`tests/unit/migration-path-references.test.ts` checks the reference both
+ways: every path a workflow names is a real file, and every file present is
+named by a workflow. A postflight nothing runs is worse than none, because
+the scope still reports success.
 
 ## Historical release tail before ADR-115 — 2026-08-22 (superseded)
 

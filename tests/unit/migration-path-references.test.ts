@@ -46,6 +46,49 @@ const FIXTURE_PREFIX = "20260101000000_";
 
 const PATH = /supabase\/migrations\/(\d{14}_[a-z0-9_]+\.sql)/g;
 
+/**
+ * The same hazard, one directory over. Postflight and guard SQL live in
+ * `.github/hosted-apply/` because the workflow is measured against a byte
+ * ceiling and each scope's verification would otherwise breach it. Nothing
+ * but a production dispatch executes those `psql -f` paths, so a rename on
+ * either side is invisible until the release it breaks.
+ *
+ * The check runs both ways deliberately. A workflow naming a file that is
+ * gone dies at the dispatch; a file nothing names is verification that
+ * silently stopped running, which is worse, because the scope still
+ * reports success.
+ */
+const HOSTED_APPLY = /\.github\/hosted-apply\/((?:[a-z]+\/)?[a-z0-9-]+\.sql)/g;
+
+function hostedApplyFiles(): string[] {
+  const root = resolve(repositoryRoot, ".github/hosted-apply");
+  const found: string[] = [];
+  for (const entry of readdirSync(root, { withFileTypes: true })) {
+    if (entry.isDirectory()) {
+      for (const nested of readdirSync(resolve(root, entry.name))) {
+        if (nested.endsWith(".sql")) found.push(`${entry.name}/${nested}`);
+      }
+    } else if (entry.isFile() && entry.name.endsWith(".sql")) {
+      found.push(entry.name);
+    }
+  }
+  return found.sort();
+}
+
+function hostedApplyReferences(): { file: string; name: string }[] {
+  const found: { file: string; name: string }[] = [];
+  for (const entry of readdirSync(resolve(repositoryRoot, ".github/workflows"), {
+    withFileTypes: true,
+  })) {
+    if (!entry.isFile() || !entry.name.endsWith(".yml")) continue;
+    const text = readFileSync(resolve(repositoryRoot, ".github/workflows", entry.name), "utf8");
+    for (const match of text.matchAll(HOSTED_APPLY)) {
+      found.push({ file: `.github/workflows/${entry.name}`, name: match[1] });
+    }
+  }
+  return found;
+}
+
 function referencesIn(directory: string, extension: string): { file: string; name: string }[] {
   const found: { file: string; name: string }[] = [];
   for (const entry of readdirSync(resolve(repositoryRoot, directory), { withFileTypes: true })) {
@@ -81,6 +124,29 @@ describe("migration paths named outside the migrations directory", () => {
         + "sweep every reference to it — and check that the sweep did not rewrite a reference "
         + "to somebody else's migration that happened to share the number.\n"
         + dangling.join("\n"),
+    ).toEqual([]);
+  });
+
+  it("names a real file for every extracted postflight and guard, and runs every one it has", () => {
+    const present = new Set(hostedApplyFiles());
+    const referenced = hostedApplyReferences();
+
+    const dangling = referenced
+      .filter(({ name }) => !present.has(name))
+      .map(({ file, name }) => `${file} names .github/hosted-apply/${name}`);
+    expect(
+      dangling,
+      "A workflow runs a hosted-apply SQL file that does not exist. The scope dies at "
+        + "`psql -f` during a production dispatch and nowhere earlier.\n" + dangling.join("\n"),
+    ).toEqual([]);
+
+    const named = new Set(referenced.map(({ name }) => name));
+    const orphaned = [...present].filter((name) => !named.has(name));
+    expect(
+      orphaned,
+      "A hosted-apply SQL file is not run by any workflow. Verification nothing executes is "
+        + "worse than none: the scope it belonged to still reports success.\n"
+        + orphaned.join("\n"),
     ).toEqual([]);
   });
 });

@@ -135,7 +135,7 @@ and nothing pretends to be a button.
 The operating dashboards (ADR-199) close the reporting gap, and they are
 built on one decision worth restating: every figure is aggregated in the
 database by a SECURITY INVOKER function. In SQL, because the corpus is
-44,837 rows and a route that tallies a bounded fetch reports a number that
+47,244 rows and a route that tallies a bounded fetch reports a number that
 is right only while a workspace is small. As an invoker, because these read
 across a whole book — a definer would read across every tenant's at once,
 the exact inverse of the portal, where a definer is what narrows. The
@@ -145,16 +145,40 @@ than zero, a running shift contributes no worked minutes, and idle time on
 a one-stop day is unknown rather than none. Route DENSITY ships from real
 scheduled windows; drive-time sequencing needs a mapping provider and is
 labelled **Not Connected**.
+Recurring billing (ADR-200) generates a period's invoices from active
+plans, and the thing that stops a double bill is a partial unique index
+rather than a check in application code. Equipment and fleet (ADR-201) puts
+assets over an append-only ledger, with status, assignment and meter
+readings as projections of it and a meter that cannot run backwards.
+Revenue forecasting (ADR-202) projects plans and contracts with a term
+forward and applies no churn or growth model, reporting every reason the
+figure understates beside it.
+The commercial portal view (ADR-203) finishes the portal: open conditions
+unioning uncorrected sightings with stations whose last scan came back
+wrong, a station table read from the scan ledger, monthly activity by
+station type, an SDS/label library covering only what was applied at the
+customer's own sites, completed-inspection history, and a sighting the
+customer can file themselves — stamped with their portal seat so a branch
+knows who is waiting on a call back. It adds no tables; it is the
+projection over data that already existed, and its four deliberate nulls
+are what keep it usable as a compliance binder. A station nobody scanned
+reports null, not "caught nothing"; a station with no threshold reports
+null, not "under" one; a trend cell with no counted scan reports null with
+its scan count beside it; and a product with no safety sheet on file is
+counted as a gap rather than hidden. Downloading a signed inspection copy
+is **Not Connected** — no object storage is configured.
 A workspace can populate itself two ways (ADR-193): the curated Demo Data
-book for presenting the product, or the full corpus — 44,837 rows across
-all forty-two tables, every optional field populated, spanning years —
+book for presenting the product, or the full corpus — 47,244 rows across
+all forty-six tables, every optional field populated, spanning years —
 for testing dashboards, reports and pagination at the size of a real book.
 GET /api/services/seed-report audits whichever is loaded, table by table,
 PASS or FAIL. Plan of record: AI/SERVICES_CRM_GAP_ANALYSIS.md and
-AI/PEST_CRM_COMPETITOR_MATRIX.md. Increments 11 (operating dashboards and
-route optimization) and 12 (recurring auto-invoicing, AR aging, dunning)
-remain open, as does the commercial portal view — device summaries, trend
-heat maps and sighting tickets — which PestPac has and this does not.
+AI/PEST_CRM_COMPETITOR_MATRIX.md. Increments 1 through 15 have shipped.
+What is left is either large and buildable — WDO/termite diagrams, offline
+mode for technicians — or gated on an external account nobody has opened:
+card/ACH processing, SMS/email delivery, GPS telemetry, QuickBooks sync,
+telephony and reviews. Those ship labelled **Not Connected** and are never
+implied to work.
 
 
 Last reviewed: 2026-08-31

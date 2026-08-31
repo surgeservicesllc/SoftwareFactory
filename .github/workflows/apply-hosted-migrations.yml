@@ -72,6 +72,7 @@ on:
           - recurring-billing
           - equipment-fleet
           - revenue-forecast
+          - commercial-portal
           - probe
 permissions:
   actions: read
@@ -1798,6 +1799,28 @@ jobs:
           psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
           psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/postflight/revenue-forecast.sql
           echo "Revenue forecasting applied; both functions verified as non-definers reachable only by authenticated."
+
+      - name: Apply the commercial portal view (scope=commercial-portal)
+        if: ${{ inputs.scope == 'commercial-portal' }}
+        run: |
+          if [ "$MODE" != "dburl" ]; then
+            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            echo "::add-mask::$ENC"
+            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+            echo "::add-mask::$DB_URL"
+          fi
+          VERSION=20260830002300_commercial_portal
+          FILE="supabase/migrations/${VERSION}.sql"
+          sha256sum "$FILE"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied "${VERSION%%_*}"
+          else
+            npx supabase migration repair --status applied "${VERSION%%_*}" --db-url "$DB_URL"
+          fi
+          psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/postflight/commercial-portal.sql
+          echo "Commercial portal view applied; seven definer projections verified, and the resolver re-proved unreachable."
 
       - name: Normalize exact legacy bot ACLs (scope=bot-legacy-acl-normalization)
         if: ${{ inputs.scope == 'bot-legacy-acl-normalization' }}
@@ -4951,58 +4974,7 @@ jobs:
           fi
 
           echo "1) Rolled-back rehearsal of the exact launch, as the command's own organization owner."
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q <<'DOORCHECK_SQL'
-          begin;
-          do $doorcheck$
-          declare
-            v_cmd public.commands%rowtype;
-            v_actor uuid;
-            v_graph uuid;
-          begin
-            select command.* into v_cmd
-              from public.commands command
-             where command.parameters ->> 'executionMode' = 'record_only'
-               and command.parameters ->> 'provider' = 'anthropic'
-             order by command.created_at desc
-             limit 1;
-            if not found then
-              raise notice 'DOORCHECK: no record-only Claude command exists to rehearse';
-              return;
-            end if;
-            raise notice 'DOORCHECK: rehearsing command % (type %)', v_cmd.id, v_cmd.command_type;
-
-            select member.user_id into v_actor
-              from public.organization_members member
-             where member.organization_id = v_cmd.organization_id
-               and member.role = 'owner'
-             order by member.created_at
-             limit 1;
-            if v_actor is null then
-              raise notice 'DOORCHECK: the organization has no owner member row';
-              return;
-            end if;
-            perform set_config(
-              'request.jwt.claims',
-              json_build_object('sub', v_actor, 'role', 'authenticated')::text,
-              true
-            );
-
-            begin
-              v_graph := public.launch_command_analysis_graph(
-                v_cmd.organization_id, v_cmd.project_id, v_cmd.id,
-                'DAG'::public.graph_topology, '[]'::jsonb,
-                'green'::public.risk_level, false,
-                '[{"node_key":"doorcheck","job":"Doorcheck rehearsal only","executor":"MODEL","capability":"analysis"}]'::jsonb,
-                '[]'::jsonb, '{}'::jsonb
-              );
-              raise notice 'DOORCHECK: launch returned graph % — the database layer is healthy (rolled back)', v_graph;
-            exception when others then
-              raise notice 'DOORCHECK: launch raised % — %', SQLSTATE, SQLERRM;
-            end;
-          end
-          $doorcheck$;
-          rollback;
-          DOORCHECK_SQL
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q -f .github/hosted-apply/guard/analysis-launch-doorcheck.sql
 
           echo ""
           echo "2) Schema-cache reload signal, in case PostgREST's cache predates 20260823000100."
@@ -5268,41 +5240,7 @@ jobs:
           psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
 
           echo "Rolled-back proof that the guard still refuses what it always refused."
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q <<'GUARD_SQL'
-          begin;
-          do $guardcheck$
-          declare
-            v_update_refused boolean := false;
-            v_delete_refused boolean := false;
-          begin
-            if to_regclass('public.factory_command_routes') is null then
-              raise notice 'GUARD: routing table absent on this database; nothing to prove';
-              return;
-            end if;
-            begin
-              update public.factory_command_routes set pipeline_template_key = pipeline_template_key;
-            exception when others then
-              v_update_refused := (SQLERRM like '%routing evidence is immutable%');
-            end;
-            begin
-              delete from public.factory_command_routes where false;
-              -- A no-op delete touches no row, so the row trigger never fires;
-              -- force one row through instead when any row exists.
-              delete from public.factory_command_routes
-               where ctid = (select ctid from public.factory_command_routes limit 1);
-            exception when others then
-              v_delete_refused := (SQLERRM like '%routing evidence is immutable%');
-            end;
-            raise notice 'GUARD: update refused=% delete refused=%', v_update_refused, v_delete_refused;
-            if exists (select 1 from public.factory_command_routes)
-              and not (v_update_refused and v_delete_refused) then
-              raise exception using errcode = '55000',
-                message = 'the routing guard no longer refuses ordinary mutation';
-            end if;
-          end
-          $guardcheck$;
-          rollback;
-          GUARD_SQL
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q -f .github/hosted-apply/guard/release-routing-evidence.sql
 
           VERIFIED=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
             set search_path = pg_catalog;
@@ -5449,36 +5387,7 @@ jobs:
           psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
 
           echo "Rolled-back proof that a project still cannot be deleted."
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q <<'GUARD_SQL'
-          begin;
-          do $guardcheck$
-          declare
-            v_project uuid;
-            v_refused boolean := false;
-          begin
-            select id into v_project from public.projects limit 1;
-            if v_project is null then
-              raise notice 'GUARD: no project to test against';
-              return;
-            end if;
-            begin
-              delete from public.projects where id = v_project;
-            exception when others then
-              -- Either message is a pass. 20260815000900's trigger explains the
-              -- refusal; without it the activity_events RESTRICT refuses just
-              -- as absolutely, only less legibly.
-              v_refused := (SQLERRM like '%projects cannot be deleted%')
-                        or (SQLSTATE = '23503');
-            end;
-            if not v_refused then
-              raise exception using errcode = '55000',
-                message = 'a project could be deleted; the protection is gone';
-            end if;
-            raise notice 'GUARD: project deletion still refused';
-          end
-          $guardcheck$;
-          rollback;
-          GUARD_SQL
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q -f .github/hosted-apply/guard/clear-autonomy-projects.sql
 
           VERIFIED=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
             set search_path = pg_catalog;

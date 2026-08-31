@@ -57,7 +57,7 @@ built.
 | Global search across records | all | **HAVE** (ADR-186) |
 | Account timeline / service history | all | **HAVE** (ADR-185) |
 | **Customer portal — residential**: balances, pay invoice, request service, service history | PestPac, GorillaDesk (Pro), Briostack, Jobber | **PARTIAL** — balances, invoices, visit history, documents and service requests ship (ADR-198). Paying online is **Not Connected**: no card processor is configured. |
-| **Customer portal — commercial**: open conditions, trend reports with heat maps, device summary, sighting tickets, SDS/compliance document library, inspection history | PestPac | **GAP** — the residential view ships (ADR-198); the commercial one (device summaries, trend heat maps, sighting tickets) does not. |
+| **Customer portal — commercial**: open conditions, trend reports with heat maps, device summary, sighting tickets, SDS/compliance document library, inspection history | PestPac | **HAVE** (ADR-203) — open conditions unioning uncorrected sightings with failing stations; a station table read from the scan ledger; monthly activity by station type with the scan count beside it; a customer-filed sighting stamped with its portal seat; an SDS/label library covering only what was applied at the customer's own sites; completed-inspection history. Downloading a signed inspection copy is **Not Connected** — no object storage is configured. |
 | Customer communication: automated reminders, SMS/email notifications | Briostack, PestPac, FieldRoutes | **GAP** |
 
 ### B. Scheduling, routing, dispatch
@@ -158,9 +158,8 @@ first, and tracked in `AI/BACKLOG.md`:
 1. ~~Documents, canvassing, marketing~~ — **SHIPPED** as ADR-196.
 2. ~~Digital forms and inspections engine~~ — **SHIPPED** as ADR-197,
    with timesheets and licence expiry.
-3. ~~Customer portal, residential view~~ — **SHIPPED** as ADR-198. The
-   commercial view (device summaries, trend heat maps, sighting tickets)
-   is still open.
+3. ~~Customer portal, residential AND commercial views~~ — **SHIPPED** as
+   ADR-198 and ADR-203.
 4. ~~Operating dashboards~~ — **SHIPPED** as ADR-199 (revenue, receivable
    aging, retention, technician productivity, route density). Route
    OPTIMIZATION by drive time is still open and needs a mapping provider.
@@ -173,16 +172,13 @@ first, and tracked in `AI/BACKLOG.md`:
 
 **Buildable now — no provider, no external account:**
 
-1. **Commercial portal view** — open conditions, device summary, trend heat
-   maps, sighting tickets, an SDS/compliance library and inspection
-   history. Every input already exists (`crm_devices`, the append-only
-   `crm_device_events`, `crm_pest_sightings`, `crm_documents`,
-   `crm_form_instances`); this is projection work over the portal's
-   existing definer pattern.
+1. ~~Commercial portal view~~ — **SHIPPED** as ADR-203. It was projection
+   work over the existing definer pattern, as predicted: no new tables,
+   one provenance column.
 2. ~~Equipment and fleet/asset management~~ — **SHIPPED** as ADR-201.
 3. ~~Revenue forecasting~~ — **SHIPPED** as ADR-202.
 4. **WDO/termite graphs and diagrams** — a drawing surface, not a form.
-   Large, and honestly the least certain of these four.
+   Large, and honestly the least certain of what is left.
 5. **Offline mode for technicians** — a service worker and a write queue.
    Large, and the correctness bar is high: a queue that silently drops a
    completed visit is worse than no offline mode.
@@ -194,7 +190,7 @@ SMS/email delivery (which also gates automated reminders and campaign
 sending), GPS/fleet telemetry, QuickBooks sync, call-centre/telephony
 integration, and reviews/reputation platforms.
 
-**A note on what "parity" can mean here.** Of the twenty-one rows still
+**A note on what "parity" can mean here.** Of the twenty rows still
 short of HAVE, roughly half cannot be closed by writing code at all — they
 are accounts somebody has to open and pay for. The honest target is every
 buildable row shipped and every provider-gated row wired to the point where

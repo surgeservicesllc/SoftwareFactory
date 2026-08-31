@@ -104,6 +104,9 @@ export const CRM_DEVICE_TYPES = [
 ] as const;
 export type CrmDeviceType = (typeof CRM_DEVICE_TYPES)[number];
 
+export const CRM_DEVICE_STATUSES = ["active", "removed"] as const;
+export type CrmDeviceStatus = (typeof CRM_DEVICE_STATUSES)[number];
+
 export const CRM_DEVICE_EVENT_KINDS = ["install", "service", "move", "remove"] as const;
 export type CrmDeviceEventKind = (typeof CRM_DEVICE_EVENT_KINDS)[number];
 
@@ -168,7 +171,7 @@ export const CRM_DEVICE_COLUMNS =
 export const CRM_DEVICE_EVENT_COLUMNS =
   "id, device_id, event, condition, activity_count, pest_observed, location_note, note, work_order_id, recorded_at, actor_user_id";
 export const CRM_SIGHTING_COLUMNS =
-  "id, account_id, property_id, pest, severity, location_note, note, sighted_at, corrective_action, corrected_at, created_at, updated_at";
+  "id, account_id, property_id, pest, severity, location_note, note, sighted_at, corrective_action, corrected_at, reported_by_portal_user_id, created_at, updated_at";
 
 export type CrmAccountRow = {
   id: string;
@@ -314,6 +317,9 @@ export type CrmSightingRow = {
   sighted_at: string;
   corrective_action: string | null;
   corrected_at: string | null;
+  /* Increment 15: null for everything staff wrote, set when the customer
+   * reported it through the portal. */
+  reported_by_portal_user_id: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -577,6 +583,11 @@ export function toSightingView(row: CrmSightingRow) {
     sightedAt: row.sighted_at,
     correctiveAction: row.corrective_action,
     correctedAt: row.corrected_at,
+    /* Who is asking. A sighting the customer filed and one a technician
+     * observed are the same kind of fact, but a branch triaging the
+     * morning list needs to know which is in front of them — the customer
+     * is waiting on a call back. */
+    reportedByCustomer: row.reported_by_portal_user_id !== null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -1970,6 +1981,216 @@ export function toPortalRequestMineView(row: CrmPortalRequestMineRow) {
     open: !isClosedRequestStatus(row.status),
     answered: row.response !== null,
   };
+}
+
+/* ---------------------------------------------------------------------------
+ * The commercial portal view (increment 15).
+ *
+ * The residential portal answers "when are you coming and what do I owe".
+ * These are the questions a food plant's quality manager asks instead, and
+ * the shapes below are the definer projections in
+ * `20260830002300_commercial_portal.sql`, verbatim.
+ *
+ * Every nullable column stays nullable through its mapper, and for the
+ * same reason as increment 11: a compliance binder is exactly where a
+ * comfortable zero does damage. `overThreshold: null` means there was no
+ * threshold or no reading — not that the station is under one. An
+ * `activityTotal` of null means nobody wrote a number down that month, and
+ * `scans` is carried beside it so the page can say which.
+ * ------------------------------------------------------------------------- */
+
+export type CrmPortalSiteRow = {
+  id: string;
+  label: string;
+  address: string;
+  property_type: string | null;
+  active_devices: number;
+  open_sightings: number;
+  last_visit_at: string | null;
+  next_visit_at: string | null;
+};
+
+export type CrmPortalStationRow = {
+  id: string;
+  property_id: string;
+  property_label: string;
+  label: string;
+  barcode: string;
+  device_type: CrmDeviceType;
+  status: CrmDeviceStatus;
+  location_note: string | null;
+  activity_threshold: number | null;
+  installed_at: string;
+  last_service_at: string | null;
+  last_condition: CrmDeviceCondition | null;
+  last_activity_count: number | null;
+  last_pest_observed: string | null;
+  over_threshold: boolean | null;
+};
+
+export type CrmPortalTrendRow = {
+  month: string;
+  device_type: CrmDeviceType;
+  scans: number;
+  scans_with_count: number;
+  activity_total: number | string | null;
+  stations_flagged: number;
+};
+
+export type CrmPortalConditionRow = {
+  kind: string;
+  source_id: string;
+  property_id: string;
+  property_label: string;
+  headline: string;
+  detail: string | null;
+  severity: string;
+  observed_at: string;
+  reported_by_customer: boolean;
+};
+
+export type CrmPortalSafetyRow = {
+  product_id: string;
+  name: string;
+  epa_registration_number: string | null;
+  active_ingredient: string | null;
+  signal_word: string | null;
+  restricted_use: boolean;
+  sds_url: string | null;
+  label_url: string | null;
+  applications: number;
+  last_applied_at: string | null;
+};
+
+export type CrmPortalInspectionRow = {
+  id: string;
+  template_name: string;
+  template_kind: CrmFormKind;
+  property_id: string | null;
+  property_label: string | null;
+  completed_at: string;
+  signed_by_name: string | null;
+  signed_at: string | null;
+  has_signature: boolean;
+  notes: string | null;
+};
+
+export function toPortalSiteView(row: CrmPortalSiteRow) {
+  return {
+    id: row.id,
+    label: row.label,
+    address: row.address,
+    propertyType: row.property_type,
+    activeDevices: row.active_devices,
+    openSightings: row.open_sightings,
+    /* Null when nothing has ever been done here, and null when nothing is
+     * booked. Neither is a date, and neither should be shown as one. */
+    lastVisitAt: row.last_visit_at,
+    nextVisitAt: row.next_visit_at,
+  };
+}
+
+export function toPortalStationView(row: CrmPortalStationRow) {
+  return {
+    id: row.id,
+    propertyId: row.property_id,
+    propertyLabel: row.property_label,
+    label: row.label,
+    /* The sticker on the box. An identifier for a bait station is not a
+     * secret, and matching the row to the wall is the point. */
+    barcode: row.barcode,
+    deviceType: row.device_type,
+    status: row.status,
+    locationNote: row.location_note,
+    activityThreshold: row.activity_threshold,
+    installedAt: row.installed_at,
+    lastServiceAt: row.last_service_at,
+    lastCondition: row.last_condition,
+    lastActivityCount: row.last_activity_count,
+    lastPestObserved: row.last_pest_observed,
+    overThreshold: row.over_threshold,
+    /* Three states, not two: never scanned, scanned without a count, and
+     * scanned with one. The page needs to tell them apart. */
+    everScanned: row.last_service_at !== null,
+    counted: row.last_activity_count !== null,
+  };
+}
+
+export function toPortalTrendView(row: CrmPortalTrendRow) {
+  return {
+    month: row.month,
+    deviceType: row.device_type,
+    scans: row.scans,
+    scansWithCount: row.scans_with_count,
+    activityTotal: row.activity_total === null ? null : Number(row.activity_total),
+    stationsFlagged: row.stations_flagged,
+  };
+}
+
+export function toPortalConditionView(row: CrmPortalConditionRow) {
+  return {
+    kind: row.kind,
+    sourceId: row.source_id,
+    propertyId: row.property_id,
+    propertyLabel: row.property_label,
+    headline: row.headline,
+    detail: row.detail,
+    severity: row.severity,
+    observedAt: row.observed_at,
+    reportedByCustomer: row.reported_by_customer,
+  };
+}
+
+export function toPortalSafetyView(row: CrmPortalSafetyRow) {
+  return {
+    productId: row.product_id,
+    name: row.name,
+    epaRegistrationNumber: row.epa_registration_number,
+    activeIngredient: row.active_ingredient,
+    signalWord: row.signal_word,
+    restrictedUse: row.restricted_use,
+    /* Null means no sheet is recorded. The page says so; it does not offer
+     * a link that goes nowhere. */
+    sdsUrl: row.sds_url,
+    labelUrl: row.label_url,
+    applications: row.applications,
+    lastAppliedAt: row.last_applied_at,
+  };
+}
+
+export function toPortalInspectionView(row: CrmPortalInspectionRow) {
+  return {
+    id: row.id,
+    templateName: row.template_name,
+    templateKind: row.template_kind,
+    propertyId: row.property_id,
+    propertyLabel: row.property_label,
+    completedAt: row.completed_at,
+    signedByName: row.signed_by_name,
+    signedAt: row.signed_at,
+    /* Whether a signature exists. The storage path is not in the
+     * projection, so there is nothing here to hand over. */
+    hasSignature: row.has_signature,
+    notes: row.notes,
+  };
+}
+
+/**
+ * How a station reads on the floor. Kept beside the mapper because the
+ * page, the tests and any later export must agree on when a station is
+ * "unknown" rather than "clear" — the whole point of the null columns.
+ */
+export function stationStanding(
+  station: Pick<
+    ReturnType<typeof toPortalStationView>,
+    "overThreshold" | "lastCondition" | "everScanned"
+  >,
+): "flagged" | "clear" | "unknown" {
+  if (station.lastCondition === "damaged" || station.lastCondition === "missing") return "flagged";
+  if (station.lastCondition === "needs_service") return "flagged";
+  if (station.overThreshold === true) return "flagged";
+  if (!station.everScanned) return "unknown";
+  return station.overThreshold === null ? "unknown" : "clear";
 }
 
 /* ---------------------------------------------------------------------------
