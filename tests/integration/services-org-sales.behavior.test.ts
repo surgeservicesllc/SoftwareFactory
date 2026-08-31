@@ -9,10 +9,10 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const migrationsDirectory = resolve(repositoryRoot, "supabase/migrations");
-const latestMigration = "20260830001700_customer_portal.sql";
+const latestMigration = "20260830001800_customer_portal.sql";
 
 /**
- * Branches, the org chart, territories and commissions (ADR-194) against
+ * Branches, the org chart, territories and commissions (ADR-195) against
  * the real migration chain.
  *
  * The company is where a CRM most often lies to itself: a branch marked

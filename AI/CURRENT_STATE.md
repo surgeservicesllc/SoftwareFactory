@@ -1,5 +1,36 @@
 # Current state
 
+## 2026-08-30: Grok Bot local release candidate (ADR-190)
+
+Grok Bot is a SoftwareFactory product label and Chief-of-Staff experience, not
+an xAI provider or model. The local candidate turns an owner prompt into a
+deterministic, JSON-safe Intent -> Requirements -> Plan -> Task Graph record
+using the project's configured Claude and Codex bot roster. Its responsive
+workspace restores durable sessions and renders conversation, goal, plan,
+agents, progress, files/diffs, tests, artifacts, and deployment evidence.
+Planned provider/model/agent fields remain routing intent and are never
+presented as observed execution evidence.
+
+Migration `20260830001000_grok_chief_of_staff_persistence.sql` adds the durable
+owner-only Supabase boundary: sessions, append-only messages and events,
+immutable task/graph/artifact links, and monotonic control intents, all tenant
+and project scoped under forced RLS with bounded definer functions. The owner
+session APIs create, list, read, and control that durable state. Replays are
+idempotent, and status/reload truth is projected from persisted state.
+
+The service-only execution bridge creates the exact canonical
+`full_lifecycle` v2 graph — Claude planning -> HUMAN architecture gate ->
+Codex Phase 1C -> exact CI, Vercel, and health evidence — and pauses it in the
+same transaction before it becomes visible. The custom provider-labelled DAG
+remains planning data and is never launched; graph and node runs remain absent,
+and no worker is dispatched. Focused bridge tests are green, and the prior full
+suite at `a26caec` was green with 5,705 passing tests and 7 skipped. Final
+post-release-workflow full gates, the exact push/deployment, hosted ledger
+application of migrations `20260830000900` and `20260830001000`, and signed-in
+production acceptance remain pending. Workers, autonomy, and automatic actions
+remain OFF, and the global kill switch remains ON. **GROK BOT: PRODUCTION
+READY is not declared.**
+
 ## Services CRM (task #63, ADR-185 — newest product)
 
 `/Services` is the pest-services CRM's own product (route group, own
@@ -24,17 +55,17 @@ The Demo Data book
 can seed a 14-account fictional clientele through the real machinery —
 every record source-labeled "Demo Data", history written by the
 triggers, loader + DemoNotice + pipeline headline on the Overview.
-Pest/IPM (ADR-190) is live: barcoded stations over an append-only scan
+Pest/IPM (ADR-191) is live: barcoded stations over an append-only scan
 ledger (install written at birth, device state projected from the ledger
 by trigger, per-organization barcode uniqueness), sightings closed only
 by recording a corrective action, and the /Services/ipm command center
 with a scan box, per-site station tables, threshold flags and the
-sighting loop. Chemicals and compliance (ADR-191) close the regulated half: a product
+sighting loop. Chemicals and compliance (ADR-192) close the regulated half: a product
 catalogue with EPA identity and SDS/label links, lots drawn down by
 trigger, an append-only application log that copies the applicator's
 license and writes its own timeline event, jurisdiction rules configured
 as rows and enforced at the boundary, and an audit report served as JSON
-or injection-guarded CSV. Billing (ADR-193) closes the money half:
+or injection-guarded CSV. Billing (ADR-194) closes the money half:
 estimates and their lines, contracts with signature and term
 completeness, invoices whose paid total and `paid` status are decided by
 the settlement trigger rather than asserted by any caller, and the
@@ -43,7 +74,7 @@ that refuses a credit larger than the payment it refunds. Every payment
 writes a `payment` timeline event, so all three system kinds now have
 real database writers; nothing in billing is deletable, and a void
 invoice keeps its reason. /Services/billing reads the four books and the
-ledger behind them. The company arrived with ADR-194: crm_branches (code, address, IANA time
+ledger behind them. The company arrived with ADR-195: crm_branches (code, address, IANA time
 zone, open/close dates), crm_employees as the org chart (seven roles, a
 branch, a supervisor, a commission rate in basis points, a quota),
 crm_territories (a branch's slice of the map, worked by one rep, defined
@@ -54,7 +85,7 @@ opportunities gained an owner; technicians gained a branch and a
 supervisor. /Services/branches, /Services/team and /Services/sales read
 them, each naming the uncomfortable number rather than hiding it: the
 book no branch serves, the map nobody works, the deals nobody owns.
-Documents, canvassing and marketing (ADR-195) close the door-to-door and
+Documents, canvassing and marketing (ADR-196) close the door-to-door and
 campaign rows of the competitor matrix: crm_documents holds a private
 storage PATH and never a URL or bytes, crm_knocks is append-only so a
 disposition cannot be improved after the door closed, consent keeps the
@@ -62,7 +93,7 @@ moment it was withdrawn, and the message funnel is CHECKed one-way so a
 reported open rate cannot exceed its own delivery. Nothing sends: no
 email/SMS provider is connected and no executor runs the automation rules,
 and /Services/marketing carries **Not Connected** above every figure.
-The forms engine (ADR-196) closes the largest gap in the competitor
+The forms engine (ADR-197) closes the largest gap in the competitor
 matrix: versioned templates over seven field types, answers checked against
 their question's declared type by trigger, "completed" counted from the
 required questions rather than asserted, signatures whole or absent with the
@@ -71,7 +102,7 @@ them. Timesheets refuse overlapping shifts and report no worked total while
 a shift is still running; licence expiry reports current, expiring, expired
 and — kept deliberately apart — unrecorded, because a licence with no date
 on file is an unknown rather than a pass. /Services/forms reads all four.
-The customer portal (ADR-197) admits the first reader who is not a member
+The customer portal (ADR-198) admits the first reader who is not a member
 of the organization whose rows they read. It does so without widening a
 single staff-facing policy: a customer reaches exactly one account through
 reviewed SECURITY DEFINER functions whose column lists are the whole of
@@ -86,7 +117,7 @@ their own words rather than over them. Paying an invoice and opening a
 document are both labelled **Not Connected**: no card processor and no
 object storage are configured, so the balance and the filing are stated
 and nothing pretends to be a button.
-A workspace can populate itself two ways (ADR-192): the curated Demo Data
+A workspace can populate itself two ways (ADR-193): the curated Demo Data
 book for presenting the product, or the full corpus — 44,837 rows across
 all forty-two tables, every optional field populated, spanning years —
 for testing dashboards, reports and pagination at the size of a real book.

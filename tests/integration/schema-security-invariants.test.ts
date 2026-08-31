@@ -277,6 +277,7 @@ describe("SECURITY DEFINER functions", () => {
     expect(result.rows.map((row) => row.proname)).toEqual([
       "abort_graph_run_as_worker",
       "agentos_record_trigger_delivery",
+      "append_grok_message_as_server",
       "append_phase1c_run_event",
       // Full Lifecycle v2 release gates are evidence-bound. These wrappers
       // atomically validate and persist the exact merge/deployment evidence
@@ -338,6 +339,12 @@ describe("SECURITY DEFINER functions", () => {
       // timing, never the sealed relay code.
       "inspect_ai_auth_sessions",
       "jsonb_has_sensitive_keys",
+      // Grok has no service_role table grants. Seven bounded evidence writers
+      // plus one canonical Full Lifecycle v2 launcher are pinned by exact
+      // overload below; the launcher atomically pauses before visibility.
+      "launch_grok_full_lifecycle_as_server",
+      "link_grok_artifact_as_server",
+      "link_grok_task_as_server",
       // The verification sweep's two hands: enumerate connected subscription
       // accounts, and record a shape-level pass. Demotion is the function
       // below; a pass is a timestamp, not an event.
@@ -392,6 +399,8 @@ describe("SECURITY DEFINER functions", () => {
       // Browser-authenticated managers cannot execute this RPC directly.
       "record_bot_readiness_preserving_disabled",
       "record_graph_artifact_as_worker",
+      "record_grok_event_as_server",
+      "record_grok_planning_failure_as_server",
       "record_job_seeker_alert_scan",
       "record_node_state_as_worker",
       "record_phase1c_run_artifact",
@@ -403,15 +412,85 @@ describe("SECURITY DEFINER functions", () => {
       // never be orphaned by a re-plan.
       "replan_phase1c_run",
       "report_ai_auth_login_url",
+      "resolve_grok_control_intent_as_server",
       "resolve_provider_connect_session",
       // Which provider account signed in — display data on a completed
       // sign-in, shape-checked against secrets, reported only by the worker.
       "set_ai_account_provider_identity",
+      "set_grok_session_status_as_server",
       // Stores a credential obtained through an OAuth callback. Server-only:
       // a browser must never write that table directly, or the seal would be
       // whatever the browser sent.
       "store_provider_credential",
       "sync_github_installation",
+    ]);
+
+    const grokFunctions = await db.query<{
+      identity_arguments: string;
+      proname: string;
+    }>(`
+      select
+        pg_catalog.pg_get_function_identity_arguments(proc.oid) as identity_arguments,
+        proc.proname
+      from pg_catalog.pg_proc proc
+      join pg_catalog.pg_namespace namespace on namespace.oid = proc.pronamespace
+      where namespace.nspname = 'public'
+        and proc.proname in (
+          'append_grok_message_as_server',
+          'launch_grok_full_lifecycle_as_server',
+          'link_grok_artifact_as_server',
+          'link_grok_task_as_server',
+          'record_grok_event_as_server',
+          'record_grok_planning_failure_as_server',
+          'resolve_grok_control_intent_as_server',
+          'set_grok_session_status_as_server'
+        )
+        and proc.prosecdef
+        and has_function_privilege('service_role', proc.oid, 'EXECUTE')
+      order by proc.proname, identity_arguments
+    `);
+
+    expect(grokFunctions.rows).toEqual([
+      {
+        identity_arguments:
+          "p_organization_id uuid, p_session_id uuid, p_role text, p_content text, p_metadata jsonb, p_idempotency_key text, p_expected_sequence bigint, p_reply_to_message_id uuid",
+        proname: "append_grok_message_as_server",
+      },
+      {
+        identity_arguments:
+          "p_organization_id uuid, p_requested_by uuid, p_project_id uuid, p_session_id uuid, p_message_id uuid, p_idempotency_key text, p_goal text, p_topology graph_topology, p_topology_reasons jsonb, p_risk_level risk_level, p_requires_owner_approval boolean, p_nodes jsonb, p_edges jsonb, p_budget jsonb, p_github_repository_id uuid, p_base_branch text, p_base_sha text, p_required_check_names jsonb",
+        proname: "launch_grok_full_lifecycle_as_server",
+      },
+      {
+        identity_arguments:
+          "p_organization_id uuid, p_session_id uuid, p_message_id uuid, p_task_link_id uuid, p_graph_artifact_id uuid, p_phase1c_artifact_id uuid, p_purpose text",
+        proname: "link_grok_artifact_as_server",
+      },
+      {
+        identity_arguments:
+          "p_organization_id uuid, p_session_id uuid, p_message_id uuid, p_command_id uuid, p_task_id uuid, p_graph_id uuid, p_graph_run_id uuid, p_relation text",
+        proname: "link_grok_task_as_server",
+      },
+      {
+        identity_arguments:
+          "p_organization_id uuid, p_session_id uuid, p_event_type text, p_correlation_id uuid, p_payload jsonb, p_expected_sequence bigint, p_message_id uuid, p_task_link_id uuid",
+        proname: "record_grok_event_as_server",
+      },
+      {
+        identity_arguments:
+          "p_organization_id uuid, p_session_id uuid, p_user_message_id uuid, p_error_code text, p_idempotency_key text, p_expected_version bigint",
+        proname: "record_grok_planning_failure_as_server",
+      },
+      {
+        identity_arguments:
+          "p_organization_id uuid, p_intent_id uuid, p_state text, p_failure_code text, p_failure_detail text",
+        proname: "resolve_grok_control_intent_as_server",
+      },
+      {
+        identity_arguments:
+          "p_organization_id uuid, p_session_id uuid, p_status text, p_expected_version bigint",
+        proname: "set_grok_session_status_as_server",
+      },
     ]);
   });
 });

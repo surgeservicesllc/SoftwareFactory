@@ -1,5 +1,5 @@
 -- Services CRM increment 4: pest/IPM core (task #63, owner /goal —
--- ADR-190). Devices/stations with barcode identity, an append-only scan
+-- ADR-191). Devices/stations with barcode identity, an append-only scan
 -- ledger, and pest sighting logs with corrective actions — the
 -- differentiator pillar, on the established posture: org-scoped forced
 -- RLS, revoke-then-grant against hosted default privileges,

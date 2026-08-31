@@ -1,5 +1,5 @@
 -- Services CRM increment 7: branches, the org chart, territories and the
--- sales motion (task #64, owner directive — ADR-194). The company half of
+-- sales motion (task #64, owner directive — ADR-195). The company half of
 -- the CRM: until now every row belonged to an organization and to nobody
 -- in particular. A pest-services business is run out of branches, by
 -- managers, through territories, by named people who are measured on what

@@ -63,6 +63,9 @@ const ROUTES = [
   // One factory step: the ten pages share one console, and the harness case
   // "factory-step" measures the populated layout.
   "/solutions/factory/requirement",
+  // The three-column Grok workspace stacks below xl and keeps its controls
+  // usable at the supported phone widths.
+  "/solutions/factory/grok",
   "/solutions/admin",
   "/auth/onboarding",
   "/offline",
@@ -251,7 +254,7 @@ test("every Services CRM section is gated server-side through its layout", async
 
 test("/customer-portal is gated server-side, and never asks a customer to onboard", async ({ page }) => {
   /*
-   * The customer portal (ADR-197) is the one signed-in surface whose reader
+   * The customer portal (ADR-198) is the one signed-in surface whose reader
    * is NOT an organization member, so it carries its own gate rather than
    * `requirePortalViewer` — that one redirects a signed-in person with no
    * organization to workspace onboarding, which for a pest-control customer

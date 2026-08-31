@@ -14,7 +14,7 @@ import { readViewer } from "@/lib/auth/viewer";
  * So this gate asks one thing — is somebody signed in — and leaves the rest
  * to the page, which asks the database whether that person has a portal
  * link. Nothing here decides what they may read; the SECURITY DEFINER
- * functions in `20260830001700_customer_portal.sql` do, and they resolve
+ * functions in `20260830001800_customer_portal.sql` do, and they resolve
  * the caller to exactly one account.
  */
 export default async function CustomerPortalLayout({

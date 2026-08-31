@@ -9,10 +9,10 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const migrationsDirectory = resolve(repositoryRoot, "supabase/migrations");
-const latestMigration = "20260830001700_customer_portal.sql";
+const latestMigration = "20260830001800_customer_portal.sql";
 
 /**
- * The customer portal (ADR-197) against the real migration chain.
+ * The customer portal (ADR-198) against the real migration chain.
  *
  * This is the suite that matters most in the whole CRM. Every other table
  * is read by a member of the organization that owns it; the portal adds a

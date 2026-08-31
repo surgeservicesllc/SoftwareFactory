@@ -2,7 +2,7 @@
 
 Last reviewed: 2026-08-31
 
-**Addendum, 2026-08-31 latest+19 - the customer portal (ADR-197):**
+**Addendum, 2026-08-31 latest+19 - the customer portal (ADR-198):**
 services-portal.behavior 13 on the real chain under hosted-style default
 privileges, written from the attacker's side: a rival's customer reading our
 invoices through a definer that could have returned everything and getting
@@ -32,7 +32,7 @@ on purpose rather than faked. RLS census 189; hosted service-role grants at
 re-proves forced RLS, no DELETE, the sealed resolver, the activation guard
 and the nine caller-scoped definers after every apply.
 
-**Addendum, 2026-08-31 latest+18 - the forms engine (ADR-196):**
+**Addendum, 2026-08-31 latest+18 - the forms engine (ADR-197):**
 services-forms.behavior 9 on the real chain under hosted-style default
 privileges (prose refused for a number question by name with the right value
 accepted; a choice outside the offered list and a multi-select outside it
@@ -55,7 +55,7 @@ from unverified to verified, with a second assertion pinning the resolution
 because its failure mode is silent. Lint zero warnings, tsc clean.
 
 **Addendum, 2026-08-31 latest+17 - documents, canvassing, marketing
-(ADR-195):** services-marketing-canvassing.behavior 9 on the real chain
+(ADR-196):** services-marketing-canvassing.behavior 9 on the real chain
 under hosted-style default privileges (a URL, an s3 scheme and a leading
 slash each refused as a storage path while a real private path is accepted;
 a document filed about nothing refused; knocks and messages append-only at
@@ -80,7 +80,7 @@ the defect that has now cost two releases, because a CHECK's regex compiles
 only when a row carries a value and therefore survives every null-column
 test. Lint zero warnings, tsc clean.
 
-**Addendum, 2026-08-30 latest+16 - the company (ADR-194):**
+**Addendum, 2026-08-30 latest+16 - the company (ADR-195):**
 services-org-sales.behavior 9 on the real chain under hosted-style default
 privileges (the branch/manager/rep/book join holding together; a commission
 derived from basis and rate on insert AND still derived after the rate is
@@ -107,7 +107,7 @@ workflow scope `branches-org-sales` postflight proves forced RLS, no DELETE
 anywhere, the anon/service_role shutout, the derive trigger and the three
 new columns on crm_accounts. Lint zero warnings, tsc clean.
 
-**Addendum, 2026-08-30 latest+15 - billing (ADR-193):**
+**Addendum, 2026-08-30 latest+15 - billing (ADR-194):**
 services-billing.behavior 6 on the real migration chain (settlement
 derived from the ledger and the invoice reopened by a refund; the refund
 cap proved at its exact remainder AND one cent past it; append-only
@@ -130,7 +130,7 @@ delete anywhere, the anon/service_role shutout and all three settlement
 triggers. Lint zero warnings, tsc clean; full vitest + production build
 before shipping.
 
-**Addendum, 2026-08-30 latest+14 - the full-scale seed (ADR-192):**
+**Addendum, 2026-08-30 latest+14 - the full-scale seed (ADR-193):**
 services-crm-seed.behavior 5 against the real migration chain, running the
 production seeder and the production validator unmodified through a
 PGlite-backed supabase client shim: the whole book seeds (every table over
@@ -148,7 +148,7 @@ failed the first product carrying a link; fixed and pinned. Route suite
 extended to 22 (scale routing, unknown scale refused). Lint zero warnings,
 tsc clean.
 
-**Addendum, 2026-08-30 latest+13 - chemicals & compliance (ADR-191):**
+**Addendum, 2026-08-30 latest+13 - chemicals & compliance (ADR-192):**
 services-chemicals-compliance.behavior 6 on the real chain under
 hosted-style default privileges (lot drawn down exactly, an over-draw and
 a unit mismatch both refused with the shelf left untouched; the
@@ -174,7 +174,7 @@ fifteen crm tables; runbook 189; workflow scope chemicals-compliance
 postflight. Lint zero warnings, tsc clean; full vitest + production
 build before shipping.
 
-**Addendum, 2026-08-30 latest+12 - pest/IPM core (ADR-190):**
+**Addendum, 2026-08-30 latest+12 - pest/IPM core (ADR-191):**
 services-pest-ipm.behavior 4 on the real chain under hosted-style
 default privileges (a station born with its install scan carrying its
 actor and location; state driven through move/remove/reinstall by the
@@ -196,6 +196,21 @@ station, both an open and a closed sighting). RLS census 158;
 hosted-grants eleven crm tables; runbook 188; workflow scope pest-ipm
 postflight. Lint zero warnings, tsc clean; full vitest + production
 build before shipping.
+
+**Addendum, 2026-08-30 latest+12 — Grok Bot local release candidate
+(ADR-191):** deterministic Chief-of-Staff planning, the owner-only durable
+session/message/event/link/control boundary, and the responsive workspace are
+integrated. Focused bridge tests prove that the service-only boundary creates
+the exact canonical `full_lifecycle` v2 graph and pauses it atomically before
+visibility, with idempotent replay/status truth, no custom provider-labelled
+DAG launch, no graph/node run, and no worker dispatch. Planned routing identity
+is not counted as observed execution. The prior full suite at `a26caec` was
+green with 5,705 passing tests and 7 skipped. This is not final exact-head,
+hosted-migration, deployment, signed-in E2E, or production-readiness evidence:
+post-release-workflow full gates, hosted ledger application of
+`20260830000900` and `20260830001000`, exact deployment, and signed-in
+production acceptance remain pending. The safety envelope remains
+workers/autonomy/automatic actions OFF and global kill switch ON.
 
 **Addendum, 2026-08-30 latest+11 — field service core (ADR-189):**
 services-field-service behavior 5 on the real chain under hosted-style

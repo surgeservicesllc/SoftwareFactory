@@ -1,5 +1,5 @@
 -- Services CRM increment 10: the customer portal (task #64, owner /goal —
--- ADR-197). Both PestPac and Briostack lead with this; the competitor
+-- ADR-198). Both PestPac and Briostack lead with this; the competitor
 -- matrix marks it the largest remaining gap.
 --
 -- THIS IS THE MOST SECURITY-SENSITIVE MIGRATION IN THE CRM. Everything

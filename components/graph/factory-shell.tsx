@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Bot,
   Boxes,
   Check,
   ChevronRight,
@@ -68,6 +69,7 @@ function SideLink({
   return (
     <Link
       href={href}
+      aria-current={current ? "page" : undefined}
       className={cn(
         "flex min-h-9 items-center gap-2.5 rounded-lg px-3 text-[13px] font-medium transition-colors",
         current
@@ -83,6 +85,7 @@ function SideLink({
 
 export function FactoryShell({
   step,
+  section = "step",
   marks,
   run,
   stepQuery = "",
@@ -91,6 +94,8 @@ export function FactoryShell({
   children,
 }: {
   step: FactoryStep;
+  /** The shell can host the lifecycle steps or a first-class Factory workspace. */
+  section?: "step" | "grok";
   /** Live standings for the sidebar's ten circles; empty while loading. */
   marks: readonly StepMark[];
   run?: {
@@ -116,7 +121,11 @@ export function FactoryShell({
         aria-label="AI Factory"
         className="sticky top-0 hidden h-screen w-56 shrink-0 flex-col overflow-y-auto border-r border-[var(--border)] bg-[var(--surface-inset)] px-3 py-5 lg:flex"
       >
-        <Link href={`/solutions/factory/requirement${stepQuery}`} className="flex items-center gap-2 px-2">
+        <Link
+          href={`/solutions/factory/requirement${stepQuery}`}
+          aria-label="Factory steps home"
+          className="flex items-center gap-2 px-2"
+        >
           <span className="grid size-8 place-items-center rounded-lg border border-[var(--accent-border)] bg-[var(--accent-surface)]">
             <Hexagon className="size-4 text-[var(--accent-text)]" aria-hidden="true" />
           </span>
@@ -131,10 +140,19 @@ export function FactoryShell({
         </nav>
 
         <p className="label mt-5 px-3">AI Factory</p>
+        <nav aria-label="AI Factory workspaces" className="mt-1.5 space-y-0.5">
+          <SideLink
+            href={`/solutions/factory/grok${stepQuery}`}
+            icon={Bot}
+            current={section === "grok"}
+          >
+            Grok Bot
+          </SideLink>
+        </nav>
         <nav aria-label="The ten factory steps" className="mt-1.5 space-y-0.5">
           {FACTORY_STEPS.map((entry) => {
             const mark = markFor(entry.slug);
-            const current = entry.slug === step.slug;
+            const current = section === "step" && entry.slug === step.slug;
             return (
               <Link
                 key={entry.slug}
@@ -155,7 +173,7 @@ export function FactoryShell({
                       ? "border-[#1f5d47] bg-[rgba(52,211,153,0.12)] text-[#34d399]"
                       : current
                         ? "border-[var(--accent-border)] text-[var(--accent-text)]"
-                        : "border-[var(--border-strong)] text-faint",
+                        : "border-[var(--border-strong)] text-muted",
                   )}
                 >
                   {mark === "complete" ? <Check className="size-3" aria-hidden="true" /> : entry.number}
@@ -229,9 +247,12 @@ export function FactoryShell({
       <div className="min-w-0 flex-1">
         <header className="flex min-h-14 items-center gap-3 border-b border-[var(--border)] bg-[var(--surface-inset)] px-4 sm:px-6">
           <div className="min-w-0 flex-1">{breadcrumb}</div>
-          <Link href="/solutions" className="btn btn-secondary btn-sm hidden sm:inline-flex">
-            Open Console
-          </Link>
+          <nav aria-label="Primary">
+            <Link href="/solutions" aria-label="AI Factory console home" className="btn btn-secondary btn-sm inline-flex">
+              <span className="hidden sm:inline">Open Console</span>
+              <span className="sm:hidden">Console</span>
+            </Link>
+          </nav>
           <span
             aria-label={viewer?.email ?? "Signed out"}
             title={viewer?.email ?? "Signed out"}

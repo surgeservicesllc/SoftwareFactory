@@ -9,10 +9,10 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const migrationsDirectory = resolve(repositoryRoot, "supabase/migrations");
-const latestMigration = "20260830001700_customer_portal.sql";
+const latestMigration = "20260830001800_customer_portal.sql";
 
 /**
- * Billing (ADR-193) against the real migration chain. Money is the part of
+ * Billing (ADR-194) against the real migration chain. Money is the part of
  * a CRM where "the application will handle it" is least defensible, so
  * every promise here is the database's: the payment ledger is append-only
  * by grant, an invoice's settled total is derived rather than asserted, a

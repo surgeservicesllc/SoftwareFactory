@@ -15,7 +15,7 @@ import { pgliteSupabaseClient } from "../support/pglite-supabase-client";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const migrationsDirectory = resolve(repositoryRoot, "supabase/migrations");
-const latestMigration = "20260830001700_customer_portal.sql";
+const latestMigration = "20260830001800_customer_portal.sql";
 
 /**
  * The full-scale seed, run for real.

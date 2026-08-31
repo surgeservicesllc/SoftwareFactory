@@ -9,10 +9,10 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const migrationsDirectory = resolve(repositoryRoot, "supabase/migrations");
-const latestMigration = "20260830001700_customer_portal.sql";
+const latestMigration = "20260830001800_customer_portal.sql";
 
 /**
- * The forms and inspections engine, timesheets and licence expiry (ADR-196)
+ * The forms and inspections engine, timesheets and licence expiry (ADR-197)
  * against the real migration chain.
  *
  * A form's value is entirely in whether its data can be trusted later. So

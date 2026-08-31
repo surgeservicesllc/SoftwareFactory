@@ -12,7 +12,7 @@ const migrationsDirectory = resolve(repositoryRoot, "supabase/migrations");
 const grantsMigration =
   "20260812002600_narrow_hosted_service_role_table_grants.sql";
 const latestMigration =
-  "20260830001700_customer_portal.sql";
+  "20260830001800_customer_portal.sql";
 
 const publicTables = [
   // Sorted alphabetically to match the catalogue query. Keep it sorted when
@@ -142,6 +142,16 @@ const publicTables = [
   "graph_templates",
   "graph_verifications",
   "graphs",
+  // Grok's seven durable, tenant-scoped evidence tables. All seven force RLS
+  // and revoke direct service_role table access; trusted writes use the exact
+  // reviewed SECURITY DEFINER functions pinned by the schema invariant.
+  "grok_artifact_links",
+  "grok_control_intents",
+  "grok_events",
+  "grok_graph_launches",
+  "grok_messages",
+  "grok_sessions",
+  "grok_task_links",
   "improvement_ledger",
   "incidents",
   // The alert engine's delivery ledger (20260829000300, ADR-164): owner

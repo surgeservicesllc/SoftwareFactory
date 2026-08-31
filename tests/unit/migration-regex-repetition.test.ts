@@ -11,8 +11,8 @@ const migrationsDirectory = resolve(import.meta.dirname, "../../supabase/migrati
  * PostgreSQL refuses a regex repetition count above 255.
  *
  * This has now cost two releases. `crm_products.sds_url` used
- * `{4,500}` (ADR-192) and `crm_documents.storage_path` used `{2,300}`
- * (ADR-195), and both compiled *silently* — a CHECK's regex is only
+ * `{4,500}` (ADR-193) and `crm_documents.storage_path` used `{2,300}`
+ * (ADR-196), and both compiled *silently* — a CHECK's regex is only
  * evaluated when a row actually carries a value for that column, so the
  * constraint sat harmless through every test that left the column null and
  * would have thrown "invalid repetition count(s)" at the first real row.

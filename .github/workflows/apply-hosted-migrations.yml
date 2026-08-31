@@ -1514,7 +1514,7 @@ jobs:
             DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
             echo "::add-mask::$DB_URL"
           fi
-          VERSION=20260830001100_pest_ipm_core
+          VERSION=20260830001200_pest_ipm_core
           FILE="supabase/migrations/${VERSION}.sql"
           sha256sum "$FILE"
           psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
@@ -1542,7 +1542,7 @@ jobs:
             DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
             echo "::add-mask::$DB_URL"
           fi
-          VERSION=20260830001200_chemicals_compliance
+          VERSION=20260830001300_chemicals_compliance
           FILE="supabase/migrations/${VERSION}.sql"
           sha256sum "$FILE"
           psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
@@ -1570,7 +1570,7 @@ jobs:
             DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
             echo "::add-mask::$DB_URL"
           fi
-          VERSION=20260830001300_billing_contracts
+          VERSION=20260830001400_billing_contracts
           FILE="supabase/migrations/${VERSION}.sql"
           sha256sum "$FILE"
           psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
@@ -1599,7 +1599,7 @@ jobs:
             DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
             echo "::add-mask::$DB_URL"
           fi
-          VERSION=20260830001400_branches_org_sales
+          VERSION=20260830001500_branches_org_sales
           FILE="supabase/migrations/${VERSION}.sql"
           sha256sum "$FILE"
           psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
@@ -1627,7 +1627,7 @@ jobs:
             DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
             echo "::add-mask::$DB_URL"
           fi
-          VERSION=20260830001500_documents_canvassing_marketing
+          VERSION=20260830001600_documents_canvassing_marketing
           FILE="supabase/migrations/${VERSION}.sql"
           sha256sum "$FILE"
           psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
@@ -1656,7 +1656,7 @@ jobs:
             DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
             echo "::add-mask::$DB_URL"
           fi
-          VERSION=20260830001600_forms_timesheets_licences
+          VERSION=20260830001700_forms_timesheets_licences
           FILE="supabase/migrations/${VERSION}.sql"
           sha256sum "$FILE"
           psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
@@ -1683,7 +1683,7 @@ jobs:
             DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
             echo "::add-mask::$DB_URL"
           fi
-          VERSION=20260830001700_customer_portal
+          VERSION=20260830001800_customer_portal
           FILE="supabase/migrations/${VERSION}.sql"
           sha256sum "$FILE"
           psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"

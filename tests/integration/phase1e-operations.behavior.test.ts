@@ -201,26 +201,27 @@ describe("Phase 1E production operations behavior", () => {
     // crm_contacts, crm_properties and the append-only crm_timeline_events;
     // 152 since the CRM pipeline (ADR-186) added crm_opportunities; 155
     // since field service (ADR-189) added crm_technicians,
-    // crm_service_plans and crm_work_orders; 158 since pest/IPM (ADR-190)
+    // crm_service_plans and crm_work_orders; 158 since pest/IPM (ADR-191)
     // added crm_devices, the append-only crm_device_events ledger and
-    // crm_pest_sightings; 162 since chemicals/compliance (ADR-191) added
+    // crm_pest_sightings; 162 since chemicals/compliance (ADR-192) added
     // crm_products, crm_product_lots, the append-only crm_applications
     // log and crm_compliance_rules. Each is RLS-enabled and forced, which
-    // 169 since billing (ADR-193) added crm_estimates, crm_estimate_lines,
+    // 169 since billing (ADR-194) added crm_estimates, crm_estimate_lines,
     // crm_contracts, crm_invoices, crm_invoice_lines and the append-only
-    // crm_payments and crm_refunds; 173 since the company arrived (ADR-194)
+    // crm_payments and crm_refunds; 173 since the company arrived (ADR-195)
     // with crm_branches, crm_employees, crm_territories and
     // crm_commissions; 182 since documents, canvassing and the marketing
-    // hub (ADR-195) added crm_documents, crm_canvass_routes, the
+    // hub (ADR-196) added crm_documents, crm_canvass_routes, the
     // append-only crm_knocks, crm_marketing_lists, crm_list_members,
     // crm_campaigns, the append-only crm_messages, crm_automations and the
-    // append-only crm_attributions; 187 since the forms engine (ADR-196)
+    // append-only crm_attributions; 187 since the forms engine (ADR-197)
     // added crm_form_templates, crm_form_fields, crm_form_instances,
     // crm_form_answers and crm_timesheets; 189 since the customer portal
-    // (ADR-197) added crm_portal_users and crm_portal_requests. Each is
-    // RLS-enabled and forced, which
-    // the filter on the next line is what actually proves.
-    expect(rlsRows).toHaveLength(189);
+    // (ADR-198) added crm_portal_users and crm_portal_requests; and 196
+    // once main's durable Grok workspace lands its seven tenant-scoped
+    // session/evidence tables alongside them. Each is RLS-enabled and
+    // forced, which the filter on the next line is what actually proves.
+    expect(rlsRows).toHaveLength(196);
     expect(rlsRows.filter((row) => !row.relrowsecurity || !row.relforcerowsecurity)).toEqual([]);
 
     const { rows: grantRows } = await db.query<{ table_name: string }>(

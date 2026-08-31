@@ -1,5 +1,5 @@
 -- Services CRM increment 6: estimates, contracts, invoices, payments and
--- refunds (task #63, owner /goal — ADR-193). The money half of the
+-- refunds (task #63, owner /goal — ADR-194). The money half of the
 -- Lead → Payment chain, on the established posture: org-scoped forced RLS,
 -- revoke-then-grant against hosted default privileges, anon/service_role
 -- shut out, same-org composite keys throughout.

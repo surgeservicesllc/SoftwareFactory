@@ -2,13 +2,30 @@
 
 Last updated: 2026-08-31
 
-## Newest (2026-08-31, latest+19): the customer portal (ADR-197, task #64)
+## Newest (2026-08-31, latest+19): the customer portal (ADR-198, task #64)
 
-`20260830001700` adds crm_portal_users and crm_portal_requests plus NINE
+TWO COLLISIONS WITH `main` WERE RESOLVED IN THIS MERGE, both from parallel
+branches picking "the next number" without seeing each other:
+
+- **Migration versions.** main took `20260830001100` for
+  `grok_planning_failure`; this branch had it for `pest_ipm_core`. The CRM
+  chain renumbered up by one slot — `001200` through `001800` — because
+  none of it is on hosted yet, so the collision costs a sweep rather than a
+  repair. If you are reading an older commit message on this branch, its
+  migration numbers are one slot lower than the files.
+- **ADR numbers.** main took ADR-190 for the Grok Bot record. This branch
+  had ADR-190 through ADR-197 for the CRM increments; they are now 191
+  through 198. The merged number wins — renumbering a landed decision to
+  make room would break every reference already pointing at it.
+  `tests/unit/decision-log-numbering.test.ts` now fails on a fifth
+  duplicate, and names the four historical ones rather than pretending the
+  log is clean.
+
+`20260830001800` adds crm_portal_users and crm_portal_requests plus NINE
 SECURITY DEFINER functions. This is the most security-sensitive migration
 in the CRM: it admits a reader who is NOT an organization member.
 
-READ ADR-197 BEFORE TOUCHING IT. The short version, and the parts that are
+READ ADR-198 BEFORE TOUCHING IT. The short version, and the parts that are
 easy to undo by accident:
 
 - **No existing policy was widened, and none should be.** The portal's
@@ -43,9 +60,9 @@ easy to undo by accident:
   organization to workspace onboarding, i.e. asks a pest-control customer
   to sign up as a pest-control company.
 
-## Newest (2026-08-31, latest+18): the forms engine (ADR-196, task #64)
+## Newest (2026-08-31, latest+18): the forms engine (ADR-197, task #64)
 
-`20260830001600` adds crm_form_templates + crm_form_fields,
+`20260830001700` adds crm_form_templates + crm_form_fields,
 crm_form_instances + crm_form_answers, crm_timesheets, and
 license_expires_on/license_state on crm_technicians.
 
@@ -76,14 +93,14 @@ VALIDATOR NOTE: crm_form_answers lists all five value columns as optional,
 which asks the audit to prove every answer shape appears in the corpus.
 That is the point — it is what proves every question type is exercised.
 
-## Newest (2026-08-31, latest+17): documents, canvassing, marketing (ADR-195)
+## Newest (2026-08-31, latest+17): documents, canvassing, marketing (ADR-196)
 
 Owner /goal: match BOSS and PestPac. The audit is
 `AI/PEST_CRM_COMPETITOR_MATRIX.md` — ten products, per-capability
 HAVE/PARTIAL/GAP, source-linked. This increment closes the photos/files,
 door-to-door and campaigns rows.
 
-`20260830001500` adds crm_documents, crm_canvass_routes + crm_knocks,
+`20260830001600` adds crm_documents, crm_canvass_routes + crm_knocks,
 crm_marketing_lists + crm_list_members, crm_campaigns + crm_messages,
 crm_automations, crm_attributions.
 
@@ -105,7 +122,7 @@ follow-on item in BACKLOG — do not fake it in the meantime.
 THE 255-REPETITION TRAP, SECOND OCCURRENCE: storage_path used `{2,300}`.
 PostgreSQL refuses a repetition count above 255 and a CHECK's regex only
 compiles when a row carries a value, so it survived every null-column test —
-exactly as ADR-192's `{4,500}` did. Fixed by splitting shape (regex) from
+exactly as ADR-193's `{4,500}` did. Fixed by splitting shape (regex) from
 length (char_length), and now guarded by
 `tests/unit/migration-regex-repetition.test.ts`, which strips comments
 first because the two ADR notes have to quote the counts that caused it.
@@ -115,10 +132,10 @@ SEED: 35 tables, 38,728 rows, 35/35 PASS. Note one deliberate omission —
 because nothing runs an automation and seeding a moment would be claiming
 one had fired. An honestly empty column is not a coverage gap.
 
-## Newest (2026-08-30, latest+16): the company arrives (ADR-194, task #64)
+## Newest (2026-08-30, latest+16): the company arrives (ADR-195, task #64)
 
 Owner directive: locations, branches, managers, salesmen, world class,
-competitor-researched. `20260830001400_branches_org_sales.sql` adds
+competitor-researched. `20260830001500_branches_org_sales.sql` adds
 crm_branches, crm_employees (the org chart), crm_territories and
 crm_commissions, plus branch/territory/owner columns on crm_accounts, an
 owner on crm_opportunities, and branch/supervisor/hire_date on
@@ -138,7 +155,7 @@ THREE INVARIANTS IN THE SCHEMA:
 THE POSTAL-CODE TRICK: a CHECK cannot hold a subquery, so per-element
 validation of `postal_codes text[]` is done by regexing the JOINED string —
 `array_to_string(postal_codes, ',') ~ '^CODE(,CODE)*$'`. Repetition counts
-stay under Postgres's 255 limit (the trap ADR-192 found), so it compiles.
+stay under Postgres's 255 limit (the trap ADR-193 found), so it compiles.
 
 WHY TECHNICIANS KEPT THEIR TABLE: a technician takes work-order
 assignments and carries a licence; an employee is a person in the business.
@@ -157,9 +174,9 @@ three unapplied migrations renumbered to 001100/001200/001300 (and this one
 to 001400); 33 files swept. Main also arrived red — see the commit
 "Withhold the typed-input boundary with the release it consumes".
 
-## Newest (2026-08-30, latest+15): billing closes the chain (ADR-193, task #63)
+## Newest (2026-08-30, latest+15): billing closes the chain (ADR-194, task #63)
 
-Increment 6. `20260830001300_billing_contracts.sql` adds crm_estimates
+Increment 6. `20260830001400_billing_contracts.sql` adds crm_estimates
 (+lines), crm_contracts, crm_invoices (+lines), crm_payments and
 crm_refunds. Five invariants live in the SCHEMA, not in a route:
 
@@ -195,14 +212,14 @@ pillar, tracked in BACKLOG.
 TRAPS RE-CONFIRMED THIS INCREMENT:
 - PGlite composite-FK trap, hit a 3rd and 4th time: a composite FK needs
   its target's unique index to EXIST FIRST. crm_opportunities and
-  crm_service_plans had none, so 20260830001300 PREPENDS both
+  crm_service_plans had none, so 20260830001400 PREPENDS both
   `(organization_id, id)` unique indexes before its own tables.
 - The hosted default-privileges trap: every new table is granted ALL to
   authenticated/service_role on creation, so append-only is expressed by
   REVOKE-then-GRANT, and the `billing-contracts` postflight proves the
   ABSENCE of update/delete rather than assuming it.
 
-## Newest (2026-08-30, latest+14): the full-scale seed corpus (ADR-192, task #63)
+## Newest (2026-08-30, latest+14): the full-scale seed corpus (ADR-193, task #63)
 
 New owner /goal: populate the CRM so every feature can be tested end to
 end, 250+ rows per applicable table, every optional field populated,
@@ -230,7 +247,7 @@ BUG THIS FOUND (would have hit production): crm_products.sds_url and
 label_url used `~ '^https://[^[:space:]]{4,500}$'`. Postgres refuses a
 regex repetition count above 255, so the CHECK compiled only when a row
 carried a URL — every prior test left it null. Fixed in
-20260830001200 (NOT yet applied to hosted, so edited in place; shape and
+20260830001300 (NOT yet applied to hosted, so edited in place; shape and
 length are separate checks now) and pinned by a chain test that inserts
 a linked product.
 
@@ -241,9 +258,9 @@ plain table. VALIDATOR TRAP: sample ordered by uuid PK, not insert order
 — insert order clusters by kind and the first page of a timeline is all
 trigger-written status changes, which would fail a fully-populated table.
 
-## Older (2026-08-30, latest+13): chemicals & compliance (ADR-191, task #63)
+## Older (2026-08-30, latest+13): chemicals & compliance (ADR-192, task #63)
 
-Increment 5, the regulated pillar. 20260830001200 adds crm_products /
+Increment 5, the regulated pillar. 20260830001300 adds crm_products /
 crm_product_lots / crm_applications / crm_compliance_rules. Five schema
 invariants: applications are APPEND-ONLY at the grant level (a
 correction is a superseding record naming the original, never an edit);
@@ -271,13 +288,13 @@ applications drawing them down, and two contrasting jurisdictions.
 Suites: services-chemicals-compliance.behavior 6, compliance routes 9,
 compliance panel 3, demo hygiene +1, demo-book replay extended (the two
 'service' writers counted apart). Census: RLS 162, hosted-grants fifteen
-crm tables, sentinels swept to 20260830001200 (28), runbook 189,
+crm tables, sentinels swept to 20260830001300 (28), runbook 189,
 workflow scope chemicals-compliance. Dispatch after merge. Next:
 increment 6, invoicing on the existing Stripe machinery.
 
-## Older (2026-08-30, latest+12): pest/IPM core (ADR-190, task #63)
+## Older (2026-08-30, latest+12): pest/IPM core (ADR-191, task #63)
 
-Increment 4, the goal's differentiator pillar. 20260830001100 adds
+Increment 4, the goal's differentiator pillar. 20260830001200 adds
 crm_devices / crm_device_events / crm_pest_sightings on the established
 posture (org-scoped forced RLS, revoke-then-grant against hosted
 defaults, anon+service_role revoked, three-column composite keys to the
@@ -309,13 +326,39 @@ closed sighting), replayed against the chain.
 Suites: services-pest-ipm.behavior 4 (chain), pest-ipm routes 7, IPM
 panel 4, demo-data hygiene +1, demo-book replay extended. Census: RLS
 158, hosted-grants eleven crm tables, sentinels swept to
-20260830001100 (26), runbook 188, workflow scope pest-ipm (postflight:
+20260830001200 (26), runbook 188, workflow scope pest-ipm (postflight:
 forced RLS x3, ledger immutability, no-DELETE, anon/service_role
 shutout, both device triggers, barcode uniqueness). Dispatch
 scope=pest-ipm right after merge. Next: increment 5, chemicals and
 compliance.
 
 ## Older (2026-08-30, latest+11): field service core (ADR-189, task #63)
+## Newest (2026-08-30, latest+12): Grok Bot local release candidate (ADR-190)
+
+The local candidate now has the truthful Grok Bot planner, persistence,
+responsive workspace, and canonical lifecycle bridge. `Grok Bot` is a
+product/Chief-of-Staff label over the factory's configured Claude and Codex
+bots, not xAI. The deterministic plan and its owner-only sessions,
+append-only messages/events, immutable task/graph/artifact links, and monotonic
+control intents persist under tenant/project forced RLS. APIs and UI restore
+that durable conversation, plan, status, and evidence on reload.
+
+The deliberately important boundary: a generated custom provider-labelled DAG
+is planning data only and is never launched. A service-only wrapper creates the
+exact canonical `full_lifecycle` v2 graph and pauses it atomically before it
+becomes visible. Creation and replay create no graph/node runs and dispatch no
+worker; replay is idempotent, while planned identity and observed execution
+evidence remain separate. Focused bridge tests are green. The prior complete
+suite at `a26caec` was green with 5,705 passing tests and 7 skipped.
+
+Next, finish and verify the guarded release workflow; rerun all full gates on
+that exact head; push and verify the exact deployment; apply only hosted ledger
+migrations `20260830000900` and `20260830001000` in order; then prove signed-in
+production create/return/reload acceptance. Workers, autonomy, and automatic
+actions remain OFF; the global kill switch remains ON. Do not declare `GROK
+BOT: PRODUCTION READY` yet.
+
+## Newest (2026-08-30, latest+11): field service core (ADR-189, task #63)
 
 Increment 3 on main-bound work: crm_technicians / crm_service_plans /
 crm_work_orders (20260830000800), all revoke-then-grant, NO DELETE

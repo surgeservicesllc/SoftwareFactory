@@ -1,5 +1,5 @@
 -- Services CRM increment 8: documents, door-to-door canvassing, and the
--- marketing hub (task #63/#64, owner /goal — ADR-195). The last of the
+-- marketing hub (task #63/#64, owner /goal — ADR-196). The last of the
 -- entities the seed goal names that the schema did not yet have.
 --
 -- Posture unchanged: organization-scoped forced RLS, revoke-then-grant
@@ -88,7 +88,7 @@ create table if not exists public.crm_documents (
   -- A private storage path, checked to be a path rather than a link.
   -- Shape and length are checked separately on purpose: PostgreSQL refuses
   -- a regex repetition count above 255, so '{2,300}' would compile only
-  -- when a row actually carried a value — the exact defect ADR-192 found.
+  -- when a row actually carried a value — the exact defect ADR-193 found.
   storage_path text not null
     check (
       storage_path ~ '^[a-z0-9][a-z0-9._/-]*$'

@@ -1,5 +1,40 @@
 # Backlog
 
+## Grok Bot -> truthful Chief-of-Staff workspace (ADR-190, 2026-08-30)
+
+- [x] Deterministic Chief-of-Staff planner: owner prompt -> intent,
+  requirements, acceptance criteria, dependency graph, configured-agent
+  routing intent, and bounded budget. `Grok Bot` is the product name; no xAI
+  provider is introduced.
+- [x] Local durable boundary in
+  `20260830001000_grok_chief_of_staff_persistence.sql`: owner-only,
+  tenant/project-scoped sessions; append-only messages/events; immutable
+  task, graph, and artifact links; monotonic control intents; forced RLS and
+  narrow definer functions. Focused runtime suites: 43/43.
+- [x] Fail-closed planning API: save and reload the plan, preserve idempotent
+  durable status truth, wake no worker, and never launch the custom
+  provider-labelled DAG. Planned provider/model/agent identity is routing
+  intent, not observed run evidence.
+- [x] Integrate and verify the Grok workspace UI: session history,
+  conversation, plan/tasks, agents, progress, files/diffs, tests, artifacts,
+  deployment, and honest blocked/control states across responsive and
+  accessibility coverage.
+- [x] Connect the session to the exact canonical `full_lifecycle` v2 bridge —
+  Claude planning -> HUMAN architecture approval -> Codex Phase 1C ->
+  CI/Vercel/health — while persisting planned identity separately from actual
+  graph/node/agent-run evidence. The service-only boundary creates and pauses
+  the graph atomically before visibility, produces no graph/node run, dispatches
+  no worker, and replays idempotently from durable state. Focused bridge tests
+  are green.
+- [ ] Run the complete release gates, publish the exact accepted identity,
+  apply only hosted ledger migrations `20260830000900` and `20260830001000`
+  in order under their guarded scope, and perform signed-in production
+  persistence/return/reload acceptance. The prior full suite at `a26caec` was
+  green with 5,705 passing tests and 7 skipped, but final gates must run on the
+  post-release-workflow exact head. Keep workers, autonomy, and automatic
+  actions OFF and the global kill switch ON; do not declare `GROK BOT:
+  PRODUCTION READY` before this evidence exists.
+
 ## Services CRM → pest-services platform (task #63, owner /goal 2026-08-30)
 
 The audit + pillar-to-increment map is `AI/SERVICES_CRM_GAP_ANALYSIS.md`
@@ -35,75 +70,75 @@ the full seeded E2E journey passes — increment 10 of the plan.
   /Services/schedule board + /Services/technicians roster; Demo Data
   fields the operation. 20260830000800; hosted apply: dispatch
   scope=field-service after merge.
-- [x] Increment 4 (ADR-190): pest/IPM core — crm_devices with per-org
+- [x] Increment 4 (ADR-191): pest/IPM core — crm_devices with per-org
   barcode identity, the append-only crm_device_events scan ledger
   (install written at birth; device state projected from the ledger by
   trigger), crm_pest_sightings with the corrective-action CHECK; the
   /Services/ipm command center (scan box, per-site station tables,
   threshold flags, sighting loop); Demo Data now runs a real IPM
-  program. 20260830001100; hosted apply: scope=pest-ipm after merge.
-- [x] Increment 5 (ADR-191): chemicals & compliance — crm_products with
+  program. 20260830001200; hosted apply: scope=pest-ipm after merge.
+- [x] Increment 5 (ADR-192): chemicals & compliance — crm_products with
   EPA identity and https-checked SDS/label references, crm_product_lots
   with trigger drawdown, the APPEND-ONLY crm_applications log (license
   copied at recording, supersede-not-edit corrections, its own timeline
   event), and crm_compliance_rules as configurable per-jurisdiction rows
   enforced at the application boundary; the audit report as JSON or
-  injection-guarded CSV; /Services/compliance. 20260830001200; hosted
+  injection-guarded CSV; /Services/compliance. 20260830001300; hosted
   apply: scope=chemicals-compliance after merge.
-- [x] Increment 6 (ADR-193): billing — crm_estimates and lines (totals
+- [x] Increment 6 (ADR-194): billing — crm_estimates and lines (totals
   derived from the lines at the boundary), crm_contracts (term,
   signature completeness, ended-iff-closed), crm_invoices and lines
   whose paid total and `paid` status are decided by the settlement
   trigger rather than any caller, and the APPEND-ONLY crm_payments /
   crm_refunds with a row-locking trigger that refuses a credit larger
   than the payment it refunds; every payment writes a `payment` timeline
-  event; /Services/billing. 20260830001300; hosted apply:
+  event; /Services/billing. 20260830001400; hosted apply:
   scope=billing-contracts after merge.
 - [ ] Increment 6 follow-on: take card payments through the existing
   Stripe machinery. The ledger records money that moved; it does not yet
   move it, and /Services/billing says so rather than implying otherwise.
   Also open in this pillar: dunning schedules and PDF invoice rendering.
-- [x] Increment 7 (ADR-194): the company — crm_branches (code, address,
+- [x] Increment 7 (ADR-195): the company — crm_branches (code, address,
   IANA time zone, open/close dates), crm_employees as the org chart (seven
   roles, branch, supervisor, commission basis points, quota),
   crm_territories (postal-code coverage, one rep, one branch) and
   crm_commissions whose payout is derived from basis × rate by trigger and
   cannot be sent by a caller at all; accounts gained branch/territory/owner,
   opportunities an owner, technicians a branch and a supervisor;
-  /Services/branches, /Services/team, /Services/sales. 20260830001400;
+  /Services/branches, /Services/team, /Services/sales. 20260830001500;
   hosted apply: scope=branches-org-sales after merge.
 - [ ] Increment 7 follow-on (canvassing): door-to-door routes, knock
   dispositions and per-rep canvassing stats. The territory map and the
   leaderboard now exist to hang them on; the knocking itself does not.
-- [x] Increment 8 (ADR-195): documents, canvassing and the marketing hub —
+- [x] Increment 8 (ADR-196): documents, canvassing and the marketing hub —
   crm_documents (a storage PATH, never a URL, never bytes),
   crm_canvass_routes + append-only crm_knocks with dispositions,
   crm_marketing_lists + crm_list_members with consent as a record that
   keeps its moment, crm_campaigns, append-only crm_messages,
   crm_automations and append-only crm_attributions; /Services/canvassing
   and /Services/marketing. No provider is wired and no executor runs the
-  rules: both surfaces carry **Not Connected**. 20260830001500; hosted
+  rules: both surfaces carry **Not Connected**. 20260830001600; hosted
   apply: scope=documents-canvassing-marketing after merge.
 - [ ] Increment 8 follow-on: wire an email/SMS provider behind
   owner-supplied credentials, and an executor for the automation rules.
   Until then `sending`/`sent` stay unreachable from the API and
   run_count/last_run_at stay unsettable, which is what keeps the page
   honest.
-- [x] Increment 9 (ADR-196): the forms and inspections engine — versioned
+- [x] Increment 9 (ADR-197): the forms and inspections engine — versioned
   templates over seven field types, assignable instances, answers checked
   against their question's declared type by trigger, "completed" counted
   from the required questions rather than asserted, signatures whole or
   absent, templates frozen once in use; plus crm_timesheets with overlap
   refused and licence expiry on technicians. /Services/forms.
-  20260830001600; hosted apply: scope=forms-timesheets-licences after merge.
+  20260830001700; hosted apply: scope=forms-timesheets-licences after merge.
 - [ ] Increment 9 follow-on: WDO/termite diagrams (a drawing surface, not a
   form), and PDF rendering of a completed inspection.
-- [x] Increment 10 (ADR-197): the customer portal, residential view — one
+- [x] Increment 10 (ADR-198): the customer portal, residential view — one
   login resolves to exactly one account through SECURITY DEFINER
   projections, with no existing staff policy widened; balance, issued
   invoices, visit history, documents and service requests; staff invite an
   address and the customer claims it themselves. /customer-portal and
-  /Services/portal. 20260830001700; hosted apply: scope=customer-portal
+  /Services/portal. 20260830001800; hosted apply: scope=customer-portal
   after merge.
 - [ ] Increment 10 follow-on: the COMMERCIAL portal view — open
   conditions, device summary with trend heat maps, sighting tickets, an

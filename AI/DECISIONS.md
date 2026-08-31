@@ -3755,13 +3755,42 @@ undeclared until the goal's full seeded E2E passes.
   roster panels 5. RLS census 155; hosted-grants +3; runbook 187;
   workflow scope field-service with full postflight.
 
-## ADR-190 - Pest/IPM: barcoded stations over an append-only scan ledger
+## ADR-190 - Grok Bot is a factory Chief-of-Staff label over the canonical lifecycle
+
+- **Date**: 2026-08-30
+- **Status**: Accepted for the local release candidate; final exact-head gates,
+  hosted apply, deployment, and signed-in production acceptance pending
+- **Decision**: `Grok Bot` names the SoftwareFactory Chief-of-Staff product; it
+  is not an xAI provider or model. An owner prompt is compiled
+  deterministically into intent, requirements, acceptance criteria, task
+  dependencies, configured-agent routing intent, and budget, then stored in
+  owner-only, tenant/project-scoped Supabase records. Sessions, append-only
+  messages/events, immutable task/graph/artifact links, and monotonic control
+  intents live behind forced RLS and bounded definer functions in
+  `20260830001000_grok_chief_of_staff_persistence.sql`.
+- **Execution boundary**: a custom provider-labelled DAG is a plan, not proof
+  of execution, and is never launched. The service-only bridge creates the
+  exact canonical `full_lifecycle` v2 graph — Claude planning -> HUMAN
+  architecture approval -> Codex Phase 1C -> exact CI, Vercel, and health
+  evidence — and pauses it atomically before visibility. Creation and replay
+  create no graph/node runs and dispatch no worker; replay is idempotent, and
+  planned provider/model/agent identity stays separate from observed
+  graph/node/agent-run identity.
+- **Consequence**: UI and control surfaces render only durable plan or observed
+  execution state, never simulated progress. Focused bridge tests are green;
+  the prior full suite at `a26caec` was green with 5,705 passing tests and 7
+  skipped. Final post-release-workflow exact-head gates, ordered hosted ledger
+  application of `20260830000900` and `20260830001000`, exact deployment, and
+  signed-in production create/return/reload acceptance remain required before
+  `GROK BOT: PRODUCTION READY` can be declared. Workers, autonomy, and
+  automatic actions remain OFF and the global kill switch remains ON.
+## ADR-191 - Pest/IPM: barcoded stations over an append-only scan ledger
 
 - **Date**: 2026-08-30
 - **Status**: Accepted (task #63, owner /goal — increment 4 of
   AI/SERVICES_CRM_GAP_ANALYSIS.md, the differentiator pillar)
 - **Decision**: `crm_devices`, `crm_device_events` and
-  `crm_pest_sightings` (migration 20260830001100) on the established
+  `crm_pest_sightings` (migration 20260830001200) on the established
   posture — org-scoped forced RLS, revoke-then-grant against hosted
   default privileges, anon/service_role shut out, three-column composite
   keys so a station or sighting can only land on its own account's
@@ -3797,13 +3826,13 @@ undeclared until the goal's full seeded E2E passes.
   sighting), replayed against the chain. RLS census 158; hosted-grants
   eleven crm tables; runbook 188; workflow scope `pest-ipm`.
 
-## ADR-191 - Chemicals & compliance: an append-only application log with configurable jurisdictions
+## ADR-192 - Chemicals & compliance: an append-only application log with configurable jurisdictions
 
 - **Date**: 2026-08-30
 - **Status**: Accepted (task #63, owner /goal — increment 5 of
   AI/SERVICES_CRM_GAP_ANALYSIS.md, the regulated pillar)
 - **Decision**: `crm_products`, `crm_product_lots`, `crm_applications`
-  and `crm_compliance_rules` (migration 20260830001200) on the
+  and `crm_compliance_rules` (migration 20260830001300) on the
   established posture. Five things live in the schema:
   1. **Applications are append-only at the grant level** —
      select+insert, nothing else. A pesticide application is a legal
@@ -3847,7 +3876,7 @@ undeclared until the goal's full seeded E2E passes.
   162; hosted-grants fifteen crm tables; runbook 189; workflow scope
   `chemicals-compliance`.
 
-## ADR-192 - The full-scale seed: a generated corpus, audited by its own report
+## ADR-193 - The full-scale seed: a generated corpus, audited by its own report
 
 - **Date**: 2026-08-30
 - **Status**: Accepted (task #63, owner /goal: populate the CRM with
@@ -3899,7 +3928,7 @@ undeclared until the goal's full seeded E2E passes.
   — 23,375 rows, every table over the 250-row floor, every optional column
   populated, zero orphans.
 
-## ADR-193 - Billing: money is recorded, never revised
+## ADR-194 - Billing: money is recorded, never revised
 
 - **Date**: 2026-08-30
 - **Status**: Accepted (task #63, owner /goal: a production-ready Pest
@@ -3909,7 +3938,7 @@ undeclared until the goal's full seeded E2E passes.
   Every field-service platform this is measured against — FieldRoutes,
   PestPac, Briostack, Jobber — closes that chain with estimates, contracts,
   invoices and payments, and every one of them is audited on it.
-- **Decision**: `20260830001300_billing_contracts.sql` adds seven tables —
+- **Decision**: `20260830001400_billing_contracts.sql` adds seven tables —
   `crm_estimates` and its lines, `crm_contracts`, `crm_invoices` and its
   lines, `crm_payments`, `crm_refunds` — on the established posture
   (organization-scoped forced RLS, revoke-then-grant against the hosted
@@ -3956,7 +3985,7 @@ undeclared until the goal's full seeded E2E passes.
   `billing-contracts` re-proves RLS, the append-only grants and the
   settlement triggers against production after every apply.
 
-## ADR-194 - The company: branches, the org chart, territories and commissions
+## ADR-195 - The company: branches, the org chart, territories and commissions
 
 - **Date**: 2026-08-30
 - **Status**: Accepted (task #64, owner directive: "build into the CRM
@@ -3969,7 +3998,7 @@ undeclared until the goal's full seeded E2E passes.
   territories and tracks performance *by territory and by rep* with
   leaderboards and commission management; FieldRoutes and PestPac both
   report by office. Without a company layer, none of that is expressible.
-- **Decision**: `20260830001400_branches_org_sales.sql` adds four tables and
+- **Decision**: `20260830001500_branches_org_sales.sql` adds four tables and
   three sets of columns.
   - **`crm_branches`** — the physical operation: a code unique per
     organization, address, phone, an IANA time zone (so a route sheet's
@@ -4024,12 +4053,12 @@ undeclared until the goal's full seeded E2E passes.
   covers all four tables; hosted-apply scope `branches-org-sales`
   re-proves the posture against production after every apply.
 
-## ADR-195 - Documents, canvassing and the marketing hub
+## ADR-196 - Documents, canvassing and the marketing hub
 
 - **Date**: 2026-08-31
 - **Status**: Accepted (task #64, owner /goal: match the feature set of BOSS
   and PestPac; audit in `AI/PEST_CRM_COMPETITOR_MATRIX.md`)
-- **Decision**: `20260830001500_documents_canvassing_marketing.sql` adds
+- **Decision**: `20260830001600_documents_canvassing_marketing.sql` adds
   nine tables — `crm_documents`, `crm_canvass_routes` and `crm_knocks`,
   `crm_marketing_lists` and `crm_list_members`, `crm_campaigns` and
   `crm_messages`, `crm_automations`, `crm_attributions` — closing the
@@ -4070,7 +4099,7 @@ undeclared until the goal's full seeded E2E passes.
   used `~ '...{2,300}$'`. PostgreSQL refuses a regex repetition count above
   255, and a CHECK's regex only compiles when a row carries a value — so it
   sat harmless through every null-column test and would have thrown at the
-  first real document, exactly as ADR-192's `{4,500}` did. Shape and length
+  first real document, exactly as ADR-193's `{4,500}` did. Shape and length
   are separate checks now, and **`tests/unit/migration-regex-repetition.test.ts`
   fails any future migration that reintroduces a count above 255** — the
   guard that was missing the first time.
@@ -4087,7 +4116,7 @@ undeclared until the goal's full seeded E2E passes.
   The full-scale seed covers all nine; hosted-apply scope
   `documents-canvassing-marketing` re-proves the posture after every apply.
 
-## ADR-196 - The forms engine: questions that freeze, answers that fit
+## ADR-197 - The forms engine: questions that freeze, answers that fit
 
 - **Date**: 2026-08-31
 - **Status**: Accepted (task #64, owner /goal: match BOSS and PestPac;
@@ -4097,7 +4126,7 @@ undeclared until the goal's full seeded E2E passes.
   compliance checklists), signed in the field and readable from the desk
   the moment they are done. Without it there is no way to record what an
   inspection actually found, only that one happened.
-- **Decision**: `20260830001600_forms_timesheets_licences.sql` adds
+- **Decision**: `20260830001700_forms_timesheets_licences.sql` adds
   `crm_form_templates` and `crm_form_fields` (versioned question sets over
   seven field types), `crm_form_instances` and `crm_form_answers`,
   `crm_timesheets`, and licence-expiry columns on `crm_technicians`.
@@ -4114,7 +4143,7 @@ undeclared until the goal's full seeded E2E passes.
      difference, so a completed form is complete rather than marked done.
   3. **A signature is a name, a moment and a stored image together, or
      none of the three**, and the image is a private path — never a link,
-     on the same reasoning documents follow (ADR-195).
+     on the same reasoning documents follow (ADR-196).
   4. **A template with forms assigned from it freezes.**
      `crm_guard_template_in_use` refuses the edit and names the remedy;
      publishing the next version is what the remedy does. A report whose
@@ -4149,7 +4178,7 @@ undeclared until the goal's full seeded E2E passes.
   `forms-timesheets-licences` re-proves RLS, no-delete, all four guards and
   the licence columns after every apply.
 
-## ADR-197 - The customer portal: a reader who is not a member
+## ADR-198 - The customer portal: a reader who is not a member
 
 - **Status**: accepted (increment 10 of task #64, owner /goal: "make this
   CRM the absolute best… all of the same features as BOSS and Pest Pack").
@@ -4218,7 +4247,7 @@ undeclared until the goal's full seeded E2E passes.
   user accepting an invitation, which a seeder cannot perform on somebody's
   behalf. Claiming those columns as covered would be the report lying about
   what it seeded — the same call made for `crm_automations.last_run_at`
-  (ADR-195).
+  (ADR-196).
 - **Surfaces**: `/customer-portal` for the customer (its own route group
   and its own gate — `requirePortalViewer` would send a customer to
   *workspace onboarding*, which is asking a pest-control customer to sign

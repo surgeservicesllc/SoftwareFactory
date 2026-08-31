@@ -13,7 +13,7 @@ import { supabaseBoundaryErrorResponse } from "@/lib/supabase/http";
  * there is deliberately no portal equivalent that grants an organization.
  *
  * Instead every read here goes through the reviewed SECURITY DEFINER
- * functions in `20260830001700_customer_portal.sql`, which resolve the
+ * functions in `20260830001800_customer_portal.sql`, which resolve the
  * caller to exactly one account and filter by it. This module adds no
  * authority of its own: it authenticates, calls a function, and returns
  * what the function returned. If the function returns nothing, the answer
