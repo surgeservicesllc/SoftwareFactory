@@ -203,20 +203,29 @@ the algorithm needs exists.
   `20260831001000`: planner v3 persists the complete Ready configured posting
   roster, normalizes `*` to the fixed canonical vocabulary in TypeScript and
   SQL, keeps v1/v2 readable, and blocks research/deploy before graph creation
-  rather than inventing executable work. This migration is not hosted yet.
+  rather than inventing executable work. Protected run `33397811324` applied
+  and ledgered it once; never replay it. Final acceptance awaits the
+  verifier-only ADR-226 correction and fresh read-only verification.
 - [x] Implement the repository worker-admission fence through
   `20260831000900`: every Grok Resume/wake and protocol-v3 graph or Phase 1C
   claim requires and revalidates the complete current admission identity;
-  legacy unadmitted Grok work cannot enter the worker. This migration is not
-  hosted yet.
-- [ ] Publish one exact rebased candidate and require lint, typecheck, the full
+  legacy unadmitted Grok work cannot enter the worker. Protected apply run
+  `33397377838` and independent read-only run `33397710586` accepted it.
+- [x] Publish one exact rebased candidate and require lint, typecheck, the full
   test suite, production build, all three browser/accessibility shards, exact
-  green CI, exact READY Vercel identity, and matching public health.
+  green CI, exact READY Vercel identity, and matching public health. Exact main
+  `85a7fed15ad876be4e56fd74903e41b68d4488b4`, CI `33395309085`, and READY
+  deployment `dpl_FcbZciXJFJN1DWxN2mxd23wEPfaU` satisfy this gate.
 - [ ] Apply only the protected completion sequence through the dedicated
   workflow: fresh `probe`, `claim-admission-fence` (`00900`),
   `specialist-admission-planning` (`01000`), then fresh read-only `verify`.
   Require exact ledger, catalog, RLS, ACL, runtime, lint, health, and stopped
   safety evidence; never broad-push, replay, repair, reset, or down-migrate.
+  Both one-file applies are complete and ledger is now `1|1`; 010 postflight
+  stopped before acceptance because its verifier counted expanded table
+  privileges as ACL items and PostgreSQL 18 NOT NULL constraints as named
+  business constraints. Ship ADR-226's verifier-only corrections, then run
+  only fresh read-only `verify`.
 - [ ] Perform signed-in production create/return/reload acceptance with workers
   still OFF, proving the exact current roster and route persist without
   claiming that provider execution occurred.

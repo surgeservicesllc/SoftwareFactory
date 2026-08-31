@@ -987,11 +987,18 @@ jobs:
                   where relation.oid='public.grok_specialist_admissions'::regclass
                     and relation.relkind='r' and pg_get_userbyid(relation.relowner)='postgres'
                     and relation.relrowsecurity and relation.relforcerowsecurity
-                    and relation.relacl is not null and (select count(*) from aclexplode(relation.relacl))=1
+                    and relation.relacl is not null and cardinality(relation.relacl)=1
+                    and (select count(*) from aclexplode(relation.relacl))=7
+                    and not exists (select 1 from aclexplode(relation.relacl) acl
+                      where acl.grantor<>relation.relowner or acl.grantee<>relation.relowner or acl.is_grantable)
                     and not has_table_privilege('anon',relation.oid,'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
                     and not has_table_privilege('authenticated',relation.oid,'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
                     and not has_table_privilege('service_role',relation.oid,'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER'))
                 and (select count(*)=29 from pg_attribute where attrelid='public.grok_specialist_admissions'::regclass and attnum>0 and not attisdropped)
+                and (select count(*)=28 from pg_attribute where attrelid='public.grok_specialist_admissions'::regclass
+                  and attnum>0 and not attisdropped and attnotnull)
+                and not exists (select 1 from pg_attribute where attrelid='public.grok_specialist_admissions'::regclass
+                  and attnum>0 and not attisdropped and attnotnull<>(attname<>'provider_identity'))
                 and (select count(*)=1 from pg_policy policy
                   where policy.polrelid='public.grok_specialist_admissions'::regclass
                     and policy.polname='grok_specialist_admissions_select_members'
@@ -1002,10 +1009,11 @@ jobs:
                 and (select count(*)=2 and bool_and(tgfoid='public.reject_grok_evidence_mutation()'::regprocedure)
                   from pg_trigger where tgrelid='public.grok_specialist_admissions'::regclass and not tgisinternal)
                 and not exists (select name from expected_constraint except
-                  select conname from pg_constraint where conrelid='public.grok_specialist_admissions'::regclass)
-                and not exists (select conname from pg_constraint where conrelid='public.grok_specialist_admissions'::regclass except
+                  select conname from pg_constraint where conrelid='public.grok_specialist_admissions'::regclass and contype<>'n')
+                and not exists (select conname from pg_constraint where conrelid='public.grok_specialist_admissions'::regclass and contype<>'n' except
                   select name from expected_constraint)
-                and (select count(*)=24 and bool_and(convalidated) from pg_constraint where conrelid='public.grok_specialist_admissions'::regclass)
+                and (select count(*)=24 and bool_and(convalidated) from pg_constraint
+                  where conrelid='public.grok_specialist_admissions'::regclass and contype<>'n')
                 and not exists (select name from expected_index except
                   select index_relation.relname from pg_index index_row join pg_class index_relation on index_relation.oid=index_row.indexrelid
                    where index_row.indrelid='public.grok_specialist_admissions'::regclass)

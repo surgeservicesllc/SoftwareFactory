@@ -2,6 +2,34 @@
 
 Last updated: 2026-08-31
 
+## Newest (2026-08-31, latest+46): Grok 009/010 hosted; verifier-only catalog containment (ADR-226)
+
+Exact main `85a7fed15ad876be4e56fd74903e41b68d4488b4` is green in all four
+jobs of CI `33395309085`, READY as Vercel deployment
+`dpl_FcbZciXJFJN1DWxN2mxd23wEPfaU`, and matches public health. Read-only
+probe `33397278231` proved ledger `0|0`. Protected run `33397377838`
+applied only 009, and independent probe `33397710586` accepted ledger `1|0`
+with exact catalog/ACL/runtime/lint/health/stopped safety.
+
+Run `33397811324` applied and ledgered only 010 and reloaded PostgREST, then
+stopped at the combined specialist postflight. Do not replay 010. The failure
+is verifier-only: one owner table ACL item expands through `aclexplode` into
+seven privilege rows, while the workflow incorrectly expected one expanded
+row; PostgreSQL 18 also exposes 28 NOT NULL declarations as constraint rows,
+while the verifier expected only the 24 named business constraints. The
+candidate verifies exact ACL item and privilege posture, filters `contype='n'`
+from the named-constraint set, and separately proves all 28 required NOT NULL
+attributes. After this
+workflow-only correction reaches exact green main/READY production, run only
+the fresh read-only `scope=verify`; it must prove ledger `1|1`, exact
+catalog/RLS/ACL/runtime/rollback/lint/health, and stopped containment.
+
+Then perform signed-in production create/return/reload acceptance with workers
+OFF. The separate real provider-backed admitted claim -> repository change ->
+draft PR -> exact-head CI -> deployment/health/audit journey still remains.
+Workers/autonomy/automatic actions are OFF and the global kill switch is ON.
+**GROK BOT: PRODUCTION READY is not declared.**
+
 ## Newest (2026-08-31, latest+45): site-wide dark/light theme (ADR-225)
 
 Dark is now the repository candidate's deterministic first-visit default for
@@ -25,8 +53,10 @@ contrast contract requires >=4.5:1 for text/muted/faint across all palette
 surfaces. Consolidated lint/typecheck, 559 test files / 6,415 tests (three
 files / seven tests skipped), the 276-page production build, and the expanded
 6/6 browser journey pass.
-Exact-head CI, Vercel READY/health, and production browser acceptance still
-gate release.
+Exact main `85a7fed15ad876be4e56fd74903e41b68d4488b4`, all four jobs in CI
+`33395309085`, READY deployment `dpl_FcbZciXJFJN1DWxN2mxd23wEPfaU`, matching
+health, and authenticated/public browser acceptance now satisfy the release
+gate.
 
 ## Newest (2026-08-31, latest+44): copilot + acceptance journey (ADR-224)
 
@@ -147,7 +177,8 @@ only production ever exercised.
 
 ## Newest (2026-08-31, latest+39): Grok claim and specialist admission release candidate (ADR-219)
 
-The implementation is complete in the repository, not in hosted Supabase.
+This older checkpoint is superseded by latest+46 above: both files are now
+ledgered in hosted Supabase, with final 010 verification still pending.
 `20260831000900_grok_claim_admission_fence.sql` has canonical LF SHA-256
 `7f2dc3b80e466b3c06f589ac6383fd768df847d66e02ec0cab53b8d8431ab737`
 and 92,648 LF bytes. `20260831001000_grok_specialist_admission_planning.sql`
