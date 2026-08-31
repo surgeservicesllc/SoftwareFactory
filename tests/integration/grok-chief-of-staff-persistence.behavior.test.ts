@@ -592,8 +592,13 @@ describe("Grok Chief-of-Staff persistence", () => {
     await assumeRole(db, "authenticated", ownerId);
     await expect(db.query(call, [...parameters])).rejects.toThrow(/permission denied/i);
 
-    // Service authority cannot substitute a member for the session's owner.
+    // The legacy bridge is now private to the admission-enforcing v2 wrapper.
     await assumeRole(db, "service_role");
+    await expect(db.query(call, [...parameters])).rejects.toThrow(/permission denied/i);
+
+    // Its unchanged implementation still enforces owner identity when invoked
+    // internally by the database-owned v2 wrapper.
+    await resetRole(db);
     const memberParameters = [...parameters];
     memberParameters[1] = memberId;
     await expect(db.query(call, memberParameters)).rejects.toThrow(/owner request identity/i);
@@ -616,7 +621,7 @@ describe("Grok Chief-of-Staff persistence", () => {
       "select count(*)::integer as count from public.graphs where project_id = $1",
       [projectId],
     );
-    await assumeRole(db, "service_role");
+    await resetRole(db);
     const launched = await db.query<{ graph_id: string; task_link_id: string }>(
       call,
       [...parameters],
@@ -1119,10 +1124,356 @@ describe("Grok Chief-of-Staff persistence", () => {
     });
   });
 
+  it("atomically admits exact locked provider identities for MODEL and Phase 1C lanes", async () => {
+    const claudeAccountId = "71000000-0000-4000-8000-000000000001";
+    const codexAccountId = "71000000-0000-4000-8000-000000000002";
+    const claudeBotId = "72000000-0000-4000-8000-000000000001";
+    const codexBotId = "72000000-0000-4000-8000-000000000002";
+    const claudeRoleId = "73000000-0000-4000-8000-000000000001";
+    const codexRoleId = "73000000-0000-4000-8000-000000000002";
+    const claudeAssignmentId = "74000000-0000-4000-8000-000000000001";
+    const codexAssignmentId = "74000000-0000-4000-8000-000000000002";
+    const maxLengthAssignmentModel = "m".repeat(128);
+    const claudeCapabilities = [
+      "architecture", "decision", "discovery", "evaluation",
+      "planning", "qa", "review", "security_review", "synthesis",
+    ] as const;
+
+    await resetRole(db);
+    await db.exec(`
+      insert into public.ai_accounts (
+        id, organization_id, provider, auth_method, display_name, status,
+        credential_purpose, provider_identity, created_by
+      ) values
+        ('${claudeAccountId}', '${organizationId}', 'anthropic', 'subscription',
+         'Grok Claude admission', 'connected', 'claude_71', 'claude-owner', '${ownerId}'),
+        ('${codexAccountId}', '${organizationId}', 'openai', 'subscription',
+         'Grok Codex admission', 'connected', 'codex_71', 'codex-owner', '${ownerId}');
+
+      insert into public.provider_credentials (
+        organization_id, purpose, sealed_envelope, source, created_by
+      ) values
+        ('${organizationId}', 'claude_71',
+         'v1.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'connect_session', '${ownerId}'),
+        ('${organizationId}', 'codex_71',
+         'v1.bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', 'connect_session', '${ownerId}');
+
+      insert into public.bot_roles (
+        id, organization_id, name, slug, summary, instructions,
+        risk_ceiling, capabilities, created_by
+      ) values
+        ('${claudeRoleId}', '${organizationId}', 'Grok analyst', 'grok-analyst',
+         'Read-only lifecycle analysis', 'Analyze and verify bounded evidence.',
+         'red', '["planning","discovery","evaluation","decision","architecture","review","security","testing","synthesis"]',
+         '${ownerId}'),
+        ('${codexRoleId}', '${organizationId}', 'Grok writer', 'grok-writer',
+         'Bounded draft pull request writer', 'Implement only through the Phase 1C bridge.',
+         'red', '["implementation"]', '${ownerId}');
+
+      insert into public.bots (
+        id, organization_id, name, provider, model, credential_ref,
+        readiness, last_checked_at, ai_account_id, created_by
+      ) values
+        ('${claudeBotId}', '${organizationId}', 'Grok Claude', 'anthropic',
+         'claude-opus-5', 'SOFTWAREFACTORY_CLAUDE_CODE_OAUTH_TOKEN_71',
+         'ready', now(), '${claudeAccountId}', '${ownerId}'),
+        ('${codexBotId}', '${organizationId}', 'Grok Codex', 'openai',
+         'gpt-5.3-codex', 'SOFTWAREFACTORY_CODEX_AUTH_JSON_71',
+         'ready', now(), '${codexAccountId}', '${ownerId}');
+
+      insert into public.bot_assignments (
+        id, organization_id, bot_id, project_id, role_id, status,
+        preset, model, work_effort, repository_access, can_open_pull_request,
+        can_merge_pull_request, pipeline_access, requires_human_approval,
+        created_by
+      ) values
+        ('${claudeAssignmentId}', '${organizationId}', '${claudeBotId}',
+         '${projectId}', '${claudeRoleId}', 'active', 'reviewer',
+         '${maxLengthAssignmentModel}', 'high', 'read', false,
+         false, 'all', true, '${ownerId}'),
+        ('${codexAssignmentId}', '${organizationId}', '${codexBotId}',
+         '${projectId}', '${codexRoleId}', 'active', 'developer', null,
+         'high', 'write', true,
+         false, 'all', true, '${ownerId}');
+    `);
+
+    const snapshots = await db.query<{
+      assignment_id: string; assignment_revision: number;
+      bot_id: string; bot_revision: number; role_id: string;
+      role_updated_at: string; ai_account_id: string; account_updated_at: string;
+      provider: "anthropic" | "openai"; model: string;
+      credential_purpose: string; credential_ref: string; provider_identity: string;
+    }>(`
+      select assignment.id as assignment_id, assignment.revision as assignment_revision,
+             bot.id as bot_id, bot.revision as bot_revision, role_definition.id as role_id,
+             role_definition.updated_at as role_updated_at,
+             account.id as ai_account_id, account.updated_at as account_updated_at,
+             bot.provider::text as provider, coalesce(assignment.model, bot.model) as model,
+             account.credential_purpose, bot.credential_ref,
+             account.provider_identity
+        from public.bot_assignments assignment
+        join public.bots bot on bot.id = assignment.bot_id
+        join public.bot_roles role_definition on role_definition.id = assignment.role_id
+        join public.ai_accounts account on account.id = bot.ai_account_id
+       where assignment.id in ('${claudeAssignmentId}', '${codexAssignmentId}')
+       order by bot.provider::text
+    `);
+    const claude = snapshots.rows.find((row) => row.provider === "anthropic")!;
+    const codex = snapshots.rows.find((row) => row.provider === "openai")!;
+
+    const taskFor = (
+      id: string,
+      lane: "claude_read_only" | "codex_workspace",
+      snapshot: typeof claude,
+      capabilities: readonly string[],
+    ) => ({
+      id,
+      lane,
+      capability: lane === "codex_workspace" ? "implementation" : "planning",
+      agentId: snapshot.assignment_id,
+      assignmentId: snapshot.assignment_id,
+      assignmentRevision: Number(snapshot.assignment_revision),
+      botId: snapshot.bot_id,
+      botRevision: Number(snapshot.bot_revision),
+      roleId: snapshot.role_id,
+      roleUpdatedAt: snapshot.role_updated_at,
+      agentCapabilities: capabilities,
+      agentMaxModelTier: "STRONG" as const,
+      aiAccountId: snapshot.ai_account_id,
+      accountUpdatedAt: snapshot.account_updated_at,
+      credentialPurpose: snapshot.credential_purpose,
+      credentialRef: snapshot.credential_ref,
+      providerIdentity: snapshot.provider_identity,
+      provider: snapshot.provider,
+      model: snapshot.model,
+    });
+    const claudeTask = taskFor(
+      "claude-generalist",
+      "claude_read_only",
+      claude,
+      claudeCapabilities,
+    );
+    const codexTask = taskFor(
+      "implement",
+      "codex_workspace",
+      codex,
+      ["implementation"],
+    );
+
+    const template = findTemplate("full_lifecycle");
+    if (!template) throw new Error("full_lifecycle template is absent");
+    const built = buildLaunchPlan(
+      { ...template, summary: "Admit exact provider routes" },
+      budgetForTemplate(template),
+    );
+    if (!built.ok) throw new Error(built.errors.join("; "));
+
+    const admissions = built.plan.nodes.flatMap((node) => {
+      const selected = node.executor === "MODEL"
+        ? { lane: "graph_model" as const, task: claudeTask }
+        : node.executor === "ANCHOR" && node.node_key === "implement"
+          ? { lane: "phase1c" as const, task: codexTask }
+          : null;
+      if (!selected) return [];
+      return [{
+        version: 1,
+        lane: selected.lane,
+        nodeKey: node.node_key,
+        sourceTaskKey: selected.task.id,
+        assignmentId: selected.task.assignmentId,
+        assignmentRevision: selected.task.assignmentRevision,
+        botId: selected.task.botId,
+        botRevision: selected.task.botRevision,
+        roleId: selected.task.roleId,
+        roleUpdatedAt: selected.task.roleUpdatedAt,
+        agentCapabilities: selected.task.agentCapabilities,
+        agentMaxModelTier: selected.task.agentMaxModelTier,
+        aiAccountId: selected.task.aiAccountId,
+        accountUpdatedAt: selected.task.accountUpdatedAt,
+        provider: selected.task.provider,
+        model: selected.task.model,
+        credentialPurpose: selected.task.credentialPurpose,
+        credentialRef: selected.task.credentialRef,
+        providerIdentity: selected.task.providerIdentity,
+        capability: node.capability,
+      }];
+    });
+
+    const { session } = await createSession("Exact provider admission");
+    await assumeRole(db, "authenticated", ownerId);
+    const user = await db.query<MessageRow>(
+      `select * from public.append_grok_user_message(
+         $1::uuid,$2::uuid,$3::text,$4::jsonb,$5::text,0,null
+       )`,
+      [organizationId, session.id, "Admit exact provider routes", "{}",
+        "provider-admission-user-0001"],
+    );
+    await assumeRole(db, "service_role");
+    const assistant = await db.query<MessageRow>(
+      `select * from public.append_grok_message_as_server(
+         $1::uuid,$2::uuid,'assistant',$3::text,$4::jsonb,$5::text,1,$6::uuid
+       )`,
+      [organizationId, session.id, "The exact provider plan is recorded.", JSON.stringify({
+        kind: "grok.plan",
+        plan: { planner: { version: 2 }, dag: { tasks: [claudeTask, codexTask] } },
+      }), "provider-admission-assistant-0001", user.rows[0].id],
+    );
+
+    const parameters = [
+      organizationId, ownerId, projectId, session.id, assistant.rows[0].id,
+      "provider-admission-launch-0001", built.plan.goal, built.plan.topology,
+      JSON.stringify(built.plan.topologyReasons), built.plan.riskLevel,
+      built.plan.requiresOwnerApproval, JSON.stringify(built.plan.nodes),
+      JSON.stringify(built.plan.edges), JSON.stringify(built.plan.budget),
+      repositoryId, "main", baseSha, JSON.stringify(requiredChecks),
+      JSON.stringify(admissions),
+    ] as const;
+    const call = `select * from public.launch_grok_full_lifecycle_v2_as_server(
+      $1::uuid,$2::uuid,$3::uuid,$4::uuid,$5::uuid,$6::text,$7::text,
+      $8::public.graph_topology,$9::jsonb,$10::public.risk_level,$11::boolean,
+      $12::jsonb,$13::jsonb,$14::jsonb,$15::uuid,$16::text,$17::text,
+      $18::jsonb,$19::jsonb
+    )`;
+
+    const mismatchedAdmissions = admissions.map((entry, index) => index === 0
+      ? { ...entry, assignmentRevision: entry.assignmentRevision + 1 }
+      : entry);
+    const mismatchedParameters = [
+      ...parameters.slice(0, 18),
+      JSON.stringify(mismatchedAdmissions),
+    ];
+    await expect(
+      db.query(call, mismatchedParameters),
+    ).rejects.toThrow(/immutable planner task|assignment.*revision|identity.*mismatch/i);
+
+    await resetRole(db);
+    const rejectedState = await db.query<{
+      admissions: number; graphs: number; launches: number;
+    }>(`
+      select
+        (select count(*)::integer
+           from public.grok_execution_admissions admission
+          where admission.session_id = $1) as admissions,
+        (select count(*)::integer
+           from public.graphs graph
+          where graph.organization_id = $2
+            and graph.project_id = $3
+            and graph.goal = $4) as graphs,
+        (select count(*)::integer
+           from public.grok_graph_launches launch
+          where launch.session_id = $1) as launches
+    `, [session.id, organizationId, projectId, built.plan.goal]);
+    expect(rejectedState.rows[0]).toEqual({
+      admissions: 0,
+      graphs: 0,
+      launches: 0,
+    });
+
+    const { session: legacySession } = await createSession("Legacy provider admission");
+    await assumeRole(db, "authenticated", ownerId);
+    const legacyUser = await db.query<MessageRow>(
+      `select * from public.append_grok_user_message(
+         $1::uuid,$2::uuid,$3::text,$4::jsonb,$5::text,0,null
+       )`,
+      [organizationId, legacySession.id, "Reject legacy provider admission", "{}",
+        "provider-admission-legacy-user-0001"],
+    );
+    await assumeRole(db, "service_role");
+    const legacyAssistant = await db.query<MessageRow>(
+      `select * from public.append_grok_message_as_server(
+         $1::uuid,$2::uuid,'assistant',$3::text,$4::jsonb,$5::text,1,$6::uuid
+       )`,
+      [organizationId, legacySession.id, "The legacy plan is recorded.", JSON.stringify({
+        kind: "grok.plan",
+        plan: { planner: { version: 1 }, dag: { tasks: [claudeTask, codexTask] } },
+      }), "provider-admission-legacy-assistant-0001", legacyUser.rows[0].id],
+    );
+    const legacyParameters = [
+      ...parameters.slice(0, 3), legacySession.id, legacyAssistant.rows[0].id,
+      "provider-admission-legacy-launch-0001", ...parameters.slice(6),
+    ];
+    await expect(db.query(call, legacyParameters)).rejects.toThrow(
+      /grok_plan_v2_message_not_found/i,
+    );
+
+    await resetRole(db);
+    const legacyRejectedState = await db.query<{
+      admissions: number; graphs: number; launches: number;
+    }>(`
+      select
+        (select count(*)::integer
+           from public.grok_execution_admissions admission
+          where admission.session_id = $1) as admissions,
+        (select count(*)::integer
+           from public.graphs graph
+          where graph.organization_id = $2
+            and graph.project_id = $3
+            and graph.goal = $4) as graphs,
+        (select count(*)::integer
+           from public.grok_graph_launches launch
+          where launch.session_id = $1) as launches
+    `, [legacySession.id, organizationId, projectId, built.plan.goal]);
+    expect(legacyRejectedState.rows[0]).toEqual({
+      admissions: 0,
+      graphs: 0,
+      launches: 0,
+    });
+
+    await assumeRole(db, "service_role");
+    const launched = await db.query<{ id: string; graph_id: string }>(call, [...parameters]);
+    const replay = await db.query<{ id: string; graph_id: string }>(call, [...parameters]);
+    expect(replay.rows[0]).toEqual(launched.rows[0]);
+
+    await resetRole(db);
+    const evidence = await db.query<{
+      total: number; graph_model: number; phase1c: number;
+      credential_versions_exact: boolean; hashes_valid: boolean;
+      max_length_model_admitted: boolean; graph_runs: number;
+      pause_requested_at: string | null;
+    }>(`
+      select count(*)::integer as total,
+             count(*) filter (where lane = 'graph_model')::integer as graph_model,
+             count(*) filter (where lane = 'phase1c')::integer as phase1c,
+             bool_and(admission_sha256 = public.grok_execution_admission_hash(admission))
+               as hashes_valid,
+             bool_and(exists (
+               select 1
+                 from public.provider_credentials credential
+                where credential.id = admission.provider_credential_id
+                  and credential.organization_id = admission.organization_id
+                  and credential.purpose = admission.credential_purpose
+                  and credential.rotated_at = admission.provider_credential_rotated_at
+             )) as credential_versions_exact,
+             bool_or(char_length(admission.model) = 128) as max_length_model_admitted,
+             (select count(*)::integer from public.graph_runs run
+               where run.graph_id = $1) as graph_runs,
+             (select pause_requested_at from public.graphs graph
+               where graph.id = $1) as pause_requested_at
+        from public.grok_execution_admissions admission
+       where admission.graph_id = $1
+    `, [launched.rows[0].graph_id]);
+    expect(evidence.rows[0]).toMatchObject({
+      total: admissions.length,
+      graph_model: admissions.filter((entry) => entry.lane === "graph_model").length,
+      phase1c: 1,
+      credential_versions_exact: true,
+      hashes_valid: true,
+      max_length_model_admitted: true,
+      graph_runs: 0,
+    });
+    expect(evidence.rows[0].pause_requested_at).not.toBeNull();
+
+    await expect(db.query(
+      "update public.grok_execution_admissions set model = model where graph_id = $1",
+      [launched.rows[0].graph_id],
+    )).rejects.toThrow(/immutable/i);
+  });
+
   it("keeps every table private even from the BYPASSRLS service role", async () => {
     const tables = [
       "grok_sessions", "grok_messages", "grok_task_links", "grok_graph_launches",
       "grok_events", "grok_artifact_links", "grok_control_intents",
+      "grok_execution_admissions",
     ];
     for (const role of ["anon", "authenticated", "service_role"] as const) {
       await assumeRole(db, role, role === "authenticated" ? ownerId : null);

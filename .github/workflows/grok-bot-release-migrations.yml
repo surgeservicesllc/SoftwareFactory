@@ -14,6 +14,7 @@ on:
           - grok-persistence
           - planning-failure
           - control-recovery
+          - provider-admission
           - verify
       confirm:
         description: "Type apply for a mutation scope; probe and verify are read-only."
@@ -49,6 +50,8 @@ jobs:
       MIGRATION_01100_SHA256: 22c035897cb51c611aa373c83e637dc4e033352d9079059521eda7fefa35e8f7
       MIGRATION_10000: supabase/migrations/20260830010000_atomic_grok_graph_control.sql
       MIGRATION_10000_SHA256: bbd664a7b556a07ab31b84b155725ea8a1b1c5a7f6a6afb1cfe1bae8c07f06b7
+      MIGRATION_PROVIDER_ADMISSION: supabase/migrations/20260831000100_grok_provider_admission.sql
+      MIGRATION_PROVIDER_ADMISSION_SHA256: 37809d9b3d9bc760ffbee501fcca383f0daa5665fb047964734603ceed41aef7
       PRODUCTION_HEALTH_URL: https://www.theagoras.com/api/health
       VERCEL_PROJECT_ID: prj_pAsrhftaVWI4SyaqstgRVSWHJkdD
     steps:
@@ -60,7 +63,7 @@ jobs:
         run: |
           case "$SCOPE" in
             probe|verify) exit 0 ;;
-            typed-input|grok-persistence|planning-failure|control-recovery) ;;
+            typed-input|grok-persistence|planning-failure|control-recovery|provider-admission) ;;
             *) echo "::error::Unknown Grok release scope."; exit 1 ;;
           esac
           if [ "$CONFIRM" != "apply" ]; then
@@ -198,6 +201,43 @@ jobs:
           fi
           echo "::notice::Exact main SHA ${SHA} is green and READY with execution workflows stopped."
 
+      - name: Compile the exact canonical provider-admission canary
+        if: ${{ inputs.scope == 'provider-admission' || inputs.scope == 'verify' }}
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          ./node_modules/.bin/tsx -e '
+            import { buildLaunchPlan } from "./lib/graph/launch-plan.ts";
+            import { budgetForTemplate, findTemplate } from "./lib/graph/templates.ts";
+            const template = findTemplate("full_lifecycle");
+            if (!template || template.version !== 2) throw new Error("full_lifecycle v2 is unavailable");
+            const built = buildLaunchPlan(
+              { ...template, summary: "Grok provider admission release canary" },
+              budgetForTemplate(template),
+            );
+            if (!built.ok) throw new Error(built.errors.join("; "));
+            process.stdout.write(JSON.stringify({
+              goal: built.plan.goal,
+              topology: built.plan.topology,
+              topologyReasons: built.plan.topologyReasons,
+              riskLevel: built.plan.riskLevel,
+              requiresOwnerApproval: built.plan.requiresOwnerApproval,
+              nodes: built.plan.nodes,
+              edges: built.plan.edges,
+              budget: built.plan.budget,
+            }));
+          ' > "$RUNNER_TEMP/grok-provider-admission-canary.json"
+          jq -e '
+            .goal == "Grok provider admission release canary"
+            and .topology == "DAG"
+            and .riskLevel == "yellow"
+            and (.nodes | type == "array" and length == 14)
+            and ([.nodes[] | select(.executor == "MODEL")] | length > 0)
+            and ([.nodes[] | select(.node_key == "implement" and .executor == "ANCHOR" and .capability == "implementation")] | length == 1)
+            and (.edges | type == "array" and length > 0)
+            and (.budget | type == "object")
+          ' "$RUNNER_TEMP/grok-provider-admission-canary.json" >/dev/null
+          echo "GROK_PROVIDER_ADMISSION_CANARY=$RUNNER_TEMP/grok-provider-admission-canary.json" >> "$GITHUB_ENV"
+
       - name: Connect to the exact Supabase project
         env:
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
@@ -221,7 +261,7 @@ jobs:
           echo "::error::Could not connect to exact Supabase project ${PROJECT_REF}."
           exit 1
 
-      - name: Verify the four exact forward files
+      - name: Verify the five exact forward files
         run: |
           verify_file() {
             FILE=$1
@@ -237,6 +277,7 @@ jobs:
           verify_file "$MIGRATION_01000" "$MIGRATION_01000_SHA256"
           verify_file "$MIGRATION_01100" "$MIGRATION_01100_SHA256"
           verify_file "$MIGRATION_10000" "$MIGRATION_10000_SHA256"
+          verify_file "$MIGRATION_PROVIDER_ADMISSION" "$MIGRATION_PROVIDER_ADMISSION_SHA256"
 
       - name: Verify prerequisite ledger catalog and stopped database state
         env:
@@ -255,9 +296,25 @@ jobs:
             grok-persistence:1\|1\|0\|0\|0) ;;
             planning-failure:1\|1\|1\|0\|0) ;;
             control-recovery:1\|1\|1\|1\|0) ;;
+            provider-admission:1\|1\|1\|1\|1) ;;
             verify:1\|1\|1\|1\|1) ;;
             *) echo "::error::Prerequisite ledger is not the exact ordered state for scope=${SCOPE} (${LEDGER})."; exit 1 ;;
           esac
+
+          ADMISSION_LEDGER=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+            select count(*) from supabase_migrations.schema_migrations
+             where version='20260831000100';")
+          case "$SCOPE:$ADMISSION_LEDGER" in
+            probe:0|probe:1) ;;
+            typed-input:0|grok-persistence:0|planning-failure:0|control-recovery:0) ;;
+            provider-admission:0) ;;
+            verify:1) ;;
+            *) echo "::error::Provider-admission prerequisite ledger is not scope-exact (${SCOPE}:${ADMISSION_LEDGER})."; exit 1 ;;
+          esac
+          if [ "$SCOPE" = "provider-admission" ] && [ "$LEDGER" != "1|1|1|1|1" ]; then
+            echo "::error::Provider admission requires the complete accepted Grok release prefix (${LEDGER})."
+            exit 1
+          fi
 
           if [ "$LEDGER" = "1|0|0|0|0" ]; then
             EXPECTED_TYPED="
@@ -329,8 +386,20 @@ jobs:
                'grok_sessions','grok_messages','grok_task_links','grok_graph_launches',
                'grok_events','grok_artifact_links','grok_control_intents');")
           case "$SCOPE:$LEDGER:$GROK_TABLES" in
-            probe:1\|0\|0\|0\|0:0|probe:1\|1\|0\|0\|0:0|probe:1\|1\|1\|0\|0:7|probe:1\|1\|1\|1\|0:7|probe:1\|1\|1\|1\|1:7|typed-input:1\|0\|0\|0\|0:0|grok-persistence:1\|1\|0\|0\|0:0|planning-failure:1\|1\|1\|0\|0:7|control-recovery:1\|1\|1\|1\|0:7|verify:1\|1\|1\|1\|1:7) ;;
+            probe:1\|0\|0\|0\|0:0|probe:1\|1\|0\|0\|0:0|probe:1\|1\|1\|0\|0:7|probe:1\|1\|1\|1\|0:7|probe:1\|1\|1\|1\|1:7|typed-input:1\|0\|0\|0\|0:0|grok-persistence:1\|1\|0\|0\|0:0|planning-failure:1\|1\|1\|0\|0:7|control-recovery:1\|1\|1\|1\|0:7|provider-admission:1\|1\|1\|1\|1:7|verify:1\|1\|1\|1\|1:7) ;;
             *) echo "::error::Grok ledger and catalog identity disagree (${SCOPE}:${LEDGER}:${GROK_TABLES})."; exit 1 ;;
+          esac
+
+          ADMISSION_CATALOG=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+            select
+              (to_regclass('public.grok_execution_admissions') is not null)::integer||'|'||
+              (exists (select 1 from pg_proc routine join pg_namespace space on space.oid=routine.pronamespace where space.nspname='public' and routine.proname='grok_execution_admission_hash'))::integer||'|'||
+              (exists (select 1 from pg_proc routine join pg_namespace space on space.oid=routine.pronamespace where space.nspname='public' and routine.proname='launch_grok_full_lifecycle_v2_as_server'))::integer||'|'||
+              (exists (select 1 from pg_constraint where conrelid='public.grok_graph_launches'::regclass and conname='grok_graph_launches_admission_scope_unique'))::integer||'|'||
+              (exists (select 1 from pg_constraint where conrelid='public.graph_nodes'::regclass and conname='graph_nodes_admission_scope_unique'))::integer;")
+          case "$ADMISSION_LEDGER:$ADMISSION_CATALOG" in
+            0:0\|0\|0\|0\|0|1:1\|1\|1\|1\|1) ;;
+            *) echo "::error::Provider-admission ledger and catalog presence disagree (${ADMISSION_LEDGER}:${ADMISSION_CATALOG})."; exit 1 ;;
           esac
 
           if [ "$LEDGER" = "1|1|1|0|0" ]; then
@@ -380,7 +449,7 @@ jobs:
           echo "::notice::Ledger=${LEDGER}; catalog and stopped containment are exact."
 
       - name: Apply exactly one ordered forward migration
-        if: ${{ inputs.scope == 'typed-input' || inputs.scope == 'grok-persistence' || inputs.scope == 'planning-failure' || inputs.scope == 'control-recovery' }}
+        if: ${{ inputs.scope == 'typed-input' || inputs.scope == 'grok-persistence' || inputs.scope == 'planning-failure' || inputs.scope == 'control-recovery' || inputs.scope == 'provider-admission' }}
         env:
           SCOPE: ${{ inputs.scope }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -398,6 +467,8 @@ jobs:
             exit 1
           fi
 
+          EADMISSION=0
+          SCOPE_LOCKS="select true;"
           case "$SCOPE" in
             typed-input)
               FILE=$MIGRATION_00900
@@ -545,6 +616,52 @@ jobs:
                 end if;
               end \$guard\$;"
               ;;
+            provider-admission)
+              FILE=$MIGRATION_PROVIDER_ADMISSION
+              EXPECTED=$MIGRATION_PROVIDER_ADMISSION_SHA256
+              VERSION=20260831000100
+              E900=1
+              E1000=1
+              E1100=1
+              E10000=1
+              EADMISSION=0
+              SCOPE_LOCKS="
+                lock table public.grok_graph_launches,public.graph_nodes in access exclusive mode;
+                lock table public.grok_messages,public.bot_assignments,public.bots,public.bot_roles,
+                  public.ai_accounts,public.provider_credentials in share mode;"
+              CATALOG_GUARD="do \$guard\$ begin
+                if to_regclass('public.grok_execution_admissions') is not null
+                  or exists (select 1 from pg_proc routine join pg_namespace space on space.oid=routine.pronamespace where space.nspname='public' and routine.proname='grok_execution_admission_hash')
+                  or exists (select 1 from pg_proc routine join pg_namespace space on space.oid=routine.pronamespace where space.nspname='public' and routine.proname='launch_grok_full_lifecycle_v2_as_server')
+                  or exists (select 1 from pg_constraint where conrelid='public.grok_graph_launches'::regclass and conname='grok_graph_launches_admission_scope_unique')
+                  or exists (select 1 from pg_constraint where conrelid='public.graph_nodes'::regclass and conname='graph_nodes_admission_scope_unique')
+                then raise exception 'provider-admission catalog is not pristine'; end if;
+                if not exists (
+                  select 1 from pg_proc routine
+                   where routine.oid=to_regprocedure('public.launch_grok_full_lifecycle_as_server(uuid,uuid,uuid,uuid,uuid,text,text,public.graph_topology,jsonb,public.risk_level,boolean,jsonb,jsonb,jsonb,uuid,text,text,jsonb)')
+                     and pg_get_userbyid(routine.proowner)='postgres' and routine.prosecdef
+                     and routine.proconfig=array['search_path=pg_catalog']::text[]
+                     and md5(replace(replace(routine.prosrc,E'\\r\\n',E'\\n'),E'\\r',E'\\n'))='49438e7ef00cf0d7034e0016e75f74f8'
+                     and routine.proacl is not null and (select count(*) from aclexplode(routine.proacl))=2
+                     and not exists (select 1 from aclexplode(routine.proacl) acl where acl.grantor<>routine.proowner or acl.privilege_type<>'EXECUTE' or acl.is_grantable or acl.grantee not in (routine.proowner,to_regrole('service_role')::oid))
+                     and has_function_privilege('service_role',routine.oid,'EXECUTE')
+                     and not has_function_privilege('authenticated',routine.oid,'EXECUTE')
+                     and not has_function_privilege('anon',routine.oid,'EXECUTE')
+                     and strpos(routine.prosrc,'public.create_graph_from_plan_with_release_identity_as_server')>0
+                     and strpos(routine.prosrc,'perform public.set_graph_pause_as_member')>0
+                     and strpos(lower(routine.prosrc),'insert into public.graph_runs')=0
+                     and strpos(lower(routine.prosrc),'insert into public.node_runs')=0
+                     and strpos(lower(routine.prosrc),'insert into public.agent_runs')=0
+                ) or to_regprocedure('public.ai_account_bot_credential_ref(public.bot_provider,text)') is null
+                  or to_regprocedure('public.reject_grok_evidence_mutation()') is null
+                  or to_regprocedure('public.jsonb_has_sensitive_keys(jsonb)') is null
+                  or to_regprocedure('public.text_has_likely_secret(text)') is null
+                then raise exception 'provider-admission prerequisite source, owner, security, search_path, ACL, or dependency drifted'; end if;
+                if (select count(*) from pg_proc routine join pg_namespace space on space.oid=routine.pronamespace
+                     where space.nspname='public' and routine.proname='launch_grok_full_lifecycle_as_server')<>1
+                then raise exception 'provider-admission prerequisite launcher overload drifted'; end if;
+              end \$guard\$;"
+              ;;
           esac
 
           STAGE_DIR=$(mktemp -d)
@@ -587,6 +704,7 @@ jobs:
                     ('public.link_grok_task_as_server(uuid,uuid,uuid,uuid,uuid,uuid,uuid,text)',null),
                     ('public.record_grok_event_as_server(uuid,uuid,text,uuid,jsonb,bigint,uuid,uuid)',null),
                     ('public.launch_grok_full_lifecycle_as_server(uuid,uuid,uuid,uuid,uuid,text,text,public.graph_topology,jsonb,public.risk_level,boolean,jsonb,jsonb,jsonb,uuid,text,text,jsonb)',null),
+                    ('public.launch_grok_full_lifecycle_v2_as_server(uuid,uuid,uuid,uuid,uuid,text,text,public.graph_topology,jsonb,public.risk_level,boolean,jsonb,jsonb,jsonb,uuid,text,text,jsonb,jsonb)',null),
                     ('public.link_grok_artifact_as_server(uuid,uuid,uuid,uuid,uuid,uuid,text)',null),
                     ('public.request_grok_control_intent(uuid,uuid,text,uuid,text,text,text)',null),
                     ('public.resolve_grok_control_intent_as_server(uuid,uuid,text,text,text)',null),
@@ -636,6 +754,7 @@ jobs:
                     or (select count(*) from supabase_migrations.schema_migrations where version='20260830001000')<>${E1000}
                     or (select count(*) from supabase_migrations.schema_migrations where version='20260830001100')<>${E1100}
                     or (select count(*) from supabase_migrations.schema_migrations where version='20260830010000')<>${E10000}
+                    or (select count(*) from supabase_migrations.schema_migrations where version='20260831000100')<>${EADMISSION}
                   then raise exception 'locked Grok release ledger changed'; end if;
                   if exists (select 1 from public.organizations where coalesce(autonomous_mode,false)
                       or autonomy_kill_switch_active is distinct from true
@@ -653,12 +772,13 @@ jobs:
                     or exists (select 1 from public.agent_runs where status='running'::public.run_status)
                   then raise exception 'locked Grok release safety state changed'; end if;
                 end \$locked\$;" \
+            -c "$SCOPE_LOCKS" \
             -c "$CATALOG_GUARD" \
             -f "$STAGED_FILE" \
             -c "insert into supabase_migrations.schema_migrations(version) values ('${VERSION}');"
 
       - name: Reload the PostgREST schema cache
-        if: ${{ inputs.scope == 'typed-input' || inputs.scope == 'grok-persistence' || inputs.scope == 'planning-failure' || inputs.scope == 'control-recovery' }}
+        if: ${{ inputs.scope == 'typed-input' || inputs.scope == 'grok-persistence' || inputs.scope == 'planning-failure' || inputs.scope == 'control-recovery' || inputs.scope == 'provider-admission' }}
         run: psql "$DB_URL" -v ON_ERROR_STOP=1 -X -c "NOTIFY pgrst, 'reload schema';"
 
       - name: Verify ledger catalog ACL runtime lint health and stopped safety
@@ -683,8 +803,18 @@ jobs:
             typed-input:1\|1\|0\|0\|0) ;;
             grok-persistence:1\|1\|1\|0\|0) ;;
             planning-failure:1\|1\|1\|1\|0) ;;
-            control-recovery:1\|1\|1\|1\|1|verify:1\|1\|1\|1\|1) ;;
+            control-recovery:1\|1\|1\|1\|1|provider-admission:1\|1\|1\|1\|1|verify:1\|1\|1\|1\|1) ;;
             *) echo "::error::Postflight ledger is not scope-exact (${SCOPE}:${LEDGER})."; exit 1 ;;
+          esac
+
+          ADMISSION_LEDGER=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+            select count(*) from supabase_migrations.schema_migrations
+             where version='20260831000100';")
+          case "$SCOPE:$ADMISSION_LEDGER" in
+            probe:0|probe:1) ;;
+            typed-input:0|grok-persistence:0|planning-failure:0|control-recovery:0) ;;
+            provider-admission:1|verify:1) ;;
+            *) echo "::error::Provider-admission postflight ledger is not scope-exact (${SCOPE}:${ADMISSION_LEDGER})."; exit 1 ;;
           esac
 
           if [ "$LEDGER" = "1|0|0|0|0" ]; then
@@ -737,17 +867,23 @@ jobs:
           fi
 
           if [ "$LEDGER" = "1|1|1|0|0" ] || [ "$LEDGER" = "1|1|1|1|0" ] || [ "$LEDGER" = "1|1|1|1|1" ]; then
+            EXPECTED_GROK_NAMESPACE_TABLES=$((7 + ADMISSION_LEDGER))
+            if [ "$ADMISSION_LEDGER" = "1" ]; then
+              ADMISSION_TABLE_EXPECTED=",('grok_execution_admissions')"
+            else
+              ADMISSION_TABLE_EXPECTED=""
+            fi
             GROK_TABLE_READY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
               with expected(name) as (values
                 ('grok_sessions'),('grok_messages'),('grok_task_links'),('grok_graph_launches'),
-                ('grok_events'),('grok_artifact_links'),('grok_control_intents')
+                ('grok_events'),('grok_artifact_links'),('grok_control_intents')${ADMISSION_TABLE_EXPECTED}
               ), state as (
                 select expected.name,relation.oid,relation.relowner,relation.relkind,
                        relation.relrowsecurity,relation.relforcerowsecurity
                   from expected
                   left join pg_class relation on relation.oid=to_regclass('public.'||expected.name)
               )
-              select count(oid)=7 and count(distinct oid)=7 and bool_and(
+              select count(oid)=${EXPECTED_GROK_NAMESPACE_TABLES} and count(distinct oid)=${EXPECTED_GROK_NAMESPACE_TABLES} and bool_and(
                 pg_get_userbyid(state.relowner)='postgres' and state.relkind='r'
                 and state.relrowsecurity and state.relforcerowsecurity
                 and (select relation.relacl from pg_class relation where relation.oid=state.oid) is not null
@@ -776,7 +912,7 @@ jobs:
                 and not exists (select 1 from pg_index index_row where index_row.indrelid=state.oid and (not index_row.indisvalid or not index_row.indisready or not index_row.indislive))
               )
               and (select count(*) from pg_class relation join pg_namespace space on space.oid=relation.relnamespace
-                    where space.nspname='public' and relation.relkind='r' and relation.relname like 'grok_%')=7
+                    where space.nspname='public' and relation.relkind='r' and relation.relname like 'grok_%')=${EXPECTED_GROK_NAMESPACE_TABLES}
               from state;")
             if [ "$GROK_TABLE_READY" != "t" ]; then
               echo "::error::Grok table owner, RLS, ACL, policy, constraint, or index catalog postflight failed."
@@ -800,6 +936,16 @@ jobs:
             else
               CONTROL_RECOVERY_FUNCTION=""
             fi
+            if [ "$ADMISSION_LEDGER" = "1" ]; then
+              GROK_LAUNCH_ROLE=none
+              PROVIDER_ADMISSION_FUNCTION=",('public.launch_grok_full_lifecycle_v2_as_server(uuid,uuid,uuid,uuid,uuid,text,text,public.graph_topology,jsonb,public.risk_level,boolean,jsonb,jsonb,jsonb,uuid,text,text,jsonb,jsonb)','service_role','f1e20ffefaadc5fe599789047958e658','v','plpgsql')"
+              EXPECTED_GROK_FUNCTIONS=$((EXPECTED_GROK_FUNCTIONS + 1))
+              EXPECTED_GROK_CATALOG_FUNCTIONS=20
+            else
+              GROK_LAUNCH_ROLE=service_role
+              PROVIDER_ADMISSION_FUNCTION=""
+              EXPECTED_GROK_CATALOG_FUNCTIONS=$EXPECTED_GROK_FUNCTIONS
+            fi
             GROK_FUNCTION_READY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
               with expected(signature,execute_role,source_md5,volatility,language_name) as (values
                 ('public.reject_grok_evidence_mutation()','none','20f0ed5db994773371be8cb167fb2cf3','v','plpgsql'),
@@ -813,13 +959,14 @@ jobs:
                 ('public.append_grok_message_as_server(uuid,uuid,text,text,jsonb,text,bigint,uuid)','service_role','5175abc05e284dccfcc6773912a4db47','v','sql'),
                 ('public.link_grok_task_as_server(uuid,uuid,uuid,uuid,uuid,uuid,uuid,text)','service_role','7149d87e48eb029194d38130b3ad7cd8','v','plpgsql'),
                 ('public.record_grok_event_as_server(uuid,uuid,text,uuid,jsonb,bigint,uuid,uuid)','service_role','aa62a1e9a3243c953c6ed6d8ff1b018d','v','plpgsql'),
-                ('public.launch_grok_full_lifecycle_as_server(uuid,uuid,uuid,uuid,uuid,text,text,public.graph_topology,jsonb,public.risk_level,boolean,jsonb,jsonb,jsonb,uuid,text,text,jsonb)','service_role','49438e7ef00cf0d7034e0016e75f74f8','v','plpgsql'),
+                ('public.launch_grok_full_lifecycle_as_server(uuid,uuid,uuid,uuid,uuid,text,text,public.graph_topology,jsonb,public.risk_level,boolean,jsonb,jsonb,jsonb,uuid,text,text,jsonb)','${GROK_LAUNCH_ROLE}','49438e7ef00cf0d7034e0016e75f74f8','v','plpgsql'),
                 ('public.link_grok_artifact_as_server(uuid,uuid,uuid,uuid,uuid,uuid,text)','service_role','23a3cca226675c99b31211549ce576d5','v','plpgsql'),
                 ('public.request_grok_control_intent(uuid,uuid,text,uuid,text,text,text)','authenticated','05adb140368fa0f59cc0bf1cad31caee','v','plpgsql'),
                 ('public.resolve_grok_control_intent_as_server(uuid,uuid,text,text,text)','service_role','bd952acdffd457e1ac03e64380284bec','v','plpgsql'),
                 ('public.set_grok_session_status_as_server(uuid,uuid,text,bigint)','service_role',${STATUS_SOURCE},'v','plpgsql')
                 ${PLANNING_FAILURE_FUNCTION}
                 ${CONTROL_RECOVERY_FUNCTION}
+                ${PROVIDER_ADMISSION_FUNCTION}
               ), state as (
                 select expected.*,routine.oid,routine.proowner,routine.prosecdef,routine.proconfig,routine.proacl,
                        routine.provolatile,language.lanname,
@@ -844,13 +991,561 @@ jobs:
                       'reject_grok_evidence_mutation','enforce_grok_session_update','enforce_grok_control_intent_update',
                       'create_grok_session','list_grok_sessions','read_grok_session','append_grok_message_internal',
                       'append_grok_user_message','append_grok_message_as_server','link_grok_task_as_server',
-                      'record_grok_event_as_server','launch_grok_full_lifecycle_as_server','link_grok_artifact_as_server',
+                     'record_grok_event_as_server','launch_grok_full_lifecycle_as_server','launch_grok_full_lifecycle_v2_as_server','grok_execution_admission_hash','link_grok_artifact_as_server',
                        'request_grok_control_intent','resolve_grok_control_intent_as_server','set_grok_session_status_as_server',
-                       'record_grok_planning_failure_as_server','apply_grok_graph_control_as_owner'))=${EXPECTED_GROK_FUNCTIONS}
+                    'record_grok_planning_failure_as_server','apply_grok_graph_control_as_owner'))=${EXPECTED_GROK_CATALOG_FUNCTIONS}
               from state;")
             if [ "$GROK_FUNCTION_READY" != "t" ]; then
               echo "::error::Grok function signature, owner, SECURITY DEFINER, search_path, overload, or raw ACL postflight failed."
               exit 1
+            fi
+
+            if [ "$ADMISSION_LEDGER" = "1" ]; then
+              PROVIDER_ADMISSION_READY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+                with admission_table as (
+                  select relation.oid,relation.relowner,relation.relkind,relation.relrowsecurity,
+                         relation.relforcerowsecurity,relation.relacl
+                    from pg_class relation
+                   where relation.oid=to_regclass('public.grok_execution_admissions')
+                ), expected_column(name,type_oid,not_null) as (values
+                  ('id','uuid'::regtype,true),
+                  ('organization_id','uuid'::regtype,true),('project_id','uuid'::regtype,true),
+                  ('session_id','uuid'::regtype,true),('message_id','uuid'::regtype,true),
+                  ('graph_launch_id','uuid'::regtype,true),('graph_id','uuid'::regtype,true),
+                  ('graph_node_id','uuid'::regtype,true),('node_key','text'::regtype,true),
+                  ('source_task_key','text'::regtype,true),('lane','text'::regtype,true),
+                  ('assignment_id','uuid'::regtype,true),('assignment_revision','bigint'::regtype,true),
+                  ('bot_id','uuid'::regtype,true),('bot_revision','bigint'::regtype,true),
+                  ('role_id','uuid'::regtype,true),('role_updated_at','timestamptz'::regtype,true),
+                  ('role_capabilities_sha256','text'::regtype,true),('agent_capabilities','jsonb'::regtype,true),
+                  ('agent_max_model_tier','text'::regtype,true),('ai_account_id','uuid'::regtype,true),
+                  ('ai_account_updated_at','timestamptz'::regtype,true),
+                  ('provider','public.bot_provider'::regtype,true),('model','text'::regtype,true),
+                  ('credential_purpose','text'::regtype,true),('credential_ref','text'::regtype,true),
+                  ('provider_credential_id','uuid'::regtype,true),
+                  ('provider_credential_rotated_at','timestamptz'::regtype,true),
+                  ('provider_identity','text'::regtype,false),('capability','text'::regtype,true),
+                  ('admission_sha256','text'::regtype,true),('created_by','uuid'::regtype,true),
+                  ('created_at','timestamptz'::regtype,true)
+                ), expected_constraint(name) as (values
+                  ('grok_execution_admissions_pkey'),
+                  ('grok_execution_admissions_organization_id_fkey'),
+                  ('grok_execution_admissions_created_by_fkey'),
+                  ('grok_execution_admissions_lane_check'),
+                  ('grok_execution_admissions_assignment_revision_check'),
+                  ('grok_execution_admissions_bot_revision_check'),
+                  ('grok_execution_admissions_role_capabilities_sha256_check'),
+                  ('grok_execution_admissions_agent_max_model_tier_check'),
+                  ('grok_execution_admissions_model_check'),
+                  ('grok_execution_admissions_credential_purpose_check'),
+                  ('grok_execution_admissions_credential_ref_check'),
+                  ('grok_execution_admissions_capability_check'),
+                  ('grok_execution_admissions_admission_sha256_check'),
+                  ('grok_execution_admissions_id_scope_unique'),
+                  ('grok_execution_admissions_graph_node_unique'),
+                  ('grok_execution_admissions_graph_node_id_unique'),
+                  ('grok_execution_admissions_session_fk'),
+                  ('grok_execution_admissions_launch_fk'),
+                  ('grok_execution_admissions_graph_node_fk'),
+                  ('grok_execution_admissions_node_key_shape'),
+                  ('grok_execution_admissions_source_task_key_shape'),
+                  ('grok_execution_admissions_lane_identity'),
+                  ('grok_execution_admissions_agent_capabilities_array'),
+                  ('grok_execution_admissions_agent_capabilities_bounded'),
+                  ('grok_execution_admissions_agent_capabilities_no_secret'),
+                  ('grok_execution_admissions_model_no_secret'),
+                  ('grok_execution_admissions_provider_identity_shape')
+                ), expected_index(name) as (values
+                  ('grok_execution_admissions_pkey'),
+                  ('grok_execution_admissions_id_scope_unique'),
+                  ('grok_execution_admissions_graph_node_unique'),
+                  ('grok_execution_admissions_graph_node_id_unique'),
+                  ('grok_execution_admissions_session_created_idx'),
+                  ('grok_execution_admissions_assignment_idx'),
+                  ('grok_execution_admissions_account_idx')
+                ), functions as (
+                  select routine.oid,routine.proname,routine.proowner,routine.prosecdef,
+                         routine.proconfig,routine.proacl,routine.provolatile,routine.proisstrict,
+                         routine.proparallel,routine.prorettype,routine.proargnames,routine.prosrc,
+                         language.lanname,
+                         md5(replace(replace(routine.prosrc,E'\\r\\n',E'\\n'),E'\\r',E'\\n')) source_md5
+                    from pg_proc routine join pg_language language on language.oid=routine.prolang
+                   where routine.oid in (
+                     to_regprocedure('public.grok_execution_admission_hash(public.grok_execution_admissions)'),
+                     to_regprocedure('public.launch_grok_full_lifecycle_v2_as_server(uuid,uuid,uuid,uuid,uuid,text,text,public.graph_topology,jsonb,public.risk_level,boolean,jsonb,jsonb,jsonb,uuid,text,text,jsonb,jsonb)')
+                   )
+                )
+                select
+                  (select count(*)=1 and bool_and(
+                    pg_get_userbyid(relowner)='postgres' and relkind='r'
+                    and relrowsecurity and relforcerowsecurity and relacl is not null
+                    and not exists (select 1 from aclexplode(relacl) acl where acl.grantor<>relowner or acl.grantee<>relowner or acl.is_grantable)
+                    and not has_table_privilege('anon',oid,'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+                    and not has_table_privilege('authenticated',oid,'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+                    and not has_table_privilege('service_role',oid,'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+                    and not exists (select 1 from pg_attribute attribute where attribute.attrelid=oid and attribute.attnum>0 and not attribute.attisdropped and attribute.attacl is not null)
+                  ) from admission_table)
+                  and (select count(attribute.attnum)=33 and bool_and(
+                         attribute.atttypid=expected_column.type_oid
+                         and attribute.attnotnull=expected_column.not_null)
+                         from expected_column
+                         left join pg_attribute attribute
+                           on attribute.attrelid='public.grok_execution_admissions'::regclass
+                          and attribute.attname=expected_column.name
+                          and attribute.attnum>0 and not attribute.attisdropped)
+                  and not exists (
+                    select attribute.attname from pg_attribute attribute
+                     where attribute.attrelid='public.grok_execution_admissions'::regclass
+                       and attribute.attnum>0 and not attribute.attisdropped
+                    except select name from expected_column
+                  )
+                  and (select count(*)=1 from pg_policy policy
+                        where policy.polrelid='public.grok_execution_admissions'::regclass
+                          and policy.polname='grok_execution_admissions_select_members'
+                          and policy.polcmd='r' and policy.polpermissive
+                          and policy.polroles=array[to_regrole('authenticated')::oid]
+                          and strpos(pg_get_expr(policy.polqual,policy.polrelid),'is_organization_member(organization_id)')>0
+                          and policy.polwithcheck is null)
+                  and (select count(*)=27 and bool_and(convalidated)
+                         from pg_constraint constraint_row
+                        where constraint_row.conrelid='public.grok_execution_admissions'::regclass)
+                  and not exists (
+                    select name from expected_constraint
+                    except
+                    select conname from pg_constraint where conrelid='public.grok_execution_admissions'::regclass
+                  )
+                  and not exists (
+                    select conname from pg_constraint where conrelid='public.grok_execution_admissions'::regclass
+                    except
+                    select name from expected_constraint
+                  )
+                  and (select count(*)=7 and bool_and(indisvalid and indisready and indislive)
+                          from pg_index where indrelid='public.grok_execution_admissions'::regclass)
+                  and not exists (
+                    select name from expected_index
+                    except
+                    select index_relation.relname from pg_index index_row
+                    join pg_class index_relation on index_relation.oid=index_row.indexrelid
+                    where index_row.indrelid='public.grok_execution_admissions'::regclass
+                  )
+                  and not exists (
+                    select index_relation.relname from pg_index index_row
+                    join pg_class index_relation on index_relation.oid=index_row.indexrelid
+                    where index_row.indrelid='public.grok_execution_admissions'::regclass
+                    except select name from expected_index
+                  )
+                  and exists (select 1 from pg_constraint where conrelid='public.grok_graph_launches'::regclass
+                    and conname='grok_graph_launches_admission_scope_unique' and contype='u' and convalidated
+                    and pg_get_constraintdef(oid)='UNIQUE (id, organization_id, project_id, session_id, message_id, graph_id)')
+                  and exists (select 1 from pg_constraint where conrelid='public.graph_nodes'::regclass
+                    and conname='graph_nodes_admission_scope_unique' and contype='u' and convalidated
+                    and pg_get_constraintdef(oid)='UNIQUE (id, organization_id, graph_id, node_key)')
+                  and (select count(*)=2
+                         and pg_catalog.array_agg(tgname order by tgname)=array[
+                           'grok_execution_admissions_immutable',
+                           'grok_execution_admissions_no_truncate'
+                         ]::name[]
+                         and bool_and(tgfoid='public.reject_grok_evidence_mutation()'::regprocedure)
+                         from pg_trigger where tgrelid='public.grok_execution_admissions'::regclass and not tgisinternal)
+                  and (select count(*)=18 from pg_trigger where tgrelid in (
+                    'public.grok_sessions'::regclass,'public.grok_messages'::regclass,'public.grok_task_links'::regclass,
+                    'public.grok_graph_launches'::regclass,'public.grok_events'::regclass,'public.grok_artifact_links'::regclass,
+                    'public.grok_control_intents'::regclass,'public.grok_execution_admissions'::regclass) and not tgisinternal)
+                  and (select count(*)=16 from pg_trigger where tgfoid='public.reject_grok_evidence_mutation()'::regprocedure and not tgisinternal
+                    and tgrelid in ('public.grok_sessions'::regclass,'public.grok_messages'::regclass,'public.grok_task_links'::regclass,
+                    'public.grok_graph_launches'::regclass,'public.grok_events'::regclass,'public.grok_artifact_links'::regclass,
+                    'public.grok_control_intents'::regclass,'public.grok_execution_admissions'::regclass))
+                  and (select count(*)=1 and bool_and(
+                    pg_get_userbyid(proowner)='postgres' and lanname='sql' and not prosecdef
+                    and prorettype='text'::regtype and proargnames=array['p_admission']::text[]
+                    and proconfig=array['search_path=pg_catalog']::text[]
+                    and provolatile='i' and proisstrict and proparallel='s'
+                    and source_md5='7e7d35830e12cc13f67d07b93cf689ee'
+                    and proacl is not null and (select count(*) from aclexplode(proacl))=1
+                    and not has_function_privilege('anon',oid,'EXECUTE')
+                    and not has_function_privilege('authenticated',oid,'EXECUTE')
+                    and not has_function_privilege('service_role',oid,'EXECUTE')
+                  ) from functions where proname='grok_execution_admission_hash')
+                  and (select count(*)=1 and bool_and(
+                    pg_get_userbyid(proowner)='postgres' and lanname='plpgsql' and prosecdef
+                    and prorettype='public.grok_graph_launches'::regtype
+                    and proargnames=array[
+                      'p_organization_id','p_requested_by','p_project_id','p_session_id','p_message_id',
+                      'p_idempotency_key','p_goal','p_topology','p_topology_reasons','p_risk_level',
+                      'p_requires_owner_approval','p_nodes','p_edges','p_budget','p_github_repository_id',
+                      'p_base_branch','p_base_sha','p_required_check_names','p_admissions'
+                    ]::text[]
+                    and proconfig=array['search_path=pg_catalog']::text[]
+                    and provolatile='v' and not proisstrict and proparallel='u'
+                    and source_md5='f1e20ffefaadc5fe599789047958e658'
+                    and strpos(prosrc,'public.launch_grok_full_lifecycle_as_server')>0
+                    and strpos(lower(prosrc),'insert into public.graph_runs')=0
+                    and strpos(lower(prosrc),'insert into public.node_runs')=0
+                    and strpos(lower(prosrc),'insert into public.agent_runs')=0
+                    and proacl is not null and (select count(*) from aclexplode(proacl))=2
+                    and not has_function_privilege('anon',oid,'EXECUTE')
+                    and not has_function_privilege('authenticated',oid,'EXECUTE')
+                    and has_function_privilege('service_role',oid,'EXECUTE')
+                  ) from functions where proname='launch_grok_full_lifecycle_v2_as_server')
+                  and (select count(*)=1 from pg_proc routine join pg_namespace space on space.oid=routine.pronamespace
+                        where space.nspname='public' and routine.proname='grok_execution_admission_hash')
+                  and (select count(*)=1 from pg_proc routine join pg_namespace space on space.oid=routine.pronamespace
+                        where space.nspname='public' and routine.proname='launch_grok_full_lifecycle_v2_as_server')
+                  and exists (select 1 from pg_proc routine
+                    where routine.oid=to_regprocedure('public.launch_grok_full_lifecycle_as_server(uuid,uuid,uuid,uuid,uuid,text,text,public.graph_topology,jsonb,public.risk_level,boolean,jsonb,jsonb,jsonb,uuid,text,text,jsonb)')
+                      and md5(replace(replace(routine.prosrc,E'\\r\\n',E'\\n'),E'\\r',E'\\n'))='49438e7ef00cf0d7034e0016e75f74f8'
+                      and routine.proacl is not null and (select count(*) from aclexplode(routine.proacl))=1
+                      and not has_function_privilege('anon',routine.oid,'EXECUTE')
+                      and not has_function_privilege('authenticated',routine.oid,'EXECUTE')
+                      and not has_function_privilege('service_role',routine.oid,'EXECUTE'));")
+              if [ "$PROVIDER_ADMISSION_READY" != "t" ]; then
+                echo "::error::Provider-admission table, constraint, index, trigger, function, source, or ACL catalog postflight failed."
+                exit 1
+              fi
+
+              CANARY_KEY="grok-provider-admission-release-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+              CANARY_PLAN=$(jq -c . "$GROK_PROVIDER_ADMISSION_CANARY")
+              psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q \
+                -v canary_plan="$CANARY_PLAN" -v release_sha="$RELEASE_SHA" -v canary_key="$CANARY_KEY" \
+                -c "begin;" \
+                -c "create temp table grok_provider_admission_release_input (
+                      plan jsonb not null, release_sha text not null, canary_key text not null
+                    ) on commit drop;
+                    insert into grok_provider_admission_release_input(plan,release_sha,canary_key)
+                    values (:'canary_plan'::jsonb,:'release_sha',:'canary_key');" \
+                -c "do \$provider_admission_runtime\$
+                    declare
+                      v_plan jsonb; v_release_sha text; v_key text;
+                      v_organization_id uuid; v_project_id uuid; v_owner_id uuid;
+                      v_repository_id uuid; v_base_branch text;
+                      v_claude_suffix text; v_codex_suffix text;
+                      v_claude_capabilities jsonb; v_claude_role_capabilities jsonb;
+                      v_claude_account public.ai_accounts; v_codex_account public.ai_accounts;
+                      v_claude_role public.bot_roles; v_codex_role public.bot_roles;
+                      v_claude_bot public.bots; v_codex_bot public.bots;
+                      v_claude_assignment public.bot_assignments; v_codex_assignment public.bot_assignments;
+                      v_claude_task jsonb; v_codex_task jsonb; v_admissions jsonb; v_mismatch jsonb;
+                      v_session public.grok_sessions; v_user_message public.grok_messages;
+                      v_assistant_message public.grok_messages;
+                      v_launch public.grok_graph_launches; v_replay public.grok_graph_launches;
+                      v_graphs_before bigint; v_expected_admissions integer; v_runtime_message text;
+                    begin
+                      select input.plan,input.release_sha,input.canary_key
+                        into v_plan,v_release_sha,v_key
+                        from pg_temp.grok_provider_admission_release_input input;
+
+                      select member.organization_id,project.id,member.user_id,
+                             repository.id,project.default_branch
+                        into v_organization_id,v_project_id,v_owner_id,
+                             v_repository_id,v_base_branch
+                        from public.project_connections link
+                        join public.projects project
+                          on project.id=link.project_id and project.organization_id=link.organization_id
+                        join public.connections connection
+                          on connection.id=link.connection_id and connection.organization_id=link.organization_id
+                        join public.github_repositories repository
+                          on repository.id=link.github_repository_id and repository.organization_id=link.organization_id
+                        join public.github_installations installation
+                          on installation.id=repository.installation_id and installation.organization_id=repository.organization_id
+                        join public.organization_members member
+                          on member.organization_id=project.organization_id
+                         and member.role='owner'::public.organization_member_role
+                       where project.status='active'
+                         and link.is_primary
+                         and connection.provider='github'::public.connection_provider
+                         and connection.status='connected'::public.connection_status
+                         and repository.full_name='surgeservicesllc/SoftwareFactory'
+                         and repository.selected and not repository.archived and not repository.disabled
+                         and repository.default_branch=project.default_branch
+                         and installation.status='active' and installation.suspended_at is null
+                       order by member.created_at,project.created_at
+                       limit 1;
+                      if not found then
+                        raise exception 'provider-admission exact SoftwareFactory owner/project/repository canary identity is unavailable';
+                      end if;
+
+                      select pg_catalog.jsonb_agg(capability order by capability)
+                        into v_claude_capabilities
+                        from (select distinct node.value ->> 'capability' capability
+                                from pg_catalog.jsonb_array_elements(v_plan -> 'nodes') node
+                               where node.value ->> 'executor'='MODEL') canonical;
+                      select pg_catalog.jsonb_agg(
+                               case capability when 'security_review' then 'security'
+                                               when 'qa' then 'testing'
+                                               else capability end
+                               order by capability)
+                        into v_claude_role_capabilities
+                        from pg_catalog.jsonb_array_elements_text(v_claude_capabilities) item(capability);
+                      if pg_catalog.jsonb_array_length(v_claude_capabilities) not between 1 and 12 then
+                        raise exception 'provider-admission canonical MODEL capability set drifted';
+                      end if;
+
+                      select candidate.value::text into v_claude_suffix
+                        from pg_catalog.generate_series(9000,9999) candidate(value)
+                       where not exists (select 1 from public.ai_accounts account
+                                          where account.organization_id=v_organization_id
+                                            and account.credential_purpose='claude_'||candidate.value)
+                         and not exists (select 1 from public.provider_credentials credential
+                                          where credential.organization_id=v_organization_id
+                                            and credential.purpose='claude_'||candidate.value)
+                       order by candidate.value limit 1;
+                      select candidate.value::text into v_codex_suffix
+                        from pg_catalog.generate_series(9000,9999) candidate(value)
+                       where not exists (select 1 from public.ai_accounts account
+                                          where account.organization_id=v_organization_id
+                                            and account.credential_purpose='codex_'||candidate.value)
+                         and not exists (select 1 from public.provider_credentials credential
+                                          where credential.organization_id=v_organization_id
+                                            and credential.purpose='codex_'||candidate.value)
+                       order by candidate.value limit 1;
+                      if v_claude_suffix is null or v_codex_suffix is null then
+                        raise exception 'provider-admission rollback canary credential namespace is exhausted';
+                      end if;
+
+                      insert into public.provider_credentials(
+                        organization_id,purpose,sealed_envelope,source,created_by
+                      ) values
+                        (v_organization_id,'claude_'||v_claude_suffix,
+                         'v1.'||pg_catalog.repeat('a',40),'connect_session',v_owner_id),
+                        (v_organization_id,'codex_'||v_codex_suffix,
+                         'v1.'||pg_catalog.repeat('b',40),'connect_session',v_owner_id);
+                      insert into public.ai_accounts(
+                        organization_id,provider,auth_method,display_name,status,
+                        credential_purpose,provider_identity,created_by
+                      ) values (
+                        v_organization_id,'anthropic','subscription',
+                        'Grok release Claude '||v_claude_suffix,'connected',
+                        'claude_'||v_claude_suffix,null,v_owner_id
+                      ) returning * into v_claude_account;
+                      insert into public.ai_accounts(
+                        organization_id,provider,auth_method,display_name,status,
+                        credential_purpose,provider_identity,created_by
+                      ) values (
+                        v_organization_id,'openai','subscription',
+                        'Grok release Codex '||v_codex_suffix,'connected',
+                        'codex_'||v_codex_suffix,null,v_owner_id
+                      ) returning * into v_codex_account;
+
+                      insert into public.bot_roles(
+                        organization_id,name,slug,summary,instructions,risk_ceiling,capabilities,created_by
+                      ) values (
+                        v_organization_id,'Grok release analyst '||v_claude_suffix,
+                        'grok-release-analyst-'||v_claude_suffix,
+                        'Rollback-only provider admission analyst','Validate bounded release evidence only.',
+                        'red',v_claude_role_capabilities,v_owner_id
+                      ) returning * into v_claude_role;
+                      insert into public.bot_roles(
+                        organization_id,name,slug,summary,instructions,risk_ceiling,capabilities,created_by
+                      ) values (
+                        v_organization_id,'Grok release writer '||v_codex_suffix,
+                        'grok-release-writer-'||v_codex_suffix,
+                        'Rollback-only provider admission writer','Validate the bounded Phase 1C handoff only.',
+                        'red','[\"implementation\"]'::jsonb,v_owner_id
+                      ) returning * into v_codex_role;
+
+                      insert into public.bots(
+                        organization_id,name,provider,model,credential_ref,readiness,
+                        last_checked_at,ai_account_id,created_by
+                      ) values (
+                        v_organization_id,'Grok release Claude '||v_claude_suffix,'anthropic',
+                        'claude-opus-5',public.ai_account_bot_credential_ref('anthropic','claude_'||v_claude_suffix),
+                        'ready',pg_catalog.now(),v_claude_account.id,v_owner_id
+                      ) returning * into v_claude_bot;
+                      insert into public.bots(
+                        organization_id,name,provider,model,credential_ref,readiness,
+                        last_checked_at,ai_account_id,created_by
+                      ) values (
+                        v_organization_id,'Grok release Codex '||v_codex_suffix,'openai',
+                        'gpt-5.3-codex',public.ai_account_bot_credential_ref('openai','codex_'||v_codex_suffix),
+                        'ready',pg_catalog.now(),v_codex_account.id,v_owner_id
+                      ) returning * into v_codex_bot;
+
+                      insert into public.bot_assignments(
+                        organization_id,bot_id,project_id,role_id,status,preset,model,work_effort,
+                        repository_access,can_open_pull_request,can_merge_pull_request,pipeline_access,
+                        requires_human_approval,created_by
+                      ) values (
+                        v_organization_id,v_claude_bot.id,v_project_id,v_claude_role.id,'active','reviewer',
+                        null,'high','read',false,false,'all',true,v_owner_id
+                      ) returning * into v_claude_assignment;
+                      insert into public.bot_assignments(
+                        organization_id,bot_id,project_id,role_id,status,preset,model,work_effort,
+                        repository_access,can_open_pull_request,can_merge_pull_request,pipeline_access,
+                        requires_human_approval,created_by
+                      ) values (
+                        v_organization_id,v_codex_bot.id,v_project_id,v_codex_role.id,'active','developer',
+                        null,'high','write',true,false,'assigned',true,v_owner_id
+                      ) returning * into v_codex_assignment;
+
+                      v_claude_task := pg_catalog.jsonb_build_object(
+                        'id','claude-generalist','lane','claude_read_only','capability','planning',
+                        'agentId',v_claude_assignment.id,'assignmentId',v_claude_assignment.id,
+                        'assignmentRevision',v_claude_assignment.revision,
+                        'botId',v_claude_bot.id,'botRevision',v_claude_bot.revision,
+                        'roleId',v_claude_role.id,'roleUpdatedAt',v_claude_role.updated_at,
+                        'agentCapabilities',v_claude_capabilities,'agentMaxModelTier','STRONG',
+                        'aiAccountId',v_claude_account.id,'accountUpdatedAt',v_claude_account.updated_at,
+                        'credentialPurpose',v_claude_account.credential_purpose,
+                        'credentialRef',v_claude_bot.credential_ref,'providerIdentity',null,
+                        'provider','anthropic','model',v_claude_bot.model
+                      );
+                      v_codex_task := pg_catalog.jsonb_build_object(
+                        'id','implement','lane','codex_workspace','capability','implementation',
+                        'agentId',v_codex_assignment.id,'assignmentId',v_codex_assignment.id,
+                        'assignmentRevision',v_codex_assignment.revision,
+                        'botId',v_codex_bot.id,'botRevision',v_codex_bot.revision,
+                        'roleId',v_codex_role.id,'roleUpdatedAt',v_codex_role.updated_at,
+                        'agentCapabilities','[\"implementation\"]'::jsonb,'agentMaxModelTier','STRONG',
+                        'aiAccountId',v_codex_account.id,'accountUpdatedAt',v_codex_account.updated_at,
+                        'credentialPurpose',v_codex_account.credential_purpose,
+                        'credentialRef',v_codex_bot.credential_ref,'providerIdentity',null,
+                        'provider','openai','model',v_codex_bot.model
+                      );
+                      select pg_catalog.jsonb_agg(
+                        case when node.value ->> 'executor'='MODEL' then pg_catalog.jsonb_build_object(
+                          'version',1,'lane','graph_model','nodeKey',node.value ->> 'node_key',
+                          'sourceTaskKey','claude-generalist','assignmentId',v_claude_assignment.id,
+                          'assignmentRevision',v_claude_assignment.revision,'botId',v_claude_bot.id,
+                          'botRevision',v_claude_bot.revision,'roleId',v_claude_role.id,
+                          'roleUpdatedAt',v_claude_role.updated_at,'agentCapabilities',v_claude_capabilities,
+                          'agentMaxModelTier','STRONG','aiAccountId',v_claude_account.id,
+                          'accountUpdatedAt',v_claude_account.updated_at,'provider','anthropic',
+                          'model',v_claude_bot.model,'credentialPurpose',v_claude_account.credential_purpose,
+                          'credentialRef',v_claude_bot.credential_ref,'providerIdentity',null,
+                          'capability',node.value ->> 'capability'
+                        ) else pg_catalog.jsonb_build_object(
+                          'version',1,'lane','phase1c','nodeKey','implement','sourceTaskKey','implement',
+                          'assignmentId',v_codex_assignment.id,'assignmentRevision',v_codex_assignment.revision,
+                          'botId',v_codex_bot.id,'botRevision',v_codex_bot.revision,'roleId',v_codex_role.id,
+                          'roleUpdatedAt',v_codex_role.updated_at,'agentCapabilities','[\"implementation\"]'::jsonb,
+                          'agentMaxModelTier','STRONG','aiAccountId',v_codex_account.id,
+                          'accountUpdatedAt',v_codex_account.updated_at,'provider','openai',
+                          'model',v_codex_bot.model,'credentialPurpose',v_codex_account.credential_purpose,
+                          'credentialRef',v_codex_bot.credential_ref,'providerIdentity',null,
+                          'capability','implementation'
+                        ) end order by node.value ->> 'node_key')
+                        into v_admissions
+                        from pg_catalog.jsonb_array_elements(v_plan -> 'nodes') node
+                       where node.value ->> 'executor'='MODEL'
+                          or (node.value ->> 'executor'='ANCHOR' and node.value ->> 'node_key'='implement'
+                              and node.value ->> 'capability'='implementation');
+                      v_expected_admissions := pg_catalog.jsonb_array_length(v_admissions);
+
+                      perform pg_catalog.set_config('request.jwt.claim.sub',v_owner_id::text,true);
+                      select * into v_session from public.create_grok_session(
+                        v_organization_id,v_project_id,'Provider admission release canary',v_key||':session');
+                      select * into v_user_message from public.append_grok_user_message(
+                        v_organization_id,v_session.id,'Validate immutable provider admission.',
+                        '{\"schemaVersion\":1,\"kind\":\"grok.prompt\"}'::jsonb,v_key||':user',0,null);
+                      select * into v_assistant_message from public.append_grok_message_as_server(
+                        v_organization_id,v_session.id,'assistant','The bounded provider plan is recorded.',
+                        pg_catalog.jsonb_build_object('kind','grok.plan','plan',pg_catalog.jsonb_build_object(
+                          'planner',pg_catalog.jsonb_build_object('version',2),
+                          'dag',pg_catalog.jsonb_build_object('tasks',pg_catalog.jsonb_build_array(v_claude_task,v_codex_task))
+                        )),v_key||':assistant',1,v_user_message.id);
+                      select pg_catalog.count(*) into v_graphs_before from public.graphs graph
+                       where graph.organization_id=v_organization_id and graph.project_id=v_project_id
+                         and graph.goal=v_plan ->> 'goal';
+
+                      execute 'set local role service_role';
+                      begin
+                        perform public.launch_grok_full_lifecycle_as_server(
+                          v_organization_id,v_owner_id,v_project_id,v_session.id,v_assistant_message.id,
+                          v_key||':old-launch',v_plan ->> 'goal',(v_plan ->> 'topology')::public.graph_topology,
+                          v_plan -> 'topologyReasons',(v_plan ->> 'riskLevel')::public.risk_level,
+                          (v_plan ->> 'requiresOwnerApproval')::boolean,v_plan -> 'nodes',v_plan -> 'edges',
+                          v_plan -> 'budget',v_repository_id,v_base_branch,v_release_sha,
+                          '[\"Lint, typecheck, test, and build\",\"Browser and accessibility tests 1/3\",\"Browser and accessibility tests 2/3\",\"Browser and accessibility tests 3/3\"]'::jsonb);
+                        raise exception 'provider-admission old service launcher did not refuse';
+                      exception when insufficient_privilege then null; end;
+
+                      v_mismatch := pg_catalog.jsonb_set(
+                        v_admissions,'{0,assignmentRevision}',
+                        pg_catalog.to_jsonb(((v_admissions #>> '{0,assignmentRevision}')::bigint)+1));
+                      begin
+                        perform public.launch_grok_full_lifecycle_v2_as_server(
+                          v_organization_id,v_owner_id,v_project_id,v_session.id,v_assistant_message.id,
+                          v_key||':launch',v_plan ->> 'goal',(v_plan ->> 'topology')::public.graph_topology,
+                          v_plan -> 'topologyReasons',(v_plan ->> 'riskLevel')::public.risk_level,
+                          (v_plan ->> 'requiresOwnerApproval')::boolean,v_plan -> 'nodes',v_plan -> 'edges',
+                          v_plan -> 'budget',v_repository_id,v_base_branch,v_release_sha,
+                          '[\"Lint, typecheck, test, and build\",\"Browser and accessibility tests 1/3\",\"Browser and accessibility tests 2/3\",\"Browser and accessibility tests 3/3\"]'::jsonb,
+                          v_mismatch);
+                        raise exception 'provider-admission mismatch did not refuse';
+                      exception when invalid_parameter_value then
+                        get stacked diagnostics v_runtime_message=message_text;
+                        if v_runtime_message not in (
+                          'grok admission does not match the immutable planner task',
+                          'selected grok assignment identity or model tier changed before admission'
+                        ) then raise exception 'provider-admission mismatch refusal identity changed'; end if;
+                      end;
+                      execute 'reset role';
+                      if (select count(*) from public.grok_execution_admissions admission where admission.session_id=v_session.id)<>0
+                        or (select count(*) from public.grok_graph_launches launch where launch.session_id=v_session.id)<>0
+                        or (select count(*) from public.graphs graph where graph.organization_id=v_organization_id
+                              and graph.project_id=v_project_id and graph.goal=v_plan ->> 'goal')<>v_graphs_before
+                      then raise exception 'provider-admission mismatch left durable runtime residue'; end if;
+
+                      execute 'set local role service_role';
+                      select * into v_launch from public.launch_grok_full_lifecycle_v2_as_server(
+                        v_organization_id,v_owner_id,v_project_id,v_session.id,v_assistant_message.id,
+                        v_key||':launch',v_plan ->> 'goal',(v_plan ->> 'topology')::public.graph_topology,
+                        v_plan -> 'topologyReasons',(v_plan ->> 'riskLevel')::public.risk_level,
+                        (v_plan ->> 'requiresOwnerApproval')::boolean,v_plan -> 'nodes',v_plan -> 'edges',
+                        v_plan -> 'budget',v_repository_id,v_base_branch,v_release_sha,
+                        '[\"Lint, typecheck, test, and build\",\"Browser and accessibility tests 1/3\",\"Browser and accessibility tests 2/3\",\"Browser and accessibility tests 3/3\"]'::jsonb,
+                        v_admissions);
+                      select * into v_replay from public.launch_grok_full_lifecycle_v2_as_server(
+                        v_organization_id,v_owner_id,v_project_id,v_session.id,v_assistant_message.id,
+                        v_key||':launch',v_plan ->> 'goal',(v_plan ->> 'topology')::public.graph_topology,
+                        v_plan -> 'topologyReasons',(v_plan ->> 'riskLevel')::public.risk_level,
+                        (v_plan ->> 'requiresOwnerApproval')::boolean,v_plan -> 'nodes',v_plan -> 'edges',
+                        v_plan -> 'budget',v_repository_id,v_base_branch,v_release_sha,
+                        '[\"Lint, typecheck, test, and build\",\"Browser and accessibility tests 1/3\",\"Browser and accessibility tests 2/3\",\"Browser and accessibility tests 3/3\"]'::jsonb,
+                        v_admissions);
+                      execute 'reset role';
+                      if v_replay.id is distinct from v_launch.id or v_replay.graph_id is distinct from v_launch.graph_id
+                        or (select count(*) from public.grok_execution_admissions admission
+                             where admission.graph_id=v_launch.graph_id)<>v_expected_admissions
+                        or (select count(*) from public.grok_execution_admissions admission
+                             where admission.graph_id=v_launch.graph_id and admission.lane='phase1c')<>1
+                        or (select count(*) from public.grok_execution_admissions admission
+                             where admission.graph_id=v_launch.graph_id and admission.lane='graph_model')<1
+                        or exists (select 1 from public.grok_execution_admissions admission
+                                    where admission.graph_id=v_launch.graph_id
+                                      and admission.admission_sha256 is distinct from public.grok_execution_admission_hash(admission))
+                        or not coalesce((select graph.pause_requested_at is not null from public.graphs graph
+                                         where graph.id=v_launch.graph_id),false)
+                        or exists (select 1 from public.graph_runs run where run.graph_id=v_launch.graph_id)
+                        or exists (select 1 from public.node_runs run join public.graph_nodes node on node.id=run.node_id
+                                    where node.graph_id=v_launch.graph_id)
+                      then raise exception 'provider-admission valid/replay/hash/pause/zero-run runtime evidence drifted'; end if;
+
+                      begin
+                        update public.grok_execution_admissions set model=model where graph_id=v_launch.graph_id;
+                        raise exception 'provider-admission immutable update did not refuse';
+                      exception when sqlstate '55000' then null; end;
+                      begin
+                        delete from public.grok_execution_admissions where graph_id=v_launch.graph_id;
+                        raise exception 'provider-admission immutable delete did not refuse';
+                      exception when sqlstate '55000' then null; end;
+                      begin
+                        truncate table public.grok_execution_admissions;
+                        raise exception 'provider-admission immutable truncate did not refuse';
+                      exception when sqlstate '55000' then null; end;
+                      if (select count(*) from public.grok_execution_admissions admission
+                           where admission.graph_id=v_launch.graph_id)<>v_expected_admissions
+                      then raise exception 'provider-admission immutable mutation canary changed evidence'; end if;
+                    end;
+                    \$provider_admission_runtime\$;" \
+                -c "rollback;"
+              ROLLBACK_READY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+                select (select count(*) from public.grok_sessions session where session.idempotency_key='${CANARY_KEY}:session')=0
+                  and (select count(*) from public.grok_graph_launches launch where launch.idempotency_key='${CANARY_KEY}:launch')=0;")
+              if [ "$ROLLBACK_READY" != "t" ]; then
+                echo "::error::Provider-admission rollback canary left durable session or launch residue."
+                exit 1
+              fi
             fi
 
             if [ "$LEDGER" = "1|1|1|1|0" ] || [ "$LEDGER" = "1|1|1|1|1" ]; then
@@ -1221,16 +1916,28 @@ jobs:
               exit 1
             fi
 
+            EXPECTED_GROK_TRIGGERS=$((16 + (2 * ADMISSION_LEDGER)))
+            EXPECTED_GROK_REJECT_TRIGGERS=$((14 + (2 * ADMISSION_LEDGER)))
+            if [ "$ADMISSION_LEDGER" = "1" ]; then
+              ADMISSION_TRIGGER_RELATION=",'public.grok_execution_admissions'::regclass"
+            else
+              ADMISSION_TRIGGER_RELATION=""
+            fi
             GROK_AUDIT_READY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
               select
                 (select count(*) from pg_trigger trigger_row
                   where trigger_row.tgrelid in (
                     'public.grok_sessions'::regclass,'public.grok_messages'::regclass,'public.grok_task_links'::regclass,
                     'public.grok_graph_launches'::regclass,'public.grok_events'::regclass,'public.grok_artifact_links'::regclass,
-                    'public.grok_control_intents'::regclass)
-                    and not trigger_row.tgisinternal)=16
+                    'public.grok_control_intents'::regclass${ADMISSION_TRIGGER_RELATION})
+                    and not trigger_row.tgisinternal)=${EXPECTED_GROK_TRIGGERS}
                 and (select count(*) from pg_trigger trigger_row
-                  where trigger_row.tgfoid='public.reject_grok_evidence_mutation()'::regprocedure and not trigger_row.tgisinternal)=14
+                  where trigger_row.tgfoid='public.reject_grok_evidence_mutation()'::regprocedure
+                    and trigger_row.tgrelid in (
+                      'public.grok_sessions'::regclass,'public.grok_messages'::regclass,'public.grok_task_links'::regclass,
+                      'public.grok_graph_launches'::regclass,'public.grok_events'::regclass,'public.grok_artifact_links'::regclass,
+                      'public.grok_control_intents'::regclass${ADMISSION_TRIGGER_RELATION})
+                    and not trigger_row.tgisinternal)=${EXPECTED_GROK_REJECT_TRIGGERS}
                 and exists (select 1 from pg_constraint where conname='grok_sessions_title_no_secret' and convalidated)
                 and exists (select 1 from pg_constraint where conname='grok_messages_content_no_secret' and convalidated)
                 and exists (select 1 from pg_constraint where conname='grok_messages_metadata_no_secret' and convalidated)
@@ -1298,6 +2005,7 @@ jobs:
                     ('public.link_grok_task_as_server(uuid,uuid,uuid,uuid,uuid,uuid,uuid,text)',null),
                     ('public.record_grok_event_as_server(uuid,uuid,text,uuid,jsonb,bigint,uuid,uuid)',null),
                     ('public.launch_grok_full_lifecycle_as_server(uuid,uuid,uuid,uuid,uuid,text,text,public.graph_topology,jsonb,public.risk_level,boolean,jsonb,jsonb,jsonb,uuid,text,text,jsonb)',null),
+                    ('public.launch_grok_full_lifecycle_v2_as_server(uuid,uuid,uuid,uuid,uuid,text,text,public.graph_topology,jsonb,public.risk_level,boolean,jsonb,jsonb,jsonb,uuid,text,text,jsonb,jsonb)',null),
                     ('public.link_grok_artifact_as_server(uuid,uuid,uuid,uuid,uuid,uuid,text)',null),
                     ('public.request_grok_control_intent(uuid,uuid,text,uuid,text,text,text)',null),
                     ('public.resolve_grok_control_intent_as_server(uuid,uuid,text,text,text)',null),

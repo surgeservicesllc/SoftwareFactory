@@ -74,6 +74,8 @@ type DatabaseError = { code?: string; message?: string };
 
 type BotRow = {
   id: string;
+  /** Absent until 20260822000200; legacy rows serialize with token 1. */
+  revision?: number;
   name: string;
   provider: string;
   model: string;
@@ -192,6 +194,7 @@ export function serializeBot(
 
   return {
     id: row.id,
+    revision: typeof row.revision === "number" && row.revision > 0 ? row.revision : 1,
     name: row.name,
     provider: row.provider,
     providerLabel: provider?.label ?? row.provider,
@@ -337,26 +340,32 @@ async function readBots(
 ): Promise<BotRow[]> {
   const baseColumns =
     "id,name,provider,model,credential_ref,base_url,readiness,readiness_detail,last_checked_at,notes";
-  try {
-    return sortNamedRows(await readCompleteTable<BotRow>(
-      client,
-      "bots",
-      `${baseColumns},ai_account_id,created_at`,
-      organizationId,
-    ));
-  } catch (error) {
-    if (!(error instanceof BotFabricQueryError)
-      || !isMissingDatabaseColumn(error.databaseError, "ai_account_id")) {
+  let revisionAvailable = true;
+  let aiAccountIdAvailable = true;
+  for (;;) {
+    const optionalColumns = [
+      revisionAvailable ? "revision" : null,
+      aiAccountIdAvailable ? "ai_account_id" : null,
+    ].filter((column): column is string => column !== null);
+    try {
+      return sortNamedRows(await readCompleteTable<BotRow>(
+        client,
+        "bots",
+        `${baseColumns},${optionalColumns.length > 0 ? `${optionalColumns.join(",")},` : ""}created_at`,
+        organizationId,
+      ));
+    } catch (error) {
+      if (!(error instanceof BotFabricQueryError)) throw error;
+      if (revisionAvailable && isMissingDatabaseColumn(error.databaseError, "revision")) {
+        revisionAvailable = false;
+        continue;
+      }
+      if (aiAccountIdAvailable && isMissingDatabaseColumn(error.databaseError, "ai_account_id")) {
+        aiAccountIdAvailable = false;
+        continue;
+      }
       throw error;
     }
-    // Very old hosted schemas predate account identity. Keep the fleet visible
-    // with a null account link; never smooth over any other read failure.
-    return sortNamedRows(await readCompleteTable<BotRow>(
-      client,
-      "bots",
-      `${baseColumns},created_at`,
-      organizationId,
-    ));
   }
 }
 

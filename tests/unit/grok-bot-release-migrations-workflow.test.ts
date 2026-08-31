@@ -34,6 +34,12 @@ const migrations = [
     path: "supabase/migrations/20260830010000_atomic_grok_graph_control.sql",
     hash: "bbd664a7b556a07ab31b84b155725ea8a1b1c5a7f6a6afb1cfe1bae8c07f06b7",
   },
+  {
+    version: "20260831000100",
+    stem: "MIGRATION_PROVIDER_ADMISSION",
+    path: "supabase/migrations/20260831000100_grok_provider_admission.sql",
+    hash: "37809d9b3d9bc760ffbee501fcca383f0daa5665fb047964734603ceed41aef7",
+  },
 ] as const;
 
 const source = readFileSync(resolve(root, workflowPath), "utf8");
@@ -105,6 +111,7 @@ describe("Grok Bot hosted release workflow", () => {
         "grok-persistence",
         "planning-failure",
         "control-recovery",
+        "provider-admission",
         "verify",
       ],
     });
@@ -139,7 +146,7 @@ describe("Grok Bot hosted release workflow", () => {
     );
   });
 
-  it("pins all four reviewed migration byte identities", () => {
+  it("pins all five reviewed migration byte identities", () => {
     for (const migration of migrations) {
       expect(workflow.jobs.release.env[migration.stem]).toBe(migration.path);
       expect(workflow.jobs.release.env[`${migration.stem}_SHA256`]).toBe(
@@ -152,8 +159,8 @@ describe("Grok Bot hosted release workflow", () => {
         migration.hash,
       );
     }
-    const identity = stepByName("Verify the four exact forward files").run ?? "";
-    expect(identity.match(/verify_file/g)).toHaveLength(5);
+    const identity = stepByName("Verify the five exact forward files").run ?? "";
+    expect(identity.match(/verify_file/g)).toHaveLength(6);
     expect(identity).toContain("sha256sum");
     expect(identity).toContain("^[0-9a-f]{64}$");
     expect(source).not.toContain("planning_failure_sha256");
@@ -179,7 +186,7 @@ describe("Grok Bot hosted release workflow", () => {
     const authorize = authorization.run ?? "";
     expect(authorize).toContain("probe|verify) exit 0");
     expect(authorize).toContain(
-      "typed-input|grok-persistence|planning-failure|control-recovery)",
+      "typed-input|grok-persistence|planning-failure|control-recovery|provider-admission)",
     );
     expect(authorize).toContain('[ "$CONFIRM" != "apply" ]');
     expect(authorize).toContain('[ "$GITHUB_ACTOR" != "$AUTHORIZED_ACTOR" ]');
@@ -310,10 +317,15 @@ describe("Grok Bot hosted release workflow", () => {
       "grok-persistence:1\\|1\\|0\\|0\\|0",
       "planning-failure:1\\|1\\|1\\|0\\|0",
       "control-recovery:1\\|1\\|1\\|1\\|0",
+      "provider-admission:1\\|1\\|1\\|1\\|1",
       "verify:1\\|1\\|1\\|1\\|1",
     ]) {
       expect(preflight).toContain(state);
     }
+    expect(preflight).toContain(
+      "provider-admission:1\\|1\\|1\\|1\\|1:7",
+    );
+    expect(preflight).toContain("provider-admission:0");
     const postflight =
       stepByName(
         "Verify ledger catalog ACL runtime lint health and stopped safety",
@@ -323,6 +335,7 @@ describe("Grok Bot hosted release workflow", () => {
       "grok-persistence:1\\|1\\|1\\|0\\|0",
       "planning-failure:1\\|1\\|1\\|1\\|0",
       "control-recovery:1\\|1\\|1\\|1\\|1",
+      "provider-admission:1\\|1\\|1\\|1\\|1",
       "verify:1\\|1\\|1\\|1\\|1",
     ]) {
       expect(postflight).toContain(state);
@@ -332,7 +345,7 @@ describe("Grok Bot hosted release workflow", () => {
   it("stages and applies exactly one file in one locked forward-only transaction", () => {
     const step = stepByName("Apply exactly one ordered forward migration");
     expect(step.if).toBe(
-      "${{ inputs.scope == 'typed-input' || inputs.scope == 'grok-persistence' || inputs.scope == 'planning-failure' || inputs.scope == 'control-recovery' }}",
+      "${{ inputs.scope == 'typed-input' || inputs.scope == 'grok-persistence' || inputs.scope == 'planning-failure' || inputs.scope == 'control-recovery' || inputs.scope == 'provider-admission' }}",
     );
     const command = step.run ?? "";
     for (const evidence of [
@@ -344,6 +357,10 @@ describe("Grok Bot hosted release workflow", () => {
       "VERSION=20260830001100",
       "control-recovery)",
       "VERSION=20260830010000",
+      "provider-admission)",
+      "VERSION=20260831000100",
+      "EADMISSION=0",
+      "lock table public.grok_graph_launches,public.graph_nodes in access exclusive mode",
       "STAGE_DIR=$(mktemp -d)",
       'find "$STAGE_DIR" -maxdepth 1 -type f',
       "plpgsql_check_function_tb",
@@ -393,12 +410,14 @@ describe("Grok Bot hosted release workflow", () => {
       "02bb1e7b35782fad9f6024c080bd149f7ade4edb9d68326fd3b04ff94ba589ad",
       "ac9bde8fc1cdd21e735f02b1fa7d940ab680c2bde8c1ec24d704d42c59045a09",
       "graph_run_not_found",
-      "count(oid)=7",
+      "count(oid)=${EXPECTED_GROK_NAMESPACE_TABLES}",
       "state.relrowsecurity and state.relforcerowsecurity",
       "not has_table_privilege('service_role'",
       "attribute.attacl is not null",
       "EXPECTED_GROK_FUNCTIONS=16",
       "EXPECTED_GROK_FUNCTIONS=17",
+      "EXPECTED_GROK_FUNCTIONS=$((EXPECTED_GROK_FUNCTIONS + 1))",
+      "EXPECTED_GROK_CATALOG_FUNCTIONS=20",
       "pg_get_userbyid(proowner)='postgres'",
       "lanname=language_name",
       "prosecdef",
@@ -407,6 +426,16 @@ describe("Grok Bot hosted release workflow", () => {
       "acldefault('r',state.relowner)",
       "launch_grok_graph_for_session",
       "launch_grok_full_lifecycle_as_server",
+      "launch_grok_full_lifecycle_v2_as_server",
+      "grok_execution_admission_hash",
+      "grok_execution_admissions",
+      "count(*)=27",
+      "count(*)=7 and bool_and(indisvalid and indisready and indislive)",
+      "count(*)=18 from pg_trigger",
+      "count(*)=16 from pg_trigger",
+      "EXPECTED_GROK_TRIGGERS=$((16 + (2 * ADMISSION_LEDGER)))",
+      "EXPECTED_GROK_REJECT_TRIGGERS=$((14 + (2 * ADMISSION_LEDGER)))",
+      "'public.grok_control_intents'::regclass${ADMISSION_TRIGGER_RELATION}",
       "grok_graph_launches",
       "grok_control_intents",
       "public.has_organization_role",
@@ -490,6 +519,8 @@ describe("Grok Bot hosted release workflow", () => {
       "6a2c4bc103081a22672c9821c228665f",
       "d5056a47bac42c495dff7b0593cbf1a9",
       "148341fdd59b01103e22687813d2e3ba",
+      "7e7d35830e12cc13f67d07b93cf689ee",
+      "f1e20ffefaadc5fe599789047958e658",
     ]) {
       expect(postflight).toContain(sourceHash);
     }
@@ -498,11 +529,11 @@ describe("Grok Bot hosted release workflow", () => {
       "('public.record_grok_planning_failure_as_server(uuid,uuid,uuid,text,text,bigint)','service_role','148341fdd59b01103e22687813d2e3ba','v','plpgsql')",
     );
     expect(postflight).toContain(
-      `('${canonicalGrokLauncher}','service_role','49438e7ef00cf0d7034e0016e75f74f8','v','plpgsql')`,
+      `('${canonicalGrokLauncher}','\${GROK_LAUNCH_ROLE}','49438e7ef00cf0d7034e0016e75f74f8','v','plpgsql')`,
     );
   });
 
-  it("admits only the exact service launcher and keeps its canonical graph paused", () => {
+  it("admits only v2 after provider admission and keeps the canonical graph paused", () => {
     const apply =
       stepByName("Apply exactly one ordered forward migration").run ?? "";
     const postflight =
@@ -530,6 +561,55 @@ describe("Grok Bot hosted release workflow", () => {
     expect(postflight).toContain(
       "to_regprocedure('public.launch_grok_graph_for_session",
     );
+    expect(postflight).toContain("GROK_LAUNCH_ROLE=none");
+    expect(postflight).toContain("PROVIDER_ADMISSION_FUNCTION=");
+    expect(postflight).toContain("not has_function_privilege('service_role',routine.oid,'EXECUTE')");
+    expect(postflight).toContain("has_function_privilege('service_role',oid,'EXECUTE')");
+    expect(postflight).toContain("grok_execution_admissions_immutable");
+    expect(postflight).toContain("grok_execution_admissions_no_truncate");
+  });
+
+  it("runs the exact provider-admission compiler and rollback-only database canary", () => {
+    const compile = stepByName(
+      "Compile the exact canonical provider-admission canary",
+    );
+    expect(compile.if).toBe(
+      "${{ inputs.scope == 'provider-admission' || inputs.scope == 'verify' }}",
+    );
+    for (const evidence of [
+      "npm ci --ignore-scripts --no-audit --no-fund",
+      'findTemplate("full_lifecycle")',
+      "template.version !== 2",
+      "buildLaunchPlan",
+      ".nodes | type == \"array\" and length == 14",
+      "GROK_PROVIDER_ADMISSION_CANARY",
+    ]) {
+      expect(compile.run).toContain(evidence);
+    }
+
+    const postflight = stepByName(
+      "Verify ledger catalog ACL runtime lint health and stopped safety",
+    ).run ?? "";
+    for (const evidence of [
+      "grok_provider_admission_release_input",
+      "set local role service_role",
+      "provider-admission old service launcher did not refuse",
+      "provider-admission mismatch did not refuse",
+      "provider-admission mismatch left durable runtime residue",
+      "launch_grok_full_lifecycle_v2_as_server",
+      "v_replay.id is distinct from v_launch.id",
+      "public.grok_execution_admission_hash(admission)",
+      "update public.grok_execution_admissions set model=model",
+      "delete from public.grok_execution_admissions",
+      "truncate table public.grok_execution_admissions",
+      "public.graph_runs",
+      "public.node_runs",
+      '-c "rollback;"',
+      "ROLLBACK_READY",
+      "rollback canary left durable session or launch residue",
+    ]) {
+      expect(postflight).toContain(evidence);
+    }
   });
 
   it("keeps probe and verify read-only", () => {

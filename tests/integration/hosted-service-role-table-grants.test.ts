@@ -149,12 +149,13 @@ const publicTables = [
   "graph_templates",
   "graph_verifications",
   "graphs",
-  // Grok's seven durable, tenant-scoped evidence tables. All seven force RLS
+  // Grok's eight durable, tenant-scoped evidence tables. All eight force RLS
   // and revoke direct service_role table access; trusted writes use the exact
   // reviewed SECURITY DEFINER functions pinned by the schema invariant.
   "grok_artifact_links",
   "grok_control_intents",
   "grok_events",
+  "grok_execution_admissions",
   "grok_graph_launches",
   "grok_messages",
   "grok_sessions",

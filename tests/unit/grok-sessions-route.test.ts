@@ -26,6 +26,7 @@ const harness = vi.hoisted(() => ({
   mapList: vi.fn(),
   plannedGraphLink: vi.fn(),
   buildCanonicalPlan: vi.fn(),
+  buildProviderAdmissions: vi.fn(),
   resolveRelease: vi.fn(),
   serviceRpc: vi.fn(),
 }));
@@ -45,6 +46,10 @@ vi.mock("@/lib/factory/chief-of-staff", () => ({
 vi.mock("@/lib/graph/canonical-full-lifecycle", () => ({
   buildCanonicalFullLifecyclePlan: harness.buildCanonicalPlan,
   resolveCanonicalFullLifecycleReleaseIdentity: harness.resolveRelease,
+}));
+vi.mock("@/lib/grok/provider-admission", () => ({
+  buildGrokProviderAdmissions: harness.buildProviderAdmissions,
+  GrokProviderAdmissionError: class GrokProviderAdmissionError extends Error {},
 }));
 vi.mock("@/lib/github/service-role", () => ({
   createSupabaseGitHubWebhookClient: harness.createServiceClient,
@@ -78,6 +83,7 @@ vi.mock("@/lib/server/http", async (importOriginal) => {
 });
 
 import { POST } from "@/app/api/grok/sessions/route";
+import { GrokProviderAdmissionError } from "@/lib/grok/provider-admission";
 
 const organizationId = "10000000-0000-4000-8000-000000000001";
 const projectId = "20000000-0000-4000-8000-000000000002";
@@ -88,11 +94,19 @@ const graphId = "70000000-0000-4000-8000-000000000007";
 const repositoryId = "80000000-0000-4000-8000-000000000008";
 const baseSha = "a".repeat(40);
 const requiredChecks = ["Lint, typecheck, test, and build"];
+const providerAdmissions = [{
+  version: 1,
+  lane: "graph_model",
+  nodeKey: "goal",
+  sourceTaskKey: "plan",
+  assignmentId: "11000000-0000-4000-8000-000000000001",
+  agentMaxModelTier: "STRONG",
+}];
 const planningFailureMessage =
   "Planning is blocked until a Ready configured Codex agent covers the repository-writing task.";
 
 const plan = {
-  planner: { version: 1 },
+  planner: { version: 2 },
   intent: { kind: "build", prompt: "Build the portal" },
   project: { projectId },
   dag: { tasks: [{ id: "implement", provider: "openai" }], layers: [["implement"]] },
@@ -236,6 +250,7 @@ describe("Grok sessions POST", () => {
     expect(JSON.stringify(harness.recordPlanningFailure.mock.calls)).not.toContain("Build the portal");
     expect(JSON.stringify(harness.recordPlanningFailure.mock.calls)).not.toContain("implementation/STRONG");
   });
+  harness.buildProviderAdmissions.mockReturnValue(providerAdmissions);
 
   it("replays a durable refusal without re-planning after the bot roster changes", async () => {
     harness.buildPlan.mockReturnValueOnce({
@@ -352,7 +367,7 @@ describe("Grok sessions POST", () => {
     }));
     expect(harness.serviceRpc).toHaveBeenCalledTimes(1);
     expect(harness.serviceRpc).toHaveBeenCalledWith(
-      "launch_grok_full_lifecycle_as_server",
+      "launch_grok_full_lifecycle_v2_as_server",
       {
         p_organization_id: organizationId,
         p_requested_by: "60000000-0000-4000-8000-000000000006",
@@ -372,8 +387,10 @@ describe("Grok sessions POST", () => {
         p_base_branch: "main",
         p_base_sha: baseSha,
         p_required_check_names: requiredChecks,
+        p_admissions: providerAdmissions,
       },
     );
+    expect(harness.buildProviderAdmissions).toHaveBeenCalledWith(plan, canonicalPlan.nodes);
     expect(harness.serviceRpc).not.toHaveBeenCalledWith(
       "launch_grok_graph_for_session",
       expect.anything(),
@@ -382,6 +399,31 @@ describe("Grok sessions POST", () => {
       "create_graph_from_plan",
       expect.anything(),
     );
+  });
+
+  it("fails closed before release resolution when immutable provider admission is unavailable", async () => {
+    harness.buildProviderAdmissions.mockImplementationOnce(() => {
+      throw new GrokProviderAdmissionError(
+        "No immutable openai posting can execute canonical node implement.",
+      );
+    });
+
+    const response = await POST(new Request("https://factory.example/api/grok/sessions", {
+      method: "POST",
+      headers: { origin: "https://factory.example", "content-type": "application/json" },
+      body: JSON.stringify({ projectId, prompt: "Build the portal" }),
+    }));
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({
+      sessionId,
+      error: {
+        code: "grok_provider_admission_required",
+        message: expect.stringMatching(/immutable openai posting/i),
+      },
+    });
+    expect(harness.resolveRelease).not.toHaveBeenCalled();
+    expect(harness.serviceRpc).not.toHaveBeenCalled();
   });
 
   it("replays the existing paused graph without resolving a changed branch or creating another graph", async () => {
@@ -479,4 +521,3 @@ describe("Grok sessions POST", () => {
     expect(harness.readProject).not.toHaveBeenCalled();
   });
 });
-

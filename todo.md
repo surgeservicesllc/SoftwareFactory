@@ -1,5 +1,28 @@
 # SoftwareFactory — shared working status
 
+## GROK IMMUTABLE PROVIDER ADMISSION RELEASE CANDIDATE (2026-08-31 — PICK UP HERE)
+
+- New forward migration `20260831000100_grok_provider_admission.sql`, canonical
+  LF SHA-256 `37809d9b3d9bc760ffbee501fcca383f0daa5665fb047964734603ceed41aef7`,
+  adds append-only forced-RLS launch admissions and the only service-role
+  executable Grok launcher. The legacy launcher is revoked, not rewritten.
+- Planner v2 persists safe assignment/bot/role/account/provider/model/
+  capability/tier/credential-reference identity. The database locks and
+  re-derives it; stale or mismatched input creates no graph or evidence.
+- Dedicated workflow scope `provider-admission` is one-file, forward-only, and
+  proves exact ledger/catalog/ACL/lint/runtime/rollback/health/stopped safety.
+  Its unit contract is 11/11 green; focused admission/security is 119/119;
+  exact-main lint, typecheck, 6,068 tests (seven skipped), the 266-page
+  production build, YAML, shell syntax, and hash checks pass.
+- Release still needs exact-main four-job CI, READY Vercel identity, protected
+  provider-admission apply + verify, and signed-in production queue/reload
+  acceptance. Do not rerun any prior Grok migration.
+- NEXT CODE SLICE: plan-only research/deploy; immutable admission roster for
+  specialist evaluation/decision coverage; wildcard normalization in TS plus
+  a new forward RPC; then admission-fence Resume/wake and worker claim.
+- Workers/autonomy/automatic actions remain OFF and the global kill switch ON.
+  Do not declare `GROK BOT: PRODUCTION READY`.
+
 ## GROK CANONICAL EVIDENCE + RESUME WAKE PRODUCTION ACCEPTED (2026-08-31)
 
 - Production application commit `5bc8eea092c683bd53aa25867efe8ab29a32b93b`

@@ -86,6 +86,33 @@ maps" was marked GAP after ADR-203 had already shipped the data. When you
 audit that file, check the rows against the code rather than against the
 previous audit — that is the third stale row found this way.
 
+## Newest (2026-08-31, latest+28): immutable Grok launch admission (ADR-208)
+
+This release candidate adds `20260831000100_grok_provider_admission.sql`
+(LF SHA-256 `37809d9b3d9bc760ffbee501fcca383f0daa5665fb047964734603ceed41aef7`).
+It adds forced-RLS, append-only `grok_execution_admissions` and the sole
+service-role executable v2 launch RPC. The old launcher remains byte-identical
+but loses service-role EXECUTE. The v2 RPC requires planner version 2, proves
+one exact admission per executable canonical node, locks and re-derives the
+assignment/bot/role/account/credential-reference identity, then delegates to
+the old atomic graph creator as owner. Graphs remain paused and no run is
+created.
+
+The application now loads connected AI-account identity with the bot fabric,
+requires persisted and current Ready state, snapshots only safe references,
+and returns `grok_provider_admission_required` before any launch on missing or
+stale coverage. Version-1 plans reload but never execute. The dedicated release
+workflow has one exact `provider-admission` scope and a rollback-only hosted
+canary; never use broad migration apply, reset, repair, down, or replay.
+
+PICK UP HERE after the release evidence is recorded: research/deploy need
+honest plan-only handling (or dedicated templates), specialist canonical
+coverage needs a persisted admission roster, and `*` needs identical TS/SQL
+normalization in a new forward migration. Then fence every Resume/wake and
+worker claim on complete current admissions. Until all of that and a real
+provider-backed E2E pass, keep workers/autonomy/automatic actions OFF, the kill
+switch ON, and do not declare `GROK BOT: PRODUCTION READY`.
+
 ## Newest (2026-08-31, latest+25): WDO reports (ADR-205, #70)
 
 `20260830010100` adds crm_wdo_inspections and crm_wdo_findings, two freeze

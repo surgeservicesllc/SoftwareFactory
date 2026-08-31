@@ -4893,3 +4893,42 @@ vault stays unreadable by both browser roles.
 route re-reads status rather than echoing its own write.
 
 Hosted apply scope `service-integrations`.
+
+## ADR-208 - Provider intent becomes immutable admission before graph creation
+
+- **Date**: 2026-08-31
+- **Status**: Accepted in the repository; hosted release and provider-backed
+  execution acceptance pending
+- **Decision**: a planned provider/model is not execution authority. Every
+  executable canonical node must carry one safe immutable admission snapshot:
+  assignment and bot revisions, role and AI-account timestamps, provider/model,
+  normalized capabilities, model-tier ceiling, and credential reference and
+  purpose. Credential material never enters the plan, admission row, browser,
+  log, fixture, or source control.
+- **Independent proof**: the database does not trust the application snapshot.
+  The v2 launcher locks and re-derives the exact tenant/project assignment,
+  bot, role, account, and credential row; validates canonical node/provider/
+  capability/tier identity; and either creates the paused graph plus all
+  append-only admissions atomically or creates nothing. Exact replay returns
+  the same launch only when every immutable hash agrees.
+- **Compatibility**: stored planner-v1 history remains readable but cannot be
+  launched. The old graph launcher remains internally reusable and byte-exact,
+  but loses service-role EXECUTE; only the v2 admitted launcher is exposed to
+  the server role.
+- **Security boundary**: `grok_execution_admissions` uses forced RLS, a single
+  member SELECT policy, owner-only table ACL, composite tenant/session/launch/
+  graph/node keys, secret guards, and update/delete/truncate rejection. Its
+  credential evidence is only credential-row identity and rotation time, never
+  the sealed envelope.
+- **Release boundary**: only the exact one-file `provider-admission` workflow
+  may apply `20260831000100`. It requires current exact-main green CI and READY
+  Vercel identity, stopped workers and broker, autonomy and automatic actions
+  off, kill switch on, exact prior ledger/catalog, linked lint, a rollback-only
+  runtime canary, postflight catalog/ACL/health, and no reset, repair, replay,
+  broad migration apply, or down path.
+- **Limit**: launch admission is not claim admission. Existing Resume/wake and
+  worker claims are still unable to prove complete current admissions, and
+  MODEL execution still uses the worker adapter boundary. Research/deploy,
+  specialist-roster admission, and wildcard normalization also remain open.
+  Workers stay OFF and the kill switch stays ON; this ADR cannot support a
+  `GROK BOT: PRODUCTION READY` declaration.

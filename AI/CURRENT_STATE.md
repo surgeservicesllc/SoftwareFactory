@@ -1,5 +1,38 @@
 # Current state
 
+## 2026-08-31: Grok immutable provider admission is release-ready, not yet hosted (ADR-208)
+
+The Grok launch boundary now fails closed unless every executable canonical
+node carries an immutable, safe provider admission. New planner version-2
+tasks snapshot the exact assignment and bot revisions, role and AI-account
+timestamps, provider/model, normalized capabilities, model-tier ceiling, and
+credential reference/purpose. They never snapshot a credential value. The
+server maps those tasks onto the canonical Full Lifecycle v2 graph, and the
+new service-only database launcher locks and re-derives every live identity
+before atomically creating the still-paused graph and its append-only
+`grok_execution_admissions` evidence. Stale or mismatched identity leaves no
+graph, launch, admission, run, or audit residue. Stored version-1 plans remain
+readable but cannot execute.
+
+Forward migration `20260831000100_grok_provider_admission.sql` has canonical
+LF SHA-256 `37809d9b3d9bc760ffbee501fcca383f0daa5665fb047964734603ceed41aef7`.
+It keeps forced RLS and owner-only table ACLs, revokes `service_role` from the
+legacy unadmitted launcher, exposes only the v2 launcher to `service_role`, and
+adds an exact one-file release scope with ledger/catalog/ACL/lint/runtime/
+rollback/health checks. The workflow's rollback canary proves old-launch
+denial, stale-revision zero residue, valid launch and exact replay, immutable
+admission rows, a paused graph, and zero graph/node runs.
+
+This is launch admission, not worker admission. Existing graph Resume/wake and
+worker-claim paths do not yet require or revalidate an admission row, so
+workers, autonomy, and every automatic action remain OFF and the global kill
+switch remains ON. Research/deploy prompts currently fail closed at canonical
+admission, specialist-only rosters can lack canonical evaluation/decision
+coverage, and wildcard role normalization still needs a new forward migration.
+Those are explicit follow-ups; **GROK BOT: PRODUCTION READY is not declared.**
+The application and migration are still awaiting exact-main CI, Vercel,
+protected hosted apply/verify, and signed-in production acceptance.
+
 ## 2026-08-31: Grok atomic control is production accepted; provider loop remains open (ADR-204)
 
 Grok Bot is a SoftwareFactory product label and Chief-of-Staff experience, not

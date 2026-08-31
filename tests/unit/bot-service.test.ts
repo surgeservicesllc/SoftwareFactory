@@ -30,6 +30,7 @@ const organizationId = "11111111-2222-4333-8444-555555555555";
 
 const botRow = {
   id: "bot-1",
+  revision: 12,
   name: "Claude",
   provider: "anthropic",
   model: "claude-opus-5",
@@ -64,6 +65,7 @@ type QueryObservations = {
   /** Simulates a PostgREST max-rows value below the requested page size. */
   assignmentServerCap?: number;
   missingAssignmentRevision?: boolean;
+  missingBotRevision?: boolean;
   missingBotAiAccountId?: boolean;
   selectedColumns?: Array<[string, string]>;
   tableCursors?: Array<[string, string]>;
@@ -146,6 +148,10 @@ function fakeClient(
                 && columns.split(",").includes("revision")
                 ? { code: "PGRST204", message: "Could not find the 'revision' column" }
                 : table === "bots"
+                  && observations?.missingBotRevision
+                  && columns.split(",").includes("revision")
+                  ? { code: "PGRST204", message: "Could not find the 'revision' column" }
+                  : table === "bots"
                   && observations?.missingBotAiAccountId
                   && columns.split(",").includes("ai_account_id")
                   ? { code: "42703", message: "column bots.ai_account_id does not exist" }
@@ -182,6 +188,7 @@ describe("serializeBot", () => {
     const bot = serializeBot(botRow);
 
     expect(bot.credentialRef).toBe("ANTHROPIC_API_KEY");
+    expect(bot.revision).toBe(12);
     expect(bot.credentialPresent).toBe(true);
     expect(bot.currentReadiness).toBe("ready");
     expect(JSON.stringify(bot)).not.toContain("fixture-value");
@@ -316,12 +323,13 @@ describe("loadBotFabric", () => {
     const observations: QueryObservations = {
       assignmentStatusPredicates: [],
       missingAssignmentRevision: true,
+      missingBotRevision: true,
       missingBotAiAccountId: true,
       selectedColumns: [],
     };
     const snapshot = await loadBotFabric(
       fakeClient({
-        bots: [botRow],
+        bots: [{ ...botRow, revision: undefined }],
         bot_roles: [],
         bot_assignments: [{
           id: "assignment-legacy",
@@ -343,11 +351,13 @@ describe("loadBotFabric", () => {
       organizationId,
     );
 
-    expect(snapshot.bots[0]).toMatchObject({ id: botRow.id, aiAccountId: null });
+    expect(snapshot.bots[0]).toMatchObject({ id: botRow.id, revision: 1, aiAccountId: null });
     expect(snapshot.assignments[0]).toMatchObject({ id: "assignment-legacy", revision: 1 });
     expect(observations.selectedColumns).toEqual(expect.arrayContaining([
       ["bots", expect.stringContaining("ai_account_id")],
       ["bots", expect.not.stringContaining("ai_account_id")],
+      ["bots", expect.stringContaining("revision")],
+      ["bots", expect.not.stringContaining("revision")],
       ["bot_assignments", expect.stringContaining("revision")],
       ["bot_assignments", expect.not.stringContaining("revision")],
     ]));
