@@ -228,6 +228,7 @@ const CASES = [
   "safety",
   "provider-settings",
   "ai-factory",
+  "grok-workspace",
   "workflows",
   "bot-workspace",
   "composer",

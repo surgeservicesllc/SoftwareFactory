@@ -34,6 +34,7 @@ import { JobSeekerConsole } from "@/components/job-seeker/console";
 import { JobSearchPanel } from "@/components/job-seeker/search-panel";
 import { ResumeReviewPanel } from "@/components/job-seeker/resume-review-panel";
 import { GitHubFileManager } from "@/components/github-file-manager";
+import { GrokWorkspace } from "@/components/grok/grok-workspace";
 import { MyProjectsConsole } from "@/components/my-projects-console";
 import { OperationsConsole } from "@/components/operations-console";
 import { PipelineTemplatesManager } from "@/components/pipeline-templates-manager";
@@ -247,6 +248,7 @@ function serveFixtures() {
       return json({ connections: FACTORY_BRIEFING_CONNECTIONS });
     }
     if (url.includes("/api/github/connections")) return json({ connections: CONNECTIONS });
+    if (url.includes("/api/grok/sessions")) return json({ sessions: [] });
     if (url.includes("/api/projects")) return json({ projects: PROJECTS });
     if (url.includes("/api/tasks") || url.includes("/api/backlog")) return json({ tasks: [] });
     if (url.includes("/api/organizations")) {
@@ -500,6 +502,12 @@ const CASES: Record<string, () => React.ReactElement> = {
   safety: () => <InShell><SafetyControls /></InShell>,
   "provider-settings": () => <InShell><ProviderSettings /></InShell>,
   "ai-factory": () => <InShell><AiFactoryConsole builtIns={TEMPLATES} /></InShell>,
+  "grok-workspace": () => (
+    <GrokWorkspace
+      initialSelection={{ projectId: PROJECT_ID }}
+      viewer={{ email: "owner@example.org", displayName: "Factory Owner" }}
+    />
+  ),
   workflows: () => <InShell><WorkflowsConsole templates={WORKFLOW_TEMPLATES} /></InShell>,
   "bot-workspace": () => <InShell><BotManagerWorkspace /></InShell>,
   composer: () => <InShell><CommandComposer /></InShell>,
