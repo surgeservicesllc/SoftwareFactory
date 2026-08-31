@@ -328,6 +328,11 @@ export type LineView = {
   createdAt: string;
 };
 
+/** An invoice line also says whether a person typed it (ADR-212). */
+export type InvoiceLineView = LineView & {
+  source: "manual" | "work_order" | "application";
+};
+
 export type EstimateView = {
   id: string;
   accountId: string;
@@ -388,7 +393,7 @@ export type InvoiceView = {
   createdAt: string;
   updatedAt: string;
   overdue: boolean;
-  lines: LineView[];
+  lines: InvoiceLineView[];
 };
 
 export type PaymentView = {

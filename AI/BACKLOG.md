@@ -324,6 +324,11 @@ the full seeded E2E journey passes — increment 10 of the plan.
   visits a year beside bills a year so level billing reads as the
   arrangement it is. /Services/schedule. 20260831000200; hosted apply:
   scope=plan-sequencing after merge.
+- [x] Increment 20 (ADR-212): invoice lines generated from the work order —
+  the service at the plan's value plus one line per current chemical
+  application, built once and never rebuilt, so the document and the record
+  of the visit cannot drift apart. /Services/billing. 20260831000300;
+  hosted apply: scope=invoice-from-visit after merge.
 - [ ] Provider-gated, ship Not Connected until an owner supplies
   credentials, never implied as working: card/ACH processing (the ledger
   records money that moved; it does not move money), SMS/email delivery,

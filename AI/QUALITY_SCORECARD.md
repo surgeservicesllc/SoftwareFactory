@@ -2,6 +2,28 @@
 
 Last reviewed: 2026-08-31
 
+**Addendum, 2026-08-31 latest+31 - invoices from the visit (ADR-212):**
+services-invoice-from-visit.behavior 12 on the real chain: the service at
+the plan's value plus one chemical line naming product, amount, target and
+EPA number, with the invoice totals recomputed by the same statement that
+wrote the lines; a second build refused rather than doubling the invoice,
+proven by counting the lines afterwards; the same visit refused on a second
+invoice with the first one's number in the message; a dispatched visit
+refused because a visit is billed after it happens; an issued invoice
+refused because a customer already holds it; a superseded application
+excluded so the invoice bills the correction rather than the mistake; a
+0.125 oz dose printed at its recorded scale rather than rounded into a
+two-decimal financial column; a one-off visit priced at zero rather than
+guessed; hand-typed lines kept and generated ones numbered after them; a
+visit from another account refused; one book's visits invisible to
+another's invoices; and the generator still an invoker with invoice lines
+still undeletable by any browser role. services-invoice-from-visit-routes 9
+pins that each of seven database refusals reaches the operator as its own
+status and the database's own words. Two defects were caught in review
+before first run: trim(trailing '0') renders 100.000 as "1", and the
+service date rendered in the session's timezone. Runbook 210; workflow
+scope `invoice-from-visit`. Matrix: 45 HAVE -> 46, 5 PARTIAL -> 4.
+
 **Addendum, 2026-08-31 latest+30 - plan sequencing (ADR-211):**
 services-plan-sequencing.behavior 14 on the real chain: a twice-monthly
 account on the 1st and the 15th for a whole year rather than 27 drifting

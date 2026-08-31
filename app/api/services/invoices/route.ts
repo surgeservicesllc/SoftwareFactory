@@ -5,7 +5,7 @@ import {
   CRM_INVOICE_LINE_COLUMNS,
   isInvoiceOverdue,
   toInvoiceView,
-  toLineView,
+  toInvoiceLineView,
   type CrmInvoiceLineRow,
   type CrmInvoiceRow,
 } from "@/lib/services/crm";
@@ -85,10 +85,10 @@ export async function GET() {
             .limit(2000);
     if (lineRows.error) return databaseErrorResponse(lineRows.error);
 
-    const linesByInvoice = new Map<string, ReturnType<typeof toLineView>[]>();
+    const linesByInvoice = new Map<string, ReturnType<typeof toInvoiceLineView>[]>();
     for (const row of (lineRows.data ?? []) as unknown as CrmInvoiceLineRow[]) {
       const bucket = linesByInvoice.get(row.invoice_id) ?? [];
-      bucket.push(toLineView(row));
+      bucket.push(toInvoiceLineView(row));
       linesByInvoice.set(row.invoice_id, bucket);
     }
 
@@ -196,7 +196,7 @@ export async function POST(request: Request) {
         invoice: {
           ...invoice,
           overdue: false,
-          lines: ((insertedLines.data ?? []) as unknown as CrmInvoiceLineRow[]).map(toLineView),
+          lines: ((insertedLines.data ?? []) as unknown as CrmInvoiceLineRow[]).map(toInvoiceLineView),
         },
       },
       { status: 201 },
