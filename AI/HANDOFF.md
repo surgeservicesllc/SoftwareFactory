@@ -335,33 +335,39 @@ compliance.
 ## Older (2026-08-30, latest+11): field service core (ADR-189, task #63)
 ## Newest (2026-08-30, latest+12): Grok Bot local release candidate (ADR-190)
 ## Newest (2026-08-30, latest+14): Grok database phase accepted; application pending (ADR-190)
+## Newest (2026-08-30, latest+15): Grok failure containment production accepted (ADR-190)
 
-Database-first Phase 1 is complete at exact commit
-`f6292c8ec359fd8e39c5463e4039b3388cf2056f`. All four required jobs passed in
-CI run `33348187052`; Vercel deployment
-`dpl_A35nZhbJQMJWLtUSroG9zXLWhXBw` is READY and public health matches the
-release. Guarded migration apply run `33348980504` passed, then independent
-read-only verify run `33349033378` passed. The required ledger vector is
-`1|1|1|1`; catalog, ACL, atomic runtime/replay, linked lint, health, and stopped
-safety are exact. Do not rerun the mutation scope.
+Phase 2 application containment is accepted at exact commit
+`d4040fee445079e34b2e062bfc234b708f802d9b`. All four required jobs passed in
+CI run `33349358778`. Vercel deployment
+`dpl_9zKFCaitCUAidmEaDbE9vAgKv5fY` is READY at
+`https://softwarefactory-hiqx4fnbh-surgeservices-projects.vercel.app`; health
+matches exact release/main, Vercel project
+`prj_pAsrhftaVWI4SyaqstgRVSWHJkdD`, and reachable matched Supabase project
+`qpuofpmagrmyamahqwxw`.
 
-Hosted `20260830001100_grok_planning_failure.sql` (normalized SHA256
-`22c035897cb51c611aa373c83e637dc4e033352d9079059521eda7fefa35e8f7`) now
-provides the service-role-only `record_grok_planning_failure_as_server` atomic
-boundary. It records a fixed safe assistant response plus immutable failure
-evidence and leaves the session `blocked` and nonclosed, without a graph, run,
-dispatch, provider call, or worker wake.
+Signed-in production acceptance on the Demo Data project submitted a harmless
+README wording request and created session
+`569325a5-5cd2-40c3-831e-0d90c89188ab`. Missing ready Claude coverage was
+refused truthfully. The session is durable `blocked`/nonclosed with exactly two
+messages and five immutable events in order: `session.created`, user
+`message.appended`, assistant `message.appended`, `session.planning_failed`,
+`session.blocked`. Return/reload retained the exact URL session and evidence.
+There is no plan, routing identity, graph, run, artifact/deployment evidence,
+provider call, worker wake, or dispatch. Prior active session
+`74d18263-37ba-4f7d-8230-dc5e41bdc86a` now reloads truthfully as request
+saved/no plan.
 
-Phase 2 is the only remaining release step: commit/push the API/store/UI caller
-and its tests/docs, require all exact-head CI jobs and matching Vercel/health,
-then perform signed-in create/return/reload acceptance against the legitimate
-no-Codex roster. Verify the structured 409 carries the durable session identity,
-the URL survives return/reload, no plan or agent-routing claims render, and no
-graph/run/dispatch exists. The application behavior is not yet claimed live.
+Preserve the accepted database-first evidence: Phase 1 commit
+`f6292c8ec359fd8e39c5463e4039b3388cf2056f`, CI `33348187052`, READY Vercel
+`dpl_A35nZhbJQMJWLtUSroG9zXLWhXBw`, apply `33348980504`, verify
+`33349033378`, ledger `1|1|1|1`, and exact catalog/ACL/runtime/replay/lint/
+health/stopped safety. Never rerun that mutation scope.
 
-Workers, autonomy, and automatic actions stay OFF; the global kill switch stays
-ON. Use forward-only containment on any mismatch. Do not declare `GROK BOT:
-PRODUCTION READY` yet.
+Workers, autonomy, and automatic actions remain OFF; the global kill switch
+remains ON, and no safety state changed. Next work is not more containment: the
+provider-backed loop requires legitimate ready bot coverage and separately
+authorized execution. Do not declare `GROK BOT: PRODUCTION READY` yet.
 
 ## Older (2026-08-30, latest+12): Grok Bot local release candidate (ADR-190)
 

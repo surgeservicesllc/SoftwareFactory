@@ -1,29 +1,34 @@
 # SoftwareFactory — shared working status
 
-## GROK BOT DATABASE PHASE ACCEPTED; APPLICATION PHASE NEXT (2026-08-30 — PICK UP HERE)
+## GROK BOT FAILURE CONTAINMENT ACCEPTED; PROVIDER LOOP STILL OPEN (2026-08-30 — PICK UP HERE)
 
-- Database-first release is exact commit
-  `f6292c8ec359fd8e39c5463e4039b3388cf2056f`. CI run `33348187052` passed all
-  four jobs; Vercel deployment `dpl_A35nZhbJQMJWLtUSroG9zXLWhXBw` is READY and
-  health matches the release.
-- Guarded apply run `33348980504` applied the hash-pinned
-  `20260830001100_grok_planning_failure.sql`; independent read-only verify run
-  `33349033378` passed. Required ledger is `1|1|1|1`, with exact catalog, ACL,
-  atomic runtime/replay, linked lint, health, and stopped safety. Do not rerun
-  the mutation scope.
-- Hosted `record_grok_planning_failure_as_server` now atomically records the
-  fixed safe assistant response and immutable failure evidence, leaving the
-  session `blocked` and nonclosed with no graph, run, dispatch, provider call,
-  or worker wake.
-- PICK UP HERE: push the Phase 2 API/store/UI caller plus tests/docs, require
-  all exact-head CI jobs and matching Vercel/health, then perform signed-in
-  create/return/reload acceptance against the legitimate connected Claude/no-
-  Codex roster. Verify durable structured 409 identity, URL return/reload, no
-  plan or routing claims, and no graph/run/dispatch. The application behavior
-  is not yet claimed live.
-- Keep workers, autonomy, and automatic actions OFF and the global kill switch
-  ON. Use forward-only containment on any mismatch. Do not claim `GROK BOT:
-  PRODUCTION READY` before Phase 2 and signed-in evidence pass.
+- Phase 2 application release is exact commit
+  `d4040fee445079e34b2e062bfc234b708f802d9b`. CI run `33349358778` passed all
+  four jobs. Vercel deployment `dpl_9zKFCaitCUAidmEaDbE9vAgKv5fY` is READY at
+  `https://softwarefactory-hiqx4fnbh-surgeservices-projects.vercel.app`; health
+  matches exact release/main, Vercel project
+  `prj_pAsrhftaVWI4SyaqstgRVSWHJkdD`, and reachable matched Supabase
+  `qpuofpmagrmyamahqwxw`.
+- Signed-in Demo Data acceptance submitted a harmless README wording request
+  and created session `569325a5-5cd2-40c3-831e-0d90c89188ab`. Missing ready
+  Claude coverage was refused truthfully into durable `blocked`/nonclosed
+  state: exactly two messages and five immutable events ordered
+  `session.created`, user `message.appended`, assistant `message.appended`,
+  `session.planning_failed`, `session.blocked`.
+- Return/reload retained the exact session URL and evidence. No plan, routing
+  identity, graph, run, artifact/deployment evidence, provider call, worker
+  wake, or dispatch exists. Legacy session
+  `74d18263-37ba-4f7d-8230-dc5e41bdc86a` now reloads as request saved/no plan.
+- Preserve Phase 1 evidence: commit
+  `f6292c8ec359fd8e39c5463e4039b3388cf2056f`, CI `33348187052`, READY Vercel
+  `dpl_A35nZhbJQMJWLtUSroG9zXLWhXBw`, apply `33348980504`, verify
+  `33349033378`, ledger `1|1|1|1`, and exact catalog/ACL/runtime/replay/lint/
+  health/stopped safety. Do not rerun that mutation scope.
+- PICK UP HERE: obtain legitimate ready bot coverage, then separately authorize
+  and verify provider-backed execution. Workers, autonomy, and automatic
+  actions remain OFF; the global kill switch remains ON, and no safety state
+  changed. Failure containment is accepted, but `GROK BOT: PRODUCTION READY`
+  is not declared.
 
 ## JOB SEEKER — JOB DISCOVERY MATCHES THE DESIGN, AND FOUR FIGURES GOT REAL DATA (2026-08-28 — PICK UP HERE)
 
