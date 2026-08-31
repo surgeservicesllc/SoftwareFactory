@@ -5316,3 +5316,48 @@ forty-four distinct. A transcription slip breaks at least one of those, and
 almost any slip breaks distinctness.
 
 No hosted apply: this adds no migration.
+
+## ADR-215 - A place inside a place
+
+An account had properties and a property had stations, visits and
+sightings. Nothing sat BELOW a property, so a 200-unit apartment block was
+one row here and two hundred service points in reality. That is the shape
+PestPac sells as Multi-Unit, and after two rounds of auditing the audit it
+was the last row on the competitor board needing neither a provider
+account, an owner authorization, nor object storage — only a level in the
+schema.
+
+**The composite reference is the whole feature.** Work orders, stations,
+sightings and plans reference `(organization, property, unit)` rather than
+`(unit)`, so a visit at Harborview cannot name a unit of Fairview. Getting
+that wrong is how multi-unit becomes a reporting feature that quietly
+attributes a treatment to the wrong home, which in a compliance record is
+worse than not having units at all.
+
+**The bug that composite key caused, and the fix.** `ON DELETE SET NULL` on
+a composite foreign key nulls EVERY referencing column — including
+`organization_id` and `property_id`, both NOT NULL. Deleting a door would
+have failed at the constraint rather than detaching the visit. The test for
+"a removed door does not unmake the work" caught it, and the fix is the
+column-list form, `on delete set null (unit_id)`, which nulls the door
+alone. A bare SET NULL here is a latent outage, so the postflight asserts
+all four references carry exactly one column in their delete set.
+
+**A unit is a place, not a person.** It carries an occupant NAME because a
+technician knocking needs one, and nothing else: no contact record, no
+account, no billing identity. Units are billed through the account that
+owns the property, which is how these contracts are actually written, and
+inventing a tenant identity would have created a second customer the
+product cannot support.
+
+**One door is one row, case-insensitively.** "4b" and "4B" are the same
+door, and a second row for it would split its history in half.
+
+**The coverage reader answers the question multi-unit exists for.** Not
+"how many units were treated" — that is easy and useless — but which doors
+were missed, sorted never-serviced first. A 200-unit sweep that reached 188
+is normal, and the twelve nobody opened are where the re-infestation comes
+from. `order by` is positional because `last_serviced_at` names an OUT
+parameter, the same trap as ADR-203.
+
+Hosted apply scope `multi-unit-properties`.

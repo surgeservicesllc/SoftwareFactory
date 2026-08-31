@@ -79,6 +79,7 @@ export type SeedCounts = {
   planSteps: number;
   stockMovements: number;
   fieldSubmissions: number;
+  propertyUnits: number;
 };
 
 export type SeedRunOutcome = { error: SeedError } | { seeded: SeedCounts };
@@ -2042,6 +2043,34 @@ export async function runSeed(
   const fieldSubmissions = await insertAll(client, "crm_field_submissions", submissionRows, "id");
   if ("error" in fieldSubmissions) return fieldSubmissions;
 
+  /*
+   * Units inside a property (ADR-215). Commercial sites get doors; a
+   * single-family home does not, which is the case the schema had to keep
+   * working unchanged.
+   */
+  const unitRows: SeedRow[] = properties.data.flatMap((property, index) => {
+    if (index % 3 !== 0) return [];
+    const propertyId = property.id as string;
+    // Six doors and a common area, which is what a small block looks like.
+    return ["1A", "1B", "2A", "2B", "3A", "3B", "Common laundry"].map((label, door) => ({
+      organization_id: org,
+      property_id: propertyId,
+      label,
+      unit_type: label.startsWith("Common") ? "common area" : "apartment",
+      occupant_name: label.startsWith("Common")
+        ? null
+        : `${["M.", "R.", "J.", "T.", "S.", "N."][door % 6]} ${
+            ["Okafor", "Halvorsen", "Nakamura", "Delacroix", "Ferreira", "Adeyemi"][
+              (index + door) % 6
+            ]}`,
+      access_notes: door % 4 === 0 ? "Buzzer is out; call from the lobby" : null,
+      active: !(door === 5 && index % 9 === 0),
+      created_by: userId,
+    }));
+  });
+  const propertyUnits = await insertAll(client, "crm_property_units", unitRows, "id, property_id");
+  if ("error" in propertyUnits) return propertyUnits;
+
   const timelineTotal = await client
     .from("crm_timeline_events")
     .select("id", { count: "exact", head: true })
@@ -2104,6 +2133,7 @@ export async function runSeed(
       planSteps: planSteps.data.length,
       stockMovements: stockMovements.data.length,
       fieldSubmissions: fieldSubmissions.data.length,
+      propertyUnits: propertyUnits.data.length,
     },
   };
 }

@@ -2,6 +2,26 @@
 
 Last reviewed: 2026-08-31
 
+**Addendum, 2026-08-31 latest+35 - multi-unit properties (ADR-215):**
+services-multi-unit.behavior 9 on the real chain, most of them about the
+wrong door rather than the right one: a visit refused when it names a unit
+of a different property, and the same for a station and a sighting; one
+door being one row however it is typed, while the same number in another
+building is a different door; the coverage reader naming never-serviced
+units FIRST, because a 200-unit sweep that reached 188 is normal and the
+twelve nobody opened are the point; a unit's own stations and sightings
+counted rather than the building's; a property with no units behaving
+exactly as before; a removed door detaching from its visit rather than
+deleting the work; one book's doors invisible to another; and the reader
+still an invoker. That suite caught a real bug in the migration: ON DELETE
+SET NULL on a COMPOSITE key nulls every referencing column, two of which
+are NOT NULL, so deleting a door would have failed at the constraint — the
+column-list form `set null (unit_id)` detaches the door alone, and the
+postflight asserts all four references carry exactly one column in their
+delete set. RLS census 207 -> 208; grants 52 -> 53 crm tables; runbook 212;
+seed report 51/51 -> 52/52 and 50,063 -> 51,281 rows, with 1,218 doors.
+Matrix: 48 HAVE -> 49, 14 GAP -> 13.
+
 **Addendum, 2026-08-31 latest+34 - the printable station label (ADR-214):**
 code39 13 pins the transcribed pattern table by the properties the real one
 has — nine elements each, exactly three wide, only narrow and wide, all

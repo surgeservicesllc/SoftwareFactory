@@ -352,11 +352,13 @@ the full seeded E2E journey passes — increment 10 of the plan.
   cannot carry prints without a symbol and says why, because barcodes are
   case-sensitive and an uppercased one would scan as a different station.
   This was the last row on the competitor board that code alone could close.
-- [ ] Multi-unit properties (PestPac parity): a unit level below a property,
-  serviced and billed individually. An account has properties and a property
-  has stations, but a 200-unit apartment block is currently one row and 200
-  service points in reality. The only row left on the competitor board that
-  code alone can close.
+- [x] Multi-unit properties (PestPac parity, ADR-215): a unit level below a
+  property, with every visit, station, sighting and plan referencing
+  (organization, property, unit) so a treatment cannot land on a door in
+  another building, plus a coverage reader that names the doors a sweep
+  missed. 20260831000500; hosted apply: scope=multi-unit-properties after
+  merge. This was the last row on the competitor board that code alone could
+  close.
 - [ ] Provider- or vendor-gated PestPac modules found by auditing the audit:
   smart traps (a sensor feed), online sales (a self-serve purchase flow on
   top of estimates and contracts, and the payment row it depends on), print

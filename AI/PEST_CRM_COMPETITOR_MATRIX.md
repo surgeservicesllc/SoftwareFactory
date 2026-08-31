@@ -230,7 +230,7 @@ implied, in the deepest-measured competitor on the board.
 
 | Capability | Who has it | Us |
 |---|---|---|
-| **Multi-unit properties**: units inside one site, serviced and billed individually | PestPac (Multi-Unit) | **GAP** — an account has properties and a property has stations, but nothing below a property. A 200-unit apartment block is one row here and 200 service points in reality. Buildable: this is a schema level, not an account. |
+| **Multi-unit properties**: units inside one site, serviced and billed individually | PestPac (Multi-Unit) | **HAVE** (ADR-215) — a unit level under a property, with visits, stations, sightings and plans referencing `(organization, property, unit)` so a treatment cannot be attributed to a door in another building. A coverage reader names the doors that were missed, never-serviced first, which is what a building sweep is actually for. Units bill through the account that owns the property. |
 | **On-site compliance logbook** for auditors (AIB, SQF, BRC) | PestPac (CustomerConnect+ Logbook) | **PARTIAL** — the commercial portal already carries what a logbook holds: SDS and label library, inspection history, device summary, open conditions and the scan ledger (ADR-198, ADR-203). What it cannot do is hand an auditor the binder, which is the document GAP above. |
 | **Post-service customer surveys** | PestPac (Customer Surveys) | **PARTIAL** — the form builder (ADR-197) already models a questionnaire with typed answers. Sending one to a customer and collecting a reply needs the email/SMS provider, so it is gated where every other outbound message is. |
 | **Smart traps**: remote-sensing devices that report activity without a visit | PestPac (Smart Traps), FieldRoutes | **GAP** — stations and their append-only scan ledger exist (ADR-191); a sensor that files its own events needs a device vendor's feed. |
@@ -238,8 +238,8 @@ implied, in the deepest-measured competitor on the board.
 | **Print marketing fulfilment**: postcards and letters actually mailed | PestPac (Print Marketing) | **GAP** — campaigns and audiences ship (ADR-196); handing a print vendor a mailing list is a vendor relationship, not code. |
 | **Website builder** | PestPac (Website Builder) | **GAP** — PestPac sells one. This is outside what a CRM core is, and it is listed rather than quietly dropped so the count stays honest. |
 
-**A note on what "parity" can mean here.** 67 capability rows: **48 HAVE,
-5 PARTIAL, 14 GAP.**
+**A note on what "parity" can mean here.** 67 capability rows: **49 HAVE,
+5 PARTIAL, 13 GAP.**
 
 (58 until PestBoss was measured in its own right, then 60, then 67 once
 PestPac's own feature index was checked against the board rather than
@@ -247,13 +247,12 @@ assumed. Two rounds of checking added nine rows and no HAVEs. That is what
 auditing your own audit looks like, and the count moving away from parity
 is the honest outcome rather than a setback.)
 
-The composition matters more than the count. **Eighteen of the nineteen
-remaining rows are gated on something outside the code.**
+The composition matters more than the count. **Every one of the eighteen
+remaining rows is gated on something outside the code.** Not most, not
+roughly half: all.
 
-The nineteenth is not: **multi-unit properties**. An account has properties
-and a property has stations, but there is nothing below a property, so a
-200-unit apartment block is one row here and 200 service points in reality.
-That is a schema level, and it is buildable.
+Multi-unit properties was the nineteenth and the only one code alone could
+close. It is closed (ADR-215).
 
 Ten need an external account somebody has to open and pay for — SMS/email
 reminders, route optimization by drive time, GPS telemetry, in-field card
@@ -266,9 +265,10 @@ service report can become a document.
 The printable station label was closed the same way (ADR-214), after the
 first round of checking added it.
 
-One row on this list can be closed by writing code: multi-unit properties.
-Everything else needs an account to open, an authorization to give, or
-object storage to configure.
+No row on this list can now be closed by writing code. What remains is an
+account to open, an authorization to give, or object storage to configure —
+and that has now survived two rounds of deliberately looking for rows the
+audit had missed.
 
 ADR-207 built the registry the provider-gated rows depend on, so each is
 wired to the point where supplying a credential and the provider's own
