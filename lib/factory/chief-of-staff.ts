@@ -14,6 +14,7 @@ import type { ProposedEdge } from "@/lib/graph/dependencies";
 import { storeZodSchema } from "@/lib/graph/stored-schema";
 import { findTemplate } from "@/lib/graph/templates";
 import type { GraphEdge, GraphTopology, RiskLevel } from "@/lib/graph/types";
+import { normalizeGrokCapabilities } from "@/lib/grok/capabilities";
 import { findSensitiveData } from "@/lib/security/sensitive-data";
 
 /**
@@ -178,7 +179,8 @@ export function composeLaunchProposal(goal: string): LaunchProposal | null {
  * one isolated repository-writing task. Planning is pure and never calls
  * either provider, a database, GitHub, or a deployment service.
  */
-export const GROK_PLAN_VERSION = 2 as const;
+export const GROK_PLAN_VERSION = 3 as const;
+export const GROK_SPECIALIST_ROSTER_VERSION = 1 as const;
 export const GROK_INTENT_KINDS = ["build", "fix", "research", "test", "deploy"] as const;
 export type GrokIntentKind = (typeof GROK_INTENT_KINDS)[number];
 export type GrokProvider = "anthropic" | "openai";
@@ -208,6 +210,26 @@ export type GrokConfiguredAgent = Readonly<{
   ready: boolean;
   /** Lower numbers win; agent id is the stable final tie-break. */
   priority?: number;
+}>;
+
+export type GrokSpecialistAdmission = Readonly<{
+  version: typeof GROK_SPECIALIST_ROSTER_VERSION;
+  assignmentId: string;
+  assignmentRevision: number;
+  botId: string;
+  botRevision: number;
+  roleId: string;
+  roleUpdatedAt: string;
+  aiAccountId: string;
+  credentialRef: string;
+  credentialPurpose: string;
+  providerIdentity: string | null;
+  accountUpdatedAt: string;
+  provider: GrokProvider;
+  model: string;
+  /** Sorted canonical capabilities; the literal wildcard is never persisted. */
+  capabilities: readonly NodeCapability[];
+  maxModelTier: Exclude<ModelTier, "NONE">;
 }>;
 
 export type GrokProjectContext = Readonly<{
@@ -373,6 +395,8 @@ export type GrokChiefOfStaffPlan = Readonly<{
     risk: RiskLevel;
   }>;
   project: GrokProjectContext;
+  /** Immutable, deterministic snapshot of every Ready project posting. */
+  admissionRoster: readonly GrokSpecialistAdmission[];
   requirements: readonly GrokRequirement[];
   acceptanceCriteria: readonly GrokAcceptanceCriterion[];
   dag: Readonly<{
@@ -458,6 +482,10 @@ const grokPlannerInputSchema = z.object({
 
 type ParsedGrokInput = z.infer<typeof grokPlannerInputSchema>;
 type ParsedGrokAgent = z.infer<typeof grokAgentSchema>;
+type NormalizedGrokAgent = Omit<ParsedGrokAgent, "capabilities"> & Readonly<{
+  capabilities: readonly NodeCapability[];
+  declaredGeneralist: boolean;
+}>;
 
 type TaskBlueprint = Readonly<{
   id: string;
@@ -755,18 +783,18 @@ function blueprintsFor(kind: GrokIntentKind): readonly TaskBlueprint[] {
 }
 
 function selectAgent(
-  agents: readonly ParsedGrokAgent[],
+  agents: readonly NormalizedGrokAgent[],
   task: TaskBlueprint,
-): ParsedGrokAgent | null {
+): NormalizedGrokAgent | null {
   const candidates = agents.filter((agent) =>
     agent.ready
     && agent.provider === task.provider
     && TIER_RANK[agent.maxModelTier] >= TIER_RANK[task.modelTier]
-    && (agent.capabilities.includes(task.capability) || agent.capabilities.includes("*")),
+    && agent.capabilities.includes(task.capability),
   );
   candidates.sort((left, right) => {
-    const leftExact = left.capabilities.includes(task.capability) ? 0 : 1;
-    const rightExact = right.capabilities.includes(task.capability) ? 0 : 1;
+    const leftExact = left.declaredGeneralist ? 1 : 0;
+    const rightExact = right.declaredGeneralist ? 1 : 0;
     return leftExact - rightExact
       || (left.priority ?? 100) - (right.priority ?? 100)
       || left.id.localeCompare(right.id);
@@ -785,7 +813,7 @@ function outputSchemaFor(task: TaskBlueprint) {
 
 function nodeContractsFor(
   tasks: readonly TaskBlueprint[],
-  selected: ReadonlyMap<string, ParsedGrokAgent>,
+  selected: ReadonlyMap<string, NormalizedGrokAgent>,
   risk: RiskLevel,
   repositoryFullName: string,
 ): readonly NodeContract[] {
@@ -910,7 +938,20 @@ export function buildGrokChiefOfStaffPlan(input: unknown): GrokPlannerResult {
     );
   }
   const value = parsed.data;
-  const ready = value.agents.filter((agent) => agent.ready);
+  if (new Set(value.agents.map((agent) => agent.assignmentId)).size !== value.agents.length) {
+    return failure(
+      "INVALID_INPUT",
+      "The Grok planning request contains a duplicate configured posting identity.",
+    );
+  }
+  const ready: readonly NormalizedGrokAgent[] = Object.freeze(value.agents
+    .filter((agent) => agent.ready)
+    .map((agent) => Object.freeze({
+      ...agent,
+      capabilities: normalizeGrokCapabilities(agent.capabilities),
+      declaredGeneralist: agent.capabilities.includes("*"),
+    }))
+    .filter((agent) => agent.capabilities.length > 0));
   if (ready.length === 0) {
     return failure(
       "NO_CONFIGURED_AGENTS",
@@ -921,7 +962,7 @@ export function buildGrokChiefOfStaffPlan(input: unknown): GrokPlannerResult {
   const kind = value.intent ?? classifyGrokIntent(value.prompt);
   const risk = planRisk(value, kind);
   const blueprints = blueprintsFor(kind);
-  const selected = new Map<string, ParsedGrokAgent>();
+  const selected = new Map<string, NormalizedGrokAgent>();
   const missingClaude = new Set<string>();
   const missingCodex = new Set<string>();
   for (const task of blueprints) {
@@ -1123,6 +1164,26 @@ export function buildGrokChiefOfStaffPlan(input: unknown): GrokPlannerResult {
       statement: "Only compiler-valid dependency artifacts and independent verification may reach delivery.",
     }),
   ]);
+  const admissionRoster: readonly GrokSpecialistAdmission[] = Object.freeze([...ready]
+    .sort((left, right) => left.assignmentId.localeCompare(right.assignmentId))
+    .map((agent) => Object.freeze({
+      version: GROK_SPECIALIST_ROSTER_VERSION,
+      assignmentId: agent.assignmentId,
+      assignmentRevision: agent.assignmentRevision,
+      botId: agent.botId,
+      botRevision: agent.botRevision,
+      roleId: agent.roleId,
+      roleUpdatedAt: agent.roleUpdatedAt,
+      aiAccountId: agent.aiAccountId,
+      credentialRef: agent.credentialRef,
+      credentialPurpose: agent.credentialPurpose,
+      providerIdentity: agent.providerIdentity,
+      accountUpdatedAt: agent.accountUpdatedAt,
+      provider: agent.provider,
+      model: agent.model,
+      capabilities: Object.freeze([...agent.capabilities]),
+      maxModelTier: agent.maxModelTier,
+    })));
 
   const plan: GrokChiefOfStaffPlan = Object.freeze({
     planner: Object.freeze({
@@ -1133,6 +1194,7 @@ export function buildGrokChiefOfStaffPlan(input: unknown): GrokPlannerResult {
     }),
     intent: Object.freeze({ kind, prompt: value.prompt, risk }),
     project: Object.freeze({ ...value.project }),
+    admissionRoster,
     requirements,
     acceptanceCriteria: criteriaFor(kind),
     dag: Object.freeze({

@@ -20,6 +20,7 @@ const harness = vi.hoisted(() => ({
   storedPlan: vi.fn(),
   loadAgents: vi.fn(),
   appendAssistant: vi.fn(),
+  recordRoster: vi.fn(),
   recordEvent: vi.fn(),
   mapDetail: vi.fn(),
   listRows: vi.fn(),
@@ -42,6 +43,7 @@ vi.mock("@/lib/security/sensitive-data", () => ({
 }));
 vi.mock("@/lib/factory/chief-of-staff", () => ({
   buildGrokChiefOfStaffPlan: harness.buildPlan,
+  GROK_PLAN_VERSION: 3,
 }));
 vi.mock("@/lib/graph/canonical-full-lifecycle", () => ({
   buildCanonicalFullLifecyclePlan: harness.buildCanonicalPlan,
@@ -70,6 +72,8 @@ vi.mock("@/lib/grok/session-store", async () => {
     storedGrokPlan: harness.storedPlan,
     loadConfiguredGrokAgents: harness.loadAgents,
     appendGrokAssistantPlan: harness.appendAssistant,
+    grokSpecialistRosterIdempotencyKey: (base: string) => `${base}:specialist-roster`,
+    recordGrokSpecialistRoster: harness.recordRoster,
     recordGrokEvent: harness.recordEvent,
     mapGrokSessionDetail: harness.mapDetail,
     listGrokSessionRows: harness.listRows,
@@ -95,10 +99,10 @@ const repositoryId = "80000000-0000-4000-8000-000000000008";
 const baseSha = "a".repeat(40);
 const requiredChecks = ["Lint, typecheck, test, and build"];
 const providerAdmissions = [{
-  version: 1,
+  version: 2,
   lane: "graph_model",
   nodeKey: "goal",
-  sourceTaskKey: "plan",
+  sourceRosterAssignmentId: "11000000-0000-4000-8000-000000000001",
   assignmentId: "11000000-0000-4000-8000-000000000001",
   agentMaxModelTier: "STRONG",
 }];
@@ -106,9 +110,10 @@ const planningFailureMessage =
   "Planning is blocked until a Ready configured Codex agent covers the repository-writing task.";
 
 const plan = {
-  planner: { version: 2 },
+  planner: { version: 3 },
   intent: { kind: "build", prompt: "Build the portal" },
   project: { projectId },
+  admissionRoster: [{ assignmentId: "11000000-0000-4000-8000-000000000001" }],
   dag: { tasks: [{ id: "implement", provider: "openai" }], layers: [["implement"]] },
   graphLaunch: { goal: "Build the portal" },
 };
@@ -177,6 +182,12 @@ beforeEach(() => {
     requiredChecks,
   });
   harness.appendAssistant.mockResolvedValue({ id: assistantMessageId });
+  harness.recordRoster.mockResolvedValue({
+    message_id: assistantMessageId,
+    roster_count: 2,
+    roster_sha256: "b".repeat(64),
+    replayed: false,
+  });
   harness.recordEvent.mockResolvedValue({});
   harness.mapDetail.mockResolvedValue({
     session: {
@@ -338,7 +349,7 @@ describe("Grok sessions POST", () => {
     expect(harness.serviceRpc).not.toHaveBeenCalled();
   });
 
-  it("records routing intent, launches only canonical v2, and returns paused without dispatch", async () => {
+  it("records roster and routing intent, launches only canonical v3, and returns paused without dispatch", async () => {
     const response = await POST(new Request("https://factory.example/api/grok/sessions", {
       method: "POST",
       headers: { origin: "https://factory.example", "content-type": "application/json" },
@@ -351,7 +362,7 @@ describe("Grok sessions POST", () => {
       session: { id: sessionId, status: "paused", graphId },
       workerWoken: false,
       executionStarted: false,
-      execution: { state: "paused", bridge: "full_lifecycle_v2" },
+      execution: { state: "paused", bridge: "full_lifecycle_v3" },
     });
     expect(harness.appendUser).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
       prompt: "Build the portal",
@@ -361,13 +372,26 @@ describe("Grok sessions POST", () => {
       plan,
       userMessageId,
     }));
+    expect(harness.recordRoster).toHaveBeenCalledWith(expect.anything(), {
+      organizationId,
+      projectId,
+      sessionId,
+      messageId: assistantMessageId,
+      requestedBy: "60000000-0000-4000-8000-000000000006",
+      idempotencyKey: "request-key-123",
+      expectedEventSequence: 3,
+    });
     expect(harness.recordEvent).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
       eventType: "session.planned",
-      expectedSequence: 3,
+      expectedSequence: 4,
+      payload: expect.objectContaining({
+        specialistRosterCount: 2,
+        specialistRosterSha256: "b".repeat(64),
+      }),
     }));
     expect(harness.serviceRpc).toHaveBeenCalledTimes(1);
     expect(harness.serviceRpc).toHaveBeenCalledWith(
-      "launch_grok_full_lifecycle_v2_as_server",
+      "launch_grok_full_lifecycle_v3_as_server",
       {
         p_organization_id: organizationId,
         p_requested_by: "60000000-0000-4000-8000-000000000006",
@@ -387,6 +411,7 @@ describe("Grok sessions POST", () => {
         p_base_branch: "main",
         p_base_sha: baseSha,
         p_required_check_names: requiredChecks,
+        p_roster_idempotency_key: "request-key-123:specialist-roster",
         p_admissions: providerAdmissions,
       },
     );
@@ -422,6 +447,49 @@ describe("Grok sessions POST", () => {
         message: expect.stringMatching(/immutable openai posting/i),
       },
     });
+    expect(harness.resolveRelease).not.toHaveBeenCalled();
+    expect(harness.serviceRpc).not.toHaveBeenCalled();
+  });
+
+  it("replays roster event 3 and plan event 4 exactly while research remains bridge-blocked", async () => {
+    const researchPlan = { ...plan, intent: { ...plan.intent, kind: "research" } };
+    harness.storedPlan.mockReturnValue(researchPlan);
+    harness.readBundle.mockResolvedValue({
+      ...bundle,
+      messages: [{ id: assistantMessageId, sequence_no: 2, role: "assistant" }],
+    });
+    harness.recordRoster.mockResolvedValue({
+      message_id: assistantMessageId,
+      roster_count: 2,
+      roster_sha256: "b".repeat(64),
+      replayed: true,
+    });
+
+    const request = () => POST(new Request("https://factory.example/api/grok/sessions", {
+      method: "POST",
+      headers: { origin: "https://factory.example", "content-type": "application/json" },
+      body: JSON.stringify({ projectId, prompt: "Build the portal" }),
+    }));
+    const first = await request();
+    const second = await request();
+
+    expect(first.status).toBe(409);
+    expect(await first.json()).toEqual(await second.json());
+    expect(harness.recordRoster).toHaveBeenCalledTimes(2);
+    for (const call of harness.recordRoster.mock.calls) {
+      expect(call[1]).toMatchObject({
+        idempotencyKey: "request-key-123",
+        expectedEventSequence: 3,
+      });
+    }
+    expect(harness.recordEvent).toHaveBeenCalledTimes(2);
+    for (const call of harness.recordEvent.mock.calls) {
+      expect(call[1]).toMatchObject({
+        eventType: "session.planned",
+        expectedSequence: 4,
+      });
+    }
+    expect(harness.buildCanonicalPlan).not.toHaveBeenCalled();
     expect(harness.resolveRelease).not.toHaveBeenCalled();
     expect(harness.serviceRpc).not.toHaveBeenCalled();
   });
@@ -486,7 +554,7 @@ describe("Grok sessions POST", () => {
       executionStarted: true,
       execution: {
         state: "running",
-        bridge: "full_lifecycle_v2",
+        bridge: "full_lifecycle_v3",
         message: expect.stringMatching(/durable graph run is linked.*request did not dispatch/i),
       },
     });

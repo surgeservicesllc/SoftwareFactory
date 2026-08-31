@@ -56,6 +56,7 @@ type ClaimRow = {
   recovery_pull_request_url: string | null;
   recovery_provider_run_reference: string | null;
   recovery_usage: unknown;
+  execution_admission?: unknown;
 };
 
 function databaseFailure(operation: string, error: unknown): never {
@@ -147,6 +148,7 @@ function mapClaim(row: ClaimRow): WorkerJob {
           usage: priorUsage,
         }
       : null,
+    executionAdmission: row.execution_admission ?? null,
   });
 }
 
@@ -216,14 +218,14 @@ export class SupabaseWorkerStore implements WorkerStore {
       p_provider: this.provider,
       p_model: this.model,
       p_lease_seconds: this.leaseSeconds,
-      p_protocol_version: 2,
+      p_protocol_version: 3,
     };
     const { data, error } = this.targetCommandId
-      ? await this.client.rpc("claim_phase1c_run_by_command_v2", {
+      ? await this.client.rpc("claim_phase1c_run_by_command_v3", {
         ...claimRequest,
         p_target_command_id: this.targetCommandId,
       })
-      : await this.client.rpc("claim_phase1c_run_v2", claimRequest);
+      : await this.client.rpc("claim_phase1c_run_v3", claimRequest);
     if (error) databaseFailure("Run claim", error);
     const row = singleRow<ClaimRow>(data);
     if (!row) return null;

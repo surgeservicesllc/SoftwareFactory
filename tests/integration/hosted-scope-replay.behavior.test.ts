@@ -127,7 +127,7 @@ describe("the workflow's post-cutover surgical-scope fence", () => {
     expect(step.indexOf("exit 1")).toBeLessThan(step.indexOf("for FILE in"));
   });
 
-  it("keeps each claim name unambiguous and exposes only protocol v2 to the worker", async () => {
+  it("keeps each claim name unambiguous and exposes only protocol v3 to the worker", async () => {
     const legacy = await overloadsOf("claim_planned_graph");
     expect(legacy.map((entry) => entry.signature)).toEqual([
       "p_worker_id text, p_supported_executors text[]",
@@ -146,6 +146,11 @@ describe("the workflow's post-cutover surgical-scope fence", () => {
     expect(v2[0].body).toContain("p_repository_full_name");
     expect(v2[0].body).toContain("p_required_check_names");
     expect(v2[0].body).toContain("protocol version 2 is required");
+    const v3 = await overloadsOf("claim_planned_graph_v3");
+    expect(v3.map((entry) => entry.signature)).toEqual([
+      "p_worker_id text, p_supported_executors text[], p_repository_full_name text, p_required_check_names jsonb, p_protocol_version integer",
+    ]);
+    expect(v3[0].body).toContain("protocol version 3 is required");
 
     const privileges = await db.query<{
       legacy_authenticated: boolean;
@@ -154,6 +159,8 @@ describe("the workflow's post-cutover surgical-scope fence", () => {
       legacy_service: boolean;
       v2_authenticated: boolean;
       v2_service: boolean;
+      v3_authenticated: boolean;
+      v3_service: boolean;
     }>(
       `select
          has_function_privilege('authenticated', 'public.claim_planned_graph(text,text[])', 'EXECUTE') as legacy_authenticated,
@@ -161,7 +168,9 @@ describe("the workflow's post-cutover surgical-scope fence", () => {
          has_function_privilege('authenticated', 'public.claim_planned_graph_internal(text,text[],text,jsonb)', 'EXECUTE') as internal_authenticated,
          has_function_privilege('service_role', 'public.claim_planned_graph_internal(text,text[],text,jsonb)', 'EXECUTE') as internal_service,
          has_function_privilege('authenticated', 'public.claim_planned_graph_v2(text,text[],text,jsonb,integer)', 'EXECUTE') as v2_authenticated,
-         has_function_privilege('service_role', 'public.claim_planned_graph_v2(text,text[],text,jsonb,integer)', 'EXECUTE') as v2_service`,
+         has_function_privilege('service_role', 'public.claim_planned_graph_v2(text,text[],text,jsonb,integer)', 'EXECUTE') as v2_service,
+         has_function_privilege('authenticated', 'public.claim_planned_graph_v3(text,text[],text,jsonb,integer)', 'EXECUTE') as v3_authenticated,
+         has_function_privilege('service_role', 'public.claim_planned_graph_v3(text,text[],text,jsonb,integer)', 'EXECUTE') as v3_service`,
     );
     expect(privileges.rows[0]).toEqual({
       legacy_authenticated: false,
@@ -169,7 +178,9 @@ describe("the workflow's post-cutover surgical-scope fence", () => {
       internal_service: false,
       legacy_service: false,
       v2_authenticated: false,
-      v2_service: true,
+      v2_service: false,
+      v3_authenticated: false,
+      v3_service: true,
     });
   });
 

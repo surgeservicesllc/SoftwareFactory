@@ -230,8 +230,9 @@ describe("worker configuration no longer requires a paid key", () => {
       SOFTWAREFACTORY_CODEX_AUTH_JSON: subscriptionJson,
     });
 
-    expect(configuration.codexAuth.zeroToken).toBe(true);
-    expect(configuration.codexAuth.apiKey).toBeNull();
+    const auth = configuration.resolveLegacyCodexAuth();
+    expect(auth.zeroToken).toBe(true);
+    expect(auth.apiKey).toBeNull();
   });
 
   it("requires and preserves an exact command UUID for a one-shot dispatch", () => {
@@ -251,9 +252,22 @@ describe("worker configuration no longer requires a paid key", () => {
     expect(configuration.targetCommandId).toBe(commandId);
   });
 
-  it("refuses to start with no Codex credential at all", () => {
-    expect(() => readWorkerConfiguration(base)).toThrowError(
+  it("defers a missing ambient credential until a claimed legacy job needs it", () => {
+    const configuration = readWorkerConfiguration(base);
+
+    expect(() => configuration.resolveLegacyCodexAuth()).toThrowError(
       expect.objectContaining({ code: "SUBSCRIPTION_CREDENTIAL_MISSING" }),
+    );
+  });
+
+  it("does not validate malformed ambient auth while bootstrapping an admission-backed worker", () => {
+    const configuration = readWorkerConfiguration({
+      ...base,
+      SOFTWAREFACTORY_CODEX_AUTH_JSON: "not-json",
+    });
+
+    expect(() => configuration.resolveLegacyCodexAuth()).toThrowError(
+      expect.objectContaining({ code: "SUBSCRIPTION_CREDENTIAL_MALFORMED" }),
     );
   });
 });

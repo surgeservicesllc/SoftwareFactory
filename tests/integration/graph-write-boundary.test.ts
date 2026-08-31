@@ -62,7 +62,7 @@ async function claimGraph(db: PGlite, graphId: string): Promise<WorkerClaim> {
   for (let attempts = 0; attempts < 20; attempts += 1) {
     await assumeRole(db, "service_role");
     const result = await db.query<{ claim: WorkerClaim | null }>(
-      `select public.claim_planned_graph_v2($1, $2::text[], $3, $4::jsonb, 2) as claim`,
+      `select public.claim_planned_graph_v3($1, $2::text[], $3, $4::jsonb, 3) as claim`,
       [workerId, supportedExecutors, claimRepository, JSON.stringify(claimRequiredChecks)],
     );
     await resetRole(db);

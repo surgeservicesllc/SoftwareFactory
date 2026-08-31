@@ -5,7 +5,8 @@ import { describe, expect, it } from "vitest";
 import {
   buildGrokChiefOfStaffPlan,
   type GrokChiefOfStaffPlan,
-  type GrokTask,
+  type GrokConfiguredAgent,
+  type GrokSpecialistAdmission,
 } from "@/lib/factory/chief-of-staff";
 import {
   buildGrokProviderAdmissions,
@@ -14,7 +15,15 @@ import {
 import { buildLaunchPlan } from "@/lib/graph/launch-plan";
 import { budgetForTemplate, findTemplate } from "@/lib/graph/templates";
 
-const identity = {
+const project = Object.freeze({
+  projectId: "90000000-0000-4000-8000-000000000009",
+  name: "SoftwareFactory",
+  repositoryFullName: "surgeservicesllc/SoftwareFactory",
+  defaultBranch: "main",
+});
+
+const claude = Object.freeze({
+  id: "10000000-0000-4000-8000-000000000001",
   assignmentId: "10000000-0000-4000-8000-000000000001",
   assignmentRevision: 4,
   botId: "20000000-0000-4000-8000-000000000002",
@@ -26,177 +35,152 @@ const identity = {
   credentialPurpose: "claude",
   credentialRef: "SOFTWAREFACTORY_CLAUDE_CODE_OAUTH_TOKEN",
   providerIdentity: "claude-owner@example.com",
-  agentCapabilities: ["*"],
-  agentMaxModelTier: "STRONG",
-} as const;
+  name: "Claude generalist",
+  provider: "anthropic",
+  model: "claude-opus-5",
+  capabilities: Object.freeze(["*"] as const),
+  maxModelTier: "STRONG",
+  ready: true,
+} satisfies GrokConfiguredAgent);
 
-function task(overrides: Partial<GrokTask> = {}): GrokTask {
-  return {
-    id: "plan",
-    title: "Plan",
-    job: "Plan the work.",
-    lane: "claude_read_only",
-    executor: "MODEL",
-    capability: "planning",
-    modelTier: "STRONG",
-    provider: "anthropic",
-    model: "claude-opus-5",
-    agentId: identity.assignmentId,
-    agentName: "Claude planner",
-    risk: "GREEN",
-    maxAttempts: 1,
-    timeoutMs: 480_000,
-    dependsOn: [],
-    contextPolicy: "DEPENDENCY_ARTIFACTS_ONLY",
-    independentOf: [],
-    gate: null,
-    artifacts: { consumes: [], produces: "plan.v1", schemaVersion: 1 },
-    contract: { input: "GOAL", outputArtifact: "plan", acceptsPartialInputs: false },
-    ...identity,
-    ...overrides,
-  };
+const codex = Object.freeze({
+  ...claude,
+  id: "50000000-0000-4000-8000-000000000005",
+  assignmentId: "50000000-0000-4000-8000-000000000005",
+  botId: "60000000-0000-4000-8000-000000000006",
+  roleId: "70000000-0000-4000-8000-000000000007",
+  aiAccountId: "80000000-0000-4000-8000-000000000008",
+  providerIdentity: null,
+  name: "Codex writer",
+  provider: "openai",
+  model: "gpt-5.3-codex",
+  credentialPurpose: "codex",
+  credentialRef: "SOFTWAREFACTORY_CODEX_AUTH_JSON",
+  capabilities: Object.freeze(["implementation"] as const),
+} satisfies GrokConfiguredAgent);
+
+function buildPlan(agents: readonly GrokConfiguredAgent[] = [claude, codex]) {
+  const planned = buildGrokChiefOfStaffPlan({
+    prompt: "Build the provider admission boundary",
+    project,
+    agents,
+  });
+  expect(planned.ok).toBe(true);
+  if (!planned.ok) throw new Error(planned.error.message);
+  return planned.plan;
 }
 
-function plan(tasks: readonly GrokTask[]): GrokChiefOfStaffPlan {
-  return { planner: { version: 2 }, dag: { tasks } } as unknown as GrokChiefOfStaffPlan;
+function canonicalNodes() {
+  const template = findTemplate("full_lifecycle");
+  if (!template) throw new Error("full_lifecycle template is unavailable");
+  const canonical = buildLaunchPlan(
+    { ...template, summary: "Build the provider admission boundary" },
+    budgetForTemplate(template),
+  );
+  if (!canonical.ok) throw new Error(canonical.errors.join("; "));
+  return canonical.plan.nodes;
+}
+
+function withRoster(
+  plan: GrokChiefOfStaffPlan,
+  roster: readonly GrokSpecialistAdmission[],
+): GrokChiefOfStaffPlan {
+  return { ...plan, admissionRoster: roster };
 }
 
 describe("Grok provider admission projection", () => {
-  it("maps a real build plan to every executable canonical lane", () => {
-    const claude = {
-      id: identity.assignmentId,
-      assignmentId: identity.assignmentId,
-      assignmentRevision: identity.assignmentRevision,
-      botId: identity.botId,
-      botRevision: identity.botRevision,
-      roleId: identity.roleId,
-      roleUpdatedAt: identity.roleUpdatedAt,
-      aiAccountId: identity.aiAccountId,
-      accountUpdatedAt: identity.accountUpdatedAt,
-      credentialPurpose: identity.credentialPurpose,
-      credentialRef: identity.credentialRef,
-      providerIdentity: identity.providerIdentity,
-      name: "Claude generalist",
-      provider: "anthropic" as const,
-      model: "claude-opus-5",
-      capabilities: ["*"] as const,
-      maxModelTier: "STRONG" as const,
-      ready: true,
-    };
-    const codex = {
-      ...claude,
-      id: "50000000-0000-4000-8000-000000000005",
-      assignmentId: "50000000-0000-4000-8000-000000000005",
-      botId: "60000000-0000-4000-8000-000000000006",
-      roleId: "70000000-0000-4000-8000-000000000007",
-      aiAccountId: "80000000-0000-4000-8000-000000000008",
-      name: "Codex writer",
-      provider: "openai" as const,
-      model: "gpt-5.3-codex",
-      credentialPurpose: "codex",
-      credentialRef: "SOFTWAREFACTORY_CODEX_AUTH_JSON",
-      capabilities: ["implementation"] as const,
-    };
-    const planned = buildGrokChiefOfStaffPlan({
-      prompt: "Build the provider admission boundary",
-      project: {
-        projectId: "90000000-0000-4000-8000-000000000009",
-        name: "SoftwareFactory",
-        repositoryFullName: "surgeservicesllc/SoftwareFactory",
-        defaultBranch: "main",
-      },
-      agents: [claude, codex],
-    });
-    expect(planned.ok).toBe(true);
-    if (!planned.ok) throw new Error(planned.error.message);
-
-    const template = findTemplate("full_lifecycle");
-    expect(template).toBeDefined();
-    if (!template) throw new Error("full_lifecycle template is unavailable");
-    const canonical = buildLaunchPlan(
-      { ...template, summary: planned.plan.intent.prompt },
-      budgetForTemplate(template),
-    );
-    expect(canonical.ok).toBe(true);
-    if (!canonical.ok) throw new Error(canonical.errors.join("; "));
-
-    const admissions = buildGrokProviderAdmissions(planned.plan, canonical.plan.nodes);
-    const executable = canonical.plan.nodes.filter((node) => node.executor === "MODEL"
+  it("maps a real planner-v3 roster to every executable canonical lane", () => {
+    const nodes = canonicalNodes();
+    const admissions = buildGrokProviderAdmissions(buildPlan(), nodes);
+    const executable = nodes.filter((node) => node.executor === "MODEL"
       || (node.executor === "ANCHOR" && node.node_key === "implement"));
+
     expect(admissions).toHaveLength(executable.length);
     expect(admissions.filter((entry) => entry.lane === "phase1c")).toHaveLength(1);
-    expect(admissions.every((entry) => entry.agentMaxModelTier === "STRONG")).toBe(true);
+    expect(admissions.every((entry) => entry.version === 2)).toBe(true);
+    expect(admissions.every((entry) => entry.agentCapabilities.includes("*") === false)).toBe(true);
   });
 
-  it("pins canonical Claude nodes and the Phase 1C Codex handoff to exact identities", () => {
-    const codex = task({
-      ...identity,
-      id: "implement",
-      provider: "openai",
-      model: "gpt-5.3-codex",
-      capability: "implementation",
-      lane: "codex_workspace",
-      credentialPurpose: "codex",
-      credentialRef: "SOFTWAREFACTORY_CODEX_AUTH_JSON",
-      agentCapabilities: ["implementation"],
-      assignmentId: "50000000-0000-4000-8000-000000000005",
-      botId: "60000000-0000-4000-8000-000000000006",
-      aiAccountId: "70000000-0000-4000-8000-000000000007",
-      roleId: "80000000-0000-4000-8000-000000000008",
-    });
-    const admissions = buildGrokProviderAdmissions(plan([task(), codex]), [
-      { node_key: "goal", executor: "MODEL", capability: "planning", model_tier: "STRONG" },
-      { node_key: "implement", executor: "ANCHOR", capability: "implementation", model_tier: null },
-      { node_key: "review", executor: "ANCHOR", capability: "review", model_tier: null },
-    ]);
+  it("uses roster-only evaluation and decision specialists without fake planner DAG tasks", () => {
+    const evaluation = {
+      ...claude,
+      id: "11000000-0000-4000-8000-000000000011",
+      assignmentId: "11000000-0000-4000-8000-000000000011",
+      botId: "12000000-0000-4000-8000-000000000012",
+      roleId: "13000000-0000-4000-8000-000000000013",
+      aiAccountId: "14000000-0000-4000-8000-000000000014",
+      capabilities: ["evaluation"] as const,
+      name: "Claude evaluator",
+    } satisfies GrokConfiguredAgent;
+    const decision = {
+      ...claude,
+      id: "21000000-0000-4000-8000-000000000021",
+      assignmentId: "21000000-0000-4000-8000-000000000021",
+      botId: "22000000-0000-4000-8000-000000000022",
+      roleId: "23000000-0000-4000-8000-000000000023",
+      aiAccountId: "24000000-0000-4000-8000-000000000024",
+      capabilities: ["decision"] as const,
+      name: "Claude decider",
+    } satisfies GrokConfiguredAgent;
+    const plan = buildPlan([claude, evaluation, decision, codex]);
+    expect(plan.dag.tasks.some((task) => task.assignmentId === evaluation.assignmentId)).toBe(false);
+    expect(plan.dag.tasks.some((task) => task.assignmentId === decision.assignmentId)).toBe(false);
 
-    expect(admissions).toHaveLength(2);
-    expect(admissions[0]).toMatchObject({
-      version: 1,
-      lane: "graph_model",
-      nodeKey: "goal",
-      assignmentId: identity.assignmentId,
-      provider: "anthropic",
-      model: "claude-opus-5",
-      agentMaxModelTier: "STRONG",
+    const admissions = buildGrokProviderAdmissions(plan, canonicalNodes());
+    expect(admissions.find((entry) => entry.nodeKey === "evaluate")).toMatchObject({
+      sourceRosterAssignmentId: evaluation.assignmentId,
+      capability: "evaluation",
     });
-    expect(admissions[1]).toMatchObject({
-      lane: "phase1c",
-      nodeKey: "implement",
-      sourceTaskKey: "implement",
-      provider: "openai",
-      model: "gpt-5.3-codex",
-      agentMaxModelTier: "STRONG",
+    expect(admissions.find((entry) => entry.nodeKey === "decide")).toMatchObject({
+      sourceRosterAssignmentId: decision.assignmentId,
+      capability: "decision",
     });
   });
 
-  it("fails closed for a legacy plan without immutable identity fields", () => {
-    const legacy = task({ assignmentId: undefined });
-    expect(() => buildGrokProviderAdmissions(plan([legacy]), [
-      { node_key: "goal", executor: "MODEL", capability: "planning", model_tier: "STRONG" },
-    ])).toThrow(GrokProviderAdmissionError);
+  it("keeps readable v1/v2 plans non-executable", () => {
+    for (const version of [1, 2]) {
+      expect(() => buildGrokProviderAdmissions(
+        { planner: { version }, dag: { tasks: [] } } as unknown as GrokChiefOfStaffPlan,
+        canonicalNodes(),
+      )).toThrow(/legacy plan/);
+    }
   });
 
-  it("keeps a readable legacy v1 plan non-executable", () => {
-    expect(() => buildGrokProviderAdmissions(
-      { planner: { version: 1 }, dag: { tasks: [task()] } } as unknown as GrokChiefOfStaffPlan,
-      [{ node_key: "goal", executor: "MODEL", capability: "planning", model_tier: "STRONG" }],
-    )).toThrow(/legacy plan/);
-  });
+  it.each(["research", "deploy"] as const)(
+    "refuses %s until an intent-specific executable bridge exists",
+    (intent) => {
+      const base = buildPlan();
+      const plan = { ...base, intent: { ...base.intent, kind: intent } } as GrokChiefOfStaffPlan;
+      expect(() => buildGrokProviderAdmissions(plan, canonicalNodes()))
+        .toThrow(/no intent-specific executable bridge/i);
+    },
+  );
 
-  it("refuses capability, tier, and provider substitution", () => {
-    expect(() => buildGrokProviderAdmissions(plan([task({
-      agentCapabilities: ["planning"],
-      agentMaxModelTier: "STANDARD",
-    })]), [
+  it("refuses capability, tier, identity, and provider substitution", () => {
+    const plan = buildPlan();
+    const base = plan.admissionRoster[0];
+    const writer = plan.admissionRoster[1];
+    if (!base || !writer) throw new Error("missing roster fixture");
+
+    expect(() => buildGrokProviderAdmissions(withRoster(plan, [{
+      ...base,
+      capabilities: ["planning"],
+      maxModelTier: "STANDARD",
+    }, writer]), [
       { node_key: "architecture", executor: "MODEL", capability: "architecture", model_tier: "STRONG" },
     ])).toThrow(/No immutable anthropic posting/);
 
-    expect(() => buildGrokProviderAdmissions(plan([task({
+    expect(() => buildGrokProviderAdmissions(withRoster(plan, [{
+      ...base,
+      assignmentId: "not-a-uuid",
+    }, writer]), [
+      { node_key: "goal", executor: "MODEL", capability: "planning", model_tier: "STRONG" },
+    ])).toThrow(GrokProviderAdmissionError);
+
+    expect(() => buildGrokProviderAdmissions(withRoster(plan, [{
+      ...base,
       provider: "openai",
-      capability: "implementation",
-      agentCapabilities: ["implementation"],
-    })]), [
+    }, writer]), [
       { node_key: "goal", executor: "MODEL", capability: "planning", model_tier: "STRONG" },
     ])).toThrow(/No immutable anthropic posting/);
   });

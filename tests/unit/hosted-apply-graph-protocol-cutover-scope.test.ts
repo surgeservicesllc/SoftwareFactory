@@ -72,7 +72,8 @@ describe("hosted graph protocol cutover scopes", () => {
     // recovered another 4.8KB — so the number comes down again. A new scope
     // should cost ~22 lines here and a file there. If this fails, extract —
     // do not raise it.
-    expect(Buffer.byteLength(workflowSource, "utf8")).toBeLessThan(478_000);
+    const canonicalLfSource = workflowSource.replace(/\r\n?/g, "\n");
+    expect(Buffer.byteLength(canonicalLfSource, "utf8")).toBeLessThan(478_000);
   });
 
   it("exposes each protected phase exactly once and grants Actions read for the fleet check", () => {

@@ -9,6 +9,7 @@ import { rehydrateStoredSchema } from "@/lib/graph/stored-schema";
 import { DEFAULT_RETRY_POLICY, type ResourceRef } from "@/lib/graph/types";
 import type { VerificationVerdict } from "@/lib/graph/verification";
 import { SDLC_STAGES } from "@/lib/sdlc/lifecycle";
+import { executionAdmissionSchema } from "@/lib/worker/execution-admission";
 import { deriveVerdict, verificationLensFor } from "@/lib/worker/verification-from-node";
 
 /**
@@ -35,9 +36,9 @@ const claimedNodeSchema = z.object({
   timeout_ms: z.number().int().positive(),
   max_attempts: z.number().int().positive(),
   allow_provider_fallback: z.boolean(),
-  // .catch(false): a projection from before the column existed simply has
-  // no tolerance, which is exactly what false says.
-  tolerates_partial_inputs: z.boolean().catch(false),
+  // A missing legacy value means no tolerance. A present malformed value is
+  // a corrupt claim and must never silently downgrade to false.
+  tolerates_partial_inputs: z.boolean().default(false),
   /*
    * The lifecycle fields, all tolerant of a projection that predates them.
    *
@@ -46,17 +47,15 @@ const claimedNodeSchema = z.object({
    * which is what lets an approval outlive the run that asked for it.
    */
   node_id: z.string().uuid().nullish(),
-  lifecycle_stage: z
-    .enum(SDLC_STAGES)
-    .nullish()
-    .catch(null),
-  gate_kind: z.enum(["AUTOMATIC", "HUMAN"]).nullish().catch(null),
-  gate_state: z.enum(["OPEN", "APPROVED", "REJECTED"]).nullish().catch(null),
+  lifecycle_stage: z.enum(SDLC_STAGES).nullish(),
+  gate_kind: z.enum(["AUTOMATIC", "HUMAN"]).nullish(),
+  gate_state: z.enum(["OPEN", "APPROVED", "REJECTED"]).nullish(),
   input_schema: z.unknown().nullish(),
   output_schema: z.unknown().nullish(),
   reads: z.array(resourceSchema).nullish(),
   writes: z.array(resourceSchema).nullish(),
   acceptance_criteria: z.unknown().nullish(),
+  execution_admission: executionAdmissionSchema.nullish(),
 });
 
 const claimedEdgeSchema = z.object({
@@ -94,22 +93,23 @@ const claimedGraphSchema = z.object({
   goal: z.string().min(1),
   topology: z.string(),
   risk_level: z.string(),
-  // Protocol v2 claims are repository-scoped. Missing identity is a malformed
+  // Protocol v3 claims are repository-scoped. Missing identity is a malformed
   // claim, never permission to analyze whichever checkout happens to be open.
   project_repository: z.string().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/).max(201),
   project_default_branch: z.string().min(1).max(255).refine((value) => value === value.trim()),
+  grok_admission_required: z.boolean(),
   /*
    * Durable graph -> Phase 1C lineage. All fields tolerate an older or
    * non-lifecycle projection by becoming null; anchor nodes then record Not
    * Connected. Malformed evidence never becomes a guessed identity.
    */
-  template_key: z.string().min(1).max(80).nullish().catch(null),
-  template_version: z.number().int().positive().nullish().catch(null),
-  template_plan_sha256: z.string().regex(/^[0-9a-f]{64}$/).nullish().catch(null),
-  base_branch: z.string().min(1).max(255).nullish().catch(null),
-  base_sha: z.string().regex(/^[0-9a-f]{40}$/).nullish().catch(null),
-  required_check_names: requiredCheckNamesSchema.nullish().catch(null),
-  required_checks_sha256: z.string().regex(/^[0-9a-f]{64}$/).nullish().catch(null),
+  template_key: z.string().min(1).max(80).nullish(),
+  template_version: z.number().int().positive().nullish(),
+  template_plan_sha256: z.string().regex(/^[0-9a-f]{64}$/).nullish(),
+  base_branch: z.string().min(1).max(255).nullish(),
+  base_sha: z.string().regex(/^[0-9a-f]{40}$/).nullish(),
+  required_check_names: requiredCheckNamesSchema.nullish(),
+  required_checks_sha256: z.string().regex(/^[0-9a-f]{64}$/).nullish(),
   phase1c_state: z.enum([
     "GRAPH_READY",
     "COMMAND_RECORDED",
@@ -119,18 +119,18 @@ const claimedGraphSchema = z.object({
     "DEPLOYMENT_RECORDED",
     "MONITORING_RECORDED",
     "VALIDATED",
-  ]).nullish().catch(null),
-  phase1c_head_sha: z.string().regex(/^[0-9a-f]{40}$/).nullish().catch(null),
-  pull_request_number: z.number().int().positive().nullish().catch(null),
-  pull_request_url: z.string().url().max(2_048).nullish().catch(null),
-  validation_evidence: phase1cValidationEvidenceSchema.nullish().catch(null),
-  merge_commit_sha: z.string().regex(/^[0-9a-f]{40}$/).nullish().catch(null),
-  deployment_id: z.string().uuid().nullish().catch(null),
-  deployment_url: z.string().url().max(2_048).nullish().catch(null),
-  project_production_url: z.string().url().max(2_048).nullish().catch(null),
+  ]).nullish(),
+  phase1c_head_sha: z.string().regex(/^[0-9a-f]{40}$/).nullish(),
+  pull_request_number: z.number().int().positive().nullish(),
+  pull_request_url: z.string().url().max(2_048).nullish(),
+  validation_evidence: phase1cValidationEvidenceSchema.nullish(),
+  merge_commit_sha: z.string().regex(/^[0-9a-f]{40}$/).nullish(),
+  deployment_id: z.string().uuid().nullish(),
+  deployment_url: z.string().url().max(2_048).nullish(),
+  project_production_url: z.string().url().max(2_048).nullish(),
   // Lifecycles judge a capacity-voided run differently (see capacityVoided);
   // tolerant of projections from before the column existed.
-  is_lifecycle: z.boolean().nullish().catch(null),
+  is_lifecycle: z.boolean().nullish(),
   budget: z.object({
     max_nodes: z.number().int().positive().catch(50),
     max_concurrent_nodes: z.number().int().positive().catch(8),
@@ -150,6 +150,40 @@ const claimedGraphSchema = z.object({
         message: "Full Lifecycle v2 requires an exact repository check policy.",
         path: ["required_check_names"],
       });
+    }
+  }
+  for (const [index, node] of claim.nodes.entries()) {
+    if (!claim.grok_admission_required && node.execution_admission) {
+      context.addIssue({
+        code: "custom",
+        message: "A non-Grok claim cannot inject provider admission metadata.",
+        path: ["nodes", index, "execution_admission"],
+      });
+    }
+    if (claim.grok_admission_required) {
+      const admission = node.execution_admission;
+      if (node.executor === "MODEL" && (
+        !admission
+        || admission.lane !== "graph_model"
+        || admission.provider !== "anthropic"
+      )) {
+        context.addIssue({
+          code: "custom",
+          message: "Every Full Lifecycle MODEL node requires its exact Anthropic admission.",
+          path: ["nodes", index, "execution_admission"],
+        });
+      }
+      if (node.executor === "ANCHOR" && node.node_key === "implement" && (
+        !admission
+        || admission.lane !== "phase1c"
+        || admission.provider !== "openai"
+      )) {
+        context.addIssue({
+          code: "custom",
+          message: "The Full Lifecycle implementation bridge requires its exact OpenAI admission.",
+          path: ["nodes", index, "execution_admission"],
+        });
+      }
     }
   }
 });
@@ -270,7 +304,7 @@ export function repositoryMismatch(
 ): string | null {
   const wanted = (projectRepository ?? "").trim();
   const checkout = (checkoutRepository ?? "").trim();
-  if (!wanted) return "The protocol-v2 claim did not name its canonical repository.";
+  if (!wanted) return "The protocol-v3 claim did not name its canonical repository.";
   if (!checkout) return "The worker could not prove which repository is checked out.";
   if (wanted.toLowerCase() === checkout.toLowerCase()) return null;
   return `This graph's project is bound to ${wanted}, but the worker is checked out on ${checkout}. `

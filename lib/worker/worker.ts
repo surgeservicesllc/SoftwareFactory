@@ -4,6 +4,7 @@ import {
   type CodexSession,
   type CodexTurnResult,
 } from "@/lib/worker/codex";
+import { CodexAuthError } from "@/lib/worker/auth";
 import { GitHubDraftPublisher, GitHubWorkerError } from "@/lib/worker/github";
 import { PolicyScanError, scanChangedFiles } from "@/lib/worker/policy-scan";
 import { ProcessExecutionError } from "@/lib/worker/process";
@@ -44,7 +45,8 @@ export type WorkerDependencies = Readonly<{
   workspace: Pick<GitWorkspaceManager,
     "prepare" | "currentHead" | "changedFiles" | "commit" | "assertImmutableCommit"
     | "assertRemoteBaseSha" | "push">;
-  codex: Pick<CodexSdkAdapter, "createSession" | "initialPrompt" | "prepare">;
+  codex: Pick<CodexSdkAdapter, "createSession" | "initialPrompt" | "prepare">
+    | ((job: WorkerJob) => Promise<Pick<CodexSdkAdapter, "createSession" | "initialPrompt" | "prepare">>);
   validator: Pick<DeterministicValidator, "bootstrap" | "run">;
   publisher: Pick<GitHubDraftPublisher, "createOrRecoverDraft" | "verifyExistingDraft" | "waitForChecks">;
 }>;
@@ -80,6 +82,7 @@ function failureCode(error: unknown) {
 }
 
 function retryable(error: unknown) {
+  if (error instanceof CodexAuthError) return false;
   const code = failureCode(error);
   return [
     "github_rate_limited",
@@ -168,10 +171,7 @@ export class SoftwareFactoryWorker {
       await heartbeat();
       controller.signal.throwIfAborted();
     };
-    const heartbeatTimer = setInterval(() => {
-      if (heartbeatInFlight || controller.signal.aborted) return;
-      void heartbeat().catch(() => undefined);
-    }, this.heartbeatMs);
+    let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 
     const event: EventWriter = async (entry) => {
       await this.dependencies.store.event(job, this.workerId, entry);
@@ -192,6 +192,18 @@ export class SoftwareFactoryWorker {
           "Phase 1C workers cannot execute RED work. Owner approval does not widen this phase ceiling.",
         );
       }
+      // Resolve the claimed job's authentication boundary before recording an
+      // event, opening a repository, or touching GitHub. Admission-backed jobs
+      // resolve only their exact immutable credential; legacy jobs still fail
+      // closed on missing or malformed ambient auth. Preparing CODEX_HOME stays
+      // below, after the isolated workspace exists.
+      const codex = typeof this.dependencies.codex === "function"
+        ? await this.dependencies.codex(job)
+        : this.dependencies.codex;
+      heartbeatTimer = setInterval(() => {
+        if (heartbeatInFlight || controller.signal.aborted) return;
+        void heartbeat().catch(() => undefined);
+      }, this.heartbeatMs);
       await event({ kind: "claimed", message: "A durable worker claimed this exact run." });
       await event({ kind: "workspace_preparing", message: "Preparing an isolated Git workspace." });
       await assertExecutionActive();
@@ -380,13 +392,13 @@ export class SoftwareFactoryWorker {
       // Seeds the per-run CODEX_HOME with subscription credentials. Must happen
       // before the first turn, and after the workspace exists — the credential
       // lives inside the run directory so it is removed with it.
-      await this.dependencies.codex.prepare(workspace);
+      await codex.prepare(workspace);
 
-      const session = this.dependencies.codex.createSession(job, workspace);
+      const session = codex.createSession(job, workspace);
       activeCodexSession = session;
       await event({ kind: "agent_started", message: "Codex engineering execution started." });
       let codexResult = await session.run(
-        this.dependencies.codex.initialPrompt(job),
+        codex.initialPrompt(job),
         controller.signal,
         event,
       );
@@ -668,7 +680,7 @@ export class SoftwareFactoryWorker {
       }
     } finally {
       clearTimeout(durationTimer);
-      clearInterval(heartbeatTimer);
+      if (heartbeatTimer) clearInterval(heartbeatTimer);
     }
   }
 

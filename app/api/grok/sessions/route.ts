@@ -2,7 +2,10 @@ import { randomUUID } from "node:crypto";
 
 import { z } from "zod";
 
-import { buildGrokChiefOfStaffPlan } from "@/lib/factory/chief-of-staff";
+import {
+  buildGrokChiefOfStaffPlan,
+  GROK_PLAN_VERSION,
+} from "@/lib/factory/chief-of-staff";
 import {
   buildCanonicalFullLifecyclePlan,
   resolveCanonicalFullLifecycleReleaseIdentity,
@@ -12,6 +15,7 @@ import {
   appendGrokUserMessage,
   createGrokSession,
   GrokStoreDatabaseError,
+  grokSpecialistRosterIdempotencyKey,
   grokSessionTitle,
   listGrokSessionRows,
   loadConfiguredGrokAgents,
@@ -22,6 +26,7 @@ import {
   readGrokProject,
   recordGrokPlanningFailure,
   recordGrokEvent,
+  recordGrokSpecialistRoster,
   storedGrokPlanningFailure,
   storedGrokPlan,
 } from "@/lib/grok/session-store";
@@ -286,6 +291,32 @@ export async function POST(request: Request) {
     if (!assistantMessage) {
       throw new Error("A durable Grok plan exists without its assistant message.");
     }
+    const preexistingGraphLink = plannedGraphLink(bundle);
+    if (plan.planner.version !== GROK_PLAN_VERSION && !preexistingGraphLink) {
+      return jsonNoStore(
+        {
+          sessionId: session.id,
+          error: {
+            code: "grok_replan_required",
+            message: "This saved plan predates immutable specialist admission. Start a new Grok goal before execution.",
+          },
+          workerWoken: false,
+          executionStarted: false,
+        },
+        { status: 409 },
+      );
+    }
+    const specialistRoster = plan.planner.version === GROK_PLAN_VERSION
+      ? await recordGrokSpecialistRoster(serviceClient, {
+          organizationId: context.activeOrganization.id,
+          projectId: project.projectId,
+          sessionId: session.id,
+          messageId: assistantMessage.id,
+          requestedBy: context.user.id,
+          idempotencyKey,
+          expectedEventSequence: 3,
+        })
+      : null;
     await recordGrokEvent(serviceClient, {
       organizationId: context.activeOrganization.id,
       sessionId: session.id,
@@ -297,20 +328,39 @@ export async function POST(request: Request) {
         planMessageId: assistantMessage.id,
         plannerVersion: plan.planner.version,
         taskCount: plan.dag.tasks.length,
+        ...(specialistRoster ? {
+          specialistRosterCount: specialistRoster.roster_count,
+          specialistRosterSha256: specialistRoster.roster_sha256,
+        } : {}),
       },
-      // Both durable messages emitted their own message.appended events first.
-      expectedSequence: 3,
+      // Both durable messages emitted their own message.appended events first;
+      // current plans then record the specialist-roster admission event.
+      expectedSequence: specialistRoster ? 4 : 3,
       messageId: assistantMessage.id,
       taskLinkId: null,
     });
 
     bundle = await readGrokBundle(context.client, context.activeOrganization.id, session.id);
     if (!plannedGraphLink(bundle)) {
+      if (plan.intent.kind === "research" || plan.intent.kind === "deploy") {
+        return jsonNoStore(
+          {
+            sessionId: session.id,
+            error: {
+              code: "grok_intent_runtime_bridge_required",
+              message: `The deterministic ${plan.intent.kind} plan and specialist roster are recorded, but no intent-specific executable bridge is installed. No graph or worker was started.`,
+            },
+            workerWoken: false,
+            executionStarted: false,
+          },
+          { status: 409 },
+        );
+      }
       /*
        * The provider-labelled Grok DAG remains routing intent. Executing it as
        * a custom graph would let the worker silently reinterpret its provider,
        * model, and configured-agent assignments. Launch only the already
-       * enforced canonical Full Lifecycle v2 plan, then pause it atomically at
+       * enforced canonical Full Lifecycle v3 plan, then pause it atomically at
        * the database boundary. No worker is dispatched from this route.
        */
       const canonical = buildCanonicalFullLifecyclePlan(parsed.data.prompt);
@@ -356,7 +406,7 @@ export async function POST(request: Request) {
         );
       }
       const { error: launchError } = await serviceClient.rpc(
-        "launch_grok_full_lifecycle_v2_as_server",
+        "launch_grok_full_lifecycle_v3_as_server",
         {
           p_organization_id: context.activeOrganization.id,
           p_requested_by: context.user.id,
@@ -376,6 +426,7 @@ export async function POST(request: Request) {
           p_base_branch: release.target.base_branch,
           p_base_sha: release.baseSha,
           p_required_check_names: release.requiredChecks,
+          p_roster_idempotency_key: grokSpecialistRosterIdempotencyKey(idempotencyKey),
           p_admissions: providerAdmissions,
         },
       );
@@ -403,7 +454,7 @@ export async function POST(request: Request) {
       executionStarted,
       execution: {
         state: executionState,
-        bridge: "full_lifecycle_v2",
+        bridge: "full_lifecycle_v3",
         message: executionMessage,
       },
     }, { status: 202 });

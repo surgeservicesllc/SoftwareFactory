@@ -334,11 +334,11 @@ interface ClaimedRun {
 
 async function claim(db: PGlite, workerId: string) {
   await asWorker(db);
-  const { rows } = await db.query<ClaimedRun>(
-    "select run_id, project_id, task_id, lease_token from public.claim_phase1c_run_v2($1,$2,$3,$4,2)",
+  const { rows } = await db.query<{ claim: ClaimedRun | null }>(
+    "select public.claim_phase1c_run_v3($1,$2,$3,$4,3) as claim",
     [workerId, "openai", "gpt-5.3-codex", 120],
   );
-  return rows[0] ?? null;
+  return rows[0]?.claim ?? null;
 }
 
 async function finish(db: PGlite, workerId: string, run: ClaimedRun) {
@@ -1558,12 +1558,13 @@ describe("an agent's context is exactly one project", { timeout: 180_000 }, () =
       await registerWorker(db, "context-worker", 1);
 
       await asWorker(db);
-      const { rows } = await db.query<Record<string, unknown>>(
-        "select * from public.claim_phase1c_run_v2($1,$2,$3,$4,2)",
+      const { rows } = await db.query<{ claim: Record<string, unknown> | null }>(
+        "select public.claim_phase1c_run_v3($1,$2,$3,$4,3) as claim",
         ["context-worker", "openai", "gpt-5.3-codex", 120],
       );
-      const payload = rows[0];
+      const payload = rows[0]?.claim;
       expect(payload).toBeDefined();
+      if (!payload) throw new Error("the v3 worker claim returned no payload");
 
       // Which project won the claim is the scheduler's business, not this
       // test's. Whichever it was, the payload must be entirely that project's.

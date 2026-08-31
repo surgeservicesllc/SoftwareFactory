@@ -2,6 +2,56 @@
 
 Last updated: 2026-08-31
 
+## Newest (2026-08-31, latest+39): Grok claim and specialist admission release candidate (ADR-219)
+
+The implementation is complete in the repository, not in hosted Supabase.
+`20260831000900_grok_claim_admission_fence.sql` has canonical LF SHA-256
+`795d49b41b2de34819272a45a837d50aa6c3808db5a2c85e6a4ad769d5deff6b`
+and 92,659 LF bytes. `20260831001000_grok_specialist_admission_planning.sql`
+has canonical LF SHA-256
+`728628f0368e1f715d8c786ffb536d2d3fcc3a859a177a0665a00ea98a8386f1`
+and 56,636 LF bytes.
+
+009 IS THE CLAIM FENCE. Protocol-v3 graph and Phase 1C claims revalidate the
+entire immutable Grok admission against the current graph node, assignment,
+bot, role, AI account, credential rotation, provider, and model. Resume and
+wake use the same assertion. An admitted worker opens only the credential row
+named by that admission after claim, with no ambient fallback; Claude is bound
+per MODEL node and Codex per Phase 1C job. The private Phase 1C submission guard
+is one-use and derives provider/model from the exact admission. V2 service-role
+Grok claims and old Grok controls are revoked. A legacy non-Grok job retains its
+existing bounded compatibility path.
+
+010 IS THE ROSTER/PLANNER REVISION. New planner-v3 messages snapshot every
+Ready configured posting into append-only forced-RLS specialist evidence. The
+literal `*` expands to the same fixed canonical capability set in TypeScript
+and PostgreSQL; it is never persisted as wildcard authority. New execution
+uses only the v3 launcher. V1/v2 remain readable history, and research/deploy
+stay blocked before graph creation because no honest canonical bridge exists.
+
+Do not renumber these files backward. Main
+`5b81adb46e468d27aa621dddededa293f50fa83d` and hosted apply run
+`33382914781` made `20260831000800_autopay_authorization.sql` a repository and
+ledger fact; `20260831000700_transactional_notices.sql` is also immutable
+history. Use only `.github/workflows/grok-bot-completion-migrations.yml` in the
+order fresh `probe`, `claim-admission-fence` with `confirm=apply`,
+`specialist-admission-planning` with `confirm=apply`, then fresh `verify`.
+
+Measured focused evidence on the rebased candidate is workflow 17/17, claim
+behavior/contracts 10/10, and worker/auth runtime 69/69. The earlier combined
+planner/admission/release focused lanes were 164/164 before the final rebase;
+do not present them as final full-release evidence.
+
+PICK UP HERE: run the complete final-tree gates, publish one exact commit, wait
+for all four exact-head CI jobs and exact READY deployment/health, then apply
+only 009 and 010 through the ordered protected scopes and repeat read-only
+verification. Perform signed-in create/return/reload acceptance with workers
+OFF. A separately authorized real provider-backed run through an admitted
+claim, draft PR, exact-head CI, and immutable audit remains mandatory before a
+production-ready declaration. Workers, autonomy, and every automatic action
+remain OFF, the global kill switch remains ON, both migrations are unhosted,
+and **GROK BOT: PRODUCTION READY is not declared.**
+
 ## Newest (2026-08-31, latest+38): autopay authorisation (ADR-218, #80)
 
 `20260831000800` adds crm_payment_instruments, crm_payment_mandates,
@@ -368,13 +418,11 @@ showing `request saved; no plan recorded` and no graph/worker/provider start.
 Do not dispatch `provider-admission` again and do not add an attestation-only
 migration.
 
-PICK UP HERE: research/deploy need honest plan-only handling (or dedicated
-templates), specialist canonical
-coverage needs a persisted admission roster, and `*` needs identical TS/SQL
-normalization in a new forward migration. Then fence every Resume/wake and
-worker claim on complete current admissions. Until all of that and a real
-provider-backed E2E pass, keep workers/autonomy/automatic actions OFF, the kill
-switch ON, and do not declare `GROK BOT: PRODUCTION READY`.
+Those roster, wildcard, and claim-fence follow-ups are now implemented by the
+ADR-219 repository candidate described at latest+39. They are not hosted and
+have not passed a real provider-backed E2E. Keep workers/autonomy/automatic
+actions OFF, the kill switch ON, and do not declare `GROK BOT: PRODUCTION
+READY`.
 
 ## Newest (2026-08-31, latest+25): WDO reports (ADR-205, #70)
 

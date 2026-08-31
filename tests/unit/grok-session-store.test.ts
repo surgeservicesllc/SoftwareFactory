@@ -11,11 +11,14 @@ vi.mock("@/lib/bots/service", () => ({ loadBotFabric: rosterHarness.loadBotFabri
 vi.mock("@/lib/ai-accounts/broker", () => ({ listAiAccounts: rosterHarness.listAiAccounts }));
 
 import { buildGrokChiefOfStaffPlan } from "@/lib/factory/chief-of-staff";
+import { NODE_CAPABILITIES } from "@/lib/graph/contracts";
 import {
   applyGrokGraphControl,
   configuredGrokAgents,
   GrokStoreProjectionError,
   loadConfiguredGrokAgents,
+  grokSpecialistRosterIdempotencyKey,
+  recordGrokSpecialistRoster,
   recordGrokPlanningFailure,
   mapGrokSessionDetail,
   readGrokBundle,
@@ -60,7 +63,7 @@ describe("atomic Grok graph control", () => {
       reason: "Resume after reviewing durable evidence.",
       idempotencyKey: "control-key-123",
     })).resolves.toEqual(appliedControl);
-    expect(rpc).toHaveBeenCalledWith("apply_grok_graph_control_as_owner", {
+    expect(rpc).toHaveBeenCalledWith("apply_grok_graph_control_v2_as_owner", {
       p_organization_id: organizationId,
       p_session_id: sessionId,
       p_graph_id: graphId,
@@ -364,7 +367,7 @@ function connectedAccount(overrides: Record<string, unknown> = {}) {
   return {
     account_id: configuredAccountId,
     provider: "anthropic",
-    auth_method: "subscription_oauth",
+    auth_method: "subscription",
     display_name: "Claude account 1",
     provider_identity: "owner@example.com",
     status: "connected",
@@ -410,6 +413,9 @@ describe("configured Grok agent identity", () => {
     expect(configuredGrokAgents(
       configuredFabric(), projectId, [connectedAccount({ provider: "openai" })],
     )).toEqual([]);
+    expect(configuredGrokAgents(
+      configuredFabric(), projectId, [connectedAccount({ auth_method: "api_key" })],
+    )).toEqual([]);
     expect(configuredGrokAgents({
       ...configuredFabric(),
       bots: [{
@@ -426,6 +432,18 @@ describe("configured Grok agent identity", () => {
       configuredFabric(), projectId,
       [connectedAccount({ provider_identity: `sk-${"a".repeat(30)}` })],
     )).toThrow("The connected AI-account roster was malformed.");
+  });
+
+  it("expands a declared wildcard to the complete sorted canonical vocabulary", () => {
+    const fabric = configuredFabric();
+    const agents = configuredGrokAgents({
+      ...fabric,
+      roles: [{ ...fabric.roles[0], capabilities: ["*", "coding", "unknown"] }],
+    }, projectId, [connectedAccount()]);
+
+    expect(agents).toHaveLength(1);
+    expect(agents[0]?.capabilities).toEqual([...NODE_CAPABILITIES].sort());
+    expect(agents[0]?.capabilities).not.toContain("*");
   });
 
   it("loads the bot and account rosters together before projecting identities", async () => {
@@ -459,6 +477,39 @@ describe("configured Grok agent identity", () => {
 
     expect(stored?.planner.version).toBe(1);
     expect(stored?.dag.tasks[0]?.assignmentId).toBeUndefined();
+  });
+});
+
+describe("immutable Grok specialist roster persistence", () => {
+  it("derives one child key and preserves exact roster event sequence 3 on replay", async () => {
+    const result = {
+      message_id: assistantMessageId,
+      roster_count: 2,
+      roster_sha256: "c".repeat(64),
+      replayed: true,
+    };
+    const rpc = vi.fn().mockResolvedValue({ data: result, error: null });
+
+    await expect(recordGrokSpecialistRoster({ rpc } as never, {
+      organizationId,
+      projectId,
+      sessionId,
+      messageId: assistantMessageId,
+      requestedBy: actorUserId,
+      idempotencyKey: "request-key-123",
+      expectedEventSequence: 3,
+    })).resolves.toEqual(result);
+    expect(grokSpecialistRosterIdempotencyKey("request-key-123"))
+      .toBe("request-key-123:specialist-roster");
+    expect(rpc).toHaveBeenCalledWith("record_grok_specialist_roster_v1_as_server", {
+      p_organization_id: organizationId,
+      p_requested_by: actorUserId,
+      p_project_id: projectId,
+      p_session_id: sessionId,
+      p_message_id: assistantMessageId,
+      p_idempotency_key: "request-key-123:specialist-roster",
+      p_expected_event_sequence: 3,
+    });
   });
 });
 

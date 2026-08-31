@@ -123,16 +123,31 @@ the algorithm needs exists.
   `33372115428`; signed-in reload retained the exact durable blocked session
   without starting a graph, worker, or provider. Never rerun, repair, replay,
   or down-migrate the already accepted migration.
-- [ ] Make admission cover every honest prompt/roster without inventing work:
-  preserve research/deploy as durable plan-only sessions or add dedicated
-  canonical templates; persist a deterministic immutable admission roster so
-  evaluation/decision specialists need not be fake DAG tasks; normalize the
-  explicit `*` generalist capability in both TypeScript and a new forward SQL
-  launcher revision. Keep v1/v2 history readable and fail closed for execution.
-- [ ] Before enabling any worker, require a complete admission set in every
-  Resume/wake and worker-claim path, and revalidate the admitted assignment,
-  bot, role, AI account, provider credential rotation, provider/model, and
-  canonical node at claim time. Legacy unadmitted graphs must never be woken.
+- [x] Implement honest prompt/roster admission in the repository through
+  `20260831001000`: planner v3 persists the complete Ready configured posting
+  roster, normalizes `*` to the fixed canonical vocabulary in TypeScript and
+  SQL, keeps v1/v2 readable, and blocks research/deploy before graph creation
+  rather than inventing executable work. This migration is not hosted yet.
+- [x] Implement the repository worker-admission fence through
+  `20260831000900`: every Grok Resume/wake and protocol-v3 graph or Phase 1C
+  claim requires and revalidates the complete current admission identity;
+  legacy unadmitted Grok work cannot enter the worker. This migration is not
+  hosted yet.
+- [ ] Publish one exact rebased candidate and require lint, typecheck, the full
+  test suite, production build, all three browser/accessibility shards, exact
+  green CI, exact READY Vercel identity, and matching public health.
+- [ ] Apply only the protected completion sequence through the dedicated
+  workflow: fresh `probe`, `claim-admission-fence` (`00900`),
+  `specialist-admission-planning` (`01000`), then fresh read-only `verify`.
+  Require exact ledger, catalog, RLS, ACL, runtime, lint, health, and stopped
+  safety evidence; never broad-push, replay, repair, reset, or down-migrate.
+- [ ] Perform signed-in production create/return/reload acceptance with workers
+  still OFF, proving the exact current roster and route persist without
+  claiming that provider execution occurred.
+- [ ] Under a separate authorization, run the real current-base provider path
+  through an admitted claim, repository change, draft pull request, stable
+  exact-head CI, and immutable audit evidence. Only that provider-backed E2E
+  can close `GROK BOT: PRODUCTION READY`.
 - [x] Establish the production baseline before containment: exact main
   `397798921ebda6a4f8e30d2c0d83af36a3dd73a0` is green/READY and hosted
   migrations `20260830000900` and `20260830001000` are each ledgered once.
@@ -159,12 +174,12 @@ the algorithm needs exists.
   wake, or dispatch. Legacy session `74d18263-37ba-4f7d-8230-dc5e41bdc86a`
   now reloads as request saved/no plan.
 - [ ] Complete the separate provider-backed loop only after legitimate ready
-  bot coverage exists and execution receives its own authorization. Keep
-  workers, autonomy, and automatic actions OFF and the global kill switch ON;
-  Phase 2 containment acceptance alone does not declare `GROK BOT: PRODUCTION
-  READY`. Before enabling a worker, make the database claim pin the selected
-  bot, connected account, provider/model, and immutable assignment revisions;
-  do not treat repository-dispatch acceptance as proof of claim or execution.
+  bot coverage exists and execution receives its own authorization. The
+  repository candidate now pins the selected bot, connected account,
+  provider/model, credential rotation, and immutable revisions at claim time,
+  but it is unhosted and has not executed a provider. Keep workers, autonomy,
+  and automatic actions OFF and the global kill switch ON; do not treat a
+  repository dispatch as proof of claim or execution.
 
 ## Services CRM → pest-services platform (task #63, owner /goal 2026-08-30)
 

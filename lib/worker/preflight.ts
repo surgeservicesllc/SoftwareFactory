@@ -55,41 +55,11 @@ export async function verifyWorkerProviderAccess(input: {
   fetcher?: typeof fetch;
   runCommand?: RunCommand;
 }) {
-  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$/.test(input.model)) {
-    throw new WorkerPreflightError("invalid_model", "The configured Codex model name is invalid.");
-  }
-
-  const runCommand = input.runCommand ?? defaultRunCommand;
-  const command = process.platform === "win32" ? "npx.cmd" : "npx";
-  const commandOptions = {
-    env: credentialFreeEnvironment(input.environment ?? process.env),
-    maxBuffer: 64 * 1_024,
-    timeout: 15_000,
-  } as const;
-  let version: string;
-  try {
-    version = (await runCommand(
-      command,
-      ["--no-install", "codex", "--version"],
-      commandOptions,
-    )).stdout.trim();
-    await runCommand(
-      command,
-      ["--no-install", "codex", "exec", "--help"],
-      commandOptions,
-    );
-  } catch {
-    throw new WorkerPreflightError(
-      "codex_cli_unavailable",
-      "The pinned Codex CLI could not start.",
-    );
-  }
-  if (version !== EXPECTED_CODEX_VERSION) {
-    throw new WorkerPreflightError(
-      "codex_cli_version_mismatch",
-      "The installed Codex CLI version does not match the reviewed release.",
-    );
-  }
+  await verifyWorkerRuntime({
+    model: input.model,
+    environment: input.environment,
+    runCommand: input.runCommand,
+  });
 
   // The whole point of subscription mode is that no request reaches the billed
   // API surface — not on a turn, and not on a preflight either. Verifying the
@@ -150,6 +120,53 @@ export async function verifyWorkerProviderAccess(input: {
     expectedObject: "response",
     expectedStatus: "completed",
   });
+}
+
+/**
+ * Verifies only credential-free runtime prerequisites. Ordinary worker startup
+ * uses this before claim because protocol-v3 admission-backed jobs do not use
+ * — and must not validate — an ambient Codex account.
+ */
+export async function verifyWorkerRuntime(input: {
+  model: string;
+  environment?: Readonly<Record<string, string | undefined>>;
+  runCommand?: RunCommand;
+}) {
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$/.test(input.model)) {
+    throw new WorkerPreflightError("invalid_model", "The configured Codex model name is invalid.");
+  }
+
+  const runCommand = input.runCommand ?? defaultRunCommand;
+  const command = process.platform === "win32" ? "npx.cmd" : "npx";
+  const commandOptions = {
+    env: credentialFreeEnvironment(input.environment ?? process.env),
+    maxBuffer: 64 * 1_024,
+    timeout: 15_000,
+  } as const;
+  let version: string;
+  try {
+    version = (await runCommand(
+      command,
+      ["--no-install", "codex", "--version"],
+      commandOptions,
+    )).stdout.trim();
+    await runCommand(
+      command,
+      ["--no-install", "codex", "exec", "--help"],
+      commandOptions,
+    );
+  } catch {
+    throw new WorkerPreflightError(
+      "codex_cli_unavailable",
+      "The pinned Codex CLI could not start.",
+    );
+  }
+  if (version !== EXPECTED_CODEX_VERSION) {
+    throw new WorkerPreflightError(
+      "codex_cli_version_mismatch",
+      "The installed Codex CLI version does not match the reviewed release.",
+    );
+  }
 }
 
 async function classifiedHttpError(response: Response, operation: string) {

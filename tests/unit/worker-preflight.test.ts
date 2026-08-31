@@ -1,7 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { CodexAuthResolution } from "@/lib/worker/auth";
-import { verifyWorkerProviderAccess, WorkerPreflightError } from "@/lib/worker/preflight";
+import {
+  verifyWorkerProviderAccess,
+  verifyWorkerRuntime,
+  WorkerPreflightError,
+} from "@/lib/worker/preflight";
 
 const apiKey = "dedicated-test-api-key-that-must-never-appear";
 const model = "gpt-5.3-codex";
@@ -26,6 +30,22 @@ function successfulCommand() {
 }
 
 describe("Phase 1C worker provider preflight", () => {
+  it("verifies credential-free startup without requiring ambient Codex auth", async () => {
+    const runCommand = successfulCommand();
+
+    await verifyWorkerRuntime({
+      model,
+      environment: {
+        PATH: "/safe/bin",
+        SOFTWAREFACTORY_CODEX_AUTH_JSON: "malformed-and-unrelated",
+      },
+      runCommand,
+    });
+
+    expect(runCommand).toHaveBeenCalledTimes(2);
+    expect(JSON.stringify(runCommand.mock.calls)).not.toContain("malformed-and-unrelated");
+  });
+
   it("verifies the pinned CLI and exact OpenAI model without giving secrets to the CLI", async () => {
     const runCommand = successfulCommand();
     const fetcher = vi.fn(async () => new Response(

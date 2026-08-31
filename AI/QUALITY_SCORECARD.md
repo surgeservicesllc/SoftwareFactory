@@ -2,6 +2,35 @@
 
 Last reviewed: 2026-08-31
 
+**Addendum, 2026-08-31 latest+39 - Grok claim and specialist admission
+(ADR-219):** The rebased repository candidate carries two forward-only files:
+009 claim fence (`795d49b41b2de34819272a45a837d50aa6c3808db5a2c85e6a4ad769d5deff6b`,
+92,659 canonical-LF bytes) and 010 specialist planning
+(`728628f0368e1f715d8c786ffb536d2d3fcc3a859a177a0665a00ea98a8386f1`,
+56,636 canonical-LF bytes). The integrated migration inventory is 217.
+
+Measured focused evidence on this rebased candidate is 17/17 for the dedicated
+release-workflow contract, 10/10 for claim behavior/contracts, and 69/69 for
+worker/auth runtime. These suites cover ordered hash-pinned scopes, protocol-v3
+claim projection, stale/missing admission refusal, exact admitted credential
+resolution after claim, legacy credential behavior, and alternate admitted
+OpenAI models using their supported default reasoning effort. Earlier combined
+planner/admission/release lanes passed 164/164 before the final rebase; that is
+supporting evidence only and is not counted as a final-tree release gate.
+
+The implementation also adds deterministic planner-v3 complete-roster evidence,
+identical TypeScript/PostgreSQL wildcard normalization, append-only forced-RLS
+specialist rows, v3-only new launch/claim authority, and fail-closed
+research/deploy planning where no canonical executable bridge exists. Final
+full lint, typecheck, test, production build, browser/accessibility, migration
+chain/catalog/RLS/ACL/replay/rollback, secret scan, exact CI, deployment,
+hosted postflight, and signed-in acceptance evidence is still pending.
+
+**Status:** repository candidate only. Migrations 009/010 are unhosted; workers,
+autonomy, and all automatic actions are OFF; the global kill switch is ON; no
+provider-backed run or draft-PR/CI journey has passed. **GROK BOT: PRODUCTION
+READY is not declared.**
+
 **Addendum, 2026-08-31 latest+38 - autopay authorisation (ADR-218):**
 services-autopay.behavior 15 on the real chain, most about what cannot
 happen: a card number refused in the holder name, spaced or dashed, and in

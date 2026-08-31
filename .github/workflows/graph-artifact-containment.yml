@@ -764,9 +764,16 @@ jobs:
               ('public.record_graph_artifact(uuid,public.graph_artifact_kind,jsonb,uuid,integer,integer)'),
               ('public.record_verification(uuid,public.verification_lens,public.verification_verdict,jsonb,uuid,text,boolean)')
             ), private_legacy as (select to_regprocedure(signature) routine from private_legacy_expected),
-            worker_expected(signature) as (values
-              ('public.claim_planned_graph_v2(text,text[],text,jsonb,integer)'),
-              ('public.claim_phase1c_run_v2(text,text,text,integer,integer)'),
+            worker_expected(signature) as (
+              select case when (select count(*) from supabase_migrations.schema_migrations where version='20260831000900')=1
+                then 'public.claim_planned_graph_v3(text,text[],text,jsonb,integer)'
+                else 'public.claim_planned_graph_v2(text,text[],text,jsonb,integer)' end
+              union all
+              select case when (select count(*) from supabase_migrations.schema_migrations where version='20260831000900')=1
+                then 'public.claim_phase1c_run_v3(text,text,text,integer,integer)'
+                else 'public.claim_phase1c_run_v2(text,text,text,integer,integer)' end
+              union all
+              select signature from (values
               ('public.read_prior_node_results_as_worker_v2(text,uuid,integer)'),
               ('public.open_node_gate_as_worker(text,uuid,uuid,integer)'),
               ('public.decide_automatic_gate_as_worker(text,uuid)'),
@@ -781,6 +788,7 @@ jobs:
               ('public.approve_graph_phase1c_test_gate_as_worker(uuid,uuid,integer,text,text,text,text,timestamp with time zone)'),
               ('public.approve_graph_phase1c_deployment_gate_as_worker(uuid,uuid,uuid,bigint,text,text,text,text,timestamp with time zone,timestamp with time zone)'),
               ('public.complete_graph_run_with_phase1c_bridge_as_worker(text,uuid,public.graph_run_state,boolean,bigint,bigint,text,text)')
+              ) retained(signature)
             ), worker_routines as (select to_regprocedure(signature) routine from worker_expected)
             select
               (select count(*)=1 from supabase_migrations.schema_migrations where version='20260827000100')
@@ -877,14 +885,23 @@ jobs:
                 where relation.oid in ('public.graph_artifacts'::regclass,'public.graph_verifications'::regclass)
                   and privilege.grantee<>relation.relowner
                   and privilege.privilege_type in ('INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER'))
-              and to_regprocedure('public.claim_planned_graph_v2(text,text[],text,jsonb,integer)') is not null
-              and has_function_privilege('service_role','public.claim_planned_graph_v2(text,text[],text,jsonb,integer)','EXECUTE')
-              and not has_function_privilege('anon','public.claim_planned_graph_v2(text,text[],text,jsonb,integer)','EXECUTE')
-              and not has_function_privilege('authenticated','public.claim_planned_graph_v2(text,text[],text,jsonb,integer)','EXECUTE')
-              and to_regprocedure('public.claim_phase1c_run_v2(text,text,text,integer,integer)') is not null
-              and has_function_privilege('service_role','public.claim_phase1c_run_v2(text,text,text,integer,integer)','EXECUTE')
-              and not has_function_privilege('anon','public.claim_phase1c_run_v2(text,text,text,integer,integer)','EXECUTE')
-              and not has_function_privilege('authenticated','public.claim_phase1c_run_v2(text,text,text,integer,integer)','EXECUTE')
+              and (
+                (
+                  (select count(*) from supabase_migrations.schema_migrations where version='20260831000900')=0
+                  and has_function_privilege('service_role','public.claim_planned_graph_v2(text,text[],text,jsonb,integer)','EXECUTE')
+                  and has_function_privilege('service_role','public.claim_phase1c_run_v2(text,text,text,integer,integer)','EXECUTE')
+                ) or (
+                  (select count(*) from supabase_migrations.schema_migrations where version='20260831000900')=1
+                  and not has_function_privilege('service_role','public.claim_planned_graph_v2(text,text[],text,jsonb,integer)','EXECUTE')
+                  and not has_function_privilege('service_role','public.claim_phase1c_run_v2(text,text,text,integer,integer)','EXECUTE')
+                  and not has_function_privilege('anon','public.claim_planned_graph_v2(text,text[],text,jsonb,integer)','EXECUTE')
+                  and not has_function_privilege('authenticated','public.claim_planned_graph_v2(text,text[],text,jsonb,integer)','EXECUTE')
+                  and not has_function_privilege('anon','public.claim_phase1c_run_v2(text,text,text,integer,integer)','EXECUTE')
+                  and not has_function_privilege('authenticated','public.claim_phase1c_run_v2(text,text,text,integer,integer)','EXECUTE')
+                  and has_function_privilege('service_role','public.claim_planned_graph_v3(text,text[],text,jsonb,integer)','EXECUTE')
+                  and has_function_privilege('service_role','public.claim_phase1c_run_v3(text,text,text,integer,integer)','EXECUTE')
+                )
+              )
               and to_regprocedure('public.diagnose_graph_queue_as_worker_v2(text,text,jsonb,uuid,integer)') is not null
               and has_function_privilege('service_role','public.diagnose_graph_queue_as_worker_v2(text,text,jsonb,uuid,integer)','EXECUTE')
               and not has_function_privilege('anon','public.diagnose_graph_queue_as_worker_v2(text,text,jsonb,uuid,integer)','EXECUTE')

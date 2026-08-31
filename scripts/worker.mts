@@ -1,9 +1,10 @@
 import { setTimeout as sleep } from "node:timers/promises";
 
-import { CodexAuthError, describeCodexAuth } from "@/lib/worker/auth";
+import { describeCodexAuth } from "@/lib/worker/auth";
 import { CodexSdkAdapter } from "@/lib/worker/codex";
 import { describeClaimOutcome } from "@/lib/worker/drain-report";
 import { readWorkerConfiguration, WorkerConfigurationError } from "@/lib/worker/env";
+import { resolveAdmittedCodexAuth } from "@/lib/worker/execution-admission";
 import { GitHubAppInstallationTokenProvider, GitHubDraftPublisher } from "@/lib/worker/github";
 import { safeErrorMessage } from "@/lib/worker/redact";
 import { SupabaseWorkerStore } from "@/lib/worker/supabase-store";
@@ -23,11 +24,10 @@ async function main() {
   }
 
   const configuration = readWorkerConfiguration();
-  // Reported before any other check. Authentication is the part of this setup
-  // an operator is most likely to get wrong, and a failure further down — an
-  // unavailable Docker image, an unreachable database — would otherwise leave
-  // them unable to tell whether their credential was even accepted.
-  process.stdout.write(`${describeCodexAuth(configuration.codexAuth)}\n`);
+  // Credential selection is claim-scoped. An admitted protocol-v3 job opens
+  // only its immutable account credential; a legacy job resolves the ambient
+  // credential after claim and still fails closed when it is absent/invalid.
+  process.stdout.write("Codex authentication will be resolved from the claimed run.\n");
 
   const store = SupabaseWorkerStore.create({
     url: configuration.supabaseUrl,
@@ -41,12 +41,28 @@ async function main() {
   try {
     const validator = new DeterministicValidator();
     await validator.assertAvailable(configuration.workRoot);
-    const codex = await CodexSdkAdapter.create(configuration.codexAuth);
     const worker = new SoftwareFactoryWorker(configuration.workerId, configuration.heartbeatMs, {
       store,
       tokenProvider: new GitHubAppInstallationTokenProvider(),
       workspace: new GitWorkspaceManager(configuration.workRoot, configuration.commitIdentity),
-      codex,
+      codex: async (job) => {
+        if (job.executionAdmission && (
+          job.provider !== job.executionAdmission.provider
+          || job.model !== job.executionAdmission.model
+        )) {
+          throw new Error("The claimed Phase 1C provider/model does not match its execution admission.");
+        }
+        const auth = job.executionAdmission
+          ? await resolveAdmittedCodexAuth({
+              supabaseUrl: configuration.supabaseUrl,
+              serviceRoleKey: configuration.supabaseServiceRoleKey,
+              organizationId: job.organizationId,
+              admission: job.executionAdmission,
+            })
+          : configuration.resolveLegacyCodexAuth();
+        process.stdout.write(`${describeCodexAuth(auth)}\n`);
+        return CodexSdkAdapter.create(auth);
+      },
       validator,
       publisher: new GitHubDraftPublisher(undefined, undefined, undefined, configuration.requiredChecks),
     });
@@ -72,7 +88,7 @@ async function main() {
 }
 
 main().catch((error) => {
-  const message = error instanceof WorkerConfigurationError || error instanceof CodexAuthError
+  const message = error instanceof WorkerConfigurationError
     ? error.message
     : safeErrorMessage(error);
   process.stderr.write(`SoftwareFactory Codex worker stopped: ${message}\n`);

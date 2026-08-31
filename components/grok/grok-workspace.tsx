@@ -22,7 +22,15 @@ import {
   Target,
   Users,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type KeyboardEvent,
+} from "react";
 
 import { FactoryShell, type FactoryViewer } from "@/components/graph/factory-shell";
 import { StatusBadge } from "@/components/ui";
@@ -652,6 +660,27 @@ export function GrokWorkspace({
     ? CONTROL_ACTIONS.filter((action) => action !== "stop")
     : CONTROL_ACTIONS;
 
+  function moveEvidenceTab(event: KeyboardEvent<HTMLButtonElement>, index: number) {
+    let nextIndex: number | null = null;
+    if (event.key === "ArrowRight" || event.key === "ArrowDown") {
+      nextIndex = (index + 1) % tabs.length;
+    } else if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
+      nextIndex = (index - 1 + tabs.length) % tabs.length;
+    } else if (event.key === "Home") {
+      nextIndex = 0;
+    } else if (event.key === "End") {
+      nextIndex = tabs.length - 1;
+    }
+    if (nextIndex === null) return;
+
+    event.preventDefault();
+    const next = tabs[nextIndex];
+    setTab(next.key);
+    window.requestAnimationFrame(() => {
+      document.getElementById(`grok-tab-${next.key}`)?.focus();
+    });
+  }
+
   return (
     <FactoryShell
       step={FACTORY_STEPS[0]}
@@ -716,8 +745,8 @@ export function GrokWorkspace({
             <aside aria-label="Session inspector" className="min-w-0 p-3">
               <div className="flex items-center justify-between gap-2"><p className="label">Control center</p><button type="button" className="grid size-8 place-items-center rounded-lg border border-[var(--border)] text-muted hover:text-foreground" aria-label="Refresh session" onClick={() => sessionId ? void loadDetail(sessionId) : void load()}><RefreshCw className="size-3.5" /></button></div>
               {selectedSession ? <div className={cn("mt-3 grid gap-1", selectedRunIsRunning ? "grid-cols-2" : "grid-cols-3")}>{renderedControlActions.map((action) => { const Icon = controlIcon(action); const allowed = selectedSession.allowedActions.includes(action); const pending = controlPending === action; return <button key={action} type="button" aria-label={allowed ? `${action} session` : `${action} unavailable in ${selectedSession.status}`} disabled={!allowed || controlPending !== null} title={allowed ? `${action} this session` : `${action} is not available in ${selectedSession.status}`} className="flex min-h-12 flex-col items-center justify-center gap-1 rounded-lg border border-[var(--border)] text-[10px] capitalize text-muted enabled:hover:border-[var(--accent-border)] enabled:hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40" onClick={() => void controlSession(action)}>{pending ? <Loader2 className="size-3.5 animate-spin" aria-hidden="true" /> : <Icon className="size-3.5" aria-hidden="true" />}{action}</button>; })}</div> : null}
-              <div className="mt-3 flex gap-1 overflow-x-auto border-b border-[var(--border)] pb-2 xl:grid xl:grid-cols-4" role="tablist" aria-label="Session evidence">{tabs.map((entry) => { const Icon = entry.icon; return <button id={`grok-tab-${entry.key}`} key={entry.key} type="button" role="tab" aria-selected={tab === entry.key} aria-controls="grok-inspector-panel" className={cn("flex min-w-max items-center justify-center gap-1 rounded-md px-2 py-1.5 text-[10px] font-medium", tab === entry.key ? "bg-[var(--accent-surface)] text-[var(--accent-text)]" : "text-muted hover:text-foreground")} onClick={() => setTab(entry.key)}><Icon className="size-3" aria-hidden="true" />{entry.label}</button>; })}</div>
-              <div id="grok-inspector-panel" role="tabpanel" aria-labelledby={`grok-tab-${tab}`} className="mt-4 max-h-[calc(70vh-11rem)] overflow-y-auto pr-1"><Inspector detail={detail} tab={tab} /></div>
+              <div className="mt-3 flex gap-1 overflow-x-auto border-b border-[var(--border)] pb-2 xl:grid xl:grid-cols-4" role="tablist" aria-label="Session evidence">{tabs.map((entry, index) => { const Icon = entry.icon; return <button id={`grok-tab-${entry.key}`} key={entry.key} type="button" role="tab" aria-selected={tab === entry.key} aria-controls="grok-inspector-panel" tabIndex={tab === entry.key ? 0 : -1} className={cn("flex min-w-max items-center justify-center gap-1 rounded-md px-2 py-1.5 text-[10px] font-medium", tab === entry.key ? "bg-[var(--accent-surface)] text-[var(--accent-text)]" : "text-muted hover:text-foreground")} onClick={() => setTab(entry.key)} onKeyDown={(event) => moveEvidenceTab(event, index)}><Icon className="size-3" aria-hidden="true" />{entry.label}</button>; })}</div>
+              <div id="grok-inspector-panel" role="tabpanel" aria-labelledby={`grok-tab-${tab}`} tabIndex={0} className="mt-4 max-h-[calc(70vh-11rem)] overflow-y-auto pr-1"><Inspector detail={detail} tab={tab} /></div>
             </aside>
           </div>
         ) : null}

@@ -49,7 +49,7 @@ async function claimGraph(
   const result = await db.query<{
     claim: { graph_id: string; graph_run_id: string } | null;
   }>(
-    `select public.claim_planned_graph_v2($1, $2::text[], $3, $4::jsonb, 2) as claim`,
+    `select public.claim_planned_graph_v3($1, $2::text[], $3, $4::jsonb, 3) as claim`,
     [workerId, ["MODEL", "DETERMINISTIC", "ANCHOR"], claimRepository,
       JSON.stringify(claimRequiredChecks)],
   );

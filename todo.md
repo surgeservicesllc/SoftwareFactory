@@ -1,6 +1,45 @@
 # SoftwareFactory — shared working status
 
-## GROK IMMUTABLE LAUNCH ADMISSION ACCEPTED; NEXT ADMISSION LAYER OPEN (2026-08-31 — PICK UP HERE)
+## GROK CLAIM/SPECIALIST ADMISSION REPOSITORY CANDIDATE; RELEASE, HOSTED, AND E2E OPEN (2026-08-31 — PICK UP HERE)
+
+- `20260831000900_grok_claim_admission_fence.sql` is frozen at canonical LF
+  SHA-256 `795d49b41b2de34819272a45a837d50aa6c3808db5a2c85e6a4ad769d5deff6b`
+  (92,659 LF bytes). Protocol v3 is the only service-role Grok claim path;
+  Resume/wake and graph/Phase 1C claims revalidate the complete current
+  admission, and a worker receives only the exact admitted credential after
+  claim.
+- `20260831001000_grok_specialist_admission_planning.sql` is frozen at
+  canonical LF SHA-256
+  `728628f0368e1f715d8c786ffb536d2d3fcc3a859a177a0665a00ea98a8386f1`
+  (56,636 LF bytes). Planner v3 persists every Ready configured posting as
+  append-only forced-RLS roster evidence, expands `*` identically in
+  TypeScript and SQL, launches only v3, keeps v1/v2 readable, and blocks
+  research/deploy before graph creation rather than inventing work.
+- Admitted workers resolve exact per-node Claude and per-job Codex auth/model
+  with no ambient fallback. An exact admitted OpenAI model uses its supported
+  CLI reasoning default; legacy no-admission work preserves the old bounded
+  behavior. Measured rebased focused evidence: workflow 17/17, claim
+  behavior/contracts 10/10, worker/auth runtime 69/69. Earlier combined
+  planner/admission/release lanes were 164/164 before final rebase and are not
+  final full-release evidence.
+- NEXT 1: run final lint, typecheck, full tests, production build,
+  browser/accessibility, migration/catalog/RLS/ACL/runtime/rollback, secret,
+  and diff checks; publish one exact candidate; require all four exact-head CI
+  jobs plus exact READY Vercel and matching health.
+- NEXT 2: use only `.github/workflows/grok-bot-completion-migrations.yml` for
+  fresh `probe` -> 009 `claim-admission-fence` -> 010
+  `specialist-admission-planning` -> fresh `verify`. Never broad-push, replay,
+  repair, reset, or down-migrate.
+- NEXT 3: perform signed-in production create/return/reload acceptance with
+  workers OFF and truthful no-execution language.
+- NEXT 4: under separate authorization, prove a real current-base provider run
+  through admitted claim, repository change, draft PR, stable exact-head CI,
+  and immutable audit evidence.
+- Both migrations are repository-only and unhosted. Workers, autonomy, and all
+  automatic actions remain OFF; the global kill switch remains ON. No actual
+  provider-backed run has passed. Do not declare `GROK BOT: PRODUCTION READY`.
+
+## HISTORICAL — GROK IMMUTABLE LAUNCH ADMISSION ACCEPTED (2026-08-31)
 
 - New forward migration `20260831000100_grok_provider_admission.sql`, canonical
   LF SHA-256 `37809d9b3d9bc760ffbee501fcca383f0daa5665fb047964734603ceed41aef7`,
@@ -36,11 +75,10 @@
   exact project/session, both messages, and truthful blocked/no-plan state
   without starting a graph, worker, or provider. Never rerun, repair, replay,
   or down-migrate the applied migration.
-- NEXT CODE SLICE: plan-only research/deploy; immutable admission roster for
-  specialist evaluation/decision coverage; wildcard normalization in TS plus
-  a new forward RPC; then admission-fence Resume/wake and worker claim.
-- Workers/autonomy/automatic actions remain OFF and the global kill switch ON.
-  Do not declare `GROK BOT: PRODUCTION READY`.
+- ADR-219 implements the former roster, wildcard, and claim-fence next slice as
+  the repository candidate above. It remains unhosted and unproven by a real
+  provider-backed run. Workers/autonomy/automatic actions remain OFF and the
+  global kill switch ON. Do not declare `GROK BOT: PRODUCTION READY`.
 
 ## GROK CANONICAL EVIDENCE + RESUME WAKE PRODUCTION ACCEPTED (2026-08-31)
 

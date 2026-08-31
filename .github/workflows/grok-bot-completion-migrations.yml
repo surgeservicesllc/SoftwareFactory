@@ -1,0 +1,1293 @@
+name: Apply Grok Bot completion migrations
+
+on:
+  workflow_dispatch:
+    inputs:
+      scope:
+        description: "Probe, apply one exact ordered completion migration, or verify both."
+        required: true
+        default: probe
+        type: choice
+        options:
+          - probe
+          - claim-admission-fence
+          - specialist-admission-planning
+          - verify
+      confirm:
+        description: "Type apply for a mutation scope; probe and verify are read-only."
+        required: false
+        default: ""
+        type: string
+      release_sha:
+        description: "Exact lowercase 40-character SoftwareFactory main SHA already green and READY in Production."
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  checks: read
+  contents: read
+  deployments: read
+
+concurrency:
+  group: apply-hosted-migrations
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PROJECT_REF: qpuofpmagrmyamahqwxw
+      MIGRATION_PROVIDER_ADMISSION: supabase/migrations/20260831000100_grok_provider_admission.sql
+      MIGRATION_PROVIDER_ADMISSION_SHA256: 37809d9b3d9bc760ffbee501fcca383f0daa5665fb047964734603ceed41aef7
+      MIGRATION_TRANSACTIONAL_NOTICES: supabase/migrations/20260831000700_transactional_notices.sql
+      MIGRATION_TRANSACTIONAL_NOTICES_SHA256: c4c562b06d61cdf67283cefa2b0ef12b35d64d33e22398d6c71b273d000b363b
+      MIGRATION_AUTOPAY_AUTHORIZATION: supabase/migrations/20260831000800_autopay_authorization.sql
+      MIGRATION_AUTOPAY_AUTHORIZATION_SHA256: 41875a16a58deb6945affa24ecf0adf6493875788ef8da3a1c7cd03f98afb4b2
+      MIGRATION_CLAIM_ADMISSION: supabase/migrations/20260831000900_grok_claim_admission_fence.sql
+      MIGRATION_CLAIM_ADMISSION_SHA256: 795d49b41b2de34819272a45a837d50aa6c3808db5a2c85e6a4ad769d5deff6b
+      MIGRATION_SPECIALIST_PLANNING: supabase/migrations/20260831001000_grok_specialist_admission_planning.sql
+      MIGRATION_SPECIALIST_PLANNING_SHA256: 728628f0368e1f715d8c786ffb536d2d3fcc3a859a177a0665a00ea98a8386f1
+      PRODUCTION_HEALTH_URL: https://www.theagoras.com/api/health
+      VERCEL_PROJECT_ID: prj_pAsrhftaVWI4SyaqstgRVSWHJkdD
+    steps:
+      - name: Authorize the exact mutation scope
+        env:
+          AUTHORIZED_ACTOR: ${{ vars.PRODUCTION_RELEASE_ACTOR }}
+          SCOPE: ${{ inputs.scope }}
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          set -euo pipefail
+          case "$SCOPE" in
+            probe|verify) exit 0 ;;
+            claim-admission-fence|specialist-admission-planning) ;;
+            *) echo "::error::Unknown Grok completion release scope."; exit 1 ;;
+          esac
+          if [ "$CONFIRM" != "apply" ]; then
+            echo "::error::A mutation scope requires confirm=apply."
+            exit 1
+          fi
+          if [ -z "$AUTHORIZED_ACTOR" ] \
+            || [ "$GITHUB_ACTOR" != "$AUTHORIZED_ACTOR" ] \
+            || [ "$GITHUB_TRIGGERING_ACTOR" != "$AUTHORIZED_ACTOR" ] \
+            || [ "$GITHUB_RUN_ATTEMPT" != "1" ]; then
+            echo "::error::Production mutation requires a first-attempt run by the exact configured actor; reruns are refused."
+            exit 1
+          fi
+
+      - name: Check out the exact release
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Verify exact green production and stopped execution workflows
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PHASE1C_WORKER_ENABLED: ${{ vars.SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED }}
+          GRAPH_WORKER_ENABLED: ${{ vars.SOFTWAREFACTORY_GRAPH_WORKER_ENABLED }}
+          GRAPH_WORKER_SCHEDULED: ${{ vars.SOFTWAREFACTORY_GRAPH_WORKER_SCHEDULED }}
+          AUTH_BROKER_DISABLED: ${{ vars.SOFTWAREFACTORY_AUTH_BROKER_DISABLED }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          set -euo pipefail
+          SHA=$(git rev-parse HEAD)
+          if [[ ! "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]] \
+            || [ "$RELEASE_SHA" != "$SHA" ] \
+            || [ "$GITHUB_REPOSITORY" != "surgeservicesllc/SoftwareFactory" ] \
+            || [ "$GITHUB_REF" != "refs/heads/main" ] \
+            || [ "$GITHUB_SHA" != "$SHA" ]; then
+            echo "::error::Grok completion migration requires the requested exact lowercase SHA on SoftwareFactory main."
+            exit 1
+          fi
+
+          CURRENT_MAIN_SHA=$(curl --fail --silent --show-error \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/git/ref/heads/main" \
+            | jq -r '.object.sha // empty')
+          if [ "$CURRENT_MAIN_SHA" != "$SHA" ]; then
+            echo "::error::Current main moved away from the requested release SHA."
+            exit 1
+          fi
+
+          CHECKS=$(curl --fail --silent --show-error \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/commits/${SHA}/check-runs?per_page=100")
+          for NAME in \
+            "Lint, typecheck, test, and build" \
+            "Browser and accessibility tests 1/3" \
+            "Browser and accessibility tests 2/3" \
+            "Browser and accessibility tests 3/3"; do
+            STATE=$(jq -r --arg name "$NAME" --arg sha "$SHA" '
+              [.check_runs[] | select(.name==$name and .head_sha==$sha and .app.slug=="github-actions")]
+              | sort_by(.completed_at // .started_at // "") | last
+              | if .==null then "missing|missing" else "\(.status)|\(.conclusion // "null")" end
+            ' <<<"$CHECKS")
+            if [ "$STATE" != "completed|success" ]; then
+              echo "::error::Exact-head check '$NAME' is not green ($STATE)."
+              exit 1
+            fi
+          done
+
+          DEPLOYMENT=$(curl --fail --silent --show-error \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/deployments?environment=Production&per_page=100" \
+            | jq -c '[.[] | select(.environment=="Production" and .task=="deploy" and .creator.login=="vercel[bot]")][0] // empty')
+          if [ -z "$DEPLOYMENT" ] \
+            || ! jq -e --arg sha "$SHA" '.sha==$sha and (.ref==$sha or .ref=="main")' <<<"$DEPLOYMENT" >/dev/null; then
+            echo "::error::Latest Vercel Production identity is not the exact checked-out SHA."
+            exit 1
+          fi
+          STATUS_URL=$(jq -r '.statuses_url' <<<"$DEPLOYMENT")
+          STATUS=$(curl --fail --silent --show-error \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${STATUS_URL}?per_page=1")
+          if ! jq -e 'length==1 and .[0].state=="success" and .[0].creator.login=="vercel[bot]" and (.[0].environment_url | test("^https://softwarefactory-[a-z0-9]+-surgeservices-projects\\.vercel\\.app/?$"))' <<<"$STATUS" >/dev/null; then
+            echo "::error::Exact-SHA Vercel Production is not READY."
+            exit 1
+          fi
+          VERCEL_DEPLOYMENT_URL=$(jq -r '.[0].environment_url | rtrimstr("/")' <<<"$STATUS")
+
+          HEALTH=$(curl --fail --silent --show-error --max-time 20 --retry 2 "$PRODUCTION_HEALTH_URL")
+          if ! jq -e \
+            --arg sha "$SHA" \
+            --arg project "$PROJECT_REF" \
+            --arg deployment_url "$VERCEL_DEPLOYMENT_URL" \
+            --arg vercel_project "$VERCEL_PROJECT_ID" '
+            .status=="ok"
+            and .service=="SoftwareFactory"
+            and .database=="reachable"
+            and .databaseProject=="matched"
+            and .databaseProjectRef==$project
+            and .deployment=="matched"
+            and .deploymentUrl==$deployment_url
+            and .vercelProjectId==$vercel_project
+            and (.vercelDeploymentId | type=="string" and test("^dpl_[A-Za-z0-9]+$"))
+            and .release=="matched"
+            and .releaseSha==$sha
+            and .releaseRef=="main"
+          ' <<<"$HEALTH" >/dev/null; then
+            echo "::error::Public production health is not the exact release, Vercel deployment, and Supabase project."
+            exit 1
+          fi
+          echo "EXPECTED_VERCEL_DEPLOYMENT_URL=$VERCEL_DEPLOYMENT_URL" >> "$GITHUB_ENV"
+          echo "EXPECTED_VERCEL_DEPLOYMENT_ID=$(jq -r '.vercelDeploymentId' <<<"$HEALTH")" >> "$GITHUB_ENV"
+
+          for WORKFLOW in graph-worker.yml codex-worker.yml claude-worker.yml auth-broker.yml graph-live-canary.yml handoff-canary.yml graph-artifact-containment.yml e2e-test-data.yml journey-prod-user.yml; do
+            ACTIVE=$(curl --fail --silent --show-error \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/workflows/${WORKFLOW}/runs?per_page=100" \
+              | jq '[.workflow_runs[] | select(.status != "completed")] | length')
+            if [ "$ACTIVE" != "0" ]; then
+              echo "::error::${WORKFLOW} has ${ACTIVE} active run(s)."
+              exit 1
+            fi
+          done
+          if [ "${PHASE1C_WORKER_ENABLED,,}" = "true" ] \
+            || [ "${GRAPH_WORKER_ENABLED,,}" = "true" ] \
+            || [ "${GRAPH_WORKER_SCHEDULED,,}" = "true" ] \
+            || [ "${AUTH_BROKER_DISABLED,,}" != "true" ]; then
+            echo "::error::A worker switch, schedule, or the AI-account auth broker is outside stopped containment."
+            exit 1
+          fi
+          echo "::notice::Exact main SHA ${SHA} is green and READY with execution workflows stopped."
+
+      - name: Connect to the exact Supabase project
+        env:
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "$SUPABASE_DB_PASSWORD" ]; then
+            echo "::error::SUPABASE_DB_PASSWORD is required."
+            exit 1
+          fi
+          ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+          echo "::add-mask::$ENC"
+          for HOST in aws-0-us-west-2.pooler.supabase.com aws-1-us-west-2.pooler.supabase.com; do
+            URL="postgresql://postgres.${PROJECT_REF}:${ENC}@${HOST}:5432/postgres"
+            echo "::add-mask::$URL"
+            if psql "$URL" -v ON_ERROR_STOP=1 -X -Atqc \
+              "select current_database()='postgres' and current_user='postgres' and to_regnamespace('supabase_migrations') is not null" \
+              | grep -qx t; then
+              echo "DB_URL=$URL" >> "$GITHUB_ENV"
+              exit 0
+            fi
+          done
+          echo "::error::Could not connect to exact Supabase project ${PROJECT_REF}."
+          exit 1
+
+      - name: Verify the five exact LF-normalized forward files
+        run: |
+          set -euo pipefail
+          verify_file() {
+            FILE=$1
+            EXPECTED=$2
+            ACTUAL=$(python3 - "$FILE" <<'PY'
+          import hashlib
+          import pathlib
+          import sys
+
+          content = pathlib.Path(sys.argv[1]).read_bytes()
+          normalized = content.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+          print(hashlib.sha256(normalized).hexdigest())
+          PY
+            )
+            if [ ! -f "$FILE" ] \
+              || [[ ! "$EXPECTED" =~ ^[0-9a-f]{64}$ ]] \
+              || [ "$ACTUAL" != "$EXPECTED" ]; then
+              echo "::error::Exact LF-normalized migration identity mismatch: $FILE"
+              exit 1
+            fi
+          }
+          verify_file "$MIGRATION_PROVIDER_ADMISSION" "$MIGRATION_PROVIDER_ADMISSION_SHA256"
+          verify_file "$MIGRATION_TRANSACTIONAL_NOTICES" "$MIGRATION_TRANSACTIONAL_NOTICES_SHA256"
+          verify_file "$MIGRATION_AUTOPAY_AUTHORIZATION" "$MIGRATION_AUTOPAY_AUTHORIZATION_SHA256"
+          verify_file "$MIGRATION_CLAIM_ADMISSION" "$MIGRATION_CLAIM_ADMISSION_SHA256"
+          verify_file "$MIGRATION_SPECIALIST_PLANNING" "$MIGRATION_SPECIALIST_PLANNING_SHA256"
+
+      - name: Verify exact ordered ledger catalog and stopped database state
+        env:
+          SCOPE: ${{ inputs.scope }}
+        run: |
+          set -euo pipefail
+          PREFIX=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+            select
+              (select count(*) from supabase_migrations.schema_migrations where version='20260831000100')||'|'||
+              (select count(*) from supabase_migrations.schema_migrations where version='20260831000200')||'|'||
+              (select count(*) from supabase_migrations.schema_migrations where version='20260831000300')||'|'||
+              (select count(*) from supabase_migrations.schema_migrations where version='20260831000400')||'|'||
+              (select count(*) from supabase_migrations.schema_migrations where version='20260831000500')||'|'||
+              (select count(*) from supabase_migrations.schema_migrations where version='20260831000600')||'|'||
+              (select count(*) from supabase_migrations.schema_migrations where version='20260831000700')||'|'||
+              (select count(*) from supabase_migrations.schema_migrations where version='20260831000800');")
+          if [ "$PREFIX" != "1|1|1|1|1|1|1|1" ]; then
+            echo "::error::The accepted 00100..00800 hosted ledger prefix is not exact (${PREFIX})."
+            exit 1
+          fi
+
+          TAIL=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+            select
+              (select count(*) from supabase_migrations.schema_migrations where version='20260831000900')||'|'||
+              (select count(*) from supabase_migrations.schema_migrations where version='20260831001000');")
+          case "$SCOPE:$TAIL" in
+            probe:0\|0|probe:1\|0|probe:1\|1) ;;
+            claim-admission-fence:0\|0) ;;
+            specialist-admission-planning:1\|0) ;;
+            verify:1\|1) ;;
+            *) echo "::error::Completion ledger is not scope-exact (${SCOPE}:${TAIL})."; exit 1 ;;
+          esac
+
+          PROVIDER_READY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+            with functions as (
+              select routine.*,language_row.lanname,
+                     md5(replace(replace(routine.prosrc,E'\\r\\n',E'\\n'),E'\\r',E'\\n')) source_md5
+                from pg_proc routine join pg_namespace space on space.oid=routine.pronamespace
+                join pg_language language_row on language_row.oid=routine.prolang
+               where space.nspname='public'
+            )
+            select
+              exists (
+                select 1 from pg_class relation join pg_namespace space on space.oid=relation.relnamespace
+                 where space.nspname='public' and relation.relname='grok_execution_admissions'
+                   and relation.relkind='r' and pg_get_userbyid(relation.relowner)='postgres'
+                   and relation.relrowsecurity and relation.relforcerowsecurity
+                   and not has_table_privilege('anon',relation.oid,'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+                   and not has_table_privilege('authenticated',relation.oid,'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+                   and not has_table_privilege('service_role',relation.oid,'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+              )
+              and exists (
+                select 1 from functions routine
+                 where routine.oid=to_regprocedure('public.grok_execution_admission_hash(public.grok_execution_admissions)')
+                   and pg_get_userbyid(routine.proowner)='postgres' and routine.lanname='sql'
+                   and not routine.prosecdef and routine.proconfig=array['search_path=pg_catalog']::text[]
+                   and routine.provolatile='i' and routine.proisstrict and routine.proparallel='s'
+                   and routine.source_md5='3c2b855b41873447c738b2b220d10544'
+                   and routine.proacl is not null and (select count(*) from aclexplode(routine.proacl))=1
+                   and not has_function_privilege('anon',routine.oid,'EXECUTE')
+                   and not has_function_privilege('authenticated',routine.oid,'EXECUTE')
+                   and not has_function_privilege('service_role',routine.oid,'EXECUTE')
+              )
+              and exists (
+                select 1 from functions routine
+                 where routine.oid=to_regprocedure('public.launch_grok_full_lifecycle_v2_as_server(uuid,uuid,uuid,uuid,uuid,text,text,public.graph_topology,jsonb,public.risk_level,boolean,jsonb,jsonb,jsonb,uuid,text,text,jsonb,jsonb)')
+                   and pg_get_userbyid(routine.proowner)='postgres' and routine.lanname='plpgsql'
+                   and routine.prosecdef and routine.proconfig=array['search_path=pg_catalog']::text[]
+                   and routine.source_md5='78055b8bc6d6d44dbb1cbd6e94657a8d'
+                   and routine.proacl is not null
+                   and not has_function_privilege('anon',routine.oid,'EXECUTE')
+                   and not has_function_privilege('authenticated',routine.oid,'EXECUTE')
+                   and has_function_privilege('service_role',routine.oid,'EXECUTE')=(split_part('${TAIL}','|',2)='0')
+              )
+              and exists (
+                select 1 from functions routine
+                 where routine.oid=to_regprocedure('public.launch_grok_full_lifecycle_as_server(uuid,uuid,uuid,uuid,uuid,text,text,public.graph_topology,jsonb,public.risk_level,boolean,jsonb,jsonb,jsonb,uuid,text,text,jsonb)')
+                   and pg_get_userbyid(routine.proowner)='postgres' and routine.prosecdef
+                   and routine.proconfig=array['search_path=pg_catalog']::text[]
+                   and routine.source_md5='49438e7ef00cf0d7034e0016e75f74f8'
+                   and routine.proacl is not null and (select count(*) from aclexplode(routine.proacl))=1
+                   and not has_function_privilege('anon',routine.oid,'EXECUTE')
+                   and not has_function_privilege('authenticated',routine.oid,'EXECUTE')
+                   and not has_function_privilege('service_role',routine.oid,'EXECUTE')
+              )
+              and exists (select 1 from pg_constraint where conrelid='public.grok_graph_launches'::regclass and conname='grok_graph_launches_admission_scope_unique' and convalidated)
+              and exists (select 1 from pg_constraint where conrelid='public.graph_nodes'::regclass and conname='graph_nodes_admission_scope_unique' and convalidated)
+              and (select count(*)=2 and bool_and(tgfoid='public.reject_grok_evidence_mutation()'::regprocedure)
+                     from pg_trigger where tgrelid='public.grok_execution_admissions'::regclass and not tgisinternal)
+              and (select count(*)=1 from functions where proname='grok_execution_admission_hash')
+              and (select count(*)=1 from functions where proname='launch_grok_full_lifecycle_v2_as_server');")
+          if [ "$PROVIDER_READY" != "t" ]; then
+            echo "::error::Accepted provider-admission ledger and exact catalog/ACL identity disagree."
+            exit 1
+          fi
+
+          CLAIM_OBJECTS=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+            select
+              (to_regclass('public.grok_phase1c_submission_guards') is not null)::integer||'|'||
+              (select count(*) from pg_proc routine join pg_namespace space on space.oid=routine.pronamespace
+                where space.nspname='public' and routine.proname in (
+                  'grok_current_execution_admission_hash','assert_current_grok_execution_admissions','grok_execution_admission_projection',
+                  'attach_current_grok_admissions_to_claim','claim_planned_graph_v3',
+                  'claim_planned_graph_by_id_v3','attach_current_grok_admission_to_phase1c_claim',
+                  'is_current_grok_phase1c_submission_authorized','validate_current_grok_phase1c_command_route',
+                  'current_grok_phase1c_claim_route',
+                  'claim_phase1c_run_v3','claim_phase1c_run_by_command_v3',
+                  'read_grok_execution_credential_as_worker','apply_grok_graph_control_v2_as_owner',
+                  'set_graph_pause_as_member_v2','assert_grok_graph_admission_as_member'));")
+          SPECIALIST_OBJECTS=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+            select
+              (to_regclass('public.grok_specialist_admissions') is not null)::integer||'|'||
+              (select count(*) from pg_proc routine join pg_namespace space on space.oid=routine.pronamespace
+                where space.nspname='public' and routine.proname in (
+                  'grok_specialist_admission_hash','normalize_grok_role_capabilities','record_grok_specialist_roster_v1_as_server',
+                  'grok_execution_admission_hash_v2','launch_grok_full_lifecycle_v3_as_server'));")
+          case "$TAIL:$CLAIM_OBJECTS:$SPECIALIST_OBJECTS" in
+            0\|0:0\|0:0\|0) ;;
+            1\|0:1\|16:0\|0) ;;
+            1\|1:1\|16:1\|5) ;;
+            *) echo "::error::Completion ledger and catalog presence disagree (${TAIL}:${CLAIM_OBJECTS}:${SPECIALIST_OBJECTS})."; exit 1 ;;
+          esac
+
+          SAFE=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+            select
+              not exists (
+                select 1 from public.organizations
+                 where coalesce(autonomous_mode,false)
+                    or autonomy_kill_switch_active is distinct from true
+                    or coalesce(auto_plan,false) or coalesce(auto_code,false)
+                    or coalesce(auto_test,false) or coalesce(auto_repair,false)
+                    or coalesce(auto_review,false) or coalesce(auto_approve,false)
+                    or coalesce(auto_merge,false) or coalesce(auto_deploy,false)
+                    or coalesce(auto_rollback,false)
+              )
+              and not exists (
+                select 1 from public.projects
+                 where coalesce(autonomous_mode,false)
+                    or coalesce(auto_plan,false) or coalesce(auto_code,false)
+                    or coalesce(auto_test,false) or coalesce(auto_repair,false)
+                    or coalesce(auto_review,false) or coalesce(auto_approve,false)
+                    or coalesce(auto_merge,false) or coalesce(auto_deploy,false)
+                    or coalesce(auto_rollback,false)
+              )
+              and not exists (select 1 from public.phase1c_workers where last_heartbeat_at > now()-interval '10 minutes')
+              and not exists (select 1 from public.phase1c_workers where last_heartbeat_at > now()+interval '1 minute')
+              and not exists (select 1 from public.phase1c_workers where current_run_id is not null)
+              and not exists (select 1 from public.graph_runs where state='RUNNING'::public.graph_run_state)
+              and not exists (select 1 from public.agent_runs where status='running'::public.run_status);")
+          if [ "$SAFE" != "t" ]; then
+            echo "::error::Autonomy, automatic actions, kill switch, worker, or runtime state is outside stopped containment."
+            exit 1
+          fi
+          echo "::notice::Completion ledger ${TAIL}, prerequisite catalog, and stopped containment are exact."
+
+      - name: Apply exactly one ordered forward completion migration
+        if: ${{ inputs.scope == 'claim-admission-fence' || inputs.scope == 'specialist-admission-planning' }}
+        env:
+          SCOPE: ${{ inputs.scope }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          set -euo pipefail
+          SHA=$(git rev-parse HEAD)
+          CURRENT_MAIN_SHA=$(curl --fail --silent --show-error \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/git/ref/heads/main" \
+            | jq -r '.object.sha // empty')
+          if [ "$RELEASE_SHA" != "$SHA" ] || [ "$CURRENT_MAIN_SHA" != "$SHA" ]; then
+            echo "::error::Current repository main changed before the protected database mutation."
+            exit 1
+          fi
+
+          case "$SCOPE" in
+            claim-admission-fence)
+              FILE=$MIGRATION_CLAIM_ADMISSION
+              EXPECTED=$MIGRATION_CLAIM_ADMISSION_SHA256
+              VERSION=20260831000900
+              E009=0
+              E010=0
+              SCOPE_LOCKS="
+                lock table public.graphs,public.graph_nodes,public.grok_graph_launches,
+                  public.grok_execution_admissions,public.graph_phase1c_bridges,
+                  public.bot_assignments,public.bots,public.bot_roles,
+                  public.ai_accounts,public.provider_credentials in share mode;"
+              CATALOG_GUARD="do \$guard\$ begin
+                 if to_regclass('public.grok_phase1c_submission_guards') is not null
+                   or exists (
+                   select 1 from pg_proc routine join pg_namespace space on space.oid=routine.pronamespace
+                    where space.nspname='public' and routine.proname in (
+                      'grok_current_execution_admission_hash','assert_current_grok_execution_admissions','grok_execution_admission_projection',
+                      'attach_current_grok_admissions_to_claim','claim_planned_graph_v3',
+                      'claim_planned_graph_by_id_v3','attach_current_grok_admission_to_phase1c_claim',
+                      'is_current_grok_phase1c_submission_authorized','validate_current_grok_phase1c_command_route',
+                      'current_grok_phase1c_claim_route',
+                      'claim_phase1c_run_v3','claim_phase1c_run_by_command_v3',
+                      'read_grok_execution_credential_as_worker','apply_grok_graph_control_v2_as_owner',
+                      'set_graph_pause_as_member_v2','assert_grok_graph_admission_as_member')
+                ) then raise exception 'claim-admission fence catalog is not pristine'; end if;
+                if to_regclass('public.grok_specialist_admissions') is not null
+                  or exists (select 1 from pg_attribute where attrelid='public.grok_execution_admissions'::regclass and attname='specialist_admission_id' and not attisdropped)
+                then raise exception 'specialist-admission catalog is not pristine'; end if;
+                if not coalesce((
+                  with expected(signature,source_md5,execute_role) as (values
+                    ('public.claim_planned_graph_v2(text,text[],text,jsonb,integer)','2d4314b0c58b31b6f58be58ccccd4584','service_role'),
+                    ('public.claim_planned_graph_by_id_v2(text,text[],text,jsonb,uuid,integer)','5cecdf559c1a11871099a7e2bf4cd886','service_role'),
+                    ('public.claim_phase1c_run_v2(text,text,text,integer,integer)','0345216c9a2eaa720e3517b3b0fa288c','service_role'),
+                    ('public.claim_phase1c_run_by_command_v2(text,text,text,integer,uuid,integer)','ce46fadd9962d960d8e885be0e2d7b4c','service_role'),
+                    ('public.apply_grok_graph_control_as_owner(uuid,uuid,uuid,text,text,text)','2b0ea737ac99b22570ddbfdd4c583eeb','authenticated'),
+                    ('public.set_graph_pause_as_member(uuid,uuid,boolean)','308dd7294f2b9706238b1aca89699bfe','authenticated')
+                  ), state as (
+                    select expected.*,routine.oid,routine.proowner,routine.prosecdef,routine.proconfig,routine.proacl,routine.provolatile,
+                           md5(replace(replace(routine.prosrc,E'\\r\\n',E'\\n'),E'\\r',E'\\n')) actual_source_md5
+                      from expected left join pg_proc routine on routine.oid=to_regprocedure(expected.signature)
+                  )
+                  select count(oid)=6 and count(distinct oid)=6 and bool_and(
+                    pg_get_userbyid(proowner)='postgres' and prosecdef
+                    and proconfig=array['search_path=pg_catalog']::text[] and actual_source_md5=source_md5
+                    and proacl is not null and (select count(*) from aclexplode(proacl))=2
+                    and not exists (select 1 from aclexplode(proacl) acl
+                      where acl.grantor<>proowner or acl.privilege_type<>'EXECUTE' or acl.is_grantable
+                         or acl.grantee not in (proowner,case execute_role when 'service_role' then to_regrole('service_role')::oid else to_regrole('authenticated')::oid end))
+                    and not has_function_privilege('anon',oid,'EXECUTE')
+                    and has_function_privilege('authenticated',oid,'EXECUTE')=(execute_role='authenticated')
+                    and has_function_privilege('service_role',oid,'EXECUTE')=(execute_role='service_role')
+                  ) from state
+                ),false) then raise exception 'legacy claim/control source, owner, security, search_path, or ACL drifted'; end if;
+              end \$guard\$;"
+              ;;
+            specialist-admission-planning)
+              FILE=$MIGRATION_SPECIALIST_PLANNING
+              EXPECTED=$MIGRATION_SPECIALIST_PLANNING_SHA256
+              VERSION=20260831001000
+              E009=1
+              E010=0
+              SCOPE_LOCKS="
+                lock table public.grok_execution_admissions in access exclusive mode;
+                lock table public.grok_sessions,public.grok_messages,public.grok_events,
+                  public.grok_graph_launches,public.graphs,public.graph_nodes,
+                  public.bot_assignments,public.bots,public.bot_roles,
+                  public.ai_accounts,public.provider_credentials in share mode;"
+              CATALOG_GUARD="do \$guard\$ begin
+                if to_regclass('public.grok_specialist_admissions') is not null
+                  or exists (select 1 from pg_attribute where attrelid='public.grok_execution_admissions'::regclass and attname='specialist_admission_id' and not attisdropped)
+                  or exists (select 1 from pg_proc routine join pg_namespace space on space.oid=routine.pronamespace
+                    where space.nspname='public' and routine.proname in (
+                      'grok_specialist_admission_hash','normalize_grok_role_capabilities','record_grok_specialist_roster_v1_as_server',
+                      'grok_execution_admission_hash_v2','launch_grok_full_lifecycle_v3_as_server'))
+                then raise exception 'specialist-admission planning catalog is not pristine'; end if;
+                if not exists (
+                    select 1 from pg_class relation
+                     where relation.oid='public.grok_phase1c_submission_guards'::regclass
+                       and relation.relkind='r' and pg_get_userbyid(relation.relowner)='postgres'
+                       and relation.relrowsecurity and relation.relforcerowsecurity
+                       and not has_table_privilege('anon',relation.oid,'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+                       and not has_table_privilege('authenticated',relation.oid,'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+                       and not has_table_privilege('service_role',relation.oid,'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+                       and not exists (select 1 from aclexplode(coalesce(relation.relacl,acldefault('r',relation.relowner))) acl
+                         where acl.grantor<>relation.relowner or acl.grantee<>relation.relowner or acl.is_grantable)
+                  )
+                  or exists (select 1 from pg_policy where polrelid='public.grok_phase1c_submission_guards'::regclass)
+                  or (select count(*) from public.grok_phase1c_submission_guards)<>0
+                  or (select count(*) from pg_attribute where attrelid='public.grok_phase1c_submission_guards'::regclass and attnum>0 and not attisdropped)<>9
+                  or (select count(*) from pg_constraint where conrelid='public.grok_phase1c_submission_guards'::regclass and contype<>'n' and convalidated)<>11
+                  or (select count(*) from pg_index where indrelid='public.grok_phase1c_submission_guards'::regclass and indisvalid and indisready and indislive)<>4
+                then raise exception 'claim-admission private guard catalog or authority drifted'; end if;
+                if not coalesce((
+                  with expected(signature,source_md5,language_name,security_definer,volatility,execute_role,object_comment) as (values
+                    ('public.grok_current_execution_admission_hash(public.grok_execution_admissions)','5d3611423811e3609dd9f2fc3f2f981a','sql',false,'i','none',null),
+                    ('public.assert_current_grok_execution_admissions(uuid)','b5dc9166e99634eaa409801055a27d4b','plpgsql',true,'v','none',null),
+                    ('public.grok_execution_admission_projection(public.grok_execution_admissions)','a85f407323a331e54d8d16123c46281f','sql',false,'i','none',null),
+                    ('public.attach_current_grok_admissions_to_claim(jsonb)','0e4a0ba5d0941f6cb43ecee3a23aecbb','plpgsql',true,'v','none',null),
+                    ('public.claim_planned_graph_v3(text,text[],text,jsonb,integer)','4a6da8bed8d1fdda17f11df00d549817','plpgsql',true,'v','service_role',null),
+                    ('public.claim_planned_graph_by_id_v3(text,text[],text,jsonb,uuid,integer)','f83873aa19703d2c61553026d4141a4c','plpgsql',true,'v','service_role',null),
+                    ('public.attach_current_grok_admission_to_phase1c_claim(jsonb)','48f84aba274b2e6316331de8e3fca796','plpgsql',true,'v','none',null),
+                    ('public.is_current_grok_phase1c_submission_authorized(uuid,uuid,text,jsonb)','9878cd04b1d77710cdea3a346e03978f','plpgsql',true,'v','none',null),
+                    ('public.normalize_phase1c_command()','c788b5e2a450a2f061dba63697c10651','plpgsql',true,'v','none',null),
+                    ('public.plan_phase1c_task_and_run()','4ace11525e1e5dacf07f97ed638fffe9','plpgsql',true,'v','none',null),
+                    ('public.submit_command(uuid,text,public.risk_level,jsonb,text)','dda8c6c952852557e13009d0c0e6d26d','plpgsql',true,'v','authenticated','Persists legacy fixed manual Codex commands and exact current Grok Phase 1C OpenAI commands only through a private one-use bridge admission. Reserved capability fields never persist.'),
+                    ('public.validate_current_grok_phase1c_command_route(uuid,uuid,uuid,uuid,text,jsonb)','db18ecc80459735c05ceea87eae233dc','plpgsql',true,'v','none',null),
+                    ('public.attach_graph_phase1c_command_for_approved_gate(uuid,uuid,uuid)','3c4b38576896b0867336771a0bab23d2','plpgsql',true,'v','none','Privately attaches an owner-approved command/task pair. Grok bridges revalidate the exact current implementation admission and provider/model; legacy bridges retain the fixed Codex contract.'),
+                    ('public.queue_phase1c_run_for_task()','92238f58e7abbab0ec3c883293394e6b','plpgsql',true,'v','none','Queues a run only for legacy fixed Codex execution or an exact current Grok Phase 1C OpenAI admission. Record-only work never creates a run, and delayed Grok queueing revalidates admission.'),
+                    ('public.submit_and_attach_graph_phase1c_command(uuid,jsonb)','eabe7aea908e4475fe4f89d0480e4826','plpgsql',true,'v','authenticated','Atomically derives approved architecture identity, revalidates current Grok admissions, canonicalizes the exact admitted Phase 1C OpenAI model, records and queues without dispatching a worker, consumes its private guard, and attaches the command. Non-Grok bridges retain the reviewed fixed model.'),
+                    ('public.claim_phase1c_run_target_budget_internal(text,text,text,integer,uuid)','2e25eefc2d119d54449a3bbe6a9e413f','plpgsql',true,'v','none',null),
+                    ('public.current_grok_phase1c_claim_route(uuid)','b0b70d6a53f60006c104ba46a1043f92','plpgsql',true,'v','none',null),
+                    ('public.claim_phase1c_run_target_internal(text,text,text,integer,uuid)','77d940d7d9be73dadd06d7f12fe0528c','plpgsql',true,'v','none',null),
+                    ('public.claim_phase1c_run_budget_internal(text,text,text,integer)','00cf400d3eba41e5d5b0ca74586a9234','plpgsql',true,'v','none',null),
+                    ('public.claim_phase1c_run_v3(text,text,text,integer,integer)','ef8803cb5ec809266b8fdf6f048b1a2f','plpgsql',true,'v','service_role',null),
+                    ('public.claim_phase1c_run_by_command_v3(text,text,text,integer,uuid,integer)','14c204c6c9d8da1ed6038d0f56942be8','plpgsql',true,'v','service_role',null),
+                    ('public.read_grok_execution_credential_as_worker(uuid,uuid,text)','28124a10dd724bbc09bae2e2d37e9069','plpgsql',true,'v','service_role',null),
+                    ('public.apply_grok_graph_control_v2_as_owner(uuid,uuid,uuid,text,text,text)','33742a47dbacb81f9d18d5381b78287d','plpgsql',true,'v','authenticated',null),
+                    ('public.set_graph_pause_as_member_v2(uuid,uuid,boolean)','fc9d4fbf5474a296e368cb7e3aba0755','plpgsql',true,'v','authenticated',null),
+                    ('public.assert_grok_graph_admission_as_member(uuid,uuid)','93b62aff4f3f1cf0721861058cd20f52','plpgsql',true,'v','authenticated',null)
+                  ), state as (
+                    select expected.*,routine.oid,routine.proowner,routine.prosecdef,routine.proconfig,routine.proacl,routine.provolatile,
+                           language_row.lanname,
+                           md5(replace(replace(routine.prosrc,E'\\r\\n',E'\\n'),E'\\r',E'\\n')) actual_source_md5
+                      from expected left join pg_proc routine on routine.oid=to_regprocedure(expected.signature)
+                      left join pg_language language_row on language_row.oid=routine.prolang
+                  )
+                  select count(oid)=25 and count(distinct oid)=25 and bool_and(
+                    pg_get_userbyid(proowner)='postgres' and prosecdef=security_definer
+                    and lanname=language_name and provolatile=volatility
+                    and proconfig=array['search_path=pg_catalog']::text[]
+                    and actual_source_md5=source_md5 and proacl is not null
+                    and (object_comment is null or obj_description(oid,'pg_proc')=object_comment)
+                    and (select count(*) from aclexplode(proacl))=case when execute_role='none' then 1 else 2 end
+                    and not exists (select 1 from aclexplode(proacl) acl
+                      where acl.grantor<>proowner or acl.privilege_type<>'EXECUTE' or acl.is_grantable
+                         or acl.grantee not in (proowner,case execute_role
+                           when 'service_role' then to_regrole('service_role')::oid
+                           when 'authenticated' then to_regrole('authenticated')::oid else proowner end))
+                    and not has_function_privilege('anon',oid,'EXECUTE')
+                    and has_function_privilege('authenticated',oid,'EXECUTE')=(execute_role='authenticated')
+                    and has_function_privilege('service_role',oid,'EXECUTE')=(execute_role='service_role')
+                  ) from state
+                ),false) then raise exception 'claim-admission function source, owner, security, search_path, or ACL drifted'; end if;
+              end \$guard\$;"
+              ;;
+          esac
+
+          STAGE_DIR=$(mktemp -d)
+          trap 'rm -rf -- "$STAGE_DIR"' EXIT
+          STAGED_FILE="$STAGE_DIR/$(basename "$FILE")"
+          python3 - "$FILE" "$STAGED_FILE" <<'PY'
+          import pathlib
+          import sys
+
+          source = pathlib.Path(sys.argv[1]).read_bytes()
+          pathlib.Path(sys.argv[2]).write_bytes(
+              source.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+          )
+          PY
+          if [ "$(sha256sum "$STAGED_FILE" | cut -d' ' -f1)" != "$EXPECTED" ] \
+            || [ "$(find "$STAGE_DIR" -maxdepth 1 -type f | wc -l | tr -d ' ')" != "1" ]; then
+            echo "::error::Exact one-file LF-normalized staging failed."
+            exit 1
+          fi
+
+          EXTENSION_BASELINE=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atq -F '|' -c "
+            select count(*) filter (where extension_row.oid is not null),
+                   count(*) filter (where routine.oid is not null)
+              from (values (1)) seed(value)
+              left join pg_extension extension_row on extension_row.extname='plpgsql_check'
+              left join pg_proc routine on routine.proname like 'plpgsql_check_function%';")
+          if [ "$EXTENSION_BASELINE" != "0|0" ]; then
+            echo "::error::plpgsql_check residue existed before linked-database rehearsal."
+            exit 1
+          fi
+
+          LINT_FINDINGS=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atq \
+            -c "begin; set local statement_timeout='10min';" \
+            -c "$CATALOG_GUARD" \
+            -f "$STAGED_FILE" \
+            -c "create extension if not exists plpgsql_check with schema extensions;" \
+            -c "with expected(signature) as (values
+                    ('public.grok_current_execution_admission_hash(public.grok_execution_admissions)'),
+                    ('public.assert_current_grok_execution_admissions(uuid)'),
+                    ('public.grok_execution_admission_projection(public.grok_execution_admissions)'),
+                    ('public.attach_current_grok_admissions_to_claim(jsonb)'),
+                    ('public.claim_planned_graph_v3(text,text[],text,jsonb,integer)'),
+                    ('public.claim_planned_graph_by_id_v3(text,text[],text,jsonb,uuid,integer)'),
+                    ('public.attach_current_grok_admission_to_phase1c_claim(jsonb)'),
+                    ('public.claim_phase1c_run_v3(text,text,text,integer,integer)'),
+                    ('public.claim_phase1c_run_by_command_v3(text,text,text,integer,uuid,integer)'),
+                    ('public.read_grok_execution_credential_as_worker(uuid,uuid,text)'),
+                    ('public.apply_grok_graph_control_v2_as_owner(uuid,uuid,uuid,text,text,text)'),
+                    ('public.set_graph_pause_as_member_v2(uuid,uuid,boolean)'),
+                    ('public.assert_grok_graph_admission_as_member(uuid,uuid)'),
+                    ('public.grok_specialist_admission_hash(public.grok_specialist_admissions)'),
+                    ('public.normalize_grok_role_capabilities(jsonb)'),
+                    ('public.record_grok_specialist_roster_v1_as_server(uuid,uuid,uuid,uuid,uuid,text,bigint)'),
+                    ('public.grok_execution_admission_hash_v2(public.grok_execution_admissions)'),
+                    ('public.launch_grok_full_lifecycle_v3_as_server(uuid,uuid,uuid,uuid,uuid,text,text,public.graph_topology,jsonb,public.risk_level,boolean,jsonb,jsonb,jsonb,uuid,text,text,jsonb,text,jsonb)')
+                  ), available as (
+                    select expected.signature,routine.oid routine_oid
+                      from expected
+                      join pg_proc routine on routine.oid=to_regprocedure(expected.signature)
+                      join pg_language language_row on language_row.oid=routine.prolang
+                     where language_row.lanname='plpgsql'
+                  )
+                  select 'LINTROW|'||available.signature||'|'||coalesce(finding.lineno::text,'')||'|'||coalesce(finding.level,'')||'|'||coalesce(finding.sqlstate,'')||'|'||coalesce(finding.message,'')
+                    from available
+                    cross join lateral extensions.plpgsql_check_function_tb(
+                      available.routine_oid::regprocedure,0::oid::regclass,
+                      false,true,true,false,false,false
+                    ) finding
+                   where finding.level in ('error','warning','extra')
+                   order by available.signature,finding.lineno,finding.position;" \
+            -c "rollback;")
+          if printf '%s\n' "$LINT_FINDINGS" | grep -q '^LINTROW|'; then
+            echo "::error::Transactional linked-database lint found completion-function findings."
+            printf '%s\n' "$LINT_FINDINGS" | grep '^LINTROW|'
+            exit 1
+          fi
+          EXTENSION_RESIDUE=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atq -F '|' -c "
+            select count(*) filter (where extension_row.oid is not null),
+                   count(*) filter (where routine.oid is not null)
+              from (values (1)) seed(value)
+              left join pg_extension extension_row on extension_row.extname='plpgsql_check'
+              left join pg_proc routine on routine.proname like 'plpgsql_check_function%';")
+          if [ "$EXTENSION_RESIDUE" != "0|0" ]; then
+            echo "::error::Transactional linked-database lint left extension residue."
+            exit 1
+          fi
+
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -X --single-transaction -q \
+            -c "set local lock_timeout='15s';
+                set local statement_timeout='10min';
+                lock table supabase_migrations.schema_migrations in share row exclusive mode;
+                lock table public.organizations,public.projects,public.phase1c_workers,
+                  public.graph_runs,public.agent_runs in share mode;
+                do \$locked\$
+                begin
+                  if (select count(*) from supabase_migrations.schema_migrations where version='20260831000100')<>1
+                    or (select count(*) from supabase_migrations.schema_migrations where version='20260831000200')<>1
+                    or (select count(*) from supabase_migrations.schema_migrations where version='20260831000300')<>1
+                    or (select count(*) from supabase_migrations.schema_migrations where version='20260831000400')<>1
+                    or (select count(*) from supabase_migrations.schema_migrations where version='20260831000500')<>1
+                    or (select count(*) from supabase_migrations.schema_migrations where version='20260831000600')<>1
+                    or (select count(*) from supabase_migrations.schema_migrations where version='20260831000700')<>1
+                    or (select count(*) from supabase_migrations.schema_migrations where version='20260831000800')<>1
+                    or (select count(*) from supabase_migrations.schema_migrations where version='20260831000900')<>${E009}
+                    or (select count(*) from supabase_migrations.schema_migrations where version='20260831001000')<>${E010}
+                  then raise exception 'locked Grok completion ledger changed'; end if;
+                  if exists (select 1 from public.organizations where coalesce(autonomous_mode,false)
+                      or autonomy_kill_switch_active is distinct from true
+                      or coalesce(auto_plan,false) or coalesce(auto_code,false) or coalesce(auto_test,false)
+                      or coalesce(auto_repair,false) or coalesce(auto_review,false) or coalesce(auto_approve,false)
+                      or coalesce(auto_merge,false) or coalesce(auto_deploy,false) or coalesce(auto_rollback,false))
+                    or exists (select 1 from public.projects where coalesce(autonomous_mode,false)
+                      or coalesce(auto_plan,false) or coalesce(auto_code,false) or coalesce(auto_test,false)
+                      or coalesce(auto_repair,false) or coalesce(auto_review,false) or coalesce(auto_approve,false)
+                      or coalesce(auto_merge,false) or coalesce(auto_deploy,false) or coalesce(auto_rollback,false))
+                    or exists (select 1 from public.phase1c_workers where last_heartbeat_at>now()-interval '10 minutes')
+                    or exists (select 1 from public.phase1c_workers where last_heartbeat_at>now()+interval '1 minute')
+                    or exists (select 1 from public.phase1c_workers where current_run_id is not null)
+                    or exists (select 1 from public.graph_runs where state='RUNNING'::public.graph_run_state)
+                    or exists (select 1 from public.agent_runs where status='running'::public.run_status)
+                  then raise exception 'locked Grok completion safety state changed'; end if;
+                end \$locked\$;" \
+            -c "$SCOPE_LOCKS" \
+            -c "$CATALOG_GUARD" \
+            -f "$STAGED_FILE" \
+            -c "insert into supabase_migrations.schema_migrations(version) values ('${VERSION}');"
+
+      - name: Reload the PostgREST schema cache
+        if: ${{ inputs.scope == 'claim-admission-fence' || inputs.scope == 'specialist-admission-planning' }}
+        run: psql "$DB_URL" -v ON_ERROR_STOP=1 -X -c "NOTIFY pgrst, 'reload schema';"
+
+      - name: Verify exact completion catalog ACL runtime lint and stopped safety
+        env:
+          SCOPE: ${{ inputs.scope }}
+        run: |
+          set -euo pipefail
+          PREFIX=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+            select
+              (select count(*) from supabase_migrations.schema_migrations where version='20260831000100')||'|'||
+              (select count(*) from supabase_migrations.schema_migrations where version='20260831000200')||'|'||
+              (select count(*) from supabase_migrations.schema_migrations where version='20260831000300')||'|'||
+              (select count(*) from supabase_migrations.schema_migrations where version='20260831000400')||'|'||
+              (select count(*) from supabase_migrations.schema_migrations where version='20260831000500')||'|'||
+              (select count(*) from supabase_migrations.schema_migrations where version='20260831000600')||'|'||
+              (select count(*) from supabase_migrations.schema_migrations where version='20260831000700')||'|'||
+              (select count(*) from supabase_migrations.schema_migrations where version='20260831000800');")
+          if [ "$PREFIX" != "1|1|1|1|1|1|1|1" ]; then
+            echo "::error::Postflight accepted 00100..00800 ledger prefix changed (${PREFIX})."
+            exit 1
+          fi
+          TAIL=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+            select
+              (select count(*) from supabase_migrations.schema_migrations where version='20260831000900')||'|'||
+              (select count(*) from supabase_migrations.schema_migrations where version='20260831001000');")
+          case "$SCOPE:$TAIL" in
+            probe:0\|0|probe:1\|0|probe:1\|1) ;;
+            claim-admission-fence:1\|0) ;;
+            specialist-admission-planning:1\|1) ;;
+            verify:1\|1) ;;
+            *) echo "::error::Completion postflight ledger is not scope-exact (${SCOPE}:${TAIL})."; exit 1 ;;
+          esac
+
+          if [ "$TAIL" = "0|0" ]; then
+            PRISTINE=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+              select
+                not exists (select 1 from pg_proc routine join pg_namespace space on space.oid=routine.pronamespace
+                  where space.nspname='public' and routine.proname in (
+                    'grok_current_execution_admission_hash','assert_current_grok_execution_admissions',
+                    'grok_execution_admission_projection','attach_current_grok_admissions_to_claim',
+                    'claim_planned_graph_v3','claim_planned_graph_by_id_v3',
+                    'attach_current_grok_admission_to_phase1c_claim','claim_phase1c_run_v3',
+                    'claim_phase1c_run_by_command_v3','read_grok_execution_credential_as_worker',
+                    'apply_grok_graph_control_v2_as_owner','set_graph_pause_as_member_v2',
+                    'assert_grok_graph_admission_as_member','grok_specialist_admission_hash',
+                    'normalize_grok_role_capabilities','record_grok_specialist_roster_v1_as_server',
+                    'grok_execution_admission_hash_v2','launch_grok_full_lifecycle_v3_as_server'))
+                and to_regclass('public.grok_specialist_admissions') is null
+                and not exists (select 1 from pg_attribute where attrelid='public.grok_execution_admissions'::regclass and attname='specialist_admission_id' and not attisdropped);")
+            if [ "$PRISTINE" != "t" ]; then
+              echo "::error::Probe ledger says completion is absent but catalog residue exists."
+              exit 1
+            fi
+          else
+            if [ "$TAIL" = "1|0" ]; then
+              CURRENT_HASH_MD5=5d3611423811e3609dd9f2fc3f2f981a
+              CURRENT_LANGUAGE=sql
+              CURRENT_VOLATILITY=i
+              CURRENT_PARALLEL=s
+            else
+              CURRENT_HASH_MD5=683feb8055a892b3b633a835a1a32683
+              CURRENT_LANGUAGE=plpgsql
+              CURRENT_VOLATILITY=s
+              CURRENT_PARALLEL=r
+            fi
+            GUARD_READY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+              with expected_column(name,type_name) as (values
+                ('token','uuid'),('caller_id','uuid'),('organization_id','uuid'),
+                ('project_id','uuid'),('bridge_id','uuid'),('admission_id','uuid'),
+                ('authorized_parameters','jsonb'),('created_at','timestamp with time zone'),
+                ('expires_at','timestamp with time zone')
+              ), expected_constraint(name,kind,definition) as (values
+                ('grok_phase1c_submission_guard_admission_fk','f'::\"char\",'FOREIGN KEY (admission_id) REFERENCES grok_execution_admissions(id) ON DELETE RESTRICT'),
+                ('grok_phase1c_submission_guard_bridge_fk','f'::\"char\",'FOREIGN KEY (bridge_id, organization_id) REFERENCES graph_phase1c_bridges(id, organization_id) ON DELETE RESTRICT'),
+                ('grok_phase1c_submission_guard_bridge_unique','u'::\"char\",'UNIQUE (bridge_id, organization_id)'),
+                ('grok_phase1c_submission_guard_caller_fk','f'::\"char\",'FOREIGN KEY (caller_id) REFERENCES auth.users(id) ON DELETE RESTRICT'),
+                ('grok_phase1c_submission_guard_lifetime','c'::\"char\",'CHECK (expires_at > created_at AND expires_at <= (created_at + ''00:05:00''::interval))'),
+                ('grok_phase1c_submission_guard_organization_fk','f'::\"char\",'FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE RESTRICT'),
+                ('grok_phase1c_submission_guard_parameters_bounded','c'::\"char\",'CHECK (octet_length(authorized_parameters::text) <= 65536)'),
+                ('grok_phase1c_submission_guard_parameters_object','c'::\"char\",'CHECK (jsonb_typeof(authorized_parameters) = ''object''::text)'),
+                ('grok_phase1c_submission_guard_parameters_safe','c'::\"char\",'CHECK (NOT jsonb_has_sensitive_keys(authorized_parameters))'),
+                ('grok_phase1c_submission_guard_project_fk','f'::\"char\",'FOREIGN KEY (project_id, organization_id) REFERENCES projects(id, organization_id) ON DELETE RESTRICT'),
+                ('grok_phase1c_submission_guards_pkey','p'::\"char\",'PRIMARY KEY (token)')
+              ), expected_index(name,is_unique,is_primary,definition) as (values
+                ('grok_phase1c_submission_guard_bridge_unique',true,false,'CREATE UNIQUE INDEX grok_phase1c_submission_guard_bridge_unique ON public.grok_phase1c_submission_guards USING btree (bridge_id, organization_id)'),
+                ('grok_phase1c_submission_guards_admission_idx',false,false,'CREATE INDEX grok_phase1c_submission_guards_admission_idx ON public.grok_phase1c_submission_guards USING btree (admission_id)'),
+                ('grok_phase1c_submission_guards_pkey',true,true,'CREATE UNIQUE INDEX grok_phase1c_submission_guards_pkey ON public.grok_phase1c_submission_guards USING btree (token)'),
+                ('grok_phase1c_submission_guards_project_expiry_idx',false,false,'CREATE INDEX grok_phase1c_submission_guards_project_expiry_idx ON public.grok_phase1c_submission_guards USING btree (organization_id, project_id, expires_at, token)')
+              )
+              select exists (
+                  select 1 from pg_class relation
+                   where relation.oid='public.grok_phase1c_submission_guards'::regclass
+                     and relation.relkind='r' and pg_get_userbyid(relation.relowner)='postgres'
+                     and relation.relrowsecurity and relation.relforcerowsecurity
+                     and not exists (select 1 from aclexplode(coalesce(relation.relacl,acldefault('r',relation.relowner))) acl
+                       where acl.grantor<>relation.relowner or acl.grantee<>relation.relowner or acl.is_grantable)
+                )
+                and not exists (select 1 from pg_policy where polrelid='public.grok_phase1c_submission_guards'::regclass)
+                and not exists (select 1 from pg_attribute where attrelid='public.grok_phase1c_submission_guards'::regclass
+                  and attnum>0 and not attisdropped and attacl is not null)
+                and not has_table_privilege('anon','public.grok_phase1c_submission_guards','SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+                and not has_table_privilege('authenticated','public.grok_phase1c_submission_guards','SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+                and not has_table_privilege('service_role','public.grok_phase1c_submission_guards','SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+                and (select count(*) from public.grok_phase1c_submission_guards)=0
+                and (select count(*) from pg_attribute where attrelid='public.grok_phase1c_submission_guards'::regclass and attnum>0 and not attisdropped)=9
+                and not exists (select 1 from expected_column expected left join pg_attribute attribute
+                  on attribute.attrelid='public.grok_phase1c_submission_guards'::regclass
+                 and attribute.attname=expected.name and attribute.attnum>0 and not attribute.attisdropped
+                 and attribute.attnotnull and format_type(attribute.atttypid,attribute.atttypmod)=expected.type_name
+                 where attribute.attnum is null)
+                and (select count(*) from pg_constraint where conrelid='public.grok_phase1c_submission_guards'::regclass and contype<>'n')=11
+                and not exists (select 1 from expected_constraint expected left join pg_constraint constraint_record
+                  on constraint_record.conrelid='public.grok_phase1c_submission_guards'::regclass
+                 and constraint_record.conname=expected.name and constraint_record.contype=expected.kind
+                 and constraint_record.convalidated and pg_get_constraintdef(constraint_record.oid,true)=expected.definition
+                 where constraint_record.oid is null)
+                and (select count(*) from pg_index where indrelid='public.grok_phase1c_submission_guards'::regclass)=4
+                and not exists (select 1 from expected_index expected left join pg_class index_relation
+                  on index_relation.relname=expected.name and index_relation.relnamespace='public'::regnamespace
+                  left join pg_index index_record on index_record.indexrelid=index_relation.oid
+                 and index_record.indrelid='public.grok_phase1c_submission_guards'::regclass
+                 and index_record.indisunique=expected.is_unique and index_record.indisprimary=expected.is_primary
+                 and index_record.indisvalid and index_record.indisready and index_record.indislive
+                 and pg_get_indexdef(index_record.indexrelid)=expected.definition
+                 where index_record.indexrelid is null);")
+            if [ "$GUARD_READY" != "t" ]; then
+              echo "::error::Claim-admission private guard relation, RLS, ACL, schema, constraints, indexes, or residue postflight failed."
+              exit 1
+            fi
+            CLAIM_READY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+              with expected(signature,source_md5,language_name,security_definer,volatility,is_strict,parallel_mode,execute_role) as (values
+                ('public.grok_current_execution_admission_hash(public.grok_execution_admissions)','${CURRENT_HASH_MD5}','${CURRENT_LANGUAGE}',false,'${CURRENT_VOLATILITY}',true,'${CURRENT_PARALLEL}','none'),
+                ('public.assert_current_grok_execution_admissions(uuid)','b5dc9166e99634eaa409801055a27d4b','plpgsql',true,'v',false,'u','none'),
+                ('public.grok_execution_admission_projection(public.grok_execution_admissions)','a85f407323a331e54d8d16123c46281f','sql',false,'i',true,'s','none'),
+                ('public.attach_current_grok_admissions_to_claim(jsonb)','0e4a0ba5d0941f6cb43ecee3a23aecbb','plpgsql',true,'v',false,'u','none'),
+                ('public.claim_planned_graph_v3(text,text[],text,jsonb,integer)','4a6da8bed8d1fdda17f11df00d549817','plpgsql',true,'v',false,'u','service_role'),
+                ('public.claim_planned_graph_by_id_v3(text,text[],text,jsonb,uuid,integer)','f83873aa19703d2c61553026d4141a4c','plpgsql',true,'v',false,'u','service_role'),
+                ('public.attach_current_grok_admission_to_phase1c_claim(jsonb)','48f84aba274b2e6316331de8e3fca796','plpgsql',true,'v',false,'u','none'),
+                ('public.is_current_grok_phase1c_submission_authorized(uuid,uuid,text,jsonb)','9878cd04b1d77710cdea3a346e03978f','plpgsql',true,'v',false,'u','none'),
+                ('public.normalize_phase1c_command()','c788b5e2a450a2f061dba63697c10651','plpgsql',true,'v',false,'u','none'),
+                ('public.plan_phase1c_task_and_run()','4ace11525e1e5dacf07f97ed638fffe9','plpgsql',true,'v',false,'u','none'),
+                ('public.submit_command(uuid,text,public.risk_level,jsonb,text)','dda8c6c952852557e13009d0c0e6d26d','plpgsql',true,'v',false,'u','authenticated'),
+                ('public.validate_current_grok_phase1c_command_route(uuid,uuid,uuid,uuid,text,jsonb)','db18ecc80459735c05ceea87eae233dc','plpgsql',true,'v',false,'u','none'),
+                ('public.attach_graph_phase1c_command_for_approved_gate(uuid,uuid,uuid)','3c4b38576896b0867336771a0bab23d2','plpgsql',true,'v',false,'u','none'),
+                ('public.queue_phase1c_run_for_task()','92238f58e7abbab0ec3c883293394e6b','plpgsql',true,'v',false,'u','none'),
+                ('public.submit_and_attach_graph_phase1c_command(uuid,jsonb)','eabe7aea908e4475fe4f89d0480e4826','plpgsql',true,'v',false,'u','authenticated'),
+                ('public.claim_phase1c_run_target_budget_internal(text,text,text,integer,uuid)','2e25eefc2d119d54449a3bbe6a9e413f','plpgsql',true,'v',false,'u','none'),
+                ('public.current_grok_phase1c_claim_route(uuid)','b0b70d6a53f60006c104ba46a1043f92','plpgsql',true,'v',false,'u','none'),
+                ('public.claim_phase1c_run_target_internal(text,text,text,integer,uuid)','77d940d7d9be73dadd06d7f12fe0528c','plpgsql',true,'v',false,'u','none'),
+                ('public.claim_phase1c_run_budget_internal(text,text,text,integer)','00cf400d3eba41e5d5b0ca74586a9234','plpgsql',true,'v',false,'u','none'),
+                ('public.claim_phase1c_run_v3(text,text,text,integer,integer)','ef8803cb5ec809266b8fdf6f048b1a2f','plpgsql',true,'v',false,'u','service_role'),
+                ('public.claim_phase1c_run_by_command_v3(text,text,text,integer,uuid,integer)','14c204c6c9d8da1ed6038d0f56942be8','plpgsql',true,'v',false,'u','service_role'),
+                ('public.read_grok_execution_credential_as_worker(uuid,uuid,text)','28124a10dd724bbc09bae2e2d37e9069','plpgsql',true,'v',false,'u','service_role'),
+                ('public.apply_grok_graph_control_v2_as_owner(uuid,uuid,uuid,text,text,text)','33742a47dbacb81f9d18d5381b78287d','plpgsql',true,'v',false,'u','authenticated'),
+                ('public.set_graph_pause_as_member_v2(uuid,uuid,boolean)','fc9d4fbf5474a296e368cb7e3aba0755','plpgsql',true,'v',false,'u','authenticated'),
+                ('public.assert_grok_graph_admission_as_member(uuid,uuid)','93b62aff4f3f1cf0721861058cd20f52','plpgsql',true,'v',false,'u','authenticated')
+              ), state as (
+                select expected.*,routine.oid,routine.proowner,routine.prosecdef,routine.proconfig,
+                       routine.proacl,routine.provolatile,routine.proisstrict,routine.proparallel,
+                       language_row.lanname,
+                       md5(replace(replace(routine.prosrc,E'\\r\\n',E'\\n'),E'\\r',E'\\n')) actual_source_md5
+                  from expected left join pg_proc routine on routine.oid=to_regprocedure(expected.signature)
+                  left join pg_language language_row on language_row.oid=routine.prolang
+              )
+              select count(oid)=25 and count(distinct oid)=25 and bool_and(
+                pg_get_userbyid(proowner)='postgres' and prosecdef=security_definer
+                and lanname=language_name and provolatile=volatility
+                and proisstrict=is_strict and proparallel=parallel_mode
+                and proconfig=array['search_path=pg_catalog']::text[]
+                and actual_source_md5=source_md5 and proacl is not null
+                and (select count(*) from aclexplode(proacl))=case when execute_role='none' then 1 else 2 end
+                and not exists (select 1 from aclexplode(proacl) acl
+                  where acl.grantor<>proowner or acl.privilege_type<>'EXECUTE' or acl.is_grantable
+                     or acl.grantee not in (proowner,case execute_role
+                       when 'service_role' then to_regrole('service_role')::oid
+                       when 'authenticated' then to_regrole('authenticated')::oid else proowner end))
+                and not has_function_privilege('anon',oid,'EXECUTE')
+                and has_function_privilege('authenticated',oid,'EXECUTE')=(execute_role='authenticated')
+                and has_function_privilege('service_role',oid,'EXECUTE')=(execute_role='service_role')
+              ) and (select count(*) from pg_proc routine join pg_namespace space on space.oid=routine.pronamespace
+                where space.nspname='public' and routine.proname in (
+                  'grok_current_execution_admission_hash','assert_current_grok_execution_admissions',
+                  'grok_execution_admission_projection','attach_current_grok_admissions_to_claim',
+                  'claim_planned_graph_v3','claim_planned_graph_by_id_v3',
+                  'attach_current_grok_admission_to_phase1c_claim',
+                  'is_current_grok_phase1c_submission_authorized','normalize_phase1c_command',
+                  'plan_phase1c_task_and_run','submit_command','validate_current_grok_phase1c_command_route',
+                  'attach_graph_phase1c_command_for_approved_gate','queue_phase1c_run_for_task',
+                  'submit_and_attach_graph_phase1c_command','claim_phase1c_run_target_budget_internal',
+                  'current_grok_phase1c_claim_route','claim_phase1c_run_target_internal',
+                  'claim_phase1c_run_budget_internal','claim_phase1c_run_v3',
+                  'claim_phase1c_run_by_command_v3','read_grok_execution_credential_as_worker',
+                  'apply_grok_graph_control_v2_as_owner','set_graph_pause_as_member_v2',
+                  'assert_grok_graph_admission_as_member'))=25
+              from state;")
+            if [ "$CLAIM_READY" != "t" ]; then
+              echo "::error::Claim-admission function source, owner, language, volatility, search_path, or raw ACL postflight failed."
+              exit 1
+            fi
+
+            LEGACY_PRIVATE=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+              with expected(signature,source_md5) as (values
+                ('public.claim_planned_graph_v2(text,text[],text,jsonb,integer)','2d4314b0c58b31b6f58be58ccccd4584'),
+                ('public.claim_planned_graph_by_id_v2(text,text[],text,jsonb,uuid,integer)','5cecdf559c1a11871099a7e2bf4cd886'),
+                ('public.claim_phase1c_run_v2(text,text,text,integer,integer)','0345216c9a2eaa720e3517b3b0fa288c'),
+                ('public.claim_phase1c_run_by_command_v2(text,text,text,integer,uuid,integer)','ce46fadd9962d960d8e885be0e2d7b4c'),
+                ('public.apply_grok_graph_control_as_owner(uuid,uuid,uuid,text,text,text)','2b0ea737ac99b22570ddbfdd4c583eeb'),
+                ('public.set_graph_pause_as_member(uuid,uuid,boolean)','308dd7294f2b9706238b1aca89699bfe')
+              ), state as (
+                select expected.*,routine.oid,routine.proowner,routine.prosecdef,routine.proconfig,routine.proacl,
+                       md5(replace(replace(routine.prosrc,E'\\r\\n',E'\\n'),E'\\r',E'\\n')) actual_source_md5
+                  from expected left join pg_proc routine on routine.oid=to_regprocedure(expected.signature)
+              )
+              select count(oid)=6 and count(distinct oid)=6 and bool_and(
+                pg_get_userbyid(proowner)='postgres' and prosecdef
+                and proconfig=array['search_path=pg_catalog']::text[] and actual_source_md5=source_md5
+                and proacl is not null and (select count(*) from aclexplode(proacl))=1
+                and not exists (select 1 from aclexplode(proacl) acl
+                  where acl.grantor<>proowner or acl.grantee<>proowner
+                     or acl.privilege_type<>'EXECUTE' or acl.is_grantable)
+                and not has_function_privilege('anon',oid,'EXECUTE')
+                and not has_function_privilege('authenticated',oid,'EXECUTE')
+                and not has_function_privilege('service_role',oid,'EXECUTE')
+              ) from state;")
+            if [ "$LEGACY_PRIVATE" != "t" ]; then
+              echo "::error::Legacy v2 claim/control functions are not exact owner-only history."
+              exit 1
+            fi
+          fi
+
+          if [ "$TAIL" = "1|1" ]; then
+            SPECIALIST_READY=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+              with expected_function(signature,source_md5,language_name,volatility,is_strict,parallel_mode,execute_role) as (values
+                ('public.grok_specialist_admission_hash(public.grok_specialist_admissions)','d02a20a9ff96046eb421743d5d1e32b9','sql','i',true,'s','none'),
+                ('public.normalize_grok_role_capabilities(jsonb)','2593f89ed48d573233c8ccb715893abb','sql','i',true,'s','none'),
+                ('public.record_grok_specialist_roster_v1_as_server(uuid,uuid,uuid,uuid,uuid,text,bigint)','8c8276ef3a0d5bf27204a836788f736f','plpgsql','v',false,'u','service_role'),
+                ('public.grok_execution_admission_hash_v2(public.grok_execution_admissions)','35ec9dcd1e11e68af6bcdc264ab1457f','sql','i',true,'s','none'),
+                ('public.launch_grok_full_lifecycle_v3_as_server(uuid,uuid,uuid,uuid,uuid,text,text,public.graph_topology,jsonb,public.risk_level,boolean,jsonb,jsonb,jsonb,uuid,text,text,jsonb,text,jsonb)','4e41c8e312bca5fb13773dd0c9fbf19f','plpgsql','v',false,'u','service_role')
+              ), function_state as (
+                select expected_function.*,routine.oid,routine.proowner,routine.prosecdef,routine.proconfig,
+                       routine.proacl,routine.provolatile,routine.proisstrict,routine.proparallel,
+                       language_row.lanname,
+                       md5(replace(replace(routine.prosrc,E'\\r\\n',E'\\n'),E'\\r',E'\\n')) actual_source_md5
+                  from expected_function left join pg_proc routine on routine.oid=to_regprocedure(expected_function.signature)
+                  left join pg_language language_row on language_row.oid=routine.prolang
+              ), expected_constraint(name) as (values
+                ('grok_specialist_admissions_pkey'),
+                ('grok_specialist_admissions_organization_id_fkey'),
+                ('grok_specialist_admissions_created_by_fkey'),
+                ('grok_specialist_admissions_idempotency_key_check'),
+                ('grok_specialist_admissions_roster_version_check'),
+                ('grok_specialist_admissions_roster_ordinal_check'),
+                ('grok_specialist_admissions_assignment_revision_check'),
+                ('grok_specialist_admissions_bot_revision_check'),
+                ('grok_specialist_admissions_role_capabilities_sha256_check'),
+                ('grok_specialist_admissions_max_model_tier_check'),
+                ('grok_specialist_admissions_model_check'),
+                ('grok_specialist_admissions_credential_purpose_check'),
+                ('grok_specialist_admissions_credential_ref_check'),
+                ('grok_specialist_admissions_admission_sha256_check'),
+                ('grok_specialist_admissions_session_fk'),
+                ('grok_specialist_admissions_message_fk'),
+                ('grok_specialist_admissions_id_scope_unique'),
+                ('grok_specialist_admissions_message_ordinal_unique'),
+                ('grok_specialist_admissions_message_assignment_unique'),
+                ('grok_specialist_admissions_idempotency_shape'),
+                ('grok_specialist_admissions_capabilities_array'),
+                ('grok_specialist_admissions_capabilities_no_secret'),
+                ('grok_specialist_admissions_model_no_secret'),
+                ('grok_specialist_admissions_provider_identity_shape')
+              ), expected_index(name) as (values
+                ('grok_specialist_admissions_pkey'),
+                ('grok_specialist_admissions_id_scope_unique'),
+                ('grok_specialist_admissions_message_ordinal_unique'),
+                ('grok_specialist_admissions_message_assignment_unique'),
+                ('grok_specialist_admissions_session_idx'),
+                ('grok_specialist_admissions_assignment_idx')
+              )
+              select
+                exists (select 1 from pg_class relation
+                  where relation.oid='public.grok_specialist_admissions'::regclass
+                    and relation.relkind='r' and pg_get_userbyid(relation.relowner)='postgres'
+                    and relation.relrowsecurity and relation.relforcerowsecurity
+                    and relation.relacl is not null and (select count(*) from aclexplode(relation.relacl))=1
+                    and not has_table_privilege('anon',relation.oid,'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+                    and not has_table_privilege('authenticated',relation.oid,'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+                    and not has_table_privilege('service_role',relation.oid,'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER'))
+                and (select count(*)=29 from pg_attribute where attrelid='public.grok_specialist_admissions'::regclass and attnum>0 and not attisdropped)
+                and (select count(*)=1 from pg_policy policy
+                  where policy.polrelid='public.grok_specialist_admissions'::regclass
+                    and policy.polname='grok_specialist_admissions_select_members'
+                    and policy.polcmd='r' and policy.polpermissive
+                    and policy.polroles=array[to_regrole('authenticated')::oid]
+                    and strpos(pg_get_expr(policy.polqual,policy.polrelid),'is_organization_member(organization_id)')>0
+                    and policy.polwithcheck is null)
+                and (select count(*)=2 and bool_and(tgfoid='public.reject_grok_evidence_mutation()'::regprocedure)
+                  from pg_trigger where tgrelid='public.grok_specialist_admissions'::regclass and not tgisinternal)
+                and not exists (select name from expected_constraint except
+                  select conname from pg_constraint where conrelid='public.grok_specialist_admissions'::regclass)
+                and not exists (select conname from pg_constraint where conrelid='public.grok_specialist_admissions'::regclass except
+                  select name from expected_constraint)
+                and (select count(*)=24 and bool_and(convalidated) from pg_constraint where conrelid='public.grok_specialist_admissions'::regclass)
+                and not exists (select name from expected_index except
+                  select index_relation.relname from pg_index index_row join pg_class index_relation on index_relation.oid=index_row.indexrelid
+                   where index_row.indrelid='public.grok_specialist_admissions'::regclass)
+                and not exists (select index_relation.relname from pg_index index_row join pg_class index_relation on index_relation.oid=index_row.indexrelid
+                   where index_row.indrelid='public.grok_specialist_admissions'::regclass except select name from expected_index)
+                and (select count(*)=6 and bool_and(indisvalid and indisready and indislive) from pg_index where indrelid='public.grok_specialist_admissions'::regclass)
+                and exists (select 1 from pg_attribute where attrelid='public.grok_execution_admissions'::regclass
+                  and attname='specialist_admission_id' and atttypid='uuid'::regtype and not attnotnull and not atthasdef and not attisdropped)
+                and exists (select 1 from pg_constraint where conrelid='public.grok_execution_admissions'::regclass
+                  and conname='grok_execution_admissions_specialist_fk' and contype='f' and convalidated
+                  and confrelid='public.grok_specialist_admissions'::regclass)
+                and exists (select 1 from pg_index index_row join pg_class index_relation on index_relation.oid=index_row.indexrelid
+                  where index_row.indrelid='public.grok_execution_admissions'::regclass
+                    and index_relation.relname='grok_execution_admissions_specialist_idx'
+                    and index_row.indisvalid and index_row.indisready and index_row.indislive
+                    and pg_get_expr(index_row.indpred,index_row.indrelid)='(specialist_admission_id IS NOT NULL)')
+                and (select count(oid)=5 and count(distinct oid)=5 and bool_and(
+                  pg_get_userbyid(proowner)='postgres' and lanname=language_name
+                  and prosecdef=(execute_role='service_role') and provolatile=volatility
+                  and proisstrict=is_strict and proparallel=parallel_mode
+                  and proconfig=array['search_path=pg_catalog']::text[] and actual_source_md5=source_md5
+                  and proacl is not null and (select count(*) from aclexplode(proacl))=case when execute_role='none' then 1 else 2 end
+                  and not exists (select 1 from aclexplode(proacl) acl
+                    where acl.grantor<>proowner or acl.privilege_type<>'EXECUTE' or acl.is_grantable
+                       or acl.grantee not in (proowner,case execute_role when 'service_role' then to_regrole('service_role')::oid else proowner end))
+                  and not has_function_privilege('anon',oid,'EXECUTE')
+                  and not has_function_privilege('authenticated',oid,'EXECUTE')
+                  and has_function_privilege('service_role',oid,'EXECUTE')=(execute_role='service_role')
+                ) from function_state)
+                and (select count(*)=5 from pg_proc routine join pg_namespace space on space.oid=routine.pronamespace
+                  where space.nspname='public' and routine.proname in (
+                    'grok_specialist_admission_hash','normalize_grok_role_capabilities',
+                    'record_grok_specialist_roster_v1_as_server','grok_execution_admission_hash_v2',
+                    'launch_grok_full_lifecycle_v3_as_server'))
+                and not has_function_privilege('service_role','public.launch_grok_full_lifecycle_v2_as_server(uuid,uuid,uuid,uuid,uuid,text,text,public.graph_topology,jsonb,public.risk_level,boolean,jsonb,jsonb,jsonb,uuid,text,text,jsonb,jsonb)','EXECUTE')
+                and has_function_privilege('service_role','public.launch_grok_full_lifecycle_v3_as_server(uuid,uuid,uuid,uuid,uuid,text,text,public.graph_topology,jsonb,public.risk_level,boolean,jsonb,jsonb,jsonb,uuid,text,text,jsonb,text,jsonb)','EXECUTE');")
+            if [ "$SPECIALIST_READY" != "t" ]; then
+              echo "::error::Specialist table, constraint, index, trigger, function, source, or ACL postflight failed."
+              exit 1
+            fi
+          fi
+
+          if [ "$TAIL" != "0|0" ]; then
+            psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q \
+              -c "begin;" \
+              -c "do \$runtime\$
+                  declare v_json jsonb;
+                  begin
+                    begin perform public.assert_current_grok_execution_admissions(gen_random_uuid());
+                      raise exception 'missing-graph assertion did not refuse';
+                    exception when sqlstate 'P0002' then
+                      if sqlerrm<>'grok admission graph not found' then raise; end if;
+                    end;
+                    begin perform public.claim_planned_graph_v3('grok-release-probe',array['MODEL'],'surgeservicesllc/SoftwareFactory','[]'::jsonb,2);
+                      raise exception 'graph v3 protocol fence did not refuse';
+                    exception when sqlstate '0A000' then null; end;
+                    begin perform public.claim_planned_graph_by_id_v3('grok-release-probe',array['MODEL'],'surgeservicesllc/SoftwareFactory','[]'::jsonb,gen_random_uuid(),2);
+                      raise exception 'target graph v3 protocol fence did not refuse';
+                    exception when sqlstate '0A000' then null; end;
+                    begin perform public.claim_phase1c_run_v3('grok-release-probe','openai','gpt-release-probe',60,2);
+                      raise exception 'Phase 1C v3 protocol fence did not refuse';
+                    exception when sqlstate '0A000' then null; end;
+                    begin perform public.claim_phase1c_run_by_command_v3('grok-release-probe','openai','gpt-release-probe',60,gen_random_uuid(),2);
+                      raise exception 'target Phase 1C v3 protocol fence did not refuse';
+                    exception when sqlstate '0A000' then null; end;
+                    begin perform public.read_grok_execution_credential_as_worker(gen_random_uuid(),gen_random_uuid(),repeat('0',64));
+                      raise exception 'credential admission identity did not refuse';
+                    exception when sqlstate '42501' then null; end;
+                    if '${TAIL}'='1|1' then
+                      v_json:=public.normalize_grok_role_capabilities('[\"*\"]'::jsonb);
+                      if jsonb_array_length(v_json)<>12 or v_json @> '[\"*\"]'::jsonb then
+                        raise exception 'wildcard normalization drifted';
+                      end if;
+                      if public.normalize_grok_role_capabilities('[\"unknown\"]'::jsonb)<>'[]'::jsonb then
+                        raise exception 'unknown capability normalization drifted';
+                      end if;
+                      begin perform public.record_grok_specialist_roster_v1_as_server(null,null,null,null,null,null,null);
+                        raise exception 'invalid specialist roster did not refuse';
+                      exception when sqlstate '22023' then null; end;
+                      begin perform public.launch_grok_full_lifecycle_v3_as_server(
+                        null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null);
+                        raise exception 'invalid v3 launch did not refuse';
+                      exception when sqlstate '22023' then null; end;
+                    end if;
+                  end \$runtime\$;" \
+              -c "rollback;"
+          fi
+
+          EXTENSION_BASELINE=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atq -F '|' -c "
+            select count(*) filter (where extension_row.oid is not null),
+                   count(*) filter (where routine.oid is not null)
+              from (values (1)) seed(value)
+              left join pg_extension extension_row on extension_row.extname='plpgsql_check'
+              left join pg_proc routine on routine.proname like 'plpgsql_check_function%';")
+          if [ "$EXTENSION_BASELINE" != "0|0" ]; then
+            echo "::error::plpgsql_check residue existed before postflight lint."
+            exit 1
+          fi
+          POST_LINT=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atq \
+            -c "begin; create extension if not exists plpgsql_check with schema extensions;" \
+            -c "with expected(signature) as (values
+                    ('public.grok_current_execution_admission_hash(public.grok_execution_admissions)'),
+                    ('public.assert_current_grok_execution_admissions(uuid)'),
+                    ('public.grok_execution_admission_projection(public.grok_execution_admissions)'),
+                    ('public.attach_current_grok_admissions_to_claim(jsonb)'),
+                    ('public.claim_planned_graph_v3(text,text[],text,jsonb,integer)'),
+                    ('public.claim_planned_graph_by_id_v3(text,text[],text,jsonb,uuid,integer)'),
+                    ('public.attach_current_grok_admission_to_phase1c_claim(jsonb)'),
+                    ('public.claim_phase1c_run_v3(text,text,text,integer,integer)'),
+                    ('public.claim_phase1c_run_by_command_v3(text,text,text,integer,uuid,integer)'),
+                    ('public.read_grok_execution_credential_as_worker(uuid,uuid,text)'),
+                    ('public.apply_grok_graph_control_v2_as_owner(uuid,uuid,uuid,text,text,text)'),
+                    ('public.set_graph_pause_as_member_v2(uuid,uuid,boolean)'),
+                    ('public.assert_grok_graph_admission_as_member(uuid,uuid)'),
+                    ('public.grok_specialist_admission_hash(public.grok_specialist_admissions)'),
+                    ('public.normalize_grok_role_capabilities(jsonb)'),
+                    ('public.record_grok_specialist_roster_v1_as_server(uuid,uuid,uuid,uuid,uuid,text,bigint)'),
+                    ('public.grok_execution_admission_hash_v2(public.grok_execution_admissions)'),
+                    ('public.launch_grok_full_lifecycle_v3_as_server(uuid,uuid,uuid,uuid,uuid,text,text,public.graph_topology,jsonb,public.risk_level,boolean,jsonb,jsonb,jsonb,uuid,text,text,jsonb,text,jsonb)')
+                  ), available as (
+                    select expected.signature,routine.oid routine_oid
+                      from expected
+                      join pg_proc routine on routine.oid=to_regprocedure(expected.signature)
+                      join pg_language language_row on language_row.oid=routine.prolang
+                     where language_row.lanname='plpgsql'
+                  )
+                  select 'LINTROW|'||available.signature||'|'||coalesce(finding.lineno::text,'')||'|'||coalesce(finding.level,'')||'|'||coalesce(finding.sqlstate,'')||'|'||coalesce(finding.message,'')
+                    from available
+                    cross join lateral extensions.plpgsql_check_function_tb(
+                      available.routine_oid::regprocedure,0::oid::regclass,
+                      false,true,true,false,false,false
+                    ) finding
+                   where finding.level in ('error','warning','extra')
+                   order by available.signature,finding.lineno,finding.position;" \
+            -c "rollback;")
+          if printf '%s\n' "$POST_LINT" | grep -q '^LINTROW|'; then
+            echo "::error::Postflight linked-database lint found completion-function findings."
+            printf '%s\n' "$POST_LINT" | grep '^LINTROW|'
+            exit 1
+          fi
+          EXTENSION_RESIDUE=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atq -F '|' -c "
+            select count(*) filter (where extension_row.oid is not null),
+                   count(*) filter (where routine.oid is not null)
+              from (values (1)) seed(value)
+              left join pg_extension extension_row on extension_row.extname='plpgsql_check'
+              left join pg_proc routine on routine.proname like 'plpgsql_check_function%';")
+          if [ "$EXTENSION_RESIDUE" != "0|0" ]; then
+            echo "::error::Postflight lint left extension residue."
+            exit 1
+          fi
+
+          SAFE=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc "
+            select
+              not exists (select 1 from public.organizations where coalesce(autonomous_mode,false)
+                or autonomy_kill_switch_active is distinct from true
+                or coalesce(auto_plan,false) or coalesce(auto_code,false) or coalesce(auto_test,false)
+                or coalesce(auto_repair,false) or coalesce(auto_review,false) or coalesce(auto_approve,false)
+                or coalesce(auto_merge,false) or coalesce(auto_deploy,false) or coalesce(auto_rollback,false))
+              and not exists (select 1 from public.projects where coalesce(autonomous_mode,false)
+                or coalesce(auto_plan,false) or coalesce(auto_code,false) or coalesce(auto_test,false)
+                or coalesce(auto_repair,false) or coalesce(auto_review,false) or coalesce(auto_approve,false)
+                or coalesce(auto_merge,false) or coalesce(auto_deploy,false) or coalesce(auto_rollback,false))
+              and not exists (select 1 from public.phase1c_workers where last_heartbeat_at>now()-interval '10 minutes')
+              and not exists (select 1 from public.phase1c_workers where last_heartbeat_at>now()+interval '1 minute')
+              and not exists (select 1 from public.phase1c_workers where current_run_id is not null)
+              and not exists (select 1 from public.graph_runs where state='RUNNING'::public.graph_run_state)
+              and not exists (select 1 from public.agent_runs where status='running'::public.run_status);")
+          if [ "$SAFE" != "t" ]; then
+            echo "::error::Completion postflight left the database outside stopped containment."
+            exit 1
+          fi
+          echo "::notice::Scope ${SCOPE} passed exact ledger, catalog, ACL, rollback runtime, lint, and stopped-safety postflight."
+
+      - name: Reverify exact production health and stopped execution workflows
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PHASE1C_WORKER_ENABLED: ${{ vars.SOFTWAREFACTORY_PHASE1C_WORKER_ENABLED }}
+          GRAPH_WORKER_ENABLED: ${{ vars.SOFTWAREFACTORY_GRAPH_WORKER_ENABLED }}
+          GRAPH_WORKER_SCHEDULED: ${{ vars.SOFTWAREFACTORY_GRAPH_WORKER_SCHEDULED }}
+          AUTH_BROKER_DISABLED: ${{ vars.SOFTWAREFACTORY_AUTH_BROKER_DISABLED }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          set -euo pipefail
+          SHA=$(git rev-parse HEAD)
+          CURRENT_MAIN_SHA=$(curl --fail --silent --show-error \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/git/ref/heads/main" \
+            | jq -r '.object.sha // empty')
+          if [ "$RELEASE_SHA" != "$SHA" ] || [ "$CURRENT_MAIN_SHA" != "$SHA" ]; then
+            echo "::error::SoftwareFactory main identity changed during completion postflight."
+            exit 1
+          fi
+
+          CHECKS=$(curl --fail --silent --show-error \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/commits/${SHA}/check-runs?per_page=100")
+          for NAME in \
+            "Lint, typecheck, test, and build" \
+            "Browser and accessibility tests 1/3" \
+            "Browser and accessibility tests 2/3" \
+            "Browser and accessibility tests 3/3"; do
+            STATE=$(jq -r --arg name "$NAME" --arg sha "$SHA" '
+              [.check_runs[] | select(.name==$name and .head_sha==$sha and .app.slug=="github-actions")]
+              | sort_by(.completed_at // .started_at // "") | last
+              | if .==null then "missing|missing" else "\(.status)|\(.conclusion // "null")" end
+            ' <<<"$CHECKS")
+            if [ "$STATE" != "completed|success" ]; then
+              echo "::error::Exact-head check '$NAME' changed during postflight ($STATE)."
+              exit 1
+            fi
+          done
+
+          DEPLOYMENT=$(curl --fail --silent --show-error \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/deployments?environment=Production&per_page=100" \
+            | jq -c '[.[] | select(.environment=="Production" and .task=="deploy" and .creator.login=="vercel[bot]")][0] // empty')
+          if [ -z "$DEPLOYMENT" ] \
+            || ! jq -e --arg sha "$SHA" '.sha==$sha and (.ref==$sha or .ref=="main")' <<<"$DEPLOYMENT" >/dev/null; then
+            echo "::error::Latest Vercel Production identity changed during postflight."
+            exit 1
+          fi
+          STATUS_URL=$(jq -r '.statuses_url' <<<"$DEPLOYMENT")
+          STATUS=$(curl --fail --silent --show-error \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${STATUS_URL}?per_page=1")
+          if ! jq -e --arg expected "$EXPECTED_VERCEL_DEPLOYMENT_URL" '
+            length==1 and .[0].state=="success" and .[0].creator.login=="vercel[bot]"
+            and (.[0].environment_url | rtrimstr("/"))==$expected
+          ' <<<"$STATUS" >/dev/null; then
+            echo "::error::Exact READY Vercel deployment changed during postflight."
+            exit 1
+          fi
+
+          HEALTH=$(curl --fail --silent --show-error --max-time 20 --retry 2 "$PRODUCTION_HEALTH_URL")
+          if ! jq -e \
+            --arg sha "$SHA" \
+            --arg project "$PROJECT_REF" \
+            --arg deployment_url "$EXPECTED_VERCEL_DEPLOYMENT_URL" \
+            --arg deployment_id "$EXPECTED_VERCEL_DEPLOYMENT_ID" \
+            --arg vercel_project "$VERCEL_PROJECT_ID" '
+            .status=="ok"
+            and .service=="SoftwareFactory"
+            and .database=="reachable"
+            and .databaseProject=="matched"
+            and .databaseProjectRef==$project
+            and .deployment=="matched"
+            and .deploymentUrl==$deployment_url
+            and .vercelDeploymentId==$deployment_id
+            and .vercelProjectId==$vercel_project
+            and .release=="matched"
+            and .releaseSha==$sha
+            and .releaseRef=="main"
+          ' <<<"$HEALTH" >/dev/null; then
+            echo "::error::Exact production health identity changed during completion postflight."
+            exit 1
+          fi
+
+          for WORKFLOW in graph-worker.yml codex-worker.yml claude-worker.yml auth-broker.yml graph-live-canary.yml handoff-canary.yml graph-artifact-containment.yml e2e-test-data.yml journey-prod-user.yml; do
+            ACTIVE=$(curl --fail --silent --show-error \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/workflows/${WORKFLOW}/runs?per_page=100" \
+              | jq '[.workflow_runs[] | select(.status != "completed")] | length')
+            if [ "$ACTIVE" != "0" ]; then
+              echo "::error::${WORKFLOW} changed to ${ACTIVE} active run(s) during postflight."
+              exit 1
+            fi
+          done
+          if [ "${PHASE1C_WORKER_ENABLED,,}" = "true" ] \
+            || [ "${GRAPH_WORKER_ENABLED,,}" = "true" ] \
+            || [ "${GRAPH_WORKER_SCHEDULED,,}" = "true" ] \
+            || [ "${AUTH_BROKER_DISABLED,,}" != "true" ]; then
+            echo "::error::A worker switch, schedule, or the auth broker changed during postflight."
+            exit 1
+          fi
+          echo "::notice::Exact release, READY deployment, health, CI, and stopped execution state survived completion postflight."

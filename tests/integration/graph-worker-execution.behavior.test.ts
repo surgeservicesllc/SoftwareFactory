@@ -275,12 +275,12 @@ describe("the graph executor boundary", { timeout: 180_000 }, () => {
     supported: readonly string[] = WORKER_SUPPORTED_EXECUTORS,
   ): Promise<unknown> {
     await asServiceRole(db);
-    const claimed = await db.query<{ claim_planned_graph_v2: unknown }>(
-      "select public.claim_planned_graph_v2($1, $2::text[], $3, $4::jsonb, 2)",
+    const claimed = await db.query<{ claim_planned_graph_v3: unknown }>(
+      "select public.claim_planned_graph_v3($1, $2::text[], $3, $4::jsonb, 3)",
       [workerId, supported, repositoryFullName, JSON.stringify(requiredCheckNames)],
     );
     await reset(db);
-    return claimed.rows[0].claim_planned_graph_v2;
+    return claimed.rows[0].claim_planned_graph_v3;
   }
 
   async function skipFreshClaimNodes(
@@ -2154,7 +2154,7 @@ describe("the graph executor boundary", { timeout: 180_000 }, () => {
     for (const executors of [null, [], ["MODEL", "UNKNOWN"]]) {
       await expect(
         db.query(
-          "select public.claim_planned_graph_v2($1, $2::text[], $3, $4::jsonb, 2)",
+          "select public.claim_planned_graph_v3($1, $2::text[], $3, $4::jsonb, 3)",
           ["graph-worker-test", executors, repositoryFullName, JSON.stringify(requiredCheckNames)],
         ),
       ).rejects.toThrow(/unique, bounded set of supported executors/i);
@@ -2175,11 +2175,18 @@ describe("the graph executor boundary", { timeout: 180_000 }, () => {
     await asServiceRole(db);
     await expect(
       db.query(
-        "select public.claim_planned_graph_v2($1, $2::text[], $3, $4::jsonb, $5)",
+        "select public.claim_planned_graph_v3($1, $2::text[], $3, $4::jsonb, $5)",
         ["graph-worker-test", WORKER_SUPPORTED_EXECUTORS, repositoryFullName,
-          JSON.stringify(requiredCheckNames), 1],
+          JSON.stringify(requiredCheckNames), 2],
       ),
-    ).rejects.toThrow(/graph worker protocol version 2 is required/i);
+    ).rejects.toThrow(/graph worker protocol version 3 is required/i);
+    await expect(
+      db.query(
+        "select public.claim_planned_graph_v2($1, $2::text[], $3, $4::jsonb, 2)",
+        ["graph-worker-test", WORKER_SUPPORTED_EXECUTORS, repositoryFullName,
+          JSON.stringify(requiredCheckNames)],
+      ),
+    ).rejects.toThrow(/permission denied/i);
     await expect(
       db.query(
         "select public.claim_planned_graph_internal($1, $2::text[], $3, $4::jsonb)",
@@ -2536,7 +2543,7 @@ describe("the graph executor boundary", { timeout: 180_000 }, () => {
         if (pausePolls === 2) {
           await asOwner(db);
           await db.query(
-            "select public.set_graph_pause_as_member($1::uuid, $2::uuid, true)",
+            "select public.set_graph_pause_as_member_v2($1::uuid, $2::uuid, true)",
             [organizationId, graphId],
           );
           await reset(db);
@@ -2598,7 +2605,7 @@ describe("the graph executor boundary", { timeout: 180_000 }, () => {
     // Resume. The second run must not re-buy the inspectors it already has.
     await asOwner(db);
     await db.query(
-      "select public.set_graph_pause_as_member($1::uuid, $2::uuid, false)",
+      "select public.set_graph_pause_as_member_v2($1::uuid, $2::uuid, false)",
       [organizationId, graphId],
     );
     await reset(db);
@@ -2631,7 +2638,7 @@ describe("the graph executor boundary", { timeout: 180_000 }, () => {
     // idempotent — a repeated click is agreement, not a second event.
     await asOwner(db);
     await db.query(
-      "select public.set_graph_pause_as_member($1::uuid, $2::uuid, false)",
+      "select public.set_graph_pause_as_member_v2($1::uuid, $2::uuid, false)",
       [organizationId, graphId],
     );
     await reset(db);
@@ -2654,13 +2661,13 @@ describe("the graph executor boundary", { timeout: 180_000 }, () => {
       [organizationId, graphId],
     );
     await expect(db.query(
-      "select public.set_graph_pause_as_member($1::uuid, $2::uuid, true)",
+      "select public.set_graph_pause_as_member_v2($1::uuid, $2::uuid, true)",
       [organizationId, graphId],
     )).rejects.toThrow(/graph_withdrawn/);
 
     // The direction is required — null is not a decision.
     await expect(db.query(
-      "select public.set_graph_pause_as_member($1::uuid, $2::uuid, null)",
+      "select public.set_graph_pause_as_member_v2($1::uuid, $2::uuid, null)",
       [organizationId, graphId],
     )).rejects.toThrow(/paused or resumed/);
     await reset(db);
@@ -2671,9 +2678,9 @@ describe("the graph executor boundary", { timeout: 180_000 }, () => {
     ]);
     await db.exec("set role authenticated");
     await expect(db.query(
-      "select public.set_graph_pause_as_member($1::uuid, $2::uuid, true)",
+      "select public.set_graph_pause_as_member_v2($1::uuid, $2::uuid, true)",
       [organizationId, graphId],
-    )).rejects.toThrow(/member of the owning organization/);
+    )).rejects.toThrow(/Graph pause control is not authorized/);
     await reset(db);
 
     // The role fences: members cannot use the worker's read, the worker's
@@ -2686,7 +2693,7 @@ describe("the graph executor boundary", { timeout: 180_000 }, () => {
     await reset(db);
     await asServiceRole(db);
     await expect(db.query(
-      "select public.set_graph_pause_as_member($1::uuid, $2::uuid, true)",
+      "select public.set_graph_pause_as_member_v2($1::uuid, $2::uuid, true)",
       [organizationId, graphId],
     )).rejects.toThrow(/permission denied/);
 

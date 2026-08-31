@@ -9,6 +9,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { buildLaunchPlan } from "@/lib/graph/launch-plan";
 import { budgetForTemplate, findTemplate } from "@/lib/graph/templates";
+import { createPhase1CExecutionPlan } from "@/lib/orchestration/plan";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const migrationsRoot = resolve(repositoryRoot, "supabase/migrations");
@@ -718,7 +719,7 @@ describe("Grok Chief-of-Staff persistence", () => {
     expect(before.rows[0].pause_requested_at).toBeNull();
 
     await assumeRole(db, "authenticated", ownerId);
-    await db.query("select * from public.set_graph_pause_as_member($1::uuid,$2::uuid,true)", [
+    await db.query("select * from public.set_graph_pause_as_member_v2($1::uuid,$2::uuid,true)", [
       organizationId, graph.rows[0].id,
     ]);
     await assumeRole(db, "service_role");
@@ -744,7 +745,7 @@ describe("Grok Chief-of-Staff persistence", () => {
 
     await assumeRole(db, "authenticated", ownerId);
     const applied = await db.query<{ intent_id: string; replayed: boolean; state: string }>(
-      `select * from public.apply_grok_graph_control_as_owner(
+      `select * from public.apply_grok_graph_control_v2_as_owner(
          $1::uuid,$2::uuid,$3::uuid,'pause',$4::text,$5::text
        )`,
       [organizationId, session.id, graph.id,
@@ -753,7 +754,7 @@ describe("Grok Chief-of-Staff persistence", () => {
     expect(applied.rows).toHaveLength(1);
     expect(applied.rows[0]).toMatchObject({ replayed: false, state: "applied" });
     const replay = await db.query<{ intent_id: string; replayed: boolean; state: string }>(
-      `select * from public.apply_grok_graph_control_as_owner(
+      `select * from public.apply_grok_graph_control_v2_as_owner(
          $1::uuid,$2::uuid,$3::uuid,'pause',$4::text,$5::text
        )`,
       [organizationId, session.id, graph.id,
@@ -799,7 +800,7 @@ describe("Grok Chief-of-Staff persistence", () => {
         "Resume requested before later pause", "ordered-resume-0001"],
     );
     const newer = await db.query<{ intent_id: string }>(
-      `select * from public.apply_grok_graph_control_as_owner(
+      `select * from public.apply_grok_graph_control_v2_as_owner(
          $1::uuid,$2::uuid,$3::uuid,'pause',$4::text,$5::text
        )`,
       [organizationId, session.id, graph.id,
@@ -817,12 +818,12 @@ describe("Grok Chief-of-Staff persistence", () => {
     await db.exec("alter table public.grok_control_intents enable trigger grok_control_intents_guard_update");
     await assumeRole(db, "authenticated", ownerId);
     await expect(db.query(
-      `select * from public.apply_grok_graph_control_as_owner(
+      `select * from public.apply_grok_graph_control_v2_as_owner(
          $1::uuid,$2::uuid,$3::uuid,'resume',$4::text,$5::text
        )`,
       [organizationId, session.id, graph.id,
         "Resume requested before later pause", "ordered-resume-0001"],
-    )).rejects.toThrow(/grok_control_superseded/i);
+    )).rejects.toThrow(/grok execution admission set is incomplete/i);
     await resetRole(db);
     const state = await db.query<{ pause_requested_at: string | null; resume_state: string }>(`
       select graph.pause_requested_at, intent.state as resume_state
@@ -845,16 +846,16 @@ describe("Grok Chief-of-Staff persistence", () => {
       [organizationId, session.id, graph.id,
         "Resume before a direct pause", "ambiguous-resume-0001"],
     );
-    await db.query("select * from public.set_graph_pause_as_member($1::uuid,$2::uuid,true)", [
+    await db.query("select * from public.set_graph_pause_as_member_v2($1::uuid,$2::uuid,true)", [
       organizationId, graph.id,
     ]);
     await expect(db.query(
-      `select * from public.apply_grok_graph_control_as_owner(
+      `select * from public.apply_grok_graph_control_v2_as_owner(
          $1::uuid,$2::uuid,$3::uuid,'resume',$4::text,$5::text
        )`,
       [organizationId, session.id, graph.id,
         "Resume before a direct pause", "ambiguous-resume-0001"],
-    )).rejects.toThrow(/grok_control_recovery_ambiguous/i);
+    )).rejects.toThrow(/grok execution admission set is incomplete/i);
 
     await resetRole(db);
     const state = await db.query<{
@@ -878,11 +879,11 @@ describe("Grok Chief-of-Staff persistence", () => {
     expect(state.rows[0].pause_requested_at).not.toBeNull();
   });
 
-  it("resolves a requested intent without rerunning an already-committed action", async () => {
+  it("refuses a requested Resume before mutation when immutable admissions are missing", async () => {
     const { session } = await createSession("Resolution-lost recovery");
     const graph = await createControlGraph(session.id, "Resolve the committed resume");
     await assumeRole(db, "authenticated", ownerId);
-    await db.query("select * from public.set_graph_pause_as_member($1::uuid,$2::uuid,true)", [
+    await db.query("select * from public.set_graph_pause_as_member_v2($1::uuid,$2::uuid,true)", [
       organizationId, graph.id,
     ]);
     const requested = await db.query<{ id: string }>(
@@ -892,19 +893,17 @@ describe("Grok Chief-of-Staff persistence", () => {
       [organizationId, session.id, graph.id,
         "Resume committed before resolution", "committed-resume-0001"],
     );
-    await db.query("select * from public.set_graph_pause_as_member($1::uuid,$2::uuid,false)", [
-      organizationId, graph.id,
-    ]);
-    const recovered = await db.query<{ intent_id: string; replayed: boolean; state: string }>(
-      `select * from public.apply_grok_graph_control_as_owner(
+    await expect(db.query(
+      "select * from public.set_graph_pause_as_member_v2($1::uuid,$2::uuid,false)",
+      [organizationId, graph.id],
+    )).rejects.toThrow(/grok execution admission set is incomplete/i);
+    await expect(db.query(
+      `select * from public.apply_grok_graph_control_v2_as_owner(
          $1::uuid,$2::uuid,$3::uuid,'resume',$4::text,$5::text
        )`,
       [organizationId, session.id, graph.id,
         "Resume committed before resolution", "committed-resume-0001"],
-    );
-    expect(recovered.rows[0]).toMatchObject({
-      intent_id: requested.rows[0].id, replayed: true, state: "applied",
-    });
+    )).rejects.toThrow(/grok execution admission set is incomplete/i);
 
     await resetRole(db);
     const state = await db.query<{
@@ -920,49 +919,26 @@ describe("Grok Chief-of-Staff persistence", () => {
        where graph.id = $1
        group by graph.id, graph.pause_requested_at, intent.state
     `, [graph.id, requested.rows[0].id]);
-    expect(state.rows[0]).toEqual({
-      pause_requested_at: null, state: "applied", pause_events: 2, applied_events: 1,
+    expect(state.rows[0]).toMatchObject({
+      state: "requested", pause_events: 1, applied_events: 0,
     });
+    expect(state.rows[0].pause_requested_at).not.toBeNull();
   });
 
-  it("rejects applied replay after an opposite direct Pause or Resume", async () => {
+  it("keeps a paused graph unchanged when immutable admissions block Resume", async () => {
     const { session } = await createSession("Applied replay state guard");
     const graph = await createControlGraph(session.id, "Reject superseded applied keys");
     await assumeRole(db, "authenticated", ownerId);
     await db.query(
-      `select * from public.apply_grok_graph_control_as_owner(
+      `select * from public.apply_grok_graph_control_v2_as_owner(
          $1::uuid,$2::uuid,$3::uuid,'pause',$4::text,$5::text
        )`,
       [organizationId, session.id, graph.id, "Atomic pause", "state-pause-0001"],
     );
-    await db.query("select * from public.set_graph_pause_as_member($1::uuid,$2::uuid,false)", [
-      organizationId, graph.id,
-    ]);
     await expect(db.query(
-      `select * from public.apply_grok_graph_control_as_owner(
-         $1::uuid,$2::uuid,$3::uuid,'pause',$4::text,$5::text
-       )`,
-      [organizationId, session.id, graph.id, "Atomic pause", "state-pause-0001"],
-    )).rejects.toThrow(/grok_control_superseded/i);
-
-    await db.query("select * from public.set_graph_pause_as_member($1::uuid,$2::uuid,true)", [
-      organizationId, graph.id,
-    ]);
-    await db.query(
-      `select * from public.apply_grok_graph_control_as_owner(
-         $1::uuid,$2::uuid,$3::uuid,'resume',$4::text,$5::text
-       )`,
-      [organizationId, session.id, graph.id, "Atomic resume", "state-resume-0001"],
-    );
-    await db.query("select * from public.set_graph_pause_as_member($1::uuid,$2::uuid,true)", [
-      organizationId, graph.id,
-    ]);
-    await expect(db.query(
-      `select * from public.apply_grok_graph_control_as_owner(
-         $1::uuid,$2::uuid,$3::uuid,'resume',$4::text,$5::text
-       )`,
-      [organizationId, session.id, graph.id, "Atomic resume", "state-resume-0001"],
-    )).rejects.toThrow(/grok_control_superseded/i);
+      "select * from public.set_graph_pause_as_member_v2($1::uuid,$2::uuid,false)",
+      [organizationId, graph.id],
+    )).rejects.toThrow(/grok execution admission set is incomplete/i);
     await resetRole(db);
     const state = await db.query<{ pause_requested_at: string | null }>(
       "select pause_requested_at from public.graphs where id = $1", [graph.id],
@@ -975,7 +951,7 @@ describe("Grok Chief-of-Staff persistence", () => {
     const graph = await createControlGraph(session.id, "Withdrawal supersedes pause");
     await assumeRole(db, "authenticated", ownerId);
     await db.query(
-      `select * from public.apply_grok_graph_control_as_owner(
+      `select * from public.apply_grok_graph_control_v2_as_owner(
          $1::uuid,$2::uuid,$3::uuid,'pause',$4::text,$5::text
        )`,
       [organizationId, session.id, graph.id, "Pause before stopping", "withdrawn-pause-0001"],
@@ -984,7 +960,7 @@ describe("Grok Chief-of-Staff persistence", () => {
       organizationId, graph.id, "Permanently stop after pausing",
     ]);
     await expect(db.query(
-      `select * from public.apply_grok_graph_control_as_owner(
+      `select * from public.apply_grok_graph_control_v2_as_owner(
          $1::uuid,$2::uuid,$3::uuid,'pause',$4::text,$5::text
        )`,
       [organizationId, session.id, graph.id, "Pause before stopping", "withdrawn-pause-0001"],
@@ -1016,19 +992,19 @@ describe("Grok Chief-of-Staff persistence", () => {
     );
     await assumeRole(db, "authenticated", ownerId);
     await expect(db.query(
-      `select * from public.apply_grok_graph_control_as_owner(
+      `select * from public.apply_grok_graph_control_v2_as_owner(
          $1::uuid,$2::uuid,$3::uuid,'pause',$4::text,$5::text
        )`,
       [organizationId, wrong.session.id, graph.id,
         "Wrong session cannot pause", "wrong-session-pause-0001"],
-    )).rejects.toThrow(/grok_control_target_not_found/i);
+    )).rejects.toThrow(/Grok graph control is not authorized/i);
     await expect(db.query(
-      `select * from public.apply_grok_graph_control_as_owner(
+      `select * from public.apply_grok_graph_control_v2_as_owner(
          $1::uuid,$2::uuid,$3::uuid,'pause',$4::text,$5::text
        )`,
       [organizationId, linked.session.id, unlinked.rows[0].id,
         "Unlinked graph cannot pause", "unlinked-graph-pause-0001"],
-    )).rejects.toThrow(/grok_control_target_not_found/i);
+    )).rejects.toThrow(/Grok graph control is not authorized/i);
 
     await resetRole(db);
     const residue = await db.query<{ events: number; intents: number }>(`
@@ -1046,12 +1022,12 @@ describe("Grok Chief-of-Staff persistence", () => {
     const graph = await createControlGraph(session.id, "Reject unavailable resume");
     await assumeRole(db, "authenticated", ownerId);
     await expect(db.query(
-      `select * from public.apply_grok_graph_control_as_owner(
+      `select * from public.apply_grok_graph_control_v2_as_owner(
          $1::uuid,$2::uuid,$3::uuid,'resume',$4::text,$5::text
        )`,
       [organizationId, session.id, graph.id,
         "Fresh resume is unavailable", "unavailable-resume-0001"],
-    )).rejects.toThrow(/grok_control_not_available/i);
+    )).rejects.toThrow(/grok execution admission set is incomplete/i);
     await resetRole(db);
     const residue = await db.query<{ events: number; intents: number; pause_requested_at: string | null }>(`
       select graph.pause_requested_at,
@@ -1070,22 +1046,22 @@ describe("Grok Chief-of-Staff persistence", () => {
 
     await assumeRole(db, "authenticated", memberId);
     await expect(db.query(
-      "select * from public.apply_grok_graph_control_as_owner($1::uuid,$2::uuid,$3::uuid,'pause',$4,$5)",
+      "select * from public.apply_grok_graph_control_v2_as_owner($1::uuid,$2::uuid,$3::uuid,'pause',$4,$5)",
       [organizationId, session.id, graph.id, "Member pause denied", "member-pause-0001"],
-    )).rejects.toThrow(/owner access is required/i);
+    )).rejects.toThrow(/Grok graph control is not authorized/i);
     await assumeRole(db, "authenticated", outsiderId);
     await expect(db.query(
-      "select * from public.apply_grok_graph_control_as_owner($1::uuid,$2::uuid,$3::uuid,'pause',$4,$5)",
+      "select * from public.apply_grok_graph_control_v2_as_owner($1::uuid,$2::uuid,$3::uuid,'pause',$4,$5)",
       [organizationId, session.id, graph.id, "Outsider pause denied", "outsider-pause-0001"],
-    )).rejects.toThrow(/owner access is required/i);
+    )).rejects.toThrow(/Grok graph control is not authorized/i);
     await expect(db.query(
-      "select * from public.apply_grok_graph_control_as_owner($1::uuid,$2::uuid,$3::uuid,'pause',$4,$5)",
+      "select * from public.apply_grok_graph_control_v2_as_owner($1::uuid,$2::uuid,$3::uuid,'pause',$4,$5)",
       [outsiderOrganizationId, session.id, graph.id,
         "Cross tenant pause denied", "cross-tenant-pause-0001"],
-    )).rejects.toThrow(/not_found/i);
+    )).rejects.toThrow(/Grok graph control is not authorized/i);
     await assumeRole(db, "anon");
     await expect(db.query(
-      "select * from public.apply_grok_graph_control_as_owner($1::uuid,$2::uuid,$3::uuid,'pause',$4,$5)",
+      "select * from public.apply_grok_graph_control_v2_as_owner($1::uuid,$2::uuid,$3::uuid,'pause',$4,$5)",
       [organizationId, session.id, graph.id, "Anonymous pause denied", "anon-pause-0001"],
     )).rejects.toThrow(/permission denied/i);
   });
@@ -1098,7 +1074,7 @@ describe("Grok Chief-of-Staff persistence", () => {
       select owner_role.rolname as owner_name, proc.proconfig, proc.prosecdef
         from pg_catalog.pg_proc proc
         join pg_catalog.pg_roles owner_role on owner_role.oid = proc.proowner
-       where proc.oid = 'public.apply_grok_graph_control_as_owner(uuid,uuid,uuid,text,text,text)'::regprocedure
+       where proc.oid = 'public.apply_grok_graph_control_v2_as_owner(uuid,uuid,uuid,text,text,text)'::regprocedure
     `);
     expect(catalog.rows).toHaveLength(1);
     expect(catalog.rows[0]).toMatchObject({
@@ -1110,11 +1086,11 @@ describe("Grok Chief-of-Staff persistence", () => {
       anon_execute: boolean; authenticated_execute: boolean; service_execute: boolean;
     }>(`
       select
-        has_function_privilege('anon', 'public.apply_grok_graph_control_as_owner(uuid,uuid,uuid,text,text,text)', 'EXECUTE')
+        has_function_privilege('anon', 'public.apply_grok_graph_control_v2_as_owner(uuid,uuid,uuid,text,text,text)', 'EXECUTE')
           as anon_execute,
-        has_function_privilege('authenticated', 'public.apply_grok_graph_control_as_owner(uuid,uuid,uuid,text,text,text)', 'EXECUTE')
+        has_function_privilege('authenticated', 'public.apply_grok_graph_control_v2_as_owner(uuid,uuid,uuid,text,text,text)', 'EXECUTE')
           as authenticated_execute,
-        has_function_privilege('service_role', 'public.apply_grok_graph_control_as_owner(uuid,uuid,uuid,text,text,text)', 'EXECUTE')
+        has_function_privilege('service_role', 'public.apply_grok_graph_control_v2_as_owner(uuid,uuid,uuid,text,text,text)', 'EXECUTE')
           as service_execute
     `);
     expect(acl.rows[0]).toEqual({
@@ -1134,6 +1110,7 @@ describe("Grok Chief-of-Staff persistence", () => {
     const claudeAssignmentId = "74000000-0000-4000-8000-000000000001";
     const codexAssignmentId = "74000000-0000-4000-8000-000000000002";
     const maxLengthAssignmentModel = "m".repeat(128);
+    const alternateCodexModel = "gpt-5.4-codex";
     const claudeCapabilities = [
       "architecture", "decision", "discovery", "evaluation",
       "planning", "qa", "review", "security_review", "synthesis",
@@ -1192,7 +1169,7 @@ describe("Grok Chief-of-Staff persistence", () => {
          '${maxLengthAssignmentModel}', 'high', 'read', false,
          false, 'all', true, '${ownerId}'),
         ('${codexAssignmentId}', '${organizationId}', '${codexBotId}',
-         '${projectId}', '${codexRoleId}', 'active', 'developer', null,
+         '${projectId}', '${codexRoleId}', 'active', 'developer', '${alternateCodexModel}',
          'high', 'write', true,
          false, 'all', true, '${ownerId}');
     `);
@@ -1221,24 +1198,19 @@ describe("Grok Chief-of-Staff persistence", () => {
     const claude = snapshots.rows.find((row) => row.provider === "anthropic")!;
     const codex = snapshots.rows.find((row) => row.provider === "openai")!;
 
-    const taskFor = (
-      id: string,
-      lane: "claude_read_only" | "codex_workspace",
+    const specialistFor = (
       snapshot: typeof claude,
       capabilities: readonly string[],
     ) => ({
-      id,
-      lane,
-      capability: lane === "codex_workspace" ? "implementation" : "planning",
-      agentId: snapshot.assignment_id,
+      version: 1,
       assignmentId: snapshot.assignment_id,
       assignmentRevision: Number(snapshot.assignment_revision),
       botId: snapshot.bot_id,
       botRevision: Number(snapshot.bot_revision),
       roleId: snapshot.role_id,
       roleUpdatedAt: snapshot.role_updated_at,
-      agentCapabilities: capabilities,
-      agentMaxModelTier: "STRONG" as const,
+      capabilities,
+      maxModelTier: "STRONG" as const,
       aiAccountId: snapshot.ai_account_id,
       accountUpdatedAt: snapshot.account_updated_at,
       credentialPurpose: snapshot.credential_purpose,
@@ -1247,18 +1219,9 @@ describe("Grok Chief-of-Staff persistence", () => {
       provider: snapshot.provider,
       model: snapshot.model,
     });
-    const claudeTask = taskFor(
-      "claude-generalist",
-      "claude_read_only",
-      claude,
-      claudeCapabilities,
-    );
-    const codexTask = taskFor(
-      "implement",
-      "codex_workspace",
-      codex,
-      ["implementation"],
-    );
+    const claudeSpecialist = specialistFor(claude, claudeCapabilities);
+    const codexSpecialist = specialistFor(codex, ["implementation"]);
+    const admissionRoster = [claudeSpecialist, codexSpecialist];
 
     const template = findTemplate("full_lifecycle");
     if (!template) throw new Error("full_lifecycle template is absent");
@@ -1270,31 +1233,31 @@ describe("Grok Chief-of-Staff persistence", () => {
 
     const admissions = built.plan.nodes.flatMap((node) => {
       const selected = node.executor === "MODEL"
-        ? { lane: "graph_model" as const, task: claudeTask }
+        ? { lane: "graph_model" as const, specialist: claudeSpecialist }
         : node.executor === "ANCHOR" && node.node_key === "implement"
-          ? { lane: "phase1c" as const, task: codexTask }
+          ? { lane: "phase1c" as const, specialist: codexSpecialist }
           : null;
       if (!selected) return [];
       return [{
-        version: 1,
+        version: 2,
         lane: selected.lane,
         nodeKey: node.node_key,
-        sourceTaskKey: selected.task.id,
-        assignmentId: selected.task.assignmentId,
-        assignmentRevision: selected.task.assignmentRevision,
-        botId: selected.task.botId,
-        botRevision: selected.task.botRevision,
-        roleId: selected.task.roleId,
-        roleUpdatedAt: selected.task.roleUpdatedAt,
-        agentCapabilities: selected.task.agentCapabilities,
-        agentMaxModelTier: selected.task.agentMaxModelTier,
-        aiAccountId: selected.task.aiAccountId,
-        accountUpdatedAt: selected.task.accountUpdatedAt,
-        provider: selected.task.provider,
-        model: selected.task.model,
-        credentialPurpose: selected.task.credentialPurpose,
-        credentialRef: selected.task.credentialRef,
-        providerIdentity: selected.task.providerIdentity,
+        sourceRosterAssignmentId: selected.specialist.assignmentId,
+        assignmentId: selected.specialist.assignmentId,
+        assignmentRevision: selected.specialist.assignmentRevision,
+        botId: selected.specialist.botId,
+        botRevision: selected.specialist.botRevision,
+        roleId: selected.specialist.roleId,
+        roleUpdatedAt: selected.specialist.roleUpdatedAt,
+        agentCapabilities: selected.specialist.capabilities,
+        agentMaxModelTier: selected.specialist.maxModelTier,
+        aiAccountId: selected.specialist.aiAccountId,
+        accountUpdatedAt: selected.specialist.accountUpdatedAt,
+        provider: selected.specialist.provider,
+        model: selected.specialist.model,
+        credentialPurpose: selected.specialist.credentialPurpose,
+        credentialRef: selected.specialist.credentialRef,
+        providerIdentity: selected.specialist.providerIdentity,
         capability: node.capability,
       }];
     });
@@ -1315,9 +1278,50 @@ describe("Grok Chief-of-Staff persistence", () => {
        )`,
       [organizationId, session.id, "The exact provider plan is recorded.", JSON.stringify({
         kind: "grok.plan",
-        plan: { planner: { version: 2 }, dag: { tasks: [claudeTask, codexTask] } },
+        plan: {
+          planner: { version: 3 },
+          intent: { kind: "build" },
+          admissionRoster,
+          dag: { tasks: [] },
+        },
       }), "provider-admission-assistant-0001", user.rows[0].id],
     );
+
+    const rosterCall = `select public.record_grok_specialist_roster_v1_as_server(
+      $1::uuid,$2::uuid,$3::uuid,$4::uuid,$5::uuid,$6::text,$7::bigint
+    ) as result`;
+    const rosterParameters = [
+      organizationId, ownerId, projectId, session.id, assistant.rows[0].id,
+      "provider-admission-roster-0001", 3,
+    ] as const;
+    const admittedRoster = await db.query<{ result: {
+      message_id: string; roster_count: number; roster_sha256: string; replayed: boolean;
+    } }>(rosterCall, [...rosterParameters]);
+    const replayedRoster = await db.query<{ result: {
+      message_id: string; roster_count: number; roster_sha256: string; replayed: boolean;
+    } }>(rosterCall, [...rosterParameters]);
+    expect(admittedRoster.rows[0]?.result).toMatchObject({
+      message_id: assistant.rows[0].id,
+      roster_count: 2,
+      replayed: false,
+    });
+    expect(replayedRoster.rows[0]?.result).toMatchObject({
+      message_id: assistant.rows[0].id,
+      roster_count: 2,
+      replayed: true,
+    });
+
+    await db.query(`select public.record_grok_event_as_server(
+      $1::uuid,$2::uuid,'session.planned',$2::uuid,$3::jsonb,4,$4::uuid,null
+    )`, [organizationId, session.id, JSON.stringify({
+      schemaVersion: 1,
+      detail: "The deterministic chief-of-staff plan was recorded; execution has not started.",
+      planMessageId: assistant.rows[0].id,
+      plannerVersion: 3,
+      taskCount: 0,
+      specialistRosterCount: 2,
+      specialistRosterSha256: admittedRoster.rows[0]!.result.roster_sha256,
+    }), assistant.rows[0].id]);
 
     const parameters = [
       organizationId, ownerId, projectId, session.id, assistant.rows[0].id,
@@ -1326,25 +1330,26 @@ describe("Grok Chief-of-Staff persistence", () => {
       built.plan.requiresOwnerApproval, JSON.stringify(built.plan.nodes),
       JSON.stringify(built.plan.edges), JSON.stringify(built.plan.budget),
       repositoryId, "main", baseSha, JSON.stringify(requiredChecks),
+      "provider-admission-roster-0001",
       JSON.stringify(admissions),
     ] as const;
-    const call = `select * from public.launch_grok_full_lifecycle_v2_as_server(
+    const call = `select * from public.launch_grok_full_lifecycle_v3_as_server(
       $1::uuid,$2::uuid,$3::uuid,$4::uuid,$5::uuid,$6::text,$7::text,
       $8::public.graph_topology,$9::jsonb,$10::public.risk_level,$11::boolean,
       $12::jsonb,$13::jsonb,$14::jsonb,$15::uuid,$16::text,$17::text,
-      $18::jsonb,$19::jsonb
+      $18::jsonb,$19::text,$20::jsonb
     )`;
 
     const mismatchedAdmissions = admissions.map((entry, index) => index === 0
       ? { ...entry, assignmentRevision: entry.assignmentRevision + 1 }
       : entry);
     const mismatchedParameters = [
-      ...parameters.slice(0, 18),
+      ...parameters.slice(0, 19),
       JSON.stringify(mismatchedAdmissions),
     ];
     await expect(
       db.query(call, mismatchedParameters),
-    ).rejects.toThrow(/immutable planner task|assignment.*revision|identity.*mismatch/i);
+    ).rejects.toThrow(/immutable specialist roster|assignment.*revision|identity.*mismatch/i);
 
     await resetRole(db);
     const rejectedState = await db.query<{
@@ -1385,7 +1390,7 @@ describe("Grok Chief-of-Staff persistence", () => {
        )`,
       [organizationId, legacySession.id, "The legacy plan is recorded.", JSON.stringify({
         kind: "grok.plan",
-        plan: { planner: { version: 1 }, dag: { tasks: [claudeTask, codexTask] } },
+        plan: { planner: { version: 1 }, dag: { tasks: [] } },
       }), "provider-admission-legacy-assistant-0001", legacyUser.rows[0].id],
     );
     const legacyParameters = [
@@ -1393,7 +1398,7 @@ describe("Grok Chief-of-Staff persistence", () => {
       "provider-admission-legacy-launch-0001", ...parameters.slice(6),
     ];
     await expect(db.query(call, legacyParameters)).rejects.toThrow(
-      /grok_plan_v2_message_not_found/i,
+      /planner v3 intent has no admitted canonical runtime bridge/i,
     );
 
     await resetRole(db);
@@ -1428,14 +1433,32 @@ describe("Grok Chief-of-Staff persistence", () => {
     const evidence = await db.query<{
       total: number; graph_model: number; phase1c: number;
       credential_versions_exact: boolean; hashes_valid: boolean;
+      specialist_links_exact: boolean; specialist_hashes_valid: boolean;
       max_length_model_admitted: boolean; graph_runs: number;
       pause_requested_at: string | null;
     }>(`
       select count(*)::integer as total,
              count(*) filter (where lane = 'graph_model')::integer as graph_model,
              count(*) filter (where lane = 'phase1c')::integer as phase1c,
-             bool_and(admission_sha256 = public.grok_execution_admission_hash(admission))
+             bool_and(admission_sha256 = public.grok_current_execution_admission_hash(admission))
                as hashes_valid,
+             bool_and(admission.specialist_admission_id is not null and exists (
+               select 1
+                 from public.grok_specialist_admissions specialist
+                where specialist.id = admission.specialist_admission_id
+                  and specialist.organization_id = admission.organization_id
+                  and specialist.project_id = admission.project_id
+                  and specialist.session_id = admission.session_id
+                  and specialist.message_id = admission.message_id
+                  and specialist.assignment_id = admission.assignment_id
+             )) as specialist_links_exact,
+             bool_and(exists (
+               select 1
+                 from public.grok_specialist_admissions specialist
+                where specialist.id = admission.specialist_admission_id
+                  and specialist.admission_sha256 =
+                    public.grok_specialist_admission_hash(specialist)
+             )) as specialist_hashes_valid,
              bool_and(exists (
                select 1
                  from public.provider_credentials credential
@@ -1458,10 +1481,238 @@ describe("Grok Chief-of-Staff persistence", () => {
       phase1c: 1,
       credential_versions_exact: true,
       hashes_valid: true,
+      specialist_links_exact: true,
+      specialist_hashes_valid: true,
       max_length_model_admitted: true,
       graph_runs: 0,
     });
     expect(evidence.rows[0].pause_requested_at).not.toBeNull();
+
+    const graphRunId = "76000000-0000-4000-8000-000000000001";
+    const architectureNodeRunId = "76000000-0000-4000-8000-000000000002";
+    const architectureArtifactId = "76000000-0000-4000-8000-000000000003";
+    const architectureGateId = "76000000-0000-4000-8000-000000000004";
+    const architectureNode = await db.query<{ id: string }>(`
+      select id from public.graph_nodes
+       where graph_id = $1 and node_key = 'architecture'
+    `, [launched.rows[0].graph_id]);
+    await db.exec(`
+      insert into public.graph_runs (
+        id, organization_id, graph_id, state, started_at, completed_at, created_by
+      ) values (
+        '${graphRunId}', '${organizationId}', '${launched.rows[0].graph_id}',
+        'RUNNING', now() - interval '10 minutes', null,
+        '${ownerId}'
+      );
+      insert into public.node_runs (
+        id, organization_id, graph_run_id, node_id, state, attempt,
+        queued_at, started_at, completed_at
+      ) values (
+        '${architectureNodeRunId}', '${organizationId}', '${graphRunId}',
+        '${architectureNode.rows[0]!.id}', 'VERIFYING', 1,
+        now() - interval '9 minutes', now() - interval '8 minutes', null
+      );
+      insert into public.graph_artifacts (
+        id, organization_id, graph_run_id, node_run_id, kind, payload, created_at
+      ) values (
+        '${architectureArtifactId}', '${organizationId}', '${graphRunId}',
+        '${architectureNodeRunId}', 'RAW',
+        '{"decision":"implement the exact alternate admitted OpenAI route"}'::jsonb,
+        now() - interval '3 minutes'
+      );
+      insert into public.graph_gates (
+        id, organization_id, graph_id, node_id, stage, kind, state,
+        opened_by_run_id, opened_at, decided_at, decided_by
+      ) values (
+        '${architectureGateId}', '${organizationId}', '${launched.rows[0].graph_id}',
+        '${architectureNode.rows[0]!.id}', 'ARCHITECTURE', 'HUMAN', 'OPEN',
+        '${graphRunId}', now() - interval '4 minutes', null, null
+      );
+      update public.graph_runs
+         set state = 'PARTIAL', completed_at = now() - interval '2 minutes'
+       where id = '${graphRunId}';
+    `);
+
+    await assumeRole(db, "authenticated", ownerId);
+    const bridge = await db.query<{ bridge_id: string }>(
+      `select bridge_id from public.approve_graph_phase1c_architecture_gate(
+         $1::uuid, $2::uuid, 'Exact alternate route reviewed'
+       )`,
+      [architectureGateId, architectureArtifactId],
+    );
+    const executionPlan = createPhase1CExecutionPlan("build_feature", {});
+    const phase1CParameters = {
+      acceptanceCriteria: ["The approved alternate-model architecture is implemented and verified."],
+      agentRole: executionPlan.agentRole,
+      budget: executionPlan.budget,
+      commandType: "build_feature",
+      dependencyTaskIds: [] as string[],
+      executionMode: "manual",
+      model: executionPlan.model,
+      plan: executionPlan.plan,
+      provider: executionPlan.provider,
+      repositoryBinding: {
+        appId: 910002,
+        baseBranch: "main",
+        baseSha,
+        connectionId,
+        externalInstallationId: 910001,
+        externalRepositoryId: 910004,
+        installationId,
+        repositoryId,
+      },
+      riskAssessment: { factors: [], reasons: [], requestedRisk: "yellow" },
+    };
+
+    await expect(db.query(
+      `select * from public.submit_command(
+         $1::uuid, $2::text, 'yellow'::public.risk_level, $3::jsonb, $4::text
+       )`,
+      [projectId, "A direct alternate model must be denied.", JSON.stringify({
+        ...phase1CParameters,
+        model: alternateCodexModel,
+      }), "direct-alternate-model-denied-0001"],
+    )).rejects.toThrow(/execution configuration|current.*admission/i);
+    await expect(db.query(
+      `select * from public.submit_command(
+         $1::uuid, $2::text, 'yellow'::public.risk_level, $3::jsonb, $4::text
+       )`,
+      [projectId, "A null reserved capability must be denied.", JSON.stringify({
+        ...phase1CParameters,
+        _grokPhase1CAuthorization: null,
+      }), "reserved-null-denied-0001"],
+    )).rejects.toThrow(/execution configuration/i);
+    await expect(db.query(
+      `select * from public.submit_command(
+         $1::uuid, $2::text, 'yellow'::public.risk_level, $3::jsonb, $4::text
+       )`,
+      [projectId, "A forged capability must be denied.", JSON.stringify({
+        ...phase1CParameters,
+        model: alternateCodexModel,
+        _grokPhase1CAuthorization: "76000000-0000-4000-8000-000000000099",
+      }), "forged-capability-denied-0001"],
+    )).rejects.toThrow(/execution configuration/i);
+
+    const submission = await db.query<{
+      bridge_id: string; command_id: string; task_id: string;
+      command_state: string; task_state: string; was_created: boolean;
+    }>(`
+      select bridge_id, command_id, task_id, command_state::text,
+             task_state::text, was_created
+        from public.submit_and_attach_graph_phase1c_command($1::uuid, $2::jsonb)
+    `, [bridge.rows[0]!.bridge_id, JSON.stringify(phase1CParameters)]);
+    expect(submission.rows[0]).toMatchObject({
+      bridge_id: bridge.rows[0]!.bridge_id,
+      command_state: "queued",
+      task_state: "queued",
+      was_created: true,
+    });
+    const replayedSubmission = await db.query<{
+      command_id: string; task_id: string; was_created: boolean;
+    }>(`
+      select command_id, task_id, was_created
+        from public.submit_and_attach_graph_phase1c_command($1::uuid, $2::jsonb)
+    `, [bridge.rows[0]!.bridge_id, JSON.stringify(phase1CParameters)]);
+    expect(replayedSubmission.rows[0]).toEqual({
+      command_id: submission.rows[0]!.command_id,
+      task_id: submission.rows[0]!.task_id,
+      was_created: false,
+    });
+
+    await resetRole(db);
+    const persistedRoute = await db.query<{
+      command_model: string; run_model: string; provider: string;
+      private_fields_absent: boolean; guards: number; residue: number;
+    }>(`
+      select command.parameters ->> 'model' as command_model,
+             run.model as run_model,
+             run.provider as provider,
+             not command.parameters ? '_grokPhase1CAuthorization'
+               and not command.parameters ? '_factoryRecordOnlyAuthorization'
+               as private_fields_absent,
+             (select count(*)::integer
+                from public.grok_phase1c_submission_guards) as guards,
+             (select count(*)::integer from public.commands rejected
+               where rejected.idempotency_key in (
+                 'direct-alternate-model-denied-0001',
+                 'reserved-null-denied-0001',
+                 'forged-capability-denied-0001'
+               )) as residue
+        from public.commands command
+        join public.agent_runs run on run.command_id = command.id
+       where command.id = $1
+    `, [submission.rows[0]!.command_id]);
+    expect(persistedRoute.rows[0]).toEqual({
+      command_model: alternateCodexModel,
+      run_model: alternateCodexModel,
+      provider: "openai",
+      private_fields_absent: true,
+      guards: 0,
+      residue: 0,
+    });
+
+    await assumeRole(db, "service_role");
+    await db.query("select * from public.register_phase1c_worker($1,$2,$3::jsonb)", [
+      "grok-alternate-model-worker", "1.0.0", JSON.stringify({ providers: ["openai"] }),
+    ]);
+    const claimed = await db.query<{ claim: {
+      command_id: string; model: string; provider: string;
+      execution_admission: { id: string; model: string; provider: string };
+    } | null }>(`
+      select public.claim_phase1c_run_by_command_v3(
+        $1, 'openai', 'gpt-5.3-codex', 120, $2::uuid, 3
+      ) as claim
+    `, ["grok-alternate-model-worker", submission.rows[0]!.command_id]);
+    expect(claimed.rows[0]!.claim).toMatchObject({
+      command_id: submission.rows[0]!.command_id,
+      model: alternateCodexModel,
+      provider: "openai",
+      execution_admission: {
+        model: alternateCodexModel,
+        provider: "openai",
+      },
+    });
+
+    await resetRole(db);
+    const beforeStaleReplay = await db.query<{
+      bridges: number; commands: number; guards: number; runs: number; tasks: number;
+    }>(`
+      select
+        (select count(*)::integer from public.graph_phase1c_bridges
+          where graph_id = $1) as bridges,
+        (select count(*)::integer from public.commands
+          where id = $2) as commands,
+        (select count(*)::integer from public.grok_phase1c_submission_guards) as guards,
+        (select count(*)::integer from public.agent_runs
+          where command_id = $2) as runs,
+        (select count(*)::integer from public.tasks
+          where command_id = $2) as tasks
+    `, [launched.rows[0].graph_id, submission.rows[0]!.command_id]);
+    await db.query(
+      "update public.bot_assignments set model = 'gpt-5.5-codex' where id = $1",
+      [codexAssignmentId],
+    );
+    await assumeRole(db, "authenticated", ownerId);
+    await expect(db.query(
+      `select * from public.submit_and_attach_graph_phase1c_command($1::uuid, $2::jsonb)`,
+      [bridge.rows[0]!.bridge_id, JSON.stringify(phase1CParameters)],
+    )).rejects.toThrow(/admission is stale|assignment admission is stale/i);
+    await resetRole(db);
+    const afterStaleReplay = await db.query<{
+      bridges: number; commands: number; guards: number; runs: number; tasks: number;
+    }>(`
+      select
+        (select count(*)::integer from public.graph_phase1c_bridges
+          where graph_id = $1) as bridges,
+        (select count(*)::integer from public.commands
+          where id = $2) as commands,
+        (select count(*)::integer from public.grok_phase1c_submission_guards) as guards,
+        (select count(*)::integer from public.agent_runs
+          where command_id = $2) as runs,
+        (select count(*)::integer from public.tasks
+          where command_id = $2) as tasks
+    `, [launched.rows[0].graph_id, submission.rows[0]!.command_id]);
+    expect(afterStaleReplay.rows[0]).toEqual(beforeStaleReplay.rows[0]);
 
     await expect(db.query(
       "update public.grok_execution_admissions set model = model where graph_id = $1",
@@ -1473,7 +1724,7 @@ describe("Grok Chief-of-Staff persistence", () => {
     const tables = [
       "grok_sessions", "grok_messages", "grok_task_links", "grok_graph_launches",
       "grok_events", "grok_artifact_links", "grok_control_intents",
-      "grok_execution_admissions",
+      "grok_execution_admissions", "grok_specialist_admissions",
     ];
     for (const role of ["anon", "authenticated", "service_role"] as const) {
       await assumeRole(db, role, role === "authenticated" ? ownerId : null);

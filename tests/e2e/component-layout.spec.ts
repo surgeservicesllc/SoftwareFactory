@@ -260,6 +260,51 @@ for (const width of WIDTHS) {
   }
 }
 
+for (const width of [320, 768, 1440]) {
+  test(`the populated blocked Grok workspace stays honest and accessible at ${width}px`, async ({ page, isMobile }) => {
+    test.skip(Boolean(isMobile), "viewport-driving check runs in the resizable projects");
+    await open(page, "grok-workspace", width);
+
+    await expect(page.getByRole("heading", { level: 1, name: "Grok Bot" })).toBeVisible();
+    await expect(page.getByRole("log", { name: "Recorded session messages" })).toContainText(
+      "Execution is not connected",
+    );
+    await expect(page.getByRole("status")).toContainText(
+      "no graph or worker execution has started",
+    );
+
+    for (const name of [
+      "Goal",
+      "Plan",
+      "Agents",
+      "Progress",
+      "Files / Diffs",
+      "Tests",
+      "Preview",
+      "Artifacts",
+      "Deployment",
+    ]) {
+      const tab = page.getByRole("tab", { name });
+      await tab.click();
+      await expect(tab).toHaveAttribute("aria-selected", "true");
+      expect(await overflowing(page), `${name} overflowed the Grok workspace at ${width}px`).toEqual([]);
+      expect(await unreachable(page, "body"), `${name} became unreachable at ${width}px`).toEqual([]);
+    }
+
+    const inspector = page.getByRole("complementary", { name: "Session inspector" });
+    await expect(inspector.getByText("Rollback", { exact: true })).toBeVisible();
+    await expect(inspector.getByText("Automatic continuation", { exact: true })).toBeVisible();
+    await expect(inspector.getByText("Not Connected", { exact: true })).toHaveCount(2);
+
+    const results = await new AxeBuilder({ page })
+      .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+      .analyze();
+    expect(results.violations.filter(({ impact }) => (
+      impact === "serious" || impact === "critical"
+    ))).toEqual([]);
+  });
+}
+
 for (const width of WIDTHS) {
   test(`job search renders populated board results inside ${width}px`, async ({ page, isMobile }) => {
     test.skip(Boolean(isMobile), "viewport-driving check runs in the resizable projects");

@@ -3,6 +3,64 @@
 Written 2026-08-14, after verifying the whole chain on a real PostgreSQL 16 cluster.
 Rebased 2026-08-16 on an owner-measured hosted position (see the section directly below).
 
+## Grok claim and specialist admission completion tail (ADR-219, repository-only)
+
+Use only `.github/workflows/grok-bot-completion-migrations.yml` for these two
+forward files, in order:
+
+- `20260831000900_grok_claim_admission_fence.sql` — canonical LF SHA-256
+  `795d49b41b2de34819272a45a837d50aa6c3808db5a2c85e6a4ad769d5deff6b`;
+- `20260831001000_grok_specialist_admission_planning.sql` — canonical LF
+  SHA-256
+  `728628f0368e1f715d8c786ffb536d2d3fcc3a859a177a0665a00ea98a8386f1`.
+
+The fixed predecessor state includes hosted Grok provider admission
+`20260831000100`, transactional notices `20260831000700`, and autopay
+authorization `20260831000800`. The last is unrelated product schema but is an
+immutable ledger predecessor: never reuse or reinterpret 008 as a Grok
+cutover. Never add 009/010 to a broad migration push, run `db push`, reset,
+repair history, replay a recorded version, down-migrate, or stage both files in
+one mutation scope.
+
+Choose one reviewed lowercase 40-character `surgeservicesllc/SoftwareFactory`
+`main` commit and pass it unchanged as `release_sha`. The workflow requires the
+exact checkout and live main, all four exact-head quality/browser-accessibility
+checks green, the latest successful READY Vercel Production deployment and
+matching public health/Vercel/Supabase identity, first-attempt configured
+release actor for mutations, stopped execution/auth workflows, worker switches
+OFF, auth broker disabled, autonomy and all automatic actions OFF, every global
+kill switch ON, and no running graph or agent run.
+
+Dispatch fresh workflow runs in this exact order:
+
+1. `scope=probe` — read-only. Require the accepted predecessor ledger and
+   catalog exactly once, 009/010 in an allowed absent/ordered state, exact
+   migration hashes, and stopped containment.
+2. `scope=claim-admission-fence`, `confirm=apply` — stage only 009, rehearse it
+   under rollback with linked-database lint and runtime canaries, then apply its
+   DDL and ledger row in one locked transaction. Require protocol-v3-only
+   service-role claims, current-admission Resume/wake/claim behavior, exact
+   credential projection, private forced-RLS submission-guard state, v2
+   denial, zero canary residue, PostgREST reload, and unchanged containment.
+3. `scope=specialist-admission-planning`, `confirm=apply` — only after 009's
+   exact acceptance, stage only 010 and require 009 exactly once. Rehearse and
+   apply it in one locked transaction. Require append-only forced-RLS roster
+   evidence, deterministic wildcard normalization and replay, exact v3
+   launcher/catalog/ACL, research/deploy refusal, PostgREST reload, and no
+   durable canary work.
+4. `scope=verify` — fresh and read-only. Repeat exact main/CI/deployment/health,
+   file identity, ordered ledger, catalog, RLS, ACL, source/ABI, runtime,
+   rollback, linked lint, and stopped-safety verification with both rows exactly
+   once.
+
+Applying and verifying both migrations does not prove a provider call. Perform
+separate signed-in create/return/reload acceptance while workers remain OFF,
+then require separately authorized real provider-backed execution through an
+admitted claim, repository change, draft pull request, stable exact-head CI,
+and immutable audit evidence before any production-ready declaration. On any
+identity, history, hash, catalog, ACL, runtime, lint, health, or safety
+mismatch, stop and contain only with a new reviewed forward migration.
+
 ## Grok immutable provider-admission tail (2026-08-31)
 
 Use only `.github/workflows/grok-bot-release-migrations.yml` for migration
@@ -331,7 +389,7 @@ the measured list, not today's total outstanding migration count. Later exact ev
 forward candidates.
 Do not add any of them to the 19-row measurement or
 infer a new overall missing count without another complete ledger probe. As of this release,
-the repository total is 215 migration files after integration with current `origin/main`. Those two numbers do not stand in a prefix relationship, and the reason
+the repository total is 217 migration files after integration with current `origin/main`. Those two numbers do not stand in a prefix relationship, and the reason
 matters: the
 hosted ledger is **not a contiguous prefix** of the local files. It has gaps in the middle and
 rows well past them. Any sentence of the form "everything after `X` is outstanding" is therefore

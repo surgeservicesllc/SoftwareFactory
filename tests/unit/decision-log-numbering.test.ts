@@ -42,7 +42,7 @@ const KNOWN_OUT_OF_ORDER = new Set([141, 149]);
 
 function headings(): { number: number; line: number; title: string }[] {
   const found: { number: number; line: number; title: string }[] = [];
-  decisions.split("\n").forEach((text, index) => {
+  decisions.replace(/\r\n?/g, "\n").split("\n").forEach((text, index) => {
     const match = /^## ADR-(\d+)\s*[-–—]\s*(.+)$/.exec(text);
     if (match) found.push({ number: Number(match[1]), line: index + 1, title: match[2] });
   });

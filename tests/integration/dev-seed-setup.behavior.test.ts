@@ -283,8 +283,8 @@ describe("the development seed's setup sequence", { timeout: 240_000 }, () => {
     // leave every factory page empty. This is the assertion that catches it.
     await asServiceRole();
     const claimed = await db.query<{ claim_planned_graph: { graph_id?: string } | null }>(
-      `select public.claim_planned_graph_v2(
-         $1, $2::text[], $3, $4::jsonb, 2
+      `select public.claim_planned_graph_v3(
+         $1, $2::text[], $3, $4::jsonb, 3
        ) as claim_planned_graph`,
       ["dev-seed-lifecycle", WORKER_SUPPORTED_EXECUTORS, CLAIM_REPOSITORY,
         JSON.stringify(CLAIM_REQUIRED_CHECKS)],

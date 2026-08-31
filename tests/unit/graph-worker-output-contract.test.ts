@@ -91,6 +91,23 @@ function node(
   };
 }
 
+function admission(provider: "anthropic" | "openai" = "anthropic") {
+  return {
+    id: "70000000-0000-4000-8000-000000000001",
+    lane: provider === "anthropic" ? "graph_model" : "phase1c",
+    provider,
+    model: provider === "anthropic" ? "claude-sonnet-5" : "gpt-5.3-codex",
+    credential_purpose: provider === "anthropic" ? "claude_2" : "codex_2",
+    credential_ref: provider === "anthropic"
+      ? "SOFTWAREFACTORY_CLAUDE_CODE_OAUTH_TOKEN_2"
+      : "SOFTWAREFACTORY_CODEX_AUTH_JSON_2",
+    provider_credential_id: "70000000-0000-4000-8000-000000000002",
+    provider_credential_rotated_at: "2026-08-31T12:00:00.000Z",
+    ai_account_id: "70000000-0000-4000-8000-000000000003",
+    admission_sha256: "b".repeat(64),
+  };
+}
+
 function claim(
   outputSchema: unknown = FACTS_SCHEMA,
   overrides: Readonly<Record<string, unknown>> = {},
@@ -106,6 +123,7 @@ function claim(
     risk_level: "GREEN",
     project_repository: "owner/repository",
     project_default_branch: "develop",
+    grok_admission_required: false,
     required_check_names: ["CI"],
     required_checks_sha256: "a".repeat(64),
     is_lifecycle: false,
@@ -158,6 +176,35 @@ function compile(input: ClaimedGraph) {
 }
 
 describe("claimed graph output contracts", () => {
+  it("keeps an ordinary non-Grok protocol-v3 claim parseable without admissions", () => {
+    const ordinary = claim();
+    expect(ordinary.grok_admission_required).toBe(false);
+    const { grok_admission_required: _omitted, ...missingLaunchIdentity } = ordinary;
+    expect(parseClaimedGraph(missingLaunchIdentity).ok).toBe(false);
+  });
+
+  it("refuses a Grok claim when a MODEL admission is missing or uses the other provider", () => {
+    expect(() => claim(FACTS_SCHEMA, { grok_admission_required: true })).toThrow(
+      /exact Anthropic admission/i,
+    );
+    expect(() => claim(FACTS_SCHEMA, {
+      grok_admission_required: true,
+      nodes: [
+        { ...node("producer", "50000000-0000-4000-8000-000000000001"), execution_admission: admission("openai") },
+      ],
+      edges: [],
+    })).toThrow(/exact Anthropic admission/i);
+  });
+
+  it("refuses provider admission metadata injected into a non-Grok claim", () => {
+    expect(() => claim(FACTS_SCHEMA, {
+      nodes: [
+        { ...node("producer", "50000000-0000-4000-8000-000000000001"), execution_admission: admission() },
+      ],
+      edges: [],
+    })).toThrow(/non-Grok claim cannot inject/i);
+  });
+
   it("parses the complete graph-scoped Phase 1C bridge projection", () => {
     const parsed = claim(FACTS_SCHEMA, {
       template_key: "full_lifecycle",
@@ -194,8 +241,31 @@ describe("claimed graph output contracts", () => {
     });
   });
 
-  it("reduces malformed bridge evidence to absent so anchors fail as Not Connected", () => {
-    const parsed = claim(FACTS_SCHEMA, {
+  it("rejects malformed bridge evidence instead of downgrading it to absent", () => {
+    const raw = {
+      graph_run_id: graphRunId,
+      graph_id: graphId,
+      organization_id: organizationId,
+      project_id: projectId,
+      project_name: "Repository Project",
+      goal: "Prove durable node contracts",
+      topology: "SEQUENTIAL",
+      risk_level: "GREEN",
+      project_repository: "owner/repository",
+      project_default_branch: "develop",
+      grok_admission_required: false,
+      required_check_names: ["CI"],
+      required_checks_sha256: "a".repeat(64),
+      is_lifecycle: true,
+      budget: {
+        max_nodes: 10,
+        max_concurrent_nodes: 2,
+        max_duration_ms: 60_000,
+        max_retries: 4,
+        max_discovery_rounds: 5,
+      },
+      nodes: [node("producer", "50000000-0000-4000-8000-000000000001")],
+      edges: [],
       template_key: "full_lifecycle",
       template_version: 2,
       phase1c_state: "PULL_REQUEST_RECORDED",
@@ -206,10 +276,12 @@ describe("claimed graph output contracts", () => {
         validation_round: 99,
         validations: new Array(51).fill({ name: "diff-check", status: "passed", duration_ms: 1 }),
       },
-    });
+    };
 
-    expect(parsed.phase1c_head_sha ?? null).toBeNull();
-    expect(parsed.validation_evidence ?? null).toBeNull();
+    const parsed = parseClaimedGraph(raw);
+    expect(parsed.ok).toBe(false);
+    if (parsed.ok) return;
+    expect(parsed.detail).toMatch(/must match pattern|invalid uuid|too big/i);
   });
 
   it("refuses a legacy unconstrained output contract before execution", () => {

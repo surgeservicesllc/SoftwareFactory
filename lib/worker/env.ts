@@ -50,7 +50,7 @@ export type WorkerConfiguration = Readonly<{
   requiredChecks: readonly string[];
   supabaseUrl: string;
   supabaseServiceRoleKey: string;
-  codexAuth: CodexAuthResolution;
+  resolveLegacyCodexAuth: () => CodexAuthResolution;
   commitIdentity: { name: string; email: string };
 }>;
 
@@ -120,6 +120,18 @@ export function readWorkerConfiguration(
     );
   }
 
+  // Protocol-v3 claims carry an immutable execution admission whose exact
+  // credential is opened only after the claim. Capture the legacy ambient
+  // inputs without parsing them here so a missing or malformed neighboring
+  // account cannot block an admission-backed job before it is claimed. The
+  // resolver still fails closed when a legacy, no-admission job actually
+  // needs that ambient credential.
+  const legacyCodexAuthEnvironment = Object.freeze({
+    SOFTWAREFACTORY_CODEX_AUTH_MODE: environment.SOFTWAREFACTORY_CODEX_AUTH_MODE,
+    SOFTWAREFACTORY_CODEX_AUTH_JSON: environment.SOFTWAREFACTORY_CODEX_AUTH_JSON,
+    OPENAI_API_KEY: environment.OPENAI_API_KEY,
+  });
+
   return Object.freeze({
     enabled: parsed.data.SOFTWAREFACTORY_WORKER_ENABLED === "true",
     runtime: parsed.data.SOFTWAREFACTORY_WORKER_RUNTIME,
@@ -132,8 +144,9 @@ export function readWorkerConfiguration(
     requiredChecks: Object.freeze(requiredChecks),
     supabaseUrl: parsed.data.NEXT_PUBLIC_SUPABASE_URL,
     supabaseServiceRoleKey: parsed.data.SUPABASE_SERVICE_ROLE_KEY,
-    // Throws a named CodexAuthError rather than resolving to a billed default.
-    codexAuth: resolveCodexAuth(environment),
+    // Throws a named CodexAuthError rather than resolving to a billed default,
+    // but only when a claimed legacy job has no immutable admission.
+    resolveLegacyCodexAuth: () => resolveCodexAuth(legacyCodexAuthEnvironment),
     commitIdentity: Object.freeze({
       name: parsed.data.GITHUB_COMMIT_IDENTITY_NAME,
       email: parsed.data.GITHUB_COMMIT_IDENTITY_EMAIL,

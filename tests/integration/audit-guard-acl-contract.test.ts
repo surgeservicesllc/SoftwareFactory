@@ -37,6 +37,8 @@ const protectedChain = new Set([
   "20260822001000_factory_any_model_record_only.sql",
   "20260822001100_contract_resume_extraction_function_acl.sql",
   "20260822001200_contract_clear_function_acls.sql",
+  "20260831000900_grok_claim_admission_fence.sql",
+  "20260831001000_grok_specialist_admission_planning.sql",
 ]);
 
 const postureQuery = `

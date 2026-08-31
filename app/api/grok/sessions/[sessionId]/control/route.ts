@@ -77,6 +77,11 @@ async function wakeResumedGraph(
   graphId: string,
 ): Promise<boolean> {
   try {
+    const admissionRead = await client.rpc("assert_grok_graph_admission_as_member", {
+      p_organization_id: organizationId,
+      p_graph_id: graphId,
+    });
+    if (admissionRead.error || admissionRead.data !== true) return false;
     const graphRead = await client.from("graphs")
       .select("id,organization_id,project_id,github_repository_id,pause_requested_at,withdrawn_at")
       .eq("id", graphId)

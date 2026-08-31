@@ -296,7 +296,8 @@ describe("the protected factory any-model record-only chain", () => {
     expect(command).toContain("FOUNDATION_READY=");
     for (const [key, path] of Object.entries(protectedPostflights)) {
       expect(command).toContain(`-f ${path}`);
-      const body = readFileSync(resolve(repositoryRoot, path), "utf8");
+      const body = readFileSync(resolve(repositoryRoot, path), "utf8")
+        .replace(/\r\n?/g, "\n");
       expect(createHash("sha256").update(body).digest("hex"))
         .toBe(protectedPostflightHashes[key as keyof typeof protectedPostflightHashes]);
     }

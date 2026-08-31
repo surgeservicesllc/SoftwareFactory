@@ -76,6 +76,9 @@ describe("Grok session control route", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     harness.rpc.mockImplementation((name: string) => {
+      if (name === "assert_grok_graph_admission_as_member") {
+        return Promise.resolve({ data: true, error: null });
+      }
       if (name === "resolve_phase1c_command_target") {
         return { single: vi.fn().mockResolvedValue({ data: target, error: null }) };
       }
@@ -298,7 +301,7 @@ describe("Grok session control route", () => {
     expect(response.status).toBe(200);
     expect(body).toMatchObject({ replayed: true, workerWoken: true });
     expect(harness.applyControl).toHaveBeenCalledBefore(harness.dispatchGraphWorker);
-    expect(harness.rpc).not.toHaveBeenCalledWith("set_graph_pause_as_member", expect.anything());
+    expect(harness.rpc).not.toHaveBeenCalledWith("set_graph_pause_as_member_v2", expect.anything());
   });
 
   it("fails an ambiguous requested Resume recovery without dispatch", async () => {
@@ -398,11 +401,17 @@ describe("Grok session control route", () => {
     harness.tenant.mockResolvedValueOnce({
       activeOrganization: { id: organizationId, role: "owner" },
       client: {
-        rpc: vi.fn().mockImplementation((name: string) => name === "resolve_phase1c_command_target"
-          ? { single: vi.fn().mockResolvedValue({
+        rpc: vi.fn().mockImplementation((name: string) => {
+          if (name === "assert_grok_graph_admission_as_member") {
+            return Promise.resolve({ data: true, error: null });
+          }
+          if (name === "resolve_phase1c_command_target") {
+            return { single: vi.fn().mockResolvedValue({
               data: { ...target, project_id: "a0000000-0000-4000-8000-00000000000a" }, error: null,
-            }) }
-          : Promise.resolve({ data: { id: graphId }, error: null })),
+            }) };
+          }
+          return Promise.resolve({ data: { id: graphId }, error: null });
+        }),
       },
     });
 

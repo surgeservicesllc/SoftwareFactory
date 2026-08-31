@@ -134,7 +134,7 @@ async function prepareGateNode(
 async function claim(client: PGlite): Promise<{ graph_run_id: string } | null> {
   await asWorker(client);
   const result = await client.query<{ c: { graph_run_id: string } | null }>(
-    `select public.claim_planned_graph_v2($1, $2, $3, $4::jsonb, 2) as c`,
+    `select public.claim_planned_graph_v3($1, $2, $3, $4::jsonb, 3) as c`,
     [WORKER, EXECUTORS, CLAIM_REPOSITORY, JSON.stringify(CLAIM_REQUIRED_CHECKS)],
   );
   return result.rows[0].c;

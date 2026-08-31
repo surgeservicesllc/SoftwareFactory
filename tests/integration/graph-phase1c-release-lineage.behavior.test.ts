@@ -785,16 +785,16 @@ describe("graph to Phase 1C release lineage", { timeout: 240_000 }, () => {
 
     await asWorker(db);
     const mismatched = await db.query<{ claim: unknown }>(
-      `select public.claim_planned_graph_v2(
+      `select public.claim_planned_graph_v3(
          'initial-lineage-worker', array['MODEL','ANCHOR'], 'factory/lineage',
-         '["Different repository policy"]'::jsonb, 2
+         '["Different repository policy"]'::jsonb, 3
        ) as claim`,
     );
     expect(mismatched.rows[0].claim).toBeNull();
     await expect(db.query(
-      `select public.claim_planned_graph_v2(
+      `select public.claim_planned_graph_v3(
          'initial-lineage-worker', array['MODEL','ANCHOR'], 'factory/lineage',
-         null::jsonb, 2
+         null::jsonb, 3
        )`,
     )).rejects.toThrow(/exact repository and required-check policy/i);
     await resetRole(db);
@@ -816,9 +816,9 @@ describe("graph to Phase 1C release lineage", { timeout: 240_000 }, () => {
 
     await asWorker(db);
     expect((await db.query<{ claim: unknown }>(
-      `select public.claim_planned_graph_v2(
+      `select public.claim_planned_graph_v3(
          'initial-lineage-worker', array['MODEL','ANCHOR'], 'factory/lineage',
-         $1::jsonb, 2
+         $1::jsonb, 3
        ) as claim`,
       [requiredCheckNamesJson],
     )).rows[0].claim).toBeNull();
@@ -832,9 +832,9 @@ describe("graph to Phase 1C release lineage", { timeout: 240_000 }, () => {
     await db.exec("set session_replication_role = origin");
     await asWorker(db);
     const result = await db.query<{ claim: Record<string, unknown> }>(
-      `select public.claim_planned_graph_v2(
+      `select public.claim_planned_graph_v3(
          'initial-lineage-worker', array['MODEL','ANCHOR'], 'factory/lineage',
-         $1::jsonb, 2
+         $1::jsonb, 3
        ) as claim`,
       [requiredCheckNamesJson],
     );
@@ -989,8 +989,8 @@ describe("graph to Phase 1C release lineage", { timeout: 240_000 }, () => {
   it("holds an approved full lifecycle architecture until exact PR evidence exists", async () => {
     await asWorker(db);
     const held = await db.query<{ claim: unknown }>(
-      `select public.claim_planned_graph_v2(
-         'lineage-worker', array['MODEL','ANCHOR'], 'factory/lineage', $1::jsonb, 2
+      `select public.claim_planned_graph_v3(
+         'lineage-worker', array['MODEL','ANCHOR'], 'factory/lineage', $1::jsonb, 3
        ) as claim`,
       [requiredCheckNamesJson],
     );
@@ -1132,8 +1132,8 @@ describe("graph to Phase 1C release lineage", { timeout: 240_000 }, () => {
 
     await asWorker(db);
     const result = await db.query<{ claim: Record<string, unknown> }>(
-      `select public.claim_planned_graph_v2(
-         'lineage-worker', array['MODEL','ANCHOR'], 'factory/lineage', $1::jsonb, 2
+      `select public.claim_planned_graph_v3(
+         'lineage-worker', array['MODEL','ANCHOR'], 'factory/lineage', $1::jsonb, 3
        ) as claim`,
       [requiredCheckNamesJson],
     );

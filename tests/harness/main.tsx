@@ -57,6 +57,7 @@ import { ReportsConsole } from "@/components/reports-console";
 import { RunsConsole } from "@/components/runs-console";
 
 import { buildPortfolio } from "@/lib/portfolio/aggregate";
+import type { GrokSessionDetail } from "@/lib/grok/contracts";
 
 import { JobSeekerContactsPanel } from "@/components/job-seeker/contacts-panel";
 import { JobSeekerDocumentsPanel } from "@/components/job-seeker/documents-panel";
@@ -110,6 +111,70 @@ import {
   WORKER_STATUS,
   WORKFLOW_TEMPLATES,
 } from "./fixtures";
+
+const GROK_HARNESS_SESSION: GrokSessionDetail = {
+  session: {
+    id: "22222222-2222-4222-8222-222222222222",
+    projectId: PROJECT_ID,
+    projectName: "Software Factory",
+    title: "Repair checkout",
+    goal: "Fix checkout and prove the result.",
+    status: "blocked",
+    commandId: null,
+    graphId: null,
+    graphRunId: null,
+    createdAt: "2026-08-30T12:00:00.000Z",
+    updatedAt: "2026-08-30T12:01:00.000Z",
+    allowedActions: [],
+  },
+  messages: [
+    {
+      id: "grok-message-user",
+      role: "user",
+      content: "Fix checkout and prove the result.",
+      createdAt: "2026-08-30T12:00:00.000Z",
+    },
+    {
+      id: "grok-message-assistant",
+      role: "assistant",
+      content: "The deterministic plan is saved. Execution is not connected.",
+      createdAt: "2026-08-30T12:01:00.000Z",
+    },
+  ],
+  tasks: [
+    {
+      id: "grok-task-inspect",
+      taskKey: "inspect",
+      title: "Inspect checkout",
+      status: "pending_graph",
+      provider: "anthropic",
+      model: "claude-sonnet",
+      agentName: "Claude reviewer",
+      attempt: null,
+      dependsOn: [],
+    },
+    {
+      id: "grok-task-repair",
+      taskKey: "repair",
+      title: "Repair checkout",
+      status: "pending_graph",
+      provider: "openai",
+      model: "gpt-codex",
+      agentName: "Codex builder",
+      attempt: null,
+      dependsOn: ["inspect"],
+    },
+  ],
+  events: [
+    {
+      id: "grok-event-blocked",
+      type: "session.blocked",
+      detail: "No admitted graph or provider execution was recorded.",
+      createdAt: "2026-08-30T12:01:00.000Z",
+    },
+  ],
+  artifacts: [],
+};
 
 /**
  * Serves the fixture reads these components make.
@@ -248,7 +313,12 @@ function serveFixtures() {
       return json({ connections: FACTORY_BRIEFING_CONNECTIONS });
     }
     if (url.includes("/api/github/connections")) return json({ connections: CONNECTIONS });
-    if (url.includes("/api/grok/sessions")) return json({ sessions: [] });
+    if (url.includes(`/api/grok/sessions/${GROK_HARNESS_SESSION.session.id}`)) {
+      return json(GROK_HARNESS_SESSION);
+    }
+    if (url.includes("/api/grok/sessions")) {
+      return json({ sessions: [GROK_HARNESS_SESSION.session] });
+    }
     if (url.includes("/api/projects")) return json({ projects: PROJECTS });
     if (url.includes("/api/tasks") || url.includes("/api/backlog")) return json({ tasks: [] });
     if (url.includes("/api/organizations")) {
