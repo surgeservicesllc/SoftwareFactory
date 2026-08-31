@@ -7,7 +7,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 
 const migrationPath = resolve(
   import.meta.dirname,
-  "../../supabase/migrations/20260830001200_grok_planning_failure.sql",
+  "../../supabase/migrations/20260830001100_grok_planning_failure.sql",
 );
 
 describe("Grok planning-failure migration contract", () => {

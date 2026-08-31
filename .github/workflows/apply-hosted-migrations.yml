@@ -5973,7 +5973,7 @@ jobs:
           echo "Applied and verified: a voided run no longer consumes a gate approval."
 
       - name: Apply the Budget Tracker schema (scope=budget-tracker)
-        # Two files, in order. 20260829000300 adds four activity enum values
+        # Two files, in order. 20260829000100 adds four activity enum values
         # and nothing else; 20260829000200 creates the six budget_* tables,
         # their RLS, indexes and two read functions. They are separate
         # migrations, applied as separate transactions, because Postgres
@@ -6001,7 +6001,14 @@ jobs:
             echo "::add-mask::$DB_URL"
           fi
 
-          TYPES_FILE=supabase/migrations/20260829000300_budget_tracker_activity_types.sql
+          # 20260829000100, not 000300: the activity-types migration was
+          # renumbered when the job-seeker alert engine took 000300, and this
+          # scope kept the old name. Its pinned hash still matches the file
+          # byte for byte, so only the version drifted — but a dispatch would
+          # have died at sha256sum with "No such file" instead of applying,
+          # and the ledger probe below was asking about a version this
+          # repository does not contain.
+          TYPES_FILE=supabase/migrations/20260829000100_budget_tracker_activity_types.sql
           SCHEMA_FILE=supabase/migrations/20260829000200_budget_tracker_foundation.sql
           if [ "$(sha256sum "$TYPES_FILE" | cut -d' ' -f1)" != "3404458b6bc99c776659897baf89933acfc6b75bce9282d3f21bb9bb963b18a4" ]; then
             echo "::error::Migration hash mismatch on ${TYPES_FILE}; refusing production DDL."
@@ -6012,7 +6019,7 @@ jobs:
             exit 1
           fi
 
-          for VERSION in 20260829000300 20260829000200; do
+          for VERSION in 20260829000100 20260829000200; do
             ROW=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
               "select count(*) from supabase_migrations.schema_migrations where version = '${VERSION}';")
             if [ "$ROW" != "0" ]; then
@@ -6026,7 +6033,7 @@ jobs:
           echo "Applying ${SCHEMA_FILE}"
           psql "$DB_URL" -v ON_ERROR_STOP=1 -1 -q -f "$SCHEMA_FILE"
 
-          for VERSION in 20260829000300 20260829000200; do
+          for VERSION in 20260829000100 20260829000200; do
             if [ "$MODE" = "token" ]; then
               npx supabase migration repair --status applied "$VERSION"
             else

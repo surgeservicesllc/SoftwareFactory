@@ -152,6 +152,16 @@ the full seeded E2E journey passes — increment 10 of the plan.
   address and the customer claims it themselves. /customer-portal and
   /Services/portal. 20260830001800; hosted apply: scope=customer-portal
   after merge.
+- [x] The `budget-tracker` apply scope pointed at
+  `20260829000300_budget_tracker_activity_types.sql`, a name the file lost
+  when the job-seeker alert engine took 000300. Its pinned hash still
+  matched the real file byte for byte, so only the version had drifted —
+  but a dispatch would have died at `sha256sum` with "No such file"
+  instead of applying, and the ledger probe asked about a version this
+  repository does not contain. Fixed to `20260829000100`, and
+  `tests/unit/migration-path-references.test.ts` now fails on any
+  `supabase/migrations/...` path a workflow or test names that is not a
+  real file.
 - [ ] Increment 10 follow-on: the COMMERCIAL portal view — open
   conditions, device summary with trend heat maps, sighting tickets, an
   SDS/compliance document library and inspection history. PestPac has it;

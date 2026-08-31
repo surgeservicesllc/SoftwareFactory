@@ -44,7 +44,7 @@ jobs:
       MIGRATION_00900_SHA256: 08f4c618954d4fe65384f396a881f6546591a413c6fd3facacaaaa9ce8d984f5
       MIGRATION_01000: supabase/migrations/20260830001000_grok_chief_of_staff_persistence.sql
       MIGRATION_01000_SHA256: cf17ece506e30beb08163c8bc5888b6b18341bb4e66f61bafaabd6912f225aa6
-      MIGRATION_01100: supabase/migrations/20260830001200_grok_planning_failure.sql
+      MIGRATION_01100: supabase/migrations/20260830001100_grok_planning_failure.sql
       MIGRATION_01100_SHA256: 22c035897cb51c611aa373c83e637dc4e033352d9079059521eda7fefa35e8f7
       PRODUCTION_HEALTH_URL: https://www.theagoras.com/api/health
       VERCEL_PROJECT_ID: prj_pAsrhftaVWI4SyaqstgRVSWHJkdD

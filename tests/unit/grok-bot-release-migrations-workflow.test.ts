@@ -25,7 +25,7 @@ const migrations = [
   {
     version: "20260830001200",
     stem: "MIGRATION_01100",
-    path: "supabase/migrations/20260830001200_grok_planning_failure.sql",
+    path: "supabase/migrations/20260830001100_grok_planning_failure.sql",
     hash: "22c035897cb51c611aa373c83e637dc4e033352d9079059521eda7fefa35e8f7",
   },
 ] as const;
