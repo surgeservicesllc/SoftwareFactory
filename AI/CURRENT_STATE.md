@@ -27,7 +27,7 @@ parity suite pins to the database's.
 
 Repository only: the migration is not yet applied to hosted.
 
-## 2026-08-31: Grok immutable provider admission is release-ready, not yet hosted (ADR-208)
+## 2026-08-31: Grok immutable provider admission is hosted; verifier containment is in progress (ADR-208)
 
 The Grok launch boundary now fails closed unless every executable canonical
 node carries an immutable, safe provider admission. New planner version-2
@@ -50,6 +50,19 @@ rollback/health checks. The workflow's rollback canary proves old-launch
 denial, stale-revision zero residue, valid launch and exact replay, immutable
 admission rows, a paused graph, and zero graph/node runs.
 
+Exact application commit `49b087e1044c157ea24271c81070a2c38b03c8da`
+passed all four jobs in CI run `33364471690` and reached exact READY Vercel
+deployment `dpl_FeUuBGBeQBDEieFtquUoHRCBPWbc`. Protected apply run
+`33365674624` passed every preflight, applied and ledgered `20260831000100`
+exactly once, and reloaded PostgREST, then stopped at postflight because the
+workflow's two new `prosrc` hashes accidentally included delimiter text.
+Independent exact-body/PGlite catalog checks prove the hosted functions and
+ACLs are correct. The verifier now derives the PostgreSQL-stored body hashes:
+`3c2b855b41873447c738b2b220d10544` for the admission hash helper and
+`78055b8bc6d6d44dbb1cbd6e94657a8d` for the v2 launcher. Do not rerun,
+repair, replay, or down-migrate `20260831000100`; publish this verifier-only
+containment and run only the independent read-only `verify` scope.
+
 This is launch admission, not worker admission. Existing graph Resume/wake and
 worker-claim paths do not yet require or revalidate an admission row, so
 workers, autonomy, and every automatic action remain OFF and the global kill
@@ -57,8 +70,8 @@ switch remains ON. Research/deploy prompts currently fail closed at canonical
 admission, specialist-only rosters can lack canonical evaluation/decision
 coverage, and wildcard role normalization still needs a new forward migration.
 Those are explicit follow-ups; **GROK BOT: PRODUCTION READY is not declared.**
-The application and migration are still awaiting exact-main CI, Vercel,
-protected hosted apply/verify, and signed-in production acceptance.
+The hosted migration is awaiting the corrected exact-main verifier release,
+independent read-only verification, and signed-in production acceptance.
 
 ## 2026-08-31: Grok atomic control is production accepted; provider loop remains open (ADR-204)
 

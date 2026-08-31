@@ -67,6 +67,15 @@
   service-role execution from the legacy unadmitted launcher. The dedicated
   one-file workflow verifies exact ledger, forced RLS, ACL/catalog/source,
   linked lint, runtime/replay/immutability/rollback, health, and stopped safety.
+- [ ] Finish verifier-only containment for the hosted admission migration.
+  Exact app commit `49b087e1044c157ea24271c81070a2c38b03c8da` passed all four
+  CI jobs and exact READY production health. Apply run `33365674624` then
+  applied and ledgered `20260831000100` once before a false-negative
+  postflight: the workflow fingerprints for both new function bodies included
+  delimiter text that PostgreSQL does not store in `prosrc`. Correct the two
+  hashes from the exact migration bodies, require exact-head CI/READY again,
+  and run only `scope=verify`. Never rerun, repair, replay, or down-migrate the
+  already accepted migration.
 - [ ] Make admission cover every honest prompt/roster without inventing work:
   preserve research/deploy as durable plan-only sessions or add dedicated
   canonical templates; persist a deterministic immutable admission roster so

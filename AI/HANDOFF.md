@@ -182,7 +182,7 @@ previous audit — that is the third stale row found this way.
 
 ## Newest (2026-08-31, latest+28): immutable Grok launch admission (ADR-208)
 
-This release candidate adds `20260831000100_grok_provider_admission.sql`
+This release adds `20260831000100_grok_provider_admission.sql`
 (LF SHA-256 `37809d9b3d9bc760ffbee501fcca383f0daa5665fb047964734603ceed41aef7`).
 It adds forced-RLS, append-only `grok_execution_admissions` and the sole
 service-role executable v2 launch RPC. The old launcher remains byte-identical
@@ -199,7 +199,22 @@ stale coverage. Version-1 plans reload but never execute. The dedicated release
 workflow has one exact `provider-admission` scope and a rollback-only hosted
 canary; never use broad migration apply, reset, repair, down, or replay.
 
-PICK UP HERE after the release evidence is recorded: research/deploy need
+HOSTED STATUS: exact app commit
+`49b087e1044c157ea24271c81070a2c38b03c8da` passed all four jobs in CI
+`33364471690` and is exact READY production deployment
+`dpl_FeUuBGBeQBDEieFtquUoHRCBPWbc`. Apply run `33365674624` passed all
+prechecks, applied and ledgered `20260831000100` once, and reloaded PostgREST.
+It then failed closed because the postflight's two new `prosrc` fingerprints
+included `$function$` delimiter text. Exact stored-body hashes are
+`3c2b855b41873447c738b2b220d10544` (helper) and
+`78055b8bc6d6d44dbb1cbd6e94657a8d` (v2 launcher); native/PGlite catalog
+checks prove the function identities and raw ACLs are otherwise exact. This is
+verifier-only containment: publish the corrected workflow, wait for exact-head
+CI/READY, then dispatch read-only `scope=verify`. Do not dispatch
+`provider-admission` again and do not add an attestation-only migration.
+
+PICK UP HERE after corrected read-only verification and production acceptance
+are recorded: research/deploy need
 honest plan-only handling (or dedicated templates), specialist canonical
 coverage needs a persisted admission roster, and `*` needs identical TS/SQL
 normalization in a new forward migration. Then fence every Resume/wake and

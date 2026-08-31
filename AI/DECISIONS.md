@@ -4897,8 +4897,8 @@ Hosted apply scope `service-integrations`.
 ## ADR-208 - Provider intent becomes immutable admission before graph creation
 
 - **Date**: 2026-08-31
-- **Status**: Accepted in the repository; hosted release and provider-backed
-  execution acceptance pending
+- **Status**: Hosted migration applied once; corrected read-only verification
+  and provider-backed execution acceptance pending
 - **Decision**: a planned provider/model is not execution authority. Every
   executable canonical node must carry one safe immutable admission snapshot:
   assignment and bot revisions, role and AI-account timestamps, provider/model,
@@ -4926,6 +4926,14 @@ Hosted apply scope `service-integrations`.
   off, kill switch on, exact prior ledger/catalog, linked lint, a rollback-only
   runtime canary, postflight catalog/ACL/health, and no reset, repair, replay,
   broad migration apply, or down path.
+- **Release incident and containment**: protected run `33365674624` applied and
+  ledgered `20260831000100` once, then failed closed because two workflow
+  fingerprints included `$function$` delimiter text that PostgreSQL excludes
+  from `pg_proc.prosrc`. Exact-body and native catalog checks prove the hosted
+  function identities and raw ACLs are correct. The accepted containment is a
+  verifier-only forward commit with hashes derived from the migration bodies,
+  followed by read-only `scope=verify`; the migration must never be rerun,
+  repaired, replayed, or replaced by an attestation-only migration.
 - **Limit**: launch admission is not claim admission. Existing Resume/wake and
   worker claims are still unable to prove complete current admissions, and
   MODEL execution still uses the worker adapter boundary. Research/deploy,

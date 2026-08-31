@@ -1,6 +1,6 @@
 # SoftwareFactory — shared working status
 
-## GROK IMMUTABLE PROVIDER ADMISSION RELEASE CANDIDATE (2026-08-31 — PICK UP HERE)
+## GROK IMMUTABLE PROVIDER ADMISSION VERIFIER CONTAINMENT (2026-08-31 — PICK UP HERE)
 
 - New forward migration `20260831000100_grok_provider_admission.sql`, canonical
   LF SHA-256 `37809d9b3d9bc760ffbee501fcca383f0daa5665fb047964734603ceed41aef7`,
@@ -14,9 +14,16 @@
   Its unit contract is 11/11 green; focused admission/security is 119/119;
   exact-main lint, typecheck, 6,068 tests (seven skipped), the 266-page
   production build, YAML, shell syntax, and hash checks pass.
-- Release still needs exact-main four-job CI, READY Vercel identity, protected
-  provider-admission apply + verify, and signed-in production queue/reload
-  acceptance. Do not rerun any prior Grok migration.
+- Exact commit `49b087e1044c157ea24271c81070a2c38b03c8da` passed all four
+  jobs in CI `33364471690` and exact READY Vercel deployment
+  `dpl_FeUuBGBeQBDEieFtquUoHRCBPWbc`. Protected run `33365674624`
+  applied and ledgered `20260831000100` once, then stopped at postflight
+  because two verifier hashes incorrectly included `$function$` delimiter
+  text. Exact-body/PGlite catalog checks prove the hosted functions and ACLs
+  are correct. Publish the verifier-only hash fix, wait for exact-head CI and
+  READY production again, then run only read-only `scope=verify` and signed-in
+  production queue/reload acceptance. Never rerun, repair, replay, or
+  down-migrate the applied migration.
 - NEXT CODE SLICE: plan-only research/deploy; immutable admission roster for
   specialist evaluation/decision coverage; wildcard normalization in TS plus
   a new forward RPC; then admission-fence Resume/wake and worker claim.

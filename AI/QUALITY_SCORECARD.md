@@ -124,9 +124,15 @@ evidence table is forced
 RLS with no direct non-owner grants, its rows reject update/delete/truncate,
 the old launcher is no longer service-role callable, and the new workflow
 canary rolls every fixture back after proving mismatch zero residue, valid
-replay, hash integrity, pause, and zero graph/node runs. Hosted apply and
-signed-in production acceptance are still pending, and worker claim/wake is
-not admission-fenced, so this score does not declare production readiness.
+replay, hash integrity, pause, and zero graph/node runs. Exact commit
+`49b087e1044c157ea24271c81070a2c38b03c8da` passed CI `33364471690` and
+exact READY deployment `dpl_FeUuBGBeQBDEieFtquUoHRCBPWbc`. Protected run
+`33365674624` applied and ledgered the migration once, then failed closed on
+two stale workflow-only `prosrc` fingerprints; exact-body/PGlite catalog
+verification proves the hosted function identities and ACLs are otherwise
+correct. Corrected exact-head read-only verification and signed-in production
+acceptance are still pending, and worker claim/wake is not admission-fenced,
+so this score does not declare production readiness.
 
 **Addendum, 2026-08-31 latest+25 - WDO reports (ADR-205):**
 services-wdo-inspections.behavior 14 on the real chain: an inspection
