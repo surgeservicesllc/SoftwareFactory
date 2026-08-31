@@ -265,6 +265,9 @@ the full seeded E2E journey passes — increment 10 of the plan.
   contradiction check on the trigger rather than the function, and issued
   reports on the customer's Compliance tab. /Services/wdo. 20260830010100;
   hosted apply: scope=wdo-inspections after merge.
+- [x] ADR-206: the commercial activity heat map — four cell states rather
+  than one opacity ramp, so a month nobody scanned cannot read as a clean
+  one. Closed the matrix row ADR-203 had already earned the data for.
 - [ ] Increment 12 follow-on: UNATTENDED billing. The generator is correct
   and idempotent but nothing calls it on a schedule, because nothing in
   this product runs on a timer. Needs a scheduler or a worker executor —

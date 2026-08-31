@@ -4782,3 +4782,34 @@ them through `crm_wdo_issue_report` rather than writing `status`**, so
 every issued report in the book passed the same check a real one would.
 
 Hosted apply scope `wdo-inspections`.
+
+## ADR-206 - The activity heat map draws four states, not one ramp
+
+**A follow-on to ADR-203**, closing the matrix's "commercial trend reports
+with heat maps" row — which was still marked GAP after ADR-203 had already
+shipped the data behind it. The audit that found that also found what was
+genuinely missing: not the trend, but the rendering.
+
+`crm_portal_device_trend` returns `scans` and `scans_with_count` beside
+`activity_total`, and ADR-203 said why. This is the surface that finally
+uses it. A single colour ramp would flatten three different facts into
+"pale", so the grid draws **four states**:
+
+- **nobody scanned** — dashed and empty, not the palest shade of the scale.
+  It is an absence, not a small amount of activity.
+- **scanned, nothing written down** — its own flat grey, marked `?`.
+  Somebody went; nobody counted.
+- **counted at nothing** — the clean colour. **This is the only one of the
+  four that means the site was clean**, and the whole design exists so the
+  other two cannot borrow that reading.
+- **activity** — the ramp, shaded against the highest month.
+
+**The grid is built from the account's own months and station types, not
+from the rows the function returned.** The function only emits a row where
+a scan happened, so the months nobody visited are exactly the ones ABSENT
+from the data — rendering only what came back would silently drop the most
+important cells. `tests/unit/portal-heat-map` pins the classification,
+including one assertion that the four states never collapse into fewer.
+
+The legend names all four in words, because a colour a customer has to
+guess at is not a report.

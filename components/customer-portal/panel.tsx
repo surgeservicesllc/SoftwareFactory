@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Receipt } from "lucide-react";
 
 import { Card, Notice, PageHeader, SectionTitle } from "@/components/ui";
@@ -214,6 +214,57 @@ const DEVICE_TYPE_LABELS: Record<string, string> = {
  * is what a customer sees, and "unknown" must never be drawn the same as
  * "clear". A station nobody scanned is not a clean station.
  */
+/**
+ * A cell in the activity heat map, and the four states it can be in.
+ *
+ * The whole reason `crm_portal_device_trend` returns `scans` and
+ * `scans_with_count` beside `activityTotal` is that these are genuinely
+ * different facts, and a single colour ramp would flatten three of them
+ * into "pale". A compliance binder is exactly where that does damage:
+ *
+ *   * `unscanned` — nobody went. NOT a clean month.
+ *   * `uncounted` — somebody went and wrote no number down. Also not clean.
+ *   * `zero` — counted, and the count was nothing. THIS is a clean month,
+ *     and it is the only one of the four that means it.
+ *   * `active` — counted, and there was something, shaded by how much.
+ *
+ * So the ramp covers `active` alone; the other three get their own
+ * treatment and their own words in the legend.
+ */
+type HeatCellState = "unscanned" | "uncounted" | "zero" | "active";
+
+type HeatCell = {
+  month: string;
+  deviceType: string;
+  state: HeatCellState;
+  scans: number;
+  activityTotal: number | null;
+  stationsFlagged: number;
+};
+
+function heatFill(cell: HeatCell, peak: number): string {
+  if (cell.state === "unscanned") return "transparent";
+  if (cell.state === "uncounted") return "#e2e8f0";
+  if (cell.state === "zero") return "#ecfdf5";
+  // Floor the ramp so a single catch is still visible against the clean
+  // colour rather than washing out to nearly the same shade.
+  const share = peak <= 0 ? 1 : Math.min(1, (cell.activityTotal ?? 0) / peak);
+  const alpha = 0.2 + share * 0.8;
+  return `rgba(225, 29, 72, ${alpha.toFixed(3)})`;
+}
+
+function heatLabel(cell: HeatCell): string {
+  const month = cell.month.slice(0, 7);
+  if (cell.state === "unscanned") return `${month}: no service scan recorded`;
+  if (cell.state === "uncounted") {
+    return `${month}: ${cell.scans} scan${cell.scans === 1 ? "" : "s"}, no count recorded`;
+  }
+  if (cell.state === "zero") {
+    return `${month}: ${cell.scans} scan${cell.scans === 1 ? "" : "s"}, no activity found`;
+  }
+  return `${month}: ${cell.activityTotal} activity across ${cell.scans} scan${cell.scans === 1 ? "" : "s"}${cell.stationsFlagged > 0 ? `, ${cell.stationsFlagged} station${cell.stationsFlagged === 1 ? "" : "s"} over threshold` : ""}`;
+}
+
 function standingOf(station: Station): "flagged" | "clear" | "unknown" {
   if (station.lastCondition === "damaged" || station.lastCondition === "missing") return "flagged";
   if (station.lastCondition === "needs_service") return "flagged";
@@ -240,6 +291,7 @@ export function CustomerPortalPanel() {
   const [inspections, setInspections] = useState<Inspection[]>([]);
   const [wdoReports, setWdoReports] = useState<WdoReport[]>([]);
   const [siteFilter, setSiteFilter] = useState<string>("");
+  const [monthsBack] = useState(12);
   const [noAccess, setNoAccess] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -384,6 +436,59 @@ export function CustomerPortalPanel() {
       setSending(false);
     }
   }, [detail, kind, preferredDate, refresh, summaryText]);
+
+  /*
+   * The grid is built from the months and station types the account
+   * actually has, NOT from the rows the trend returned — because the
+   * function only returns a row where a scan happened, so the months
+   * nobody visited are precisely the ones missing from the data. Rendering
+   * only what came back would silently drop the most important cells.
+   */
+  const heatMap = useMemo(() => {
+    const months: string[] = [];
+    const now = new Date();
+    for (let back = monthsBack - 1; back >= 0; back -= 1) {
+      const at = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - back, 1));
+      months.push(at.toISOString().slice(0, 10));
+    }
+
+    const types = [
+      ...new Set([
+        ...stations.map((station) => station.deviceType),
+        ...trend.map((cell) => cell.deviceType),
+      ]),
+    ].sort();
+
+    const byKey = new Map(trend.map((cell) => [`${cell.month.slice(0, 7)}|${cell.deviceType}`, cell]));
+
+    const rows = types.map((deviceType) => ({
+      deviceType,
+      cells: months.map((month): HeatCell => {
+        const found = byKey.get(`${month.slice(0, 7)}|${deviceType}`);
+        if (found === undefined) {
+          return {
+            month, deviceType, state: "unscanned",
+            scans: 0, activityTotal: null, stationsFlagged: 0,
+          };
+        }
+        const state: HeatCellState =
+          found.scansWithCount === 0
+            ? "uncounted"
+            : (found.activityTotal ?? 0) === 0
+              ? "zero"
+              : "active";
+        return {
+          month, deviceType, state,
+          scans: found.scans,
+          activityTotal: found.activityTotal,
+          stationsFlagged: found.stationsFlagged,
+        };
+      }),
+    }));
+
+    const peak = Math.max(0, ...trend.map((cell) => cell.activityTotal ?? 0));
+    return { months, rows, peak };
+  }, [monthsBack, stations, trend]);
 
   const report = useCallback(async () => {
     setReporting(true);
@@ -754,47 +859,112 @@ export function CustomerPortalPanel() {
           <Card>
             <SectionTitle
               title="Activity by month"
-              description="One row per month per station type. The scan count sits beside the activity on purpose: a month with no activity and a month nobody scanned are different facts, and this grid will not let them look the same."
+              description="One cell per month per station type. Four states, not one scale: a month nobody visited, a month somebody visited without counting, a month counted at nothing, and a month with activity. Only the third of those means the site was clean, and this grid will not let the others borrow it."
             />
-            {trend.length === 0 ? (
+            {heatMap.rows.length === 0 ? (
               <p className="mt-4 text-sm text-muted" data-testid="customer-portal-trend-empty">
-                No service scans have been recorded for this selection yet.
+                No stations are recorded for this selection, so there is nothing to chart.
               </p>
             ) : (
-              <div className="mt-4 overflow-x-auto">
-                <table className="w-full text-left text-sm" data-testid="customer-portal-trend-table">
-                  <thead>
-                    <tr className="border-b border-line text-xs uppercase tracking-wide text-faint">
-                      <th className="py-2 pr-3 font-medium">Month</th>
-                      <th className="py-2 pr-3 font-medium">Type</th>
-                      <th className="py-2 pr-3 font-medium">Scans</th>
-                      <th className="py-2 pr-3 font-medium">Counted</th>
-                      <th className="py-2 pr-3 font-medium">Activity</th>
-                      <th className="py-2 font-medium">Stations over threshold</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {trend.map((cell) => (
-                      <tr key={`${cell.month}-${cell.deviceType}`} className="border-b border-line/60">
-                        <td className="py-2 pr-3 text-foreground">{cell.month.slice(0, 7)}</td>
-                        <td className="py-2 pr-3 text-muted">
-                          {DEVICE_TYPE_LABELS[cell.deviceType] ?? cell.deviceType}
-                        </td>
-                        <td className="py-2 pr-3 tabular-nums text-muted">{cell.scans}</td>
-                        <td className="py-2 pr-3 tabular-nums text-muted">{cell.scansWithCount}</td>
-                        <td className="py-2 pr-3 tabular-nums">
-                          {cell.activityTotal === null ? (
-                            <span className="text-faint">nothing counted</span>
-                          ) : (
-                            <span className="text-foreground">{cell.activityTotal}</span>
-                          )}
-                        </td>
-                        <td className="py-2 tabular-nums text-muted">{cell.stationsFlagged}</td>
+              <>
+                <div className="mt-4 overflow-x-auto">
+                  <table
+                    className="border-separate border-spacing-1 text-sm"
+                    data-testid="customer-portal-trend-heatmap"
+                  >
+                    <caption className="sr-only">
+                      Station activity by month and station type
+                    </caption>
+                    <thead>
+                      <tr>
+                        <th scope="col" className="pr-3 text-left text-xs font-medium uppercase tracking-wide text-faint">
+                          Type
+                        </th>
+                        {heatMap.months.map((month) => (
+                          <th
+                            key={month}
+                            scope="col"
+                            className="w-10 pb-1 text-center text-[10px] font-medium tabular-nums text-faint"
+                          >
+                            {month.slice(5, 7)}
+                          </th>
+                        ))}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {heatMap.rows.map((row) => (
+                        <tr key={row.deviceType}>
+                          <th
+                            scope="row"
+                            className="whitespace-nowrap pr-3 text-left text-xs font-normal text-muted"
+                          >
+                            {DEVICE_TYPE_LABELS[row.deviceType] ?? row.deviceType}
+                          </th>
+                          {row.cells.map((cell) => (
+                            <td key={`${row.deviceType}-${cell.month}`} className="p-0">
+                              <div
+                                title={heatLabel(cell)}
+                                aria-label={`${DEVICE_TYPE_LABELS[row.deviceType] ?? row.deviceType}, ${heatLabel(cell)}`}
+                                style={{ backgroundColor: heatFill(cell, heatMap.peak) }}
+                                className={cn(
+                                  "flex size-9 items-center justify-center rounded text-[10px] tabular-nums",
+                                  /* A cell nobody scanned is drawn as an
+                                     absence — dashed and empty — rather
+                                     than as the palest shade of the scale.
+                                     It is not a small amount of activity. */
+                                  cell.state === "unscanned"
+                                    ? "border border-dashed border-line text-faint"
+                                    : "border border-transparent",
+                                  cell.state === "active" && (cell.activityTotal ?? 0) / Math.max(heatMap.peak, 1) > 0.55
+                                    ? "font-semibold text-white"
+                                    : "text-foreground",
+                                )}
+                              >
+                                {cell.state === "unscanned"
+                                  ? "·"
+                                  : cell.state === "uncounted"
+                                    ? "?"
+                                    : cell.activityTotal}
+                              </div>
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <ul
+                  className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-xs text-muted"
+                  data-testid="customer-portal-trend-legend"
+                >
+                  <li className="flex items-center gap-2">
+                    <span className="inline-flex size-4 items-center justify-center rounded border border-dashed border-line text-[9px] text-faint">
+                      ·
+                    </span>
+                    Nobody scanned — not a clean month
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <span
+                      className="inline-flex size-4 items-center justify-center rounded text-[9px]"
+                      style={{ backgroundColor: "#e2e8f0" }}
+                    >
+                      ?
+                    </span>
+                    Scanned, no count written down
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <span className="inline-block size-4 rounded" style={{ backgroundColor: "#ecfdf5" }} />
+                    Counted, nothing found
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <span className="inline-block size-4 rounded" style={{ backgroundColor: "rgba(225, 29, 72, 0.25)" }} />
+                    <span className="inline-block size-4 rounded" style={{ backgroundColor: "rgba(225, 29, 72, 1)" }} />
+                    Activity, shaded to the highest month
+                    {heatMap.peak > 0 ? ` (${heatMap.peak})` : ""}
+                  </li>
+                </ul>
+              </>
             )}
           </Card>
         </>

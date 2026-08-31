@@ -2,6 +2,21 @@
 
 Last reviewed: 2026-08-31
 
+**Addendum, 2026-08-31 latest+26 - the activity heat map (ADR-206):**
+portal-heat-map 6, pinning the four cell states the grid draws and one
+assertion that they never collapse into fewer: a month absent from the
+response classified as unscanned rather than clean (the function only
+returns a row where a scan happened, so the months nobody visited are
+exactly the ones missing, and a grid built from the returned rows alone
+would drop them silently); a scan with no number written down kept out of
+the clean state; a counted zero allowed to be clean, because that one
+actually is; and a bigint total crossing as a number rather than a string,
+without which the shading would compare text and rank 9 above 31. No
+migration, no new tables, no seed change. It also corrected the matrix's
+"commercial trend reports with heat maps" row, which was still GAP after
+ADR-203 shipped the data behind it — 12 GAP down to 11, 18 rows now short
+of HAVE.
+
 **Addendum, 2026-08-31 latest+25 - WDO reports (ADR-205):**
 services-wdo-inspections.behavior 14 on the real chain: an inspection
 refused for not answering the headline question; a report claiming evidence

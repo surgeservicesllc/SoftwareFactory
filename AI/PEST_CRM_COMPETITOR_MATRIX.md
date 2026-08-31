@@ -137,7 +137,7 @@ built.
 | Pipeline conversion report | Briostack | **HAVE** (ADR-186) |
 | Compliance/application report with CSV | PestPac | **HAVE** (ADR-192) |
 | **Operating dashboards: revenue, retention/churn, tech productivity, route density** | all | **HAVE** (ADR-199) — all four, aggregated over the whole book in the database rather than over a bounded fetch. |
-| **Commercial trend reports with heat maps** | PestPac | **GAP** |
+| **Commercial trend reports with heat maps** | PestPac | **HAVE** (ADR-203, ADR-206) — month x station-type activity on the customer's Stations tab, rendered as a shaded grid. It draws FOUR states rather than one ramp, because the data distinguishes them: nobody scanned, scanned without counting, counted at nothing, and counted with activity. Only the third is a clean month, and the grid refuses to let the other two borrow that reading. |
 | **Revenue forecasting** | Briostack | **HAVE** (ADR-202) — projects active plans and contracts with their term, and applies no churn or growth model, because this system has no evidence for one. Every omission is reported beside the figure. |
 
 ### I. Operations
@@ -192,7 +192,7 @@ SMS/email delivery (which also gates automated reminders and campaign
 sending), GPS/fleet telemetry, QuickBooks sync, call-centre/telephony
 integration, and reviews/reputation platforms.
 
-**A note on what "parity" can mean here.** Of the 19 rows still
+**A note on what "parity" can mean here.** Of the 18 rows still
 short of HAVE, roughly half cannot be closed by writing code at all — they
 are accounts somebody has to open and pay for. The honest target is every
 buildable row shipped and every provider-gated row wired to the point where

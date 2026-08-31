@@ -2,6 +2,31 @@
 
 Last updated: 2026-08-31
 
+## Newest (2026-08-31, latest+26): the activity heat map (ADR-206, #71)
+
+The customer's Stations tab renders month x station-type activity as a
+shaded grid. FOUR states, never one ramp:
+
+  nobody scanned (dashed, empty) | scanned without counting (grey, "?")
+  | counted at nothing (clean colour) | activity (the ramp)
+
+ONLY "counted at nothing" means the site was clean. Collapse any of the
+other three into it — which is what a single opacity scale does — and a
+compliance grid starts telling a customer their site is fine because
+nobody went. The legend names all four in words for the same reason.
+
+THE GRID IS BUILT FROM THE ACCOUNT'S MONTHS AND TYPES, NOT FROM THE ROWS
+THE FUNCTION RETURNED. crm_portal_device_trend only emits a row where a
+scan happened, so the months nobody visited are precisely the ones missing
+from the response. Render only what came back and the most important cells
+vanish silently. tests/unit/portal-heat-map pins all four states and
+asserts they never collapse into fewer.
+
+This also corrected a stale matrix row: "commercial trend reports with heat
+maps" was marked GAP after ADR-203 had already shipped the data. When you
+audit that file, check the rows against the code rather than against the
+previous audit — that is the third stale row found this way.
+
 ## Newest (2026-08-31, latest+25): WDO reports (ADR-205, #70)
 
 `20260830010100` adds crm_wdo_inspections and crm_wdo_findings, two freeze
