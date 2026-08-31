@@ -71,14 +71,31 @@ them. Timesheets refuse overlapping shifts and report no worked total while
 a shift is still running; licence expiry reports current, expiring, expired
 and — kept deliberately apart — unrecorded, because a licence with no date
 on file is an unknown rather than a pass. /Services/forms reads all four.
+The customer portal (ADR-197) admits the first reader who is not a member
+of the organization whose rows they read. It does so without widening a
+single staff-facing policy: a customer reaches exactly one account through
+reviewed SECURITY DEFINER functions whose column lists are the whole of
+what they can see, and a signed-in caller with no portal link resolves to
+no account and is answered with nothing. Staff invite an address on
+/Services/portal; the person at that address turns it into a login
+themselves, because the database refuses any write that points a portal
+row's login at a session other than the caller's own. /customer-portal
+shows that customer their balance, issued invoices, visit history,
+paperwork and the requests they have sent, with the company's reply beside
+their own words rather than over them. Paying an invoice and opening a
+document are both labelled **Not Connected**: no card processor and no
+object storage are configured, so the balance and the filing are stated
+and nothing pretends to be a button.
 A workspace can populate itself two ways (ADR-192): the curated Demo Data
-book for presenting the product, or the full corpus — 44,067 rows across
-all forty tables, every optional field populated, spanning years —
+book for presenting the product, or the full corpus — 44,837 rows across
+all forty-two tables, every optional field populated, spanning years —
 for testing dashboards, reports and pagination at the size of a real book.
 GET /api/services/seed-report audits whichever is loaded, table by table,
-PASS or FAIL. Plan of record: AI/SERVICES_CRM_GAP_ANALYSIS.md — ten increments;
-PEST CRM: PRODUCTION READY is declared only after the seeded E2E
-journey (increment 10).
+PASS or FAIL. Plan of record: AI/SERVICES_CRM_GAP_ANALYSIS.md and
+AI/PEST_CRM_COMPETITOR_MATRIX.md. Increments 11 (operating dashboards and
+route optimization) and 12 (recurring auto-invoicing, AR aging, dunning)
+remain open, as does the commercial portal view — device summaries, trend
+heat maps and sighting tickets — which PestPac has and this does not.
 
 
 Last reviewed: 2026-08-31

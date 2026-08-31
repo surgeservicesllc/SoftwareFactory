@@ -2,6 +2,36 @@
 
 Last reviewed: 2026-08-31
 
+**Addendum, 2026-08-31 latest+19 - the customer portal (ADR-197):**
+services-portal.behavior 13 on the real chain under hosted-style default
+privileges, written from the attacker's side: a rival's customer reading our
+invoices through a definer that could have returned everything and getting
+only their own; a signed-in stranger with no portal link calling all five
+reads and getting nothing five times; a deactivated login still holding a
+session, with restoring it restoring exactly one account; a customer filing a
+request against a rival's site refused by name, with their own landing; the
+resolver `crm_portal_account_for(uuid)` executable by NO role while the
+argument-free `crm_portal_me()` answers only about the caller; a rival
+assigning our customer's login refused by the activation trigger, and the
+patient version — inviting our customer's own address and waiting for them to
+accept — refused by the global unique index; a portal user reading the two
+tables directly and seeing nothing; a draft invoice never reaching the
+customer; an unactivated invitation unable to act as a login; and `anon`
+holding execute on no portal function.
+services-customer-portal-routes 14 pins the boundary: one flat 403 carrying
+neither account nor organization id, argument-free RPC on every read, both
+Not Connected labels, an insert that omits `user_id` entirely rather than
+nulling it, a triage that cannot rewrite the customer's words, the closing
+moment supplied with a closing status and cleared when reopened, and the two
+rollout figures (invitations never used, accounts never invited) computed
+rather than estimated. Seed extended to 42 tables — 44,837 rows, 42/42 PASS,
+zero orphans; portal logins are invitations only, and `user_id`,
+`activated_at` and `last_seen_at` are excluded from optional-field coverage
+on purpose rather than faked. RLS census 189; hosted service-role grants at
+42 crm tables; runbook 195; workflow scope `customer-portal` postflight
+re-proves forced RLS, no DELETE, the sealed resolver, the activation guard
+and the nine caller-scoped definers after every apply.
+
 **Addendum, 2026-08-31 latest+18 - the forms engine (ADR-196):**
 services-forms.behavior 9 on the real chain under hosted-style default
 privileges (prose refused for a number question by name with the right value

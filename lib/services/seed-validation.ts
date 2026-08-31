@@ -131,6 +131,33 @@ const SPECS: Spec[] = [
     parents: [{ column: "technician_id", table: "crm_technicians" }],
   },
   {
+    table: "crm_portal_users",
+    /*
+     * `user_id`, `activated_at` and `last_seen_at` are deliberately NOT
+     * listed. A login is a real auth user accepting an invitation, which
+     * the seeder cannot perform on somebody's behalf — so those columns
+     * are empty in the corpus, and claiming them as covered would be the
+     * report lying about what it seeded.
+     */
+    optional: ["contact_id"],
+    enumColumn: "role",
+    parents: [{ column: "account_id", table: "crm_accounts" }],
+  },
+  {
+    table: "crm_portal_requests",
+    optional: [
+      "property_id",
+      "portal_user_id",
+      "detail",
+      "preferred_date",
+      "response",
+      "work_order_id",
+      "resolved_at",
+    ],
+    enumColumn: "status",
+    parents: [{ column: "account_id", table: "crm_accounts" }],
+  },
+  {
     table: "crm_documents",
     optional: ["account_id", "property_id", "work_order_id", "content_type", "byte_size", "notes"],
     enumColumn: "kind",

@@ -242,10 +242,27 @@ test("every Services CRM section is gated server-side through its layout", async
     "/Services/canvassing",
     "/Services/marketing",
     "/Services/forms",
+    "/Services/portal",
   ]) {
     await page.goto(path);
     await expect(page).toHaveURL(/\/auth\/sign-in\?next=%2FServices/);
   }
+});
+
+test("/customer-portal is gated server-side, and never asks a customer to onboard", async ({ page }) => {
+  /*
+   * The customer portal (ADR-197) is the one signed-in surface whose reader
+   * is NOT an organization member, so it carries its own gate rather than
+   * `requirePortalViewer` — that one redirects a signed-in person with no
+   * organization to workspace onboarding, which for a pest-control customer
+   * means being asked to sign up as a pest-control company.
+   *
+   * Signed out, the only correct answer is the sign-in page carrying this
+   * path back. Asking for the URL directly is what tells a real server gate
+   * from a link merely left out of a navigation.
+   */
+  await page.goto("/customer-portal");
+  await expect(page).toHaveURL(/\/auth\/sign-in\?next=%2Fcustomer-portal/);
 });
 
 test("/Job-Search is gated server-side, and by its own call", async ({ page }) => {

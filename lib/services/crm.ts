@@ -1706,3 +1706,268 @@ export function licenceDaysRemaining(
   if (expiresOn === null) return null;
   return Math.round((Date.parse(expiresOn) - Date.parse(today)) / 86_400_000);
 }
+
+/* ---------------------------------------------------------------------------
+ * The customer portal (increment 10). Two vocabularies live here and they
+ * are deliberately separate:
+ *
+ *   * the STAFF view of a portal user and a service request — the whole row,
+ *     read through ordinary organization-scoped RLS;
+ *   * the CUSTOMER projections, which are the return shapes of the SECURITY
+ *     DEFINER functions and contain only what a customer may see.
+ *
+ * Nothing maps one into the other. A customer projection is never built by
+ * trimming a staff row, because a trim can be forgotten; it is built from a
+ * function whose column list is the entire surface.
+ * ------------------------------------------------------------------------- */
+
+export type CrmPortalRole = "viewer" | "payer";
+export type CrmRequestKind = "service" | "reschedule" | "question" | "complaint" | "cancel" | "quote";
+export type CrmRequestStatus = "submitted" | "acknowledged" | "scheduled" | "resolved" | "declined";
+
+export const CRM_PORTAL_ROLES: readonly CrmPortalRole[] = ["viewer", "payer"];
+export const CRM_REQUEST_KINDS: readonly CrmRequestKind[] = [
+  "service",
+  "reschedule",
+  "question",
+  "complaint",
+  "cancel",
+  "quote",
+];
+export const CRM_REQUEST_STATUSES: readonly CrmRequestStatus[] = [
+  "submitted",
+  "acknowledged",
+  "scheduled",
+  "resolved",
+  "declined",
+];
+
+/** A request in one of these states is finished, and carries a resolved_at. */
+export const CRM_CLOSED_REQUEST_STATUSES: readonly CrmRequestStatus[] = ["resolved", "declined"];
+
+export function isClosedRequestStatus(status: CrmRequestStatus): boolean {
+  return CRM_CLOSED_REQUEST_STATUSES.includes(status);
+}
+
+export const CRM_PORTAL_USER_COLUMNS =
+  "id, account_id, contact_id, user_id, email, role, invited_at, activated_at, last_seen_at, active, created_at, updated_at";
+export const CRM_PORTAL_REQUEST_COLUMNS =
+  "id, account_id, property_id, portal_user_id, kind, status, summary, detail, preferred_date, response, work_order_id, submitted_at, resolved_at, updated_at";
+
+export type CrmPortalUserRow = {
+  id: string;
+  account_id: string;
+  contact_id: string | null;
+  user_id: string | null;
+  email: string;
+  role: CrmPortalRole;
+  invited_at: string;
+  activated_at: string | null;
+  last_seen_at: string | null;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CrmPortalRequestRow = {
+  id: string;
+  account_id: string;
+  property_id: string | null;
+  portal_user_id: string | null;
+  kind: CrmRequestKind;
+  status: CrmRequestStatus;
+  summary: string;
+  detail: string | null;
+  preferred_date: string | null;
+  response: string | null;
+  work_order_id: string | null;
+  submitted_at: string;
+  resolved_at: string | null;
+  updated_at: string;
+};
+
+export function toPortalUserView(row: CrmPortalUserRow) {
+  return {
+    id: row.id,
+    accountId: row.account_id,
+    contactId: row.contact_id,
+    /*
+     * Whether a login is attached, not which one. The auth user id is an
+     * internal identifier and no staff screen needs it to do its job.
+     */
+    linked: row.user_id !== null,
+    email: row.email,
+    role: row.role,
+    invitedAt: row.invited_at,
+    activatedAt: row.activated_at,
+    lastSeenAt: row.last_seen_at,
+    active: row.active,
+    /*
+     * The three states a portal invitation is actually in. An invitation
+     * that was accepted and then switched off reads as `suspended`, not as
+     * `invited`, because the customer did accept it once.
+     */
+    state: row.activated_at === null ? "invited" : row.active ? "active" : "suspended",
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function toPortalRequestView(row: CrmPortalRequestRow) {
+  return {
+    id: row.id,
+    accountId: row.account_id,
+    propertyId: row.property_id,
+    portalUserId: row.portal_user_id,
+    kind: row.kind,
+    status: row.status,
+    summary: row.summary,
+    detail: row.detail,
+    preferredDate: row.preferred_date,
+    response: row.response,
+    workOrderId: row.work_order_id,
+    submittedAt: row.submitted_at,
+    resolvedAt: row.resolved_at,
+    open: !isClosedRequestStatus(row.status),
+    /* Answered means somebody wrote back, which is not the same as closed. */
+    answered: row.response !== null,
+    updatedAt: row.updated_at,
+  };
+}
+
+/* --- The customer's own side: the definer projections, verbatim. --------- */
+
+export type CrmPortalSummaryRow = {
+  account_name: string;
+  account_status: CrmAccountStatus;
+  open_invoices: number;
+  balance_cents: number | string;
+  next_visit_on: string | null;
+  open_requests: number;
+};
+
+export type CrmPortalInvoiceRow = {
+  id: string;
+  number: string;
+  status: CrmInvoiceStatus;
+  total_cents: number | string;
+  paid_cents: number | string;
+  balance_cents: number | string;
+  issued_on: string | null;
+  due_on: string | null;
+};
+
+export type CrmPortalVisitRow = {
+  id: string;
+  service_type: string;
+  status: CrmWorkOrderStatus;
+  scheduled_start: string | null;
+  completed_at: string | null;
+  property_label: string | null;
+  completion_notes: string | null;
+};
+
+export type CrmPortalDocumentRow = {
+  id: string;
+  title: string;
+  kind: CrmDocumentKind;
+  storage_path: string;
+  content_type: string | null;
+  byte_size: number | string | null;
+  uploaded_at: string;
+};
+
+export type CrmPortalRequestMineRow = {
+  id: string;
+  kind: CrmRequestKind;
+  status: CrmRequestStatus;
+  summary: string;
+  detail: string | null;
+  preferred_date: string | null;
+  response: string | null;
+  submitted_at: string;
+  resolved_at: string | null;
+};
+
+export function toPortalSummaryView(row: CrmPortalSummaryRow) {
+  return {
+    accountName: row.account_name,
+    accountStatus: row.account_status,
+    openInvoices: row.open_invoices,
+    balanceCents: Number(row.balance_cents),
+    /*
+     * Null when nothing is on the calendar. A customer with no upcoming
+     * visit should read "none scheduled" and be able to ask for one, not be
+     * shown a today's-date placeholder that implies somebody is coming.
+     */
+    nextVisitOn: row.next_visit_on,
+    openRequests: row.open_requests,
+  };
+}
+
+export function toPortalInvoiceView(
+  row: CrmPortalInvoiceRow,
+  today = new Date().toISOString().slice(0, 10),
+) {
+  const balanceCents = Number(row.balance_cents);
+  return {
+    id: row.id,
+    number: row.number,
+    status: row.status,
+    totalCents: Number(row.total_cents),
+    paidCents: Number(row.paid_cents),
+    balanceCents,
+    issuedOn: row.issued_on,
+    dueOn: row.due_on,
+    /*
+     * The same rule the staff ledger uses, restated over the projection's
+     * own columns rather than shared through a staff row type — the portal
+     * must not need a staff view object to exist in order to answer.
+     */
+    overdue: row.status === "open" && balanceCents > 0 && row.due_on !== null && row.due_on < today,
+  };
+}
+
+export function toPortalVisitView(row: CrmPortalVisitRow) {
+  return {
+    id: row.id,
+    serviceType: row.service_type,
+    status: row.status,
+    scheduledStart: row.scheduled_start,
+    completedAt: row.completed_at,
+    propertyLabel: row.property_label,
+    /* The technician's note to the customer. Dispatch instructions are not
+     * in the projection at all, so there is nothing here to leak. */
+    completionNotes: row.completion_notes,
+  };
+}
+
+export function toPortalDocumentView(row: CrmPortalDocumentRow) {
+  return {
+    id: row.id,
+    title: row.title,
+    kind: row.kind,
+    /* A path, never a URL. Signing a link is the storage layer's job and
+     * this project has no storage provider connected. */
+    storagePath: row.storage_path,
+    contentType: row.content_type,
+    byteSize: row.byte_size === null ? null : Number(row.byte_size),
+    uploadedAt: row.uploaded_at,
+  };
+}
+
+export function toPortalRequestMineView(row: CrmPortalRequestMineRow) {
+  return {
+    id: row.id,
+    kind: row.kind,
+    status: row.status,
+    summary: row.summary,
+    detail: row.detail,
+    preferredDate: row.preferred_date,
+    response: row.response,
+    submittedAt: row.submitted_at,
+    resolvedAt: row.resolved_at,
+    open: !isClosedRequestStatus(row.status),
+    answered: row.response !== null,
+  };
+}

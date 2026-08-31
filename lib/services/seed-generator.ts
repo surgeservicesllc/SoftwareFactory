@@ -301,6 +301,36 @@ export type SeedAccount = {
     campaignIndex?: number;
     note: string;
   }[];
+  /**
+   * Increment 10: who on this account was invited to the customer portal,
+   * and what they have asked for through it.
+   *
+   * The seed creates INVITATIONS, never logins. `user_id`, `activated_at`
+   * and `last_seen_at` stay empty because attaching a login requires a real
+   * Supabase auth user accepting it — the seeder has none to offer, and a
+   * fabricated one would either break the foreign key or claim somebody
+   * signed in who never did.
+   */
+  portalUsers?: {
+    contactSeat: number;
+    email: string;
+    role: "viewer" | "payer";
+    invitedDaysAgo: number;
+    active: boolean;
+  }[];
+  portalRequests?: {
+    portalSeat?: number;
+    propertySeat?: number;
+    visitSeat?: number;
+    kind: "service" | "reschedule" | "question" | "complaint" | "cancel" | "quote";
+    status: "submitted" | "acknowledged" | "scheduled" | "resolved" | "declined";
+    summary: string;
+    detail?: string;
+    preferredInDays?: number;
+    response?: string;
+    submittedDaysAgo: number;
+    resolvedDaysAgo?: number;
+  }[];
   /** Increment 9: the inspections and reports filled out about this customer. */
   forms?: {
     templateIndex: number;
@@ -884,6 +914,78 @@ export function generateSeedDataset(scale: SeedScale, seed = 20260830): SeedData
                 ? { signedByName: `${account.contacts[0]?.firstName ?? "Alex"} ${account.contacts[0]?.lastName ?? "Reyes"}` }
                 : {}),
               notes: `${pick(random, ["Filled out on site", "Completed at the truck", "Reviewed with the customer", "Sent to the branch"])}.`,
+            };
+          });
+
+    /*
+     * The portal. Only a customer gets an invitation — a prospect has no
+     * account to log into — and one in eleven has been switched off, so
+     * the staff page has a suspended row to render rather than a table
+     * where every row looks the same.
+     */
+    account.portalUsers = !serviced
+      ? []
+      : Array.from(
+          { length: Math.min(account.contacts.length, 1 + (account.index % 2)) },
+          (_, seat) => ({
+            contactSeat: seat,
+            // The contact's own address, so the invitation points at a
+            // person on the account rather than at a made-up mailbox.
+            email: account.contacts[seat].email,
+            role: (seat === 0 && account.index % 3 === 0 ? "payer" : "viewer") as "viewer" | "payer",
+            invitedDaysAgo: between(random, 5, 900),
+            active: (account.index + seat) % 11 !== 0,
+          }),
+        );
+
+    account.portalRequests =
+      (account.portalUsers?.length ?? 0) === 0
+        ? []
+        : Array.from({ length: between(random, 1, 3) }, (_, seat) => {
+            const roll = (account.index + seat) % 5;
+            const status = (
+              roll === 0 ? "submitted"
+              : roll === 1 ? "acknowledged"
+              : roll === 2 ? "scheduled"
+              : roll === 3 ? "resolved"
+              : "declined"
+            ) as NonNullable<SeedAccount["portalRequests"]>[number]["status"];
+            const closed = status === "resolved" || status === "declined";
+            const submittedDaysAgo = between(random, 2, 500);
+            const kind = REQUEST_KINDS[(account.index + seat) % REQUEST_KINDS.length];
+            return {
+              portalSeat: seat % (account.portalUsers?.length ?? 1),
+              ...(account.properties.length > 0 ? { propertySeat: seat % account.properties.length } : {}),
+              // A scheduled request names the visit it became; the others
+              // have not turned into work yet, and pretending otherwise
+              // would make the queue look emptier than it is.
+              ...(status === "scheduled" ? { visitSeat: seat } : {}),
+              kind,
+              status,
+              summary: REQUEST_SUMMARIES[kind],
+              detail: `${pick(random, [
+                "Noticed it again this morning by the loading dock.",
+                "Started after the weekend and has not let up.",
+                "The team would rather we came before opening.",
+                "Same corner as last time; the trap was empty.",
+                "Happy with the work, just need the timing moved.",
+              ])}`,
+              ...(seat % 2 === 0 ? { preferredInDays: between(random, 2, 45) } : {}),
+              // Only a closed request carries an answer here. An open one
+              // that had already been answered would hide the queue this
+              // page exists to show.
+              ...(closed
+                ? {
+                    response: pick(random, [
+                      "Booked for the next route through your area.",
+                      "Treated on the follow-up visit; monitoring for two weeks.",
+                      "Moved to the earlier window you asked for.",
+                      "Outside the plan you are on — quoted separately.",
+                    ]),
+                    resolvedDaysAgo: Math.max(1, submittedDaysAgo - between(random, 1, 30)),
+                  }
+                : {}),
+              submittedDaysAgo,
             };
           });
 
@@ -1664,6 +1766,20 @@ function generateTerritory(
     notes: `${pick(random, ["Dense residential", "Mixed commercial and residential", "Rural route, long drives", "Downtown core"])}.`,
   };
 }
+
+const REQUEST_KINDS = [
+  "service", "reschedule", "question", "complaint", "cancel", "quote",
+] as const;
+
+/** What a customer actually writes in the one line the form gives them. */
+const REQUEST_SUMMARIES: Record<(typeof REQUEST_KINDS)[number], string> = {
+  service: "Ants along the back wall again",
+  reschedule: "Can we move next week's visit later",
+  question: "What was applied on the last visit",
+  complaint: "Technician missed the storage room",
+  cancel: "Please pause service over the winter",
+  quote: "Price for adding the second building",
+};
 
 /* --------------------------------- documents, canvassing and marketing (8) */
 

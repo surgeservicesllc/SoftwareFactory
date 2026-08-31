@@ -4148,3 +4148,96 @@ undeclared until the goal's full seeded E2E passes.
   tables — 40/40, 44,067 rows. Hosted-apply scope
   `forms-timesheets-licences` re-proves RLS, no-delete, all four guards and
   the licence columns after every apply.
+
+## ADR-197 - The customer portal: a reader who is not a member
+
+- **Status**: accepted (increment 10 of task #64, owner /goal: "make this
+  CRM the absolute best… all of the same features as BOSS and Pest Pack").
+  PestPac and Briostack both lead with a customer portal;
+  `AI/PEST_CRM_COMPETITOR_MATRIX.md` marked it the largest remaining gap.
+- **The problem this schema is shaped around**: every table before it is
+  read by a member of the organization that owns it, so
+  `is_organization_member(organization_id)` is the whole of authorization.
+  A portal introduces a reader who is **not** a member — a customer, who
+  must see exactly one account and nothing else, forever. The obvious
+  implementation is to widen the existing policies with an "or is a portal
+  user of this account" clause, and that is the implementation this ADR
+  rejects.
+- **Decision: not one existing `using` clause was edited.** A portal
+  reader gets in through a handful of SECURITY DEFINER functions that
+  resolve the caller to one account and filter every read by it. The
+  consequences are the reason:
+  - a mistake in the portal cannot silently widen staff-facing access,
+    because staff-facing access is not touched;
+  - the entire customer-visible surface is the column lists of eight
+    functions — a reviewable amount of code, in one file;
+  - a signed-in caller with no portal link resolves to no account, so the
+    functions return nothing rather than everything.
+- **Four invariants, each proved rather than asserted**:
+  1. **One login sees one account.** `crm_portal_users_user_key` is unique
+     on `user_id` globally, not per tenant, so a second company cannot
+     attach an existing customer's login to their own account.
+  2. **The portal reads a projection, never a table.** Internal costs,
+     dispatch instructions, technician licences and staff commentary are
+     absent from the returned columns — not filtered by a policy, not
+     present. A draft invoice is excluded on the same reasoning: it was
+     never issued to anybody.
+  3. **A service request is the customer's words.** They insert and read
+     their own; they cannot edit one after sending it. The staff reply
+     lives in its own column and never overwrites `detail`.
+  4. **An inactive link is no link.** Every function re-resolves on each
+     call, so deactivating closes the door immediately rather than at the
+     next sign-in.
+- **Two holes found while building it, both closed in the schema rather
+  than in the routes** — the API is not the only door, since an
+  organization member holds the same privileges through PostgREST
+  directly:
+  - `crm_portal_account_for(uuid)` takes a login id, so **any** role
+    holding execute could ask it about somebody else's login and be handed
+    that person's organization and account. Nobody holds execute on it now;
+    the projections reach it as their own definer owner, and the app asks
+    about itself through the argument-free `crm_portal_me()`.
+  - `user_id` is not an ordinary column. `crm_portal_guard_activation`
+    refuses any write that points it at a session other than the caller's
+    own, so **staff invite an address and the person at that address
+    claims it** — through `crm_portal_accept_invitation()`, which matches
+    the verified address behind the caller's own session. Detaching is
+    still allowed; assigning never was. The trigger governs only *changes*
+    to the column, so suspending or re-roling a claimed link still works.
+- **Refusals are deliberately indistinguishable.** "Never invited",
+  "already claimed" and "switched off" produce one message, and the API
+  keeps them one. Telling them apart would turn the accept route into a way
+  to ask whether an address is a customer.
+- **Two controls are absent rather than decorative.** Paying an invoice
+  needs a card processor and opening a document needs object storage;
+  neither is connected, so both are labelled **Not Connected** and the
+  balance and the filing are stated instead. A storage path is not a link.
+- **Seeding is invitations, never logins.** `user_id`, `activated_at` and
+  `last_seen_at` are left empty in the corpus and are deliberately excluded
+  from the seed report's optional-field coverage: a login is a real auth
+  user accepting an invitation, which a seeder cannot perform on somebody's
+  behalf. Claiming those columns as covered would be the report lying about
+  what it seeded — the same call made for `crm_automations.last_run_at`
+  (ADR-195).
+- **Surfaces**: `/customer-portal` for the customer (its own route group
+  and its own gate — `requirePortalViewer` would send a customer to
+  *workspace onboarding*, which is asking a pest-control customer to sign
+  up as a pest-control company), and `/Services/portal` for staff. The
+  staff page leads with the two figures a rollout is judged on and neither
+  is visible from a count of who signed in: invitations never used, and
+  accounts never invited.
+- **Verification**: `services-portal.behavior` (13) on the real chain,
+  written from the attacker's side — a rival's customer reading our
+  invoices through a definer that could have returned everything, a
+  stranger calling all five reads, a deactivated login still holding a
+  session, a customer filing against a rival's site, the resolver
+  unreachable by every role, the patient attack of inviting our customer's
+  own address and waiting for them to accept it, direct reads of the portal
+  tables, and `anon` executing nothing.
+  `services-customer-portal-routes` (14) pins the boundary: one flat 403
+  with no identifiers in it, argument-free RPC calls, both Not Connected
+  labels, a triage that cannot rewrite the customer's words, and the
+  closing moment supplied with the closing status. Seed covers both tables
+  — 42/42, 44,837 rows. Hosted-apply scope `customer-portal` re-proves
+  forced RLS, no DELETE, the sealed resolver, the activation guard and the
+  nine caller-scoped definers after every apply.

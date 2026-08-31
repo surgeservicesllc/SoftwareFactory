@@ -56,8 +56,8 @@ built.
 | Duplicate detection on create | PestPac, FieldRoutes | **HAVE** (ADR-186) |
 | Global search across records | all | **HAVE** (ADR-186) |
 | Account timeline / service history | all | **HAVE** (ADR-185) |
-| **Customer portal — residential**: balances, pay invoice, request service, service history | PestPac, GorillaDesk (Pro), Briostack, Jobber | **GAP** |
-| **Customer portal — commercial**: open conditions, trend reports with heat maps, device summary, sighting tickets, SDS/compliance document library, inspection history | PestPac | **GAP** |
+| **Customer portal — residential**: balances, pay invoice, request service, service history | PestPac, GorillaDesk (Pro), Briostack, Jobber | **PARTIAL** — balances, invoices, visit history, documents and service requests ship (ADR-197). Paying online is **Not Connected**: no card processor is configured. |
+| **Customer portal — commercial**: open conditions, trend reports with heat maps, device summary, sighting tickets, SDS/compliance document library, inspection history | PestPac | **GAP** — the residential view ships (ADR-197); the commercial one (device summaries, trend heat maps, sighting tickets) does not. |
 | Customer communication: automated reminders, SMS/email notifications | Briostack, PestPac, FieldRoutes | **GAP** |
 
 ### B. Scheduling, routing, dispatch
@@ -158,8 +158,9 @@ first, and tracked in `AI/BACKLOG.md`:
 1. ~~Documents, canvassing, marketing~~ — **SHIPPED** as ADR-195.
 2. ~~Digital forms and inspections engine~~ — **SHIPPED** as ADR-196,
    with timesheets and licence expiry.
-3. **Customer portal** (increment 10) — both PestPac and Briostack lead
-   with it; residential first, then the commercial view.
+3. ~~Customer portal, residential view~~ — **SHIPPED** as ADR-197. The
+   commercial view (device summaries, trend heat maps, sighting tickets)
+   is still open.
 4. **Dashboards and route optimization** (increment 11).
 5. **Recurring auto-invoicing, AR aging and dunning** (increment 12).
 

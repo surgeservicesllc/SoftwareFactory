@@ -52,6 +52,8 @@ export type SeedCounts = {
   territories: number;
   commissions: number;
   documents: number;
+  portalUsers: number;
+  portalRequests: number;
   canvassRoutes: number;
   knocks: number;
   marketingLists: number;
@@ -345,8 +347,13 @@ export async function runSeed(
       is_primary: seat === 0,
     })),
   );
-  const contacts = await insertAll(client, "crm_contacts", contactRows, "id");
+  const contacts = await insertAll(client, "crm_contacts", contactRows, "id, account_id, email");
   if ("error" in contacts) return contacts;
+  // Keyed by account and address so a portal invitation can name the person
+  // it was sent to rather than floating free of the contact list.
+  const contactIdByKey = new Map(
+    contacts.data.map((row) => [`${row.account_id as string}:${row.email as string}`, row.id as string]),
+  );
 
   const propertyRows = dataset.accounts.flatMap((account) =>
     account.properties.map((property) => ({
@@ -989,6 +996,73 @@ export async function runSeed(
   const documents = await insertAll(client, "crm_documents", documentRows, "id");
   if ("error" in documents) return documents;
 
+  /* ------------------------------------------- the customer portal (10) */
+
+  /*
+   * INVITATIONS, not logins. `user_id`, `activated_at` and `last_seen_at`
+   * are left empty on every seeded row because a login is a real Supabase
+   * auth user accepting an invitation, and the seeder has none to offer.
+   * Writing a fabricated uuid there would break the foreign key; writing a
+   * date without one would claim a customer signed in who never did.
+   */
+  const portalUserRows = dataset.accounts.flatMap((account) => {
+    const accountId = accountIdByName.get(account.name);
+    if (accountId === undefined) return [];
+    return (account.portalUsers ?? []).map((portalUser) => ({
+      organization_id: org,
+      account_id: accountId,
+      contact_id: contactIdByKey.get(`${accountId}:${portalUser.email}`) ?? null,
+      email: portalUser.email,
+      role: portalUser.role,
+      invited_at: daysAgoIso(portalUser.invitedDaysAgo),
+      active: portalUser.active,
+      created_by: userId,
+    }));
+  });
+  const portalUsers = await insertAll(
+    client,
+    "crm_portal_users",
+    portalUserRows,
+    "id, account_id, email",
+  );
+  if ("error" in portalUsers) return portalUsers;
+  const portalUserIdByKey = new Map(
+    portalUsers.data.map((row) => [`${row.account_id as string}:${row.email as string}`, row.id as string]),
+  );
+
+  const portalRequestRows = dataset.accounts.flatMap((account) => {
+    const accountId = accountIdByName.get(account.name);
+    if (accountId === undefined) return [];
+    const visitOffset = visitOffsets.get(account.name) ?? 0;
+    const seats = account.portalUsers ?? [];
+    return (account.portalRequests ?? []).map((request) => {
+      const seat = request.portalSeat === undefined ? undefined : seats[request.portalSeat];
+      return {
+        organization_id: org,
+        account_id: accountId,
+        property_id:
+          request.propertySeat === undefined ? null : propertyFor(account.name, request.propertySeat),
+        portal_user_id:
+          seat === undefined ? null : portalUserIdByKey.get(`${accountId}:${seat.email}`) ?? null,
+        kind: request.kind,
+        status: request.status,
+        summary: request.summary,
+        detail: request.detail ?? null,
+        preferred_date: request.preferredInDays === undefined ? null : dateInDays(request.preferredInDays),
+        response: request.response ?? null,
+        work_order_id:
+          request.visitSeat === undefined ? null : visitIds[visitOffset + request.visitSeat] ?? null,
+        submitted_at: daysAgoIso(request.submittedDaysAgo),
+        // The schema pairs these: a closed request carries the moment it
+        // closed, and an open one carries none.
+        resolved_at: request.resolvedDaysAgo === undefined ? null : daysAgoIso(request.resolvedDaysAgo),
+        created_by: userId,
+      };
+    });
+  });
+  const portalRequests = await insertAll(client, "crm_portal_requests", portalRequestRows, "id");
+  if ("error" in portalRequests) return portalRequests;
+
   const canvassRouteRows = dataset.canvassRoutes.map((route) => {
     const walkedAt = daysAgoIso(route.walkedDaysAgo);
     return {
@@ -1512,6 +1586,8 @@ export async function runSeed(
       territories: territories.data.length,
       commissions: commissions.data.length,
       documents: documents.data.length,
+      portalUsers: portalUsers.data.length,
+      portalRequests: portalRequests.data.length,
       canvassRoutes: canvassRoutes.data.length,
       knocks: knocks.data.length,
       marketingLists: lists.data.length,

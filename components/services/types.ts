@@ -790,3 +790,63 @@ export type LicencesPayload = {
     noLicence: number;
   };
 };
+
+/* --- the customer portal (increment 10) --------------------------------- */
+
+export type PortalUserView = {
+  id: string;
+  accountId: string;
+  accountName: string | null;
+  contactId: string | null;
+  linked: boolean;
+  email: string;
+  role: string;
+  invitedAt: string;
+  activatedAt: string | null;
+  lastSeenAt: string | null;
+  active: boolean;
+  state: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type PortalRequestView = {
+  id: string;
+  accountId: string;
+  propertyId: string | null;
+  portalUserId: string | null;
+  kind: string;
+  status: string;
+  summary: string;
+  detail: string | null;
+  preferredDate: string | null;
+  response: string | null;
+  workOrderId: string | null;
+  submittedAt: string;
+  resolvedAt: string | null;
+  open: boolean;
+  answered: boolean;
+  updatedAt: string;
+};
+
+export type PortalUsersPayload = {
+  portalUsers: PortalUserView[];
+  counts: {
+    total: number;
+    active: number;
+    invited: number;
+    suspended: number;
+    neverSignedIn: number;
+    accountsWithoutPortal: number;
+  };
+};
+
+export type PortalRequestsPayload = {
+  requests: PortalRequestView[];
+  counts: {
+    total: number;
+    open: number;
+    awaitingReply: number;
+    byStatus: Record<string, number>;
+  };
+};

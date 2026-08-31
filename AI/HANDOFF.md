@@ -2,6 +2,47 @@
 
 Last updated: 2026-08-31
 
+## Newest (2026-08-31, latest+19): the customer portal (ADR-197, task #64)
+
+`20260830001700` adds crm_portal_users and crm_portal_requests plus NINE
+SECURITY DEFINER functions. This is the most security-sensitive migration
+in the CRM: it admits a reader who is NOT an organization member.
+
+READ ADR-197 BEFORE TOUCHING IT. The short version, and the parts that are
+easy to undo by accident:
+
+- **No existing policy was widened, and none should be.** The portal's
+  entire visible surface is the column lists of the definer functions in
+  that one file. Adding an "or is a portal user" clause to a staff policy
+  would move that surface into every table at once.
+- **`crm_portal_account_for(uuid)` is executable by NOBODY** — not
+  authenticated, not service_role. It takes a login id, so execute on it
+  is a cross-tenant identifier leak. The projections reach it as their own
+  definer owner. The app asks about itself through `crm_portal_me()`,
+  which takes no argument. Do not "helpfully" grant the resolver back.
+- **Staff invite an ADDRESS; the customer claims it.**
+  `crm_portal_guard_activation` refuses any write that points `user_id` at
+  a session other than the caller's own, and
+  `crm_portal_accept_invitation()` is the only way in — it matches the
+  verified address behind the caller's own session, read through
+  `to_jsonb(u) ->> 'email'` so it parses against the test harness's auth
+  shim too. The trigger governs only CHANGES to `user_id`, which is what
+  lets staff still suspend or re-role a claimed link.
+- **Every accept failure returns the same message.** Never split "never
+  invited" from "already claimed" — that turns the route into an oracle
+  for whether an address is a customer.
+- **Seeding is invitations only.** `user_id`, `activated_at` and
+  `last_seen_at` stay empty and are deliberately NOT in the validator's
+  optional list. A seeder cannot accept an invitation on somebody's
+  behalf; claiming those columns as covered would make the report lie.
+- **Two Not Connected labels are load-bearing**: paying an invoice needs a
+  card processor, opening a document needs object storage. Neither is
+  configured. A storage path is not a link.
+- `/customer-portal` has its OWN route group and gate. It must not use
+  `requirePortalViewer` — that sends a signed-in person with no
+  organization to workspace onboarding, i.e. asks a pest-control customer
+  to sign up as a pest-control company.
+
 ## Newest (2026-08-31, latest+18): the forms engine (ADR-196, task #64)
 
 `20260830001600` adds crm_form_templates + crm_form_fields,

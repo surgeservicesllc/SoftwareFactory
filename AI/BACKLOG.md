@@ -98,10 +98,28 @@ the full seeded E2E journey passes — increment 10 of the plan.
   20260830001600; hosted apply: scope=forms-timesheets-licences after merge.
 - [ ] Increment 9 follow-on: WDO/termite diagrams (a drawing surface, not a
   form), and PDF rendering of a completed inspection.
-- [ ] Increment 10: the customer portal — residential first (balance, pay
-  request, service history, documents), then the commercial view (open
-  conditions, device summary, sighting tickets, SDS/compliance library,
-  inspection history). Both PestPac and Briostack lead with this.
+- [x] Increment 10 (ADR-197): the customer portal, residential view — one
+  login resolves to exactly one account through SECURITY DEFINER
+  projections, with no existing staff policy widened; balance, issued
+  invoices, visit history, documents and service requests; staff invite an
+  address and the customer claims it themselves. /customer-portal and
+  /Services/portal. 20260830001700; hosted apply: scope=customer-portal
+  after merge.
+- [ ] Increment 10 follow-on: the COMMERCIAL portal view — open
+  conditions, device summary with trend heat maps, sighting tickets, an
+  SDS/compliance document library and inspection history. PestPac has it;
+  the residential view that shipped does not.
+- [ ] Increment 10 follow-on: sending the invitation. The row exists and
+  the accept flow works, but nothing emails a customer to tell them — no
+  email provider is connected, so an invitation is delivered by whatever
+  the office does today. Wire it when a provider is supplied.
+- [ ] Increment 10 follow-on: the workflow size ceiling. After
+  scope=customer-portal, `.github/workflows/apply-hosted-migrations.yml`
+  is ~488KB against a 490,000-byte guard — roughly one scope of headroom
+  left. Extract the per-scope postflight SQL into
+  `.github/hosted-apply/postflight/<scope>.sql` and run it with `psql -f`,
+  the way the probe SQL was extracted, BEFORE adding increment 11's
+  scope.
 - [ ] Increment 11: operating dashboards (revenue, retention/churn,
   technician productivity, route density) and route optimization —
   sequencing a day's stops by real geography, not a claim of it.

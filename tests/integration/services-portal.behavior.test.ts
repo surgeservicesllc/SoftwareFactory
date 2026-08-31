@@ -53,6 +53,9 @@ describe("the customer portal", { timeout: 240_000 }, () => {
       create schema if not exists auth;
       create table auth.users (
         id uuid primary key default gen_random_uuid(),
+        -- Real Supabase carries this column; the portal's accept flow reads
+        -- it through to_jsonb() so the same SQL parses either way.
+        email text,
         raw_user_meta_data jsonb not null default '{}'::jsonb
       );
       create or replace function auth.uid() returns uuid language sql stable as $$
@@ -152,8 +155,10 @@ describe("the customer portal", { timeout: 240_000 }, () => {
   it("sets up two tenants, each with a customer and a portal login", async () => {
     await db.exec("reset role");
     await db.exec(`
-      insert into auth.users (id) values
-        ('${customerLogin}'), ('${strangerLogin}'), ('${rivalCustomerLogin}');
+      insert into auth.users (id, email) values
+        ('${customerLogin}', 'ap@harborview.example'),
+        ('${strangerLogin}', 'nobody@elsewhere.example'),
+        ('${rivalCustomerLogin}', 'ap@rivalgrocers.example');
     `);
 
     await as(acmeOwner);
@@ -163,11 +168,13 @@ describe("the customer portal", { timeout: 240_000 }, () => {
       [acmeOrg, acmeOwner],
     );
     acmeAccount = acme.rows[0].id;
+    // Staff invite an ADDRESS. They cannot attach a login to it — that is
+    // the customer's own act, below.
     await db.query(
       `insert into public.crm_portal_users
-         (organization_id, account_id, user_id, email, role, activated_at, created_by)
-       values ($1, $2, $3, 'ap@harborview.example', 'payer', now(), $4)`,
-      [acmeOrg, acmeAccount, customerLogin, acmeOwner],
+         (organization_id, account_id, email, role, created_by)
+       values ($1, $2, 'ap@harborview.example', 'payer', $3)`,
+      [acmeOrg, acmeAccount, acmeOwner],
     );
     await db.query(
       `insert into public.crm_invoices
@@ -194,9 +201,9 @@ describe("the customer portal", { timeout: 240_000 }, () => {
     rivalAccount = rival.rows[0].id;
     await db.query(
       `insert into public.crm_portal_users
-         (organization_id, account_id, user_id, email, activated_at, created_by)
-       values ($1, $2, $3, 'ap@rivalgrocers.example', now(), $4)`,
-      [rivalOrg, rivalAccount, rivalCustomerLogin, rivalOwner],
+         (organization_id, account_id, email, created_by)
+       values ($1, $2, 'ap@rivalgrocers.example', $3)`,
+      [rivalOrg, rivalAccount, rivalOwner],
     );
     await db.query(
       `insert into public.crm_invoices
@@ -208,6 +215,43 @@ describe("the customer portal", { timeout: 240_000 }, () => {
     await reset();
 
     expect(acmeAccount).not.toBe(rivalAccount);
+  });
+
+  it("lets the invited address, and only it, turn an invitation into a login", async () => {
+    // A stranger holding a session cannot accept somebody else's
+    // invitation, and is told nothing about whether one exists.
+    await asPortal(strangerLogin);
+    await expect(
+      db.query("select public.crm_portal_accept_invitation()"),
+    ).rejects.toThrow(/no open invitation for this address/);
+
+    // The invited address accepts its own.
+    await asPortal(customerLogin);
+    const claimed = await db.query<{ id: string }>(
+      "select public.crm_portal_accept_invitation() as id",
+    );
+    expect(claimed.rows[0].id).toMatch(/^[0-9a-f-]{36}$/);
+
+    await asPortal(rivalCustomerLogin);
+    await db.query("select public.crm_portal_accept_invitation()");
+
+    // Accepting twice is not a second door: the invitation is already
+    // claimed, so there is nothing open to accept.
+    await asPortal(customerLogin);
+    await expect(
+      db.query("select public.crm_portal_accept_invitation()"),
+    ).rejects.toThrow(/no open invitation for this address/);
+    await reset();
+
+    // Activation is derived from the acceptance, not asserted by staff.
+    const { rows } = await db.query<{ activated: boolean; seen: boolean }>(
+      `select activated_at is not null as activated, last_seen_at is not null as seen
+         from public.crm_portal_users where user_id = $1`,
+      [customerLogin],
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].activated).toBe(true);
+    expect(rows[0].seen).toBe(true);
   });
 
   it("shows a portal user their own account, and only theirs", async () => {
@@ -241,6 +285,47 @@ describe("the customer portal", { timeout: 240_000 }, () => {
     // Not one row of ours, in a function that runs as the definer and could
     // have returned everything had it not filtered.
     expect(invoices.rows.map((row) => row.number)).toEqual(["INV-R-1"]);
+    await reset();
+  });
+
+  it("will not answer the resolver about anybody but the caller", async () => {
+    // crm_portal_account_for takes a uuid. If a customer — or a member of
+    // any other tenant — could execute it, they could ask it about a login
+    // that is not theirs and be handed that login's organization and
+    // account. So nobody holds execute on it; the projections reach it as
+    // their own definer owner.
+    await reset();
+    const { rows: reachable } = await db.query<{ grantee: string }>(
+      `select r.rolname as grantee
+         from pg_proc p
+         join pg_namespace n on n.oid = p.pronamespace
+         cross join unnest(array['anon', 'authenticated', 'service_role']) as r(rolname)
+        where n.nspname = 'public'
+          and p.proname = 'crm_portal_account_for'
+          and has_function_privilege(r.rolname, p.oid, 'execute')`,
+    );
+    expect(reachable.map((row) => row.grantee)).toEqual([]);
+
+    // And the question the app actually needs answered — "who am I?" —
+    // takes no argument, so it cannot be pointed at somebody else.
+    await asPortal(customerLogin);
+    const mine = await db.query<{ account_id: string }>(
+      "select account_id from public.crm_portal_me()",
+    );
+    expect(mine.rows).toHaveLength(1);
+    expect(mine.rows[0].account_id).toBe(acmeAccount);
+
+    await asPortal(rivalCustomerLogin);
+    const theirs = await db.query<{ account_id: string }>(
+      "select account_id from public.crm_portal_me()",
+    );
+    expect(theirs.rows[0].account_id).toBe(rivalAccount);
+    expect(theirs.rows[0].account_id).not.toBe(acmeAccount);
+
+    // A stranger is nobody: the same call answers with no row rather than
+    // erroring in a way that would confirm the uuid exists.
+    await asPortal(strangerLogin);
+    expect((await db.query("select * from public.crm_portal_me()")).rows).toEqual([]);
     await reset();
   });
 
@@ -337,8 +422,8 @@ describe("the customer portal", { timeout: 240_000 }, () => {
 
   it("keeps one login to one account, across every tenant", async () => {
     await as(rivalOwner);
-    // The rival cannot attach our customer's login to their own account and
-    // read us through it: the uniqueness is global, not per-tenant.
+    // Assigning a login outright is refused before uniqueness is even
+    // reached: staff invite an address, they do not hand out sessions.
     await expect(
       db.query(
         `insert into public.crm_portal_users
@@ -346,7 +431,37 @@ describe("the customer portal", { timeout: 240_000 }, () => {
          values ($1, $2, $3, 'stolen@rivalgrocers.example', now(), $4)`,
         [rivalOrg, rivalAccount, customerLogin, rivalOwner],
       ),
+    ).rejects.toThrow(/may only be attached by the person it belongs to/);
+
+    // So the reachable attack is the patient one: invite our customer's own
+    // address to the rival's account and wait for them to accept it. The
+    // uniqueness is global rather than per-tenant, so the second claim has
+    // nowhere to land — one login stays one account.
+    await db.query(
+      `insert into public.crm_portal_users (organization_id, account_id, email, created_by)
+       values ($1, $2, 'ap@harborview.example', $3)`,
+      [rivalOrg, rivalAccount, rivalOwner],
+    );
+    await reset();
+
+    await asPortal(customerLogin);
+    await expect(
+      db.query("select public.crm_portal_accept_invitation()"),
     ).rejects.toThrow(/crm_portal_users_user_key/);
+
+    // And they still see exactly the one account they always saw.
+    const summary = await db.query<{ account_name: string }>(
+      "select account_name from public.crm_portal_summary()",
+    );
+    expect(summary.rows.map((row) => row.account_name)).toEqual(["Harborview Foods"]);
+    await reset();
+
+    // Clean up the bait so later assertions count what they expect to.
+    await as(rivalOwner);
+    await db.query(
+      "update public.crm_portal_users set active = false where organization_id = $1 and email = $2",
+      [rivalOrg, "ap@harborview.example"],
+    );
     await reset();
   });
 

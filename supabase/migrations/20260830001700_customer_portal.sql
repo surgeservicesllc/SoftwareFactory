@@ -167,8 +167,28 @@ as $$
    limit 1;
 $$;
 
-revoke all on function public.crm_portal_account_for(uuid) from public, anon, service_role;
-grant execute on function public.crm_portal_account_for(uuid) to authenticated;
+-- The resolver takes a uuid, so anybody who could execute it could ask
+-- "is THIS login a portal user, and for whose account?" about a uuid that
+-- is not theirs — which would hand one tenant another tenant's
+-- organization and account identifiers. Nobody gets execute on it. The
+-- projections below reach it as their own definer owner, and the app asks
+-- about itself through `crm_portal_me()`, which takes no argument and so
+-- can only ever answer about the caller.
+revoke all on function public.crm_portal_account_for(uuid)
+  from public, anon, authenticated, service_role;
+
+-- "Am I a portal user, and for which account?" — asked about the caller,
+-- by construction. This is what a portal page calls to decide whether it
+-- has a customer in front of it at all.
+create or replace function public.crm_portal_me()
+returns table (organization_id uuid, account_id uuid, portal_user_id uuid, role public.crm_portal_role)
+language sql
+stable
+security definer
+set search_path = pg_catalog, public
+as $$
+  select * from public.crm_portal_account_for(auth.uid());
+$$;
 
 -- ---------------------------------------------------------------------------
 -- The customer-visible projections — invariant 2. Each returns named
@@ -314,6 +334,25 @@ as $$
    limit 200;
 $$;
 
+-- The one column a portal user may write about themselves, and the only
+-- write in the whole read path. `last_seen_at` is what tells a branch
+-- office whether an invitation was ever really used; a column nothing ever
+-- writes would leave every portal user looking dormant forever. The
+-- function can set nothing else, on nobody else's row.
+create or replace function public.crm_portal_touch()
+returns void
+language sql
+volatile
+security definer
+set search_path = pg_catalog, public
+as $$
+  update public.crm_portal_users
+     set last_seen_at = now()
+   where user_id = auth.uid()
+     and active
+     and activated_at is not null;
+$$;
+
 -- Invariant 3: the customer can say something, once.
 create or replace function public.crm_portal_submit_request(
   p_kind public.crm_request_kind,
@@ -355,11 +394,108 @@ begin
 end;
 $$;
 
+-- ---------------------------------------------------------------------------
+-- Who may attach a login to an invitation.
+--
+-- Staff can write crm_portal_users — that is how an invitation is created
+-- and withdrawn. But `user_id` is not an ordinary column: writing somebody
+-- else's auth id into it would hand that person's next portal sign-in a
+-- different company's account. RLS cannot express "this column, only this
+-- value", and the API is not the only door — a member holds the same
+-- privileges through PostgREST directly. So the rule lives in the database.
+--
+-- A portal login is CLAIMED by the person signing in, never assigned.
+-- ---------------------------------------------------------------------------
+
+create or replace function public.crm_portal_guard_activation()
+returns trigger
+language plpgsql
+security definer
+set search_path = pg_catalog, public
+as $$
+begin
+  -- Only a CHANGE to user_id is governed. Staff still deactivate a link,
+  -- change a role or correct a contact on a row that already carries a
+  -- login; what they cannot do is point that column at a session.
+  if tg_op = 'UPDATE' and new.user_id is not distinct from old.user_id then
+    return new;
+  end if;
+  -- Detaching is allowed — a link can be released. Attaching is not,
+  -- unless the session doing it is the one being attached.
+  if new.user_id is not null and new.user_id is distinct from auth.uid() then
+    raise exception 'a portal login may only be attached by the person it belongs to'
+      using errcode = 'insufficient_privilege';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists crm_portal_users_guard_activation on public.crm_portal_users;
+create trigger crm_portal_users_guard_activation
+  before insert or update on public.crm_portal_users
+  for each row execute function public.crm_portal_guard_activation();
+
+-- The trigger function is not an entry point. Nothing outside a trigger has
+-- a reason to call it, so nothing may.
+revoke all on function public.crm_portal_guard_activation()
+  from public, anon, authenticated, service_role;
+
+-- ---------------------------------------------------------------------------
+-- Accepting an invitation. Staff invite an ADDRESS; the person holding a
+-- session at that address turns it into a login, themselves.
+--
+-- The match is on the verified address behind the caller's own session,
+-- read through `to_jsonb(u) ->> 'email'` rather than a named column so the
+-- text parses against both real Supabase and the integration harness's
+-- minimal auth shim. Nothing the caller sends is trusted: the portal user
+-- id is a hint that narrows the search, never the thing that grants it.
+-- ---------------------------------------------------------------------------
+
+create or replace function public.crm_portal_accept_invitation(p_portal_user uuid default null)
+returns uuid
+language plpgsql
+security definer
+set search_path = pg_catalog, public
+as $$
+declare
+  v_email text;
+  v_id uuid;
+begin
+  select lower(btrim(to_jsonb(u) ->> 'email')) into v_email
+    from auth.users u where u.id = auth.uid();
+  if v_email is null or v_email = '' then
+    raise exception 'no verified address to match an invitation against'
+      using errcode = 'insufficient_privilege';
+  end if;
+
+  select p.id into v_id
+    from public.crm_portal_users p
+   where lower(btrim(p.email)) = v_email
+     and p.active
+     and p.user_id is null
+     and (p_portal_user is null or p.id = p_portal_user)
+   order by p.invited_at desc
+   limit 1;
+  if v_id is null then
+    -- Deliberately the same refusal whether the address was never invited,
+    -- was already claimed, or was switched off. Telling them apart would
+    -- turn this into a way to ask whether an address is a customer.
+    raise exception 'no open invitation for this address' using errcode = 'no_data_found';
+  end if;
+
+  update public.crm_portal_users
+     set user_id = auth.uid(), activated_at = now(), last_seen_at = now()
+   where id = v_id;
+  return v_id;
+end;
+$$;
+
 do $$
 declare
   v_function text;
 begin
   foreach v_function in array array[
+    'crm_portal_me()', 'crm_portal_touch()', 'crm_portal_accept_invitation(uuid)',
     'crm_portal_summary()', 'crm_portal_invoices()', 'crm_portal_visits()',
     'crm_portal_documents()', 'crm_portal_requests_mine()',
     'crm_portal_submit_request(public.crm_request_kind, text, text, uuid, date)'

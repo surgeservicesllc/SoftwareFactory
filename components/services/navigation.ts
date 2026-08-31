@@ -13,6 +13,7 @@ import {
   ScanLine,
   ShieldCheck,
   Users,
+  UserRoundCheck,
   type LucideIcon,
 } from "lucide-react";
 
@@ -123,6 +124,12 @@ export const SERVICES_NAVIGATION: readonly ServicesNavItem[] = [
     label: "Forms & Compliance",
     description: "Inspections, timesheets, licence expiry",
     icon: ClipboardCheck,
+  },
+  {
+    href: `${SERVICES_ROOT}/portal`,
+    label: "Customer Portal",
+    description: "Invitations, and what customers asked for",
+    icon: UserRoundCheck,
   },
 ];
 

@@ -216,10 +216,11 @@ describe("Phase 1E production operations behavior", () => {
     // crm_campaigns, the append-only crm_messages, crm_automations and the
     // append-only crm_attributions; 187 since the forms engine (ADR-196)
     // added crm_form_templates, crm_form_fields, crm_form_instances,
-    // crm_form_answers and crm_timesheets. Each is RLS-enabled and forced,
-    // which
+    // crm_form_answers and crm_timesheets; 189 since the customer portal
+    // (ADR-197) added crm_portal_users and crm_portal_requests. Each is
+    // RLS-enabled and forced, which
     // the filter on the next line is what actually proves.
-    expect(rlsRows).toHaveLength(187);
+    expect(rlsRows).toHaveLength(189);
     expect(rlsRows.filter((row) => !row.relrowsecurity || !row.relforcerowsecurity)).toEqual([]);
 
     const { rows: grantRows } = await db.query<{ table_name: string }>(
