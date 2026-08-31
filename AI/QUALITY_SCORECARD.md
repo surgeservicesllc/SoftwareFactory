@@ -62,6 +62,25 @@ and one-file transactional probe/apply/verify semantics. Hosted apply,
 exact-head CI/build/browser, deployment, health, and live acceptance remain
 pending; all execution switches remain OFF and the kill switch remains ON.
 
+**Addendum, 2026-08-31 latest+55 - Grok deploy-readiness projection
+(ADR-236):** Twelve focused files pass 82/82 tests, including the provider
+projection/admission unit contract, App Router behavior, migration static
+contract, post-019 null-fence contract, schema-security allowlist/signature,
+migration version/collision/runbook/decision guards, the Claude executor tool
+ceiling, and a full-chain PGlite runtime canary. The canary proves the
+immutable source message remains a RED deploy plan with its HUMAN delivery
+handoff while the durable graph contains only four GREEN Claude inspections,
+zero resources, zero gates, and zero graph runs. Null admission versions, RED
+projected risk, projected owner approval, and any resource widening roll back
+without graph, launch, or roster residue. Exact replay returns the same launch
+and revalidates current admission. Changed planner jobs or verifier schemas also
+fail before residue, and the worker/executor suite proves this fixed graph gets
+an explicit empty provider-tool list. Focused ESLint passes. Repository typecheck
+is blocked before this slice by the shared dependency junction missing
+`unpdf`; Turbopack also refuses that out-of-root `node_modules` junction before
+compilation. Exact-main consolidated typecheck/build/CI remain release gates. The
+candidate has not been pushed, hosted, dispatched, or applied and does not
+claim deployment or production readiness.
 **Addendum, 2026-08-31 latest+52 - protected Grok context-envelope 011 lane
 (ADR-232):** The workflow contract, action-pin, and secret-boundary suites pass
 16/16; focused ESLint and whitespace checks pass. A native full-chain PGlite

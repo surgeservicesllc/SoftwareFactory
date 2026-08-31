@@ -34,6 +34,8 @@ export type NodeExecutorOptions = Readonly<{
   initialContext?: GrokClaimContext | null;
   /** Model per node tier; the tiering decision stays with the caller. */
   modelForNode?: (node: CompiledNode) => string;
+  /** Explicit provider tool ceiling. An empty list is a genuine no-tools run. */
+  allowedTools?: readonly string[];
   maxTurns?: number;
 }>;
 
@@ -216,7 +218,7 @@ export function buildClaudeNodeExecutor(
         auth,
         {
           workingDirectory: options.workingDirectory,
-          allowedTools: ["Read", "Glob", "Grep"],
+          allowedTools: options.allowedTools ?? ["Read", "Glob", "Grep"],
           outputSchema: requiredOutputSchema,
           // Turns bound the exploration; the deadline above bounds the wall
           // clock. The transport clamps this to its own ceiling, which is why

@@ -6055,13 +6055,6 @@ Verify repeats the catalog/runtime evidence without replaying the migration.
 No reset, repair, down, broad migration apply, or automatic workflow dispatch
 is a containment mechanism; any mismatch stops for a new forward change.
 
-Function identity is the line-ending-canonical native PostgreSQL
-`pg_proc.prosrc`, not a source-file slice containing `$function$` delimiter
-text. Runtime fixtures are synthetic and rolled back, audit checks are
-content-free, and the canary proves no graph, node, agent, provider, bridge, or
-Phase 1C execution. Workers, schedules, autonomy, and automatic actions stay
-OFF and the organization kill switch stays ON for the entire lane.
-
 ## ADR-233 - Phase 1C completion records one exact graph re-wake intent
 
 - **Date**: 2026-08-31
@@ -6167,6 +6160,52 @@ plan therefore produces `replanRequired=true`. No context or message operation
 wakes a worker, starts a run, dispatches an action, or changes autonomy. Replan
 must be a separately designed and owner-visible transition rather than an
 implicit side effect of conversation.
+
+## ADR-236 - A deploy request may execute readiness inspection, never delivery
+
+- **Date**: 2026-08-31
+- **Status**: Accepted for the repository candidate; protected migration,
+  exact-head release, and provider-backed acceptance remain required
+
+The deterministic planner-v3 deploy plan remains immutable, RED, and owner-
+gated, including its final `delivery` HUMAN handoff. That task is not executable
+through Grok. A separate deploy-readiness bridge may derive only the four exact
+Claude MODEL inspection tasks (`inspect_release`, `verify_release_tests`,
+`review_release_security`, and `verification_fan_in`) after proving the whole
+source plan, message, task/edge/budget shape, complete current specialist
+roster, exact planner-selected assignment, provider/model/capability/tier, and
+both specialist and execution-admission hashes.
+
+The derived graph is a distinct GREEN/no-owner-approval inspection graph. Every
+node has empty reads and writes, no lifecycle stage or gate, no feedback edge,
+no provider fallback, and exact pinned input/output schema hashes. The source
+`delivery` task and its edge are excluded; the fixed graph goal explicitly
+prohibits merge, deploy, resource mutation, worker wake, and production claims.
+The graph worker maps only that fixed goal to an explicit empty provider-tool
+list, making the persisted zero-resource contract true at execution as well as
+in the database. Forward migration
+`20260831001800_grok_deploy_readiness_runtime.sql` repeats the derivation from
+the immutable plan instead of trusting the browser payload, records an input
+hash that includes the complete source-plan hash, creates the graph, pauses it
+in the same transaction, links immutable evidence, and creates zero graph runs.
+The service-only SECURITY DEFINER boundary has `search_path=pg_catalog`, uses
+the null-safe v2 roster protocol, and grants execution only to `service_role`.
+
+This closes the dead-end where a deploy prompt could only return
+`grok_intent_runtime_bridge_required`; it does not perform or authorize a
+deployment. Replay revalidates the current admissions and the persisted zero-
+resource/zero-gate/zero-run posture. Actual merge, deployment, health
+observation, delivery approval, worker activation, autonomy, and automatic
+actions remain outside this bridge and retain their existing RED/Not Connected
+controls. The repository candidate has not been pushed, hosted, dispatched, or
+applied, so no production or provider-backed result is claimed.
+
+Function identity is the line-ending-canonical native PostgreSQL
+`pg_proc.prosrc`, not a source-file slice containing `$function$` delimiter
+text. Runtime fixtures are synthetic and rolled back, audit checks are
+content-free, and the canary proves no graph, node, agent, provider, bridge, or
+Phase 1C execution. Workers, schedules, autonomy, and automatic actions stay
+OFF and the organization kill switch stays ON for the entire lane.
 
 ## ADR-237 - Release the admission-version null fence through one exact-file lane
 

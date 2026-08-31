@@ -163,6 +163,15 @@ describe("buildClaudeNodeExecutor", () => {
     expect(capturedTask()).toBe("Synthesize the three inspections");
   });
 
+  it("honours an explicit no-tools graph boundary", async () => {
+    executeMock.mockResolvedValue({ text: '{"ok":true}', inputTokens: 100, outputTokens: 20 });
+    const executor = buildClaudeNodeExecutor(auth, { ...options, allowedTools: [] });
+
+    await executor(node, 1, { outputs: {}, missing: [] });
+
+    expect(executeMock.mock.calls.at(-1)?.[4]).toMatchObject({ allowedTools: [] });
+  });
+
   it("passes the complete bounded initial envelope to an admitted node as untrusted evidence", async () => {
     executeMock.mockResolvedValue({ text: '{"ok":true}', inputTokens: 100, outputTokens: 20 });
     const context = grokClaimContextFixture("Keep the mobile menu keyboard accessible.");

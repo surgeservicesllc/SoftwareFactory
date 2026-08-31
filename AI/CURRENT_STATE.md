@@ -85,6 +85,34 @@ Focused behavior/contract and full-chain migration tests pass locally. Nothing
 was pushed, deployed, dispatched, or applied; workers, autonomy, and automatic
 actions remain OFF and the global kill switch remains ON.
 
+## 2026-08-31: Grok deploy intent now records a contained release-readiness graph (ADR-236)
+
+The repository candidate replaces the deploy-intent dead end with one exact,
+durable inspection projection. The saved planner-v3 plan remains RED and keeps
+its owner-gated `delivery` HUMAN handoff. Only the four exact Claude release-
+identity, test-evidence, security, and fan-in tasks enter the projected graph;
+delivery is excluded. The projected graph is GREEN, has no owner gate, and
+every node has empty reads/writes plus null lifecycle/gate fields. Its fixed
+goal explicitly forbids merge, deployment, resource mutation, worker wake, and
+production claims. The graph worker recognizes only that fixed goal and passes
+an explicit empty provider-tool list, so the runtime cannot silently turn the
+zero-resource contract back into checkout access.
+
+Forward migration `20260831001800_grok_deploy_readiness_runtime.sql` derives
+that graph again from the immutable plan message and fails on plan, task, edge,
+budget, roster, admission, model, capability, tier, identity, or hash drift. Its
+node-contract proof pins the exact deterministic input/output schema hashes, so
+weakened verifier evidence requirements cannot enter the graph. Its
+service-role-only SECURITY DEFINER boundary uses the null-safe roster v2 entry,
+records the source-plan hash in idempotent launch evidence, atomically pauses
+the graph, and creates no graph run. Replay revalidates admissions, zero
+resources/gates, pause, and zero runs.
+
+Focused unit/route/contract/schema tests and the full-chain PGlite runtime
+canary are green in the isolated candidate. Nothing in this slice merges,
+deploys, wakes a worker, enables autonomy, changes automatic actions, or
+disengages the kill switch. It has not been pushed, hosted, dispatched, or
+applied, and it does not declare Grok or any deploy path production-ready.
 ## 2026-08-31: Grok exposes advanced audited controls without bypassing them (ADR-231)
 
 The repository candidate adds one collapsed **Advanced controls** section to

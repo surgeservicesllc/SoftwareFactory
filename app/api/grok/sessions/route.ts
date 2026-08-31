@@ -37,6 +37,8 @@ import {
   storedGrokPlan,
 } from "@/lib/grok/session-store";
 import {
+  buildGrokDeployReadinessAdmissions,
+  buildGrokDeployReadinessProjection,
   buildGrokProviderAdmissions,
   buildGrokReadOnlyIntentAdmissions,
   GrokProviderAdmissionError,
@@ -390,20 +392,50 @@ export async function POST(request: Request) {
     bundle = await persistInitialContext(bundle);
     if (!plannedGraphLink(bundle)) {
       if (plan.intent.kind === "deploy") {
-        return jsonNoStore(
-          {
-            sessionId: session.id,
-            error: {
-              code: "grok_intent_runtime_bridge_required",
-              message: `The deterministic ${plan.intent.kind} plan and specialist roster are recorded, but no intent-specific executable bridge is installed. No graph or worker was started.`,
+        let readiness;
+        let providerAdmissions;
+        try {
+          readiness = buildGrokDeployReadinessProjection(plan);
+          providerAdmissions = buildGrokDeployReadinessAdmissions(plan, readiness.nodes);
+        } catch (error) {
+          if (!(error instanceof GrokProviderAdmissionError)) throw error;
+          return jsonNoStore(
+            {
+              sessionId: session.id,
+              error: {
+                code: "grok_provider_admission_required",
+                message: error.message,
+              },
+              workerWoken: false,
+              executionStarted: false,
             },
-            workerWoken: false,
-            executionStarted: false,
+            { status: 409 },
+          );
+        }
+        const { error: launchError } = await serviceClient.rpc(
+          "launch_grok_deploy_readiness_v1_as_server",
+          {
+            p_organization_id: context.activeOrganization.id,
+            p_requested_by: context.user.id,
+            p_project_id: project.projectId,
+            p_session_id: session.id,
+            p_message_id: assistantMessage.id,
+            p_idempotency_key: idempotencyKey,
+            p_goal: readiness.goal,
+            p_topology: readiness.topology,
+            p_topology_reasons: readiness.topologyReasons,
+            p_risk_level: readiness.riskLevel,
+            p_requires_owner_approval: readiness.requiresOwnerApproval,
+            p_nodes: readiness.nodes,
+            p_edges: readiness.edges,
+            p_budget: readiness.budget,
+            p_roster_idempotency_key: grokSpecialistRosterIdempotencyKey(idempotencyKey),
+            p_admissions: providerAdmissions,
           },
-          { status: 409 },
         );
-      }
-      if (plan.intent.kind === "research") {
+        if (launchError) return databaseErrorResponse(launchError);
+        bundle = await readGrokBundle(context.client, context.activeOrganization.id, session.id);
+      } else if (plan.intent.kind === "research") {
         if (
           plan.graphLaunch.riskLevel !== "green"
           || plan.graphLaunch.requiresOwnerApproval
@@ -552,7 +584,9 @@ export async function POST(request: Request) {
     const executionState = detail.session.status;
     const graphKind = plan.intent.kind === "research"
       ? "read-only research graph"
-      : "canonical release graph";
+      : plan.intent.kind === "deploy"
+        ? "read-only release-readiness graph"
+        : "canonical release graph";
     const executionMessage = executionStarted
       ? `A durable graph run is linked and the session is ${executionState}. This request did not dispatch a worker.`
       : executionState === "paused"
@@ -568,7 +602,9 @@ export async function POST(request: Request) {
         state: executionState,
         bridge: plan.intent.kind === "research"
           ? "read_only_research_v2"
-          : "full_lifecycle_v4",
+          : plan.intent.kind === "deploy"
+            ? "deploy_readiness_v1"
+            : "full_lifecycle_v4",
         message: executionMessage,
       },
     }, { status: 202 });

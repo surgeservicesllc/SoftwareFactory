@@ -330,6 +330,9 @@ describe("SECURITY DEFINER functions", () => {
       // Grok has no service_role table grants. Its bounded server/worker RPCs
       // and null-fenced canonical Full Lifecycle v4 launcher are pinned by exact overload
       // below; the launcher atomically pauses before visibility.
+      // Deploy intent receives only a resource-free GREEN readiness projection;
+      // its RED delivery handoff remains immutable plan evidence, never a node.
+      "launch_grok_deploy_readiness_v1_as_server",
       "launch_grok_full_lifecycle_v4_as_server",
       // Research launches the planner's exact Claude-only, zero-write DAG;
       // this service boundary also pauses before visibility and never wakes.
@@ -437,6 +440,7 @@ describe("SECURITY DEFINER functions", () => {
       where namespace.nspname = 'public'
         and proc.proname in (
           'append_grok_message_as_server',
+          'launch_grok_deploy_readiness_v1_as_server',
           'launch_grok_full_lifecycle_v3_as_server',
           'launch_grok_full_lifecycle_v4_as_server',
           'launch_grok_read_only_research_v1_as_server',
@@ -461,6 +465,11 @@ describe("SECURITY DEFINER functions", () => {
         identity_arguments:
           "p_organization_id uuid, p_session_id uuid, p_role text, p_content text, p_metadata jsonb, p_idempotency_key text, p_expected_sequence bigint, p_reply_to_message_id uuid",
         proname: "append_grok_message_as_server",
+      },
+      {
+        identity_arguments:
+          "p_organization_id uuid, p_requested_by uuid, p_project_id uuid, p_session_id uuid, p_message_id uuid, p_idempotency_key text, p_goal text, p_topology graph_topology, p_topology_reasons jsonb, p_risk_level risk_level, p_requires_owner_approval boolean, p_nodes jsonb, p_edges jsonb, p_budget jsonb, p_roster_idempotency_key text, p_admissions jsonb",
+        proname: "launch_grok_deploy_readiness_v1_as_server",
       },
       {
         identity_arguments:

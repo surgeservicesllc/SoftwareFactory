@@ -30,6 +30,8 @@ const harness = vi.hoisted(() => ({
   buildCanonicalPlan: vi.fn(),
   buildProviderAdmissions: vi.fn(),
   buildReadOnlyAdmissions: vi.fn(),
+  buildDeployProjection: vi.fn(),
+  buildDeployAdmissions: vi.fn(),
   resolveRelease: vi.fn(),
   serviceRpc: vi.fn(),
 }));
@@ -52,6 +54,8 @@ vi.mock("@/lib/graph/canonical-full-lifecycle", () => ({
   resolveCanonicalFullLifecycleReleaseIdentity: harness.resolveRelease,
 }));
 vi.mock("@/lib/grok/provider-admission", () => ({
+  buildGrokDeployReadinessProjection: harness.buildDeployProjection,
+  buildGrokDeployReadinessAdmissions: harness.buildDeployAdmissions,
   buildGrokProviderAdmissions: harness.buildProviderAdmissions,
   buildGrokReadOnlyIntentAdmissions: harness.buildReadOnlyAdmissions,
   GrokProviderAdmissionError: class GrokProviderAdmissionError extends Error {},
@@ -133,6 +137,26 @@ const canonicalPlan = {
   budget: { max_nodes: 14, max_concurrent_nodes: 3 },
 };
 
+const deployReadinessPlan = {
+  goal: "Inspect immutable release evidence for the saved RED deploy intent. Do not merge, deploy, mutate resources, wake workers, or claim production.",
+  topology: "DAG",
+  topologyReasons: [{ code: "DEPENDENCIES", detail: "Release evidence fans in." }],
+  riskLevel: "green",
+  requiresOwnerApproval: false,
+  nodes: [{
+    node_key: "inspect_release",
+    executor: "MODEL",
+    capability: "review",
+    model_tier: "STRONG",
+    reads: [],
+    writes: [],
+    lifecycle_stage: null,
+    gate_kind: null,
+  }],
+  edges: [],
+  budget: { max_nodes: 4, max_concurrent_nodes: 3 },
+};
+
 const bundle = {
   session: { id: sessionId, project_id: projectId, status: "active", version: 2 },
   messages: [],
@@ -181,6 +205,8 @@ beforeEach(() => {
     plan: canonicalPlan,
   });
   harness.buildReadOnlyAdmissions.mockReturnValue(providerAdmissions);
+  harness.buildDeployProjection.mockReturnValue(deployReadinessPlan);
+  harness.buildDeployAdmissions.mockReturnValue(providerAdmissions);
   harness.resolveRelease.mockResolvedValue({
     ok: true,
     target: { repository_id: repositoryId, base_branch: "main" },
@@ -572,7 +598,7 @@ describe("Grok sessions POST", () => {
     expect(harness.serviceRpc).not.toHaveBeenCalled();
   });
 
-  it("replays roster event 3 and plan event 4 exactly while deploy remains bridge-blocked", async () => {
+  it("replays roster evidence and launches only the paused deploy-readiness projection", async () => {
     const deployPlan = { ...plan, intent: { ...plan.intent, kind: "deploy" } };
     harness.storedPlan.mockReturnValue(deployPlan);
     harness.readBundle.mockResolvedValue({
@@ -594,8 +620,14 @@ describe("Grok sessions POST", () => {
     const first = await request();
     const second = await request();
 
-    expect(first.status).toBe(409);
-    expect(await first.json()).toEqual(await second.json());
+    expect(first.status).toBe(202);
+    const firstBody = await first.json();
+    expect(firstBody).toEqual(await second.json());
+    expect(firstBody).toMatchObject({
+      workerWoken: false,
+      executionStarted: false,
+      execution: { bridge: "deploy_readiness_v1", state: "paused" },
+    });
     expect(harness.recordRoster).toHaveBeenCalledTimes(2);
     for (const call of harness.recordRoster.mock.calls) {
       expect(call[1]).toMatchObject({
@@ -610,9 +642,64 @@ describe("Grok sessions POST", () => {
         expectedSequence: 4,
       });
     }
+    expect(harness.buildDeployProjection).toHaveBeenCalledTimes(2);
+    expect(harness.buildDeployAdmissions).toHaveBeenCalledWith(
+      deployPlan,
+      deployReadinessPlan.nodes,
+    );
+    expect(harness.serviceRpc).toHaveBeenCalledTimes(2);
+    for (const call of harness.serviceRpc.mock.calls) {
+      expect(call).toEqual([
+        "launch_grok_deploy_readiness_v1_as_server",
+        expect.objectContaining({
+          p_organization_id: organizationId,
+          p_project_id: projectId,
+          p_session_id: sessionId,
+          p_message_id: assistantMessageId,
+          p_goal: deployReadinessPlan.goal,
+          p_risk_level: "green",
+          p_requires_owner_approval: false,
+          p_nodes: deployReadinessPlan.nodes,
+          p_admissions: providerAdmissions,
+        }),
+      ]);
+    }
     expect(harness.buildCanonicalPlan).not.toHaveBeenCalled();
     expect(harness.resolveRelease).not.toHaveBeenCalled();
+  });
+
+  it("keeps the RED deploy plan recorded when the safe readiness projection cannot be proved", async () => {
+    const deployPlan = { ...plan, intent: { ...plan.intent, kind: "deploy" } };
+    harness.storedPlan.mockReturnValue(deployPlan);
+    harness.readBundle.mockResolvedValue({
+      ...bundle,
+      messages: [{ id: assistantMessageId, sequence_no: 2, role: "assistant" }],
+    });
+    harness.buildDeployProjection.mockImplementationOnce(() => {
+      throw new GrokProviderAdmissionError(
+        "Deploy readiness requires the exact immutable RED deploy plan and owner-gated delivery handoff.",
+      );
+    });
+
+    const response = await POST(new Request("https://factory.example/api/grok/sessions", {
+      method: "POST",
+      headers: { origin: "https://factory.example", "content-type": "application/json" },
+      body: JSON.stringify({ projectId, prompt: "Deploy the portal" }),
+    }));
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({
+      sessionId,
+      workerWoken: false,
+      executionStarted: false,
+      error: {
+        code: "grok_provider_admission_required",
+        message: expect.stringMatching(/exact immutable RED deploy plan/i),
+      },
+    });
+    expect(harness.buildDeployAdmissions).not.toHaveBeenCalled();
     expect(harness.serviceRpc).not.toHaveBeenCalled();
+    expect(harness.resolveRelease).not.toHaveBeenCalled();
   });
 
   it("launches the exact immutable research DAG paused without release resolution or dispatch", async () => {

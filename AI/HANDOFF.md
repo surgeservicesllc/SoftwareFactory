@@ -114,6 +114,32 @@ autonomy/actions OFF, and kill switches ON. This candidate is repository-only:
 do not claim hosted or production acceptance and do not enable a worker to
 test it.
 
+## Newest (2026-08-31, latest+55): Grok deploy-readiness projection (ADR-236)
+
+`20260831001800_grok_deploy_readiness_runtime.sql` closes only the deploy-
+intent planning dead end. The immutable source plan MUST remain planner v3,
+RED, owner-gated, and contain all five exact deploy tasks. The `delivery` HUMAN
+handoff is source evidence only and MUST NOT enter the graph. The boundary
+derives the other four exact planner-selected Claude tasks as a distinct GREEN
+inspection graph with empty reads and writes, null lifecycle/gates, no feedback
+or fallback, exact verifier schema hashes, no provider tools, and a fixed no-
+merge/no-deploy/no-mutation/no-production-claim goal.
+
+The launcher is service-role-only SECURITY DEFINER with
+`search_path=pg_catalog`. It calls the null-safe roster v2 boundary, repeats the
+exact plan/message/project/task/edge/budget projection inside PostgreSQL, locks
+and rechecks current roster/admission identity and hashes, includes the complete
+source-plan hash in idempotent launch evidence, pauses before visibility, and
+creates zero graph runs. Replay must still prove admissions current, resources
+and gates absent, and the graph paused with zero runs.
+
+Focused unit/route/contract/schema evidence is green, and the full-chain PGlite
+canary proves unsafe risk, gate, resource, and null-version inputs leave zero
+graph/launch/roster residue before exact launch/replay. This isolated candidate
+has not been pushed, deployed, dispatched, hosted, or applied. Actual merge,
+deployment, delivery approval, production health, worker/autonomy/automatic
+actions, and the kill-switch position are unchanged and outside this bridge.
+Do not claim production readiness from a readiness-inspection graph.
 ## Newest (2026-08-31, latest+52): protected Grok context-envelope 011 lane (ADR-232)
 
 Use `.github/workflows/grok-context-envelopes-migration.yml` for 011 only.

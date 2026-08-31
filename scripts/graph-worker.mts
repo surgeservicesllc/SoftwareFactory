@@ -1,6 +1,7 @@
 import { setTimeout as sleep } from "node:timers/promises";
 
 import { describeDrainOutcome } from "@/lib/graph/drain-report";
+import { GROK_DEPLOY_READINESS_GOAL } from "@/lib/grok/provider-admission";
 import { tryResolveClaudeAuth } from "@/lib/providers/claude-auth";
 import { buildClaudeNodeExecutor } from "@/lib/worker/claude-node-executor";
 import { executeDeterministicNode } from "@/lib/worker/deterministic-node-executor";
@@ -206,6 +207,12 @@ async function main() {
               defaultBranch: parsed.graph.base_branch ?? parsed.graph.project_default_branch,
               workingDirectory: process.cwd(),
               initialContext: parsed.graph.initial_context ?? null,
+              // A deploy-readiness graph persists zero resource declarations,
+              // so its provider process receives zero tools as well. Its exact
+              // verifier schemas must return BLOCKED when evidence is absent.
+              ...(parsed.graph.goal === GROK_DEPLOY_READINESS_GOAL
+                ? { allowedTools: [] as const }
+                : {}),
               ...(exactModel ? { modelForNode: () => exactModel } : {}),
             });
             return executor(node, attempt, inputs);

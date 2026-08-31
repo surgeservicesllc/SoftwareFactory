@@ -92,6 +92,26 @@ named decision, a named authorization, or production itself.
 - [ ] Publish/apply/verify 016 only as a separately reviewed production
   release. The repository candidate has no hosted ledger or runtime evidence.
 
+## Grok deploy-readiness projection (ADR-236, 2026-08-31)
+
+- [x] Preserve the exact planner-v3 deploy request as immutable RED intent with
+  its owner-gated HUMAN `delivery` handoff.
+- [x] Derive only the four exact Claude MODEL inspection/fan-in tasks into a
+  separate GREEN graph; remove delivery and every resource, write, lifecycle
+  stage, gate, feedback edge, provider fallback, provider tool, run, wake, and
+  dispatch path; pin the exact verifier schema hashes.
+- [x] Add the service-role-only, null-safe forward migration
+  `20260831001800_grok_deploy_readiness_runtime.sql` with exact message/plan/
+  task/edge/budget/roster/admission/hash checks, source-plan hashing, immutable
+  audit/link evidence, atomic pause, and idempotent current-admission replay.
+- [x] Route deploy intent to the dedicated readiness boundary without release
+  mutation identity resolution; prove focused TypeScript, route, contract,
+  schema, and full-chain PGlite behavior.
+- [ ] Integrate on exact main and create a separately reviewed protected 018
+  release scope before any hosted apply. Require exact ledger/catalog/ACL/RLS/
+  runtime/rollback/lint/health/stopped evidence and signed-in reload acceptance.
+  Do not merge, deploy, wake workers, or present the readiness graph as observed
+  production delivery.
 ## Grok context-envelope 011 protected release lane (ADR-232, 2026-08-31)
 
 - [x] Pin the exact canonical-LF 011 migration path, SHA-256, Supabase project,
