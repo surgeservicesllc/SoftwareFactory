@@ -90,7 +90,7 @@ built.
 | IPM devices, thresholds, scan ledger | Briostack, PestPac | **HAVE** (ADR-191) |
 | Pest sightings with corrective actions | PestPac | **HAVE** (ADR-191) |
 | Digital form builder: inspections, service reports, compliance checklists — assignable, signed, instantly on the desktop | PestPac | **HAVE** (ADR-197) |
-| **WDO / termite graphs and diagrams** | PestPac, ServSuite | **GAP** |
+| **WDO / termite graphs and diagrams** | PestPac, ServSuite | **HAVE** (ADR-204) — NPMA-33-shaped reports with a not-null verdict, obstructions and inaccessible areas as first-class columns, and a 0..1 coordinate diagram with click-to-place marks. An issue-time check refuses a report that contradicts its own findings in either direction. Uploading a floor plan is **Not Connected** — no object storage — so the built-in structure outline ships. |
 
 ### E. Chemicals and compliance
 
@@ -177,8 +177,10 @@ first, and tracked in `AI/BACKLOG.md`:
    one provenance column.
 2. ~~Equipment and fleet/asset management~~ — **SHIPPED** as ADR-201.
 3. ~~Revenue forecasting~~ — **SHIPPED** as ADR-202.
-4. **WDO/termite graphs and diagrams** — a drawing surface, not a form.
-   Large, and honestly the least certain of what is left.
+4. ~~WDO/termite graphs and diagrams~~ — **SHIPPED** as ADR-204. It was a
+   drawing surface, as expected, but the hard part turned out to be the
+   verdict rather than the drawing: a not-null answer so an unfinished
+   inspection cannot read as a clean structure.
 5. **Offline mode for technicians** — a service worker and a write queue.
    Large, and the correctness bar is high: a queue that silently drops a
    completed visit is worse than no offline mode.
@@ -190,7 +192,7 @@ SMS/email delivery (which also gates automated reminders and campaign
 sending), GPS/fleet telemetry, QuickBooks sync, call-centre/telephony
 integration, and reviews/reputation platforms.
 
-**A note on what "parity" can mean here.** Of the twenty rows still
+**A note on what "parity" can mean here.** Of the 19 rows still
 short of HAVE, roughly half cannot be closed by writing code at all — they
 are accounts somebody has to open and pay for. The honest target is every
 buildable row shipped and every provider-gated row wired to the point where

@@ -2,6 +2,45 @@
 
 Last updated: 2026-08-31
 
+## Newest (2026-08-31, latest+25): WDO reports (ADR-204, #70)
+
+`20260830010100` adds crm_wdo_inspections and crm_wdo_findings, two freeze
+triggers, an invoker summary and two portal definers.
+
+THE COLUMN THE WHOLE FILE EXISTS FOR is `visible_evidence`, NOT NULL. "No
+visible evidence observed" is an ANSWER somebody signed, not an absence of
+rows. Make it nullable, or model clean as zero findings, and an inspection
+nobody finished becomes indistinguishable from a structure that came back
+clean. Do not "simplify" it.
+
+THE CONTRADICTION CHECK IS ON THE TRIGGER, NOT IN
+`crm_wdo_issue_report`. The first draft put it in the function and that was
+a HOLE: a member can PATCH `status` through PostgREST and skip it entirely,
+because the freeze trigger only fires on rows already issued. There is a
+test that comes in through that exact door. Do not move the check back.
+
+THE ALREADY-ISSUED REFUSAL, CONVERSELY, MUST STAY IN THE FUNCTION. Every
+evaluation inside one statement shares the same transaction `now()`, so a
+trigger comparing old and new issued_at sees no difference. `select
+(f(x)).*` evaluates f once per output column — fourteen mutating calls from
+one innocuous line. With the check in the function the second evaluation
+raises and the statement rolls back whole. Moving it to the trigger makes
+that test fail; that is the test's job.
+
+A CONDUCIVE CONDITION IS NOT EVIDENCE. `ADVERSE_WDO_FINDINGS` is
+live_infestation, visible_damage, previous_infestation — and nothing else.
+Add conducive_condition or previous_treatment to that set and every honest
+clean report becomes unissuable.
+
+Coordinates are 0..1 and paired (`num_nonnulls in (0,2)`). A finding with
+NO coordinates is normal, listed and not drawn; every surface reports how
+many are placed. Never draw the subset and call it the diagram.
+
+The seed issues reports through `crm_wdo_issue_report` rather than writing
+`status`. Keep it that way — a seeder that walks around the guard produces
+a book the product could not have produced. That is also why the PGlite
+supabase shim now has `.rpc()`.
+
 ## Newest (2026-08-31, latest+24): the commercial portal view (ADR-203, #67)
 
 `20260830002300` adds seven portal projections, four indexes and one

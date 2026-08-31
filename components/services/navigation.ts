@@ -1,5 +1,6 @@
 import {
   BanknoteArrowDown,
+  Bug,
   Building2,
   CalendarDays,
   Coins,
@@ -151,6 +152,12 @@ export const SERVICES_NAVIGATION: readonly ServicesNavItem[] = [
     label: "Equipment & Fleet",
     description: "Trucks, sprayers, meters and their service",
     icon: Truck,
+  },
+  {
+    href: `${SERVICES_ROOT}/wdo`,
+    label: "WDO Reports",
+    description: "Termite inspections, findings and diagrams",
+    icon: Bug,
   },
 ];
 

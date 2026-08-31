@@ -220,5 +220,40 @@ export function pgliteSupabaseClient(db: PGlite) {
     from(table: string) {
       return new Builder(db, table);
     },
+
+    /**
+     * `rpc`, because production code calls functions as well as tables —
+     * the seeder issues a WDO report through `crm_wdo_issue_report` rather
+     * than writing `status` itself, and a shim without this would have
+     * quietly forced it to take the shortcut the schema exists to close.
+     *
+     * PostgREST returns a scalar for a scalar-returning function and rows
+     * for a set-returning one, so `select * from f(args)` is the shape
+     * that matches both.
+     */
+    async rpc(name: string, args: Record<string, unknown> = {}) {
+      const names = Object.keys(args);
+      const placeholders = names.map((key, index) => `${key} => $${index + 1}`).join(", ");
+      const values = names.map((key) => args[key]);
+      try {
+        const result = await db.query(
+          `select * from public.${name}(${placeholders})`,
+          values,
+        );
+        const rows = result.rows as Record<string, unknown>[];
+        // A one-column result is a scalar function; unwrap it the way
+        // PostgREST does rather than handing back a wrapper object.
+        if (rows.length === 1 && Object.keys(rows[0]).length === 1) {
+          return { data: Object.values(rows[0])[0], error: null };
+        }
+        return { data: rows, error: null };
+      } catch (error) {
+        const shaped = error as { message?: string; code?: string };
+        return {
+          data: null,
+          error: { message: shaped.message ?? String(error), code: shaped.code ?? "P0001" },
+        };
+      }
+    },
   };
 }

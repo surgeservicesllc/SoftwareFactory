@@ -154,6 +154,19 @@ type Inspection = {
   notes: string | null;
 };
 
+type WdoReport = {
+  id: string;
+  reportNumber: string;
+  propertyLabel: string | null;
+  inspectedOn: string;
+  visibleEvidence: boolean;
+  obstructions: string | null;
+  inaccessibleAreas: string | null;
+  recommendation: string | null;
+  findings: number;
+  superseded: boolean;
+};
+
 type Tab =
   | "overview"
   | "conditions"
@@ -225,6 +238,7 @@ export function CustomerPortalPanel() {
   const [conditions, setConditions] = useState<Condition[]>([]);
   const [products, setProducts] = useState<SafetyProduct[]>([]);
   const [inspections, setInspections] = useState<Inspection[]>([]);
+  const [wdoReports, setWdoReports] = useState<WdoReport[]>([]);
   const [siteFilter, setSiteFilter] = useState<string>("");
   const [noAccess, setNoAccess] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -273,6 +287,7 @@ export function CustomerPortalPanel() {
         stationsRes,
         conditionsRes,
         complianceRes,
+        wdoRes,
       ] = await Promise.all([
         fetch("/api/customer-portal/invoices", { headers: { accept: "application/json" } }),
         fetch("/api/customer-portal/visits", { headers: { accept: "application/json" } }),
@@ -284,6 +299,7 @@ export function CustomerPortalPanel() {
         }),
         fetch("/api/customer-portal/conditions", { headers: { accept: "application/json" } }),
         fetch("/api/customer-portal/compliance", { headers: { accept: "application/json" } }),
+        fetch("/api/customer-portal/wdo", { headers: { accept: "application/json" } }),
       ]);
       if (invoicesRes.ok) setInvoices(((await invoicesRes.json()) as { invoices: Invoice[] }).invoices);
       if (visitsRes.ok) setVisits(((await visitsRes.json()) as { visits: Visit[] }).visits);
@@ -306,6 +322,7 @@ export function CustomerPortalPanel() {
         setProducts(body.products);
         setInspections(body.inspections);
       }
+      if (wdoRes.ok) setWdoReports(((await wdoRes.json()) as { reports: WdoReport[] }).reports);
     } catch {
       setLoadError("Your account could not be loaded.");
     }
@@ -459,7 +476,7 @@ export function CustomerPortalPanel() {
             ["overview", "Overview", undefined],
             ["conditions", "Open conditions", conditions.length],
             ["stations", "Stations", stations.length],
-            ["compliance", "Compliance", products.length + inspections.length],
+            ["compliance", "Compliance", products.length + inspections.length + wdoReports.length],
             ["invoices", "Invoices", invoices.length],
             ["visits", "Visits", visits.length],
             ["documents", "Documents", documents.length],
@@ -852,6 +869,72 @@ export function CustomerPortalPanel() {
                         </a>
                       )}
                     </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
+
+          <Card className="mb-6">
+            <SectionTitle
+              title="Termite and wood-destroying-organism reports"
+              description="Issued reports only. A report still in draft has not answered the question yet, so it is not a document and is not here."
+            />
+            {wdoReports.length === 0 ? (
+              <p className="mt-4 text-sm text-muted" data-testid="customer-portal-wdo-empty">
+                No WDO reports have been issued for your account.
+              </p>
+            ) : (
+              <ul className="mt-4 divide-y divide-line" data-testid="customer-portal-wdo-list">
+                {wdoReports.map((report) => (
+                  <li key={report.id} className="py-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-sm font-medium text-foreground">
+                        {report.reportNumber}
+                      </span>
+                      <span
+                        className={cn(
+                          "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold",
+                          report.visibleEvidence
+                            ? "border-rose-200 bg-rose-50 text-rose-700"
+                            : "border-emerald-200 bg-emerald-50 text-emerald-700",
+                        )}
+                      >
+                        {/* The verdict is an answer somebody signed, not an
+                            absence of rows. It is stated either way. */}
+                        {report.visibleEvidence
+                          ? "visible evidence observed"
+                          : "no visible evidence observed"}
+                      </span>
+                      <span className="text-xs text-faint">
+                        {report.propertyLabel ?? "Account-wide"} · {report.inspectedOn}
+                      </span>
+                      {report.superseded ? (
+                        <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-700">
+                          replaced by a later report
+                        </span>
+                      ) : null}
+                    </div>
+                    {report.recommendation === null ? null : (
+                      <p className="mt-1 text-sm text-muted">{report.recommendation}</p>
+                    )}
+                    {report.obstructions === null && report.inaccessibleAreas === null ? null : (
+                      <p
+                        className="mt-1 rounded-lg bg-amber-50 p-2 text-sm text-amber-800"
+                        data-testid="customer-portal-wdo-limits"
+                      >
+                        {/* What could NOT be inspected. This is the part of
+                            a WDO report a buyer most needs and is least
+                            likely to be shown, so it is not collapsed. */}
+                        <strong>Not inspected:</strong>{" "}
+                        {[report.obstructions, report.inaccessibleAreas]
+                          .filter((line) => line !== null)
+                          .join(" ")}
+                      </p>
+                    )}
+                    <p className="mt-1 text-xs text-faint">
+                      {report.findings} finding{report.findings === 1 ? "" : "s"} recorded.
+                    </p>
                   </li>
                 ))}
               </ul>

@@ -223,6 +223,13 @@ the full seeded E2E journey passes — increment 10 of the plan.
   completed-inspection history, plus a sighting the customer can file
   themselves. Three tabs on /customer-portal. 20260830002300; hosted apply:
   scope=commercial-portal after merge.
+- [x] Increment 16 (ADR-204): WDO/termite inspection reports — a not-null
+  verdict so an unfinished inspection cannot read as a clean one, the
+  areas that could NOT be inspected as first-class columns, a 0..1
+  coordinate diagram with click-to-place marks, an issue-time
+  contradiction check on the trigger rather than the function, and issued
+  reports on the customer's Compliance tab. /Services/wdo. 20260830010100;
+  hosted apply: scope=wdo-inspections after merge.
 - [ ] Increment 12 follow-on: UNATTENDED billing. The generator is correct
   and idempotent but nothing calls it on a schedule, because nothing in
   this product runs on a timer. Needs a scheduler or a worker executor —

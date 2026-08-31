@@ -1267,6 +1267,44 @@ export type SeedSighting = {
   correctedDaysAgo?: number;
 };
 
+export type SeedWdoFinding = {
+  kind:
+    | "live_infestation"
+    | "visible_damage"
+    | "previous_infestation"
+    | "previous_treatment"
+    | "conducive_condition";
+  organism?: string;
+  area: string;
+  /* Normalized 0..1, and paired: the schema refuses half a coordinate. */
+  positionX?: number;
+  positionY?: number;
+  note?: string;
+  treatmentNote?: string;
+};
+
+export type SeedWdoInspection = {
+  seat: number;
+  propertyIndex: number;
+  technicianIndex: number;
+  reportNumber: string;
+  inspectedDaysAgo: number;
+  structuresInspected: string;
+  /* The headline answer. Never optional here either — a generated report
+   * that had not answered it would be a draft nobody wrote. */
+  visibleEvidence: boolean;
+  obstructions?: string;
+  inaccessibleAreas?: string;
+  recommendation?: string;
+  issued: boolean;
+  /* A correction names the report it replaces, by number — the runner
+   * resolves it to an id, inserting the originals first. */
+  supersedesReportNumber?: string;
+  /* The visit the inspection was performed on, when there was one. */
+  visitSeat?: number;
+  findings: SeedWdoFinding[];
+};
+
 export type SeedApplication = {
   propertyIndex: number;
   productIndex: number;
@@ -1362,6 +1400,7 @@ export type SeedOperations = {
   devices: SeedDevice[];
   sightings: SeedSighting[];
   applications: SeedApplication[];
+  wdoInspections: SeedWdoInspection[];
   billing: SeedBilling;
 };
 
@@ -1386,6 +1425,7 @@ export function generateOperations(
      */
     return {
       plans: [], visits: [], devices: [], sightings: [], applications: [],
+      wdoInspections: [],
       billing: generateBilling(account, [], [], makeRandom(seed + account.index * 104729), false),
     };
   }
@@ -1532,15 +1572,151 @@ export function generateOperations(
     };
   });
 
+  /*
+   * WDO reports. A book of these has to contain all four honest shapes or
+   * the page cannot be trusted to tell them apart:
+   *
+   *   1. issued, evidence found, with adverse findings behind it;
+   *   2. issued, genuinely clean — no findings at all, or only conducive
+   *      conditions, which are worth recording and are NOT evidence;
+   *   3. issued, clean, but naming an area that could not be inspected;
+   *   4. still a draft, which has answered nothing yet.
+   *
+   * Nothing generated here contradicts itself, because the database would
+   * refuse to issue it — a seed that produced an unissuable report would be
+   * testing the trigger rather than filling the book.
+   */
+  const wdoInspections: SeedWdoInspection[] = Array.from(
+    { length: 1 + (account.index % 2) },
+    (_, seat) => {
+      const shape = (account.index + seat) % 4;
+      const evidence = shape === 0;
+      const inspectedDaysAgo = between(random, 20, 900);
+      const propertyIndex = seat % propertyCount;
+      const findings: SeedWdoFinding[] = [];
+
+      if (evidence) {
+        findings.push({
+          kind: pick(random, ["live_infestation", "visible_damage"] as const),
+          organism: pick(random, WDO_ORGANISMS),
+          area: pick(random, WDO_AREAS),
+          // Placed on the diagram, in the unit square.
+          positionX: Number((between(random, 8, 92) / 100).toFixed(4)),
+          positionY: Number((between(random, 12, 88) / 100).toFixed(4)),
+          note: `${pick(random, ["Active mud tubes", "Frass at the sill", "Galleries in two joists", "Exit holes in the trim"])}; ${pick(random, ["photographed", "probed and confirmed", "sounded hollow", "moisture reading taken"])}.`,
+        });
+        // A previous treatment beside a live finding is ordinary, and it
+        // is deliberately recorded WITHOUT coordinates — an inspector
+        // notes "per the 2019 notice" long before anybody puts a pin in
+        // a drawing, and the page must count that gap rather than draw
+        // around it.
+        findings.push({
+          kind: "previous_treatment",
+          area: "Perimeter, per the prior notice on file",
+          treatmentNote: `${pick(random, ["Trench and treat", "Bait stations installed", "Localised foam injection", "Borate applied to exposed framing"])} in ${2015 + (account.index % 9)}; ${pick(random, ["under warranty until renewal", "warranty lapsed", "annual renewal current", "transferable to the buyer"])}.`,
+        });
+      } else {
+        // Clean, but not empty: a conducive condition must not make an
+        // honest clean report unissuable. Every clean report carries one,
+        // which is also what a real book looks like — an inspector who
+        // found nothing living almost always found something worth
+        // writing down.
+        findings.push({
+          kind: "conducive_condition",
+          area: pick(random, ["South foundation", "Crawlspace vents", "Rear downspout", "Planter bed at the wall"]),
+          positionX: Number((between(random, 8, 92) / 100).toFixed(4)),
+          positionY: Number((between(random, 12, 88) / 100).toFixed(4)),
+          note: pick(random, [
+            "Wood-to-soil contact at two posts.",
+            "Standing water after rain.",
+            "Vents obstructed by stored material.",
+            "Mulch banked above the slab line.",
+          ]),
+        });
+      }
+
+      return {
+        seat,
+        propertyIndex,
+        technicianIndex: technicianFor(seat + 5),
+        reportNumber: `WDO-${pad(account.index + 1, 4)}-${seat + 1}`,
+        inspectedDaysAgo,
+        structuresInspected: pick(random, WDO_STRUCTURES),
+        visibleEvidence: evidence,
+        ...(shape === 2
+          ? {
+              obstructions: pick(random, [
+                "Stored pallets against the south wall; that section was not inspected.",
+                "Finished basement ceiling; joists not visible.",
+                "Crawlspace access blocked by ductwork.",
+                "Heavy insulation in the attic; sheathing not visible throughout.",
+              ]),
+              inaccessibleAreas: pick(random, [
+                "Sub-area beneath the west addition.",
+                "Behind fixed cabinetry in the prep room.",
+                "The locked mechanical room.",
+              ]),
+            }
+          : {}),
+        ...(evidence
+          ? {
+              recommendation: `${pick(random, ["Treat and re-inspect in 30 days", "Localised treatment with a follow-up", "Full perimeter treatment recommended", "Repair the damaged members and treat"])}.`,
+            }
+          : {}),
+        // Shape 3 stays a draft: it has answered nothing yet, and a book
+        // with no drafts in it would let "issued" look like the only state.
+        issued: shape !== 3,
+        // The second report on an account is a correction of the first —
+        // the only way this schema allows an issued report to be changed.
+        ...(seat === 1
+          ? { supersedesReportNumber: `WDO-${pad(account.index + 1, 4)}-1` }
+          : {}),
+        ...(completedVisitPositions.length > 0
+          ? { visitSeat: completedVisitPositions[seat % completedVisitPositions.length] }
+          : {}),
+        findings,
+      };
+    },
+  );
+
   return {
     plans,
     visits,
     devices,
     sightings,
     applications,
+    wdoInspections,
     billing: generateBilling(account, plans, visits, makeRandom(seed + account.index * 104729), true),
   };
 }
+
+const WDO_ORGANISMS = [
+  "Eastern subterranean termite",
+  "Formosan subterranean termite",
+  "Western drywood termite",
+  "Carpenter ant",
+  "Old house borer",
+  "Powderpost beetle",
+  "Wood-decay fungus",
+];
+
+const WDO_AREAS = [
+  "Crawlspace, NE corner joists",
+  "Attic rafters, south bay",
+  "Sill plate at the front elevation",
+  "Garage door frame, left jamb",
+  "Rear porch posts",
+  "Basement stair stringer",
+  "Sub-area piers beneath the kitchen",
+];
+
+const WDO_STRUCTURES = [
+  "Main dwelling and detached garage",
+  "Main dwelling only",
+  "Main dwelling, garage and rear shed",
+  "Commercial structure and loading dock",
+  "Main dwelling and attached carport",
+];
 
 const LINE_DESCRIPTIONS = [
   "Initial service and inspection", "Monthly IPM service", "Quarterly deep inspection",

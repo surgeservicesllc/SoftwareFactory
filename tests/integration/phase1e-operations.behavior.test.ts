@@ -222,9 +222,10 @@ describe("Phase 1E production operations behavior", () => {
     // session/evidence tables; 198 since recurring billing (ADR-200) added
     // crm_billing_runs and crm_dunning_notices; and 200 since the fleet
     // (ADR-201) added crm_equipment and the append-only
-    // crm_equipment_events. Each is RLS-enabled and forced, which the
-    // filter on the next line is what actually proves.
-    expect(rlsRows).toHaveLength(200);
+    // crm_equipment_events; and 202 since WDO reports (ADR-204) added
+    // crm_wdo_inspections and crm_wdo_findings. Each is RLS-enabled and
+    // forced, which the filter on the next line is what actually proves.
+    expect(rlsRows).toHaveLength(202);
     expect(rlsRows.filter((row) => !row.relrowsecurity || !row.relforcerowsecurity)).toEqual([]);
 
     const { rows: grantRows } = await db.query<{ table_name: string }>(

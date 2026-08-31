@@ -374,6 +374,29 @@ const SPECS: Spec[] = [
     ],
   },
   {
+    table: "crm_wdo_inspections",
+    optional: [
+      "work_order_id",
+      "obstructions",
+      "inaccessible_areas",
+      "recommendation",
+      "issued_at",
+      "supersedes_id",
+    ],
+    enumColumn: "status",
+    parents: [
+      { column: "account_id", table: "crm_accounts" },
+      { column: "property_id", table: "crm_properties" },
+      { column: "inspector_technician_id", table: "crm_technicians" },
+    ],
+  },
+  {
+    table: "crm_wdo_findings",
+    optional: ["organism", "position_x", "position_y", "note", "treatment_note"],
+    enumColumn: "kind",
+    parents: [{ column: "inspection_id", table: "crm_wdo_inspections" }],
+  },
+  {
     table: "crm_products",
     optional: ["epa_registration_number", "active_ingredient", "signal_word", "sds_url", "label_url", "default_unit"],
     enumColumn: "default_unit",

@@ -119,6 +119,8 @@ const publicTables = [
   "crm_territories",
   "crm_timeline_events",
   "crm_timesheets",
+  "crm_wdo_findings",
+  "crm_wdo_inspections",
   "crm_work_orders",
   "deployment_validations",
   "deployments",
