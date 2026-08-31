@@ -19,7 +19,7 @@ function jsonResponse(body: unknown) {
   });
 }
 
-const inspection = {
+const inspection: Record<string, unknown> = {
   id: "11111111-1111-4111-8111-111111111111",
   reportNumber: "WDO-2026-0042",
   inspectedOn: "2026-08-12",
@@ -60,7 +60,7 @@ const findings = [
   },
 ];
 
-function mockFetch(overrides: Partial<typeof inspection> = {}) {
+function mockFetch(overrides: Record<string, unknown> = {}) {
   vi.spyOn(global, "fetch").mockImplementation((input) => {
     const url = String(input);
     if (url.includes("/findings")) {
@@ -77,14 +77,14 @@ afterEach(() => {
 describe("the printable WDO report", () => {
   it("prints a draft only under a DRAFT banner", async () => {
     mockFetch();
-    render(<WdoPrintView inspectionId={inspection.id} />);
+    render(<WdoPrintView inspectionId={inspection.id as string} />);
     expect(await screen.findByText("WDO-2026-0042")).toBeInTheDocument();
     expect(screen.getByText(/Draft — not an issued report/)).toBeInTheDocument();
   });
 
   it("drops the banner once issued, and says the rendering is the browser's", async () => {
     mockFetch({ status: "issued", issuedAt: "2026-08-13T09:00:00Z" });
-    render(<WdoPrintView inspectionId={inspection.id} />);
+    render(<WdoPrintView inspectionId={inspection.id as string} />);
     expect(await screen.findByText("WDO-2026-0042")).toBeInTheDocument();
     expect(screen.queryByText(/Draft — not an issued report/)).not.toBeInTheDocument();
     expect(screen.getByText(/on your machine, not on a server/)).toBeInTheDocument();
@@ -92,7 +92,7 @@ describe("the printable WDO report", () => {
 
   it("prints the inaccessible-areas claim even when there are none, and numbers the diagram to the table", async () => {
     mockFetch();
-    render(<WdoPrintView inspectionId={inspection.id} />);
+    render(<WdoPrintView inspectionId={inspection.id as string} />);
     await screen.findByText("WDO-2026-0042");
     // Absence is a claim, printed as one.
     expect(screen.getByText(/None recorded — every area/)).toBeInTheDocument();

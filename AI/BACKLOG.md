@@ -306,7 +306,16 @@ the full seeded E2E journey passes — increment 10 of the plan.
 - [ ] Increment 6 follow-on: take card payments through the existing
   Stripe machinery. The ledger records money that moved; it does not yet
   move it, and /Services/billing says so rather than implying otherwise.
-  Also open in this pillar: dunning schedules and PDF invoice rendering.
+  Charging a customer's card needs the card_payments provider row live
+  plus the ADR-218 mandate machinery pointed at a real processor — an
+  owner-supplied account, not code. Dunning SCHEDULES stay behind the
+  same no-timer gate as unattended billing.
+- [x] PDF invoice rendering, split out and shipped: every invoice number
+  on /Services/billing links to /Services/billing/print/[invoiceId] — the
+  lines that sum to the subtotal, tax, total, paid net of refunds, and
+  the balance derived at print time; a draft or void invoice prints only
+  under its banner so neither can circulate as a bill. Print-to-PDF is
+  the browser's own, said on the page.
 - [x] Increment 7 (ADR-195): the company — crm_branches (code, address,
   IANA time zone, open/close dates), crm_employees as the org chart (seven
   roles, branch, supervisor, commission basis points, quota),
@@ -1660,7 +1669,12 @@ when no row exists. No behaviour of the authoritative gate changes.
 
 ## Maintenance
 
-- [ ] Run final verification on the repository-supported Node version.
+- [x] Run final verification on the repository-supported Node version.
+  Done 2026-08-31 on Node v22.22.2 (engines requires >=22): the complete
+  gate set ran green in one session — full vitest (6,39x tests, ~9 min),
+  `eslint . --max-warnings 0`, `tsc --noEmit`, and a production build —
+  and CI repeated lint/typecheck/test/build plus all three browser
+  shards green on the same tree (run 33391416517).
 - [ ] Before any new hosted database command, reconfirm the authenticated release identity and exact project `qpuofpmagrmyamahqwxw`; do not fall back to the previously wrong/unauthorized profile.
 - [x] Move Vitest configuration to native ESM (`vitest.config.mts`) to remove the prior config-loader warning.
 - [ ] Expand authenticated E2E once a safe disposable live-provider fixture exists.
