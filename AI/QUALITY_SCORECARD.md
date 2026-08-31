@@ -2,6 +2,20 @@
 
 Last reviewed: 2026-08-31
 
+**Addendum, 2026-08-31 latest+47 - version-safe Grok ACL verification
+(ADR-227):** Exact main `24a6313e98023bfc618a921fc563c9f4bde4cad2`
+passed four-job CI `33400336336`, reached READY deployment
+`dpl_49dFxebk4jpWEXUtfK2CbsQpBk1T`, and matched public health. Fresh read-only
+verify `33401887942` skipped apply/reload and failed closed only at the
+specialist catalog predicate. PostgreSQL 17/18 includes `MAINTAIN` in the
+owner's default table privilege set, so a fixed expanded count of seven is
+incorrect. The candidate compares the actual privilege-type set to
+`acldefault('r', relowner)` in both directions, requires its dynamically
+derived expanded-row count, and retains owner-only, non-grantable, explicit
+role-denial, and PostgreSQL 18 NOT NULL checks. The focused workflow contract
+passes 12/12. Exact-head release and a new read-only
+verify remain pending; no database or safety state changes with this fix.
+
 **Addendum, 2026-08-31 latest+46 - Grok hosted completion and verifier catalog
 containment (ADR-226):** Exact main
 `85a7fed15ad876be4e56fd74903e41b68d4488b4` passed all four jobs in CI

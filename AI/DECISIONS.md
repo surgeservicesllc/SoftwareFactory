@@ -5897,3 +5897,31 @@ weaken RLS, or change autonomy. After the corrected workflow itself passes
 exact-head CI and READY deployment identity, only a fresh read-only `verify`
 scope may accept ledger `1|1` and the catalog/ACL/runtime/rollback/lint/health/
 stopped-safety postflight.
+
+## ADR-227 - Compare table ACLs to PostgreSQL's version-local owner default
+
+- **Date**: 2026-08-31
+- **Status**: Accepted; verifier correction pending exact-head release and
+  read-only production verification
+
+ADR-226 correctly separated ACL items from expanded privileges and PostgreSQL
+18 NOT NULL constraints from the named business-constraint set, but it fixed
+the expanded privilege count at seven. Read-only production verify
+`33401887942` proved that assumption is not portable: PostgreSQL 17 and 18 add
+`MAINTAIN` to the table-owner default, so the hosted owner ACL expands to eight
+privileges. This is a verifier defect, not hosted catalog drift.
+
+The verifier now compares only `privilege_type` from the actual `relacl` and
+`acldefault('r', relowner)` with `EXCEPT` in both directions, and compares the
+two expanded-row counts dynamically so a duplicate ACL item cannot hide behind
+set semantics. The independent posture checks remain mandatory: every actual
+grant must be owner-to-owner and non-grantable, and `anon`, `authenticated`,
+and `service_role` must have no table privilege. The existing PostgreSQL 18
+`contype='n'` filtering and separate `pg_attribute` NOT NULL census are
+unchanged.
+
+This correction changes only protected verification and its contract test. It
+does not apply or replay a migration, reload PostgREST, change ledger/history,
+alter hosted catalog or ACLs, enable a worker, or change autonomy and kill
+switch state. After exact-head CI and READY deployment identity, the only
+permitted database action is a fresh read-only `scope=verify` at exact main.

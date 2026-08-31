@@ -1,26 +1,27 @@
 # Current state
 
-## 2026-08-31: Grok completion DDL is hosted; acceptance is stopped on verifier-only catalog fixes (ADR-226)
+## 2026-08-31: Grok completion DDL is hosted; acceptance awaits a version-safe ACL verifier (ADR-227)
 
-Exact main `85a7fed15ad876be4e56fd74903e41b68d4488b4` passed all four
-required jobs in CI run `33395309085`, reached READY Vercel deployment
-`dpl_FcbZciXJFJN1DWxN2mxd23wEPfaU`, and reports that same Git, deployment,
-and Supabase project identity from public health. Protected read-only run
-`33397278231` proved the completion ledger began `0|0`. Run `33397377838`
-then applied only hash-pinned `20260831000900`, and read-only run
-`33397710586` independently proved ledger `1|0` plus exact catalog, ACL,
-runtime, lint, health, and stopped containment.
+Exact main `24a6313e98023bfc618a921fc563c9f4bde4cad2` passed all four
+required jobs in CI run `33400336336`, reached READY Vercel deployment
+`dpl_49dFxebk4jpWEXUtfK2CbsQpBk1T`, and reports the matching Git,
+deployment, and Supabase project identity from public health. Its workflow-only
+containment correctly handles PostgreSQL 18 NOT NULL constraints separately
+from the 24 named business constraints. Fresh read-only run `33401887942`
+skipped both apply and reload, accepted exact identity and preflight, then
+failed closed only at the combined specialist catalog predicate.
 
-Protected run `33397811324` applied and ledgered only hash-pinned
-`20260831001000` and reloaded PostgREST, then stopped at its postflight. The
-failure is in two workflow predicates, not the hosted DDL. The table-ACL check required one row from
-`aclexplode(relacl)` for one owner ACL item, but PostgreSQL expands that table
-ACL item into the seven standard table privileges. PostgreSQL 18 also exposes
-the table's 28 NOT NULL declarations as `pg_constraint` rows; they must not be
-mistaken for the 24 named business constraints and are verified separately
-through `pg_attribute`. The migration is never to be replayed, reset, repaired
-in history, or down-migrated. ADR-226 corrects both predicates before a fresh
-read-only `verify` run.
+That remaining failure is verifier-only. PostgreSQL 17 and 18 add `MAINTAIN`
+to the table-owner default privilege set, so the one owner ACL item expands to
+eight privileges on the hosted version rather than the hard-coded seven. The
+candidate now compares the actual privilege-type set to
+`acldefault('r', relowner)` in both directions while independently requiring
+the same server-derived expanded-row count, owner-to-owner non-grantable rows,
+and denials for `anon`, `authenticated`, and `service_role`. It retains the
+PostgreSQL 18 NOT NULL split. The hosted ledger
+remains `1|1`; neither migration may be replayed, reset, repaired in history,
+or down-migrated. After this workflow-only correction passes exact-head CI and
+READY deployment identity, only a fresh read-only `verify` scope may run.
 
 Workers, autonomy, and every automatic action stayed OFF; the global kill
 switch stayed ON. Signed-in create/return/reload acceptance and a real
