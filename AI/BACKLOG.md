@@ -5,7 +5,7 @@
 Every box below this section is either checked or parked, and every parked
 box's own text names what unparks it. Read this section as the index; the
 rows are the record. As of this triage the file holds 117 open boxes, all
-of them parked, in exactly five families:
+ of them parked, in exactly five families:
 
 1. **Owner credentials or accounts** — an external account or key nobody
    has opened or supplied: the eight CRM provider rows (SMS, email,
@@ -47,6 +47,22 @@ probe-verified hosted ledger through `20260831001400`, and the
 category/insert-chain/notice truthfulness fixes. Nothing in this file is
 open because work stopped; everything open is waiting on a named key, a
 named decision, a named authorization, or production itself.
+
+## Grok 015/017 protected release lanes (ADR-234, 2026-08-31)
+
+- [x] Add separate manual, shared-concurrency `probe` / `apply` / `verify`
+  workflows for only the canonical-LF hash-pinned 015 context projection and
+  017 read-only research migrations.
+- [x] Require exact release/CI/READY/health/Supabase identity, configured
+  first-attempt actor and confirmation, unchanged unrelated ledger, exact
+  forward order through 016, native catalog/ACL fingerprints, linked lint, and
+  stopped workers/autonomy/actions with kill switches ON.
+- [x] Rehearse each target-version migration chain and its full rollback-only
+  runtime/adverse postflight, proving replay, tenant and tamper refusal,
+  content-free audit, paused read-only research, and zero execution residue.
+- [ ] Publish and dispatch 015 then 017 only as separately reviewed production
+  releases after their prerequisites are hosted. No hosted operation or
+  production acceptance is claimed by this repository candidate.
 
 ## Grok Phase 1C exact graph re-wake (ADR-233, 2026-08-31)
 
@@ -308,11 +324,12 @@ the algorithm needs exists.
   all post-plan follow-ups; and rolls back the claim on mismatch. Admitted
   Claude/Codex prompts receive a separate typed untrusted-data section without
   changing the existing 4 KB goal. Legacy/non-Grok claims stay unchanged.
-- [ ] Add `20260831001500` to a dedicated protected forward-only apply/verify
-  scope after `01100` is accepted. Pin canonical LF hash and native `prosrc`
-  identities; prove exact ledger/catalog/ACL/runtime/rollback/lint/health and
-  stopped containment. No worker, autonomy, automatic-action, URL/image fetch,
-  merge, or deployment authority belongs to that scope.
+- [x] Add `20260831001500` to a dedicated protected forward-only
+  `probe` / `apply` / `verify` scope after `01100` is accepted. ADR-234 pins its
+  canonical-LF hash and native `prosrc` identities and proves exact ledger/
+  catalog/ACL/runtime/rollback/lint/health plus stopped containment. Hosted
+  dispatch remains separately gated; no worker, autonomy, automatic-action,
+  URL/image fetch, merge, or deployment authority belongs to that scope.
 - [x] Publish one exact rebased candidate and require lint, typecheck, the full
   test suite, production build, all three browser/accessibility shards, exact
   green CI, exact READY Vercel identity, and matching public health. Exact main

@@ -6136,3 +6136,34 @@ Forward migration 016 has its own hash-pinned one-file manual release lane.
 Probe/apply/verify require exact release, ledger, catalog, lint, health, and
 stopped-safety evidence. No broad migration apply, reset, repair, down, or
 automatic workflow dispatch is permitted.
+
+## ADR-234 - Release Grok context projection and read-only research through sequential one-file lanes
+
+- **Date**: 2026-08-31
+- **Status**: Accepted for the repository candidate; hosted operations not run
+
+The admitted context projector and the read-only research launcher are separate
+forward schema boundaries. They therefore receive separate manual
+`probe` / `apply` / `verify` workflows, serialized by the shared hosted-
+migration concurrency group. Each lane pins one canonical-LF migration and
+permits apply to persist only that staged file plus its one ledger row in a
+locked transaction. Exact repository/main, first-attempt actor, confirmation,
+four green checks, READY deployment, health/Supabase identity, unrelated-ledger
+digest, native catalog/ACL fingerprints, linked lint, and stopped execution
+state are fail-closed prerequisites.
+
+Migration 015 may not be inserted behind any later ledger row. Migration 017
+requires the exact lineage through 016 and may not be inserted behind a later
+row. This preserves the later v2/v4 admission wrappers in 019 without allowing
+an older lane to rewrite or masquerade as their release. Probe rehearses the
+one file with a temporary ledger row and rolls back; verify reads the installed
+identity and runs synthetic fixtures entirely inside rollback.
+
+The 015 fixture proves immutable initial-only context, unchanged owner goal,
+exact replay, secret-tamper rejection, and zero execution. The 017 fixture
+proves a one-node Anthropic read-only paused graph, exact replay, tenant and
+changed-input refusal, write-node rejection, current admission, content-free
+audit, and zero graph/node/agent/provider/Phase1C execution. Neither lane
+enables a worker, changes autonomy or automatic actions, disengages a kill
+switch, dispatches another workflow, fetches references, or authorizes a
+merge/deploy. Hosted probe/apply/verify remains a separately reviewed release.

@@ -1,5 +1,27 @@
 # Current state
 
+## 2026-08-31: Grok 015 and 017 have sequential protected release candidates (ADR-234)
+
+Two manual, serialized `probe` / `apply` / `verify` lanes now cover only
+`20260831001500_grok_claim_context_projection.sql` (canonical-LF SHA-256
+`4c33bcb908cb0b7a1972b4e2dc79d9fdc8bee13d118490e179afc2001a159e4b`,
+24,264 bytes) and `20260831001700_grok_read_only_research_runtime.sql`
+(canonical-LF SHA-256
+`3fe4cf4b6d49b29ed927650ab1581d3e580352702c76f5f6f0a837094d603061`,
+22,840 bytes). Apply can persist only its staged exact file and one ledger row
+in a locked transaction. The 015 lane refuses every later ledger row; the 017
+lane requires exact lineage through 016 and refuses every row later than 017.
+
+Rollback-only native PostgreSQL fixtures prove exact ledger/catalog/ACL/RLS,
+idempotent context and research behavior, tenant/admission/tamper refusal,
+content-free audit, paused read-only output, and zero graph/node/agent/provider/
+Phase1C execution. Both lanes also gate on exact current main, four green jobs,
+READY Vercel and health/Supabase identity, configured first-attempt actor,
+unmodified unrelated history, linked lint, workers/schedules stopped,
+autonomy/actions OFF, and kill switches ON. Focused workflow plus native
+behavior evidence passes 17/17 locally. Nothing was pushed, dispatched,
+deployed, or applied; no hosted ledger or production acceptance is claimed.
+
 ## 2026-08-31: admitted Grok Phase 1C completion has an exact durable graph re-wake (ADR-233)
 
 The repository candidate adds forward migration

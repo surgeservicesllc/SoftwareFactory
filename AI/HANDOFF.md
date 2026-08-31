@@ -24,6 +24,33 @@ green CI and READY deployment, dispatch only fresh read-only `scope=verify`.
 Workers/autonomy/automatic actions remain OFF and the global kill switch
 remains ON. Signed-in acceptance and a real provider-backed E2E still remain;
 **GROK BOT: PRODUCTION READY is not declared.**
+## Newest (2026-08-31, latest+54): protected Grok 015/017 lanes (ADR-234)
+
+Use `.github/workflows/grok-claim-context-projection-migration.yml` only for
+015 and `.github/workflows/grok-read-only-research-runtime-migration.yml` only
+for 017. Their canonical-LF identities are respectively
+`4c33bcb908cb0b7a1972b4e2dc79d9fdc8bee13d118490e179afc2001a159e4b`
+(24,264 bytes) and
+`3fe4cf4b6d49b29ed927650ab1581d3e580352702c76f5f6f0a837094d603061`
+(22,840 bytes). The native normalized `pg_proc.prosrc` MD5 for the exact 017
+v1 launcher is `e028c29915d50f0eb7773affa146fae7` at its target migration
+boundary. Do not substitute source slices containing dollar-quote delimiters.
+
+Run the lanes in forward order only: 015 refuses every later ledger row; 017
+requires exact 00100-01600 lineage and refuses every row later than 017. The
+later 019 release owns the callable v2/v4 wrappers and contracts the older
+launcher ACL, so the target-version 017 postflight intentionally proves v1 at
+the 017 boundary rather than pretending the post-019 catalog is the same.
+Every operation preserves an exact unrelated-ledger digest and stopped safety.
+
+Focused workflow and native target-chain postflight evidence passes 17/17.
+The fixtures prove immutable initial context and read-only research replay,
+tenant/tamper/write refusal, exact admissions, content-free audit, paused graph,
+and zero execution, then roll back all synthetic rows. Nothing was pushed,
+dispatched, deployed, or applied. Hosted probes and sequential apply/verify
+remain separately reviewed work; keep workers, schedules, autonomy, and every
+automatic action OFF and kill switches ON.
+
 ## Newest (2026-08-31, latest+53): exact Grok Phase 1C graph re-wake (ADR-233)
 
 Migration `20260831001600_grok_phase1c_graph_rewake.sql`, canonical-LF SHA-256

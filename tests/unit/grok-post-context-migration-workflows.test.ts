@@ -223,13 +223,14 @@ describe("post-context migration release order and adverse behavior", () => {
   const context = load(releases[0]);
   const research = load(releases[1]);
 
-  it("requires 015 before 017 and cannot insert 015 behind installed 017", () => {
+  it("requires 015 before every later migration", () => {
     for (const version of [
       "20260831001100", "20260831001200", "20260831001300", "20260831001400",
     ]) expect(context.preflight).toContain(version);
-    expect(context.preflight).toContain("20260831001700");
+    expect(context.preflight).toContain("migration.version > '20260831001500'");
     expect(context.preflight).toContain("grok_claim_context_release_absent_ledger_or_catalog_mismatch");
     expect(research.preflight).toContain("20260831001500");
+    expect(research.preflight).toContain("20260831001600");
     expect(research.preflight).toContain("grok_initial_context_claim_projection(uuid)");
     expect(research.preflight).toContain("migration.version > '20260831001700'");
   });

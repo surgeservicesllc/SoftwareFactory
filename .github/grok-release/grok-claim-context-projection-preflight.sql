@@ -84,8 +84,10 @@ begin
         or pg_catalog.to_regprocedure(
           'public.grok_initial_context_claim_projection(uuid)'
         ) is not null
-        or (select pg_catalog.count(*) from supabase_migrations.schema_migrations
-             where version = '20260831001700') <> 0
+        or exists (
+          select 1 from supabase_migrations.schema_migrations migration
+           where migration.version > '20260831001500'
+        )
         or pg_catalog.to_regprocedure(
           'public.launch_grok_read_only_research_v1_as_server(uuid,uuid,uuid,uuid,uuid,text,text,public.graph_topology,jsonb,public.risk_level,boolean,jsonb,jsonb,jsonb,text,jsonb)'
         ) is not null

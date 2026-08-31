@@ -15,6 +15,18 @@ derived expanded-row count, and retains owner-only, non-grantable, explicit
 role-denial, and PostgreSQL 18 NOT NULL checks. The focused workflow contract
 passes 12/12. Exact-head release and a new read-only
 verify remain pending; no database or safety state changes with this fix.
+**Addendum, 2026-08-31 latest+54 - protected Grok 015/017 lanes
+(ADR-234):** Focused static workflow and native PGlite target-chain suites pass
+17/17. Evidence pins canonical-LF migration hashes, target ordering through
+016, exact native function fingerprints/ACLs, forced RLS and zero table grants,
+one-file locked transactions, linked lint, immutable unrelated-ledger digests,
+runtime replay, tenant/tamper/write-node adverse cases, content-free audit,
+paused read-only graph output, and zero graph/node/agent/provider/Phase1C
+execution. Both workflows are manual, first-attempt-only, exact-confirmed, and
+serialized with every execution switch OFF and kill switch ON. Hosted
+probe/apply/verify, exact-head CI/build/browser, deployment, health, and signed-
+in production acceptance remain pending; this is repository evidence only.
+
 **Addendum, 2026-08-31 latest+53 - exact Grok Phase 1C graph re-wake
 (ADR-233):** Focused TypeScript behavior and SQL/workflow contract suites pass,
 and the full migration chain accepts 016 after the 015 context projection.
