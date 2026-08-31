@@ -9,9 +9,9 @@ graph-phase1c-release-lineage.behavior 16 — the new case sets both
 timestamps on the fixture graph (pairing the by-columns to satisfy the
 pair constraints) and reads them back through the definer as the worker.
 Guard suites re-run green: path references both ways, scope replay
-executes the new postflight, runbook total 220, workflow 476,716 bytes of
-478,000 — the extraction backlog item is filed because the next scope
-does not fit.
+executes the new postflight, runbook total 220, and the workflow's
+per-step DB_URL preamble is fully extracted — 451,768 bytes against a
+guard ratcheted to 455,000.
 
 **Addendum, 2026-08-31 latest+42 - portal filed-copy downloads (ADR-222):**
 services-portal.behavior grew to 15: a customer lists their own filed

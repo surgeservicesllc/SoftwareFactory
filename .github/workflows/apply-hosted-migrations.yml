@@ -375,12 +375,6 @@ jobs:
       - name: Apply the broker function migrations surgically (scope=broker-functions)
         if: ${{ inputs.scope == 'broker-functions' }}
         run: |
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
-          fi
           CUTOVER_APPLIED=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc \
             "select exists (select 1 from supabase_migrations.schema_migrations where version >= '20260827000150');")
           if [ "$CUTOVER_APPLIED" = "t" ]; then
@@ -491,12 +485,6 @@ jobs:
           # extracted so the workflow stays under GitHub's 500KB planning
           # ceiling. Each file is byte-for-byte what bash handed psql -c
           # before; order, pipeline suffixes and output are unchanged.
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
-          fi
           psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/01.sql
           echo "present = t: the DDL is live, so repair the history row rather than re-running the file."
           echo "present = f: that migration has genuinely not run."
@@ -937,12 +925,6 @@ jobs:
       - name: Apply the project control migrations surgically (scope=project-controls)
         if: ${{ inputs.scope == 'project-controls' }}
         run: |
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
-          fi
           repair() {
             if [ "$MODE" = "token" ]; then
               npx supabase migration repair --status applied "$1"
@@ -966,12 +948,6 @@ jobs:
       - name: Apply the pipeline selection migration (scope=pipeline-selection)
         if: ${{ inputs.scope == 'pipeline-selection' }}
         run: |
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
-          fi
           FILE=supabase/migrations/20260821000300_project_pipeline_selection.sql
           echo "Applying ${FILE}"
           psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
@@ -986,12 +962,6 @@ jobs:
       - name: Apply the agent selection surgically (scope=agent-selection)
         if: ${{ inputs.scope == 'agent-selection' }}
         run: |
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
-          fi
           FILE=supabase/migrations/20260822000100_project_agent_selection.sql
           echo "Applying ${FILE}"
           psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
@@ -1006,12 +976,6 @@ jobs:
       - name: Apply the job discovery surface (scope=job-seeker-discovery-surface)
         if: ${{ inputs.scope == 'job-seeker-discovery-surface' }}
         run: |
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
-          fi
           FILE=supabase/migrations/20260828000400_job_seeker_discovery_surface.sql
           # Preflight: refuse a file that is not the reviewed one. The apply is
           # forward-only and additive, but "additive" is a property of this
@@ -1061,12 +1025,6 @@ jobs:
       - name: Apply the job seeker alert engine (scope=job-seeker-alert-engine)
         if: ${{ inputs.scope == 'job-seeker-alert-engine' }}
         run: |
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
-          fi
           FILE=supabase/migrations/20260829000300_job_seeker_alert_engine.sql
           # Preflight: refuse a file that is not the reviewed one. The apply is
           # forward-only and additive, but "additive" is a property of this
@@ -1128,12 +1086,6 @@ jobs:
       - name: Apply the job seeker result marks table (scope=job-seeker-result-marks)
         if: ${{ inputs.scope == 'job-seeker-result-marks' }}
         run: |
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
-          fi
           FILE=supabase/migrations/20260829000400_job_seeker_result_marks.sql
           # Preflight: refuse a file that is not the reviewed one. The apply is
           # forward-only and additive, but "additive" is a property of this
@@ -1191,12 +1143,6 @@ jobs:
       - name: Apply node attempt persistence (scope=node-attempt-persistence)
         if: ${{ inputs.scope == 'node-attempt-persistence' }}
         run: |
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
-          fi
           FILE=supabase/migrations/20260830000100_node_attempt_persistence.sql
           sha256sum "$FILE"
           psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
@@ -1231,12 +1177,6 @@ jobs:
       - name: Apply graph withdrawal (scope=withdraw-graph)
         if: ${{ inputs.scope == 'withdraw-graph' }}
         run: |
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
-          fi
           FILE=supabase/migrations/20260830000200_withdraw_graph_as_member.sql
           sha256sum "$FILE"
           psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
@@ -1278,12 +1218,6 @@ jobs:
       - name: Apply node attempt projection (scope=node-attempt-projection)
         if: ${{ inputs.scope == 'node-attempt-projection' }}
         run: |
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
-          fi
           FILE=supabase/migrations/20260830000300_project_node_attempt.sql
           sha256sum "$FILE"
           psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
@@ -1316,12 +1250,6 @@ jobs:
       - name: Apply graph pause/resume (scope=pause-graph)
         if: ${{ inputs.scope == 'pause-graph' }}
         run: |
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
-          fi
           FILE=supabase/migrations/20260830000400_pause_graph.sql
           sha256sum "$FILE"
           psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
@@ -1374,12 +1302,6 @@ jobs:
       - name: Apply the Services CRM foundation (scope=services-crm)
         if: ${{ inputs.scope == 'services-crm' }}
         run: |
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
-          fi
           # Two files: the foundation (idempotent re-run) and the grant
           # narrowing that collapses the hosted default privileges the first
           # dispatch's postflight caught handing authenticated ALL on the
@@ -1429,12 +1351,6 @@ jobs:
       - name: Apply the CRM pipeline and search support (scope=crm-pipeline)
         if: ${{ inputs.scope == 'crm-pipeline' }}
         run: |
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
-          fi
           VERSION=20260830000700_crm_pipeline_search
           FILE="supabase/migrations/${VERSION}.sql"
           sha256sum "$FILE"
@@ -1486,12 +1402,6 @@ jobs:
       - name: Apply the field service core (scope=field-service)
         if: ${{ inputs.scope == 'field-service' }}
         run: |
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
-          fi
           VERSION=20260830000800_field_service_core
           FILE="supabase/migrations/${VERSION}.sql"
           sha256sum "$FILE"
@@ -1535,12 +1445,6 @@ jobs:
       - name: Apply the pest/IPM core (scope=pest-ipm)
         if: ${{ inputs.scope == 'pest-ipm' }}
         run: |
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
-          fi
           VERSION=20260830001200_pest_ipm_core
           FILE="supabase/migrations/${VERSION}.sql"
           sha256sum "$FILE"
@@ -1563,12 +1467,6 @@ jobs:
       - name: Apply chemicals and compliance (scope=chemicals-compliance)
         if: ${{ inputs.scope == 'chemicals-compliance' }}
         run: |
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
-          fi
           VERSION=20260830001300_chemicals_compliance
           FILE="supabase/migrations/${VERSION}.sql"
           sha256sum "$FILE"
@@ -1591,12 +1489,6 @@ jobs:
       - name: Apply billing and contracts (scope=billing-contracts)
         if: ${{ inputs.scope == 'billing-contracts' }}
         run: |
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
-          fi
           VERSION=20260830001400_billing_contracts
           FILE="supabase/migrations/${VERSION}.sql"
           sha256sum "$FILE"
@@ -1620,12 +1512,6 @@ jobs:
       - name: Apply branches, the org chart and the sales motion (scope=branches-org-sales)
         if: ${{ inputs.scope == 'branches-org-sales' }}
         run: |
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
-          fi
           VERSION=20260830001500_branches_org_sales
           FILE="supabase/migrations/${VERSION}.sql"
           sha256sum "$FILE"
@@ -1648,12 +1534,6 @@ jobs:
       - name: Apply documents, canvassing and marketing (scope=documents-canvassing-marketing)
         if: ${{ inputs.scope == 'documents-canvassing-marketing' }}
         run: |
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
-          fi
           VERSION=20260830001600_documents_canvassing_marketing
           FILE="supabase/migrations/${VERSION}.sql"
           sha256sum "$FILE"
@@ -1677,12 +1557,6 @@ jobs:
       - name: Apply the forms engine, timesheets and licences (scope=forms-timesheets-licences)
         if: ${{ inputs.scope == 'forms-timesheets-licences' }}
         run: |
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
-          fi
           VERSION=20260830001700_forms_timesheets_licences
           FILE="supabase/migrations/${VERSION}.sql"
           sha256sum "$FILE"
@@ -1704,12 +1578,6 @@ jobs:
       - name: Apply the customer portal (scope=customer-portal)
         if: ${{ inputs.scope == 'customer-portal' }}
         run: |
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
-          fi
           VERSION=20260830001800_customer_portal
           FILE="supabase/migrations/${VERSION}.sql"
           sha256sum "$FILE"
@@ -1737,12 +1605,6 @@ jobs:
       - name: Apply the operating dashboards (scope=operating-dashboards)
         if: ${{ inputs.scope == 'operating-dashboards' }}
         run: |
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
-          fi
           VERSION=20260830001900_operating_dashboards
           FILE="supabase/migrations/${VERSION}.sql"
           sha256sum "$FILE"
@@ -1759,12 +1621,6 @@ jobs:
       - name: Apply recurring billing and dunning (scope=recurring-billing)
         if: ${{ inputs.scope == 'recurring-billing' }}
         run: |
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
-          fi
           VERSION=20260830002000_recurring_billing_dunning
           FILE="supabase/migrations/${VERSION}.sql"
           sha256sum "$FILE"
@@ -1781,12 +1637,6 @@ jobs:
       - name: Apply equipment and fleet (scope=equipment-fleet)
         if: ${{ inputs.scope == 'equipment-fleet' }}
         run: |
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
-          fi
           VERSION=20260830002100_equipment_fleet
           FILE="supabase/migrations/${VERSION}.sql"
           sha256sum "$FILE"
@@ -1803,12 +1653,6 @@ jobs:
       - name: Apply revenue forecasting (scope=revenue-forecast)
         if: ${{ inputs.scope == 'revenue-forecast' }}
         run: |
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
-          fi
           VERSION=20260830002200_revenue_forecast
           FILE="supabase/migrations/${VERSION}.sql"
           sha256sum "$FILE"
@@ -1825,12 +1669,6 @@ jobs:
       - name: Apply the commercial portal view (scope=commercial-portal)
         if: ${{ inputs.scope == 'commercial-portal' }}
         run: |
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
-          fi
           VERSION=20260830002300_commercial_portal
           FILE="supabase/migrations/${VERSION}.sql"
           sha256sum "$FILE"
@@ -1847,12 +1685,6 @@ jobs:
       - name: Apply WDO inspection reports (scope=wdo-inspections)
         if: ${{ inputs.scope == 'wdo-inspections' }}
         run: |
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
-          fi
           VERSION=20260830010100_wdo_inspections
           FILE="supabase/migrations/${VERSION}.sql"
           sha256sum "$FILE"
@@ -1869,12 +1701,6 @@ jobs:
       - name: Apply the integration registry (scope=service-integrations)
         if: ${{ inputs.scope == 'service-integrations' }}
         run: |
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
-          fi
           VERSION=20260830010200_service_integrations
           FILE="supabase/migrations/${VERSION}.sql"
           sha256sum "$FILE"
@@ -1891,12 +1717,6 @@ jobs:
       - name: Widen the secret guard to restricted keys (scope=secret-guard-restricted-keys)
         if: ${{ inputs.scope == 'secret-guard-restricted-keys' }}
         run: |
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
-          fi
           VERSION=20260830010300_secret_guard_restricted_keys
           FILE="supabase/migrations/${VERSION}.sql"
           sha256sum "$FILE"
@@ -1913,12 +1733,6 @@ jobs:
       - name: Apply the offline field queue (scope=field-offline-queue)
         if: ${{ inputs.scope == 'field-offline-queue' }}
         run: |
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
-          fi
           VERSION=20260830010400_field_offline_queue
           FILE="supabase/migrations/${VERSION}.sql"
           sha256sum "$FILE"
@@ -1935,12 +1749,6 @@ jobs:
       - name: Apply plan sequencing (scope=plan-sequencing)
         if: ${{ inputs.scope == 'plan-sequencing' }}
         run: |
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
-          fi
           VERSION=20260831000200_plan_sequencing
           FILE="supabase/migrations/${VERSION}.sql"
           sha256sum "$FILE"
@@ -1957,12 +1765,6 @@ jobs:
       - name: Apply invoices built from the visit (scope=invoice-from-visit)
         if: ${{ inputs.scope == 'invoice-from-visit' }}
         run: |
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
-          fi
           VERSION=20260831000300_invoice_from_visit
           FILE="supabase/migrations/${VERSION}.sql"
           sha256sum "$FILE"
@@ -1979,12 +1781,6 @@ jobs:
       - name: Apply truck stock (scope=truck-stock)
         if: ${{ inputs.scope == 'truck-stock' }}
         run: |
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
-          fi
           VERSION=20260831000400_truck_stock
           FILE="supabase/migrations/${VERSION}.sql"
           sha256sum "$FILE"
@@ -2001,12 +1797,6 @@ jobs:
       - name: Apply multi-unit properties (scope=multi-unit-properties)
         if: ${{ inputs.scope == 'multi-unit-properties' }}
         run: |
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
-          fi
           VERSION=20260831000500_multi_unit_properties
           FILE="supabase/migrations/${VERSION}.sql"
           sha256sum "$FILE"
@@ -2023,12 +1813,6 @@ jobs:
       - name: Apply filed service documents (scope=service-documents)
         if: ${{ inputs.scope == 'service-documents' }}
         run: |
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
-          fi
           VERSION=20260831000600_service_documents
           FILE="supabase/migrations/${VERSION}.sql"
           sha256sum "$FILE"
@@ -2045,12 +1829,6 @@ jobs:
       - name: Apply transactional notices (scope=transactional-notices)
         if: ${{ inputs.scope == 'transactional-notices' }}
         run: |
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
-          fi
           VERSION=20260831000700_transactional_notices
           FILE="supabase/migrations/${VERSION}.sql"
           sha256sum "$FILE"
@@ -2067,12 +1845,6 @@ jobs:
       - name: Apply autopay authorization (scope=autopay-authorization)
         if: ${{ inputs.scope == 'autopay-authorization' }}
         run: |
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
-          fi
           VERSION=20260831000800_autopay_authorization
           FILE="supabase/migrations/${VERSION}.sql"
           sha256sum "$FILE"
@@ -2140,12 +1912,6 @@ jobs:
           if [ -z "$SUPABASE_DB_PASSWORD" ]; then
             echo "::error::The protected bot-legacy-acl-normalization scope requires SUPABASE_DB_PASSWORD for live catalog verification."
             exit 1
-          fi
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
           fi
 
           FILE=supabase/migrations/20260822000150_normalize_legacy_bot_function_acls.sql
@@ -2365,12 +2131,6 @@ jobs:
           if [ -z "$SUPABASE_DB_PASSWORD" ]; then
             echo "::error::The protected bot-account-binding scope requires SUPABASE_DB_PASSWORD for live catalog verification."
             exit 1
-          fi
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
           fi
           FILE=supabase/migrations/20260822000200_register_bot_for_ai_account.sql
           EXPECTED_SHA256=658e615580cc5b413f81fd45f5b884917c27f44b66395aa462f9640ac27c48bf
@@ -3004,12 +2764,6 @@ jobs:
             echo "::error::The protected bot-account-binding-contract scope requires SUPABASE_DB_PASSWORD for live catalog verification."
             exit 1
           fi
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
-          fi
 
           FILE=supabase/migrations/20260822000300_contract_bot_mutator_acls.sql
           EXPECTED_SHA256=79914bc97660eef908b6a0fa0c90abfdd15da1683b383ad568e34bf3bd32c5f7
@@ -3325,12 +3079,6 @@ jobs:
           if [ -z "$SUPABASE_DB_PASSWORD" ]; then
             echo "::error::The protected factory-any-model-record-only scope requires SUPABASE_DB_PASSWORD for exact catalog, lint, and containment verification."
             exit 1
-          fi
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
           fi
 
           CHECKED_OUT_SHA=$(git rev-parse HEAD)
@@ -4308,12 +4056,6 @@ jobs:
             echo "::error::This scope requires SUPABASE_DB_PASSWORD for live postflight verification."
             exit 1
           fi
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
-          fi
 
           RECORDED=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc \
             "select concat_ws('|',
@@ -4572,12 +4314,6 @@ jobs:
       - name: Apply the Agentic SDLC lifecycle surgically (scope=lifecycle)
         if: ${{ inputs.scope == 'lifecycle' }}
         run: |
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
-          fi
           CUTOVER_APPLIED=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -Atqc \
             "select exists (select 1 from supabase_migrations.schema_migrations where version >= '20260827000150');")
           if [ "$CUTOVER_APPLIED" = "t" ]; then
@@ -4647,12 +4383,6 @@ jobs:
           if [ -z "$SUPABASE_DB_PASSWORD" ]; then
             echo "::error::This scope requires SUPABASE_DB_PASSWORD for live ledger verification."
             exit 1
-          fi
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
           fi
 
           FILE=supabase/migrations/20260822000400_job_seeker_resume_extraction.sql
@@ -4736,12 +4466,6 @@ jobs:
             echo "::error::This scope requires SUPABASE_DB_PASSWORD for live verification."
             exit 1
           fi
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
-          fi
 
           FILE=supabase/migrations/20260822000500_job_seeker_extraction_grant_contract.sql
           EXPECTED_SHA256=c5709783bdaa3919e65809493345b4cfbc527121c2bf44a3a7fe98e0e7e9b1ee
@@ -4803,12 +4527,6 @@ jobs:
             echo "::error::This scope requires SUPABASE_DB_PASSWORD for live verification."
             exit 1
           fi
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
-          fi
 
           FILE=supabase/migrations/20260822001300_contract_audit_guard_function_acl.sql
           EXPECTED_SHA256=910fe9268d310025d54ad5861ae3e59964f90d6c17bc60b8fbd6d25d419caded
@@ -4857,12 +4575,6 @@ jobs:
           if [ -z "$SUPABASE_DB_PASSWORD" ]; then
             echo "::error::This scope requires SUPABASE_DB_PASSWORD for live verification."
             exit 1
-          fi
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
           fi
 
           FILE=supabase/migrations/20260822001400_clear_partial_agentos_foundation.sql
@@ -4933,12 +4645,6 @@ jobs:
           if [ -z "$SUPABASE_DB_PASSWORD" ]; then
             echo "::error::This scope requires SUPABASE_DB_PASSWORD for live verification."
             exit 1
-          fi
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
           fi
 
           CARRY_FILE=supabase/migrations/20260815001000_cross_project_dependencies.sql
@@ -5018,12 +4724,6 @@ jobs:
             echo "::error::This scope requires SUPABASE_DB_PASSWORD for live verification."
             exit 1
           fi
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
-          fi
 
           FILE=supabase/migrations/20260823000100_command_analysis_graphs.sql
           EXPECTED_SHA256=5fa2cffaeff7a46e22871c58ac3704e962a9001652bd7cf10668a96631ec04d2
@@ -5071,12 +4771,6 @@ jobs:
             echo "::error::This scope requires SUPABASE_DB_PASSWORD."
             exit 1
           fi
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
-          fi
 
           echo "1) Rolled-back rehearsal of the exact launch, as the command's own organization owner."
           psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q -f .github/hosted-apply/guard/analysis-launch-doorcheck.sql
@@ -5092,12 +4786,6 @@ jobs:
           if [ -z "$SUPABASE_DB_PASSWORD" ]; then
             echo "::error::This scope requires SUPABASE_DB_PASSWORD."
             exit 1
-          fi
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
           fi
 
           PLAN=supabase/fixtures/production_readiness.launch-plan.json
@@ -5200,12 +4888,6 @@ jobs:
             echo "::error::This scope requires SUPABASE_DB_PASSWORD for live verification."
             exit 1
           fi
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
-          fi
 
           FILE=supabase/migrations/20260823000200_delete_selected_pipelines.sql
           EXPECTED_SHA256=45e3cda26bb7da8f3d5d8353ec7a981af067482b4ea490a8f6298b76fee354dc
@@ -5250,12 +4932,6 @@ jobs:
           if [ -z "$SUPABASE_DB_PASSWORD" ]; then
             echo "::error::This scope requires SUPABASE_DB_PASSWORD for live verification."
             exit 1
-          fi
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
           fi
 
           FILE=supabase/migrations/20260823000300_stop_and_delete_selected_pipelines.sql
@@ -5314,12 +4990,6 @@ jobs:
             echo "::error::This scope requires SUPABASE_DB_PASSWORD for live verification."
             exit 1
           fi
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
-          fi
 
           FILE=supabase/migrations/20260823000400_pipeline_delete_releases_routing_evidence.sql
           EXPECTED_SHA256=e35c93087dd7b111a411b621f92a13ecf2741a199ebbe8f3b71da342752b2a56
@@ -5371,12 +5041,6 @@ jobs:
           if [ -z "$SUPABASE_DB_PASSWORD" ]; then
             echo "::error::This scope requires SUPABASE_DB_PASSWORD for live verification."
             exit 1
-          fi
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
           fi
 
           FILE=supabase/migrations/20260823000500_finish_provider_credential_vault.sql
@@ -5461,12 +5125,6 @@ jobs:
             echo "::error::This scope requires SUPABASE_DB_PASSWORD for live verification."
             exit 1
           fi
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
-          fi
 
           FILE=supabase/migrations/20260823000600_clear_autonomy_projects.sql
           EXPECTED_SHA256=47556e48f997e3f4485a194bc18dc29406ee83f2bbd3548ba5af9f83c80c00b3
@@ -5519,12 +5177,6 @@ jobs:
           if [ -z "$SUPABASE_DB_PASSWORD" ]; then
             echo "::error::This scope requires SUPABASE_DB_PASSWORD for live verification."
             exit 1
-          fi
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
           fi
 
           BACKFILL_FILE=supabase/migrations/20260823000700_backfill_graph_node_lifecycle_stage.sql
@@ -5595,12 +5247,6 @@ jobs:
             echo "::error::This scope requires SUPABASE_DB_PASSWORD for live verification."
             exit 1
           fi
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
-          fi
 
           GROWTH_FILE=supabase/migrations/20260823000800_discovery_evaluation_decision_stages.sql
           MAP_FILE=supabase/migrations/20260823000900_discovery_capability_stage_map.sql
@@ -5670,12 +5316,6 @@ jobs:
             echo "::error::This scope requires SUPABASE_DB_PASSWORD for live verification."
             exit 1
           fi
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
-          fi
 
           CUTOVER=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
             "select exists (select 1 from supabase_migrations.schema_migrations where version >= '20260827000150');")
@@ -5730,12 +5370,6 @@ jobs:
           if [ -z "$SUPABASE_DB_PASSWORD" ]; then
             echo "::error::This scope requires SUPABASE_DB_PASSWORD for live verification."
             exit 1
-          fi
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
           fi
 
           CUTOVER=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
@@ -5792,12 +5426,6 @@ jobs:
             echo "::error::This scope requires SUPABASE_DB_PASSWORD for live verification."
             exit 1
           fi
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
-          fi
 
           ARTIFACTS_FILE=supabase/migrations/20260824001000_list_graph_run_artifacts.sql
           if [ "$(sha256sum "$ARTIFACTS_FILE" | cut -d' ' -f1)" != "21754b39db18292401a1b0828a4a8f2c036a135775dd3c136992f50f63ca18d7" ]; then
@@ -5846,12 +5474,6 @@ jobs:
           if [ -z "$SUPABASE_DB_PASSWORD" ]; then
             echo "::error::This scope requires SUPABASE_DB_PASSWORD for live verification."
             exit 1
-          fi
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
           fi
 
           CUTOVER=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
@@ -5909,12 +5531,6 @@ jobs:
             echo "::error::This scope requires SUPABASE_DB_PASSWORD for live verification."
             exit 1
           fi
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
-          fi
 
           BILLING_FILE=supabase/migrations/20260825000400_billing_foundation.sql
           if [ "$(sha256sum "$BILLING_FILE" | cut -d' ' -f1)" != "0d7d91336a700d3d93765a4a256e3aba29a684c9092653e7487ac5dc6e077ea7" ]; then
@@ -5962,12 +5578,6 @@ jobs:
           if [ -z "$SUPABASE_DB_PASSWORD" ]; then
             echo "::error::This scope requires SUPABASE_DB_PASSWORD for live verification."
             exit 1
-          fi
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
           fi
 
           NOTE_FILE=supabase/migrations/20260825000300_runs_state_their_closure_reason.sql
@@ -6023,12 +5633,6 @@ jobs:
           if [ -z "$SUPABASE_DB_PASSWORD" ]; then
             echo "::error::This scope requires SUPABASE_DB_PASSWORD for live verification."
             exit 1
-          fi
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
           fi
 
           CUTOVER=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
@@ -6099,12 +5703,6 @@ jobs:
           if [ -z "$SUPABASE_DB_PASSWORD" ]; then
             echo "::error::This scope requires SUPABASE_DB_PASSWORD for live verification."
             exit 1
-          fi
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
           fi
 
           # 20260829000100, not 000300: the activity-types migration was
@@ -6193,12 +5791,6 @@ jobs:
             echo "::error::This scope requires SUPABASE_DB_PASSWORD for live verification."
             exit 1
           fi
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
-          fi
 
           ROW=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
             "select count(*) from supabase_migrations.schema_migrations where version = '20260823001000';")
@@ -6245,12 +5837,6 @@ jobs:
           if [ -z "$SUPABASE_DB_PASSWORD" ]; then
             echo "::error::This scope requires SUPABASE_DB_PASSWORD for live verification."
             exit 1
-          fi
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
           fi
 
           ROW=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc \
@@ -6304,12 +5890,6 @@ jobs:
           if [ -z "$SUPABASE_DB_PASSWORD" ]; then
             echo "::error::This protected scope requires SUPABASE_DB_PASSWORD for exact live ledger/catalog/safety verification."
             exit 1
-          fi
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
           fi
 
           FILE=supabase/migrations/20260827000150_fence_legacy_graph_protocol.sql
@@ -6445,12 +6025,6 @@ jobs:
           if [ -z "$SUPABASE_DB_PASSWORD" ]; then
             echo "::error::This protected scope requires SUPABASE_DB_PASSWORD for exact live ledger/catalog/safety verification."
             exit 1
-          fi
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
           fi
 
           FILE=supabase/migrations/20260827000200_graph_phase1c_release_lineage.sql
@@ -6636,12 +6210,6 @@ jobs:
             echo "::error::This protected scope requires SUPABASE_DB_PASSWORD for exact live catalog verification."
             exit 1
           fi
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
-          fi
 
           FILE=supabase/migrations/20260827000100_record_job_seeker_job_atomically.sql
           EXPECTED_SHA256=2f51bf64ba3fd2bc711e6fbf9e660a2cc0dd5ef4b1f85d932ee574e79e9c7d13
@@ -6721,12 +6289,6 @@ jobs:
             echo "::error::This scope requires SUPABASE_DB_PASSWORD for live verification."
             exit 1
           fi
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
-          fi
 
           SPEND_FILE=supabase/migrations/20260825000200_run_cost_and_budget_in_graph_runs.sql
           if [ "$(sha256sum "$SPEND_FILE" | cut -d' ' -f1)" != "abc7bb695628942be85b32db1fb06b71f81dad1f831b75c8a1f9c861af4c0fe8" ]; then
@@ -6777,12 +6339,6 @@ jobs:
           if [ -z "$SUPABASE_DB_PASSWORD" ]; then
             echo "::error::This scope requires SUPABASE_DB_PASSWORD for live verification."
             exit 1
-          fi
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
           fi
 
           TYPES_FILE=supabase/migrations/20260822000700_clear_surface_activity_types.sql
@@ -6872,12 +6428,6 @@ jobs:
       - name: Repair bots onto the executable model (scope=executable-model-repair)
         if: ${{ inputs.scope == 'executable-model-repair' }}
         run: |
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
-          fi
 
           FILE=supabase/migrations/20260822000600_route_bots_onto_the_executable_model.sql
           EXPECTED_SHA256=c76448dfb29a60dfcc792d00a7853bebbe97acfb2002b440f12565b93fde78f0
@@ -6908,12 +6458,6 @@ jobs:
           if [ -z "$SUPABASE_DB_PASSWORD" ]; then
             echo "::error::scope=all requires SUPABASE_DB_PASSWORD to prove protected bot-00150/00200/job-00400/job-00500/model-00600/clear-00700/00800/00300/00850/00900/01000/01100/01200 and graph-00150/00200 are already recorded."
             exit 1
-          fi
-          if [ "$MODE" != "dburl" ]; then
-            ENC=$(node -e 'console.log(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
-            echo "::add-mask::$ENC"
-            DB_URL="postgresql://postgres.${PROJECT_REF}:${ENC}@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-            echo "::add-mask::$DB_URL"
           fi
           if [ "$(tr -d '\r' < supabase/migrations/20260822000300_contract_bot_mutator_acls.sql | sha256sum | cut -d' ' -f1)" != "79914bc97660eef908b6a0fa0c90abfdd15da1683b383ad568e34bf3bd32c5f7" ] \
             || [ "$(tr -d '\r' < supabase/migrations/20260822000400_job_seeker_resume_extraction.sql | sha256sum | cut -d' ' -f1)" != "0faa6d4174f01a43abffda463d4dbe9dc60d82be54d9207011e4c064c4f0b465" ] \

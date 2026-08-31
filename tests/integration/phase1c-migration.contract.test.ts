@@ -1,16 +1,10 @@
 // @vitest-environment node
 
-import { readdir, readFile } from "node:fs/promises";
-import { resolve } from "node:path";
-
 import { PGlite } from "@electric-sql/pglite";
-import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
 import { describe, expect, it } from "vitest";
 import { LATEST_MIGRATION } from "../support/latest-migration";
+import { createMigratedDatabase, latestMigration } from "../support/migrated-database";
 
-const repositoryRoot = resolve(import.meta.dirname, "../..");
-const migrationsRoot = resolve(repositoryRoot, "supabase/migrations");
-const latestMigration = LATEST_MIGRATION;
 const ownerId = "00000000-0000-4000-8000-000000000101";
 const organizationId = "10000000-0000-4000-8000-000000000001";
 const projectId = "20000000-0000-4000-8000-000000000001";
@@ -25,33 +19,10 @@ const reportId = "60000000-0000-4000-8000-000000000001";
 type ApplicationRole = "anon" | "authenticated" | "service_role";
 
 async function database() {
-  const db = new PGlite({ extensions: { pgcrypto } });
-  await db.exec(`
-    create schema if not exists auth;
-    create table auth.users (
-      id uuid primary key default gen_random_uuid(),
-      raw_user_meta_data jsonb not null default '{}'::jsonb
-    );
-    create or replace function auth.uid()
-    returns uuid language sql stable as $$
-      select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid
-    $$;
-    create or replace function auth.jwt()
-    returns jsonb language sql stable as $$
-      select coalesce(nullif(current_setting('request.jwt.claims', true), '')::jsonb, '{}'::jsonb)
-    $$;
-    create role anon nologin;
-    create role authenticated nologin;
-    create role service_role nologin bypassrls;
-  `);
-  const migrations = (await readdir(migrationsRoot))
-    .filter((file) => /^\d+.*\.sql$/.test(file))
-    .sort();
-  expect(migrations.at(-1)).toBe(latestMigration);
-  for (const migration of migrations) {
-    await db.exec(await readFile(resolve(migrationsRoot, migration), "utf8"));
-  }
-  return db;
+  // The chain, restored from a snapshot; the coverage assertion each
+  // call used to make survives via the helper's content-keyed cache.
+  expect(await latestMigration()).toBe(LATEST_MIGRATION);
+  return createMigratedDatabase();
 }
 
 async function seedExecutableProject(db: PGlite) {

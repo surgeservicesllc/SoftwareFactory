@@ -1,14 +1,10 @@
 // @vitest-environment node
 
-import { readdir, readFile } from "node:fs/promises";
-import { resolve } from "node:path";
 
 import { PGlite } from "@electric-sql/pglite";
-import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { createMigratedDatabase } from "../support/migrated-database";
 
-const migrationsRoot = resolve(import.meta.dirname, "../../supabase/migrations");
-const cutoff = "20260831000900_grok_claim_admission_fence.sql";
 const userId = "10000000-0000-4000-8000-000000000001";
 const organizationId = "20000000-0000-4000-8000-000000000002";
 const projectId = "30000000-0000-4000-8000-000000000003";
@@ -20,32 +16,10 @@ describe("Grok claim admission fence behavior", () => {
   let db: PGlite;
 
   beforeAll(async () => {
-    db = new PGlite({ extensions: { pgcrypto } });
-    await db.exec(`
-      create schema if not exists auth;
-      create table auth.users (
-        id uuid primary key default gen_random_uuid(),
-        raw_user_meta_data jsonb not null default '{}'::jsonb
-      );
-      create or replace function auth.uid()
-      returns uuid language sql stable as $$
-        select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid
-      $$;
-      create or replace function auth.jwt()
-      returns jsonb language sql stable as $$
-        select coalesce(nullif(current_setting('request.jwt.claims', true), '')::jsonb, '{}'::jsonb)
-      $$;
-      create role anon nologin;
-      create role authenticated nologin;
-      create role service_role nologin bypassrls;
-    `);
-    const migrations = (await readdir(migrationsRoot))
-      .filter((name) => /^\d+.*\.sql$/.test(name) && name.localeCompare(cutoff) <= 0)
-      .sort();
-    expect(migrations.at(-1)).toBe(cutoff);
-    for (const migration of migrations) {
-      await db.exec(await readFile(resolve(migrationsRoot, migration), "utf8"));
-    }
+    // The chain, restored from a snapshot rather than replayed; the
+    // helper keys its cache on the CONTENT of every migration, and
+    // asserts coverage of the whole directory.
+    db = await createMigratedDatabase();
     await db.exec(`
       insert into auth.users (id) values ('${userId}');
       insert into public.organizations (id,name,slug,created_by)

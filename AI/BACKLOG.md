@@ -454,14 +454,13 @@ the full seeded E2E journey passes — increment 10 of the plan.
   Worker-only ACL restated after the forced DROP; postflight proves the
   new columns and the unchanged reach. Hosted apply:
   scope=queue-diagnosis-visibility after merge.
-- [ ] The apply workflow's byte ceiling, again: the Grok-completion merge
-  pushed the file to 478,074 — over the 478,000 guard — so the extraction
-  started early: `Choose the connection` now exports a masked $DB_URL in
-  BOTH modes, the three newest steps (day-route, portal-filed-documents,
-  queue-diagnosis-visibility) carry no preamble, and the file is 477,608.
-  REMAINING: 76 older steps still carry the six-line preamble (~27KB).
-  Convert them to the env $DB_URL in one mechanical pass, then ratchet the
-  guard down to keep the recovery. New steps must never add the preamble.
+- [x] The apply workflow's byte ceiling, again: the Grok-completion merge
+  pushed the file to 478,074 — over the 478,000 guard. `Choose the
+  connection` now exports a masked $DB_URL in BOTH modes and every apply
+  step's identical six-line preamble is gone (76 removed in the mechanical
+  pass after the three newest shipped without one): 478,074 -> 451,768
+  bytes, guard ratcheted to 455,000 so the recovery is kept. New steps
+  read $DB_URL from env and must never re-add the preamble.
 - [x] Increment 6 (ADR-176): Changes & release panel —
   `lib/factory/release-evidence.ts` derives the release trail from the
   ANCHOR observations (lineage/review/ci_check_runs/deployment/probe);

@@ -13,9 +13,10 @@ Restate the revoke/grant in the same migration and make the postflight
 prove reach AND the new columns via pg_get_function_result — an existence
 check alone passes on the old definition.
 
-THE WORKFLOW BYTE CEILING IS NEARLY SPENT: 476,716 of 478,000. Do not add
-another apply scope without first extracting the repeated DB_URL/mask
-preamble (backlog item filed). Raising the guard is not the fix.
+THE PREAMBLE IS GONE: Choose the connection exports a masked $DB_URL in
+both modes and every apply step reads it from env — 451,768 bytes against
+a 455,000 guard. Never re-add the six-line per-step preamble; a new scope
+step is VERSION + sha256sum + psql + repair + postflight only.
 
 ## Newest (2026-08-31, latest+42): portal filed-copy downloads (ADR-222)
 

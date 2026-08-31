@@ -1,11 +1,9 @@
 // @vitest-environment node
 
-import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
 
 import { PGlite } from "@electric-sql/pglite";
-import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { createMigratedDatabase } from "../support/migrated-database";
 
 /**
  * Executable proof that the marketing schema behaves as designed.
@@ -18,13 +16,6 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
  * public write path validates its input inside the database.
  */
 
-const repositoryRoot = resolve(import.meta.dirname, "../..");
-
-const migrationFiles = [
-  "20260812000100_control_plane_schema.sql",
-  "20260812000200_row_level_security.sql",
-  "20260813000500_marketing_content.sql",
-] as const;
 
 const CONTENT_TABLES = [
   "marketing_pages",
@@ -62,29 +53,10 @@ describe("marketing schema RLS behavior", () => {
   let db: PGlite;
 
   beforeAll(async () => {
-    db = new PGlite({ extensions: { pgcrypto } });
-    await db.exec(`
-      create schema if not exists auth;
-      create table auth.users (
-        id uuid primary key default gen_random_uuid(),
-        raw_user_meta_data jsonb not null default '{}'::jsonb
-      );
-      create or replace function auth.uid()
-      returns uuid language sql stable as $$
-        select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid
-      $$;
-      create or replace function auth.jwt()
-      returns jsonb language sql stable as $$
-        select coalesce(nullif(current_setting('request.jwt.claims', true), '')::jsonb, '{}'::jsonb)
-      $$;
-      create role anon nologin;
-      create role authenticated nologin;
-      create role service_role nologin bypassrls;
-    `);
-
-    for (const file of migrationFiles) {
-      await db.exec(await readFile(resolve(repositoryRoot, "supabase/migrations", file), "utf8"));
-    }
+    // The chain, restored from a snapshot rather than replayed; the
+    // helper keys its cache on the CONTENT of every migration, and
+    // asserts coverage of the whole directory.
+    db = await createMigratedDatabase();
   }, 120_000);
 
   afterAll(async () => {

@@ -1,12 +1,10 @@
 // @vitest-environment node
 
 import { createHash } from "node:crypto";
-import { readdir, readFile } from "node:fs/promises";
-import { resolve } from "node:path";
 
 import { PGlite } from "@electric-sql/pglite";
-import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { createMigratedDatabase } from "../support/migrated-database";
 
 /**
  * The credential vault, against the real migrated schema.
@@ -17,8 +15,6 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
  * and a code that is wrong, stale, or spent is refused identically.
  */
 
-const repositoryRoot = resolve(import.meta.dirname, "../..");
-const migrationsDirectory = resolve(repositoryRoot, "supabase/migrations");
 
 const ownerId = "00000000-0000-4000-8000-0000000000a1";
 const memberId = "00000000-0000-4000-8000-0000000000a2";
@@ -46,28 +42,10 @@ describe("provider credential vault", { timeout: 120_000 }, () => {
   let db: PGlite;
 
   beforeAll(async () => {
-    db = new PGlite({ extensions: { pgcrypto } });
-    await db.exec(`
-      create schema if not exists auth;
-      create table auth.users (
-        id uuid primary key default gen_random_uuid(),
-        raw_user_meta_data jsonb not null default '{}'::jsonb
-      );
-      create or replace function auth.uid() returns uuid language sql stable as $$
-        select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid
-      $$;
-      create or replace function auth.jwt() returns jsonb language sql stable as $$
-        select coalesce(nullif(current_setting('request.jwt.claims', true), '')::jsonb, '{}'::jsonb)
-      $$;
-      create role anon nologin;
-      create role authenticated nologin;
-      create role service_role nologin bypassrls;
-    `);
-
-    const files = (await readdir(migrationsDirectory)).filter((f) => f.endsWith(".sql")).sort();
-    for (const file of files) {
-      await db.exec(await readFile(resolve(migrationsDirectory, file), "utf8"));
-    }
+    // The chain, restored from a snapshot rather than replayed; the
+    // helper keys its cache on the CONTENT of every migration, and
+    // asserts coverage of the whole directory.
+    db = await createMigratedDatabase();
 
     await db.exec(`
       insert into auth.users (id) values ('${ownerId}'), ('${memberId}'), ('${outsiderId}');
