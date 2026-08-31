@@ -39,6 +39,7 @@ import type {
   GrokArtifact,
   GrokControlAction,
   GrokSession,
+  GrokSessionCursor,
   GrokSessionDetail,
   GrokSessionListResponse,
 } from "@/lib/grok/contracts";
@@ -427,6 +428,8 @@ export function GrokWorkspace({
   const [projects, setProjects] = useState<readonly Project[]>([]);
   const [projectId, setProjectId] = useState(initialSelection.projectId ?? "");
   const [sessions, setSessions] = useState<readonly GrokSession[]>([]);
+  const [sessionCursor, setSessionCursor] = useState<GrokSessionCursor | null>(null);
+  const [loadingMoreSessions, setLoadingMoreSessions] = useState(false);
   const [sessionId, setSessionId] = useState(initialSelection.sessionId ?? "");
   const [detail, setDetail] = useState<GrokSessionDetail | null>(null);
   const [tab, setTab] = useState<InspectorTab>("goal");
@@ -443,18 +446,18 @@ export function GrokWorkspace({
   }> | null>(null);
   const controlAttempts = useRef(new Map<string, string>());
 
-  const loadDetail = useCallback(async (id: string) => {
+  const loadDetail = useCallback(async (id: string): Promise<GrokSessionDetail | null> => {
     const requestId = ++detailRequest.current;
     if (!id) {
       setDetail(null);
       setNotice("");
-      return;
+      return null;
     }
     setDetail((current) => current?.session.id === id ? current : null);
     try {
       const response = await fetch(`/api/grok/sessions/${id}`, { cache: "no-store" });
       const body = await readJson(response) as GrokSessionDetail;
-      if (requestId !== detailRequest.current) return;
+      if (requestId !== detailRequest.current) return null;
       setDetail(body);
       setProjectId(body.session.projectId);
       setSessionId(body.session.id);
@@ -469,51 +472,78 @@ export function GrokWorkspace({
         graphId: body.session.graphId ?? undefined,
         graphRunId: body.session.graphRunId ?? undefined,
       });
+      return body;
     } catch (error) {
-      if (requestId !== detailRequest.current) return;
+      if (requestId !== detailRequest.current) return null;
       setDetail(null);
       setNotice("");
       setErrorMessage(error instanceof Error ? error.message : "The session could not be loaded.");
+      return null;
     }
+  }, []);
+
+  const readSessionPage = useCallback(async (
+    targetProjectId: string,
+    cursor: GrokSessionCursor | null = null,
+  ): Promise<GrokSessionListResponse> => {
+    const params = new URLSearchParams({ projectId: targetProjectId, limit: "20" });
+    if (cursor) {
+      params.set("beforeCreatedAt", cursor.createdAt);
+      params.set("beforeId", cursor.id);
+    }
+    const response = await fetch(`/api/grok/sessions?${params.toString()}`, { cache: "no-store" });
+    return await readJson(response) as GrokSessionListResponse;
   }, []);
 
   const load = useCallback(async () => {
     try {
-      const [projectResponse, sessionResponse] = await Promise.all([
-        fetch("/api/projects", { cache: "no-store" }),
-        fetch("/api/grok/sessions", { cache: "no-store" }),
-      ]);
-      if (projectResponse.status === 401 || sessionResponse.status === 401) {
+      const projectResponse = await fetch("/api/projects", { cache: "no-store" });
+      if (projectResponse.status === 401) {
         setState("signed-out");
         return;
       }
-      if (projectResponse.status === 409 || sessionResponse.status === 409) {
+      if (projectResponse.status === 409) {
         setState("setup");
         return;
       }
       const projectBody = await readJson(projectResponse) as { projects?: Project[] };
-      const sessionBody = await readJson(sessionResponse) as GrokSessionListResponse;
       const nextProjects = Array.isArray(projectBody.projects) ? projectBody.projects : [];
-      const nextSessions = Array.isArray(sessionBody.sessions) ? sessionBody.sessions : [];
       setProjects(nextProjects);
-      setSessions(nextSessions);
-      const requestedSession = initialSelection.sessionId
-        ? nextSessions.find((session) => session.id === initialSelection.sessionId) ?? null
-        : null;
-      const selectedProject = initialSelection.projectId || requestedSession?.projectId || nextProjects[0]?.id || "";
-      const selectedSession = initialSelection.sessionId
-        ?? (requestedSession?.projectId === selectedProject
-          ? requestedSession.id
-          : nextSessions.find((session) => !selectedProject || session.projectId === selectedProject)?.id ?? "");
+      const selectedProject = initialSelection.projectId
+        || nextProjects[0]?.id
+        || "";
+      if (!selectedProject) {
+        setSessions([]);
+        setSessionCursor(null);
+        setState("setup");
+        return;
+      }
+      const sessionBody = await readSessionPage(selectedProject);
+      const projectSessions = Array.isArray(sessionBody.sessions) ? sessionBody.sessions : [];
+      setSessions(projectSessions);
+      setSessionCursor(sessionBody.nextCursor ?? null);
+      const selectedSession = initialSelection.sessionId ?? projectSessions[0]?.id ?? "";
       setProjectId(selectedProject);
       setSessionId(selectedSession);
       setState("ready");
-      await loadDetail(selectedSession);
+      const loaded = await loadDetail(selectedSession);
+      // A session-only deep link can target another project or be older than
+      // the first page. The direct owner-scoped read establishes identity;
+      // then reload the correctly scoped history without losing that session.
+      if (loaded && loaded.session.projectId !== selectedProject) {
+        const corrected = await readSessionPage(loaded.session.projectId);
+        const correctedSessions = Array.isArray(corrected.sessions) ? corrected.sessions : [];
+        setSessions([
+          loaded.session,
+          ...correctedSessions.filter((session) => session.id !== loaded.session.id),
+        ]);
+        setSessionCursor(corrected.nextCursor ?? null);
+      }
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Grok Bot could not be loaded.");
       setState("error");
     }
-  }, [initialSelection.projectId, initialSelection.sessionId, loadDetail]);
+  }, [initialSelection.projectId, initialSelection.sessionId, loadDetail, readSessionPage]);
 
   useEffect(() => {
     const kickoff = window.setTimeout(() => void load(), 0);
@@ -548,6 +578,49 @@ export function GrokWorkspace({
     const session = sessions.find((candidate) => candidate.id === id);
     updateUrl({ projectId: session?.projectId ?? projectId, sessionId: id, graphId: session?.graphId ?? undefined, graphRunId: session?.graphRunId ?? undefined });
     await loadDetail(id);
+  }
+
+  async function selectProject(nextProjectId: string) {
+    detailRequest.current += 1;
+    setProjectId(nextProjectId);
+    setSessionId("");
+    setDetail(null);
+    setSessions([]);
+    setSessionCursor(null);
+    setErrorMessage("");
+    setNotice("");
+    updateUrl({ projectId: nextProjectId || undefined });
+    if (!nextProjectId) return;
+    try {
+      const body = await readSessionPage(nextProjectId);
+      const nextSessions = Array.isArray(body.sessions) ? body.sessions : [];
+      setSessions(nextSessions);
+      setSessionCursor(body.nextCursor ?? null);
+      const firstSessionId = nextSessions[0]?.id ?? "";
+      setSessionId(firstSessionId);
+      if (firstSessionId) await loadDetail(firstSessionId);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "The project sessions could not be loaded.");
+    }
+  }
+
+  async function loadMoreSessions() {
+    if (!projectId || !sessionCursor || loadingMoreSessions) return;
+    setLoadingMoreSessions(true);
+    setErrorMessage("");
+    try {
+      const body = await readSessionPage(projectId, sessionCursor);
+      const more = Array.isArray(body.sessions) ? body.sessions : [];
+      setSessions((current) => {
+        const known = new Set(current.map((session) => session.id));
+        return [...current, ...more.filter((session) => !known.has(session.id))];
+      });
+      setSessionCursor(body.nextCursor ?? null);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "More sessions could not be loaded.");
+    } finally {
+      setLoadingMoreSessions(false);
+    }
   }
 
   async function submit(event: FormEvent) {
@@ -707,13 +780,14 @@ export function GrokWorkspace({
                 <p className="label">Sessions</p>
                 <button type="button" className="grid size-8 place-items-center rounded-lg border border-[var(--border)] text-muted hover:text-foreground" aria-label="Start a new goal" onClick={() => { detailRequest.current += 1; setSessionId(""); setDetail(null); setPrompt(""); setErrorMessage(""); setNotice(""); updateUrl({ projectId: projectId || undefined }); }}><MessageSquarePlus className="size-4" aria-hidden="true" /></button>
               </div>
-              <label className="mt-3 block"><span className="sr-only">Project</span><select className="input w-full text-sm" value={projectId} onChange={(event) => { detailRequest.current += 1; setProjectId(event.target.value); setSessionId(""); setDetail(null); setErrorMessage(""); setNotice(""); updateUrl({ projectId: event.target.value || undefined }); }}><option value="">Choose project</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select></label>
+              <label className="mt-3 block"><span className="sr-only">Project</span><select className="input w-full text-sm" value={projectId} onChange={(event) => void selectProject(event.target.value)}><option value="">Choose project</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select></label>
               <ul className="mt-3 max-h-52 space-y-1 overflow-y-auto xl:max-h-[calc(70vh-7rem)]">
                 {filteredSessions.map((session) => (
                   <li key={session.id}><button type="button" aria-current={session.id === sessionId ? "true" : undefined} className={cn("w-full rounded-lg px-3 py-2.5 text-left transition-colors", session.id === sessionId ? "bg-[var(--accent-surface)]" : "hover:bg-[var(--surface-raised)]")} onClick={() => void selectSession(session.id)}><span className="flex items-center gap-2"><span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{session.title}</span><ChevronRight className="size-3.5 shrink-0 text-faint" /></span><span className="mt-1 flex items-center justify-between gap-2 text-[11px] text-muted"><span>{sessionListStatus(session, detail)}</span><time>{clock(session.updatedAt)}</time></span></button></li>
                 ))}
                 {!filteredSessions.length ? <li className="rounded-lg border border-dashed border-[var(--border-strong)] p-3 text-xs text-muted">No persisted sessions for this project.</li> : null}
               </ul>
+              {sessionCursor ? <button type="button" className="btn btn-secondary btn-sm mt-2 w-full" disabled={loadingMoreSessions} onClick={() => void loadMoreSessions()}>{loadingMoreSessions ? <Loader2 className="size-3.5 animate-spin" aria-hidden="true" /> : null}Load older sessions</button> : null}
             </aside>
 
             <div className="flex min-h-[34rem] min-w-0 flex-col border-b border-[var(--border)] xl:border-b-0 xl:border-r">

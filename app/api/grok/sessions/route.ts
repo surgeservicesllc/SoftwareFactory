@@ -63,7 +63,12 @@ const requestSchema = z.object({
 const listQuerySchema = z.object({
   projectId: z.string().uuid().optional(),
   limit: z.coerce.number().int().min(1).max(50).default(20),
-}).strict();
+  beforeCreatedAt: z.string().datetime({ offset: true }).optional(),
+  beforeId: z.string().uuid().optional(),
+}).strict().refine(
+  (value) => (value.beforeCreatedAt === undefined) === (value.beforeId === undefined),
+  { message: "A complete Grok session cursor is required." },
+);
 
 function ownerRequired() {
   return jsonNoStore(
@@ -108,6 +113,8 @@ export async function GET(request: Request) {
     const parsed = listQuerySchema.safeParse({
       projectId: url.searchParams.get("projectId") ?? undefined,
       limit: url.searchParams.get("limit") ?? undefined,
+      beforeCreatedAt: url.searchParams.get("beforeCreatedAt") ?? undefined,
+      beforeId: url.searchParams.get("beforeId") ?? undefined,
     });
     if (!parsed.success) {
       return jsonNoStore(
@@ -121,9 +128,19 @@ export async function GET(request: Request) {
       context.client,
       context.activeOrganization.id,
       parsed.data.projectId ?? null,
-      parsed.data.limit,
+      parsed.data.limit + 1,
+      parsed.data.beforeCreatedAt && parsed.data.beforeId
+        ? { createdAt: parsed.data.beforeCreatedAt, id: parsed.data.beforeId }
+        : null,
     );
-    return jsonNoStore({ sessions: mapGrokSessionList(rows) });
+    const page = rows.slice(0, parsed.data.limit);
+    const last = page.at(-1);
+    return jsonNoStore({
+      sessions: mapGrokSessionList(page),
+      nextCursor: rows.length > parsed.data.limit && last
+        ? { createdAt: last.created_at, id: last.session_id }
+        : null,
+    });
   } catch (error) {
     return storeFailure(error, "grok_sessions_unavailable", "Grok sessions could not be loaded.");
   }

@@ -86,7 +86,7 @@ vi.mock("@/lib/server/http", async (importOriginal) => {
   return { ...actual, readBoundedJson: harness.readBoundedJson };
 });
 
-import { POST } from "@/app/api/grok/sessions/route";
+import { GET, POST } from "@/app/api/grok/sessions/route";
 import { GrokProviderAdmissionError } from "@/lib/grok/provider-admission";
 
 const organizationId = "10000000-0000-4000-8000-000000000001";
@@ -205,6 +205,86 @@ beforeEach(() => {
       allowedActions: [],
     },
     messages: [], tasks: [], events: [], artifacts: [],
+  });
+});
+
+describe("Grok sessions GET", () => {
+  const firstCreatedAt = "2026-08-30T20:00:00.000Z";
+  const secondSessionId = "30000000-0000-4000-8000-000000000013";
+  const secondCreatedAt = "2026-08-30T19:00:00.000Z";
+  const lookAheadSessionId = "30000000-0000-4000-8000-000000000023";
+  const row = (id: string, createdAt: string) => ({
+    session_id: id,
+    project_id: projectId,
+    project_name: "Factory",
+    title: `Session ${id}`,
+    status: "active",
+    last_message_sequence: 1,
+    last_event_sequence: 1,
+    created_at: createdAt,
+    updated_at: createdAt,
+  });
+
+  it("lists one project with a bounded look-ahead row and returns an exact cursor", async () => {
+    const rows = [
+      row(sessionId, firstCreatedAt),
+      row(secondSessionId, secondCreatedAt),
+      row(lookAheadSessionId, "2026-08-30T18:00:00.000Z"),
+    ];
+    const projected = rows.slice(0, 2).map((entry) => ({ id: entry.session_id }));
+    harness.listRows.mockResolvedValue(rows);
+    harness.mapList.mockReturnValue(projected);
+
+    const response = await GET(new Request(
+      `https://factory.example/api/grok/sessions?projectId=${projectId}&limit=2`,
+    ));
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      sessions: projected,
+      nextCursor: { createdAt: secondCreatedAt, id: secondSessionId },
+    });
+    expect(harness.listRows).toHaveBeenCalledWith(
+      expect.anything(),
+      organizationId,
+      projectId,
+      3,
+      null,
+    );
+    expect(harness.mapList).toHaveBeenCalledWith(rows.slice(0, 2));
+  });
+
+  it("passes the complete cursor to the database boundary and ends pagination honestly", async () => {
+    const rows = [row(lookAheadSessionId, "2026-08-30T18:00:00.000Z")];
+    const projected = [{ id: lookAheadSessionId }];
+    harness.listRows.mockResolvedValue(rows);
+    harness.mapList.mockReturnValue(projected);
+
+    const response = await GET(new Request(
+      `https://factory.example/api/grok/sessions?projectId=${projectId}&limit=20`
+      + `&beforeCreatedAt=${encodeURIComponent(secondCreatedAt)}&beforeId=${secondSessionId}`,
+    ));
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ sessions: projected, nextCursor: null });
+    expect(harness.listRows).toHaveBeenCalledWith(
+      expect.anything(),
+      organizationId,
+      projectId,
+      21,
+      { createdAt: secondCreatedAt, id: secondSessionId },
+    );
+  });
+
+  it("rejects an incomplete cursor before reading tenant state", async () => {
+    const response = await GET(new Request(
+      `https://factory.example/api/grok/sessions?projectId=${projectId}`
+      + `&beforeCreatedAt=${encodeURIComponent(secondCreatedAt)}`,
+    ));
+
+    expect(response.status).toBe(400);
+    expect(harness.requireActiveOrganization).not.toHaveBeenCalled();
+    expect(harness.listRows).not.toHaveBeenCalled();
   });
 });
 

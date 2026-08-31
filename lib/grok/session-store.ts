@@ -1002,15 +1002,19 @@ export async function listGrokSessionRows(
   organizationId: string,
   projectId: string | null,
   limit: number,
+  before: Readonly<{ createdAt: string; id: string }> | null = null,
 ): Promise<readonly z.infer<typeof listRowSchema>[]> {
   const value = await rpc<unknown>(client, "list_grok_sessions", {
     p_organization_id: organizationId,
     p_project_id: projectId,
     p_limit: limit,
-    p_before_created_at: null,
-    p_before_id: null,
+    p_before_created_at: before?.createdAt ?? null,
+    p_before_id: before?.id ?? null,
   });
-  const parsed = z.array(listRowSchema).max(50).safeParse(value ?? []);
+  // Callers may request one look-ahead row to prove whether another page
+  // exists. The database boundary accepts at most 100 rows; keep the browser
+  // API's tighter 50-row page plus one bounded look-ahead row here.
+  const parsed = z.array(listRowSchema).max(51).safeParse(value ?? []);
   if (!parsed.success) throw new GrokStoreProjectionError("The Grok session list was malformed.");
   return parsed.data;
 }

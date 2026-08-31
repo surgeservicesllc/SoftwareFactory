@@ -80,5 +80,13 @@ export type GrokSessionDetail = Readonly<{
   runEvidence?: GrokRunEvidence | null;
 }>;
 
-export type GrokSessionListResponse = Readonly<{ sessions: readonly GrokSession[] }>;
+export type GrokSessionCursor = Readonly<{
+  createdAt: string;
+  id: string;
+}>;
+
+export type GrokSessionListResponse = Readonly<{
+  sessions: readonly GrokSession[];
+  nextCursor: GrokSessionCursor | null;
+}>;
 

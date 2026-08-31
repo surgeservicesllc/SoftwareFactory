@@ -132,6 +132,11 @@ the algorithm needs exists.
   conversation, plan/tasks, agents, progress, files/diffs, tests, artifacts,
   deployment, and honest blocked/control states across responsive and
   accessibility coverage.
+- [x] Scope session history at the database boundary instead of filtering an
+  organization-wide top-20 list in the browser. Expose the existing stable
+  `(created_at, id)` cursor, prove complete-cursor validation and bounded
+  look-ahead, add `Load older sessions`, and retain direct links that fall
+  outside the first project page (ADR-228; focused 31/31).
 - [x] Connect the session to the exact canonical `full_lifecycle` v2 bridge —
   Claude planning -> HUMAN architecture approval -> Codex Phase 1C ->
   CI/Vercel/health — while persisting planned identity separately from actual

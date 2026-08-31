@@ -5925,3 +5925,23 @@ does not apply or replay a migration, reload PostgREST, change ledger/history,
 alter hosted catalog or ACLs, enable a worker, or change autonomy and kill
 switch state. After exact-head CI and READY deployment identity, the only
 permitted database action is a fresh read-only `scope=verify` at exact main.
+
+## ADR-228 - Grok history pages by project and immutable session identity
+
+- **Date**: 2026-08-31
+- **Status**: Accepted for the repository candidate
+
+The workspace previously requested the newest 20 sessions for the whole
+organization and filtered them by project in React. That is not pagination: a
+busy second project can push every session for the selected project out of the
+bounded response. The existing database function already supports exact
+project scope and a stable `(created_at, id)` keyset cursor, so the API now
+exposes that contract instead of inventing an offset or enlarging the cap.
+
+The API reads one bounded look-ahead row and returns a cursor only when more
+history is proven. Both cursor fields are required together, and the database
+continues to enforce owner, organization, and project isolation. A direct
+session link remains authoritative even when it is outside the first page: the
+workspace reads that immutable session identity, then reconciles the sidebar
+to its actual project. Session-list membership is navigation data; it must
+never decide whether an owner-scoped session may be resumed.

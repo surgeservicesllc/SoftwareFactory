@@ -28,6 +28,24 @@ switch stayed ON. Signed-in create/return/reload acceptance and a real
 provider-backed repository/PR/CI/deployment journey still remain. **GROK BOT:
 PRODUCTION READY is not declared.**
 
+## 2026-08-31: Grok history is project-scoped and cursor-complete (ADR-228)
+
+The Grok workspace no longer loads the newest organization-wide sessions and
+then filters that truncated list in the browser. It selects the active project
+first, calls the existing owner-scoped `list_grok_sessions` boundary with that
+exact project UUID, and exposes the database's `(created_at, id)` keyset cursor
+through the API. Owners can load older sessions without an offset race or a
+cross-project omission. A direct session link still reads that session by
+owner/tenant scope, then corrects the project history when the linked session
+is outside the first page or the URL omitted its project.
+
+The API fetches one bounded look-ahead row, returns at most the requested 50
+sessions, and emits a continuation cursor only when another row actually
+exists. Partial cursors are refused before tenant state is read. Focused API
+and workspace evidence passes 31/31; affected-file lint and repository
+typecheck pass. This is a repository candidate only and does not change worker,
+autonomy, automatic-action, or kill-switch state.
+
 ## 2026-08-31: One persistent dark/light choice now covers every site shell (ADR-225)
 
 The repository candidate makes dark the first-visit default for the public

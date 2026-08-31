@@ -5,7 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { GrokWorkspace } from "@/components/grok/grok-workspace";
-import type { GrokSessionDetail } from "@/lib/grok/contracts";
+import type { GrokSession, GrokSessionCursor, GrokSessionDetail } from "@/lib/grok/contracts";
 
 const PROJECT = { id: "11111111-1111-4111-8111-111111111111", name: "Software Factory" };
 const SESSION: GrokSessionDetail = {
@@ -103,6 +103,8 @@ function installFetch(
     postHttpFailures?: number;
     controlBodyFailures?: number;
     controlHttpFailures?: number;
+    historyCursor?: GrokSessionCursor;
+    olderSessions?: readonly GrokSession[];
   }> = {},
 ) {
   let remainingDetailFailures = options.detailFailures ?? 0;
@@ -142,8 +144,14 @@ function installFetch(
         },
       }, 202);
     }
-    if (url === "/api/grok/sessions") {
-      return json({ sessions: detail && options.includeDetailInList !== false ? [detail.session] : [] });
+    if (url.startsWith("/api/grok/sessions?") && !init?.method) {
+      const isOlderPage = url.includes("beforeCreatedAt=");
+      return json({
+        sessions: isOlderPage
+          ? options.olderSessions ?? []
+          : detail && options.includeDetailInList !== false ? [detail.session] : [],
+        nextCursor: isOlderPage ? null : options.historyCursor ?? null,
+      });
     }
     if (url.endsWith("/control") && init?.method === "POST") {
       const action = JSON.parse(String(init.body)).action as "pause" | "resume";
@@ -206,6 +214,34 @@ describe("GrokWorkspace", () => {
     expect(screen.getByRole("link", { name: "Grok Bot" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByText("No persisted sessions for this project.")).toBeInTheDocument();
     expect(screen.getByText("No goal recorded")).toBeInTheDocument();
+  });
+
+  it("loads project-scoped session history through an exact keyset cursor", async () => {
+    const user = userEvent.setup();
+    const olderSession: GrokSession = {
+      ...SESSION.session,
+      id: "22222222-2222-4222-8222-222222222223",
+      title: "Older repair",
+      createdAt: "2026-08-29T12:00:00.000Z",
+      updatedAt: "2026-08-29T12:01:00.000Z",
+    };
+    const historyCursor = {
+      createdAt: SESSION.session.createdAt,
+      id: SESSION.session.id,
+    };
+    const fetchMock = installFetch(SESSION, { historyCursor, olderSessions: [olderSession] });
+    render(<GrokWorkspace initialSelection={{ projectId: PROJECT.id }} />);
+
+    const loadOlder = await screen.findByRole("button", { name: "Load older sessions" });
+    await user.click(loadOlder);
+
+    expect(await screen.findByText(olderSession.title)).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      `/api/grok/sessions?projectId=${PROJECT.id}&limit=20`
+      + `&beforeCreatedAt=${encodeURIComponent(historyCursor.createdAt)}`
+      + `&beforeId=${historyCursor.id}`,
+      { cache: "no-store" },
+    );
   });
 
   it("renders only persisted messages, task assignments, events, and evidence", async () => {
