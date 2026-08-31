@@ -73,9 +73,12 @@ for (const { path, heading } of routes) {
         contentType: "application/json",
         body: JSON.stringify({ projects: [grokProject] }),
       }));
-      await page.route("**/api/grok/sessions", (route) => route.fulfill({
+      // Session history is cursor-paged, so the initial request carries a
+      // query string. Match only the collection endpoint (never /:sessionId)
+      // while allowing those pagination parameters.
+      await page.route(/\/api\/grok\/sessions(?:\?.*)?$/, (route) => route.fulfill({
         contentType: "application/json",
-        body: JSON.stringify({ sessions: [grokSession] }),
+        body: JSON.stringify({ sessions: [grokSession], nextCursor: null }),
       }));
       await page.route("**/api/grok/sessions/*", (route) => route.fulfill({
         contentType: "application/json",
