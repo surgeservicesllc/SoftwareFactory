@@ -1524,7 +1524,15 @@ Implemented, hosted in the reconciled chain, and locally verified against the mi
 - [x] Persist per-project synthetic journey definitions with database-enforced step safety and profile coverage, execute read steps through the bounded probe, and record declared writes as skipped.
 - [ ] Authorize a scheduler identity for continuous monitoring without widening `service_role`.
 - [ ] Connect Vercel deployment status, error-rate/latency telemetry, database liveness, and job/integration signals.
-- [ ] Resolve the residual probe limitation: a public hostname that resolves to a private address at DNS time is not detected.
+- [x] Resolve the residual probe limitation. RESOLVED since the ten-step
+  release protocol landed: `lib/operations/guarded-lookup-core.ts` wraps
+  node:dns lookup, checks EVERY answer against the private/loopback/
+  metadata ranges, and `probe-core.ts` installs it as the undici Agent's
+  dialer — so a public hostname resolving privately at DNS time fails
+  with "resolved to a private, loopback, or metadata address" before any
+  connection is made. operations-guarded-lookup covers it (loopback
+  refused, all answers checked even when one was asked for). This row
+  predated the fix and was stale.
 
 ## Phase 2B task work locks need a lease before anything can gate on them
 
