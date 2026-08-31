@@ -169,7 +169,7 @@ Playwright discovers the single guarded desktop test. The signed-in lane has
 not run, this candidate has not been pushed or deployed, and no production
 acceptance is claimed. Running it later requires the exact fake account and
 project prerequisites plus `GROK_RECORD_ONLY_E2E_PASSWORD`.
-## 2026-08-31: Grok context envelopes and follow-up turns are a repository candidate (ADR-227)
+## 2026-08-31: Grok context envelopes and follow-up turns are a repository candidate (ADR-235)
 
 The repository candidate now binds every Grok request to a durable, append-only
 context envelope. The server derives the exact project and repository/default-

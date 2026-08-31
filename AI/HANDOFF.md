@@ -184,7 +184,7 @@ main SHA, four green exact-head checks, exact READY Vercel/health identity, and
 Focused tests pass 8/8; lint/typecheck and Playwright discovery pass. This is a
 local repository candidate only. It has not been pushed, deployed, or run
 against production, so it supplies no signed-in acceptance evidence yet.
-## Newest (2026-08-31, latest+48): Grok context envelopes and follow-up turns (ADR-227)
+## Newest (2026-08-31, latest+48): Grok context envelopes and follow-up turns (ADR-235)
 
 `20260831001100_grok_context_envelopes.sql` is a repository-only forward
 migration. It creates append-only, forced-RLS `grok_context_envelopes` and

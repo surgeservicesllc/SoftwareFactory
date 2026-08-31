@@ -212,7 +212,7 @@ describe("Phase 1E production operations behavior", () => {
     // crm_autopay_enrollments and crm_charge_attempts; 217 since the day
     // route (ADR-221) added crm_routes and crm_route_stops; 219 since
     // the Grok completion chain added its private Phase 1C guard and
-    // specialist roster; and 221 since ADR-227 added the two append-only Grok
+    // specialist roster; and 221 since ADR-235 added the two append-only Grok
     // context tables. (Both earlier branches counted 215 -> 217 independently;
     // their union was 219.)
     // Each is RLS-enabled and forced, which the filter on the next line is

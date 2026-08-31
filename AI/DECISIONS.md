@@ -5925,7 +5925,7 @@ does not apply or replay a migration, reload PostgREST, change ledger/history,
 alter hosted catalog or ACLs, enable a worker, or change autonomy and kill
 switch state. After exact-head CI and READY deployment identity, the only
 permitted database action is a fresh read-only `scope=verify` at exact main.
-## ADR-227 - Grok context is an immutable bounded envelope; follow-ups do not silently replan
+## ADR-235 - Grok context is an immutable bounded envelope; follow-ups do not silently replan
 
 - **Date**: 2026-08-31
 - **Status**: Accepted for the repository candidate; protected migration and

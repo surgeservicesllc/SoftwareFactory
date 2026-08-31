@@ -306,7 +306,7 @@ the algorithm needs exists.
   legacy unadmitted Grok work cannot enter the worker. Protected apply run
   `33397377838` and independent read-only run `33397710586` accepted it.
 - [x] Implement durable bounded input context and multi-turn composition
-  (ADR-227) through `20260831001100`: exact server-derived project/repository
+  (ADR-235) through `20260831001100`: exact server-derived project/repository
   references, safe bounded text capture, URL/image reference-only handling,
   tenant-linked integration references, forced RLS, append-only audit/hash
   evidence, exact replay, and an atomic owner follow-up boundary that never

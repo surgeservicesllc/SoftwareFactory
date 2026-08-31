@@ -108,7 +108,7 @@ manual-only dispatch, read-only GitHub permissions, exact identities, secret-
 only credentials, capture off, one permitted create mutation, no Resume or
 worker dispatch, read-only SQL, and stopped-containment checks before and
 after.
-**Addendum, 2026-08-31 latest+48 - durable Grok context envelopes (ADR-227):**
+**Addendum, 2026-08-31 latest+48 - durable Grok context envelopes (ADR-235):**
 The repository candidate now has bounded, append-only Grok input context for
 project, repository, captured text files, public URL/image references, and
 linked integrations. Focused unit, route, component, migration-contract, and
