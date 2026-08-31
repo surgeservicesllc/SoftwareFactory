@@ -101,6 +101,23 @@ export type GrokArtifact = Readonly<{
   createdAt: string;
 }>;
 
+/** Exact durable handoff from a lifecycle graph into its isolated Codex run. */
+export type GrokPhase1CEvidence = Readonly<{
+  bridgeId: string;
+  state: string;
+  originGraphRunId: string;
+  commandId: string | null;
+  taskId: string | null;
+  agentRunId: string | null;
+  headSha: string | null;
+  pullRequestId: string | null;
+  mergeCommitSha: string | null;
+  deploymentId: string | null;
+  monitorObservationId: string | null;
+  deploymentValidationId: string | null;
+  updatedAt: string;
+}>;
+
 export type GrokRunEvidence = Readonly<{
   state: string;
   closureNote: string | null;
@@ -112,6 +129,8 @@ export type GrokRunEvidence = Readonly<{
   events: readonly (GrokEvent & Readonly<{ nodeKey: string | null }>)[];
   eventsTruncated: boolean;
   release: ReleaseEvidence;
+  /** Null until the graph records an exact Phase 1C bridge. */
+  phase1c: GrokPhase1CEvidence | null;
 }>;
 
 export type GrokSessionDetail = Readonly<{

@@ -663,7 +663,9 @@ describe("Grok session graph persistence", () => {
         ? { data: { id: graphId, goal: plan.intent.prompt, pause_requested_at: null, withdrawn_at: null }, error: null }
         : table === "graph_runs"
           ? { data: null, error: null }
-          : { data: [{ id: nodeId, node_key: plannedTask.id, job: plannedTask.title }], error: null };
+          : table === "graph_phase1c_bridges"
+            ? { data: null, error: null }
+            : { data: [{ id: nodeId, node_key: plannedTask.id, job: plannedTask.title }], error: null };
       const query: Record<string, unknown> = {};
       for (const method of ["select", "eq", "order", "limit"]) {
         query[method] = vi.fn(() => query);
@@ -738,6 +740,24 @@ describe("Grok session graph persistence", () => {
           id: runId, state: "RUNNING", closure_note: null,
           started_at: createdAt, completed_at: null, tokens_used: 1200, cost_micros: 3400,
           created_at: createdAt,
+        },
+        error: null,
+      },
+      graph_phase1c_bridges: {
+        data: {
+          id: "62200000-0000-4000-8000-000000000006",
+          graph_run_id: runId,
+          state: "PULL_REQUEST_RECORDED",
+          command_id: "62300000-0000-4000-8000-000000000006",
+          task_id: "62400000-0000-4000-8000-000000000006",
+          agent_run_id: "62500000-0000-4000-8000-000000000006",
+          pull_request_id: "62600000-0000-4000-8000-000000000006",
+          head_sha: "b".repeat(40),
+          merge_commit_sha: null,
+          deployment_id: null,
+          monitor_observation_id: null,
+          deployment_validation_id: null,
+          updated_at: createdAt,
         },
         error: null,
       },
@@ -833,6 +853,11 @@ describe("Grok session graph persistence", () => {
       tokensUsed: 1200,
       costMicros: 3400,
       eventsTruncated: true,
+      phase1c: {
+        state: "PULL_REQUEST_RECORDED",
+        agentRunId: "62500000-0000-4000-8000-000000000006",
+        headSha: "b".repeat(40),
+      },
     });
     expect(detail.runEvidence?.events).toHaveLength(500);
     expect(detail.runEvidence?.events[0]).toMatchObject({

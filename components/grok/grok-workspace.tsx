@@ -422,6 +422,19 @@ function Inspector({ detail, tab }: { detail: GrokSessionDetail | null; tab: Ins
             {run.closureNote ? <p className="mt-3 text-xs leading-5 text-muted">{run.closureNote}</p> : null}
           </div>
         ) : null}
+        {run?.phase1c ? (
+          <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-inset)] p-3 text-xs">
+            <div className="flex items-center justify-between gap-3">
+              <p className="font-semibold text-foreground">Phase 1C handoff</p>
+              <StatusBadge tone={run.phase1c.agentRunId ? "info" : "neutral"}>{run.phase1c.state.replaceAll("_", " ")}</StatusBadge>
+            </div>
+            <p className="mt-2 break-all text-muted">
+              {run.phase1c.agentRunId ? (
+                <Link prefetch={false} href={`/solutions/runs?runId=${encodeURIComponent(run.phase1c.agentRunId)}`} className="font-medium text-[var(--accent-text)] underline underline-offset-4">Open exact agent run {run.phase1c.agentRunId}</Link>
+              ) : "No exact agent run has been recorded for this handoff yet."}
+            </p>
+          </div>
+        ) : null}
         {detail.eventsTruncated ? <p className="text-xs text-muted">Newest 200 Grok session events shown.</p> : null}
         {run?.eventsTruncated ? <p className="text-xs text-muted">Newest 500 graph events shown.</p> : null}
         <ol className="space-y-3 border-l border-[var(--border-strong)] pl-4">
@@ -896,6 +909,12 @@ export function GrokWorkspace({
     ? CONTROL_ACTIONS.filter((action) => action !== "stop")
     : CONTROL_ACTIONS;
   const lifecycleControls = selectedSession ? lifecycleControlHref(selectedSession) : null;
+  const phase1cAgentRunId = selectedSession && detail?.session.id === selectedSession.id
+    ? detail.runEvidence?.phase1c?.agentRunId ?? null
+    : null;
+  const phase1cControls = phase1cAgentRunId
+    ? `/solutions/runs?runId=${encodeURIComponent(phase1cAgentRunId)}`
+    : "/solutions/runs";
 
   function moveEvidenceTab(event: KeyboardEvent<HTMLButtonElement>, index: number) {
     let nextIndex: number | null = null;
@@ -1026,8 +1045,8 @@ export function GrokWorkspace({
                     ) : (
                       <p className="rounded-md border border-dashed border-[var(--border-strong)] px-3 py-2 text-[10px] text-muted">Lifecycle controls become available after exact run evidence is linked.</p>
                     )}
-                    <Link prefetch={false} href="/solutions/runs" className="flex items-center justify-between gap-3 rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-foreground hover:border-[var(--accent-border)]">
-                      <span><strong className="block text-xs">Retry / Cancel</strong><span className="mt-0.5 block text-[10px] text-muted">Eligible recorded Phase 1C runs only</span></span><ChevronRight className="size-3.5 shrink-0 text-faint" aria-hidden="true" />
+                    <Link prefetch={false} href={phase1cControls} className="flex items-center justify-between gap-3 rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-foreground hover:border-[var(--accent-border)]">
+                      <span><strong className="block text-xs">Retry / Cancel</strong><span className="mt-0.5 block text-[10px] text-muted">{phase1cAgentRunId ? "Exact recorded Phase 1C agent run" : "Eligible recorded Phase 1C runs only"}</span></span><ChevronRight className="size-3.5 shrink-0 text-faint" aria-hidden="true" />
                     </Link>
                     <Link prefetch={false} href="/solutions/operations" className="flex items-center justify-between gap-3 rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-foreground hover:border-[var(--accent-border)]">
                       <span><strong className="block text-xs">Rollback</strong><span className="mt-0.5 block text-[10px] text-muted">RED operations eligibility and evidence</span></span><ChevronRight className="size-3.5 shrink-0 text-faint" aria-hidden="true" />

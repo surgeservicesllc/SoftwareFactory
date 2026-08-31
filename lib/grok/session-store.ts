@@ -1251,6 +1251,21 @@ type GraphEvidence = Readonly<{
     createdAt: string;
   }>[];
   eventsTruncated: boolean;
+  phase1c: Readonly<{
+    bridgeId: string;
+    state: string;
+    originGraphRunId: string;
+    commandId: string | null;
+    taskId: string | null;
+    agentRunId: string | null;
+    headSha: string | null;
+    pullRequestId: string | null;
+    mergeCommitSha: string | null;
+    deploymentId: string | null;
+    monitorObservationId: string | null;
+    deploymentValidationId: string | null;
+    updatedAt: string;
+  }> | null;
 }>;
 
 const GRAPH_EVENT_LIMIT = 500;
@@ -1263,6 +1278,25 @@ const graphArtifactRowSchema = z.object({
   payload: z.unknown(),
   created_at: z.string().datetime({ offset: true }),
 }).passthrough();
+
+const graphPhase1CBridgeRowSchema = z.object({
+  id: z.string().uuid(),
+  graph_run_id: z.string().uuid(),
+  state: z.enum([
+    "GRAPH_READY", "COMMAND_RECORDED", "PHASE1C_BOUND", "PULL_REQUEST_RECORDED",
+    "MERGE_RECORDED", "DEPLOYMENT_RECORDED", "MONITORING_RECORDED", "VALIDATED",
+  ]),
+  command_id: z.string().uuid().nullable(),
+  task_id: z.string().uuid().nullable(),
+  agent_run_id: z.string().uuid().nullable(),
+  pull_request_id: z.string().uuid().nullable(),
+  head_sha: z.string().regex(/^[0-9a-f]{40}$/).nullable(),
+  merge_commit_sha: z.string().regex(/^[0-9a-f]{40}$/).nullable(),
+  deployment_id: z.string().uuid().nullable(),
+  monitor_observation_id: z.string().uuid().nullable(),
+  deployment_validation_id: z.string().uuid().nullable(),
+  updated_at: z.string().datetime({ offset: true }),
+}).strict();
 
 function artifactLabel(kind: string, nodeKey: string | null, payload: unknown): string {
   const observation = z.object({ observation: z.string().min(1).max(160) }).passthrough()
@@ -1323,7 +1357,20 @@ async function readGraphEvidence(
   const nodes = z.array(z.object({
     id: z.string().uuid(), node_key: z.string().min(1), job: z.string().min(1),
   }).strict()).max(50).safeParse(nodeRead.data ?? []);
-  if (!run.success || !nodes.success) throw new GrokStoreProjectionError("The linked graph evidence was malformed.");
+  const resolvedGraphRunId = run.success ? run.data?.id ?? null : null;
+  const bridgeRead = resolvedGraphRunId
+    ? await client.from("graph_phase1c_bridges")
+      .select("id,graph_run_id,state,command_id,task_id,agent_run_id,pull_request_id,head_sha,merge_commit_sha,deployment_id,monitor_observation_id,deployment_validation_id,updated_at")
+      .eq("organization_id", organizationId)
+      .eq("graph_id", graphId)
+      .eq("graph_run_id", resolvedGraphRunId)
+      .maybeSingle()
+    : { data: null, error: null };
+  if (bridgeRead.error) throw new GrokStoreDatabaseError(bridgeRead.error);
+  const bridge = graphPhase1CBridgeRowSchema.nullable().safeParse(bridgeRead.data);
+  if (!run.success || !nodes.success || !bridge.success) {
+    throw new GrokStoreProjectionError("The linked graph evidence was malformed.");
+  }
 
   let nodeRuns: Array<{
     id?: string; node_id: string; state: string; provider: string | null;
@@ -1431,6 +1478,21 @@ async function readGraphEvidence(
       createdAt: event.created_at,
     }))),
     eventsTruncated: parsedEventsWereTruncated,
+    phase1c: bridge.data ? Object.freeze({
+      bridgeId: bridge.data.id,
+      state: bridge.data.state,
+      originGraphRunId: bridge.data.graph_run_id,
+      commandId: bridge.data.command_id,
+      taskId: bridge.data.task_id,
+      agentRunId: bridge.data.agent_run_id,
+      headSha: bridge.data.head_sha,
+      pullRequestId: bridge.data.pull_request_id,
+      mergeCommitSha: bridge.data.merge_commit_sha,
+      deploymentId: bridge.data.deployment_id,
+      monitorObservationId: bridge.data.monitor_observation_id,
+      deploymentValidationId: bridge.data.deployment_validation_id,
+      updatedAt: bridge.data.updated_at,
+    }) : null,
   });
 }
 
@@ -1571,6 +1633,7 @@ export async function mapGrokSessionDetail(
     events: evidence.events,
     eventsTruncated: evidence.eventsTruncated,
     release: deriveReleaseEvidence(evidence.artifacts),
+    phase1c: evidence.phase1c,
   }) : null;
   return Object.freeze({
     session, messages, contextEnvelopes, tasks, events,

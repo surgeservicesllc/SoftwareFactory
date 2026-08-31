@@ -58,6 +58,21 @@ const SESSION: GrokSessionDetail = {
       deployment: { environment: "production", state: "success", url: "https://preview.example.dev" },
       health: { url: "https://preview.example.dev/health", healthy: true, postDeployValidation: "availability probe passed" },
     },
+    phase1c: {
+      bridgeId: "55555555-5555-4555-8555-555555555555",
+      state: "PULL_REQUEST_RECORDED",
+      originGraphRunId: "44444444-4444-4444-8444-444444444444",
+      commandId: "66666666-6666-4666-8666-666666666666",
+      taskId: "77777777-7777-4777-8777-777777777777",
+      agentRunId: "88888888-8888-4888-8888-888888888888",
+      headSha: "b".repeat(40),
+      pullRequestId: "99999999-9999-4999-8999-999999999998",
+      mergeCommitSha: null,
+      deploymentId: null,
+      monitorObservationId: null,
+      deploymentValidationId: null,
+      updatedAt: "2026-08-30T12:00:05.000Z",
+    },
   },
 };
 
@@ -317,7 +332,7 @@ describe("GrokWorkspace", () => {
       `/solutions/lifecycle/run/${SESSION.session.graphRunId}`,
     );
     expect(within(controlCenter).getByRole("link", { name: /Retry \/ Cancel/i })).toHaveAttribute(
-      "href", "/solutions/runs",
+      "href", `/solutions/runs?runId=${SESSION.runEvidence?.phase1c?.agentRunId}`,
     );
     expect(within(controlCenter).getByRole("link", { name: /Rollback/i })).toHaveAttribute(
       "href", "/solutions/operations",
@@ -341,6 +356,9 @@ describe("GrokWorkspace", () => {
     expect(within(controlCenter).getByText("12,345")).toBeInTheDocument();
     expect(within(controlCenter).getByText("$0.4567")).toBeInTheDocument();
     expect(within(controlCenter).getByText(/node.completed · research/)).toBeInTheDocument();
+    expect(within(controlCenter).getByRole("link", { name: /Open exact agent run/i })).toHaveAttribute(
+      "href", `/solutions/runs?runId=${SESSION.runEvidence?.phase1c?.agentRunId}`,
+    );
     const progressItems = within(controlCenter).getAllByRole("listitem");
     expect(progressItems[0]).toHaveTextContent("node.completed · research");
     expect(progressItems[1]).toHaveTextContent("session.started");
