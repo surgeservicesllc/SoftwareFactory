@@ -64,8 +64,16 @@ type GrokCreateResponse = GrokSessionDetail & Readonly<{
   blocked?: Readonly<{ code: string; message: string }>;
 }>;
 type GrokControlResponse = GrokSessionDetail & Readonly<{
-  control: Readonly<{ intentId: string; action: GrokControlAction; state: string }>;
+  control: Readonly<{
+    intentId: string;
+    action: GrokControlAction;
+    state: string;
+    wakeIntentId: string | null;
+    controlRevision: number | null;
+  }>;
   replayed: boolean;
+  dispatchAccepted: boolean;
+  workerAcknowledged: boolean;
   workerWoken: boolean;
   note?: string;
 }>;
@@ -413,12 +421,42 @@ function Inspector({ detail, tab }: { detail: GrokSessionDetail | null; tab: Ins
 
   if (tab === "progress") {
     const run = detail.runEvidence;
+    const wake = detail.wakeEvidence ?? null;
     const progressEvents = run
       ? [...run.events, ...detail.events].sort((left, right) => left.createdAt.localeCompare(right.createdAt))
       : detail.events;
-    if (!run && !progressEvents.length) return <EmptyInspector label="progress events" />;
+    if (!run && !progressEvents.length && !wake) return <EmptyInspector label="progress events" />;
     return (
       <div className="space-y-4">
+        {wake ? (
+          <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-inset)] p-3 text-xs">
+            <div className="flex items-center justify-between gap-3">
+              <p className="font-semibold text-foreground">Resume wake evidence</p>
+              <StatusBadge tone={wake.workerAcknowledged ? "safe" : wake.dispatchAccepted ? "info" : "neutral"}>
+                {wake.workerAcknowledged
+                  ? "Worker acknowledged"
+                  : wake.dispatchAccepted
+                    ? "Dispatch accepted"
+                    : "Intent recorded"}
+              </StatusBadge>
+            </div>
+            <p className="mt-2 leading-5 text-muted">
+              {wake.workerAcknowledged
+                ? "The exact target graph worker claimed this graph and persisted its matching receipt before provider work."
+                : wake.dispatchAccepted
+                  ? "GitHub accepted the dispatch; this is not a worker wake. Waiting for the exact target graph claim receipt."
+                  : "The Resume intent is durable, but no accepted dispatch or worker wake has been recorded."}
+            </p>
+            <dl className="mt-3 grid grid-cols-2 gap-2">
+              <div><dt className="text-muted">Control revision</dt><dd className="mt-1 text-foreground">{wake.controlRevision}</dd></div>
+              <div><dt className="text-muted">Worker woken</dt><dd className="mt-1 text-foreground">{wake.workerWoken ? "Yes — receipt recorded" : "No"}</dd></div>
+              <div><dt className="text-muted">Worker</dt><dd className="mt-1 break-all text-foreground">{wake.workerId ?? "Not acknowledged"}</dd></div>
+              <div><dt className="text-muted">Receipt time</dt><dd className="mt-1 text-foreground">{wake.acknowledgedAt ? clock(wake.acknowledgedAt) : "Not recorded"}</dd></div>
+              <div><dt className="text-muted">Protocol</dt><dd className="mt-1 text-foreground">{wake.protocolVersion ?? "Not recorded"}</dd></div>
+              <div><dt className="text-muted">Capability</dt><dd className="mt-1 text-foreground">{wake.capabilityVersion ?? "Not recorded"}</dd></div>
+            </dl>
+          </div>
+        ) : null}
         {run ? (
           <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-inset)] p-3">
             <div className="flex items-center justify-between gap-3 text-xs"><span className="font-semibold text-foreground">{run.progress.completed} of {run.progress.total} nodes complete</span><span className="text-muted">{run.progress.percent}%</span></div>

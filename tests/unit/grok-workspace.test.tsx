@@ -40,6 +40,18 @@ const SESSION: GrokSessionDetail = {
   ],
   events: [{ id: "e1", type: "session.started", detail: "Planning began.", createdAt: "2026-08-30T12:00:04.000Z" }],
   artifacts: [{ id: "a1", kind: "test_run", label: "Focused tests", uri: null, createdAt: "2026-08-30T12:00:03.000Z" }],
+  wakeEvidence: {
+    wakeIntentId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    controlRevision: 17,
+    dispatchAccepted: true,
+    dispatchRecordedAt: "2026-08-30T12:00:00.500Z",
+    workerAcknowledged: false,
+    workerWoken: false,
+    workerId: null,
+    protocolVersion: null,
+    capabilityVersion: null,
+    acknowledgedAt: null,
+  },
   runEvidence: {
     state: "RUNNING",
     closureNote: null,
@@ -223,11 +235,19 @@ function installFetch(
           status: resumed ? "planned" : "paused",
           allowedActions: resumed ? ["pause", "stop"] : ["resume", "stop"],
         },
-        control: { intentId: "control-1", action, state: "applied" },
+        control: {
+          intentId: "control-1",
+          action,
+          state: "applied",
+          wakeIntentId: resumed ? "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" : null,
+          controlRevision: resumed ? 17 : null,
+        },
         replayed: resumed && controlFailureOccurred,
-        workerWoken: resumed,
+        dispatchAccepted: resumed,
+        workerAcknowledged: false,
+        workerWoken: false,
         note: resumed
-          ? "The resume was already applied and the exact graph worker wake was accepted again for recovery."
+          ? "The resume was already applied and GitHub accepted another exact recovery dispatch. The worker is not marked woken until it claims this graph and records the matching receipt."
           : "The control was durably applied by the existing audited runtime boundary.",
       });
     }
@@ -352,6 +372,10 @@ describe("GrokWorkspace", () => {
     expect(within(controlCenter).getByText(/attempt 2/)).toBeInTheDocument();
 
     await userEvent.click(within(controlCenter).getByRole("tab", { name: "Progress" }));
+    expect(within(controlCenter).getByText("Resume wake evidence")).toBeInTheDocument();
+    expect(within(controlCenter).getByText("Dispatch accepted")).toBeInTheDocument();
+    expect(within(controlCenter).getByText(/this is not a worker wake/i)).toBeInTheDocument();
+    expect(within(controlCenter).getByText("No")).toBeInTheDocument();
     expect(within(controlCenter).getByText("1 of 2 nodes complete")).toBeInTheDocument();
     expect(within(controlCenter).getByText("12,345")).toBeInTheDocument();
     expect(within(controlCenter).getByText("$0.4567")).toBeInTheDocument();
@@ -711,7 +735,7 @@ describe("GrokWorkspace", () => {
     expect(screen.getByRole("status")).toHaveTextContent("durably applied");
   });
 
-  it("reuses the exact Resume key after an indeterminate 500 and recovers the wake", async () => {
+  it("reuses the exact Resume key after an indeterminate 500 and recovers dispatch acceptance", async () => {
     const pausedSession: GrokSessionDetail = {
       ...SESSION,
       session: {
@@ -730,7 +754,7 @@ describe("GrokWorkspace", () => {
       "server lost the response after the durable control attempt",
     );
     await user.click(within(inspector).getByRole("button", { name: "resume session" }));
-    expect(await screen.findByRole("status")).toHaveTextContent("accepted again for recovery");
+    expect(await screen.findByRole("status")).toHaveTextContent("accepted another exact recovery dispatch");
 
     const bodies = fetchMock.mock.calls
       .filter(([url, init]) => String(url).endsWith("/control") && init?.method === "POST")
@@ -759,7 +783,7 @@ describe("GrokWorkspace", () => {
     await user.click(within(inspector).getByRole("button", { name: "resume session" }));
     await screen.findByRole("alert");
     await user.click(within(inspector).getByRole("button", { name: "resume session" }));
-    expect(await screen.findByRole("status")).toHaveTextContent("accepted again for recovery");
+    expect(await screen.findByRole("status")).toHaveTextContent("accepted another exact recovery dispatch");
 
     const bodies = fetchMock.mock.calls
       .filter(([url, init]) => String(url).endsWith("/control") && init?.method === "POST")

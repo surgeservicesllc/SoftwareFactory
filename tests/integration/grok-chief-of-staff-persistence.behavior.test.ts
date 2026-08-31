@@ -1533,12 +1533,29 @@ describe("Grok Chief-of-Staff persistence", () => {
     // fixture: unpause, claim, assert, and roll the whole transaction back.
     await db.exec("begin");
     try {
-      await db.query(
-        "select public.set_graph_pause_as_member_v2($1::uuid,$2::uuid,false)",
-        [organizationId, launched.rows[0].graph_id],
+      const resumed = await db.query<{
+        wake_intent_id: string; control_revision: number;
+      }>(
+        `select wake_intent_id, control_revision
+           from public.apply_grok_graph_control_v3_as_owner(
+             $1::uuid,$2::uuid,$3::uuid,'resume',$4::text,$5::text
+           )`,
+        [organizationId, session.id, launched.rows[0].graph_id,
+          "Resume through an exact durable worker receipt",
+          "provider-admission-wake-resume-0001"],
       );
+      expect(resumed.rows[0]?.wake_intent_id).toMatch(/^[0-9a-f-]{36}$/i);
+      expect(Number(resumed.rows[0]?.control_revision)).toBeGreaterThan(0);
       await assumeRole(db, "service_role");
+      await db.query(
+        `select * from public.record_grok_graph_wake_dispatch_as_server(
+          $1::uuid,$2::uuid,$3::bigint,'accepted',null,$4::text
+        )`,
+        [organizationId, resumed.rows[0]!.wake_intent_id,
+          resumed.rows[0]!.control_revision, "provider-admission-wake-dispatch-0001"],
+      );
       const graphClaim = await db.query<{ claim: {
+        graph_run_id: string;
         graph_id: string;
         initial_context: {
           envelope_id: string; input_sha256: string;
@@ -1561,6 +1578,146 @@ describe("Grok Chief-of-Staff persistence", () => {
       const graphContextJson = JSON.stringify(graphClaim.rows[0]!.claim!.initial_context);
       expect(graphContextJson).toContain(initialContextText);
       expect(graphContextJson).not.toContain(followUpText);
+
+      await db.exec("savepoint missing_wake_payload");
+      try {
+        await expect(db.query(
+          `select public.assert_no_grok_graph_wake_payload_required_as_worker(
+            'grok-context-worker',$1::uuid,$2::uuid,1,1
+          )`,
+          [launched.rows[0].graph_id, graphClaim.rows[0]!.claim!.graph_run_id],
+        )).rejects.toThrow(/exact Grok graph wake intent.*required/i);
+      } finally {
+        await db.exec("rollback to savepoint missing_wake_payload");
+      }
+
+      await db.exec("savepoint wrong_wake_revision");
+      try {
+        await expect(db.query(
+          `select * from public.acknowledge_grok_graph_wake_as_worker(
+            'grok-context-worker',$1::uuid,$2::bigint,$3::uuid,$4::uuid,1,1
+          )`,
+          [resumed.rows[0]!.wake_intent_id,
+            Number(resumed.rows[0]!.control_revision) + 1,
+            launched.rows[0].graph_id, graphClaim.rows[0]!.claim!.graph_run_id],
+        )).rejects.toThrow(/intent, revision, or graph identity mismatch/i);
+      } finally {
+        await db.exec("rollback to savepoint wrong_wake_revision");
+      }
+
+      const receipt = await db.query<{
+        id: string; wake_intent_id: string; graph_run_id: string;
+        worker_id: string; protocol_version: number; capability_version: number;
+      }>(
+        `select * from public.acknowledge_grok_graph_wake_as_worker(
+          'grok-context-worker',$1::uuid,$2::bigint,$3::uuid,$4::uuid,1,1
+        )`,
+        [resumed.rows[0]!.wake_intent_id, resumed.rows[0]!.control_revision,
+          launched.rows[0].graph_id, graphClaim.rows[0]!.claim!.graph_run_id],
+      );
+      expect(receipt.rows[0]).toMatchObject({
+        wake_intent_id: resumed.rows[0]!.wake_intent_id,
+        graph_run_id: graphClaim.rows[0]!.claim!.graph_run_id,
+        worker_id: "grok-context-worker",
+        protocol_version: 1,
+        capability_version: 1,
+      });
+      const receiptReplay = await db.query<{ id: string }>(
+        `select * from public.acknowledge_grok_graph_wake_as_worker(
+          'grok-context-worker',$1::uuid,$2::bigint,$3::uuid,$4::uuid,1,1
+        )`,
+        [resumed.rows[0]!.wake_intent_id, resumed.rows[0]!.control_revision,
+          launched.rows[0].graph_id, graphClaim.rows[0]!.claim!.graph_run_id],
+      );
+      expect(receiptReplay.rows[0]?.id).toBe(receipt.rows[0]?.id);
+
+      await db.exec("savepoint wrong_wake_worker");
+      try {
+        await expect(db.query(
+          `select * from public.acknowledge_grok_graph_wake_as_worker(
+            'different-grok-worker',$1::uuid,$2::bigint,$3::uuid,$4::uuid,1,1
+          )`,
+          [resumed.rows[0]!.wake_intent_id, resumed.rows[0]!.control_revision,
+            launched.rows[0].graph_id, graphClaim.rows[0]!.claim!.graph_run_id],
+        )).rejects.toThrow(/replay conflicts with exact worker identity/i);
+      } finally {
+        await db.exec("rollback to savepoint wrong_wake_worker");
+      }
+      await db.exec("savepoint wrong_wake_version");
+      try {
+        await expect(db.query(
+          `select * from public.acknowledge_grok_graph_wake_as_worker(
+            'grok-context-worker',$1::uuid,$2::bigint,$3::uuid,$4::uuid,2,1
+          )`,
+          [resumed.rows[0]!.wake_intent_id, resumed.rows[0]!.control_revision,
+            launched.rows[0].graph_id, graphClaim.rows[0]!.claim!.graph_run_id],
+        )).rejects.toThrow(/protocol and capability version 1 are required/i);
+      } finally {
+        await db.exec("rollback to savepoint wrong_wake_version");
+      }
+      await db.exec("savepoint wrong_wake_graph");
+      try {
+        await expect(db.query(
+          `select * from public.acknowledge_grok_graph_wake_as_worker(
+            'grok-context-worker',$1::uuid,$2::bigint,
+            '00000000-0000-4000-8000-00000000f999'::uuid,$3::uuid,1,1
+          )`,
+          [resumed.rows[0]!.wake_intent_id, resumed.rows[0]!.control_revision,
+            graphClaim.rows[0]!.claim!.graph_run_id],
+        )).rejects.toThrow(/intent, revision, or graph identity mismatch/i);
+      } finally {
+        await db.exec("rollback to savepoint wrong_wake_graph");
+      }
+
+      await assumeRole(db, "authenticated", ownerId);
+      const wakeState = await db.query<{
+        wake_intent_id: string; control_revision: number;
+        dispatch_accepted: boolean; worker_acknowledged: boolean;
+        worker_woken: boolean; worker_id: string;
+      }>(
+        "select * from public.read_grok_graph_wake_state_as_owner($1::uuid,$2::uuid,$3::uuid)",
+        [organizationId, session.id, launched.rows[0].graph_id],
+      );
+      expect(wakeState.rows[0]).toMatchObject({
+        wake_intent_id: resumed.rows[0]!.wake_intent_id,
+        control_revision: resumed.rows[0]!.control_revision,
+        dispatch_accepted: true,
+        worker_acknowledged: true,
+        worker_woken: true,
+        worker_id: "grok-context-worker",
+      });
+      await resetRole(db);
+      const noGoalLeak = await db.query<{ leaked: boolean }>(`
+        select exists (
+          select 1 from public.grok_events event
+           where event.session_id = $1
+             and event.event_type like 'graph.wake_%'
+             and event.payload::text like '%' || $2 || '%'
+        ) as leaked
+      `, [session.id, built.plan.goal]);
+      expect(noGoalLeak.rows[0]?.leaked).toBe(false);
+
+      await assumeRole(db, "authenticated", ownerId);
+      await db.query(
+        `select * from public.apply_grok_graph_control_v3_as_owner(
+          $1::uuid,$2::uuid,$3::uuid,'pause',$4::text,$5::text
+        )`,
+        [organizationId, session.id, launched.rows[0].graph_id,
+          "Pause supersedes the prior worker wake", "provider-admission-wake-pause-0002"],
+      );
+      await assumeRole(db, "service_role");
+      await db.exec("savepoint stale_wake_replay");
+      try {
+        await expect(db.query(
+          `select * from public.acknowledge_grok_graph_wake_as_worker(
+            'grok-context-worker',$1::uuid,$2::bigint,$3::uuid,$4::uuid,1,1
+          )`,
+          [resumed.rows[0]!.wake_intent_id, resumed.rows[0]!.control_revision,
+            launched.rows[0].graph_id, graphClaim.rows[0]!.claim!.graph_run_id],
+        )).rejects.toThrow(/superseded by a later control/i);
+      } finally {
+        await db.exec("rollback to savepoint stale_wake_replay");
+      }
     } finally {
       await db.exec("rollback");
       await db.exec("reset role");

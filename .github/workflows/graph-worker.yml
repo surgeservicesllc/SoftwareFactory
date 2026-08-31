@@ -98,6 +98,11 @@ jobs:
           # by-default schedule remains the only global drain path.
           SOFTWAREFACTORY_TARGET_GRAPH_ID: ${{ github.event.client_payload.graph_id || inputs.graph_id || '' }}
           SOFTWAREFACTORY_TARGET_CLAIM_REQUIRED: ${{ github.event_name != 'schedule' }}
+          # An owner Resume carries an exact, opaque durable intent identity.
+          # GitHub accepting this event is not a wake; the claimed worker must
+          # receipt this pair in Supabase before any provider node can start.
+          SOFTWAREFACTORY_GROK_WAKE_INTENT_ID: ${{ github.event.client_payload.wake_intent_id || '' }}
+          SOFTWAREFACTORY_GROK_CONTROL_REVISION: ${{ github.event.client_payload.control_revision || '' }}
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.SOFTWAREFACTORY_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SOFTWAREFACTORY_SUPABASE_SERVICE_ROLE_KEY }}
           SOFTWAREFACTORY_CREDENTIAL_KEY: ${{ secrets.SOFTWAREFACTORY_CREDENTIAL_KEY }}

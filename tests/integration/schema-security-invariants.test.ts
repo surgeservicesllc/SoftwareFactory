@@ -262,6 +262,7 @@ describe("SECURITY DEFINER functions", () => {
     // phase deliberately gives the worker a new capability.
     expect(result.rows.map((row) => row.proname)).toEqual([
       "abort_graph_run_as_worker",
+      "acknowledge_grok_graph_wake_as_worker",
       "agentos_record_trigger_delivery",
       "append_grok_message_as_server",
       "append_phase1c_run_event",
@@ -270,6 +271,9 @@ describe("SECURITY DEFINER functions", () => {
       // with the gate decision instead of exposing low-level record helpers.
       "approve_graph_phase1c_deployment_gate_as_worker",
       "approve_graph_phase1c_test_gate_as_worker",
+      // Absence-only guard for initial claims. It returns no wake identity;
+      // any Resume history requires the exact opaque dispatch payload.
+      "assert_no_grok_graph_wake_payload_required_as_worker",
       "bind_graph_phase1c_run_by_command_as_worker",
       // The auth-broker worker's eight capabilities: drive a sign-in session
       // through the provider's real login. `read_ai_auth_relay_code` returns
@@ -402,6 +406,9 @@ describe("SECURITY DEFINER functions", () => {
       "record_grok_context_envelope_as_server",
       "record_grok_event_as_server",
       "record_grok_graph_rewake_delivery_as_worker",
+      // Transport acceptance/failure is append-only and is deliberately
+      // separate from the exact worker acknowledgement above.
+      "record_grok_graph_wake_dispatch_as_server",
       "record_grok_planning_failure_as_server",
       "record_grok_specialist_roster_v2_as_server",
       "record_job_seeker_alert_scan",

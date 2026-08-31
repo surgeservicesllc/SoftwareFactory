@@ -50,6 +50,8 @@ describe("atomic Grok graph control", () => {
     state: "applied",
     idempotency_key: "control-key-123",
     replayed: false,
+    wake_intent_id: "61000000-0000-4000-8000-000000000006",
+    control_revision: 9,
   };
 
   it("applies one graph control through the atomic owner boundary", async () => {
@@ -63,7 +65,7 @@ describe("atomic Grok graph control", () => {
       reason: "Resume after reviewing durable evidence.",
       idempotencyKey: "control-key-123",
     })).resolves.toEqual(appliedControl);
-    expect(rpc).toHaveBeenCalledWith("apply_grok_graph_control_v2_as_owner", {
+    expect(rpc).toHaveBeenCalledWith("apply_grok_graph_control_v3_as_owner", {
       p_organization_id: organizationId,
       p_session_id: sessionId,
       p_graph_id: graphId,
@@ -85,6 +87,68 @@ describe("atomic Grok graph control", () => {
       reason: "Resume after reviewing durable evidence.",
       idempotencyKey: "control-key-123",
     })).resolves.toEqual(replay);
+  });
+
+  it("falls back narrowly for Pause without inventing wake evidence during app-first rollout", async () => {
+    const legacy = {
+      ...appliedControl,
+      action: "pause",
+      wake_intent_id: undefined,
+      control_revision: undefined,
+    };
+    const rpc = vi.fn()
+      .mockResolvedValueOnce({
+        data: null,
+        error: { code: "PGRST202", message: "apply_grok_graph_control_v3_as_owner is absent" },
+      })
+      .mockResolvedValueOnce({ data: [legacy], error: null });
+
+    await expect(applyGrokGraphControl({ rpc } as never, {
+      organizationId,
+      sessionId,
+      graphId,
+      action: "pause",
+      reason: "Pause while reviewing durable evidence.",
+      idempotencyKey: "control-key-123",
+    })).resolves.toMatchObject({
+      wake_intent_id: null,
+      control_revision: null,
+    });
+    expect(rpc.mock.calls.map(([name]) => name)).toEqual([
+      "apply_grok_graph_control_v3_as_owner",
+      "apply_grok_graph_control_v2_as_owner",
+    ]);
+  });
+
+  it("fails closed instead of applying a v2 Resume when the atomic wake boundary is absent", async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: null,
+      error: { code: "PGRST202", message: "apply_grok_graph_control_v3_as_owner is absent" },
+    });
+    await expect(applyGrokGraphControl({ rpc } as never, {
+      organizationId,
+      sessionId,
+      graphId,
+      action: "resume",
+      reason: "Resume after reviewing durable evidence.",
+      idempotencyKey: "control-key-123",
+    })).rejects.toBeInstanceOf(Error);
+    expect(rpc).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects a partial wake identity projection", async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: [{ ...appliedControl, control_revision: null }],
+      error: null,
+    });
+    await expect(applyGrokGraphControl({ rpc } as never, {
+      organizationId,
+      sessionId,
+      graphId,
+      action: "resume",
+      reason: "Resume after reviewing durable evidence.",
+      idempotencyKey: "control-key-123",
+    })).rejects.toThrow(/did not match its exact input/i);
   });
 
   it.each([
@@ -798,7 +862,8 @@ describe("Grok session graph persistence", () => {
         return query;
       }),
       rpc: vi.fn().mockImplementation(async (name: string) => ({
-        data: name === "list_grok_context_envelopes" ? [] : [{
+        data: name === "list_grok_context_envelopes"
+          || name === "read_grok_graph_wake_state_as_owner" ? [] : [{
           artifact_id: "65000000-0000-4000-8000-000000000006",
           node_run_id: "63000000-0000-4000-8000-000000000006",
           node_key: plannedTask.id,

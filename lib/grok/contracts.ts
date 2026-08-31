@@ -133,6 +133,26 @@ export type GrokRunEvidence = Readonly<{
   phase1c: GrokPhase1CEvidence | null;
 }>;
 
+/**
+ * Exact durable truth for the newest owner Resume of this graph.
+ *
+ * `dispatchAccepted` means only that GitHub accepted repository_dispatch.
+ * `workerWoken` and `workerAcknowledged` become true together, and only after
+ * the exact target graph worker claimed the graph and persisted its receipt.
+ */
+export type GrokWakeEvidence = Readonly<{
+  wakeIntentId: string;
+  controlRevision: number;
+  dispatchAccepted: boolean;
+  dispatchRecordedAt: string | null;
+  workerAcknowledged: boolean;
+  workerWoken: boolean;
+  workerId: string | null;
+  protocolVersion: number | null;
+  capabilityVersion: number | null;
+  acknowledgedAt: string | null;
+}>;
+
 export type GrokSessionDetail = Readonly<{
   session: GrokSession;
   messages: readonly GrokMessage[];
@@ -144,6 +164,8 @@ export type GrokSessionDetail = Readonly<{
   artifacts: readonly GrokArtifact[];
   /** Canonical graph-run evidence. Absent on older payloads; null until a run exists. */
   runEvidence?: GrokRunEvidence | null;
+  /** Null until the graph has an exact durable owner-Resume wake intent. */
+  wakeEvidence?: GrokWakeEvidence | null;
 }>;
 
 export type GrokSessionCursor = Readonly<{

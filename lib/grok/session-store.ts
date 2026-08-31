@@ -7,6 +7,7 @@ import { z } from "zod";
 
 import { listAiAccounts, type AiAccountRow } from "@/lib/ai-accounts/broker";
 import { assignmentPostingIsConfigured } from "@/lib/bots/assignment-config";
+import { isMissingDatabaseFunction } from "@/lib/bots/schema-compat";
 import { normalizeCredentialRef } from "@/lib/bots/credentials";
 import { loadBotFabric } from "@/lib/bots/service";
 import type { BotFabricSnapshot, SerializedBotRole } from "@/lib/bots/types";
@@ -28,6 +29,7 @@ import type {
   GrokSession,
   GrokSessionDetail,
   GrokTask,
+  GrokWakeEvidence,
 } from "@/lib/grok/contracts";
 import { normalizeGrokCapabilities } from "@/lib/grok/capabilities";
 import { MODEL_TIERS, NODE_CAPABILITIES } from "@/lib/graph/contracts";
@@ -349,6 +351,8 @@ const appliedGraphControlSchema = z.object({
   state: z.literal("applied"),
   idempotency_key: z.string().min(8).max(128),
   replayed: z.boolean(),
+  wake_intent_id: z.string().uuid().nullable(),
+  control_revision: z.coerce.number().int().positive().nullable(),
 }).strict();
 
 export type GrokAppliedGraphControl = z.infer<typeof appliedGraphControlSchema>;
@@ -364,16 +368,38 @@ export async function applyGrokGraphControl(
     idempotencyKey: string;
   }>,
 ): Promise<GrokAppliedGraphControl> {
-  const value = await rpc<unknown>(client, "apply_grok_graph_control_v2_as_owner", {
+  const parameters = {
     p_organization_id: input.organizationId,
     p_session_id: input.sessionId,
     p_graph_id: input.graphId,
     p_action: input.action,
     p_reason: input.reason,
     p_idempotency_key: input.idempotencyKey,
-  });
+  };
+  let value: unknown;
+  try {
+    value = await rpc<unknown>(client, "apply_grok_graph_control_v3_as_owner", parameters);
+  } catch (error) {
+    if (!(error instanceof GrokStoreDatabaseError)
+        || !isMissingDatabaseFunction(
+          error.databaseError,
+          "apply_grok_graph_control_v3_as_owner",
+        )) {
+      throw error;
+    }
+    // A Resume may not cross an app-first window without its same-transaction
+    // wake intent: v2 could unpause a graph that a scheduled worker later
+    // claims without the opaque receipt identity. Pause/withdraw remain safe
+    // to delegate because they never wake or make work claimable.
+    if (input.action === "resume") throw error;
+    const legacy = await rpc<unknown>(client, "apply_grok_graph_control_v2_as_owner", parameters);
+    const row = oneRow(legacy, "apply_grok_graph_control_v2_as_owner");
+    value = typeof row === "object" && row !== null
+      ? { ...row, wake_intent_id: null, control_revision: null }
+      : row;
+  }
   const parsed = appliedGraphControlSchema.safeParse(
-    oneRow(value, "apply_grok_graph_control_v2_as_owner"),
+    oneRow(value, "apply_grok_graph_control_v3_as_owner"),
   );
   if (!parsed.success) {
     throw new GrokStoreProjectionError("The atomic Grok graph control result was malformed.");
@@ -384,10 +410,92 @@ export async function applyGrokGraphControl(
     || parsed.data.graph_id !== input.graphId
     || parsed.data.action !== input.action
     || parsed.data.idempotency_key !== input.idempotencyKey
+    || ((parsed.data.wake_intent_id === null) !== (parsed.data.control_revision === null))
+    || (input.action !== "resume" && parsed.data.wake_intent_id !== null)
   ) {
     throw new GrokStoreProjectionError("The atomic Grok graph control result did not match its exact input.");
   }
   return parsed.data;
+}
+
+const grokWakeEvidenceSchema = z.object({
+  wake_intent_id: z.string().uuid(),
+  control_revision: z.coerce.number().int().positive(),
+  dispatch_accepted: z.boolean(),
+  dispatch_recorded_at: z.string().datetime({ offset: true }).nullable(),
+  worker_acknowledged: z.boolean(),
+  worker_woken: z.boolean(),
+  worker_id: z.string().min(3).max(160).nullable(),
+  protocol_version: z.coerce.number().int().positive().nullable(),
+  capability_version: z.coerce.number().int().positive().nullable(),
+  acknowledged_at: z.string().datetime({ offset: true }).nullable(),
+}).strict().superRefine((evidence, context) => {
+  if (evidence.worker_acknowledged !== evidence.worker_woken) {
+    context.addIssue({
+      code: "custom",
+      message: "Worker wake and acknowledgement must come from the same receipt.",
+    });
+  }
+  const hasReceipt = evidence.acknowledged_at !== null;
+  if (hasReceipt !== evidence.worker_acknowledged
+      || hasReceipt !== (evidence.worker_id !== null)
+      || hasReceipt !== (evidence.protocol_version !== null)
+      || hasReceipt !== (evidence.capability_version !== null)) {
+    context.addIssue({
+      code: "custom",
+      message: "Worker receipt identity is incomplete.",
+    });
+  }
+  if (evidence.worker_acknowledged && !evidence.dispatch_accepted) {
+    context.addIssue({
+      code: "custom",
+      message: "A worker receipt requires durable accepted dispatch evidence.",
+    });
+  }
+});
+
+async function readGrokWakeEvidence(
+  client: SupabaseClient,
+  organizationId: string,
+  sessionId: string,
+  graphId: string,
+): Promise<GrokWakeEvidence | null> {
+  let value: unknown;
+  try {
+    value = await rpc<unknown>(client, "read_grok_graph_wake_state_as_owner", {
+      p_organization_id: organizationId,
+      p_session_id: sessionId,
+      p_graph_id: graphId,
+    });
+  } catch (error) {
+    if (error instanceof GrokStoreDatabaseError
+        && isMissingDatabaseFunction(
+          error.databaseError,
+          "read_grok_graph_wake_state_as_owner",
+        )) return null;
+    throw error;
+  }
+  const rows = Array.isArray(value) ? value : value === null ? [] : [value];
+  if (rows.length === 0) return null;
+  if (rows.length !== 1) {
+    throw new GrokStoreProjectionError("The Grok wake evidence was ambiguous.");
+  }
+  const parsed = grokWakeEvidenceSchema.safeParse(rows[0]);
+  if (!parsed.success) {
+    throw new GrokStoreProjectionError("The Grok wake evidence was malformed.");
+  }
+  return Object.freeze({
+    wakeIntentId: parsed.data.wake_intent_id,
+    controlRevision: parsed.data.control_revision,
+    dispatchAccepted: parsed.data.dispatch_accepted,
+    dispatchRecordedAt: parsed.data.dispatch_recorded_at,
+    workerAcknowledged: parsed.data.worker_acknowledged,
+    workerWoken: parsed.data.worker_woken,
+    workerId: parsed.data.worker_id,
+    protocolVersion: parsed.data.protocol_version,
+    capabilityVersion: parsed.data.capability_version,
+    acknowledgedAt: parsed.data.acknowledged_at,
+  });
 }
 
 export async function requestGrokControlIntent(
@@ -1538,11 +1646,14 @@ export async function mapGrokSessionDetail(
 ): Promise<GrokSessionDetail> {
   const plan = storedGrokPlan(bundle);
   const link = plannedGraphLink(bundle);
-  const [evidence, contextEnvelopes] = await Promise.all([
+  const [evidence, contextEnvelopes, wakeEvidence] = await Promise.all([
     link?.graph_id
       ? readGraphEvidence(client, organizationId, link.graph_id, link.graph_run_id)
       : Promise.resolve(null),
     listGrokContextEnvelopes(client, organizationId, bundle.session.id),
+    link?.graph_id
+      ? readGrokWakeEvidence(client, organizationId, bundle.session.id, link.graph_id)
+      : Promise.resolve(null),
   ]);
   const userMessage = bundle.messages.find((message) => message.role === "user");
   const plannedByKey = new Map(plan?.dag.tasks.map((task) => [task.id, task]) ?? []);
@@ -1640,5 +1751,6 @@ export async function mapGrokSessionDetail(
     eventsTruncated: bundle.events_truncated ?? false,
     artifacts: Object.freeze([...artifacts, ...graphArtifacts]),
     runEvidence,
+    wakeEvidence,
   });
 }

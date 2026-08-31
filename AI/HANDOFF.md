@@ -2,6 +2,30 @@
 
 Last updated: 2026-08-31
 
+## Newest: initial Grok Resume wake receipt (ADR-239)
+
+Migration `20260831002100_grok_initial_wake_receipts.sql` is the forward-only
+schema boundary. Owner Resume returns its exact `wake_intent_id` and positive
+`control_revision`; the Grok control route sends those two opaque values with
+the exact graph dispatch, then records only accepted/failed transport truth.
+The synchronous response keeps `workerWoken=false` unless the reloaded durable
+receipt already matches that exact pair.
+
+The graph worker reads `SOFTWAREFACTORY_GROK_WAKE_INTENT_ID` and
+`SOFTWAREFACTORY_GROK_CONTROL_REVISION` as an all-or-nothing pair. After an
+exact claim and repository check—but before compile/provider—it calls
+`acknowledge_grok_graph_wake_as_worker`. Initial Grok claims without a payload
+call the non-resolving absence guard; if any Resume intent exists, the run is
+aborted rather than discovering or guessing the identity. Do not move this
+gate after compilation, call HTTP 204 a wake, or add goal/session text to the
+dispatch payload or wake audit.
+
+No live database write, dispatch, push, deployment, or safety-state change was
+performed in this lane. Keep workers/schedules/autonomy/actions OFF and the
+global kill switch ON. Integration with newer 020/dispatch work may require a
+mechanical conflict resolution, but must preserve the exact third dispatch
+argument `{ wakeIntentId, controlRevision }`.
+
 ## Newest (2026-08-31, latest+55): protected Grok 019 null-fence lane (ADR-237)
 
 Use only `.github/workflows/grok-admission-version-null-fence-migration.yml`

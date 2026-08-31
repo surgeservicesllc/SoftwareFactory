@@ -2,6 +2,19 @@
 
 Last reviewed: 2026-08-31
 
+**Addendum, 2026-08-31 - initial Grok Resume durable wake truth (ADR-239):**
+Migration 021, route/store/worker boundaries, workflow wiring, and the Grok
+Progress inspector now separate durable Resume intent, GitHub dispatch
+acceptance, and exact worker acknowledgement. Native full-chain PGlite proves
+same-transaction intent creation, absence/wrong-revision refusal before
+provider work, exact post-claim receipt, idempotent exact replay, owner read,
+and content-free audit. Unit and static contracts cover mismatched projections,
+app-first Resume refusal (with non-waking Pause/Withdraw fallback only), opaque payload wiring, ordering before
+compile/provider, FORCE RLS, immutability, and service-only mutation ACLs.
+Exact-head CI/build/browser, hosted migration, deployment, health, and signed-
+in live-worker acceptance remain pending; no production-readiness claim is
+made and every execution/safety switch remains in its stopped state.
+
 **Addendum, 2026-08-31 latest+55 - protected Grok 019 admission-version
 null fence (ADR-237):** Repository evidence freezes canonical-LF migration 019
 at SHA-256

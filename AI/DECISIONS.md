@@ -6235,3 +6235,34 @@ a worker, dispatch, autonomy, automatic action, kill-switch change, merge,
 deploy, or live database operation. Any mismatch requires a separately
 reviewed forward containment change; reset, replay, repair, down, and broad
 migration application are prohibited.
+
+## ADR-239 - A Grok Resume is not a worker wake until the exact claim receipts it
+
+- **Date**: 2026-08-31
+- **Status**: Accepted for the repository candidate; hosted operation and live
+  worker acceptance not run
+
+An owner Resume must leave one durable wake intent in the same transaction as
+the applied graph control. The identity is bound to organization, project,
+session, graph, control intent, and the exact control/event revision. A replay
+returns that same identity; it may never synthesize evidence for a legacy
+Resume after the fact. Wake events contain identifiers and state only, never
+goal, prompt, context, or credential material.
+
+Repository dispatch is transport, not execution. Accepted and failed delivery
+attempts are immutable separate rows, and an accepted HTTP response sets only
+`dispatchAccepted`. `workerWoken` and `workerAcknowledged` become true together
+only when the exact target worker has claimed the exact graph/run and records
+the supplied wake UUID/control revision with protocol and capability version 1
+before graph compilation or provider access. The worker is not permitted to
+resolve a missing wake identity from current database state. An initial Grok
+claim with any Resume history but no opaque payload therefore aborts, and
+stale graph/session/control/admission, wrong run/worker/version, or conflicting
+replay identity fails closed.
+
+Wake tables are append-only, FORCE RLS, and carry no direct grants. Dispatch
+and receipt functions are service-role-only; the read projection is owner and
+exact-launch scoped. The UI separately labels intent, dispatch acceptance, and
+worker receipt and preserves that truth after reload. This decision does not
+enable any worker, schedule, autonomy, automatic action, merge, deployment, or
+rollback, and it does not disengage the global kill switch.

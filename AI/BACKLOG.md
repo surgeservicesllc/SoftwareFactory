@@ -1,5 +1,21 @@
 # Backlog
 
+## Grok initial Resume durable wake receipt (ADR-239, 2026-08-31)
+
+- [x] Create one append-only wake intent in the exact owner Resume transaction,
+  with tenant/session/graph/control revision identity and content-free audit.
+- [x] Record GitHub dispatch acceptance/failure separately and never translate
+  HTTP acceptance into `workerWoken`.
+- [x] Require the exact target graph claim to receipt worker identity,
+  protocol/capability version, and immutable timestamps before provider work;
+  fail closed on missing, stale, wrong, or conflicting replay identity.
+- [x] Project dispatch versus receipt truth through API, reload, and the Grok
+  Progress inspector; cover the service boundaries, SQL contract, and native
+  PGlite behavior.
+- [ ] Integrate and release migration 021 only through a separately reviewed
+  forward production lane. No hosted apply or live worker acceptance is
+  claimed by this repository candidate.
+
 ## Grok admission-version null-fence release lane (ADR-237, 2026-08-31)
 
 - [x] Freeze canonical-LF migration 019 at SHA-256

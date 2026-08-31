@@ -213,11 +213,13 @@ describe("Phase 1E production operations behavior", () => {
     // route (ADR-221) added crm_routes and crm_route_stops; 219 since
     // the Grok completion chain added its private Phase 1C guard and
     // specialist roster; and 221 since ADR-235 added the two append-only Grok
-    // context tables. (Both earlier branches counted 215 -> 217 independently;
-    // their union was 219.)
+    // context tables; 223 after later Grok completion evidence; and 226 after
+    // ADR-239 added the three append-only initial Resume wake evidence tables.
+    // (Both earlier branches counted 215 -> 217 independently; their union
+    // was 219.)
     // Each is RLS-enabled and forced, which the filter on the next line is
     // what actually proves.
-    expect(rlsRows).toHaveLength(223);
+    expect(rlsRows).toHaveLength(226);
     expect(rlsRows.filter((row) => !row.relrowsecurity || !row.relforcerowsecurity)).toEqual([]);
 
     const { rows: grantRows } = await db.query<{ table_name: string }>(

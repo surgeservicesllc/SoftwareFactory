@@ -30,6 +30,8 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 const CLAIM_ABORT_DETAIL = Object.freeze({
   invalidProjection: "The claimed graph projection failed protocol-v3 validation.",
   repositoryMismatch: "The claimed graph repository did not match this worker checkout.",
+  wakeReceiptFailure: "The claimed graph did not match the exact durable Grok Resume wake receipt.",
+  wakePayloadMissing: "The claimed initial Grok graph has a Resume intent but this dispatch carried no exact wake identity.",
   compileFailure: "The claimed graph failed the execution contract before any node started.",
 });
 let stopping = false;
@@ -49,6 +51,19 @@ function optionalUuidEnv(name: string): string | null {
   return value;
 }
 
+function optionalPositiveIntegerEnv(name: string): number | null {
+  const value = process.env[name]?.trim();
+  if (!value) return null;
+  if (!/^[1-9][0-9]*$/.test(value)) {
+    throw new Error(`${name} must be a positive integer when supplied.`);
+  }
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed)) {
+    throw new Error(`${name} must be a safe positive integer when supplied.`);
+  }
+  return parsed;
+}
+
 async function main() {
   if (process.env.SOFTWAREFACTORY_GRAPH_WORKER_ENABLED?.trim() !== "true") {
     process.stdout.write("SoftwareFactory graph worker is disabled. Set SOFTWAREFACTORY_GRAPH_WORKER_ENABLED=true to start it.\n");
@@ -66,6 +81,14 @@ async function main() {
     throw new Error("SOFTWAREFACTORY_REQUIRED_CHECKS is not a safe, unique repository policy.");
   }
   const targetGraphId = optionalUuidEnv("SOFTWAREFACTORY_TARGET_GRAPH_ID");
+  const grokWakeIntentId = optionalUuidEnv("SOFTWAREFACTORY_GROK_WAKE_INTENT_ID");
+  const grokControlRevision = optionalPositiveIntegerEnv("SOFTWAREFACTORY_GROK_CONTROL_REVISION");
+  if ((grokWakeIntentId === null) !== (grokControlRevision === null)) {
+    throw new Error("The exact Grok wake intent and control revision must be supplied together.");
+  }
+  if (grokWakeIntentId && !targetGraphId) {
+    throw new Error("An exact Grok wake payload requires SOFTWAREFACTORY_TARGET_GRAPH_ID.");
+  }
   if (
     process.env.SOFTWAREFACTORY_TARGET_CLAIM_REQUIRED?.trim() === "true"
     && !targetGraphId
@@ -121,6 +144,41 @@ async function main() {
         "FAILED",
         CLAIM_ABORT_DETAIL.repositoryMismatch,
       );
+      continue;
+    }
+
+    const initialGrokClaim = parsed.graph.grok_admission_required
+      && (
+        parsed.graph.phase1c_state === null
+        || parsed.graph.phase1c_state === undefined
+        || parsed.graph.phase1c_state === "GRAPH_READY"
+      );
+    try {
+      if (grokWakeIntentId !== null && grokControlRevision !== null) {
+        if (parsed.graph.graph_id !== targetGraphId) {
+          throw new Error("The claimed graph did not match the exact dispatch target.");
+        }
+        await store.acknowledgeGrokWake({
+          wakeIntentId: grokWakeIntentId,
+          controlRevision: grokControlRevision,
+          graphId: parsed.graph.graph_id,
+          graphRunId: parsed.graph.graph_run_id,
+        });
+      } else if (initialGrokClaim) {
+        // Initial creates have no Resume intent and pass this absence guard.
+        // Once any Resume exists, only its opaque dispatch identity may cross
+        // this boundary; the database never resolves that identity for us.
+        await store.assertNoGrokWakePayloadRequired({
+          graphId: parsed.graph.graph_id,
+          graphRunId: parsed.graph.graph_run_id,
+        });
+      }
+    } catch {
+      const detail = grokWakeIntentId === null
+        ? CLAIM_ABORT_DETAIL.wakePayloadMissing
+        : CLAIM_ABORT_DETAIL.wakeReceiptFailure;
+      process.stderr.write(`${detail}\n`);
+      await store.abortRun(parsed.graph.graph_run_id, "FAILED", detail);
       continue;
     }
 

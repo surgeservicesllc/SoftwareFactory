@@ -1,5 +1,31 @@
 # Current state
 
+## 2026-08-31: initial Grok Resume wake truth requires a durable worker receipt (ADR-239)
+
+Forward migration `20260831002100_grok_initial_wake_receipts.sql` records one
+immutable wake intent in the exact owner Resume transaction, bound to tenant,
+project, session, graph, control intent, and event revision. GitHub dispatch
+accepted/failed attempts are separate append-only transport evidence: an HTTP
+acceptance never sets `workerWoken`. Only the exact target graph worker can
+record the matching run/worker/protocol/capability receipt after its claim and
+before compilation or provider work. Missing, stale, wrong-graph, wrong-run,
+wrong-worker, wrong-version, and conflicting replay identities fail closed.
+
+The control response exposes `wakeIntentId`, `controlRevision`,
+`dispatchAccepted`, `workerAcknowledged`, and `workerWoken`; the durable session
+projection exposes the same evidence for reload and the Progress inspector
+labels dispatch acceptance as awaiting a receipt. Evidence tables are FORCE
+RLS with no direct grants and immutable guards; mutation functions are
+service-role-only and owner reads remain tenant/launch scoped. The opaque
+workflow payload contains only graph/wake UUID and control revision—never goal
+text. PGlite exercises the real Resume, accepted dispatch, exact claim, absent
+and wrong revision refusal, exact/idempotent receipt, owner projection, and
+content-free audit.
+
+This is repository-only work. Nothing was applied, dispatched, pushed,
+deployed, or enabled; workers, schedules, autonomy, and automatic actions stay
+OFF and the global kill switch stays ON.
+
 ## 2026-08-31: Grok admission-version null fence has an exact protected lane (ADR-237)
 
 Migration `20260831001900_grok_admission_version_null_fence.sql` is frozen at

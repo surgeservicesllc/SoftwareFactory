@@ -3,6 +3,10 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { WORKER_SUPPORTED_EXECUTORS } from "@/lib/worker/executor-support";
 import type { GraphRunStore } from "@/lib/worker/graph-run";
 import { explainEmptyQueue, type QueueGraphRow } from "@/lib/worker/queue-diagnosis";
+import {
+  acknowledgeGrokGraphWake,
+  assertNoGrokWakePayloadRequired,
+} from "@/lib/worker/grok-wake-receipt";
 
 function rpcFailureMessage(failure: unknown): string {
   if (failure && typeof failure === "object" && "message" in failure
@@ -78,6 +82,28 @@ export class SupabaseGraphStore implements GraphRunStore {
       : await this.client.rpc("claim_planned_graph_v3", claimRequest);
     if (error) throw new Error(`Claiming a planned graph failed: ${error.message ?? "unknown error"}`);
     return data ?? null;
+  }
+
+  async acknowledgeGrokWake(input: Readonly<{
+    wakeIntentId: string;
+    controlRevision: number;
+    graphId: string;
+    graphRunId: string;
+  }>) {
+    return acknowledgeGrokGraphWake(this.client, {
+      workerId: this.workerId,
+      ...input,
+    });
+  }
+
+  async assertNoGrokWakePayloadRequired(input: Readonly<{
+    graphId: string;
+    graphRunId: string;
+  }>) {
+    return assertNoGrokWakePayloadRequired(this.client, {
+      workerId: this.workerId,
+      ...input,
+    });
   }
 
   /**
