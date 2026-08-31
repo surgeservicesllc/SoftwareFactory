@@ -273,6 +273,7 @@ describe("the workflow's post-cutover surgical-scope fence", () => {
       "operating-dashboards.sql",
       "pest-ipm.sql",
       "plan-sequencing.sql",
+      "portal-filed-documents.sql",
       "record-only-boundary.sql",
       "record-only-functions.sql",
       "recurring-billing.sql",

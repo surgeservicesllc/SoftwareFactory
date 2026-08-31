@@ -489,6 +489,14 @@ order from geography — crm_properties holds an address and no coordinates,
 and turning one into the other is geocoding. Drive time, traffic, time
 windows and bulk geocoding all still need a mapping provider.
 
+A portal customer can download their own filed copies (ADR-221). Two
+definer projections list and serve crm_service_documents bodies scoped
+through crm_portal_account_for; the Documents tab renders per-copy
+download anchors (attachment, nosniff, no-store — never inline), marks
+superseded copies instead of hiding them, and the two notices that blamed
+object storage for the missing link are corrected — that blocker ended
+with ADR-216.
+
 Of the remaining eighteen rows, eight are gated on an
 external account nobody has opened: card/ACH processing, SMS/email
 delivery, GPS telemetry, QuickBooks sync, telephony, reviews and

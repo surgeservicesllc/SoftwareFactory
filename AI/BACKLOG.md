@@ -281,10 +281,10 @@ the full seeded E2E journey passes — increment 10 of the plan.
   `tests/unit/migration-path-references.test.ts` now fails on any
   `supabase/migrations/...` path a workflow or test names that is not a
   real file.
-- [ ] Increment 10 follow-on: the COMMERCIAL portal view — open
-  conditions, device summary with trend heat maps, sighting tickets, an
-  SDS/compliance document library and inspection history. PestPac has it;
-  the residential view that shipped does not.
+- [x] Increment 10 follow-on: the COMMERCIAL portal view. Shipped as
+  increment 15 (ADR-203) — open conditions, device trend heat maps,
+  sighting tickets, the SDS library and inspection history on
+  /customer-portal; this earlier entry predates it and was stale.
 - [ ] Increment 10 follow-on: sending the invitation. The row exists and
   the accept flow works, but nothing emails a customer to tell them — no
   email provider is connected, so an invitation is delivered by whatever
@@ -409,9 +409,11 @@ the full seeded E2E journey passes — increment 10 of the plan.
   under RLS had already solved it for the Job Seeker.
 - [ ] Send a filed document to a customer. The email/SMS provider row, same
   as every other outbound message.
-- [ ] Offer the filed copy for download in the customer portal, replacing
-  the two Not Connected notices that cite object storage — those sentences
-  are now out of date and should be corrected when that path is wired.
+- [x] Offer the filed copy for download in the customer portal (ADR-221):
+  two definers hand a customer their own list and bodies, the panel's
+  Documents tab renders per-copy download anchors with a superseded mark,
+  and both stale notices citing object storage are corrected.
+  20260831001000; hosted apply: scope=portal-filed-documents after merge.
 - [ ] BLOCKED ON OWNER AUTHORIZATION, not on code: running recurring
   invoicing on a schedule. A timer that raises invoices against real
   customers is a billing action executed autonomously, which
@@ -806,10 +808,10 @@ already in the database.
   was kept and why.
 - [x] Apply to hosted with a dedicated narrow scope, hash-pinned, with a ledger
   preflight and a post-apply readback that fails the run on a mismatch.
-- [ ] Dispatch `scope=probe` for the independent second read of the two
-  functions' privileges. The apply's own gate passed; a step that grades its
-  own work is the weaker evidence, and the probe read exists but has not been
-  run.
+- [x] Dispatch `scope=probe` for the independent second read of the two
+  functions' privileges. Run 33385704826 (2026-08-31 11:10Z, success) is
+  that read: the ACL listings show the expected grants and the after-ledger
+  listing is the current contiguous chain through `20260831000800`.
 
 ## Any-model safe Step 8 -> Step 9 release (2026-08-22, ADR-115)
 

@@ -2,6 +2,32 @@
 
 Last updated: 2026-08-31
 
+## Newest (2026-08-31, latest+41): portal filed-copy downloads (ADR-221)
+
+`20260831001000` adds crm_portal_filed_documents and
+crm_portal_filed_document_body. Two API routes under
+app/api/customer-portal/filed-documents serve the list and the download;
+the panel's Documents tab renders the copies and both stale object-storage
+notices are corrected.
+
+BOTH FUNCTIONS ARE AND MUST STAY SECURITY DEFINER — a portal login is not
+an organization member and an invoker would return nothing. What makes
+that safe is the crm_portal_account_for scoping, the same as every other
+portal projection, and the postflight re-proves authenticated-only reach
+plus the ADR-213 no-anon sweep.
+
+THE DOWNLOAD IS AN ATTACHMENT, NEVER INLINE. A filed HTML report rendered
+in the portal's origin would execute whatever a compromised office account
+filed. content-disposition: attachment + nosniff + no-store; keep it so.
+
+SUPERSEDED COPIES STAY LISTED, flagged. The customer may hold a printed
+original; hiding it makes their paper unverifiable.
+
+A crm_service_documents FIXTURE MUST NAME A SUBJECT
+(crm_service_documents_names_a_subject: work order, inspection or
+property) and byte_size must be octet_length(body) — compute it in SQL,
+never by hand-counting.
+
 ## Newest (2026-08-31, latest+40): the day route (ADR-220, #83)
 
 `20260831000900` adds crm_routes and crm_route_stops.

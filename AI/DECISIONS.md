@@ -5664,3 +5664,42 @@ theirs to the browser roles; this one now does.
 Row moves GAP -> PARTIAL, with the optimiser named as the remainder.
 
 Hosted apply scope `day-route`.
+
+## ADR-221 - The filed copy is the download, so the portal stops apologizing for storage
+
+The portal's Documents tab and the inspections tab both carried a **Not
+Connected** notice blaming object storage for the absence of a download
+link. Those sentences went stale the day ADR-216 landed: a filed service
+document's bytes live in `crm_service_documents.body`, a column under
+forced RLS, and nothing about serving them to the customer they belong to
+requires a storage provider. Leaving the notices up would have violated
+the truthfulness rule in the other direction — claiming a blocker that no
+longer exists is as false as claiming a feature that doesn't.
+
+**Two definers, because the customer is a stranger to the schema.** A
+portal login is not an organization member and holds no grant on
+`crm_service_documents`. `crm_portal_filed_documents()` (the list, capped
+at 200, newest first) and `crm_portal_filed_document_body(uuid)` (one
+title/content-type/body row) are SECURITY DEFINER, scoped through
+`crm_portal_account_for(auth.uid())` exactly like every other portal
+projection. A wrong-tenant or unknown id returns the empty set — the same
+answer as "no such document", so an id is not an oracle.
+
+**Superseded is a flag, not a filter.** The customer may hold a printed
+copy of the original, so the original stays listed with `superseded true`
+(an EXISTS against `supersedes_id`) and the correction sits above it.
+Hiding it would make their paper copy unverifiable.
+
+**Download, never inline.** The body route answers with
+`content-disposition: attachment`, `x-content-type-options: nosniff` and
+`cache-control: no-store`, and the filename is derived from the sanitized
+title. A filed HTML report rendered inline in the portal's own origin
+would execute whatever a compromised office account managed to file; a
+download is inert until the customer opens it deliberately, in whatever
+their machine considers safe.
+
+The postflight proves reach, not shape: both functions stable definers,
+executable by `authenticated` and by nobody else, and the ADR-213 rule
+re-checked — no `crm_portal%` function reachable by `anon`.
+
+Hosted apply scope `portal-filed-documents`.

@@ -505,4 +505,73 @@ describe("the customer portal", { timeout: 240_000 }, () => {
     expect(acl.map((row) => row.proname)).toEqual([]);
     await reset();
   });
+
+  it("hands a customer their own filed copies, marked when superseded (ADR-221)", async () => {
+    await as(acmeOwner);
+    // A filed copy must name a subject; a property is the lightest one.
+    const site = await db.query<{ id: string }>(
+      `insert into public.crm_properties (organization_id, account_id, label, address)
+       values ($1, $2, 'Harborview Plant', '4100 Cannery Row') returning id`,
+      [acmeOrg, acmeAccount]);
+    const original = await db.query<{ id: string }>(
+      `insert into public.crm_service_documents
+         (organization_id, account_id, property_id, kind, title, content_type,
+          byte_size, body, filed_by)
+       values ($1, $2, $3, 'service_report', 'Service report — 12 Jan',
+               'text/html', octet_length($4::text), $4, $5)
+       returning id`,
+      [acmeOrg, acmeAccount, site.rows[0].id,
+       "<h1>Report</h1><p>Two stations rebaited.</p>", acmeOwner]);
+    await db.query(
+      `insert into public.crm_service_documents
+         (organization_id, account_id, property_id, kind, title, content_type,
+          byte_size, body, supersedes_id, filed_by)
+       values ($1, $2, $3, 'service_report', 'Service report — 12 Jan (corrected)',
+               'text/html', octet_length($4::text), $4, $5, $6)`,
+      [acmeOrg, acmeAccount, site.rows[0].id,
+       "<h1>Report</h1><p>Three stations rebaited.</p>", original.rows[0].id,
+       acmeOwner]);
+    await reset();
+
+    await asPortal(customerLogin);
+    const listed = await db.query<{ id: string; title: string; superseded: boolean }>(
+      "select id, title, superseded from public.crm_portal_filed_documents()");
+    expect(listed.rows).toHaveLength(2);
+    // The original stays listed — the customer may hold a printed copy of
+    // it — and says a correction exists.
+    const first = listed.rows.find((row) => row.id === original.rows[0].id);
+    expect(first?.superseded).toBe(true);
+    expect(listed.rows.find((row) => row.title.includes("corrected"))?.superseded).toBe(false);
+
+    const body = await db.query<{ content_type: string; body: string }>(
+      "select content_type, body from public.crm_portal_filed_document_body($1)",
+      [original.rows[0].id]);
+    expect(body.rows[0].content_type).toBe("text/html");
+    expect(body.rows[0].body).toContain("Two stations rebaited");
+    await reset();
+  });
+
+  it("gives another tenant's customer nothing, not even an error to learn from", async () => {
+    await asPortal(customerLogin);
+    const mine = await db.query<{ id: string }>(
+      "select id from public.crm_portal_filed_documents()");
+    const someDocument = mine.rows[0].id;
+    await reset();
+
+    // The rival's customer asking for an acme document id gets an empty
+    // set — deliberately the same answer as "no such document".
+    await asPortal(rivalCustomerLogin);
+    const stolen = await db.query(
+      "select * from public.crm_portal_filed_document_body($1)", [someDocument]);
+    expect(stolen.rows).toHaveLength(0);
+    const theirList = await db.query("select * from public.crm_portal_filed_documents()");
+    expect(theirList.rows).toHaveLength(0);
+    await reset();
+
+    // A login with no portal account at all sees an empty world too.
+    await asPortal(strangerLogin);
+    const strangers = await db.query("select * from public.crm_portal_filed_documents()");
+    expect(strangers.rows).toHaveLength(0);
+    await reset();
+  });
 });

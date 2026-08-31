@@ -2,6 +2,17 @@
 
 Last reviewed: 2026-08-31
 
+**Addendum, 2026-08-31 latest+41 - portal filed-copy downloads (ADR-221):**
+services-portal.behavior grew to 15: a customer lists their own filed
+copies with the original still present and flagged superseded, reads a
+body, and a rival tenant's customer (or a stranger login) asking with a
+real id gets the empty set — the same answer as "no such document". The
+fixture lesson cost two failed runs: crm_service_documents refuses a row
+that names no subject (property/work order/inspection) and byte_size must
+be octet_length(body) computed in SQL, and a hand-ordered parameter list
+put a document id in filed_by. hosted-scope-replay executes the new
+postflight against the migrated chain; runbook total 217.
+
 **Addendum, 2026-08-31 latest+40 - the day route (ADR-220):**
 services-day-route.behavior 11 on the real chain, most of them about the
 three ways somebody drives to the wrong place: a stop whose visit is

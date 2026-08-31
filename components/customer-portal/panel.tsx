@@ -52,6 +52,16 @@ type Visit = {
   completionNotes: string | null;
 };
 
+type FiledCopy = {
+  id: string;
+  kind: string;
+  title: string;
+  contentType: string;
+  byteSize: number;
+  filedAt: string;
+  superseded: boolean;
+};
+
 type PortalDocument = {
   id: string;
   title: string;
@@ -282,6 +292,7 @@ export function CustomerPortalPanel() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [visits, setVisits] = useState<Visit[]>([]);
   const [documents, setDocuments] = useState<PortalDocument[]>([]);
+  const [filedCopies, setFiledCopies] = useState<FiledCopy[]>([]);
   const [requests, setRequests] = useState<Request[]>([]);
   const [sites, setSites] = useState<Site[]>([]);
   const [stations, setStations] = useState<Station[]>([]);
@@ -340,6 +351,7 @@ export function CustomerPortalPanel() {
         conditionsRes,
         complianceRes,
         wdoRes,
+        filedRes,
       ] = await Promise.all([
         fetch("/api/customer-portal/invoices", { headers: { accept: "application/json" } }),
         fetch("/api/customer-portal/visits", { headers: { accept: "application/json" } }),
@@ -352,11 +364,14 @@ export function CustomerPortalPanel() {
         fetch("/api/customer-portal/conditions", { headers: { accept: "application/json" } }),
         fetch("/api/customer-portal/compliance", { headers: { accept: "application/json" } }),
         fetch("/api/customer-portal/wdo", { headers: { accept: "application/json" } }),
+        fetch("/api/customer-portal/filed-documents", { headers: { accept: "application/json" } }),
       ]);
       if (invoicesRes.ok) setInvoices(((await invoicesRes.json()) as { invoices: Invoice[] }).invoices);
       if (visitsRes.ok) setVisits(((await visitsRes.json()) as { visits: Visit[] }).visits);
       if (documentsRes.ok)
         setDocuments(((await documentsRes.json()) as { documents: PortalDocument[] }).documents);
+      if (filedRes.ok)
+        setFiledCopies(((await filedRes.json()) as { documents: FiledCopy[] }).documents);
       if (requestsRes.ok) setRequests(((await requestsRes.json()) as { requests: Request[] }).requests);
       if (sitesRes.ok) setSites(((await sitesRes.json()) as { sites: Site[] }).sites);
       if (stationsRes.ok) {
@@ -1148,9 +1163,9 @@ export function CustomerPortalPanel() {
               </ul>
             )}
             <Notice tone="info">
-              Downloading a signed copy is <strong>Not Connected</strong> — no object storage is
-              configured for this workspace, so the portal reports that a signature exists rather than
-              offering a file it cannot produce.
+              When the company files a copy of a report, it appears under Documents &rarr; Filed
+              copies and downloads from there. An inspection listed here without a filed copy is
+              reported as signed rather than offered as a file the portal does not hold.
             </Notice>
           </Card>
         </>
@@ -1262,9 +1277,42 @@ export function CustomerPortalPanel() {
             title="Documents"
             description="Your agreements, reports and permits. Internal photographs and staff notes are not in this list."
           />
+          {filedCopies.length > 0 ? (
+            <div className="mt-4" data-testid="customer-portal-filed-copies">
+              <h3 className="text-sm font-semibold text-foreground">Filed copies</h3>
+              <p className="text-xs text-muted">
+                Each one is exactly what the report said on the day it was filed. A correction is a
+                new filing; the original stays, marked superseded.
+              </p>
+              <ul className="mt-2 divide-y divide-line">
+                {filedCopies.map((copy) => (
+                  <li key={copy.id} className="flex flex-wrap items-center gap-2 py-2.5">
+                    <span className="text-sm font-medium text-foreground">{copy.title}</span>
+                    <span className="text-xs text-faint">
+                      {copy.kind.replace(/_/g, " ")} · {copy.filedAt.slice(0, 10)}
+                    </span>
+                    {copy.superseded ? (
+                      <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700">
+                        superseded
+                      </span>
+                    ) : null}
+                    <a
+                      href={`/api/customer-portal/filed-documents/${copy.id}`}
+                      download
+                      className="ml-auto rounded-md border border-line px-2.5 py-1 text-xs font-medium transition hover:bg-subtle"
+                      data-testid={`customer-portal-filed-download-${copy.id}`}
+                    >
+                      Download
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
           <Notice tone="info">
-            Downloading is <strong>Not Connected</strong> — no document storage is configured for this
-            workspace, so these are listed rather than opened.
+            The list below is the office&rsquo;s document index &mdash; entries name a file the
+            company keeps elsewhere, so they are listed rather than opened here. Filed copies above
+            download directly.
           </Notice>
           {documents.length === 0 ? (
             <p className="mt-4 text-sm text-muted" data-testid="customer-portal-documents-empty">
