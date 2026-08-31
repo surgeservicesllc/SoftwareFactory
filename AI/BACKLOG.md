@@ -24,7 +24,7 @@ shipped their ungated half:
   degradation — a property with no point is LISTED as unsequenceable rather
   than silently dropped from the day. That would move the row to PARTIAL.
   Still gated afterwards: bulk geocoding, drive time, traffic and time
-  windows. SHIPPED as the day route (ADR-221, `20260831001200`): the
+  windows. SHIPPED as the day route (ADR-221, `20260831001200`, hosted run 33389230218): the
   dispatcher's sequence is first-class (routes, stops, resequencing,
   route sheet), which is the half of "route manager" no provider gates.
   The optimiser itself remains gated on geocoding exactly as ADR-221
@@ -436,7 +436,7 @@ the full seeded E2E journey passes — increment 10 of the plan.
   two definers hand a customer their own list and bodies, the panel's
   Documents tab renders per-copy download anchors with a superseded mark,
   and both stale notices citing object storage are corrected.
-  20260831001300; hosted apply: scope=portal-filed-documents after merge.
+  20260831001300; hosted: scope=portal-filed-documents, run 33389312549.
 - [ ] BLOCKED ON OWNER AUTHORIZATION, not on code: running recurring
   invoicing on a schedule. A timer that raises invoices against real
   customers is a billing action executed autonomously, which
@@ -452,8 +452,8 @@ the full seeded E2E journey passes — increment 10 of the plan.
   pause_requested_at projected, and explainEmptyQueue names both reasons
   ahead of everything else — withdrawn is final, pause waits for a resume.
   Worker-only ACL restated after the forced DROP; postflight proves the
-  new columns and the unchanged reach. Hosted apply:
-  scope=queue-diagnosis-visibility after merge.
+  new columns and the unchanged reach. Hosted:
+  scope=queue-diagnosis-visibility, run 33389384384.
 - [x] The apply workflow's byte ceiling, again: the Grok-completion merge
   pushed the file to 478,074 — over the 478,000 guard. `Choose the
   connection` now exports a masked $DB_URL in BOTH modes and every apply
@@ -1259,10 +1259,17 @@ ADR-115/ADR-118/ADR-120/ADR-121
   passed. Remote journey `33115019633` separately passed the returning-account
   gate; its live-board sample had no new savable row and skipped that mutation
   honestly rather than substituting a fake result.
-- [ ] Move the remaining manual `POST /api/job-seeker/jobs` insert chain onto
-  the atomic boundary, add its regression, then revoke authenticated direct
-  INSERT on jobs/matches/applications in a separate forward contraction. Do
-  not revoke while that application path still depends on the grants.
+- [x] Move the remaining manual `POST /api/job-seeker/jobs` insert chain onto
+  the atomic boundary, with its regression: the route now calls
+  insertScoredJob/loadEvaluationInputs (record_job_seeker_job commits job,
+  match, pipeline entry and audit event together), and a source regression
+  in job-seeker-record.test.ts fails if a direct insert on any of the
+  three tables creeps back.
+- [ ] PARKED until production runs the new route code (one deploy after
+  this merges): revoke authenticated direct INSERT on
+  jobs/matches/applications in a separate forward contraction with its own
+  scope and postflight. Do not revoke while any deployed code still
+  depends on the grants.
 - [ ] Reconsider Jobbank only with a reliable, reviewed fallback contract for
   its intermittent Cloudflare block. Upstream suggests WebSearch as a
   fallback; the current hosted adapter has no such instrument. This is a

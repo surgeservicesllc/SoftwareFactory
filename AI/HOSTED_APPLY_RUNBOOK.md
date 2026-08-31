@@ -435,12 +435,12 @@ Every scope in the table below has since been applied — probe run
 lists the remote ledger holding every version from `20260830002000`
 contiguously through `20260831000800` (autopay authorization). The known
 missing middle rows are unchanged by any of this, and `20260814002500`
-remains present-but-unledgered. Three local migrations are NOT yet hosted:
-`20260831001200` (day route, dispatch `scope=day-route` once PR #482 is on
-`main`) and `20260831001300` (portal filed documents,
-`scope=portal-filed-documents` once its PR is on `main`) and
-`20260831001400` (queue-diagnosis visibility,
-`scope=queue-diagnosis-visibility`, same PR). The table stays
+remains present-but-unledgered. All three of this line's migrations are now hosted, each from `main` at
+`1c9ab4b` after PR #482 merged with all four CI jobs green, each having
+run its own postflight: `20260831001200` day route (run 33389230218),
+`20260831001300` portal filed documents (run 33389312549), and
+`20260831001400` queue-diagnosis visibility (run 33389384384), applied
+2026-08-31 11:55-11:58Z in that order. The table stays
 because what each postflight proves is still the reason it exists:
 
 | Scope | Version | What its postflight proves |
