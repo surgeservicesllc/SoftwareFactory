@@ -1,6 +1,6 @@
 # SoftwareFactory — shared working status
 
-## GROK IMMUTABLE PROVIDER ADMISSION RUNTIME VERIFIER CONTAINMENT (2026-08-31 — PICK UP HERE)
+## GROK IMMUTABLE LAUNCH ADMISSION ACCEPTED; NEXT ADMISSION LAYER OPEN (2026-08-31 — PICK UP HERE)
 
 - New forward migration `20260831000100_grok_provider_admission.sql`, canonical
   LF SHA-256 `37809d9b3d9bc760ffbee501fcca383f0daa5665fb047964734603ceed41aef7`,
@@ -26,11 +26,16 @@
   `dpl_Hazwv3nZwHnNer7FAKSfkMqGThUU`. Read-only verify `33369343687` passed
   identity, ledger, catalog, and stopped containment, then failed before the
   rollback canary because `psql -c` did not interpolate its three fixture
-  variables. It skipped apply/reload and made no durable change. Publish the
-  checked-in `psql -f` runtime-input fix, wait for exact-head CI and READY
-  production again, then run only read-only `scope=verify` and signed-in
-  production queue/reload acceptance. Never rerun, repair, replay, or
-  down-migrate the applied migration.
+  variables. It skipped apply/reload and made no durable change. Forward fix
+  `7bdbb5b7a5ef5466f7283ec66d09d3240fbc9311` consumes the checked-in input
+  through `psql -f`. Then-current main
+  `f86062a616c3859d93569fb7edfe15d3025b0c26` passed all four exact CI jobs,
+  READY deployment `dpl_7vXNrvijm5RrSpLLEnVCSxrrvgDc`, and read-only verify
+  `33372115428`. Exact ledger/catalog/ACL/rollback runtime/lint/health/stopped
+  safety passed; apply/reload stayed skipped. Signed-in reload retained the
+  exact project/session, both messages, and truthful blocked/no-plan state
+  without starting a graph, worker, or provider. Never rerun, repair, replay,
+  or down-migrate the applied migration.
 - NEXT CODE SLICE: plan-only research/deploy; immutable admission roster for
   specialist evaluation/decision coverage; wildcard normalization in TS plus
   a new forward RPC; then admission-fence Resume/wake and worker claim.

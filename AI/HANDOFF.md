@@ -245,15 +245,23 @@ verifier-only containment. Hash-fix commit
 READY deployment `dpl_Hazwv3nZwHnNer7FAKSfkMqGThUU` passed. Read-only verify
 `33369343687` passed identity, ledger, catalog, and stopped containment, then
 failed before its rollback canary because `psql -c` does not interpolate
-`:'variable'` input. It skipped apply/reload and made no durable change. The
-next verifier-only commit must feed the checked-in input through `psql -f`,
-wait for exact-head CI/READY, and dispatch only read-only `scope=verify`. Do
-not dispatch `provider-admission` again and do not add an attestation-only
+`:'variable'` input. It skipped apply/reload and made no durable change.
+Forward verifier-only commit
+`7bdbb5b7a5ef5466f7283ec66d09d3240fbc9311` feeds the checked-in input
+through `psql -f` and pins the broken form in the workflow contract.
+Then-current main `f86062a616c3859d93569fb7edfe15d3025b0c26`
+passed exact CI `33370961802`, READY deployment
+`dpl_7vXNrvijm5RrSpLLEnVCSxrrvgDc`, and read-only verify `33372115428`.
+Apply/reload were skipped; ledger/catalog/ACL/rollback runtime/lint/health and
+stopped safety all passed. Signed-in reload retained project
+`51af87ae-27a9-470c-a9a2-73122d01f420`, session
+`569325a5-5cd2-40c3-831e-0d90c89188ab`, and both messages while truthfully
+showing `request saved; no plan recorded` and no graph/worker/provider start.
+Do not dispatch `provider-admission` again and do not add an attestation-only
 migration.
 
-PICK UP HERE: finish the runtime-input verifier containment and record corrected
-read-only verification plus signed-in production acceptance. Then research/deploy need
-honest plan-only handling (or dedicated templates), specialist canonical
+PICK UP HERE: research/deploy need honest plan-only handling (or dedicated
+templates), specialist canonical
 coverage needs a persisted admission roster, and `*` needs identical TS/SQL
 normalization in a new forward migration. Then fence every Resume/wake and
 worker claim on complete current admissions. Until all of that and a real

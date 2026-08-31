@@ -48,7 +48,7 @@ parity suite pins to the database's.
 
 Repository only: the migration is not yet applied to hosted.
 
-## 2026-08-31: Grok immutable provider admission is hosted; runtime verifier containment is in progress (ADR-208)
+## 2026-08-31: Grok immutable launch admission and its runtime verifier are production accepted (ADR-208)
 
 The Grok launch boundary now fails closed unless every executable canonical
 node carries an immutable, safe provider admission. New planner version-2
@@ -90,12 +90,24 @@ Read-only run `33369343687` then passed exact main/CI/Vercel/health, compiler,
 project/file identity, ledger, catalog, and stopped-containment preflight. It
 correctly skipped migration apply and schema reload, but failed before the
 rollback canary because `psql -c` sent its three `:'variable'` tokens to the
-server without client interpolation. The open forward containment moves that
+server without client interpolation. Forward commit
+`7bdbb5b7a5ef5466f7283ec66d09d3240fbc9311` moves that
 fixture input into `.github/grok-release/provider-admission-runtime-input.sql`
 and regression-tests that it is consumed through `psql -f`. The failed run
-made no durable database change. Do not rerun, repair, replay, or down-migrate
-`20260831000100`; publish this verifier-only containment and run only the
-independent read-only `verify` scope.
+made no durable database change.
+
+Then-current main `f86062a616c3859d93569fb7edfe15d3025b0c26`
+retained the workflow, input, test, and provider migration byte-for-byte,
+passed all four jobs in CI `33370961802`, and reached exact READY Vercel
+deployment `dpl_7vXNrvijm5RrSpLLEnVCSxrrvgDc`. Read-only verify run
+`33372115428` passed exact ledger, catalog, ACL, rollback runtime, linked lint,
+health, and stopped-safety postflight; its apply and schema-reload steps were
+skipped. Signed-in production reload retained project
+`51af87ae-27a9-470c-a9a2-73122d01f420` and session
+`569325a5-5cd2-40c3-831e-0d90c89188ab`, reloaded both durable messages, and
+truthfully remained `request saved; no plan recorded` with no graph, worker,
+or provider start. Do not rerun, repair, replay, or down-migrate
+`20260831000100`.
 
 This is launch admission, not worker admission. Existing graph Resume/wake and
 worker-claim paths do not yet require or revalidate an admission row, so
@@ -104,8 +116,9 @@ switch remains ON. Research/deploy prompts currently fail closed at canonical
 admission, specialist-only rosters can lack canonical evaluation/decision
 coverage, and wildcard role normalization still needs a new forward migration.
 Those are explicit follow-ups; **GROK BOT: PRODUCTION READY is not declared.**
-The hosted migration is awaiting the corrected runtime-input verifier release,
-independent read-only verification, and signed-in production acceptance.
+The launch-admission slice and its verifier are accepted. The worker-admission,
+prompt/roster, wildcard-normalization, and real provider-backed E2E slices
+remain open.
 
 ## 2026-08-31: Grok atomic control is production accepted; provider loop remains open (ADR-204)
 

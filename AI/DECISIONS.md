@@ -4943,6 +4943,13 @@ Hosted apply scope `service-integrations`.
   transaction rolled back. The accepted forward containment is to load those
   three safe values through a checked-in `psql -f` input and forbid the broken
   `-c` form in the workflow contract; migration/history remain untouched.
+- **Containment acceptance**: forward commit
+  `7bdbb5b7a5ef5466f7283ec66d09d3240fbc9311` implements that transport fix.
+  Then-current main `f86062a616c3859d93569fb7edfe15d3025b0c26`
+  passed all four exact-head CI jobs, READY production, and read-only verifier
+  `33372115428`; apply/reload were skipped and the exact catalog/ACL/rollback
+  runtime/lint/health/stopped-safety proof passed. Signed-in reload retained
+  the exact durable blocked session without implying or starting execution.
 - **Limit**: launch admission is not claim admission. Existing Resume/wake and
   worker claims are still unable to prove complete current admissions, and
   MODEL execution still uses the worker adapter boundary. Research/deploy,
