@@ -154,4 +154,48 @@ describe("Phase 1C worker dispatch", () => {
       },
     );
   });
+
+  it("carries an exact opaque wake receipt identity without target repository metadata", async () => {
+    vi.stubEnv("SOFTWAREFACTORY_GRAPH_WORKER_ENABLED", "true");
+
+    await dispatchGraphWorker({
+      appId: 4582606,
+      externalInstallationId: 153479019,
+      externalRepositoryId: 1332327462,
+      repositoryFullName: "another-owner/target-project",
+    }, "33333333-3333-4333-8333-333333333333", {
+      wakeIntentId: "44444444-4444-4444-8444-444444444444",
+      controlRevision: 7,
+    });
+
+    expect(githubApiRequest).toHaveBeenCalledWith(
+      "/repos/factory-runtime/SoftwareFactory/dispatches",
+      expect.objectContaining({
+        body: {
+          event_type: GRAPH_DISPATCH_EVENT,
+          client_payload: {
+            graph_id: "33333333-3333-4333-8333-333333333333",
+            wake_intent_id: "44444444-4444-4444-8444-444444444444",
+            control_revision: "7",
+          },
+        },
+      }),
+    );
+  });
+
+  it("rejects a malformed wake receipt before provider access", async () => {
+    vi.stubEnv("SOFTWAREFACTORY_GRAPH_WORKER_ENABLED", "true");
+
+    await expect(dispatchGraphWorker({
+      appId: 4582606,
+      externalInstallationId: 153479019,
+      externalRepositoryId: 1332327462,
+      repositoryFullName: "another-owner/target-project",
+    }, "33333333-3333-4333-8333-333333333333", {
+      wakeIntentId: "not-a-uuid",
+      controlRevision: 0,
+    })).rejects.toThrow("wake receipt identity");
+    expect(createGitHubInstallationToken).not.toHaveBeenCalled();
+    expect(githubApiRequest).not.toHaveBeenCalled();
+  });
 });

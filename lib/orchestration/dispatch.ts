@@ -133,6 +133,13 @@ export type GraphDispatchResult = Readonly<{
   reason: "dispatched" | "worker_disabled";
 }>;
 
+export type GraphWakeReceiptIdentity = Readonly<{
+  wakeIntentId: string;
+  controlRevision: number;
+}>;
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 /**
  * Wakes the analysis graph worker after a graph has been planned for a
  * recorded command. Same contract as the Phase 1C dispatch: the payload is
@@ -142,6 +149,7 @@ export type GraphDispatchResult = Readonly<{
 export async function dispatchGraphWorker(
   target: Phase1CDispatchTarget,
   graphId: string,
+  receipt?: GraphWakeReceiptIdentity,
 ): Promise<GraphDispatchResult> {
   // Dispatch is itself an automatic action. Keep the application and the
   // workflow behind the same exact, fail-closed switch so a recorded graph is
@@ -150,6 +158,22 @@ export async function dispatchGraphWorker(
     return { dispatched: false, reason: "worker_disabled" };
   }
   assertProjectTarget(target);
-  await sendWorkerDispatch(GRAPH_DISPATCH_EVENT, { graph_id: graphId });
+  if (!UUID_PATTERN.test(graphId)) {
+    throw new Error("The target graph identity is invalid.");
+  }
+  if (receipt && (
+    !UUID_PATTERN.test(receipt.wakeIntentId)
+    || !Number.isSafeInteger(receipt.controlRevision)
+    || receipt.controlRevision <= 0
+  )) {
+    throw new Error("The graph wake receipt identity is invalid.");
+  }
+  await sendWorkerDispatch(GRAPH_DISPATCH_EVENT, {
+    graph_id: graphId,
+    ...(receipt ? {
+      wake_intent_id: receipt.wakeIntentId,
+      control_revision: String(receipt.controlRevision),
+    } : {}),
+  });
   return { dispatched: true, reason: "dispatched" };
 }
