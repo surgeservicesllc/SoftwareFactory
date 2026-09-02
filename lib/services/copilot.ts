@@ -42,6 +42,12 @@ export const COPILOT_SKILLS = [
     example: "How much have we invoiced this month?",
     keywords: ["revenue", "invoiced this month", "billed", "billing total", "how much", "month so far"],
   },
+  {
+    id: "followups",
+    label: "What to do next",
+    example: "What should I follow up on today?",
+    keywords: ["follow up", "follow-up", "followup", "to do", "todo", "my plate", "next step", "what should i"],
+  },
 ] as const;
 
 export type CopilotSkillId = (typeof COPILOT_SKILLS)[number]["id"];
@@ -122,6 +128,27 @@ export function composeRevenueAnswer(facts: {
     `${facts.invoiced} invoice${facts.invoiced === 1 ? "" : "s"} raised in ${facts.month} `
     + `for ${dollars(facts.totalCents)}; ${dollars(facts.collectedCents)} of that is already collected.`
   );
+}
+
+export function composeFollowupsAnswer(facts: {
+  overdue: number;
+  dueToday: number;
+  suggestions: ReadonlyArray<{ title: string; reason: string }>;
+  suggestionCount: number;
+}): string {
+  const owed =
+    facts.overdue === 0 && facts.dueToday === 0
+      ? "No open follow-ups are due today or overdue."
+      : `${facts.overdue} overdue and ${facts.dueToday} due today among your open follow-ups.`;
+  if (facts.suggestionCount === 0) {
+    return `${owed} Your records suggest nothing further right now.`;
+  }
+  const top = facts.suggestions
+    .slice(0, 3)
+    .map((suggestion) => `${suggestion.title} (${suggestion.reason})`)
+    .join("; ");
+  const more = facts.suggestionCount > 3 ? ` and ${facts.suggestionCount - 3} more on the Follow-ups page` : "";
+  return `${owed} Your records suggest: ${top}${more}.`;
 }
 
 /** The refusal that teaches: what this copilot can actually answer. */

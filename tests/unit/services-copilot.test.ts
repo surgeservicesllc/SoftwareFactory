@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   COPILOT_SKILLS,
   composeAutopayAnswer,
+  composeFollowupsAnswer,
   composeOverdueAnswer,
   composeRevenueAnswer,
   composeRoutesAnswer,
@@ -71,5 +72,31 @@ describe("the composed answers carry real figures", () => {
     expect(
       composeRevenueAnswer({ month: "August 2026", invoiced: 5, totalCents: 500_000, collectedCents: 200_000 }),
     ).toBe("5 invoices raised in August 2026 for $5,000.00; $2,000.00 of that is already collected.");
+  });
+});
+
+describe("the follow-ups answer", () => {
+  it("names what is owed and the top three suggestions with their reasons", () => {
+    const answer = composeFollowupsAnswer({
+      overdue: 2,
+      dueToday: 1,
+      suggestions: [
+        { title: "Collect invoice INV-7", reason: "12 days overdue; no collection action recorded in the last 7 days." },
+        { title: "Reach out to Harborview Foods", reason: "Lead with no recorded activity in 21 days." },
+        { title: "Renew licence for Ada", reason: "Licence PCO-1 expires on 2026-09-20." },
+        { title: "Chase estimate EST-3", reason: "Sent 11 days ago with no decision recorded." },
+      ],
+      suggestionCount: 4,
+    });
+    expect(answer).toContain("2 overdue and 1 due today");
+    expect(answer).toContain("Collect invoice INV-7 (12 days overdue");
+    expect(answer).toContain("Renew licence for Ada");
+    expect(answer).not.toContain("Chase estimate EST-3");
+    expect(answer).toContain("1 more on the Follow-ups page");
+  });
+
+  it("says plainly when nothing is owed and nothing is suggested", () => {
+    expect(composeFollowupsAnswer({ overdue: 0, dueToday: 0, suggestions: [], suggestionCount: 0 }))
+      .toBe("No open follow-ups are due today or overdue. Your records suggest nothing further right now.");
   });
 });

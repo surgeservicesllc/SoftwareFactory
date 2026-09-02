@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   COPILOT_SKILLS,
   composeAutopayAnswer,
+  composeFollowupsAnswer,
   composeOverdueAnswer,
   composeRevenueAnswer,
   composeRoutesAnswer,
@@ -59,6 +60,32 @@ export async function POST(request: Request) {
 
     const today = new Date();
     const todayIso = isoDay(today);
+
+    if (skill === "followups") {
+      const [openRead, suggestRead] = await Promise.all([
+        client
+          .from("crm_tasks")
+          .select("due_on")
+          .eq("organization_id", organizationId)
+          .eq("status", "open")
+          .lte("due_on", todayIso)
+          .limit(2000),
+        client.rpc("crm_suggest_followups", { p_organization: organizationId }),
+      ]);
+      if (openRead.error) return databaseErrorResponse(openRead.error);
+      if (suggestRead.error) return databaseErrorResponse(suggestRead.error);
+      const due = (openRead.data ?? []) as Array<{ due_on: string }>;
+      const suggestions = (suggestRead.data ?? []) as Array<{ title: string; reason: string }>;
+      return jsonNoStore({
+        skill,
+        answer: composeFollowupsAnswer({
+          overdue: due.filter((task) => task.due_on < todayIso).length,
+          dueToday: due.filter((task) => task.due_on === todayIso).length,
+          suggestions,
+          suggestionCount: suggestions.length,
+        }),
+      });
+    }
 
     if (skill === "overdue_invoices") {
       const { data, error } = await client

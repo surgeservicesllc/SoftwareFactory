@@ -563,6 +563,19 @@ const SPECS: Spec[] = [
     ],
   },
   {
+    table: "crm_tasks",
+    optional: [
+      "account_id", "opportunity_id", "assignee_employee_id", "detail", "suggestion_key",
+      "reason", "done_at", "cancelled_at",
+    ],
+    enumColumn: "status",
+    parents: [
+      { column: "account_id", table: "crm_accounts" },
+      { column: "opportunity_id", table: "crm_opportunities" },
+      { column: "assignee_employee_id", table: "crm_employees" },
+    ],
+  },
+  {
     // `settled_at` and `processor_reference` are absent on purpose, exactly
     // as ADR-217's dispatch columns are: only a real settlement through a
     // connected processor writes them, and a seeded value in either would
@@ -597,6 +610,10 @@ export const SEED_SPEC_TABLES: readonly string[] = SPECS.map((spec) => spec.tabl
  * skipping work: each says why 250 rows of it would be fiction.
  */
 export const DELIBERATELY_UNSEEDED: Readonly<Record<string, string>> = {
+  crm_followup_dismissals:
+    "A dismissal is one person's decision about one computed suggestion "
+    + "(ADR-228). Seeding it would fabricate judgement nobody exercised, "
+    + "and would hide real suggestions from the demo book for thirty days.",
   crm_service_integrations:
     "A registry of at most one row per provider per workspace (ADR-207). "
     + "Eight providers cannot honestly become 250 rows, and the rows it does "

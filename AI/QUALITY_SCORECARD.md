@@ -2,6 +2,20 @@
 
 Last reviewed: 2026-08-31
 
+**Addendum, 2026-09-02 latest+49 - follow-ups and the suggested next step
+(ADR-228):** services-followups.behavior 9 (RLS forced and exact grants on
+both tables; all seven rules with their computed reasons and high-first
+ordering; a rival organization sees nothing; one open task per key with
+the second accept refused by index and the key returning once the task
+closes; moments stamped by the row and any asserted moment ignored; the
+`task` history line on completion ending the stale-lead rule; a dated
+dismissal; a collection action silencing the quiet-invoice rule; both
+origin/key contradictions refused). services-followups-panel 5 (buckets,
+accept posts the key only, done patches status only, manual create, a 409
+surfaced verbatim). services-copilot +2 (the follow-ups composer). The
+seed roster, scope replay, migration-version, path-reference and
+byte-ceiling guards all pass with the new table, scope and postflight.
+
 **Addendum, 2026-08-31 latest+48 - the close-out tail:**
 budget-transactions-editing 5 (PATCH never carries the stated balance;
 delete asks first; breaks rendered with stated vs computed; transfer

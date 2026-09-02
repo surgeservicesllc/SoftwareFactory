@@ -5925,3 +5925,50 @@ does not apply or replay a migration, reload PostgREST, change ledger/history,
 alter hosted catalog or ACLs, enable a worker, or change autonomy and kill
 switch state. After exact-head CI and READY deployment identity, the only
 permitted database action is a fresh read-only `scope=verify` at exact main.
+
+## ADR-228 - A suggestion is a fact with a reason; it becomes a task only when somebody accepts it
+
+The two CRMs this product is measured against fail the same way from
+opposite ends: PestPac reviewers say it "doesn't lead you to the next step"
+and takes "50 steps to get something done"; HubSpot reviewers say its
+next-best-action and lead scoring are opaque, "finicky", and locked behind
+the expensive tier. The honest version of an AI-first answer in this phase
+is not a model guessing what to do — it is the office's own morning
+questions, answered from the rows as they are right now, with the fact that
+raised each one printed beside it.
+
+**Seven rules, read live, never stored.** `crm_suggest_followups(org)` is a
+SECURITY INVOKER SQL function: a stale lead (no recorded activity in 14
+days), an open deal past its expected close, an estimate sent ten days ago
+with no decision, a portal request nobody acknowledged in two days, an
+overdue invoice with no collection action in seven days, a licence expiring
+within 30 days, a high-severity sighting three days without correction. A
+stored suggestion is stale the moment the invoice is paid, and "the system
+told me to call them" about a paid invoice loses a customer — so nothing is
+stored, and INVOKER means the caller only ever sees suggestions about rows
+they could open.
+
+**A suggestion is not a task.** `crm_tasks` holds what somebody agreed to
+do; a suggestion enters it only through acceptance, and the accepted row
+keeps the rule's KEY and REASON so the transcript of why it exists survives
+the click. The route recomputes on accept and takes title and reason from
+the database's own result, never from the request body — a task can only
+claim a reason the database actually computed, and a key that no longer
+fires is a 409. One open task per key is a partial unique index, so two
+tabs accepting the same suggestion produce one task, not two people chasing
+one customer. Declining is `crm_followup_dismissals`, dated: a lead nobody
+wanted in March is a lead again in April.
+
+**The row stamps its own moments.** `done_at` and `cancelled_at` are set by
+a BEFORE trigger from the status alone; a caller asserting a moment is
+overwritten. Finishing a follow-up about an account writes a `task` line on
+that account's history through the same definer pattern as status changes,
+which is also what ends the stale-lead suggestion: activity was recorded.
+No DELETE grant on tasks — a follow-up that was agreed and dropped is a fact
+about the relationship; cancelling is a status.
+
+The copilot gains a sixth skill ("What should I follow up on today?") that
+composes the same figures. The competitor rows for tasks, follow-up
+tracking, and actionable next steps move to HAVE; the teardown in
+`AI/CRM_COMPETITIVE_TEARDOWN.md` records which complaints this closes and
+which it only starts on.
