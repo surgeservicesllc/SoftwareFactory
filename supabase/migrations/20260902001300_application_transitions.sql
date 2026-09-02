@@ -113,6 +113,12 @@ end;
 $function$;
 
 drop trigger if exists job_seeker_applications_record_transition on public.job_seeker_applications;
+-- A trigger function is fired by the table, never called; nobody needs
+-- EXECUTE on it, and a definer function every role may call is one more
+-- privileged entry point. The security invariants pin the callable set.
+revoke all on function public.job_seeker_record_application_transition()
+  from public, anon, authenticated, service_role;
+
 create trigger job_seeker_applications_record_transition
   after insert or update on public.job_seeker_applications
   for each row execute function public.job_seeker_record_application_transition();
