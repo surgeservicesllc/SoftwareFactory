@@ -91,11 +91,12 @@ anything on a timer stays RED and owner-gated.
   a 65-table JSON export through the caller's own RLS. /Services/data.
   20260902000300; hosted apply: scope=data-you-own after merge. Closes
   HubSpot 7/8, PestPac 9/17, PestBoss 21.
-- [ ] Workflow headroom, BEFORE increment 29's scope: the apply workflow is
-  at 454,449 bytes against the 455,000 guard. Extract something in its own
-  change first — the probe step still carries four heredocs (25,918
-  bytes), or one of the three mutating giants named above — with the
-  verbatim+re-point discipline, never in the same change as a new scope.
+- [x] Workflow headroom, before increment 29's scope: the probe step's four
+  remaining heredocs (audit-write, remove-account, register-bot,
+  agent-assignment) are files under `.github/hosted-apply/probe/` (44 now,
+  each executed and the count pinned by the replay test), re-pointed with
+  `-f`. The workflow is 446,039 bytes and the guard is ratcheted to
+  450,000 so the recovered room is kept, not spent by accident.
 - [ ] Increment 29 (job profitability): technician cost rates and lot unit
   costs; margin per visit, per plan, per branch, every input printed
   beside the figure. Closes PestPac 8.
