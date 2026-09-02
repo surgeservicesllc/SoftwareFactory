@@ -399,8 +399,9 @@ describe("model polish on the application's documents (ADR-248)", () => {
     }));
     render(<JobSeekerApplicationsPanel />);
     fireEvent.click(await screen.findByText(/generated documents/i));
+    // The lane renders before the documents answer; wait for the answer, not the container.
     const lane = await screen.findByTestId("polish-lane");
-    expect(lane).toHaveTextContent("Not Connected — ANTHROPIC_API_KEY is not set on the server.");
+    await waitFor(() => expect(lane).toHaveTextContent("Not Connected — ANTHROPIC_API_KEY is not set on the server."));
     expect(screen.queryByRole("button", { name: /polish the resume/i })).not.toBeInTheDocument();
     expect(screen.queryByTestId("polished-badge")).not.toBeInTheDocument();
   });
