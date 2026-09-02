@@ -3,7 +3,7 @@ with expected_functions(signature, source_md5, contract_md5, volatility, execute
   ('public.ai_account_bot_credential_ref(public.bot_provider,text)', 'afae78ba3750e372829dd50e1b48c5cb', '93243ca92614a4c2cd42045536de34cf', 'i', 'none'),
   ('public.assign_bot(uuid,uuid,uuid,uuid)', '80b547b7b722c57a9d2a262b67698be8', 'f6f66a20b1848121d45f08ffe716466e', 'v', 'none'),
   ('public.assign_bots_to_project(uuid,uuid,jsonb)', '23b260247a4be4f4a8d8aa2497e1b6a2', '509ff97d6dd6ccecfc6a0b559f6402ab', 'v', 'none'),
-  ('public.assign_bots_to_project_checked(uuid,uuid,jsonb)', '5ff06f065e241ad2baf5d7d5f576743a', '509ff97d6dd6ccecfc6a0b559f6402ab', 'v', 'authenticated'),
+  ('public.assign_bots_to_project_checked(uuid,uuid,jsonb)', '0ad5e0fc065a266e2c9a4ccc3734570f', '509ff97d6dd6ccecfc6a0b559f6402ab', 'v', 'authenticated'),
   ('public.enforce_bot_ai_account_binding()', '885b6c63c7f0b761d3ae99bdb416d6f4', 'c76d49585995381de4cd050f453488a7', 'v', 'none'),
   ('public.ensure_ai_account_bot(uuid,uuid,public.bot_provider,text,text,boolean,text,text)', '3140ecd6b0d850732f96bdc5096b97e3', '3e616013f7f1aa22bc5b06c8babb29a6', 'v', 'authenticated'),
   ('public.increment_bot_assignment_revision()', '90320b19a6b41eb32b084a3b0db8ef21', 'c76d49585995381de4cd050f453488a7', 'v', 'none'),
@@ -11,11 +11,11 @@ with expected_functions(signature, source_md5, contract_md5, volatility, execute
   ('public.record_bot_readiness(uuid,uuid,public.bot_readiness,text)', 'daecfeb964d863373a2072cc62e1033e', 'f399bc01e734509765a9955d6ea12d3f', 'v', 'none'),
   ('public.record_bot_readiness_preserving_disabled(uuid,uuid,uuid,bigint,uuid,public.bot_provider,text,text,text,public.bot_readiness,text)', '1132e6e0bed1697a7ccaa82006db35f5', '0fab1985ab6e7ca13e0c38d6302536f0', 'v', 'service_role'),
   ('public.set_bot_assignment_execution(uuid,uuid,text,text)', '55ec15132d903ace0300f2cbe32db6bd', '09868603f1251c9b3c0e714585c470a6', 'v', 'none'),
-  ('public.set_bot_assignment_execution_checked(uuid,uuid,uuid,bigint,text,text)', 'd0c11a5c1e57878c9b1b5d8753ecb1fd', '47ed878441dae8b7a4e4c5292e1260ae', 'v', 'authenticated'),
+  ('public.set_bot_assignment_execution_checked(uuid,uuid,uuid,bigint,text,text)', 'f9a381c4fab5274262e3a79a49c46c17', '47ed878441dae8b7a4e4c5292e1260ae', 'v', 'authenticated'),
   ('public.update_bot_assignment(uuid,uuid,public.bot_assignment_status)', '0aaec47295f86adbeec784d288f24400', '15df08b5f10d11f2eb75939bd24ff471', 'v', 'none'),
-  ('public.update_bot_assignment_checked(uuid,uuid,uuid,bigint,public.bot_assignment_status)', '5323b0adb327f3d3a19c9bdca220922e', 'caa9e8093054cac7ebb3571ee2a5ec98', 'v', 'authenticated'),
+  ('public.update_bot_assignment_checked(uuid,uuid,uuid,bigint,public.bot_assignment_status)', 'e0fb88d49063d1d5665b10d610c6a288', 'caa9e8093054cac7ebb3571ee2a5ec98', 'v', 'authenticated'),
   ('public.update_bot_assignment_configuration(uuid,uuid,jsonb,uuid,public.bot_assignment_status)', '7f51999309b645832d471ccebea94a9c', '25a69b2727d3e8c038411fcdfa7f9ae3', 'v', 'none'),
-  ('public.update_bot_assignment_configuration_checked(uuid,uuid,uuid,bigint,jsonb,uuid,public.bot_assignment_status)', 'eabefae63edf3d957ed8a0ad5e10d1bd', 'a40abf44b52cd3bcaf55f6bad964626b', 'v', 'authenticated')
+  ('public.update_bot_assignment_configuration_checked(uuid,uuid,uuid,bigint,jsonb,uuid,public.bot_assignment_status)', '34edb5b2b6c827c5a8eb63f6b282bac2', 'a40abf44b52cd3bcaf55f6bad964626b', 'v', 'authenticated')
 ), function_state as (
   select expected.*,
          routine.oid,

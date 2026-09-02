@@ -472,10 +472,13 @@ the one value the file prints: `bot-account-binding-expand-verified.sql`
 `scope-all-protected-catalog-ready.sql` (the broad push's protected-catalog
 gate). `tests/integration/hosted-guard-captures.behavior.test.ts` executes
 each against the chain replayed to the state its step expects and pins
-what it prints. As of ADR-235 the broad gate prints `f` on the chain and on
-hosted, because it still pins the four `_checked` mutators' sources from
-before `20260822000900` rewrote them; the repair is a recorded follow-up
-and `scope=all` refuses until it lands.
+what it prints. Between `20260822000900` and ADR-236 the broad gate
+printed `f` on the chain and on hosted, because it still pinned the four
+`_checked` mutators' sources from before that repair rewrote them (found
+by ADR-235's execution test); the four pins now name the post-repair
+sources and the gate prints `t` against the whole chain. If it ever prints
+`f` again, something in the protected catalog drifted — the clause is not
+the thing to change.
 
 ## Historical release tail before ADR-115 — 2026-08-22 (superseded)
 

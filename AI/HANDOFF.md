@@ -2,7 +2,20 @@
 
 Last updated: 2026-09-02
 
-## Newest (2026-09-02, latest+57): guard captures (ADR-235) — the extraction, and what it found
+## Newest (2026-09-02, latest+58): scope=all's gate repaired (ADR-236)
+
+THE GATE SAYS T AGAIN. The four `_checked` source pins in
+`guard/scope-all-protected-catalog-ready.sql` name the post-20260822000900
+sources; `hosted-guard-captures.behavior` proves the whole file prints `t`
+against the whole chain. Nothing was loosened: sixteen functions, their
+contract hashes, ACL shapes, revision columns and triggers are all still
+required exact. If the test ever prints `f` again, something in that
+catalog drifted — find what, do not touch the clause.
+
+A BROAD PUSH IS STILL THE OWNER'S. scope=all being able to say yes changes
+nothing about who dispatches it; every increment keeps its own scope.
+
+## Older (2026-09-02, latest+57): guard captures (ADR-235) — the extraction, and what it found
 
 WORKFLOW: 409,854 of 420,000 bytes. The three captured catalog checks
 (`VERIFIED=` in bot-account-binding, `CATALOG_READY=` in the retired

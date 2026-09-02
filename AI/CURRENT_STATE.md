@@ -1,5 +1,18 @@
 # Current state
 
+## 2026-09-02: scope=all's gate repaired (ADR-236)
+
+The broad push's protected-catalog gate
+(`.github/hosted-apply/guard/scope-all-protected-catalog-ready.sql`) names
+the four `_checked` mutators' sources as `20260822000900` left them — the
+values the record-only chain's verification already pinned beside the old
+ones — instead of as `20260822000200` wrote them. Nothing else in the gate
+changed. `hosted-guard-captures.behavior` 4: the broad gate now prints `t`
+against the whole chain (was `f` for exactly those four hashes, ADR-235);
+the EXPAND-state and CONTRACT-preflight expectations are unchanged. On
+hosted, `scope=all` can pass its catalog gate again; a broad push remains
+an owner-dispatched action and no scope is in this change.
+
 ## 2026-09-02: Guard captures (ADR-235)
 
 The apply workflow's three largest inline SQL blocks — the captured

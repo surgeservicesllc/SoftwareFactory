@@ -6313,3 +6313,32 @@ its own follow-up, after which the expectation flips to `t` and the
 decomposition goes. The retired CONTRACT step stays retired; its
 preflight moved because it was the second-largest block, not because it
 will run.
+
+## ADR-236 - scope=all's protected-catalog gate names the sources the chain actually produces
+
+ADR-235's execution test found the broad push's protected-catalog gate
+printing `f` against the whole migration chain, and on the hosted
+database, for one reason: it pinned the four `_checked` mutators'
+sources as `20260822000200` wrote them, while `20260822000900` — the
+hosted plpgsql catalog repair the same gate requires in the ledger —
+rewrote all four. Every other predicate held. The stale pin read as a
+policy refusal ("catalog is not exact"), which is the wrong sentence: the
+catalog was exactly what the chain produces, and the gate was out of date.
+
+**The four pins now name the post-repair sources**, the same values the
+record-only chain's verification has pinned beside the old ones since the
+repair shipped (`0ad5e0fc…`, `f9a381c4…`, `e0fb88d4…`, `34edb5b2…`).
+Nothing else in the file changes: the contract hashes, volatility, owner,
+`search_path`, the exact ACL shape per function, the revision columns and
+the triggers are all still required to be exact. The gate is repaired to
+the truth, not loosened; a gate that "expects" `f` was never an option.
+
+**The test flips to `t` and loses its decomposition.** The clause-by-clause
+reading existed to prove the refusal had exactly one cause; with the cause
+gone, the whole file printing `t` against the whole chain is the assertion,
+and a future drift in any of the sixteen functions fails it outright.
+
+**A broad push is still an owner action.** Repairing the gate makes
+`scope=all` able to say yes again; it does not dispatch anything, and the
+policy that a broad push is dispatched by the owner, with every protected
+version already recorded separately, is unchanged.
