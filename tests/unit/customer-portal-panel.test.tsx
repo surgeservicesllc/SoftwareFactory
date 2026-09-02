@@ -88,7 +88,8 @@ describe("the customer's own side", () => {
     const user = userEvent.setup();
     render(<CustomerPortalPanel />);
     const tab = await screen.findByRole("tab", { name: /Messages/ });
-    expect(tab).toHaveTextContent("1");
+    // The unread count arrives with the thread, after the first paint.
+    await waitFor(() => expect(tab).toHaveTextContent("1"));
     await user.click(tab);
     const thread = await screen.findByTestId("customer-portal-messages");
     expect(within(thread).getByText("Noted, thank you.")).toBeInTheDocument();
