@@ -118,7 +118,7 @@ listed so the count stays honest, not built.
 | 16 | Premium: Top Applicant badge, who viewed, applicant insights | **N/A by design** — every insight this product has is computed and free; nothing is paywalled per feature |
 | 17 | Premium: AI interview prep | **BUILD 6** prep sheet from your own facts; **GATED** model-generated questions |
 | 18 | Premium: AI resume / cover-letter writing | **HAVE** fact-only builders (ADR-096); **BUILD 8** model polish with the non-fabrication check, **GATED** on a provider credential |
-| 19 | Apply on company site (external ATS hand-off) | **HAVE** link-out with viewed mark; **BUILD 4** application kit for the re-entry every ATS demands |
+| 19 | Apply on company site (external ATS hand-off) | **HAVE** link-out with viewed mark; **HAVE** (ADR-244) application kit for the re-entry every ATS demands |
 | 20 | Job collections / curated lists | **HAVE** saved searches (ADR-163 addendum) |
 | 21 | Commute / distance filter | **HAVE** radius with the resolved centre printed (ADR-168/170) |
 | 22 | Verified employer / hiring badges | **N/A** — cannot be verified from here; **HAVE** (ADR-242) red flags and posting completeness are the computed substitutes |
@@ -149,7 +149,7 @@ listed so the count stays honest, not built.
 | 17 | Indeed's AI resume review | **HAVE** resume review (pattern always, model when a credential exists) |
 | 18 | Email digests | **HAVE** alert email with facts only, never-repeat |
 | 19 | Application status ("Applied", "Viewed by employer") | **HAVE** eleven stages you record; **HAVE** (ADR-243) transitions ledger with dates |
-| 20 | Screening questions on apply | **N/A** (employer side); **BUILD 4** requirements check and the answers you keep ready |
+| 20 | Screening questions on apply | **N/A** (employer side); **HAVE** (ADR-244) requirements check and the answers you keep ready |
 | 21 | Indeed postings inside the search | **GATED** (JSearch, ADR-184); deep link-out today (ADR-169) |
 | 22 | Profile and job preferences | **HAVE** |
 | 23 | Mobile app | **HAVE** responsive |
@@ -199,7 +199,7 @@ listed so the count stays honest, not built.
 | 3 | Reposted jobs shown as "new" | reviewers, *recurring* | Re-datings counted per URL; the earliest date ever seen wins the verdict | **BUILD 1** |
 | 4 | "Actively reviewing" and "100+ applicants" signals mean nothing | reviewers | No theatre: the only signals are computed ones (match, freshness, red flags) | **HAVE** (by design) |
 | 5 | "Jobs for you" recommends junk | reviewers, *recurring* | Deterministic seven-component match with reasons and gaps; minimum-score filter | **HAVE** |
-| 6 | Easy Apply, then re-enter everything in Workday | reviewers, *recurring* | An application kit: every field an ATS asks, copy-ready from your profile, plus the screening answers you keep | **BUILD 4** |
+| 6 | Easy Apply, then re-enter everything in Workday | reviewers, *recurring* | An application kit: every field an ATS asks, copy-ready from your profile, plus the screening answers you keep | **HAVE** (ADR-244) |
 | 7 | Premium paywalls the useful signals (Top Applicant, who viewed); 80% say it was not worth it | reviewers, comparisons | Every computed insight is free; nothing is gated per feature | **HAVE** (by design) |
 | 8 | Filters lie: "remote" returns on-site; date filter ignores reposts | reviewers | Unstated facts kept and labeled, never guessed; radius prints its centre; **HAVE** (ADR-242) work model derived from the text when the board states none, labeled derived | **HAVE** / **HAVE** (ADR-242) |
 | 9 | Salary hidden; LinkedIn "estimates" are wrong | reviewers, surveys (72% skip unlisted-salary jobs) | Salary as data or "unstated"; require-salary filter; parsed figure with its period printed | **HAVE** / **HAVE** (ADR-242) |
@@ -235,7 +235,7 @@ listed so the count stays honest, not built.
 | 9 | Support answers with automated replies | reviewers | Every refusal in this product carries its reason in words | **HAVE** (by design) |
 | 10 | Assessments and skills tests forced on applicants | reviewers | None | **N/A** |
 | 11 | Indeed Resume mangles formatting | reviewers | Fact-only builders produce plain, ATS-safe text; versions kept | **HAVE** |
-| 12 | Knockout screening questions auto-reject | ATS guides, *recurring* | Requirements check: "must have" lines from the posting checked against your recorded facts, each with a verdict | **BUILD 4** |
+| 12 | Knockout screening questions auto-reject | ATS guides, *recurring* | Requirements check: "must have" lines from the posting checked against your recorded facts, each with a verdict | **HAVE** (ADR-244) |
 | 13 | Status is only "Applied"/"Viewed" | reviewers | Eleven stages; transitions ledger with dates | **HAVE** / **HAVE** (ADR-243) |
 | 14 | The same job listed several times | reviewers | Dedupe | **HAVE** |
 | 15 | Staffing-agency and commission-only spam | reviewers | Agency-likely label; exclude-company chips | **HAVE** (ADR-242) / **HAVE** |
@@ -293,7 +293,7 @@ apply scope with a postflight. Status is updated here as each lands.
 | 1 | ADR-241 | **Freshness**: a posting sightings ledger (public facts, one row per URL, written through one definer boundary) and a verdict per card — fresh / aging / likely stale / unknown — with the numbers printed; hide-them is the person's choice | **SHIPPED** |
 | 2 | ADR-242 | **Red flags and completeness**: scam markers with the matched phrase, agency-likely from the company name, posting completeness, sponsorship stated/not, work model derived from text, parsed salary with its period; all as derived facets through search, saved searches and alerts | **SHIPPED** |
 | 3 | ADR-243 | **Silence measured**: an append-only application transitions ledger, days-silent against your own median days-to-reply by source, a suggested follow-up date with the arithmetic, closure reasons, and a funnel of where your search stalls | **SHIPPED** |
-| 4 | ADR-244 | **Application kit**: the screening answers you keep (authorization, sponsorship, relocation, start date, notice, expectations), copy-ready ATS blocks from your profile, and a requirements check per posting | planned |
+| 4 | ADR-244 | **Application kit**: the screening answers you keep (authorization, sponsorship, relocation, start date, notice, expectations), copy-ready ATS blocks from your profile, and a requirements check per posting | **SHIPPED** |
 | 5 | ADR-245 | **What keeps costing you**: the skills gap across your target and saved jobs ranked by frequency, and your own history with each company on every result | planned |
 | 6 | ADR-246 | **Interview prep sheet** composed from your own facts; model-generated questions only when a provider exists, labeled | planned |
 | 7 | ADR-247 | **Your data is yours**: an export of every table the Job Seeker writes about you, under your own RLS | planned |

@@ -217,10 +217,10 @@ describe("Phase 1E production operations behavior", () => {
     // world-class build-out added crm_tasks and crm_followup_dismissals
     // (ADR-228), crm_scoring_rules (ADR-229) and crm_imports (ADR-230): 223.
     // 230 since the JobSearch build-out added the posting sightings ledger
-    // (ADR-241) and 231 with the application transitions ledger (ADR-243).
-    // Each is RLS-enabled and forced, which the filter on the next line is
-    // what actually proves.
-    expect(rlsRows).toHaveLength(231);
+    // (ADR-241), 231 with the application transitions ledger (ADR-243) and
+    // 232 with the screening answers (ADR-244). Each is RLS-enabled and
+    // forced, which the filter on the next line is what actually proves.
+    expect(rlsRows).toHaveLength(232);
     expect(rlsRows.filter((row) => !row.relrowsecurity || !row.relforcerowsecurity)).toEqual([]);
 
     const { rows: grantRows } = await db.query<{ table_name: string }>(

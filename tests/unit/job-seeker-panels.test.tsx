@@ -310,6 +310,37 @@ describe("JobSeekerApplicationsPanel", () => {
     expect(patches[1]).toEqual({ action: "close", closedReason: "no_response" });
   });
 
+  it("checks the posting's requirements on demand, each line with its verdict and reason (ADR-244)", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/job-seeker/jobs/j1/requirements") {
+        return jsonResponse({
+          checks: [
+            { line: "5+ years of experience with TypeScript required.", verdict: "met", reason: "Asks for 5+ years; your recorded history (10 years from its dates) covers it." },
+            { line: "Must be authorized to work in the US without sponsorship.", verdict: "unknown", reason: "Answer the work-authorization and sponsorship screening questions to check this line." },
+          ],
+          counts: { met: 1, unmet: 0, unknown: 1 },
+          basis: "Each line is the posting's own sentence, checked against your recorded profile and screening answers; nothing is assumed met.",
+        });
+      }
+      if (url === "/api/job-seeker/jobs") return jsonResponse({ jobs: [SCORED_JOB] });
+      if (url === "/api/job-seeker/import-sources") return jsonResponse({ sources: [] });
+      throw new Error(`Unexpected request: ${url}`);
+    }));
+
+    render(<JobSeekerApplicationsPanel />);
+    await screen.findByText("Awaiting your review");
+    const details = screen.getByTestId("requirements-check");
+    fireEvent(details, new Event("toggle", { bubbles: false }));
+    (details as HTMLDetailsElement).open = true;
+    fireEvent(details, new Event("toggle"));
+
+    expect(await screen.findByText("1 met · 0 not met · 1 unknown.", { exact: false })).toBeInTheDocument();
+    expect(screen.getByText("Met")).toBeInTheDocument();
+    expect(screen.getByText("Unknown")).toBeInTheDocument();
+    expect(screen.getByText(/Answer the work-authorization and sponsorship screening questions/)).toBeInTheDocument();
+  });
+
   it("prepares an application: generates fact-only documents and shows them versioned", async () => {
     const posts: string[] = [];
     // The real route advances the stage to READY_FOR_REVIEW; the stub

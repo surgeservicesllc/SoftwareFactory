@@ -2,6 +2,27 @@
 
 Last reviewed: 2026-09-02
 
+**Addendum, 2026-09-02 latest+66 - JobSearch build-out, increment 4: the application kit (ADR-244):**
+job-seeker-application-kit 11 (blocks verbatim and in order with the
+answered questions, nothing from nothing; requirement sentences kept
+once and bounded; the experience span from dates; years from the
+answer before the dates and unknown without either; authorization and
+sponsorship from the answers only, an offered sponsorship met; degree,
+certification, clearance and language verdicts; a skills line met by
+the profile, unmet when unrecorded, unknown with no skills; unknown
+keys dropped). job-seeker-screening-answers.behavior 2 (the fixed
+vocabulary, the empty answer, the upsert in place; the other member
+blind and refused, service_role holding nothing, RLS forced).
+application-kit routes 6 (blocks + answers composed; no profile said;
+upsert and delete with the conflict key; unknown key and
+credential-shaped answer refused; the check's verdicts and basis; 404
+for another person's job), application-kit panel 2 (verbatim block,
+Copy to the clipboard, one PUT, the profile-first empty state), panels
++1 (the requirements check on open). Navigation test updated for the
+one destination beyond the design. Grants roster and RLS census 232;
+replay executes the new postflight; runbook 234; workflow 416,142 of
+420,000; tsc, eslint and the production build clean.
+
 **Addendum, 2026-09-02 latest+65 - JobSearch build-out, increment 3: silence measured (ADR-243):**
 job-seeker-transitions.behavior 4 (one row per stage or approval
 change and none for a note edit, exact from/to pairs; a recruiter

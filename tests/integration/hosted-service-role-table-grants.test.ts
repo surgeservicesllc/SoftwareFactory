@@ -187,6 +187,7 @@ const publicTables = [
   "job_seeker_result_marks",
   "job_seeker_resume_extractions",
   "job_seeker_saved_searches",
+  "job_seeker_screening_answers",
   "job_seeker_search_alerts",
   "job_seeker_search_events",
   "job_seeker_uploads",

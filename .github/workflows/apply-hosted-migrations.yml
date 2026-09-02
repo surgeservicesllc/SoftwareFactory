@@ -100,6 +100,7 @@ on:
           - conversation-routing
           - posting-sightings
           - application-transitions
+          - application-kit
           - probe
 permissions:
   actions: read
@@ -1922,6 +1923,21 @@ jobs:
           psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
           psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/postflight/application-transitions.sql
           echo "Application transitions applied; silence measured against the person's own replies, closure reasons, and the funnel."
+      - name: Apply the application kit (scope=application-kit)
+        if: ${{ inputs.scope == 'application-kit' }}
+        run: |
+          VERSION=20260902001400_application_kit
+          FILE="supabase/migrations/${VERSION}.sql"
+          sha256sum "$FILE"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied "${VERSION%%_*}"
+          else
+            npx supabase migration repair --status applied "${VERSION%%_*}" --db-url "$DB_URL"
+          fi
+          psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/postflight/application-kit.sql
+          echo "Application kit applied; the screening answers a person keeps, under their own row-level security."
       - name: Normalize exact legacy bot ACLs (scope=bot-legacy-acl-normalization)
         if: ${{ inputs.scope == 'bot-legacy-acl-normalization' }}
         run: |

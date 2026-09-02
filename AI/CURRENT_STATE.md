@@ -1,5 +1,31 @@
 # Current state
 
+## 2026-09-02: JobSearch build-out — increment 4, the application kit (ADR-244)
+
+`20260902001400_application_kit.sql`: `job_seeker_screening_answers`
+(twelve fixed question keys, one answer per question per person,
+uniform own-row RLS, authenticated CRUD, nothing to anon or
+service_role). `lib/job-seeker/application-kit.ts`: `buildKitBlocks`
+(contact, summary, work history, education, skills, certifications,
+answered questions — verbatim), `extractRequirements` (signal-word
+sentences, ≤ 20, deduplicated), `recordedExperienceYears`,
+`checkRequirements` (met / unmet / unknown per line, each naming the
+recorded fact or the question to answer), `toScreeningAnswers`. Routes:
+`GET/PUT /api/job-seeker/application-kit` (blocks + answers; upsert per
+question, an empty answer deletes; unknown keys and credential-shaped
+answers refused) and `GET /api/job-seeker/jobs/[jobId]/requirements`
+(checks, counts, basis; 404 for another person's job). Page
+`/job-seeker/application-kit` (copy buttons, answers form, profile-first
+empty state) with a navigation entry after Cover Letters and a harness
+scene for the width sweep; the Applications page gains a "Requirements
+check" per application. Tests: job-seeker-application-kit 11,
+job-seeker-screening-answers.behavior 2, application-kit routes 6,
+application-kit panel 2, panels +1, navigation updated. Grants roster
+and RLS census 232; replay executes the new postflight; runbook count
+234; workflow 416,142 bytes of 420,000; tsc, eslint and the production
+build clean. Hosted apply scope `application-kit` is dispatched after
+merge.
+
 ## 2026-09-02: JobSearch build-out — increment 3, silence measured (ADR-243)
 
 `20260902001300_application_transitions.sql`: `job_seeker_closed_reason`

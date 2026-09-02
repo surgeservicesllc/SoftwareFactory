@@ -2,7 +2,36 @@
 
 Last updated: 2026-09-02
 
-## Newest (2026-09-02, latest+65): silence measured (ADR-243)
+## Newest (2026-09-02, latest+66): the application kit (ADR-244)
+
+UNKNOWN IS A VERDICT. `checkRequirements` answers "unknown" whenever no
+recorded fact can decide a line, and the reason names the screening
+question or profile field to fill. Do not default an unanswered
+sponsorship or clearance line to "met"; a knockout question answered by
+assumption is the silent rejection the increment exists to prevent.
+
+THE VOCABULARY IS FIXED AND CONTAINS NO SELF-IDENTIFICATION. Twelve
+keys, checked in the schema and mirrored in `SCREENING_QUESTIONS`; the
+PUT schema is one optional field per key, strict (zod's record over an
+enum demands every key, which is why it is an object). Gender, veteran,
+disability and ethnicity questions are deliberately absent — the
+employer asks those on their own form.
+
+VERBATIM BLOCKS. `buildKitBlocks` copies the profile; it does not
+rewrite, rank or summarise. `Card` does not forward `data-testid`, so the
+block containers are `<section className="card">` — the same trap as
+every panel before it.
+
+The navigation gains one entry beyond the owner's design (Application
+Kit, after Cover Letters); the navigation test's expected list carries
+the comment. The harness scene `job-seeker-application-kit` is in the
+component-layout sweep.
+
+HOSTED: scope=application-kit is dispatched after merge; record the run
+id here and in CURRENT_STATE. Pending applies queued behind it:
+posting-sightings (#504), application-transitions (increment 3).
+
+## Older (2026-09-02, latest+65): silence measured (ADR-243)
 
 THE TRIGGER WRITES THE LEDGER. `job_seeker_application_transitions` is
 written only by the AFTER trigger on applications (SECURITY DEFINER);

@@ -3,6 +3,7 @@ import {
   BarChart3,
   Briefcase,
   CalendarCheck,
+  ClipboardList,
   Compass,
   FileText,
   LayoutDashboard,
@@ -82,6 +83,9 @@ export const JOB_SEEKER_NAVIGATION: readonly JobSeekerNavEntry[] = [
   { label: "Applications", href: "/job-seeker/applications", icon: FileText },
   { label: "Resume Library", href: "/job-seeker/resumes", icon: FileText },
   { label: "Cover Letters", href: "/job-seeker/cover-letters", icon: Mail },
+  // ADR-244: the one destination beyond the owner's design, because every
+  // application form asks for it and nothing else on the page holds it.
+  { label: "Application Kit", href: "/job-seeker/application-kit", icon: ClipboardList },
   { label: "Interview Tracker", href: "/job-seeker/interviews", icon: CalendarCheck },
   { label: "Contacts & Outreach", href: "/job-seeker/contacts", icon: Users },
   { label: "Notes & Documents", href: "/job-seeker/documents", icon: NotebookPen },

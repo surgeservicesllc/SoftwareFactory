@@ -6682,3 +6682,48 @@ Bounds: nothing here estimates an employer. The comparison is always
 the person's own medians, the default is named as a default, and every
 ledger-backed section answers null — never a fabricated zero — when the
 migration is not applied on a deployment.
+
+## ADR-244 - The application kit: answers kept once, blocks copied verbatim, and a requirements check that never assumes
+
+Date: 2026-09-02
+
+Two complaints share a root. Easy Apply is followed by an applicant
+tracking system that asks for everything again — Workday alone costs
+employers up to 70% of completed applications, and the twelve screening
+questions after the resume are the same on every form. And knockout
+questions are the leading cause of silent rejection: a "must be
+authorized to work without sponsorship" line answered wrong ends the
+application before a person reads it.
+
+The kit answers both from recorded facts. `job_seeker_screening_answers`
+(20260902001400) keeps one row per question from a fixed vocabulary of
+twelve — authorization, sponsorship, start date, notice period, years,
+education, clearance, languages, travel, relocation, salary expectation,
+references — person-scoped under the uniform own-row policies, with no
+demographic or self-identification questions in it, deliberately: those
+are the employer's to ask on their own form, not this product's to
+store. `buildKitBlocks` copies the profile into the blocks a form has
+fields for — contact, summary, work history, education, skills,
+certifications, answered questions — without rewording, so what is
+pasted is what was recorded; the page carries a Copy button per block.
+
+The requirements check reads the posting's own "must" sentences
+(`extractRequirements`: signal words, bounded, deduplicated) and answers
+each with a verdict that names the fact it used — years from the
+screening answer first and the recorded history's dates second,
+authorization and sponsorship from the answers, degrees and
+certifications from the recorded education and certifications, clearance
+and languages from the answers, and every other line from the skills and
+technologies it names — or says plainly that nothing recorded can answer
+it. "Unknown" is a verdict, not a gap in the checker: a person who has
+not said whether they need sponsorship is not assumed to meet a
+sponsorship line, and the reason tells them which question to answer.
+It lives on each application as "Requirements check", fetched on open.
+
+Bounds: the extractor is a deterministic pass over English posting text
+and misses requirements phrased without its signal words; a skill the
+profile does not record is reported "not met" with the advice to record
+it if true, because the evaluator (ADR-096) already treats unrecorded as
+absent and two rules would be worse than one. The navigation grows by
+one destination beyond the owner's design, Application Kit, because
+every form asks for it and no other page holds it.

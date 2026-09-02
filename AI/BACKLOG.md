@@ -95,9 +95,16 @@ own PR, ADR, behavior test against the real chain, and hosted scope.
   "Use this date". 20260902001300; hosted apply:
   scope=application-transitions after merge. Closes LinkedIn 1/13/21,
   Indeed 4/13/20/25, others 17.
-- [ ] Increment 4 (ADR-244): application kit — screening answers the
-  person keeps, copy-ready ATS blocks from the profile, a requirements
-  check per posting with a verdict per line.
+- [x] Increment 4 (ADR-244): application kit —
+  `job_seeker_screening_answers` (twelve fixed keys, own-row RLS);
+  `lib/job-seeker/application-kit.ts` (verbatim blocks; requirement
+  lines extracted from the posting and checked against recorded facts
+  with met/unmet/unknown naming the fact); routes
+  `/api/job-seeker/application-kit` (GET/PUT) and
+  `/api/job-seeker/jobs/[jobId]/requirements`; page
+  `/job-seeker/application-kit` with copy buttons and the answers form;
+  "Requirements check" on every application. 20260902001400; hosted
+  apply: scope=application-kit after merge. Closes LinkedIn 6, Indeed 12.
 - [ ] Increment 5 (ADR-245): what keeps costing you — skills gap across
   target and saved jobs ranked by frequency; your own history with each
   company on every result.
