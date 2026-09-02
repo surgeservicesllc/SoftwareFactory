@@ -31,6 +31,19 @@ export type Sighting = Readonly<{
   latestPostedOn: string | null;
   reposts: number;
   closesOn: string | null;
+  /** The latest still-open recheck (ADR-249), when one was made. */
+  lastCheckedAt: string | null;
+  lastCheckStatus: string | null;
+  lastCheckNote: string | null;
+}>;
+
+/** A recheck older than this is history, not evidence. */
+export const RECHECK_VALID_DAYS = 7;
+
+export type RecheckView = Readonly<{
+  status: string;
+  checkedDaysAgo: number;
+  note: string;
 }>;
 
 export type Freshness = Readonly<{
@@ -43,6 +56,8 @@ export type Freshness = Readonly<{
   reposts: number;
   /** Each sentence names the number that produced the verdict. */
   reasons: readonly string[];
+  /** The recheck that bore on the verdict, when a recent one exists. */
+  recheck: RecheckView | null;
 }>;
 
 function daysBetween(earlier: string, later: Date): number | null {
@@ -111,6 +126,33 @@ export function assessFreshness(args: Readonly<{
     reasons.push("The board states no posting date and this product has not seen the posting before.");
   }
 
+  /*
+   * A recent recheck (ADR-249) is direct evidence and outranks arithmetic
+   * about dates: a page that is gone is stale whatever the board says, and
+   * a page that answered and does not say "closed" is not called stale on
+   * age alone — it is at most aging, because the recheck proves the page,
+   * not the vacancy. A redirect, a refusal or no answer decides nothing and
+   * is printed as such.
+   */
+  let recheck: RecheckView | null = null;
+  const checkedDaysAgo = args.sighting?.lastCheckedAt ? daysBetween(args.sighting.lastCheckedAt, now) : null;
+  if (
+    checkedDaysAgo !== null && checkedDaysAgo <= RECHECK_VALID_DAYS
+    && args.sighting?.lastCheckStatus && args.sighting.lastCheckNote
+  ) {
+    recheck = { status: args.sighting.lastCheckStatus, checkedDaysAgo, note: args.sighting.lastCheckNote };
+    const when = checkedDaysAgo === 0 ? "today" : `${plural(checkedDaysAgo, "day", "days")} ago`;
+    if (recheck.status === "gone") {
+      level = "stale";
+      reasons.push(`Rechecked ${when}: ${recheck.note}`);
+    } else if (recheck.status === "open") {
+      if (level === "stale") level = "aging";
+      reasons.push(`Rechecked ${when}: ${recheck.note} That proves the page, not the vacancy.`);
+    } else {
+      reasons.push(`Rechecked ${when}: ${recheck.note}`);
+    }
+  }
+
   return Object.freeze({
     level,
     postedDaysAgo,
@@ -118,6 +160,7 @@ export function assessFreshness(args: Readonly<{
     timesSeen,
     reposts,
     reasons: Object.freeze(reasons),
+    recheck,
   });
 }
 
@@ -143,5 +186,8 @@ export function toSighting(row: Record<string, unknown>): Sighting {
     latestPostedOn: (row.latest_posted_on as string | null) ?? null,
     reposts: Number(row.reposts ?? 0),
     closesOn: (row.closes_on as string | null) ?? null,
+    lastCheckedAt: (row.last_checked_at as string | null) ?? null,
+    lastCheckStatus: (row.last_check_status as string | null) ?? null,
+    lastCheckNote: (row.last_check_note as string | null) ?? null,
   };
 }

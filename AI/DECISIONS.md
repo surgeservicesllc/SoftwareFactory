@@ -6900,3 +6900,51 @@ words ("led" for "joined"), and a proper noun that opens a sentence is
 not checked as a name. Those are the limits of a deterministic pass and
 are printed with the check's counts rather than hidden behind a "verified"
 badge. Hosted apply: scope=document-polish after merge.
+
+## ADR-249 - Still open? A bounded, owner-safe recheck of a posting URL, recorded on the sightings row
+
+Date: 2026-09-02
+
+Freshness (ADR-241) reasons from dates. The complaint it cannot fully
+answer — expired listings that linger, on every board reviewed — has one
+more source of evidence: the posting's own page. This increment reads
+it, once, on the person's request, within bounds, and records what it
+said where everyone who sees the posting will see it.
+
+The bounds come first because a server that fetches a URL a browser
+supplied is a request forger unless it refuses everything but the public
+web. `lib/job-seeker/board-search/recheck.ts` refuses, before a byte is
+sent: anything but https; a URL with credentials or a port; an address
+in place of a host; a single-label, local or internal name; and any host
+whose resolved addresses — all of them — are not public (loopback,
+private, link-local, carrier-grade, multicast, unique-local, mapped v4).
+Redirects are never followed; a 3xx is reported as "moved" and left
+there. One request, six seconds, at most 256 KB of body read and never
+stored. The route adds a second gate: only a URL the sightings ledger
+already holds is rechecked, so the endpoint cannot be pointed at an
+address a search never returned.
+
+The answer is derived, not judged: 404 or 410 is gone; 3xx is moved; a
+2xx whose text contains one of a fixed list of closure phrases is gone
+and the note quotes the phrase; any other 2xx is open; 4xx/5xx is
+blocked ("the site refused an automated read; that says nothing about
+the posting"); no answer is unreachable. `record_posting_recheck`
+(20260902001600) writes the status, HTTP status and note onto the
+existing sightings row through one definer boundary — authenticated,
+vocabulary-checked, reusing a check under ten minutes old so a burst of
+clicks is one outbound read — and `read_posting_sightings` is recreated
+to carry the latest check to every search card.
+
+`assessFreshness` folds a recheck under seven days old in: gone makes
+the verdict stale whatever the dates say; open lifts a stale-by-age
+posting to aging, with the sentence "that proves the page, not the
+vacancy"; moved, blocked and unreachable are printed and decide nothing.
+The card carries a "Still open?" button and prints the answer with when
+it was checked.
+
+Bounds: the closure phrases are a fixed list in English and Danish, so a
+board that says "closed" some other way reads as open — the note prints
+"does not say the position is closed" rather than "open" for exactly that
+reason; a page behind a login or a bot wall is "blocked", never guessed.
+Hosted apply: scope=posting-recheck after merge. With this increment the
+nine-increment program of the teardown is complete.

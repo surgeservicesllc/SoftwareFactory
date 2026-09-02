@@ -60,6 +60,9 @@ Audit: `AI/JOB_SEARCH_COMPETITIVE_TEARDOWN.md` — LinkedIn, Indeed and
 seven other boards, 25 features each, the top 25 complaints per platform
 with an AI-first answer, and the program below. Each increment is its
 own PR, ADR, behavior test against the real chain, and hosted scope.
+All nine increments are shipped as of 2026-09-02 (increments 2–4 on
+#505; 5–9 on the follow-on PR); hosted scopes are dispatched after each
+merge and recorded in `AI/CURRENT_STATE.md`.
 
 - [x] Increment 1 (ADR-241): freshness — `job_seeker_posting_sightings`
   (public facts, one row per URL, forced RLS, SELECT to authenticated,
@@ -139,8 +142,18 @@ own PR, ADR, behavior test against the real chain, and hosted scope.
   **Not Connected** on Applications, badges on polished versions.
   Hosted apply: scope=document-polish after merge. Closes LinkedIn 18,
   "cover letters that cannot invent" rows.
-- [ ] Increment 9 (ADR-249): still open? — a bounded, owner-safe recheck
-  of a posting URL recorded on the sightings row.
+- [x] Increment 9 (ADR-249): still open? — 2026-09-02.
+  `lib/job-seeker/board-search/recheck.ts` (https only, no credentials
+  or port, no address literals or local names, every resolved address
+  public, redirects never followed, 6 s / 256 KB, nothing stored;
+  status from the HTTP answer and a fixed closure-phrase list, the
+  phrase quoted); `record_posting_recheck` + `read_posting_sightings`
+  with the check (20260902001600); `POST /api/job-seeker/search/recheck`
+  with the ledger as allow-list and ten-minute reuse; the verdict folds
+  a recheck under seven days in; "Still open?" on every card. Hosted
+  apply: scope=posting-recheck after merge. Closes Google-for-Jobs 11,
+  "expired jobs still listed", "cannot tell whether still open". The
+  nine-increment program is complete.
 - Owner-only, unchanged: `JSEARCH_RAPIDAPI_KEY` for inline LinkedIn/Indeed
   (ADR-184); `RESEND_API_KEY`, `JOB_ALERT_EMAIL_FROM`, `CRON_SECRET` for
   live alert email (ADR-164); the keyed boards' credentials

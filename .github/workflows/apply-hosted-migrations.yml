@@ -102,6 +102,7 @@ on:
           - application-transitions
           - application-kit
           - document-polish
+          - posting-recheck
           - probe
 permissions:
   actions: read
@@ -1954,6 +1955,21 @@ jobs:
           psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
           psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/postflight/document-polish.sql
           echo "Document provenance applied; a polished version carries its model and the check that let it be stored."
+      - name: Apply the posting recheck (scope=posting-recheck)
+        if: ${{ inputs.scope == 'posting-recheck' }}
+        run: |
+          VERSION=20260902001600_posting_recheck
+          FILE="supabase/migrations/${VERSION}.sql"
+          sha256sum "$FILE"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied "${VERSION%%_*}"
+          else
+            npx supabase migration repair --status applied "${VERSION%%_*}" --db-url "$DB_URL"
+          fi
+          psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/postflight/posting-recheck.sql
+          echo "Posting recheck applied; a bounded still-open answer recorded on the sightings row, reused for ten minutes."
       - name: Normalize exact legacy bot ACLs (scope=bot-legacy-acl-normalization)
         if: ${{ inputs.scope == 'bot-legacy-acl-normalization' }}
         run: |

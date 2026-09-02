@@ -1,5 +1,29 @@
 # Current state
 
+## 2026-09-02: JobSearch build-out — increment 9, still open? (ADR-249) — the program is complete
+
+`20260902001600_posting_recheck.sql`: `job_seeker_posting_sightings`
+gains `last_checked_at`, `last_check_status` (open | gone | moved |
+blocked | unreachable), `last_check_http_status`, `last_check_note`,
+`checks` with four checks; `record_posting_recheck(text, text, integer,
+text)` SECURITY DEFINER (authenticated only; existing rows only; a check
+under ten minutes old is returned unchanged); `read_posting_sightings`
+recreated with the three check columns (invoker, authenticated only).
+`lib/job-seeker/board-search/recheck.ts`: `refuseUrl`, `isPublicAddress`,
+`classifyPage`, `recheckPosting` (DNS-resolved public-only, manual
+redirects, 6 s, 256 KB, nothing stored). `freshness.ts`: `Sighting`
+carries the check, `assessFreshness` folds one under seven days in with
+the sentence, `Freshness.recheck`. `POST /api/job-seeker/search/recheck`
+(same-origin; ledger as allow-list; reuse under ten minutes; records
+through the definer; returns the recheck and the new verdict). Search
+card: "Still open?" button and the answer line; the verdict replaced by
+the server's. Chain: workflow scope `posting-recheck` + step (417,893
+bytes of 420,000), postflight, replay roster 45, runbook count 236.
+Tests: freshness +3, recheck 8, recheck route 4, recheck.behavior 4,
+search panel +1; tsc, eslint and the production build clean. Hosted
+apply scope `posting-recheck` is dispatched after merge. All nine
+increments of `AI/JOB_SEARCH_COMPETITIVE_TEARDOWN.md` are shipped.
+
 ## 2026-09-02: JobSearch build-out — increment 8, polish that cannot invent (ADR-248)
 
 `20260902001500_document_polish.sql`: `job_seeker_documents` gains

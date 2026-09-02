@@ -2,6 +2,30 @@
 
 Last reviewed: 2026-09-02
 
+**Addendum, 2026-09-02 latest+71 - JobSearch build-out, increment 9: still open? (ADR-249):**
+job-seeker-recheck 8 (a public https URL accepted and every other
+shape refused by name; every private, loopback, link-local,
+carrier-grade, unique-local, multicast, mapped and documentation range
+rejected and public ranges accepted; gone, moved, blocked and open
+named with the HTTP status and a closure phrase quoted; refusal before
+any byte for a non-https URL, a private resolved address and an empty
+resolution; one fetch with manual redirects classified; the body bound
+proven with a phrase beyond and before the cap; unreachable, never a
+throw, for an unresolved host or a failed fetch). job-seeker-freshness
++3 (gone makes stale and prints the recheck; open lifts stale-by-age to
+aging with the proof sentence; blocked printed without changing the
+verdict and a week-old check ignored). job-seeker-recheck-route 4 (a
+known posting rechecked, recorded through the definer and folded into
+the verdict; a check under ten minutes reused without a read; an unseen
+posting and a non-public URL refused before any read; cross-origin
+refused). job-seeker-recheck.behavior 4 (recorded on the existing row
+and read with the sighting; reused under ten minutes and rewritten
+after; the vocabulary, the key shape, the note length and an unknown
+key; anon refused and direct writes refused). Search panel +1 (the
+button, the answer line, the verdict replaced). Replay executes the new
+postflight (45); workflow 417,893 bytes of 420,000; runbook count 236;
+tsc, eslint and the production build clean.
+
 **Addendum, 2026-09-02 latest+70 - JobSearch build-out, increment 8: polish that cannot invent (ADR-248):**
 job-seeker-polish-check 4 (a faithful rewording passes with the counts
 described; an added skill, number and name each named with its kind

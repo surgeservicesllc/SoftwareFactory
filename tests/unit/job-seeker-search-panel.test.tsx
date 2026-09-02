@@ -1388,3 +1388,46 @@ describe("your history with the company (ADR-245)", () => {
     expect(screen.getByTestId("history-basis")).toHaveTextContent("(2 recorded)");
   });
 });
+
+describe("still open? (ADR-249)", () => {
+  it("rechecks on request, prints the answer, and takes the server's new verdict", async () => {
+    const posts: unknown[] = [];
+    const card = {
+      job: { ...hit("Platform Engineer").job, url: "https://jobnet.dk/find-job/recheck" },
+      publishedOn: "2026-06-01",
+      closesOn: null,
+      sources: [{ board: "jobnet", boardName: "Jobnet", url: "https://jobnet.dk/find-job/recheck", externalId: "id-recheck", saveToken: "t-recheck" }],
+      primarySourceIndex: 0,
+      match: null,
+      freshness: { level: "stale", postedDaysAgo: 93, firstSeenDaysAgo: null, timesSeen: 0, reposts: 0, reasons: ["Posted 93 days ago by the board's own date."] },
+    };
+    respond({
+      results: [{ board: "jobnet", boardName: "Jobnet", totalAvailable: 1, hits: [hit("Platform Engineer")], locationApplied: true }],
+      failures: [],
+      unified: { hits: [card], dedupedFrom: 1, beforeFilters: 1, matchBasis: { computed: false, reason: "No Career Profile is recorded yet." } },
+    });
+    const underlying = globalThis.fetch;
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/job-seeker/search/recheck") {
+        posts.push(JSON.parse(String(init?.body)));
+        return new Response(JSON.stringify({
+          urlKey: "k", reused: false,
+          recheck: { status: "open", note: "HTTP 200 — the page is up and does not say the position is closed.", checkedAt: new Date().toISOString(), minutesAgo: 0 },
+          freshness: { level: "aging", postedDaysAgo: 93, firstSeenDaysAgo: 0, timesSeen: 1, reposts: 0, reasons: ["Posted 93 days ago by the board's own date.", "Rechecked today: HTTP 200 — the page is up and does not say the position is closed. That proves the page, not the vacancy."], recheck: { status: "open", checkedDaysAgo: 0, note: "HTTP 200 — the page is up and does not say the position is closed." } },
+        }), { headers: { "Content-Type": "application/json" } });
+      }
+      return underlying(input, init);
+    }));
+    const user = userEvent.setup();
+    render(<JobSearchPanel />);
+    await screen.findByText(/Searching 2 boards:/);
+    await search(user);
+    expect(await screen.findByTestId("freshness-badge")).toHaveTextContent("Likely stale");
+
+    await user.click(screen.getByRole("button", { name: "Still open? Platform Engineer" }));
+    expect(await screen.findByTestId("recheck-result")).toHaveTextContent("Rechecked just now: HTTP 200 — the page is up and does not say the position is closed.");
+    expect(posts).toEqual([{ url: "https://jobnet.dk/find-job/recheck", publishedOn: "2026-06-01", closesOn: null }]);
+    expect(screen.getByTestId("freshness-badge")).toHaveTextContent("Aging");
+  });
+});

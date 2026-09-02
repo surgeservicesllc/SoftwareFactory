@@ -2,7 +2,39 @@
 
 Last updated: 2026-09-02
 
-## Newest (2026-09-02, latest+70): polish that cannot invent (ADR-248)
+## Newest (2026-09-02, latest+71): still open? (ADR-249) — the program is complete
+
+THE LEDGER IS THE ALLOW-LIST. The recheck route reads
+`read_posting_sightings` for the URL's key first and refuses (404) a URL
+the ledger has never seen; only then does `recheckPosting` run, and it
+refuses again (before any byte) unless the URL is https on a real public
+host whose every resolved address is public. Do not add a way to recheck
+an arbitrary URL; the two gates are the feature.
+
+REDIRECTS ARE NEVER FOLLOWED. `redirect: "manual"`; a 3xx is "moved"
+and decides nothing. A test that stubs fetch asserts the option.
+
+THE ANSWER IS DERIVED. 404/410 gone; 3xx moved; 2xx with a closure
+phrase gone (phrase quoted); other 2xx open — the note says "does not
+say the position is closed", not "open"; other 4xx/5xx blocked; no
+answer unreachable. `assessFreshness` folds a check under
+`RECHECK_VALID_DAYS` (7) in: gone → stale, open → at most aging with
+"that proves the page, not the vacancy", the rest printed only.
+
+TEN-MINUTE REUSE, TWICE. The route reuses a check under ten minutes old
+without fetching; the definer function returns the row unchanged for the
+same window even if a client calls it directly.
+
+`read_posting_sightings` was dropped and recreated (a return type cannot
+be altered); its grants are re-applied in the same migration and the
+posting-recheck postflight checks the new columns are in its result.
+
+HOSTED: scope=posting-recheck is dispatched after merge; record the run
+id here and in CURRENT_STATE. Also on this branch: scope=document-polish
+(increment 8). Still pending from #505 (increments 2–4):
+scope=application-transitions then scope=application-kit, in that order.
+
+## Older (2026-09-02, latest+70): polish that cannot invent (ADR-248)
 
 REJECTED MEANS NOT STORED. `generatePolishedDocument` returns `rejected`
 with the check when any term, number or mid-sentence name in the
