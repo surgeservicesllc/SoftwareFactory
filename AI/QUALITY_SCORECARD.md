@@ -2,6 +2,16 @@
 
 Last reviewed: 2026-09-02
 
+**Addendum, 2026-09-02 latest+72 - the hosted service_role contract (ADR-250):**
+job-seeker-service-role-contract 1 (every job_seeker table in the
+migrations is named in an explicit revoke from service_role). The
+replay suite executes the new postflight (46); the grants roster, RLS
+census and security invariants are unchanged (no new table, no new
+function); workflow 418,895 bytes of 420,000; runbook count 237. The
+finding itself came from a hosted postflight, not a local test — PGlite
+cannot see default privileges — which is the argument for every scope
+carrying one.
+
 **Addendum, 2026-09-02 latest+71 - JobSearch build-out, increment 9: still open? (ADR-249):**
 job-seeker-recheck 8 (a public https URL accepted and every other
 shape refused by name; every private, loopback, link-local,

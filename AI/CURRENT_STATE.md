@@ -1,5 +1,22 @@
 # Current state
 
+## 2026-09-02: the job seeker tables' hosted service_role grants (ADR-250)
+
+`20260902001700_job_seeker_service_role_contract.sql`: revoke all from
+public, anon and service_role on the twelve job seeker tables that
+predate the explicit-revoke convention (foundation eight, uploads, saved
+searches, search alerts, search events); authenticated untouched; a
+no-op locally. Postflight walks every `job_seeker_%` table (forced RLS,
+nothing for anon or service_role, authenticated reads). Workflow scope
+`job-seeker-service-role-contract` + step (418,895 bytes of 420,000),
+replay roster 46, runbook count 237. Test:
+job-seeker-service-role-contract 1 (every job_seeker table named in an
+explicit service_role revoke). Hosted: scope=document-polish run
+33638477432 applied the migration and recorded 20260902001500, then its
+postflight refused on the pre-existing grant ("job_seeker_documents
+grants are wrong"); the contraction scope is dispatched after merge,
+then scope=document-polish is re-run for its green postflight.
+
 ## 2026-09-02: JobSearch build-out — increment 9, still open? (ADR-249) — the program is complete
 
 `20260902001600_posting_recheck.sql`: `job_seeker_posting_sightings`
@@ -21,7 +38,8 @@ the server's. Chain: workflow scope `posting-recheck` + step (417,893
 bytes of 420,000), postflight, replay roster 45, runbook count 236.
 Tests: freshness +3, recheck 8, recheck route 4, recheck.behavior 4,
 search panel +1; tsc, eslint and the production build clean. Hosted
-apply scope `posting-recheck` is dispatched after merge. All nine
+apply scope `posting-recheck`: run 33638710879 succeeded on main 317f623
+(#506 squash). All nine
 increments of `AI/JOB_SEARCH_COMPETITIVE_TEARDOWN.md` are shipped.
 
 ## 2026-09-02: JobSearch build-out — increment 8, polish that cannot invent (ADR-248)
@@ -47,7 +65,10 @@ versions; Resume Library badge. Chain: workflow scope `document-polish`
 runbook count 235. Tests: polish-check 4, polish 6, documents polish
 route 5, panels +2, document-polish.behavior 3, interview-questions
 unchanged on the shared lane; tsc, eslint and the production build
-clean. Hosted apply scope `document-polish` is dispatched after merge.
+clean. Hosted apply scope `document-polish`: run 33638477432 on main
+317f623 applied the migration and recorded 20260902001500; its postflight
+refused on a pre-existing hosted grant (ADR-250) and is re-run after the
+contraction scope.
 
 ## 2026-09-02: JobSearch build-out — increment 7, your data is yours (ADR-247)
 

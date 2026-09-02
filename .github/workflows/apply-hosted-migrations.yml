@@ -103,6 +103,7 @@ on:
           - application-kit
           - document-polish
           - posting-recheck
+          - job-seeker-service-role-contract
           - probe
 permissions:
   actions: read
@@ -1970,6 +1971,21 @@ jobs:
           psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
           psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/postflight/posting-recheck.sql
           echo "Posting recheck applied; a bounded still-open answer recorded on the sightings row, reused for ten minutes."
+      - name: Contract the job seeker tables' hosted service_role grants (scope=job-seeker-service-role-contract)
+        if: ${{ inputs.scope == 'job-seeker-service-role-contract' }}
+        run: |
+          VERSION=20260902001700_job_seeker_service_role_contract
+          FILE="supabase/migrations/${VERSION}.sql"
+          sha256sum "$FILE"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied "${VERSION%%_*}"
+          else
+            npx supabase migration repair --status applied "${VERSION%%_*}" --db-url "$DB_URL"
+          fi
+          psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/postflight/job-seeker-service-role-contract.sql
+          echo "Job seeker service_role contract applied; the twelve pre-convention tables hold nothing for anon or service_role."
       - name: Normalize exact legacy bot ACLs (scope=bot-legacy-acl-normalization)
         if: ${{ inputs.scope == 'bot-legacy-acl-normalization' }}
         run: |
