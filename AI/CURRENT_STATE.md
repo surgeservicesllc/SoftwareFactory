@@ -1,5 +1,35 @@
 # Current state
 
+## 2026-09-02: JobSearch build-out — increment 1, freshness (ADR-241)
+
+The owner's new /goal (task #91) opens a second competitive program,
+audited in `AI/JOB_SEARCH_COMPETITIVE_TEARDOWN.md`: LinkedIn, Indeed and
+seven other boards inventoried at 25 features each, the top 25
+job-seeker complaints per platform each with an AI-first answer and a
+status, and a nine-increment build program. Increment 1 ships
+`20260902001200_posting_sightings.sql`: `job_seeker_posting_sightings`
+(one row per posting URL — the board's dates plus how often and when
+this product has seen it; public facts only, no person or workspace;
+forced RLS, SELECT to authenticated, nothing to service_role),
+`record_posting_sightings(jsonb)` (DEFINER, authenticated-only, ≤ 400
+per call, malformed elements skipped and the written count returned,
+re-datings counted as reposts, nulls never erasing a recorded date) and
+`read_posting_sightings(text[])` (INVOKER, ≤ 1,000 keys).
+`lib/job-seeker/board-search/freshness.ts` is the browser-safe verdict
+(fresh < 21 days, aging 21–44, likely stale ≥ 45 or a passed closing
+date or two re-datings, unknown when nothing is known — every reason a
+sentence with its number); `posting-key.ts` is the server-only md5 key.
+The search route records every returned URL, reads the ledger back for
+the unified cards, attaches a verdict to each and a `freshnessBasis`
+line saying whether the ledger was read. The panel shows a badge on
+aging and likely-stale cards with the reasons one click away, a summary
+line with the count, and "Hide them" as the person's own toggle. Tests:
+job-seeker-sightings.behavior 6, job-seeker-freshness 11, search route
++3, panel +1. Grants roster and RLS census 230; replay executes the new
+postflight; runbook count 232; workflow 414,342 bytes of 420,000; tsc
+and eslint clean. Hosted apply scope `posting-sightings` is dispatched
+after merge.
+
 ## 2026-09-02: Conversation routing (ADR-240)
 
 Increment 36 ships `20260902001100_conversation_routing.sql`:

@@ -10,6 +10,8 @@ import { resolvedSourceCatalogue } from "@/lib/job-seeker/board-search/catalogue
 import { availableBoardSearchAdapters, boardSearchAdapter } from "@/lib/job-seeker/board-search/registry";
 import { BoardSearchError, type BoardSearchQuery } from "@/lib/job-seeker/board-search/types";
 import { applyRadius, resolvePlace } from "@/lib/job-seeker/board-search/geo";
+import { assessFreshness, toSighting, type Sighting } from "@/lib/job-seeker/board-search/freshness";
+import { postingUrlKey } from "@/lib/job-seeker/board-search/posting-key";
 import {
   applyUnifiedFilters,
   dedupeAcrossBoards,
@@ -340,6 +342,75 @@ export async function POST(request: Request) {
       : scored.filter((hit) => hit.match !== null && hit.match.score >= minimumScore);
 
     /*
+     * Freshness (ADR-241): every URL the boards returned is recorded in the
+     * sightings ledger, then the ledger is read back for the cards the
+     * person will see. Recording first means a posting's first sighting
+     * counts as one search. Both calls are failure-tolerant — a search that
+     * answered is never failed by its own bookkeeping — and a card whose
+     * sighting could not be read gets a verdict from the board's dates
+     * alone, with the basis line below saying so.
+     */
+    const sightingRows = new Map<string, {
+      url: string;
+      source: string;
+      company: string;
+      title: string;
+      postedOn: string | null;
+      closesOn: string | null;
+    }>();
+    for (const entry of taggedForUnify) {
+      const url = entry.hit.job.url;
+      if (url === null || sightingRows.has(url)) continue;
+      sightingRows.set(url, {
+        url,
+        source: entry.board,
+        company: entry.hit.job.company,
+        title: entry.hit.job.title,
+        postedOn: entry.hit.publishedOn,
+        closesOn: entry.hit.closesOn,
+      });
+      if (sightingRows.size >= 400) break;
+    }
+    let sightingsByKey = new Map<string, Sighting>();
+    let ledgerRead = false;
+    if (sightingRows.size > 0) {
+      try {
+        await client.rpc("record_posting_sightings", { p_sightings: [...sightingRows.values()] });
+      } catch {
+        // The ledger missed a tick; the search still answers.
+      }
+      try {
+        const keys = unifiedHits
+          .filter((hit) => hit.job.url !== null)
+          .map((hit) => postingUrlKey(hit.job.url!))
+          .slice(0, 1000);
+        const read = keys.length === 0
+          ? null
+          : await client.rpc("read_posting_sightings", { p_url_keys: keys });
+        if (keys.length === 0) {
+          ledgerRead = true;
+        } else if (read && !read.error && Array.isArray(read.data)) {
+          sightingsByKey = new Map(
+            (read.data as Record<string, unknown>[]).map((row) => [String(row.url_key), toSighting(row)]),
+          );
+          ledgerRead = true;
+        }
+      } catch {
+        // Verdicts fall back to the board's own dates; the basis says so.
+      }
+    } else {
+      ledgerRead = true;
+    }
+    const withFreshness = unifiedHits.map((hit) => ({
+      ...hit,
+      freshness: assessFreshness({
+        publishedOn: hit.publishedOn,
+        closesOn: hit.closesOn,
+        sighting: hit.job.url === null ? null : sightingsByKey.get(postingUrlKey(hit.job.url)) ?? null,
+      }),
+    }));
+
+    /*
      * Metering: one immutable event per board actually queried, so the
      * discovery page's credit meter counts something real. This is the one
      * write in the search path — an audit of the asking, never a copy of the
@@ -371,11 +442,15 @@ export async function POST(request: Request) {
        */
       failures,
       unified: {
-        hits: unifiedHits,
+        hits: withFreshness,
         dedupedFrom: taggedForUnify.length,
         beforeFilters: deduped.length,
         /** Present when a radius was requested; says what it actually did. */
         radius,
+        /** Where each card's freshness verdict came from. */
+        freshnessBasis: ledgerRead
+          ? "Freshness is computed from each board's own dates and this product's sightings ledger; every verdict prints its numbers."
+          : "Freshness is computed from each board's own dates only — the sightings ledger could not be read for this search.",
         /** How scores were produced, or that none could be. */
         matchBasis: evaluation.profileRecorded
           ? { computed: true as const, method: EVALUATION_METHOD_LABEL }

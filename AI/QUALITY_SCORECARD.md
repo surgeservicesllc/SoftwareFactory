@@ -2,6 +2,24 @@
 
 Last reviewed: 2026-09-02
 
+**Addendum, 2026-09-02 latest+63 - JobSearch build-out, increment 1: freshness (ADR-241):**
+job-seeker-sightings.behavior 6 (one row per URL, readable by another
+person; the JS key equals SQL's md5; repeat sightings counted, a
+re-dating counted as a repost, a missing date erasing nothing, an
+earlier date not a repost; malformed elements skipped with the written
+count honest; anon refused, a 401-element batch refused, direct
+insert/update/delete refused, service_role holding no grant, RLS forced;
+exact-key reads and the 1,000-key bound). job-seeker-freshness 11 (each
+level at its printed threshold, the earliest date overruling a re-date
+with the exact sentence, two re-datings stale, a passed closing date, a
+future one kept, ledger-only aging, unknown never fresh, labels, key,
+row mapping). Search route +3 (ledger unreadable → dates-only basis;
+ledger read → stale from an 80-day first sighting and three
+re-datings; both calls refused → still 200), panel +1 (badge on the
+stale card only, reasons verbatim, hide/show toggle). Grants roster and
+RLS census 230; replay executes the new postflight; runbook 232;
+workflow 414,342 of 420,000; tsc and eslint clean.
+
 **Addendum, 2026-09-02 latest+62 - conversation routing (ADR-240):**
 services-conversation-routing.behavior 4 (the branch manager with the
 exact sentence, the rep once the manager is inactive, the least-loaded

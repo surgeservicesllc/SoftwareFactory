@@ -319,10 +319,13 @@ describe("searching across boards", () => {
     expect(Array.isArray(payload.failures)).toBe(true);
   });
 
-  it("stores no results: the only write is the per-board metering event", async () => {
+  it("stores no results: the only table write is the per-board metering event", async () => {
     // If searching ever starts writing anything else, every glanced-at
-    // posting could land in someone's job list. The one legitimate write is
-    // the search-events audit the credit meter counts.
+    // posting could land in someone's job list. The one legitimate table
+    // write is the search-events audit the credit meter counts; the other
+    // bookkeeping — the posting sightings ledger (ADR-241) — crosses a
+    // definer function and holds public facts about postings, never the
+    // person's results.
     const client = stubClient();
     harness.requireActiveOrganization.mockResolvedValue({
       activeOrganization: { id: activeOrganizationId },
@@ -332,7 +335,15 @@ describe("searching across boards", () => {
 
     await POST(searchRequest({ text: "engineer" }));
 
-    expect(client.rpc).not.toHaveBeenCalled();
+    expect(client.rpc.mock.calls.map(([fn]) => fn)).toEqual([
+      "record_posting_sightings",
+      "read_posting_sightings",
+    ]);
+    const recorded = client.rpc.mock.calls[0]?.[1] as { p_sightings: Array<{ url: string; source: string }> };
+    // Thirteen boards answered one hit each, all with the same URL: one
+    // sighting per URL, so the ledger counts a posting once per search.
+    expect(recorded.p_sightings).toHaveLength(1);
+    expect(recorded.p_sightings[0]).toMatchObject({ url: "https://jobnet.dk/find-job/1", source: "jobnet", postedOn: "2026-08-20" });
     expect(client.from.mock.calls.map(([table]) => table)).toEqual(["job_seeker_search_events"]);
     const rows = client.insert.mock.calls[0]?.[0] as Array<{ board: string; results_returned: number | null }>;
     expect(rows).toHaveLength(13);
@@ -634,5 +645,97 @@ describe("the credential-gated aggregator", () => {
       .map((source) => source.boardName)
       .sort();
     expect(badges).toEqual(["Indeed (JSearch)", "LinkedIn (JSearch)"]);
+  });
+});
+
+describe("freshness (ADR-241)", () => {
+  it("attaches a verdict to every card from the board's dates when the ledger cannot be read, and says so", async () => {
+    // The stub's rpc answers nothing, which is what an unapplied migration
+    // looks like from the route: the verdict falls back to the board's own
+    // posting date and the basis line names the fallback.
+    const response = await POST(searchRequest({ text: "engineer" }));
+    const payload = (await response.json()) as {
+      unified: {
+        hits: Array<{ freshness: { level: string; postedDaysAgo: number | null; reasons: string[] } }>;
+        freshnessBasis: string;
+      };
+    };
+    expect(response.status).toBe(200);
+    expect(payload.unified.freshnessBasis).toContain("board's own dates only");
+    expect(payload.unified.hits.length).toBeGreaterThan(0);
+    for (const card of payload.unified.hits) {
+      expect(["fresh", "aging", "stale", "unknown"]).toContain(card.freshness.level);
+      expect(card.freshness.reasons[0]).toMatch(/^Posted \d+ days? ago by the board's own date\.$/);
+    }
+  });
+
+  it("reads the ledger back and lets an old first sighting overrule a fresh-looking date", async () => {
+    const client = stubClient();
+    client.rpc.mockImplementation(async (fn: string) => {
+      if (fn === "read_posting_sightings") {
+        return {
+          data: [{
+            url_key: "e6c2ce6ec4e6c5e0b2a2b2e6f1a1c1d1", // replaced below
+            first_seen_at: new Date(Date.now() - 80 * 86_400_000).toISOString(),
+            last_seen_at: new Date().toISOString(),
+            times_seen: 12,
+            earliest_posted_on: new Date(Date.now() - 90 * 86_400_000).toISOString().slice(0, 10),
+            latest_posted_on: "2026-08-20",
+            reposts: 3,
+            closes_on: null,
+          }],
+          error: null,
+        };
+      }
+      return { data: 1, error: null };
+    });
+    harness.requireActiveOrganization.mockResolvedValue({
+      activeOrganization: { id: activeOrganizationId },
+      user: { id: "user-1" },
+      client,
+    });
+    const { postingUrlKey } = await import("@/lib/job-seeker/board-search/posting-key");
+    const key = postingUrlKey("https://jobnet.dk/find-job/1");
+    // The stub above cannot know the key at definition time; patch it in.
+    const original = client.rpc.getMockImplementation()!;
+    client.rpc.mockImplementation(async (fn: string, args: unknown) => {
+      const answer = await original(fn, args) as { data: unknown; error: null };
+      if (fn === "read_posting_sightings") {
+        (answer.data as Array<{ url_key: string }>)[0]!.url_key = key;
+        expect((args as { p_url_keys: string[] }).p_url_keys).toContain(key);
+      }
+      return answer;
+    });
+
+    const response = await POST(searchRequest({ text: "engineer" }));
+    const payload = (await response.json()) as {
+      unified: {
+        hits: Array<{ freshness: { level: string; reposts: number; timesSeen: number; reasons: string[] } }>;
+        freshnessBasis: string;
+      };
+    };
+    expect(response.status).toBe(200);
+    expect(payload.unified.freshnessBasis).toContain("sightings ledger");
+    const card = payload.unified.hits[0]!;
+    expect(card.freshness.level).toBe("stale");
+    expect(card.freshness.reposts).toBe(3);
+    expect(card.freshness.timesSeen).toBe(12);
+    expect(card.freshness.reasons).toContain("Re-dated 3 times since first seen (the posting date moved forward).");
+    expect(card.freshness.reasons.some((reason) => reason.startsWith("First seen here 80 days ago, on 12 searches."))).toBe(true);
+  });
+
+  it("keeps answering when the ledger refuses both calls", async () => {
+    const client = stubClient();
+    client.rpc.mockRejectedValue(new Error("function record_posting_sightings does not exist"));
+    harness.requireActiveOrganization.mockResolvedValue({
+      activeOrganization: { id: activeOrganizationId },
+      user: { id: "user-1" },
+      client,
+    });
+    const response = await POST(searchRequest({ text: "engineer" }));
+    const payload = (await response.json()) as { unified: { hits: unknown[]; freshnessBasis: string } };
+    expect(response.status).toBe(200);
+    expect(payload.unified.hits.length).toBeGreaterThan(0);
+    expect(payload.unified.freshnessBasis).toContain("could not be read");
   });
 });

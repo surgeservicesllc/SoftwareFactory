@@ -19,6 +19,7 @@ import {
   linkoutCarriesFilters,
   type LinkoutQuery,
 } from "@/lib/job-seeker/board-search/linkout";
+import { freshnessLabel } from "@/lib/job-seeker/board-search/freshness";
 
 /**
  * Search: query live job boards and save what is worth keeping.
@@ -115,7 +116,17 @@ type MatchView = {
   excluded: string | null;
 };
 
-type UnifiedCard = UnifiedHit & { match?: MatchView | null };
+/** The server's freshness verdict (ADR-241): a level and the numbers behind it. */
+type FreshnessView = {
+  level: "fresh" | "aging" | "stale" | "unknown";
+  postedDaysAgo: number | null;
+  firstSeenDaysAgo: number | null;
+  timesSeen: number;
+  reposts: number;
+  reasons: string[];
+};
+
+type UnifiedCard = UnifiedHit & { match?: MatchView | null; freshness?: FreshnessView | null };
 
 type MatchBasis =
   | { computed: true; method: string }
@@ -301,6 +312,14 @@ export function JobSearchPanel() {
   const [marksError, setMarksError] = useState<string | null>(null);
   const [showHidden, setShowHidden] = useState(false);
   const [favoritesOnly, setFavoritesOnly] = useState(false);
+  /**
+   * Freshness (ADR-241): a card the server calls likely stale is shown by
+   * default with its verdict and numbers; hiding is the person's choice,
+   * never the page's, so a filter nobody set can never make a search look
+   * emptier than it was.
+   */
+  const [hideStale, setHideStale] = useState(false);
+  const [freshnessBasis, setFreshnessBasis] = useState<string | null>(null);
 
   const [savedSearches, setSavedSearches] = useState<SavedSearchView[]>([]);
   const [alertsChannel, setAlertsChannel] = useState<AlertsChannel | null>(null);
@@ -403,6 +422,7 @@ export function JobSearchPanel() {
     setServerUnified(null);
     setMatchBasis(null);
     setRadiusReport(null);
+    setFreshnessBasis(null);
     setSaves({});
     setSaveErrors({});
     setShownCount(UNIFIED_PAGE_SIZE);
@@ -424,7 +444,12 @@ export function JobSearchPanel() {
       const payload = (await response.json()) as {
         results?: BoardResult[];
         failures?: BoardFailure[];
-        unified?: { hits?: UnifiedCard[]; matchBasis?: MatchBasis; radius?: RadiusView | null };
+        unified?: {
+          hits?: UnifiedCard[];
+          matchBasis?: MatchBasis;
+          radius?: RadiusView | null;
+          freshnessBasis?: string;
+        };
         error?: { message?: string };
       };
       // A superseded search must not paint over the current one.
@@ -441,6 +466,7 @@ export function JobSearchPanel() {
       setServerUnified(payload.unified?.hits ?? null);
       setMatchBasis(payload.unified?.matchBasis ?? null);
       setRadiusReport(payload.unified?.radius ?? null);
+      setFreshnessBasis(payload.unified?.freshnessBasis ?? null);
     } catch {
       if (requestRef.current === ticket) {
         setSearchError("The search could not be run.");
@@ -665,6 +691,12 @@ export function JobSearchPanel() {
     ).length;
   }, [visibleUnified, marks]);
 
+  /** Cards the server called likely stale, counted before the person's choice to hide them. */
+  const likelyStale = useMemo(
+    () => (visibleUnified ?? []).filter((card) => card.freshness?.level === "stale").length,
+    [visibleUnified],
+  );
+
   const displayedUnified = useMemo(() => {
     if (visibleUnified === null) return null;
     let list = visibleUnified;
@@ -674,8 +706,11 @@ export function JobSearchPanel() {
     if (marks !== null && favoritesOnly) {
       list = list.filter((card) => card.job.url !== null && marks.favorite.has(card.job.url));
     }
+    if (hideStale) {
+      list = list.filter((card) => card.freshness?.level !== "stale");
+    }
     return list;
-  }, [visibleUnified, marks, showHidden, favoritesOnly]);
+  }, [visibleUnified, marks, showHidden, favoritesOnly, hideStale]);
 
   // ── Saved searches ────────────────────────────────────────────────────
   const currentQuery = useCallback((): SavedSearchQuery => ({
@@ -1584,6 +1619,26 @@ export function JobSearchPanel() {
                       : `${matchBasis.reason} Match scores appear once your Career Profile is recorded.`}
                   </p>
                 ) : null}
+                {freshnessBasis !== null ? (
+                  <p className="mt-2 text-xs text-[var(--muted)]" data-testid="freshness-basis">
+                    {freshnessBasis}
+                  </p>
+                ) : null}
+                {likelyStale > 0 ? (
+                  <p className="mt-2 text-xs text-[var(--muted)]" data-testid="stale-summary">
+                    {likelyStale} {likelyStale === 1 ? "posting looks" : "postings look"} likely stale —
+                    posted or first seen here 45+ days ago, re-dated twice, or past a stated closing
+                    date; each card says which.{" "}
+                    <button
+                      type="button"
+                      data-testid="stale-toggle"
+                      onClick={() => setHideStale((value) => !value)}
+                      className="underline underline-offset-2"
+                    >
+                      {hideStale ? "Show them" : "Hide them"}
+                    </button>
+                  </p>
+                ) : null}
                 {hiddenByFilters > 0 ? (
                   <p className="mt-2 text-xs text-[var(--muted)]">
                     {hiddenByFilters} {hiddenByFilters === 1 ? "posting is" : "postings are"} hidden by
@@ -1611,7 +1666,9 @@ export function JobSearchPanel() {
                       ? `Every result is hidden by the filters above — the boards did return ${totalHits} ${totalHits === 1 ? "posting" : "postings"}.`
                       : favoritesOnly
                         ? "None of these results is in your favorites. Untick “Favorites only” to see all of them."
-                        : "Every remaining result is one you hid. Use “Show hidden” above to see them."}
+                        : hideStale && likelyStale > 0
+                          ? "Every remaining result looks likely stale. Use “Show them” above to see them anyway."
+                          : "Every remaining result is one you hid. Use “Show hidden” above to see them."}
                   </p>
                 ) : (
                   <ul className="mt-4 space-y-3">
@@ -1645,6 +1702,15 @@ export function JobSearchPanel() {
                                 {marks !== null && card.job.url !== null && marks.viewed.has(card.job.url) ? (
                                   <span className="ml-2 rounded-full border border-[var(--border)] px-1.5 py-0.5 align-middle text-[10px] font-semibold uppercase tracking-wide text-[var(--muted)]">
                                     Viewed
+                                  </span>
+                                ) : null}
+                                {card.freshness != null && freshnessLabel(card.freshness.level) !== null ? (
+                                  <span
+                                    data-testid="freshness-badge"
+                                    title={card.freshness.reasons.join(" ")}
+                                    className={`ml-2 rounded-full border px-1.5 py-0.5 align-middle text-[10px] font-semibold uppercase tracking-wide ${card.freshness.level === "stale" ? "border-[var(--warning)] text-[var(--warning)]" : "border-[var(--border)] text-[var(--muted)]"}`}
+                                  >
+                                    {freshnessLabel(card.freshness.level)}
                                   </span>
                                 ) : null}
                               </p>
@@ -1698,6 +1764,18 @@ export function JobSearchPanel() {
                                       ))}
                                     </ul>
                                   ) : null}
+                                </details>
+                              ) : null}
+                              {card.freshness != null && freshnessLabel(card.freshness.level) !== null ? (
+                                <details className="mt-1 text-xs text-[var(--muted)]" data-testid="freshness-reasons">
+                                  <summary className="cursor-pointer">
+                                    Why {freshnessLabel(card.freshness.level)?.toLowerCase()}
+                                  </summary>
+                                  <ul className="mt-1 list-disc pl-4">
+                                    {card.freshness.reasons.map((reason) => (
+                                      <li key={reason}>{reason}</li>
+                                    ))}
+                                  </ul>
                                 </details>
                               ) : null}
                             </div>
