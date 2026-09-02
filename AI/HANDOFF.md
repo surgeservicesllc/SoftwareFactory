@@ -2,6 +2,27 @@
 
 Last updated: 2026-08-31
 
+## Newest (2026-09-02, latest+54): nothing hidden (ADR-232)
+
+DRILL-DOWN MIRRORS THE AGGREGATE. `crm_dashboard_rows` repeats each
+dashboard function's WHERE verbatim (issue date + non-draft; open with a
+balance + the same bucket CASE; customer + NOT EXISTS active plan; the
+same UTC day). If you change a dashboard predicate, change its branch
+here in the same migration — the behavior test asserts count == rows for
+every figure and will catch the drift, but only if it runs. Every key
+cast sits inside `case when p_figure = … then p_key::type end`; keep it
+that way or a key for one figure raises in another's branch.
+
+THE DRY RUN MUST STAY STABLE. The postflight refuses a VOLATILE or
+DEFINER `crm_automation_dry_run`; a "run it for real" button is a
+different function, RED, and does not exist.
+
+THE AUDIT TRUSTS NOTHING THE TRIGGERS ALREADY REFUSE. Arrival-outside-
+window and technician-mismatch can only arise by drift after routing
+(the route triggers refuse them at insert), which is why they are
+audited. A new finding is a new UNION ALL branch, a `FINDING_LABELS`
+entry, and a fixture in the behavior test that raises exactly one of it.
+
 ## Newest (2026-09-02, latest+53): job profitability (ADR-231)
 
 UNKNOWN IS NOT ZERO. `crm_visit_profitability` returns a NULL margin when

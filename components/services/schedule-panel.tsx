@@ -11,6 +11,7 @@ import { PlanSequenceEditor } from "@/components/services/plan-sequence-editor";
 import { cn } from "@/lib/cn";
 import type {
   AccountsPayload,
+  ScheduleAuditPayload,
   ServicePlansPayload,
   TechniciansPayload,
   WorkOrdersPayload,
@@ -61,6 +62,7 @@ export function ServicesSchedulePanel() {
   const [plans, setPlans] = useState<ServicePlansPayload | null>(null);
   const [technicians, setTechnicians] = useState<TechniciansPayload | null>(null);
   const [accounts, setAccounts] = useState<AccountsPayload | null>(null);
+  const [audit, setAudit] = useState<ScheduleAuditPayload | null>(null);
   const [listError, setListError] = useState<string | null>(null);
   const [actError, setActError] = useState<string | null>(null);
   const [openForm, setOpenForm] = useState<"workOrder" | "plan" | null>(null);
@@ -69,11 +71,12 @@ export function ServicesSchedulePanel() {
 
   const refresh = useCallback(async () => {
     try {
-      const [ordersRes, plansRes, techsRes, accountsRes] = await Promise.all([
+      const [ordersRes, plansRes, techsRes, accountsRes, auditRes] = await Promise.all([
         fetch("/api/services/work-orders", { headers: { accept: "application/json" } }),
         fetch("/api/services/service-plans", { headers: { accept: "application/json" } }),
         fetch("/api/services/technicians", { headers: { accept: "application/json" } }),
         fetch("/api/services/accounts", { headers: { accept: "application/json" } }),
+        fetch("/api/services/schedule/audit", { headers: { accept: "application/json" } }),
       ]);
       const ordersBody = (await ordersRes.json()) as WorkOrdersPayload & {
         error?: { message?: string };
@@ -87,6 +90,10 @@ export function ServicesSchedulePanel() {
       if (plansRes.ok) setPlans((await plansRes.json()) as ServicePlansPayload);
       if (techsRes.ok) setTechnicians((await techsRes.json()) as TechniciansPayload);
       if (accountsRes.ok) setAccounts((await accountsRes.json()) as AccountsPayload);
+      if (auditRes.ok) {
+        const auditBody = (await auditRes.json()) as Partial<ScheduleAuditPayload>;
+        setAudit(Array.isArray(auditBody.findings) ? (auditBody as ScheduleAuditPayload) : null);
+      }
     } catch {
       setListError("The schedule could not be listed.");
     }
@@ -214,6 +221,55 @@ export function ServicesSchedulePanel() {
             </span>
           ))}
         </div>
+      ) : null}
+
+      {audit !== null ? (
+        <section
+          className={cn("card mb-6", audit.summary.bySeverity.high > 0 ? "border-[var(--danger)]" : audit.summary.total > 0 ? "border-[var(--warning)]" : "")}
+          data-testid="services-schedule-audit"
+        >
+          <SectionTitle
+            title={audit.summary.total === 0 ? "Schedule audit: nothing contradicts" : `Schedule audit (${audit.summary.total})`}
+            description={`Every contradiction in the next ${audit.window.days} days, computed from the schedule itself each time you look: double bookings, visits on no route, plans due with no visit, arrivals outside the promised window, and visits whose window passed without being closed.`}
+          />
+          {audit.summary.total === 0 ? (
+            <p className="mt-3 text-sm text-muted" data-testid="services-schedule-audit-clean">
+              No double bookings, no unrouted visits, no due plan without a visit, no arrival outside its window, and nothing left open past its window.
+            </p>
+          ) : (
+            <>
+              <p className="mt-3 text-xs text-muted" data-testid="services-schedule-audit-summary">
+                {audit.summary.byFinding.map((entry) => `${entry.count} ${entry.label.toLowerCase()}`).join(" · ")}
+                {audit.ceiling.reached ? ` · showing the first ${audit.ceiling.findings}` : ""}
+              </p>
+              <ul className="mt-3 divide-y divide-line" data-testid="services-schedule-audit-findings">
+                {audit.findings.slice(0, 100).map((finding, index) => (
+                  <li key={`${finding.finding}:${finding.workOrderId ?? finding.planId ?? index}:${finding.otherWorkOrderId ?? ""}`} className="py-2.5 text-sm">
+                    <span
+                      className={cn(
+                        "mr-2 inline-block rounded-full px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide",
+                        finding.severity === "high"
+                          ? "bg-rose-100 text-rose-800"
+                          : finding.severity === "medium"
+                            ? "bg-amber-100 text-amber-800"
+                            : "bg-slate-100 text-slate-700",
+                      )}
+                    >
+                      {finding.severity}
+                    </span>
+                    <span className="font-medium text-foreground">{finding.label}</span>
+                    <span className="text-muted">
+                      {" "}
+                      · {finding.accountName} · {finding.occursOn}
+                      {finding.technicianName ? ` · ${finding.technicianName}` : ""}
+                    </span>
+                    <span className="block text-xs text-muted">{finding.detail}</span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </section>
       ) : null}
 
       {duePlans.length > 0 ? (

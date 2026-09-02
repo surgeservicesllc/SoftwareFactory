@@ -5,6 +5,7 @@ import {
   composeAutopayAnswer,
   composeFollowupsAnswer,
   composeLostMoneyAnswer,
+  composeScheduleAuditAnswer,
   composeOverdueAnswer,
   composeRevenueAnswer,
   composeRoutesAnswer,
@@ -143,5 +144,29 @@ describe("the lost-money answer", () => {
     expect(composeLostMoneyAnswer({ days: 30, completed: 0, known: 0, losers: [] })).toContain("nothing to cost");
     expect(composeLostMoneyAnswer({ days: 30, completed: 4, known: 4, losers: [] }))
       .toBe("All 4 completed visits have every cost input on file. None of the costed visits lost money in the last 30 days.");
+  });
+});
+
+describe("the schedule-audit answer", () => {
+  it("says so when nothing contradicts, and otherwise counts by kind, flags the urgent ones, and names the first three", () => {
+    expect(composeScheduleAuditAnswer({ days: 7, total: 0, bySeverity: { high: 0, medium: 0, low: 0 }, byFinding: [], worst: [] }))
+      .toBe("Nothing contradicts in the next 7 days: no double bookings, no unrouted visits, no due plan without a visit, no arrival outside its window, and nothing left open past its window.");
+    expect(composeScheduleAuditAnswer({
+      days: 7,
+      total: 3,
+      bySeverity: { high: 2, medium: 1, low: 0 },
+      byFinding: [{ label: "Double-booked technician", count: 2 }, { label: "Plan due with no visit", count: 1 }],
+      worst: [
+        { label: "Double-booked technician", account: "Harborview Foods", detail: "Overlaps Ridgeway Bakery, 10:30–11:30." },
+        { label: "Double-booked technician", account: "Ridgeway Bakery", detail: "Overlaps Harborview Foods, 10:00–11:00." },
+        { label: "Plan due with no visit", account: "Old Mill", detail: "Quarterly IPM due 2026-04-17 (quarterly); no visit within a week of it." },
+      ],
+    })).toBe(
+      "3 contradictions in the next 7 days (2 double-booked technician, 1 plan due with no visit). 2 need attention today. "
+      + "First: Harborview Foods — double-booked technician: Overlaps Ridgeway Bakery, 10:30–11:30.; "
+      + "Ridgeway Bakery — double-booked technician: Overlaps Harborview Foods, 10:00–11:00.; "
+      + "Old Mill — plan due with no visit: Quarterly IPM due 2026-04-17 (quarterly); no visit within a week of it.. "
+      + "Every one is listed on the Schedule page with the rows involved.",
+    );
   });
 });

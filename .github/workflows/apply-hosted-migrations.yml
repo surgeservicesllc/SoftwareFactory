@@ -91,6 +91,7 @@ on:
           - explainable-scoring
           - data-you-own
           - job-profitability
+          - nothing-hidden
           - probe
 permissions:
   actions: read
@@ -1774,6 +1775,21 @@ jobs:
           psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
           psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/postflight/job-profitability.sql
           echo "Job profitability applied; two bounded cost columns, one function reading as the caller, unknowns counted not zeroed."
+      - name: Apply nothing hidden (scope=nothing-hidden)
+        if: ${{ inputs.scope == 'nothing-hidden' }}
+        run: |
+          VERSION=20260902000500_nothing_hidden
+          FILE="supabase/migrations/${VERSION}.sql"
+          sha256sum "$FILE"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied "${VERSION%%_*}"
+          else
+            npx supabase migration repair --status applied "${VERSION%%_*}" --db-url "$DB_URL"
+          fi
+          psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/postflight/nothing-hidden.sql
+          echo "Nothing hidden applied; schedule audit, automation dry run and dashboard drill-down, three invoker functions that store nothing."
       - name: Normalize exact legacy bot ACLs (scope=bot-legacy-acl-normalization)
         if: ${{ inputs.scope == 'bot-legacy-acl-normalization' }}
         run: |

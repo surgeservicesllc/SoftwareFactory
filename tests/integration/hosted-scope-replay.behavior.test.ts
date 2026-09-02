@@ -285,6 +285,7 @@ describe("the workflow's post-cutover surgical-scope fence", () => {
       "invoice-from-visit.sql",
       "job-profitability.sql",
       "multi-unit-properties.sql",
+      "nothing-hidden.sql",
       "operating-dashboards.sql",
       "pest-ipm.sql",
       "plan-sequencing.sql",

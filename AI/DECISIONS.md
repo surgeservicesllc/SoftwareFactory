@@ -6114,3 +6114,53 @@ cost per mile, no per-route figure: those need inputs the book does not
 carry, and inventing a default for them is exactly the practice this
 increment exists to refuse. A route's profitability is the sum of its
 visits', which the grouping by technician already shows.
+
+## ADR-232 - Nothing hidden: a figure you can open, a rule you can rehearse, a schedule that names its own contradictions
+
+Three complaints across the teardown share one shape — a number with
+nothing behind it. HubSpot's dashboards "cap the number of reports" and
+offer no drill-down; its workflows are "nerve-racking to set live" because
+nobody can see what one would touch; PestPac "puts tasks on the wrong day"
+and leaves "missing stops" for the technician to discover on the road.
+Each is answered by the same move: compute the thing live, under the
+caller's RLS, and show the rows.
+
+**The schedule audits itself.** `crm_schedule_audit(org, days)` names six
+contradictions with the rows involved: a technician double-booked (each
+visit is its own finding, because each is the one somebody must move); a
+visit whose window has passed and is still open; a scheduled visit no
+planned or released route carries; an active plan due with no visit within
+a week of it; a planned arrival outside the window promised to the
+customer; and a visit reassigned after it was routed. The last two can
+only arise by drift — the route triggers (ADR-221) refuse them at insert
+— which is exactly why they are audited rather than trusted. High before
+medium before low, then by date. Nothing is stored: a fixed conflict
+disappears the moment it is fixed. The Schedule page shows the audit
+above the board; the copilot answers "What contradicts in the schedule?"
+
+**A rule can be rehearsed.** `crm_automation_dry_run(org, rule, days)` is
+a STABLE function that lists exactly which records an automation would
+touch right now, what it would do to each ("Would email dana@…: …"), and
+why it would not — no email on file, do-not-contact, marketing declined
+for a lead rule, notices declined for the rest. The rule's own counters
+cannot move, because nothing runs; the postflight checks the function is
+STABLE and INVOKER. The page states coverage first — "2 match; the rule
+would act on 1 and skip 1 (1 no email on file)" — so a rule is read as
+what it would do to real people before anybody arms it. Executors stay
+**RED**; the send behind a sending rule stays **Not Connected**.
+
+**Every figure opens, by its own predicate.** `crm_dashboard_rows(org,
+figure, key)` returns the rows behind each dashboard figure by repeating
+the aggregate's exact WHERE — the invoiced month by issue date and
+non-draft status, the aging bucket by the same CASE, the customer with no
+plan by the same NOT EXISTS, the technician's visits by the same window,
+the route day by the same UTC day — so the count on the tile and the list
+under it cannot disagree, and the behavior test asserts that equality
+figure by figure. Every cast of the key sits inside a CASE on the figure,
+so a key shaped for one figure is never parsed for another; the route
+checks the shape in code first.
+
+**What this deliberately does not do.** The audit does not resolve a
+conflict, the dry run does not run, and the drill-down does not edit.
+Each names the rows and stops — the person decides, on the page that
+owns the row.

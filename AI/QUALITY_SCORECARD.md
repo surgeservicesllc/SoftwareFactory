@@ -2,6 +2,25 @@
 
 Last reviewed: 2026-08-31
 
+**Addendum, 2026-09-02 latest+54 - nothing hidden (ADR-232):**
+services-nothing-hidden.behavior 4 (six findings each raised once by a
+fixture and never by the clean rows, ordered high/medium/low with the
+exact detail sentences; three rules dry-run — a lead email blocked by "no
+email on file", a service SMS blocked by "no phone on file", an overdue
+task with nothing blocking — with counters untouched; every dashboard
+figure's rows equal to its aggregate bucket by bucket, technician by
+technician, day by day, and a stray key never parsed; a rival sees
+nothing and only `authenticated` may execute). services-nothing-hidden
+4 (severity and kind counts in the audit's order; dry-run summary by
+reason; every figure's key shape accepted and refused; row view). services-
+nothing-hidden-routes 5 (window bounded; malformed id and foreign rule
+refused without a run; records, summary and Not Connected; unknown figure
+and wrong-shaped key refused before the database; null key for a keyless
+figure). services-schedule-panel +1, services-dashboards-panel 2,
+services-marketing-panel 1, services-copilot +1. Hosted apply scope
+`nothing-hidden` with a postflight that refuses a non-STABLE or DEFINER
+function.
+
 **Addendum, 2026-09-02 latest+53 - job profitability (ADR-231):**
 services-profitability.behavior 6 (a fully known visit priced from
 invoice, timesheet-minus-break at the technician's rate and the lot's

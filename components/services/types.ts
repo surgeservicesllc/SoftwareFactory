@@ -1079,3 +1079,44 @@ export type StockPayload = {
   balances: StockBalanceView[];
   counts: { locations: number; lots: number };
 };
+
+/* --- nothing hidden (increment 30, ADR-232) ------------------------------ */
+
+export type {
+  DashboardRowView,
+  DryRunRecordView,
+  DryRunSummary,
+  ScheduleAuditSummary,
+  ScheduleFindingView,
+} from "@/lib/services/nothing-hidden";
+import type {
+  DashboardRowView as DashboardRowViewT,
+  DryRunRecordView as DryRunRecordViewT,
+  DryRunSummary as DryRunSummaryT,
+  ScheduleAuditSummary as ScheduleAuditSummaryT,
+  ScheduleFindingView as ScheduleFindingViewT,
+} from "@/lib/services/nothing-hidden";
+
+export type ScheduleAuditPayload = {
+  organizationId: string;
+  window: { days: number };
+  findings: ScheduleFindingViewT[];
+  summary: ScheduleAuditSummaryT;
+  ceiling: { findings: number; reached: boolean };
+};
+
+export type DryRunPayload = {
+  automation: AutomationView;
+  window: { days: number };
+  records: DryRunRecordViewT[];
+  summary: DryRunSummaryT;
+  execution: { connected: boolean; label: string };
+};
+
+export type DashboardRowsPayload = {
+  figure: string;
+  key: string | null;
+  window: { days: number };
+  rows: DashboardRowViewT[];
+  ceiling: { rows: number; reached: boolean };
+};

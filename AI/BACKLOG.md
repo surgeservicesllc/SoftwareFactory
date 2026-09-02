@@ -108,11 +108,17 @@ anything on a timer stays RED and owner-gated.
   copilot "Which jobs lost money this quarter?" states coverage first.
   20260902000400; hosted apply: scope=job-profitability after merge.
   Closes PestPac 8.
-- [ ] Increment 30 (nothing hidden): schedule audit (double-booked
-  technicians, visits on no route, due plans with no visit, promised
-  windows that contradict planned arrival); automation DRY-RUN naming
-  exactly which records a rule would touch; dashboard drill-down to the
-  rows behind every figure. Closes HubSpot 5/6, PestPac 7/10.
+- [x] Increment 30 (ADR-232): nothing hidden — `crm_schedule_audit()` naming
+  six contradictions with the rows involved (double-booked, slipped,
+  unrouted, plan due with no visit, arrival outside the promised window,
+  routed under a different technician), shown above the Schedule board
+  and answered by the copilot; `crm_automation_dry_run()` (STABLE) listing
+  exactly which records a rule would touch, what it would do to each and
+  why it would not, with coverage stated first and the send labelled Not
+  Connected; `crm_dashboard_rows()` opening every dashboard figure by the
+  aggregate's own predicate so tile and list cannot disagree. All three
+  INVOKER, nothing stored. 20260902000500; hosted apply: scope=nothing-
+  hidden after merge. Closes HubSpot 5/6, PestPac 7/10.
 - [ ] Increment 31 (the customer's side): post-service survey asked in the
   portal after a completed visit; request SLA clock with breach flagged;
   two-way portal messages threaded on the account. Closes HubSpot

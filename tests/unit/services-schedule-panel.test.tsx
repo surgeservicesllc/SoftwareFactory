@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -112,12 +112,21 @@ function json(body: unknown, status = 200) {
   });
 }
 
+const emptyAudit = {
+  organizationId: "org-1",
+  window: { days: 14 },
+  findings: [],
+  summary: { total: 0, bySeverity: { high: 0, medium: 0, low: 0 }, byFinding: [] },
+  ceiling: { findings: 500, reached: false },
+};
+
 let fetchMock: ReturnType<typeof vi.fn>;
 
 function serve(overrides: {
   workOrders?: unknown;
   plans?: unknown;
   sequence?: unknown;
+  audit?: unknown;
   onWrite?: (url: string, init: RequestInit) => Response | null;
 }) {
   fetchMock.mockImplementation((url: string, init?: RequestInit) => {
@@ -136,6 +145,9 @@ function serve(overrides: {
     }
     if (url.startsWith("/api/services/technicians")) {
       return Promise.resolve(json(techniciansPayload));
+    }
+    if (url.startsWith("/api/services/schedule/audit")) {
+      return Promise.resolve(json(overrides.audit ?? emptyAudit));
     }
     return Promise.resolve(json(accountsPayload));
   });
@@ -335,5 +347,31 @@ describe("sequencing a plan onto named dates", () => {
     expect(cadence.textContent).toContain("1 visits a year");
     expect(cadence.textContent).toContain("4 bills a year");
     expect(cadence.textContent).toContain("level billing");
+  });
+
+  it("shows the schedule audit with every finding named, and says so when nothing contradicts", async () => {
+    serve({
+      audit: {
+        ...emptyAudit,
+        findings: [
+          { finding: "double_booked", label: "Double-booked technician", severity: "high", occursOn: "2026-04-15", workOrderId: "wo-1", otherWorkOrderId: "wo-2", planId: null, routeId: null, accountId: "acc-1", accountName: "Harborview Foods", technicianId: "t1", technicianName: "Rosa Vega", detail: "Overlaps Harborview Foods, 10:30–11:30." },
+          { finding: "plan_due_unscheduled", label: "Plan due with no visit", severity: "medium", occursOn: "2026-04-17", workOrderId: null, otherWorkOrderId: null, planId: "p1", routeId: null, accountId: "acc-1", accountName: "Harborview Foods", technicianId: null, technicianName: null, detail: "Quarterly IPM due 2026-04-17 (quarterly); no visit within a week of it." },
+        ],
+        summary: { total: 2, bySeverity: { high: 1, medium: 1, low: 0 }, byFinding: [{ finding: "double_booked", label: "Double-booked technician", count: 1 }, { finding: "plan_due_unscheduled", label: "Plan due with no visit", count: 1 }] },
+      },
+    });
+    render(<ServicesSchedulePanel />);
+    const card = await screen.findByTestId("services-schedule-audit");
+    expect(within(card).getByText("Schedule audit (2)")).toBeInTheDocument();
+    expect(screen.getByTestId("services-schedule-audit-summary")).toHaveTextContent("1 double-booked technician · 1 plan due with no visit");
+    expect(within(card).getByText("Overlaps Harborview Foods, 10:30–11:30.")).toBeInTheDocument();
+    expect(within(card).getByText("Double-booked technician")).toBeInTheDocument();
+    expect(within(card).getAllByText("high")).toHaveLength(1);
+
+    cleanup();
+    serve({});
+    render(<ServicesSchedulePanel />);
+    await screen.findByTestId("services-schedule-audit-clean");
+    expect(screen.getByText("Schedule audit: nothing contradicts")).toBeInTheDocument();
   });
 });
