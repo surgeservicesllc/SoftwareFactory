@@ -35,7 +35,7 @@ rival's no-such-request; the queue's order and the caller's record; the
 rival seeing nothing; grants), pure 3, routes 3, panel. Seed audit
 68/68; replay with the new postflight; runbook count 231; workflow
 bytes under 420,000; tsc and eslint clean. Hosted apply scope
-`conversation-routing` is dispatched after merge. With this the
+`conversation-routing`: run 33594365362 succeeded on main 37be65f. With this the
 teardown's last buildable row is closed; every remaining row is GATED
 on a provider or RED on owner direction.
 
@@ -79,8 +79,7 @@ cancel; project cancel counting three and recording four; grants), pure,
 routes and panel suites. Seed audit 68/68; grants roster and RLS census
 229; replay with the new postflight; runbook count 230; workflow bytes
 under 420,000; tsc and eslint clean. Hosted apply scope `schedule-bends`:
-run 33593186976 dispatched on main b67b31c (in progress when this was
-recorded; the result is recorded with the program close-out).
+run 33593186976 succeeded on main b67b31c.
 
 ## 2026-09-02: The form asks the next question (ADR-238)
 
