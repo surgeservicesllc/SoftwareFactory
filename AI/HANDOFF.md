@@ -19,10 +19,11 @@ change. What is left is GATED (sending, charging, locating, syncing,
 listening, generating) or RED (TOTP, executors on a clock). The next
 scope, if any, needs owner direction, not a general goal.
 
-HOSTED: scope=forms-conditions run 33591853778 succeeded on main f178847;
-scope=schedule-bends run 33593186976 dispatched on main b67b31c (record its
-result); scope=conversation-routing is dispatched after its merge; record
-both outcomes here and in CURRENT_STATE.
+HOSTED: scope=conversation-routing run 33594365362 succeeded on main
+37be65f; scope=schedule-bends run 33593186976 succeeded on main b67b31c;
+scope=forms-conditions run 33591853778 succeeded on main f178847. Every
+teardown increment is applied; the hosted ledger ends at
+20260902001100_conversation_routing.
 
 ## Older (2026-09-02, latest+61): the schedule bends (ADR-239)
 
@@ -36,9 +37,8 @@ A PROJECT IS ITS VISITS. There is no project-level status beyond
 `cancelled`; planned/active/done are counted from the visits every time.
 Do not store progress on the project row.
 
-HOSTED: scope=schedule-bends run 33593186976 dispatched on main b67b31c;
-record its result here and in CURRENT_STATE. scope=forms-conditions: run
-33591853778.
+HOSTED: scope=schedule-bends run 33593186976 succeeded on main b67b31c.
+scope=forms-conditions: run 33591853778.
 
 ## Older (2026-09-02, latest+60): the form asks the next question (ADR-238)
 
