@@ -97,6 +97,7 @@ on:
           - knowledge-base
           - forms-conditions
           - schedule-bends
+          - conversation-routing
           - probe
 permissions:
   actions: read
@@ -1873,6 +1874,22 @@ jobs:
           psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
           psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/postflight/schedule-bends.sql
           echo "Schedule bends applied; bulk visit edits with one outcome per row, and multi-day projects as one visit per day."
+
+      - name: Apply conversation routing (scope=conversation-routing)
+        if: ${{ inputs.scope == 'conversation-routing' }}
+        run: |
+          VERSION=20260902001100_conversation_routing
+          FILE="supabase/migrations/${VERSION}.sql"
+          sha256sum "$FILE"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied "${VERSION%%_*}"
+          else
+            npx supabase migration repair --status applied "${VERSION%%_*}" --db-url "$DB_URL"
+          fi
+          psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/postflight/conversation-routing.sql
+          echo "Conversation routing applied; a suggested assignee with the reason printed, assignment on the timeline, and the queue by person."
       - name: Normalize exact legacy bot ACLs (scope=bot-legacy-acl-normalization)
         if: ${{ inputs.scope == 'bot-legacy-acl-normalization' }}
         run: |

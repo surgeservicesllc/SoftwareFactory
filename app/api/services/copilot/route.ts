@@ -36,6 +36,7 @@ import {
   type CrmContactHygieneRow,
 } from "@/lib/services/trust";
 import { composeKnowledgeAnswer, toKbSearchHit, type CrmKbSearchRow } from "@/lib/services/knowledge";
+import { composeUnassignedAnswer, toRequestQueueView, type CrmRequestQueueRow } from "@/lib/services/conversation-routing";
 import {
   ApiRequestError,
   databaseErrorResponse,
@@ -183,6 +184,21 @@ export async function POST(request: Request) {
       return jsonNoStore({
         skill,
         answer: composeHelpDeskAnswer({ open: summary.open, overdue: summary.overdue, late }),
+      });
+    }
+
+    if (skill === "unassigned_requests") {
+      const read = await client.rpc("crm_request_queue", { p_organization: organizationId }).limit(500);
+      if (read.error) return databaseErrorResponse(read.error);
+      const queue = ((read.data ?? []) as unknown as CrmRequestQueueRow[]).map(toRequestQueueView);
+      return jsonNoStore({
+        skill,
+        answer: composeUnassignedAnswer({
+          open: queue.length,
+          unassigned: queue.filter((row) => row.assigneeEmployeeId === null).map((row) => ({
+            account: row.accountName, summary: row.summary, waitingMinutes: row.waitingMinutes, suggestedName: row.suggestedName, reason: row.suggestedReason,
+          })),
+        }),
       });
     }
 

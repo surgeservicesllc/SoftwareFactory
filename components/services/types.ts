@@ -839,6 +839,8 @@ export type PortalRequestView = {
   workOrderId: string | null;
   submittedAt: string;
   resolvedAt: string | null;
+  assigneeEmployeeId: string | null;
+  assignedAt: string | null;
   open: boolean;
   answered: boolean;
   updatedAt: string;

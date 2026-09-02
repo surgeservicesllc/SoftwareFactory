@@ -1,5 +1,44 @@
 # Current state
 
+## 2026-09-02: Conversation routing (ADR-240)
+
+Increment 36 ships `20260902001100_conversation_routing.sql`:
+`crm_portal_requests.assignee_employee_id` (FK same-org employees, on
+delete set null), `assigned_at` and `assigned_by`, paired by check;
+`crm_my_employee()` (the caller's active staff record by `user_id`);
+`crm_request_open_load(org, employee)`; `crm_request_suggested_assignee(org,
+request)` (INVOKER, STABLE, plpgsql: the branch manager of the territory
+`crm_territory_for_address` resolves from the account's billing address,
+else that territory's active rep, else the least-loaded active CSR or
+dispatcher with ties by name, else nobody — every branch returning the
+reason as a sentence, the territory code, the postal code and the open
+load; no row for a request the caller cannot see); `crm_request_assign(org,
+request, employee)` (INVOKER, VOLATILE: refuses an inactive or foreign
+person, updates the pairing, writes a `note` timeline event "Request
+assigned to <name>." or "Request unassigned."); `crm_request_queue(org)`
+(INVOKER, STABLE: open requests unassigned-first then oldest, with the
+assignee's name and, for the unassigned, the suggestion via a lateral
+call). Every function authenticated-only. `lib/services/conversation-
+routing.ts` maps rows, labels waiting time and composes the copilot
+answer. Routes: GET/PUT `/api/services/portal/requests/[id]/assignment`
+(suggestion; assign or unassign, refusals named), GET
+`/api/services/portal/queue` (queue, active employees, the caller's
+record, counts). Customer Portal page: an Assigned column with a select
+of active staff, "Suggested: <name> — <reason>" with Accept for the
+unassigned, the waiting time for the assigned, and a Mine only filter
+when the caller has a staff record. Copilot `unassigned_requests` ("What
+is unassigned on the help desk?"). Seed: every third request assigned.
+Tests: services-conversation-routing.behavior 4 (the four-step
+suggestion with the exact sentence at each step and ties by name; the
+timeline note, the inactive refusal, the pairing check, unassign, the
+rival's no-such-request; the queue's order and the caller's record; the
+rival seeing nothing; grants), pure 3, routes 3, panel. Seed audit
+68/68; replay with the new postflight; runbook count 231; workflow
+bytes under 420,000; tsc and eslint clean. Hosted apply scope
+`conversation-routing` is dispatched after merge. With this the
+teardown's last buildable row is closed; every remaining row is GATED
+on a provider or RED on owner direction.
+
 ## 2026-09-02: The schedule bends (ADR-239)
 
 Increment 35 ships `20260902001000_schedule_bends.sql`:
@@ -39,8 +78,9 @@ the inverted window; progress live through a completion and a bulk
 cancel; project cancel counting three and recording four; grants), pure,
 routes and panel suites. Seed audit 68/68; grants roster and RLS census
 229; replay with the new postflight; runbook count 230; workflow bytes
-under 420,000; tsc and eslint clean. Hosted apply scope `schedule-bends`
-is dispatched after merge.
+under 420,000; tsc and eslint clean. Hosted apply scope `schedule-bends`:
+run 33593186976 dispatched on main b67b31c (in progress when this was
+recorded; the result is recorded with the program close-out).
 
 ## 2026-09-02: The form asks the next question (ADR-238)
 
@@ -83,7 +123,8 @@ none for a retired template or another type; grants), services-form-
 conditions 6, services-forms-conditions-routes 5, services-forms-
 conditions-panel 2. Seed audit 67/67; replay with the new postflight;
 runbook count 229; workflow 411,640 of 420,000; tsc and eslint clean.
-Hosted apply scope `forms-conditions` is dispatched after merge.
+Hosted apply scope `forms-conditions`: run 33591853778 succeeded on main
+`f178847`.
 
 ## 2026-09-02: What people look up (ADR-237)
 

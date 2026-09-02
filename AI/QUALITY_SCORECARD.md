@@ -2,6 +2,18 @@
 
 Last reviewed: 2026-09-02
 
+**Addendum, 2026-09-02 latest+62 - conversation routing (ADR-240):**
+services-conversation-routing.behavior 4 (the branch manager with the
+exact sentence, the rep once the manager is inactive, the least-loaded
+dispatcher once the rep is too — with the load counted and ties broken
+by name — and nobody with both reason variants; the assignment's
+timeline note by name, an inactive person refused, the pairing check,
+unassign recorded, a rival's request unknown; the queue unassigned-first
+with the suggestion and the caller's own record; grants exact).
+services-conversation-routing 3, routes 3, panel. Seed audit 68/68 with
+every third request assigned; replay executes the new postflight;
+runbook 231; tsc and eslint clean.
+
 **Addendum, 2026-09-02 latest+61 - the schedule bends (ADR-239):**
 services-schedule-bends.behavior 3 (four visits in one batch — applied
 with the new technician and day, completed-not-changed, on a named route

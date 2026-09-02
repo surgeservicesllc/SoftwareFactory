@@ -1856,7 +1856,7 @@ export function isClosedRequestStatus(status: CrmRequestStatus): boolean {
 export const CRM_PORTAL_USER_COLUMNS =
   "id, account_id, contact_id, user_id, email, role, invited_at, activated_at, last_seen_at, active, created_at, updated_at";
 export const CRM_PORTAL_REQUEST_COLUMNS =
-  "id, account_id, property_id, portal_user_id, kind, status, summary, detail, preferred_date, response, work_order_id, submitted_at, acknowledged_at, first_response_at, resolved_at, updated_at";
+  "id, account_id, property_id, portal_user_id, kind, status, summary, detail, preferred_date, response, work_order_id, submitted_at, acknowledged_at, first_response_at, resolved_at, assignee_employee_id, assigned_at, updated_at";
 
 export type CrmPortalUserRow = {
   id: string;
@@ -1889,6 +1889,9 @@ export type CrmPortalRequestRow = {
   acknowledged_at: string | null;
   first_response_at: string | null;
   resolved_at: string | null;
+  /** Who has it (ADR-240). */
+  assignee_employee_id?: string | null;
+  assigned_at?: string | null;
   updated_at: string;
 };
 
@@ -1936,6 +1939,8 @@ export function toPortalRequestView(row: CrmPortalRequestRow) {
     acknowledgedAt: row.acknowledged_at ?? null,
     firstResponseAt: row.first_response_at ?? null,
     resolvedAt: row.resolved_at,
+    assigneeEmployeeId: row.assignee_employee_id ?? null,
+    assignedAt: row.assigned_at ?? null,
     open: !isClosedRequestStatus(row.status),
     /* Answered means somebody wrote back, which is not the same as closed. */
     answered: row.response !== null,

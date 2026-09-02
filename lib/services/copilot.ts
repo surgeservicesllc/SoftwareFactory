@@ -91,6 +91,12 @@ export const COPILOT_SKILLS = [
     keywords: ["past their promise", "past promise", "sla", "help desk", "unanswered request", "late request", "requests are late", "waiting on us"],
   },
   {
+    id: "unassigned_requests",
+    label: "Requests nobody has",
+    example: "Which requests have nobody assigned?",
+    keywords: ["nobody assigned", "unassigned", "nobody has", "who should take", "who has the request", "assign the request", "route the request", "queue by person"],
+  },
+  {
     id: "knowledge",
     label: "What the knowledge base says",
     example: "What do we tell customers about ants?",

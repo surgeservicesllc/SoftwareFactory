@@ -217,6 +217,23 @@ anything on a timer stays RED and owner-gated.
   cancel; "Day 2 of 4" beside a project's visit. Seed: three projects.
   20260902001000; hosted apply: scope=schedule-bends after merge. Closes
   PestBoss 4/7.
+- [x] Increment 36 (ADR-240): conversation routing —
+  `crm_portal_requests.assignee_employee_id` / `assigned_at` / `assigned_by`
+  (paired), `crm_request_suggested_assignee()` (INVOKER, STABLE: branch
+  manager of the territory the account's address falls in, else that
+  territory's rep, else the least-loaded active CSR or dispatcher, else
+  nobody — each with the reason in words and the open load printed),
+  `crm_request_assign()` (the assignment, recorded on the account's
+  timeline by name; an inactive person refused; null unassigns),
+  `crm_request_queue()` (open requests unassigned-first with the
+  suggestion), `crm_my_employee()`, `crm_request_open_load()`. No new
+  table. Routes: GET/PUT `/api/services/portal/requests/[id]/assignment`,
+  GET `/api/services/portal/queue`. Customer Portal page: an Assigned
+  column with a select, "Suggested: X — reason" with Accept, Mine only.
+  Copilot "Which requests have nobody assigned?". Seed: every third
+  request assigned. 20260902001100; hosted apply:
+  scope=conversation-routing after merge. Closes HubSpot 38 — the last
+  buildable row of the teardown; what remains is GATED or RED.
 - [ ] **RED — owner direction required:** TOTP enrolment through Supabase
   Auth's own MFA (PestPac complaint 14). `policies/PROTECTED_RESOURCES.md`
   lists MFA under identity and authorization and
