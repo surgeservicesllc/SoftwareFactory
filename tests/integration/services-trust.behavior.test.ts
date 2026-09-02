@@ -118,6 +118,15 @@ describe("trust: forecast scenarios and contact hygiene", { timeout: 240_000 }, 
       `insert into public.crm_invoices (organization_id, account_id, number, status, subtotal_cents, tax_cents, total_cents, issued_on, due_on, created_by)
        values ($1, $2, 'INV-T-1', 'open', 5000, 0, 5000, current_date - 400, current_date - 370, $3) returning id`,
       [acmeOrg, oldMill, acmeOwner])).rows[0].id;
+    // Old Mill's last touch is pinned to exactly 400 days ago as a
+    // timestamp. The invoice above dates it to a midnight, and the
+    // function rounds elapsed days to the nearest integer, so a
+    // date-only touch read as 400 before noon and 401 after — a
+    // time-of-day flake, not a defect in either. The note is the same
+    // event a person would record when the invoice went out.
+    await db.query(
+      `insert into public.crm_timeline_events (organization_id, account_id, kind, summary, actor_user_id, occurred_at)
+       values ($1, $2, 'note', 'Invoice INV-T-1 sent.', $3, now() - interval '400 days')`, [acmeOrg, oldMill, acmeOwner]);
     const notice = (await db.query<{ notice_id: string }>(
       `select notice_id from public.crm_notice_compose('invoice_overdue', 'email', $1, 'dup@harborview.example', 'Your invoice is overdue.', current_date, now(), 'Invoice overdue')`,
       [invoice])).rows[0].notice_id;
@@ -173,7 +182,7 @@ describe("trust: forecast scenarios and contact hygiene", { timeout: 240_000 }, 
     const { rows } = await db.query<{ contact_name: string; account_name: string; flags: string[]; flag_count: number; days_since_touch: number | null }>(
       `select contact_name, account_name, flags, flag_count, days_since_touch from public.crm_contact_hygiene($1)`, [acmeOrg]);
     // Dana's address differs from the failed one only by case, so it is
-    // the same undeliverable mailbox; Old Mill's last touch is an invoice
+    // the same undeliverable mailbox; Old Mill's last touch is exactly
     // 400 days old; Ana's account is a customer nobody has spoken to.
     expect(rows.map((row) => [row.contact_name, row.flags])).toEqual([
       ["Sam Ortiz", ["undeliverable", "duplicate_email", "inactive_account", "untouched_year"]],
