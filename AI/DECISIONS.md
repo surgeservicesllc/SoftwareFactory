@@ -6948,3 +6948,46 @@ board that says "closed" some other way reads as open — the note prints
 reason; a page behind a login or a bot wall is "blocked", never guessed.
 Hosted apply: scope=posting-recheck after merge. With this increment the
 nine-increment program of the teardown is complete.
+
+## ADR-250 - The job seeker tables hold nothing for service_role on hosted, and the chain says so explicitly
+
+Date: 2026-09-02
+
+The document-polish postflight (ADR-248) refused production with
+"job_seeker_documents grants are wrong". The migration had applied and
+the ledger row was recorded; the assertion that anon and service_role
+hold nothing on the table is what failed. The chain never granted either.
+Hosted Supabase does, through ALTER DEFAULT PRIVILEGES on `public`, at
+CREATE TABLE time — the mechanism ADR-114's extraction contract
+(20260822000500) already documented for one table. The job seeker
+foundation revoked only anon from its eight tables, and the upload and
+discovery-surface tables followed that shape; every job seeker table
+created after the extraction contract revokes all three roles
+explicitly, and each of those postflights has passed on production.
+Twelve tables predate the convention: profiles, preferences, jobs,
+matches, applications, documents, contacts, outreach, uploads, saved
+searches, search alerts, search events.
+
+RLS is enabled and forced on all twelve, so anon reads nothing either
+way; service_role is the hole, because it bypasses row level security
+and no policy applies to it. No worker reads or writes these tables —
+the alert engine's service key signs definer RPCs and nothing else — so
+the grant protected nothing and exposed every person's rows to the
+worker key. 20260902001700 revokes all from public, anon and
+service_role on the twelve, leaves authenticated exactly as each table's
+own migration set it, and is a no-op locally (PGlite has no default
+privileges, which is why every behavior test passed and only the hosted
+readback could find this). Its postflight walks every `job_seeker_%`
+table and refuses if anon or service_role holds anything, if RLS is not
+forced, or if authenticated lost SELECT. A unit test pins the
+convention: every job_seeker table must be named in an explicit revoke
+from service_role somewhere in the chain, so the next table cannot skip
+it. The document-polish scope is re-run after the contraction for its
+green postflight; the migration itself is not re-applied in substance
+(every statement in it is idempotent).
+
+Bounds: this contracts the job seeker tables only. Other public tables
+created after 20260812002600's blanket narrowing may carry the same
+default grants; the hosted-service-role-table-grants roster checks the
+chain, not production, and a production-wide readback is a separate
+decision for the owner.

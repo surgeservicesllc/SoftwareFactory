@@ -63,6 +63,11 @@ own PR, ADR, behavior test against the real chain, and hosted scope.
 All nine increments are shipped as of 2026-09-02 (increments 2–4 on
 #505; 5–9 on the follow-on PR); hosted scopes are dispatched after each
 merge and recorded in `AI/CURRENT_STATE.md`.
+- [x] Hosted service_role contract (ADR-250) — 2026-09-02. The
+  document-polish postflight found Supabase default grants on twelve
+  pre-convention job seeker tables; 20260902001700 revokes them
+  (scope=job-seeker-service-role-contract) and a unit test pins the
+  explicit-revoke convention.
 
 - [x] Increment 1 (ADR-241): freshness — `job_seeker_posting_sightings`
   (public facts, one row per URL, forced RLS, SELECT to authenticated,

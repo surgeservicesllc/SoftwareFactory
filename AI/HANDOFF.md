@@ -2,7 +2,30 @@
 
 Last updated: 2026-09-02
 
-## Newest (2026-09-02, latest+71): still open? (ADR-249) — the program is complete
+## Newest (2026-09-02, latest+72): the hosted service_role contract (ADR-250)
+
+THE POSTFLIGHT DID ITS JOB. scope=document-polish (run 33638477432)
+applied 20260902001500 and recorded it, then refused on
+"job_seeker_documents grants are wrong": on hosted, service_role (and
+possibly anon) held privileges the chain never granted — Supabase's
+default privileges at CREATE TABLE, which the foundation loop (revoke
+anon only) never took back. PGlite has no default privileges, so no
+local test can see this. Do not weaken a postflight's grant assertion to
+get green; contract the grant.
+
+TWELVE TABLES, ONE MIGRATION. 20260902001700 revokes all from public,
+anon and service_role on the pre-convention tables and touches
+authenticated on none of them. Every job seeker table created since the
+extraction contract already revokes explicitly and has passed its own
+postflight on production. `job-seeker-service-role-contract.test.ts`
+pins the convention for the next table.
+
+ORDER AFTER MERGE: scope=job-seeker-service-role-contract, then re-run
+scope=document-polish (idempotent statements, repair no-op) for its
+green postflight; record both run ids here and in CURRENT_STATE. Also
+from #506: scope=posting-recheck (see below).
+
+## Older (2026-09-02, latest+71): still open? (ADR-249) — the program is complete
 
 THE LEDGER IS THE ALLOW-LIST. The recheck route reads
 `read_posting_sightings` for the URL's key first and refuses (404) a URL
@@ -29,8 +52,8 @@ same window even if a client calls it directly.
 be altered); its grants are re-applied in the same migration and the
 posting-recheck postflight checks the new columns are in its result.
 
-HOSTED: scope=posting-recheck is dispatched after merge; record the run
-id here and in CURRENT_STATE. Also on this branch: scope=document-polish
+HOSTED: scope=posting-recheck run 33638710879 succeeded on main 317f623
+(#506 squash, 2026-09-02 13:55 UTC). Also on this branch: scope=document-polish
 (increment 8). #505 (increments 2–4) is merged as d85a759; its scopes
 application-transitions (run 33636521077) and application-kit (run
 33636602923) are applied.
@@ -61,8 +84,10 @@ words, so the verb after a bullet is not flagged as an invented name.
 The behavior suite accepts either check name for an unknown origin,
 because Postgres reports whichever fails first.
 
-HOSTED: scope=document-polish is dispatched after merge; record the run
-id here and in CURRENT_STATE. #505 (increments 2–4) is merged as d85a759;
+HOSTED: scope=document-polish run 33638477432 (main 317f623, #506 squash)
+applied the migration and recorded 20260902001500; the postflight refused
+on a pre-existing hosted grant — see latest+72 (ADR-250) for the
+contraction and the re-run. #505 (increments 2–4) is merged as d85a759;
 its scopes application-transitions (run 33636521077) and
 application-kit (run 33636602923) are applied.
 
