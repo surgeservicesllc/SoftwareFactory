@@ -69,11 +69,15 @@ describe("hosted graph protocol cutover scopes", () => {
     // and lowering the number is what keeps the recovery. The commercial
     // portal scope breached 480,000 outright, and extracting the three
     // remaining inline heredoc guards to .github/hosted-apply/guard/
-    // recovered another 4.8KB — so the number comes down again. A new scope
-    // should cost ~22 lines here and a file there. If this fails, extract —
-    // do not raise it.
+    // recovered another 4.8KB — so the number comes down again. The trust
+    // scope left 490 bytes; the three largest captured catalog checks
+    // (bot-account-binding's postflight, the retired CONTRACT preflight and
+    // scope=all's protected-catalog gate) then moved to guard files the
+    // replay suite executes, recovering 39.6KB — and the number comes down
+    // once more. A new scope should cost ~22 lines here and a file there.
+    // If this fails, extract — do not raise it.
     const canonicalLfSource = workflowSource.replace(/\r\n?/g, "\n");
-    expect(Buffer.byteLength(canonicalLfSource, "utf8")).toBeLessThan(450_000);
+    expect(Buffer.byteLength(canonicalLfSource, "utf8")).toBeLessThan(420_000);
   });
 
   it("exposes each protected phase exactly once and grants Actions read for the fleet check", () => {

@@ -1,8 +1,33 @@
 # Handoff
 
-Last updated: 2026-08-31
+Last updated: 2026-09-02
 
-## Newest (2026-09-02, latest+56): trust (ADR-234) — the program is complete
+## Newest (2026-09-02, latest+57): guard captures (ADR-235) — the extraction, and what it found
+
+WORKFLOW: 409,854 of 420,000 bytes. The three captured catalog checks
+(`VERIFIED=` in bot-account-binding, `CATALOG_READY=` in the retired
+CONTRACT step, `PROTECTED_CATALOG_READY=` in scope=all) are files under
+`.github/hosted-apply/guard/`, verbatim and dedented, read with
+`$(psql … -Atq -f …)`. `hosted-guard-captures.behavior` executes each one
+at the state its step expects; the two pinning suites splice the files
+back in through `tests/support/hosted-apply-guards.ts`. The next scope
+fits; a new scope still costs ~22 lines here and a file there.
+
+SCOPE=ALL IS REFUSING, AND THE TEST SAYS SO. The broad gate pins the four
+`_checked` mutators' sources as 20260822000200 wrote them, and
+20260822000900 rewrote them; on hosted it has printed `f` since that
+repair. The test pins `f` for exactly those four signatures and `t` with
+that clause set aside. The repair is its own change: replace the four
+source md5s in `guard/scope-all-protected-catalog-ready.sql` with the
+post-repair values the record-only step already pins beside the old ones
+(`0ad5e0fc…`, `f9a381c4…`, `e0fb88d4…`, `34edb5b2…`), flip the test's
+expectation to `true`, drop the decomposition. Do NOT loosen the clause.
+
+HOSTED: customers-side run 33584595689 succeeded on main 81e10cf; trust
+run 33585834149 succeeded on main fca867e. The program's seven
+increments are all applied.
+
+## Older (2026-09-02, latest+56): trust (ADR-234) — the program is complete
 
 The seven-increment build-out (26–32) is shipped. What remains from the
 teardown is either **GATED** on a provider the owner opens (sending,

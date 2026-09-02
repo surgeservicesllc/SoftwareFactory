@@ -97,6 +97,24 @@ anything on a timer stays RED and owner-gated.
   each executed and the count pinned by the replay test), re-pointed with
   `-f`. The workflow is 446,039 bytes and the guard is ratcheted to
   450,000 so the recovered room is kept, not spent by accident.
+- [x] Workflow headroom, after increment 32 (ADR-235): the three captured
+  catalog checks — bot-account-binding's `VERIFIED=`, the retired CONTRACT
+  step's `CATALOG_READY=`, scope=all's `PROTECTED_CATALOG_READY=` — are
+  files under `.github/hosted-apply/guard/`, verbatim and dedented, read
+  with `$(psql … -Atq -f …)`; each executed by
+  `hosted-guard-captures.behavior` at the state its step expects; the two
+  pinning suites read the files spliced in place. 449,510 → 409,854 bytes;
+  guard ratcheted to 420,000. Its own change; no scope in it.
+- [ ] **scope=all's protected-catalog gate refuses on hosted** (found by
+  the extraction's execution test; ADR-235): the gate pins the four
+  `_checked` mutators' sources as 20260822000200 wrote them, and
+  20260822000900 — which the same gate requires in the ledger — rewrote
+  them. Repair, in its own change: replace the four source md5s in
+  `.github/hosted-apply/guard/scope-all-protected-catalog-ready.sql` with
+  the post-repair values the record-only step already pins beside the old
+  ones; flip the test's broad expectation to `true` and drop its
+  decomposition. Do not loosen the clause. A broad push itself stays an
+  owner-dispatched action.
 - [x] Increment 29 (ADR-231): job profitability — `hourly_cost_cents` on
   technicians and `unit_cost_cents` on lots (bounded, NULL = unknown), and
   `crm_visit_profitability()` reading as the caller: revenue from non-void
@@ -737,7 +755,10 @@ the full seeded E2E journey passes — increment 10 of the plan.
   (factory-any-model-record-only 82KB, scope=all 65KB,
   bot-account-binding 41KB) — extract with the same verbatim+re-point
   discipline, never in the same change as a new scope. The ceiling test
-  stays; do not raise it.
+  stays; do not raise it. Done in part (ADR-235): the largest captured
+  catalog check in each of scope=all, bot-account-binding and the retired
+  CONTRACT step moved to guard files (39.6KB); the steps' remaining SQL
+  is the next candidate if the ceiling is reached again.
 
 ## Job Search 50-source engine (active owner goal, ADR-163)
 

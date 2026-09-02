@@ -6252,3 +6252,64 @@ silently authorise them. The build-out's goal is a general request, so
 TOTP enrolment through Supabase Auth's own MFA is recorded as a precise,
 owner-gated item — what it would touch, what it would not — and not
 built here. That is the policy working, not the increment falling short.
+
+## ADR-235 - The three captured catalog checks leave the workflow as files, and the move finds a gate that has been refusing since the plpgsql repair
+
+After the trust scope the apply workflow stood at 449,510 of its 450,000
+byte guard: the next scope, at roughly 800 bytes, would have failed the
+guard, and the guard's rule is "extract — do not raise it". The recorded
+follow-up since ADR-178 was the three mutating giants. This change is that
+extraction, on its own, with no scope in it.
+
+**What moved, and how it is proven to be the same.** The three largest
+inline SQL blocks in the workflow were all captured catalog checks — a
+single `select exists(…)` whose one value a step branches on:
+`VERIFIED=` in the bot-account-binding scope (its own postflight of the
+EXPAND catalog), `CATALOG_READY=` in the retired CONTRACT scope (its
+preflight of the same state), and `PROTECTED_CATALOG_READY=` in
+`scope=all` (the protected-catalog gate before a broad push). Each is now
+a file under `.github/hosted-apply/guard/` and its step reads
+`VAR=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atq -f …)`. The files are the
+text psql already received, dedented by the twelve columns of YAML
+indentation and nothing else: the extraction script re-indented each file
+and asserted it equalled the exact bash-unescaped string the `-Atqc`
+argument carried (no `$`, backtick, `"` or line continuation was present,
+so the shell had nothing to change). The workflow is 409,854 bytes; the
+guard is ratcheted from 450,000 to 420,000 so the recovered 39.6 KB stays
+recovered.
+
+**Every file is executed, at the state its step expects.** A file nothing
+runs is the hazard ADR-179 recorded (run 33297041401), so
+`hosted-guard-captures.behavior` replays the migration chain in phases:
+up to and including `20260822000200`, where both EXPAND-state checks must
+print `t`; through `20260822000300`, after which the CONTRACT preflight
+must print `f` — a preflight that kept saying `t` would apply CONTRACT
+twice; and the whole chain, for the broad gate. The suites that pin what
+a step proves before it writes read the step's text with each captured
+file spliced in after the reference that runs it, so every ordering and
+content assertion holds against the SQL a dispatch will actually run.
+
+**The finding.** Against the whole chain the broad gate prints `f`. The
+test takes it apart: sixteen functions, two revision columns with their
+defaults and constraints, three triggers, every ACL — all exact, except
+the source hash of the four `_checked` mutators. The gate pins their
+sources as `20260822000200` wrote them; `20260822000900` (the hosted
+plpgsql catalog repair, which the same step requires to be in the ledger
+before it will push) rewrote all four, and the record-only chain's own
+verification already pins both hashes side by side. So on the hosted
+database, which has applied that repair, `scope=all` has refused with
+"the live contracted function/ACL/revision/constraint/trigger catalog is
+not exact" since the repair landed — a stale pin reading as a policy
+refusal. Nothing shipped through `scope=all` in that time; every
+increment has its own scope, which is why nobody saw it.
+
+**Decision.** The move stays verbatim, so the diff proves the move and
+the gate's behaviour is unchanged by it. The test pins the finding
+exactly — `f`, for those four signatures and no other reason, and `t`
+with that one clause set aside — so the gate cannot drift further in
+silence and the repair cannot be forgotten. Repairing the four pins to
+the post-repair sources is a change to a release gate; it is recorded as
+its own follow-up, after which the expectation flips to `t` and the
+decomposition goes. The retired CONTRACT step stays retired; its
+preflight moved because it was the second-largest block, not because it
+will run.

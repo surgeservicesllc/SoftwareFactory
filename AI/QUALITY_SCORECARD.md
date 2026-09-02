@@ -1,6 +1,19 @@
 # Quality scorecard
 
-Last reviewed: 2026-08-31
+Last reviewed: 2026-09-02
+
+**Addendum, 2026-09-02 latest+57 - guard captures (ADR-235):**
+hosted-guard-captures.behavior 4 (each captured guard file named once by
+exactly the step that carried it inline and still branched on; both
+EXPAND-state checks `t` with the chain replayed to 20260822000200; the
+CONTRACT preflight `f` once 20260822000300 lands; the broad gate `f`
+against the whole chain for exactly the four rewritten `_checked` sources
+and `t` with that clause set aside). The bot-account-binding and
+bot-mutator-contract suites read the captured files spliced in place and
+pass unchanged in what they prove; the path-reference guard holds both
+ways; the byte ceiling is 420,000 against 409,854. The extraction script
+proved every file re-indents to the exact string psql received. tsc,
+eslint and the fifteen workflow-reading suites clean.
 
 **Addendum, 2026-09-02 latest+56 - trust (ADR-234):**
 services-trust.behavior 3 (flat months untouched at zero rates and

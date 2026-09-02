@@ -1,5 +1,28 @@
 # Current state
 
+## 2026-09-02: Guard captures (ADR-235)
+
+The apply workflow's three largest inline SQL blocks — the captured
+catalog checks `VERIFIED=` (scope=bot-account-binding's own postflight),
+`CATALOG_READY=` (the retired CONTRACT scope's preflight) and
+`PROTECTED_CATALOG_READY=` (scope=all's protected-catalog gate) — are
+files under `.github/hosted-apply/guard/`, verbatim and dedented, read
+with `$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atq -f …)`. The workflow is
+409,854 bytes and the guard is ratcheted from 450,000 to 420,000. No scope
+is in the change. `hosted-guard-captures.behavior` 4 (each file captured
+once by its own step and still branched on; both EXPAND-state checks `t`
+with the chain replayed to 20260822000200; the CONTRACT preflight `f`
+once 20260822000300 lands; the broad gate `f` against the whole chain for
+exactly one reason — the four `_checked` mutators' source hashes, which
+20260822000900 rewrote — and `t` with that clause set aside). The two
+suites that pin what those steps prove read the files spliced in place
+(`tests/support/hosted-apply-guards.ts`); path references are checked
+both ways as before. Finding: on hosted, `scope=all` has refused with
+"catalog is not exact" since the plpgsql repair landed; the four-pin
+repair is a recorded follow-up in its own change. Hosted applies:
+`customers-side` run 33584595689 succeeded on main `81e10cf`; `trust`
+run 33585834149 succeeded on main `fca867e`.
+
 ## 2026-09-02: Trust (ADR-234)
 
 Increment 32 ships `20260902000700_trust.sql`: `crm_forecast_assumptions`
@@ -35,7 +58,8 @@ contact and says when the book is clean), copilot +1. Seed roster with the
 assumptions deliberately unseeded; grants roster and RLS census 227;
 scope replay with the new postflight; runbook count 227; byte guard
 449,510 of 450,000 — the next scope needs an extraction first; tsc and
-eslint clean. Hosted apply scope `trust` is dispatched after merge.
+eslint clean. Hosted apply scope `trust`: run 33585834149 succeeded on
+main `fca867e`.
 
 ## 2026-09-02: The customer's side (ADR-233)
 
@@ -73,7 +97,8 @@ sides; nine functions granted to authenticated only and three tables
 fenced with forced RLS). Seed audit 66/66 with surveys deliberately
 unseeded; grants roster, RLS census 226, scope replay with the new
 postflight, runbook count 226, byte guard (448,707), tsc and eslint
-clean. Hosted apply scope `customers-side` is dispatched after merge.
+clean. Hosted apply scope `customers-side`: run 33584595689 succeeded on
+main `81e10cf`.
 
 ## 2026-09-02: Nothing hidden (ADR-232)
 
