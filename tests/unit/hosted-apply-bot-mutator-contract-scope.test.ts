@@ -7,6 +7,8 @@ import { resolve } from "node:path";
 import { parse } from "yaml";
 import { describe, expect, it } from "vitest";
 
+import { withGuardFiles } from "../support/hosted-apply-guards";
+
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const workflowPath = resolve(
   repositoryRoot,
@@ -210,7 +212,9 @@ describe("the hosted bot mutator CONTRACT release path", () => {
 
   it("makes broad push prove CONTRACT and the whole protected catalog after the atomic scope", () => {
     const broad = stepByName("Push the outstanding migrations (scope=all)");
-    const command = broad.run ?? "";
+    // The protected-catalog check is captured from a guard file; read it as
+    // the dispatch will, in place.
+    const command = withGuardFiles(broad.run ?? "");
     const contract = command.indexOf("where version = '20260822000300'");
     const hostedFunctionAcl = command.indexOf("where version = '20260822000850'", contract);
     const repair = command.indexOf("where version = '20260822000900'", hostedFunctionAcl);

@@ -464,6 +464,19 @@ ways: every path a workflow names is a real file, and every file present is
 named by a workflow. A postflight nothing runs is worse than none, because
 the scope still reports success.
 
+Three of the guard files are captures rather than assertions — the step
+reads `VAR=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atq -f …)` and branches on
+the one value the file prints: `bot-account-binding-expand-verified.sql`
+(that scope's own postflight), `bot-mutator-contract-catalog-ready.sql`
+(the retired CONTRACT scope's preflight) and
+`scope-all-protected-catalog-ready.sql` (the broad push's protected-catalog
+gate). `tests/integration/hosted-guard-captures.behavior.test.ts` executes
+each against the chain replayed to the state its step expects and pins
+what it prints. As of ADR-235 the broad gate prints `f` on the chain and on
+hosted, because it still pins the four `_checked` mutators' sources from
+before `20260822000900` rewrote them; the repair is a recorded follow-up
+and `scope=all` refuses until it lands.
+
 ## Historical release tail before ADR-115 — 2026-08-22 (superseded)
 
 The evidence in this section records an earlier checkpoint. It is not the

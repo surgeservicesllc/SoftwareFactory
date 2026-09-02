@@ -7,6 +7,8 @@ import { resolve } from "node:path";
 import { parse } from "yaml";
 import { describe, expect, it } from "vitest";
 
+import { withGuardFiles } from "../support/hosted-apply-guards";
+
 /**
  * This is a protected, one-file production scope. A bot-account-binding
  * dispatch must never inherit the workflow's broad `scope=all` behavior or a
@@ -278,7 +280,9 @@ describe("the hosted bot-account-binding apply scope", () => {
   });
 
   it("uses migration-local and workflow postflights to reject inherited ACL/catalog drift", () => {
-    const command = protectedStep().run ?? "";
+    // The step's final catalog check is captured from a guard file; read it
+    // as the dispatch will, in place.
+    const command = withGuardFiles(protectedStep().run ?? "");
     const migration = readFileSync(migrationPath, "utf8");
     const apply = command.indexOf('-f "$FILE"');
     const workflowPostflight = command.indexOf("EXPAND_FUNCTIONS_EXACT=");
