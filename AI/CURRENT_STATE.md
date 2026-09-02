@@ -105,8 +105,8 @@ line with the count, and "Hide them" as the person's own toggle. Tests:
 job-seeker-sightings.behavior 6, job-seeker-freshness 11, search route
 +3, panel +1. Grants roster and RLS census 230; replay executes the new
 postflight; runbook count 232; workflow 414,342 bytes of 420,000; tsc
-and eslint clean. Hosted apply scope `posting-sightings` is dispatched
-after merge.
+and eslint clean. Merged as #504 (79324f5); hosted apply scope
+`posting-sightings`: run 33630908789 succeeded on main 79324f5.
 
 ## 2026-09-02: Conversation routing (ADR-240)
 

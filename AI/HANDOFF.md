@@ -28,8 +28,9 @@ the comment. The harness scene `job-seeker-application-kit` is in the
 component-layout sweep.
 
 HOSTED: scope=application-kit is dispatched after merge; record the run
-id here and in CURRENT_STATE. Pending applies queued behind it:
-posting-sightings (#504), application-transitions (increment 3).
+id here and in CURRENT_STATE. Also pending from this PR:
+scope=application-transitions (increment 3). Applied already:
+scope=posting-sightings run 33630908789 on main 79324f5 (#504).
 
 ## Older (2026-09-02, latest+65): silence measured (ADR-243)
 
@@ -121,8 +122,8 @@ proves JS and SQL agree. Keep `posting-key.ts` server-only
 (node:crypto) and `freshness.ts` browser-safe — the panel imports the
 latter.
 
-HOSTED: scope=posting-sightings is dispatched after merge; record the
-run id here and in CURRENT_STATE.
+HOSTED: scope=posting-sightings run 33630908789 succeeded on main
+79324f5 (#504).
 
 ## Older (2026-09-02, latest+62): conversation routing (ADR-240) — the teardown is closed
 
