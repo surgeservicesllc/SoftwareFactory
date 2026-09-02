@@ -5,6 +5,7 @@ import {
   composeAutopayAnswer,
   composeFollowupsAnswer,
   composeHelpDeskAnswer,
+  composeHygieneAnswer,
   composeLostMoneyAnswer,
   composeRatingsAnswer,
   composeScheduleAuditAnswer,
@@ -29,6 +30,11 @@ import {
   type CrmRequestSlaRow,
   type CrmSurveyResponseRow,
 } from "@/lib/services/customers-side";
+import {
+  summarizeHygiene,
+  toContactHygieneView,
+  type CrmContactHygieneRow,
+} from "@/lib/services/trust";
 import {
   ApiRequestError,
   databaseErrorResponse,
@@ -176,6 +182,21 @@ export async function POST(request: Request) {
       return jsonNoStore({
         skill,
         answer: composeHelpDeskAnswer({ open: summary.open, overdue: summary.overdue, late }),
+      });
+    }
+
+    if (skill === "stale_contacts") {
+      const read = await client.rpc("crm_contact_hygiene", { p_organization: organizationId }).limit(1000);
+      if (read.error) return databaseErrorResponse(read.error);
+      const contacts = ((read.data ?? []) as unknown as CrmContactHygieneRow[]).map(toContactHygieneView);
+      const summary = summarizeHygiene(contacts);
+      return jsonNoStore({
+        skill,
+        answer: composeHygieneAnswer({
+          contacts: summary.contacts,
+          byFlag: summary.byFlag,
+          worst: contacts.slice(0, 3).map((row) => ({ contact: row.contactName, account: row.accountName, labels: row.labels })),
+        }),
       });
     }
 

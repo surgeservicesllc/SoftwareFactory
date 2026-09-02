@@ -5,6 +5,7 @@ import {
   composeAutopayAnswer,
   composeFollowupsAnswer,
   composeHelpDeskAnswer,
+  composeHygieneAnswer,
   composeLostMoneyAnswer,
   composeRatingsAnswer,
   composeScheduleAuditAnswer,
@@ -194,5 +195,17 @@ describe("the help-desk answer", () => {
       open: 3, overdue: 1,
       late: [{ account: "Harborview Foods", kind: "complaint", summary: "Ants again", waitingMinutes: 390, promise: "acknowledge" }],
     })).toBe('1 of 3 open requests is past a promise. First: Harborview Foods — complaint: "Ants again" (acknowledge overdue after 6.5 h). The full clock is on the Customer Portal page.');
+  });
+});
+
+describe("the hygiene answer", () => {
+  it("says the book is clean, or counts the reasons and names where to start without deleting anything", () => {
+    expect(composeHygieneAnswer({ contacts: 0, byFlag: [], worst: [] }))
+      .toBe("Every contact on the book can be reached, is unique, sits on a live account, and has been touched this year.");
+    expect(composeHygieneAnswer({
+      contacts: 2,
+      byFlag: [{ label: "Same email on another contact", count: 2 }, { label: "Account is inactive", count: 1 }],
+      worst: [{ contact: "Sam Ortiz", account: "Old Mill", labels: ["Same email on another contact", "Account is inactive"] }],
+    })).toBe("2 contacts should not be trusted as they stand: 2 same email on another contact, 1 account is inactive. Start with Sam Ortiz at Old Mill (same email on another contact; account is inactive). Nothing is deleted for you — the list is on the Data page under Hygiene, and each row opens its account.");
   });
 });

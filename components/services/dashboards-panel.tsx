@@ -5,6 +5,7 @@ import { TrendingUp } from "lucide-react";
 
 import { Card, Notice, PageHeader, SectionTitle } from "@/components/ui";
 import type { DashboardRowsPayload, DashboardsPayload } from "@/components/services/types";
+import type { ForecastAssumptionsView, ForecastScenarioMonthView, ScenarioTotals } from "@/lib/services/trust";
 import { cn } from "@/lib/cn";
 
 /**
@@ -34,6 +35,18 @@ const BUCKET_LABELS: Record<string, string> = {
 
 type Tab = "revenue" | "forecast" | "receivable" | "technicians" | "routes";
 
+type ScenarioPayload = {
+  window: { months: number };
+  assumptions: ForecastAssumptionsView | null;
+  applied: { churnBps: number; growthBps: number; source: "stored" | "query" | "none" };
+  months: ForecastScenarioMonthView[];
+  totals: ScenarioTotals;
+};
+
+function percent(bps: number): string {
+  return `${(bps / 100).toFixed(1)}%`;
+}
+
 function money(cents: number): string {
   return `$${(cents / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
 }
@@ -54,6 +67,80 @@ export function ServicesDashboardsPanel() {
   const [drill, setDrill] = useState<{ figure: string; key: string | null; label: string; days?: number } | null>(null);
   const [rows, setRows] = useState<DashboardRowsPayload | null>(null);
   const [rowsError, setRowsError] = useState<string | null>(null);
+  const [scenario, setScenario] = useState<ScenarioPayload | null>(null);
+  const [scenarioError, setScenarioError] = useState<string | null>(null);
+  const [churnInput, setChurnInput] = useState("");
+  const [growthInput, setGrowthInput] = useState("");
+  const [noteInput, setNoteInput] = useState("");
+  const [scenarioBusy, setScenarioBusy] = useState(false);
+
+  /*
+   * The scenario is the recorded forecast with the owner's own churn and
+   * growth applied, factor printed per month. Reading it with no inputs
+   * applies what the workspace saved; reading it with inputs is a what-if
+   * that is never saved unless Save is pressed.
+   */
+  const readScenario = useCallback(async (whatIf?: { churnBps: number; growthBps: number }) => {
+    setScenarioError(null);
+    const params = new URLSearchParams();
+    if (whatIf) {
+      params.set("churnBps", String(whatIf.churnBps));
+      params.set("growthBps", String(whatIf.growthBps));
+    }
+    try {
+      const response = await fetch(`/api/services/forecast/scenario${params.size > 0 ? `?${params.toString()}` : ""}`, {
+        headers: { accept: "application/json" },
+      });
+      const body = (await response.json()) as ScenarioPayload & { error?: { message?: string } };
+      if (!response.ok) {
+        setScenarioError(body.error?.message ?? "The scenario could not be read.");
+        return;
+      }
+      setScenario(body);
+      if (!whatIf) {
+        setChurnInput((body.applied.churnBps / 100).toFixed(1));
+        setGrowthInput((body.applied.growthBps / 100).toFixed(1));
+        setNoteInput(body.assumptions?.note ?? "");
+      }
+    } catch {
+      setScenarioError("The scenario could not be read.");
+    }
+  }, []);
+
+  useEffect(() => {
+    const kickoff = window.setTimeout(() => void readScenario(), 0);
+    return () => window.clearTimeout(kickoff);
+  }, [readScenario]);
+
+  const inputBps = useCallback((value: string) => Math.min(10_000, Math.max(0, Math.round(Number(value || "0") * 100))), []);
+
+  const saveAssumptions = useCallback(async (clear: boolean) => {
+    setScenarioBusy(true);
+    setScenarioError(null);
+    try {
+      const response = await fetch("/api/services/forecast/scenario", {
+        method: clear ? "DELETE" : "PUT",
+        headers: { "content-type": "application/json" },
+        body: clear
+          ? undefined
+          : JSON.stringify({
+              annualChurnBps: inputBps(churnInput),
+              annualGrowthBps: inputBps(growthInput),
+              note: noteInput.trim().length === 0 ? null : noteInput.trim(),
+            }),
+      });
+      if (!response.ok) {
+        const body = (await response.json()) as { error?: { message?: string } };
+        setScenarioError(body.error?.message ?? "The assumptions could not be saved.");
+        return;
+      }
+      await readScenario();
+    } catch {
+      setScenarioError("The assumptions could not be saved.");
+    } finally {
+      setScenarioBusy(false);
+    }
+  }, [churnInput, growthInput, inputBps, noteInput, readScenario]);
 
   /*
    * Every figure opens. The rows come from `crm_dashboard_rows`, which
@@ -359,6 +446,78 @@ export function ServicesDashboardsPanel() {
             </div>
           )}
         </Card>
+      ) : null}
+
+      {tab === "forecast" ? (
+        <section className="card mt-6" data-testid="services-forecast-scenario-card">
+          <SectionTitle
+            title="Your assumptions, beside the figure"
+            description="The recorded forecast applies no model. This card applies only what you type — an annual churn and growth, compounded month by month — and prints the factor for every month so the scenario can be checked by hand. A what-if is not saved unless you save it."
+          />
+          {scenarioError !== null ? <Notice tone="warning">{scenarioError}</Notice> : null}
+          <div className="mt-4 flex flex-wrap items-end gap-3">
+            <label className="text-sm">
+              <span className="mb-1 block text-xs uppercase tracking-wide text-faint">Annual churn %</span>
+              <input type="number" min={0} max={100} step={0.1} value={churnInput} onChange={(event) => setChurnInput(event.target.value)} aria-label="Annual churn percent" className="w-24 rounded-lg border border-line px-2 py-1 text-sm text-foreground" />
+            </label>
+            <label className="text-sm">
+              <span className="mb-1 block text-xs uppercase tracking-wide text-faint">Annual growth %</span>
+              <input type="number" min={0} max={100} step={0.1} value={growthInput} onChange={(event) => setGrowthInput(event.target.value)} aria-label="Annual growth percent" className="w-24 rounded-lg border border-line px-2 py-1 text-sm text-foreground" />
+            </label>
+            <label className="min-w-64 flex-1 text-sm">
+              <span className="mb-1 block text-xs uppercase tracking-wide text-faint">Where the numbers came from</span>
+              <input type="text" maxLength={300} value={noteInput} onChange={(event) => setNoteInput(event.target.value)} aria-label="Where the numbers came from" placeholder="e.g. last two years of cancellations" className="w-full rounded-lg border border-line px-2 py-1 text-sm text-foreground" />
+            </label>
+            <button type="button" onClick={() => void readScenario({ churnBps: inputBps(churnInput), growthBps: inputBps(growthInput) })} className="btn btn-secondary px-3 py-1.5 text-xs">
+              Try it
+            </button>
+            <button type="button" disabled={scenarioBusy} onClick={() => void saveAssumptions(false)} className="btn btn-primary px-3 py-1.5 text-xs">
+              Save
+            </button>
+            {scenario?.assumptions ? (
+              <button type="button" disabled={scenarioBusy} onClick={() => void saveAssumptions(true)} className="btn btn-secondary px-3 py-1.5 text-xs">
+                Clear
+              </button>
+            ) : null}
+          </div>
+          {scenario === null ? (
+            <p className="mt-4 text-sm text-muted">Reading the scenario…</p>
+          ) : (
+            <>
+              <p className="mt-3 text-sm text-muted" data-testid="services-forecast-scenario-applied">
+                {scenario.applied.source === "none"
+                  ? "No assumptions saved: the scenario equals the recorded forecast."
+                  : `${scenario.applied.source === "query" ? "Trying" : "Applying"} ${percent(scenario.applied.churnBps)} annual churn and ${percent(scenario.applied.growthBps)} annual growth${scenario.applied.source === "query" ? " (not saved)" : ""}.`}
+                {" "}Over {scenario.window.months} months: recorded {money(scenario.totals.recordedCents)}, scenario {money(scenario.totals.scenarioCents)}
+                {scenario.totals.differenceCents === 0 ? "." : ` (${scenario.totals.differenceCents > 0 ? "+" : "−"}${money(Math.abs(scenario.totals.differenceCents))}).`}
+              </p>
+              {scenario.months.length > 0 ? (
+                <div className="mt-3 overflow-x-auto">
+                  <table className="w-full text-left text-sm" data-testid="services-forecast-scenario-table">
+                    <thead>
+                      <tr className="border-b border-line text-xs uppercase tracking-wide text-faint">
+                        <th className="py-2 pr-3 font-medium">Month</th>
+                        <th className="py-2 pr-3 font-medium">Recorded</th>
+                        <th className="py-2 pr-3 font-medium">Scenario</th>
+                        <th className="py-2 font-medium">Factor</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-line">
+                      {scenario.months.map((month) => (
+                        <tr key={month.month}>
+                          <td className="py-2 pr-3 text-foreground">{month.month.slice(0, 7)}</td>
+                          <td className="py-2 pr-3 tabular-nums text-muted">{money(month.recordedCents)}</td>
+                          <td className="py-2 pr-3 tabular-nums text-foreground">{money(month.scenarioCents)}</td>
+                          <td className="py-2 tabular-nums text-muted">×{(month.factorBps / 10000).toFixed(4)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : null}
+            </>
+          )}
+        </section>
       ) : null}
 
       {tab === "receivable" ? (

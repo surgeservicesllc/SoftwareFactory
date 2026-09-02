@@ -646,6 +646,10 @@ export const SEED_SPEC_TABLES: readonly string[] = SPECS.map((spec) => spec.tabl
  * skipping work: each says why 250 rows of it would be fiction.
  */
 export const DELIBERATELY_UNSEEDED: Readonly<Record<string, string>> = {
+  crm_forecast_assumptions:
+    "The owner's own churn and growth, with a note on where the numbers came "
+    + "from (ADR-234). Seeding them would put a made-up model under the demo "
+    + "forecast, which is the exact thing the recorded forecast refuses to do.",
   crm_portal_surveys:
     "A rating is the customer's own word, written only through their portal "
     + "login (ADR-233). Staff hold no INSERT on the table, so the seeder — "

@@ -1,5 +1,42 @@
 # Current state
 
+## 2026-09-02: Trust (ADR-234)
+
+Increment 32 ships `20260902000700_trust.sql`: `crm_forecast_assumptions`
+(one row per workspace — annual churn and growth in basis points, a note
+on their provenance; RLS forced; deliberately unseeded) and
+`crm_revenue_forecast_scenario(months, churn_bps, growth_bps)`, SECURITY
+INVOKER, returning the recorded forecast beside the same months with the
+rates compounded month by month and the factor printed, month zero always
+the recorded figure, inputs clamped to 0–100%; and
+`crm_contact_hygiene(org)`, SECURITY INVOKER, naming every contact the
+book should not trust with the reasons (unreachable, undeliverable,
+duplicate email, inactive account, untouched for a year), most flagged
+first, returning nothing for a clean contact. Routes
+`GET/PUT/DELETE /api/services/forecast/scenario` (a what-if from the
+query is applied and never saved; the payload says which source was
+applied) and `GET /api/services/data/hygiene`. The Dashboards forecast
+tab gains a Scenario card; the Data page gains a Hygiene card. Copilot
+skill "Which contacts are stale?". TOTP enrolment is recorded as RED and
+owner-gated with its exact scope in the backlog, per PROTECTED_RESOURCES
+and RISK_CLASSIFICATION.
+
+Evidence: 3 behavior tests on the replayed chain (twelve flat months
+untouched at zero rates; (0.88)^(11/12) eleven months out at twelve
+percent churn, decreasing factors, churn and growth compounded together,
+inputs clamped; one set of assumptions per workspace inside 0–100% and
+invisible to a rival; the hygiene report naming four contacts with their
+exact reasons in order — an inactive, undeliverable, duplicated and
+untouched contact first — and nobody clean; both functions
+authenticated-only). Pure 3, routes 4, panels 2 (the scenario card applies
+the saved numbers, tries a what-if without saving and saves in basis
+points with provenance; the hygiene card states the reasons, lists each
+contact and says when the book is clean), copilot +1. Seed roster with the
+assumptions deliberately unseeded; grants roster and RLS census 227;
+scope replay with the new postflight; runbook count 227; byte guard
+449,510 of 450,000 — the next scope needs an extraction first; tsc and
+eslint clean. Hosted apply scope `trust` is dispatched after merge.
+
 ## 2026-09-02: The customer's side (ADR-233)
 
 Increment 31 ships `20260902000600_customers_side.sql`: `crm_portal_surveys`
@@ -69,7 +106,8 @@ clean state; drill-down keys for a tile, a bucket, a technician, a day and
 a month with the ceiling stated; dry-run coverage and per-record lines);
 copilot +1. Scope replay with the new postflight, runbook count 225, byte
 guard 450,000 (447,824), tsc, eslint and a production build clean. Hosted
-apply scope `nothing-hidden` is dispatched after merge.
+apply scope `nothing-hidden`: run 33582776542 on main `0ec154f`, success,
+postflight passed.
 
 ## 2026-09-02: Job profitability (ADR-231)
 

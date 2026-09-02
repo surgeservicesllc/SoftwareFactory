@@ -93,6 +93,7 @@ on:
           - job-profitability
           - nothing-hidden
           - customers-side
+          - trust
           - probe
 permissions:
   actions: read
@@ -1806,6 +1807,21 @@ jobs:
           psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
           psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/postflight/customers-side.sql
           echo "Customer side applied; post-visit ratings, the request SLA clock with its two stamps, and the two-way message thread."
+      - name: Apply trust (scope=trust)
+        if: ${{ inputs.scope == 'trust' }}
+        run: |
+          VERSION=20260902000700_trust
+          FILE="supabase/migrations/${VERSION}.sql"
+          sha256sum "$FILE"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied "${VERSION%%_*}"
+          else
+            npx supabase migration repair --status applied "${VERSION%%_*}" --db-url "$DB_URL"
+          fi
+          psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/postflight/trust.sql
+          echo "Trust applied; forecast scenario inputs with the factor printed, and the contact hygiene report."
       - name: Normalize exact legacy bot ACLs (scope=bot-legacy-acl-normalization)
         if: ${{ inputs.scope == 'bot-legacy-acl-normalization' }}
         run: |

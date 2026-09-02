@@ -90,6 +90,12 @@ export const COPILOT_SKILLS = [
     example: "Which requests are past their promise?",
     keywords: ["past their promise", "past promise", "sla", "help desk", "unanswered request", "late request", "requests are late", "waiting on us"],
   },
+  {
+    id: "stale_contacts",
+    label: "Contacts the book should not trust",
+    example: "Which contacts are stale?",
+    keywords: ["stale", "bounced", "undeliverable", "duplicate contact", "duplicate email", "hygiene", "clean up contacts", "bad contacts"],
+  },
 ] as const;
 
 export type CopilotSkillId = (typeof COPILOT_SKILLS)[number]["id"];
@@ -304,6 +310,22 @@ export function composeHelpDeskAnswer(facts: {
     })
     .join("; ");
   return `${facts.overdue} of ${facts.open} open requests ${facts.overdue === 1 ? "is" : "are"} past a promise. First: ${lines}. The full clock is on the Customer Portal page.`;
+}
+
+export function composeHygieneAnswer(facts: {
+  contacts: number;
+  byFlag: ReadonlyArray<{ label: string; count: number }>;
+  worst: ReadonlyArray<{ contact: string; account: string; labels: ReadonlyArray<string> }>;
+}): string {
+  if (facts.contacts === 0) {
+    return "Every contact on the book can be reached, is unique, sits on a live account, and has been touched this year.";
+  }
+  const reasons = facts.byFlag.map((entry) => `${entry.count} ${entry.label.toLowerCase()}`).join(", ");
+  const worst = facts.worst
+    .slice(0, 3)
+    .map((entry) => `${entry.contact} at ${entry.account} (${entry.labels.map((label) => label.toLowerCase()).join("; ")})`)
+    .join("; ");
+  return `${facts.contacts} contact${facts.contacts === 1 ? "" : "s"} should not be trusted as ${facts.contacts === 1 ? "it stands" : "they stand"}: ${reasons}. Start with ${worst}. Nothing is deleted for you — the list is on the Data page under Hygiene, and each row opens its account.`;
 }
 
 /** The refusal that teaches: what this copilot can actually answer. */

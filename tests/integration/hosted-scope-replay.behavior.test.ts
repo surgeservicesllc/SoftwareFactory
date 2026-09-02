@@ -301,6 +301,7 @@ describe("the workflow's post-cutover surgical-scope fence", () => {
       "service-integrations.sql",
       "transactional-notices.sql",
       "truck-stock.sql",
+      "trust.sql",
       "wdo-inspections.sql",
     ]);
 

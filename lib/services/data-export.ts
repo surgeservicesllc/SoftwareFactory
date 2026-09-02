@@ -75,6 +75,7 @@ export const CRM_EXPORT_TABLES = [
   "crm_service_integrations",
   "crm_tasks",
   "crm_followup_dismissals",
+  "crm_forecast_assumptions",
   "crm_scoring_rules",
   "crm_sla_policies",
   "crm_imports",
