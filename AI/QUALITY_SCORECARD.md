@@ -2,6 +2,26 @@
 
 Last reviewed: 2026-09-02
 
+**Addendum, 2026-09-02 latest+65 - JobSearch build-out, increment 3: silence measured (ADR-243):**
+job-seeker-transitions.behavior 4 (one row per stage or approval
+change and none for a note edit, exact from/to pairs; a recruiter
+response and a rejection both counted as replies with the median from
+real timestamps per source and overall; a closure reason refused off a
+closed row; append-only under both guards, private to the owner, anon
+refused, service_role holding no grant, RLS forced). job-seeker-silence
+8 (nothing before submission; the source median and the exact
+follow-up sentence; the all-sources fallback and "was due"; the named
+default and the 21-day clamp; replied/outran-the-ledger/closed
+sentences; the funnel counting applications not events; row mapping).
+job-seeker-silence-routes 6 (close writes stage and reason together;
+an unknown reason 422; the list's silence and basis; null silence with
+the reason when unreadable; analytics funnel/reasons/replies; nulls
+when the ledger is unreadable). panels +1 (sentence, suggestion, "Use
+this date" PATCH, close with reason PATCH), job-seeker-analytics-panel
+2. Grants roster and RLS census 231; replay executes the new
+postflight; runbook 233; workflow 415,273 of 420,000; tsc and eslint
+clean.
+
 **Addendum, 2026-09-02 latest+64 - JobSearch build-out, increment 2: posting signals (ADR-242):**
 job-seeker-signals 15 (the seven red flags with exact phrases on text
 that trips them and silence on an ordinary posting that mentions

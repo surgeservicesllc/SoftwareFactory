@@ -270,6 +270,46 @@ describe("JobSeekerApplicationsPanel", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/explicit approval first/);
   });
+  it("measures silence, offers the computed follow-up date, and closes with a reason (ADR-243)", async () => {
+    const patches: unknown[] = [];
+    const applied = {
+      ...SCORED_JOB,
+      application: {
+        id: "a3", stage: "APPLIED", approvalStatus: "approved", applicationUrl: null, notes: null, followUpAt: null,
+        closedReason: null,
+        silence: {
+          daysSinceApplied: 10, daysSilent: 10, repliedAfterDays: null,
+          sentence: "Silent for 10 days. Your median reply took 9 days across 1 reply on remotive.",
+          suggestedFollowUpOn: "2026-09-16",
+          suggestionSentence: "A follow-up was due 2026-09-16: applied 2026-09-07 + 9 days (your median 9 on remotive, held between 7 and 21).",
+        },
+      },
+    };
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.startsWith("/api/job-seeker/applications/") && init?.method === "PATCH") {
+        patches.push(JSON.parse(String(init.body)));
+        return jsonResponse({ application: { ...applied.application, followUpAt: "2026-09-16T09:00:00.000Z" } });
+      }
+      if (url === "/api/job-seeker/jobs") return jsonResponse({ jobs: [applied] });
+      if (url === "/api/job-seeker/import-sources") return jsonResponse({ sources: [] });
+      throw new Error(`Unexpected request: ${url}`);
+    }));
+
+    render(<JobSeekerApplicationsPanel />);
+    expect(await screen.findByTestId("silence")).toHaveTextContent("Silent for 10 days. Your median reply took 9 days across 1 reply on remotive.");
+    expect(screen.getByTestId("silence-suggestion")).toHaveTextContent("A follow-up was due 2026-09-16: applied 2026-09-07 + 9 days");
+
+    fireEvent.click(screen.getByRole("button", { name: "Use this date" }));
+    await waitFor(() => expect(patches).toHaveLength(1));
+    expect(patches[0]).toEqual({ action: "follow_up", followUpAt: "2026-09-16T09:00:00.000Z" });
+
+    fireEvent.change(screen.getByLabelText("Why is it closing?"), { target: { value: "no_response" } });
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(patches).toHaveLength(2));
+    expect(patches[1]).toEqual({ action: "close", closedReason: "no_response" });
+  });
+
   it("prepares an application: generates fact-only documents and shows them versioned", async () => {
     const posts: string[] = [];
     // The real route advances the stage to READY_FOR_REVIEW; the stub

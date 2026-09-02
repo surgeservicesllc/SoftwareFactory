@@ -6630,3 +6630,55 @@ posting text; a scam written to avoid these phrases is not caught, and
 the card says "no red flags" only in the sense that none of the seven
 signs appears. No directory, reputation list or model is consulted, and
 nothing here can be wrong about a fact the posting did not state.
+
+## ADR-243 - Silence measured: a transitions ledger, days silent against your own replies, and a closure with its reason
+
+Date: 2026-09-02
+
+The complaint 67% of job seekers made in 2025 is silence — applied, and
+nothing — and its corollary is not knowing whether a follow-up is early,
+due, or pointless. No board can answer it, because none learns the
+outcome. This product can, because the person records every stage of
+every application here; what it lacked was the history. Stage changes
+were overwritten in place, so "how long do replies take" had no data
+behind it.
+
+Increment 3 keeps the history. `job_seeker_application_transitions`
+(20260902001300) holds one append-only row per stage or approval change,
+written by an AFTER trigger on `job_seeker_applications` so the ledger
+cannot disagree with the table; the trigger is SECURITY DEFINER so the
+row lands without handing authenticated an INSERT grant. A composite
+foreign key proves each row belongs to the same person and workspace as
+its application. The ledger is forced-RLS, readable by its owner only,
+and rewrite-refusing by trigger. A closed application also says why:
+`closed_reason` is the person's own word from a fixed enum, allowed only
+while the stage is CLOSED, and null means "not said" — counted as
+"unstated" in the analytics rather than guessed.
+
+Two invoker functions turn the ledger into numbers under the caller's
+own RLS. `job_seeker_application_replies` returns when each application
+first got a reply — a transition into a response stage, or a closure
+whose reason is the employer's answer, because a rejection is a reply
+and silence is the complaint. `job_seeker_response_stats` returns, per
+source and for every source together, applications submitted, replies
+recorded, still silent, and the median days from applied to first reply
+(`percentile_cont(0.5)` over real timestamps; a median over nothing is
+null; a person with no submitted applications gets no rows, not a row of
+zeroes).
+
+The page prints the arithmetic. `lib/job-seeker/silence.ts` says "Silent
+for 21 days. Your median reply took 12 days across 4 replies on
+remotive." — the source's own replies first, then every source, then a
+named default of 7 days when nothing is recorded — and derives the
+follow-up as applied + median, held between 7 and 21 days so one freak
+reply cannot make it absurd, with the whole sum in the sentence and a
+"Use this date" button that writes it as the follow-up. An application
+whose stage says a reply came but whose ledger has no row for it — one
+that predates the ledger — is told exactly that, and given no date.
+Analytics gains the funnel (applications that ever reached each stage,
+counted from the ledger), the closure reasons, and replies by source.
+
+Bounds: nothing here estimates an employer. The comparison is always
+the person's own medians, the default is named as a default, and every
+ledger-backed section answers null — never a fabricated zero — when the
+migration is not applied on a deployment.

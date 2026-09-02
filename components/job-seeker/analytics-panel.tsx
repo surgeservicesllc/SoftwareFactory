@@ -20,7 +20,25 @@ type AnalyticsView = {
   averageMatchScore: number | null;
   byTitle: Array<{ title: string; jobs: number; averageScore: number }>;
   bySource: Array<{ source: string; count: number }>;
+  /** Applications that ever reached each stage, from the transitions ledger (ADR-243). */
+  funnel?: Array<{ stage: string; reached: number }> | null;
+  closedReasons?: Array<{ reason: string; count: number }>;
+  responseBySource?: Array<{
+    source: string | null;
+    applied: number;
+    replied: number;
+    silent: number;
+    medianDaysToReply: number | null;
+  }> | null;
 };
+
+function stageLabel(stage: string): string {
+  return stage.replaceAll("_", " ").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function reasonLabel(reason: string): string {
+  return reason === "unstated" ? "Not said" : reason.replaceAll("_", " ").replace(/^\w/, (c) => c.toUpperCase());
+}
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
@@ -134,6 +152,82 @@ export function JobSeekerAnalyticsPanel() {
               </li>
             ))}
           </ul>
+        </Card>
+      ) : null}
+
+      {analytics.funnel && analytics.funnel.some((row) => row.reached > 0) ? (
+        <Card>
+          <SectionTitle
+            title="Where applications stall"
+            description="How many applications ever reached each stage, counted from your transitions ledger."
+          />
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full min-w-96 text-sm" data-testid="funnel">
+              <thead>
+                <tr className="text-left text-xs uppercase text-[var(--text-faint)]">
+                  <th className="pb-2 pr-4 font-medium">Stage</th>
+                  <th className="pb-2 font-medium">Reached</th>
+                </tr>
+              </thead>
+              <tbody>
+                {analytics.funnel.map((row) => (
+                  <tr key={row.stage} className="border-t border-[var(--border)]">
+                    <td className="py-2 pr-4 text-[var(--text)]">{stageLabel(row.stage)}</td>
+                    <td className="py-2 tabular-nums text-[var(--text)]">{row.reached}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      ) : null}
+
+      {analytics.closedReasons && analytics.closedReasons.length > 0 ? (
+        <Card>
+          <SectionTitle title="Why applications ended" description="Your own word on each closed application, counted." />
+          <ul className="mt-3 space-y-1 text-sm" data-testid="closed-reasons">
+            {analytics.closedReasons.map((row) => (
+              <li key={row.reason} className="flex justify-between gap-4">
+                <span className="text-[var(--text-muted)]">{reasonLabel(row.reason)}</span>
+                <span className="tabular-nums text-[var(--text)]">{row.count}</span>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      ) : null}
+
+      {analytics.responseBySource && analytics.responseBySource.some((row) => row.applied > 0) ? (
+        <Card>
+          <SectionTitle
+            title="Replies by source"
+            description="Applications submitted, replies recorded, still silent, and the median days to a reply — your own numbers, per source."
+          />
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full min-w-96 text-sm" data-testid="replies-by-source">
+              <thead>
+                <tr className="text-left text-xs uppercase text-[var(--text-faint)]">
+                  <th className="pb-2 pr-4 font-medium">Source</th>
+                  <th className="pb-2 pr-4 font-medium">Applied</th>
+                  <th className="pb-2 pr-4 font-medium">Replied</th>
+                  <th className="pb-2 pr-4 font-medium">Silent</th>
+                  <th className="pb-2 font-medium">Median days to reply</th>
+                </tr>
+              </thead>
+              <tbody>
+                {analytics.responseBySource.map((row) => (
+                  <tr key={row.source ?? "all"} className="border-t border-[var(--border)]">
+                    <td className="py-2 pr-4 text-[var(--text)]">{row.source ?? "All sources"}</td>
+                    <td className="py-2 pr-4 tabular-nums text-[var(--text-muted)]">{row.applied}</td>
+                    <td className="py-2 pr-4 tabular-nums text-[var(--text-muted)]">{row.replied}</td>
+                    <td className="py-2 pr-4 tabular-nums text-[var(--text-muted)]">{row.silent}</td>
+                    <td className="py-2 tabular-nums text-[var(--text)]">
+                      {row.medianDaysToReply === null ? "—" : row.medianDaysToReply}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </Card>
       ) : null}
 

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { Card, EmptyState, SectionTitle, StatusBadge } from "@/components/ui";
 import type { JobView } from "@/components/job-seeker/jobs-panel";
+import { CLOSED_REASON_LABELS, CLOSED_REASONS, type ClosedReason } from "@/lib/job-seeker/silence";
 
 /**
  * The application pipeline. Eleven stages, and one rule above all of them:
@@ -127,6 +128,8 @@ export function JobSeekerApplicationsPanel() {
   const [problem, setProblem] = useState("");
   const [busyId, setBusyId] = useState("");
   const [documentsByApplication, setDocumentsByApplication] = useState<Record<string, DocumentView[]>>({});
+  /** The reason chosen beside each Close button; "" is "not said" (ADR-243). */
+  const [closeReasons, setCloseReasons] = useState<Record<string, "" | ClosedReason>>({});
 
   const load = useCallback(async () => {
     try {
@@ -252,7 +255,36 @@ export function JobSeekerApplicationsPanel() {
                       <p className="text-sm text-[var(--text-muted)]">
                         {job.company}
                         {job.match ? ` · score ${job.match.score}/100` : ""}
+                        {application.stage === "CLOSED" && application.closedReason ? (
+                          ` · closed: ${CLOSED_REASON_LABELS[application.closedReason as ClosedReason] ?? application.closedReason}`
+                        ) : ""}
                       </p>
+                      {application.silence ? (
+                        <p className="mt-1 text-xs text-[var(--text-muted)]" data-testid="silence">
+                          {application.silence.sentence}
+                        </p>
+                      ) : null}
+                      {application.silence?.suggestionSentence ? (
+                        <p className="mt-1 text-xs text-[var(--text-muted)]" data-testid="silence-suggestion">
+                          {application.silence.suggestionSentence}{" "}
+                          {application.followUpAt?.slice(0, 10) === application.silence.suggestedFollowUpOn ? (
+                            <span>Set as your follow-up.</span>
+                          ) : (
+                            <button
+                              type="button"
+                              className="underline underline-offset-2"
+                              disabled={busyId === application.id}
+                              onClick={() =>
+                                void transition(application.id, {
+                                  action: "follow_up",
+                                  followUpAt: `${application.silence!.suggestedFollowUpOn}T09:00:00.000Z`,
+                                })}
+                            >
+                              Use this date
+                            </button>
+                          )}
+                        </p>
+                      ) : null}
                     </div>
                     <StatusBadge
                       tone={
@@ -312,14 +344,38 @@ export function JobSeekerApplicationsPanel() {
                       </button>
                     ))}
                     {application.stage !== "CLOSED" ? (
-                      <button
-                        type="button"
-                        className="btn btn-sm"
-                        disabled={busyId === application.id}
-                        onClick={() => void transition(application.id, { action: "close" })}
-                      >
-                        Close
-                      </button>
+                      <span className="inline-flex items-center gap-1.5">
+                        <label className="sr-only" htmlFor={`close-reason-${application.id}`}>
+                          Why is it closing?
+                        </label>
+                        <select
+                          id={`close-reason-${application.id}`}
+                          value={closeReasons[application.id] ?? ""}
+                          onChange={(event) =>
+                            setCloseReasons((current) => ({
+                              ...current,
+                              [application.id]: event.target.value as "" | ClosedReason,
+                            }))}
+                          className="rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-xs"
+                        >
+                          <option value="">Why? (optional)</option>
+                          {CLOSED_REASONS.map((reason) => (
+                            <option key={reason} value={reason}>{CLOSED_REASON_LABELS[reason]}</option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          className="btn btn-sm"
+                          disabled={busyId === application.id}
+                          onClick={() =>
+                            void transition(application.id, {
+                              action: "close",
+                              closedReason: closeReasons[application.id] || null,
+                            })}
+                        >
+                          Close
+                        </button>
+                      </span>
                     ) : null}
                   </div>
 

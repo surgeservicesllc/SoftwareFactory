@@ -137,7 +137,7 @@ listed so the count stays honest, not built.
 | 5 | Company reviews and ratings | **N/A** (marketplace UGC); **BUILD 5** your own history with the company |
 | 6 | Salary tool and "estimated" salary on postings | **HAVE** never estimates; **HAVE** (ADR-242) parsed figure with the period printed |
 | 7 | Indeed Assessments | **N/A** |
-| 8 | Employer messaging and interview scheduling (Indeed Interview) | **N/A** (employer side); **HAVE** Interview Tracker; **BUILD 3** silence measured in days against your own median |
+| 8 | Employer messaging and interview scheduling (Indeed Interview) | **N/A** (employer side); **HAVE** Interview Tracker; **HAVE** (ADR-243) silence measured in days against your own median |
 | 9 | "Urgently hiring" / "Hiring multiple candidates" badges | **N/A by design** — no badge that is the employer's claim; **BUILD 1** freshness is the computed one |
 | 10 | Sponsored (paid) placement in results | **N/A by design** — nothing is ranked for money; sort orders are stated |
 | 11 | Saved jobs and applied-jobs list | **HAVE** |
@@ -148,7 +148,7 @@ listed so the count stays honest, not built.
 | 16 | Hiring events | **N/A** |
 | 17 | Indeed's AI resume review | **HAVE** resume review (pattern always, model when a credential exists) |
 | 18 | Email digests | **HAVE** alert email with facts only, never-repeat |
-| 19 | Application status ("Applied", "Viewed by employer") | **HAVE** eleven stages you record; **BUILD 3** transitions ledger with dates |
+| 19 | Application status ("Applied", "Viewed by employer") | **HAVE** eleven stages you record; **HAVE** (ADR-243) transitions ledger with dates |
 | 20 | Screening questions on apply | **N/A** (employer side); **BUILD 4** requirements check and the answers you keep ready |
 | 21 | Indeed postings inside the search | **GATED** (JSearch, ADR-184); deep link-out today (ADR-169) |
 | 22 | Profile and job preferences | **HAVE** |
@@ -177,8 +177,8 @@ listed so the count stays honest, not built.
 | 15 | Application tracking | all | **HAVE** |
 | 16 | Interview tracking | all (none) | **HAVE** — derived from the stage (ADR-117) |
 | 17 | Contacts and outreach | all (none) | **HAVE** — drafts never claim a send |
-| 18 | Analytics of your own search | all (none) | **HAVE** — counted, nulls render as "—"; **BUILD 3** funnel and closure reasons |
-| 19 | Follow-up reminders | all (none) | **HAVE** manual date; **BUILD 3** suggested from your own response arithmetic |
+| 18 | Analytics of your own search | all (none) | **HAVE** — counted, nulls render as "—"; **HAVE** (ADR-243) funnel and closure reasons |
+| 19 | Follow-up reminders | all (none) | **HAVE** manual date; **HAVE** (ADR-243) suggested from your own response arithmetic |
 | 20 | Scam detection | all (none) | **HAVE** (ADR-242) red flags with the matched phrase printed |
 | 21 | Staffing-agency filter | all (none) | **HAVE** (ADR-242) agency-likely from the company name, labeled derived |
 | 22 | Visa sponsorship stated / not | all (none) | **HAVE** (ADR-242) sponsorship facet from the posting text |
@@ -194,7 +194,7 @@ listed so the count stays honest, not built.
 
 | # | Complaint | Who says it | AI-first answer | Us |
 |---|-----------|-------------|-----------------|----|
-| 1 | Applications vanish: 67% got zero response in 2025; "not knowing if a human saw it" outranks rejection | surveys (Greenhouse, Monster), *recurring* | Silence measured, not suffered: days since applied against your own median days-to-reply by source, "silent for 21 days; 3 of your 4 replies came within 14" | **BUILD 3** |
+| 1 | Applications vanish: 67% got zero response in 2025; "not knowing if a human saw it" outranks rejection | surveys (Greenhouse, Monster), *recurring* | Silence measured, not suffered: days since applied against your own median days-to-reply by source, "silent for 21 days; 3 of your 4 replies came within 14" | **HAVE** (ADR-243) |
 | 2 | Ghost jobs: 1 in 4 not real; 81% of recruiters admit their employer posts them | surveys, press, *recurring* | A freshness verdict per card from the boards' own dates and this product's sightings ledger, numbers printed | **BUILD 1** |
 | 3 | Reposted jobs shown as "new" | reviewers, *recurring* | Re-datings counted per URL; the earliest date ever seen wins the verdict | **BUILD 1** |
 | 4 | "Actively reviewing" and "100+ applicants" signals mean nothing | reviewers | No theatre: the only signals are computed ones (match, freshness, red flags) | **HAVE** (by design) |
@@ -206,7 +206,7 @@ listed so the count stays honest, not built.
 | 10 | Fake recruiters and phishing through the platform | press, FTC | Red-flag scan of the posting text with the matched phrase printed; a scan for pasted recruiter messages | **HAVE** (ADR-242) |
 | 11 | The same job five times from five staffing agencies | reviewers | Cross-board dedupe (one card, every source); agency-likely label and exclusion from the company name | **HAVE** / **HAVE** (ADR-242) |
 | 12 | Job alerts flood the inbox with irrelevant roles | reviewers, *recurring* | Alerts run your saved filters and minimum score; a posting is never sent twice for a search | **HAVE** |
-| 13 | No feedback on rejection | surveys, *recurring* | Closure reasons on every ended application and a funnel of where your search stalls | **BUILD 3** |
+| 13 | No feedback on rejection | surveys, *recurring* | Closure reasons on every ended application and a funnel of where your search stalls | **HAVE** (ADR-243) |
 | 14 | Application tracking is one word ("Applied") | reviewers | Eleven stages with dates, notes, follow-up, documents per application | **HAVE** |
 | 15 | Cannot see which resume version went where | reviewers | Every generated version is stored against its application, immutably | **HAVE** |
 | 16 | Vague postings: no location, level or pay | reviewers | Posting completeness printed (pay, place, work model, level, description, date) | **HAVE** (ADR-242) |
@@ -214,7 +214,7 @@ listed so the count stays honest, not built.
 | 18 | Keyword-only matching; skills badges nobody reads | reviewers | Reasons and gaps per posting; the gap across all your target jobs ranked by how often it costs you | **HAVE** / **BUILD 5** |
 | 19 | Recruiter spam in InMail | reviewers | No inbound channel; contacts are ones you record | **N/A** |
 | 20 | Expired jobs still listed | reviewers | Closing date passed → likely stale; a bounded "still open?" recheck of the posting URL | **BUILD 1** / **BUILD 9** |
-| 21 | Cannot withdraw or annotate after applying | reviewers | Close with a reason at any stage; notes always editable | **HAVE** / **BUILD 3** |
+| 21 | Cannot withdraw or annotate after applying | reviewers | Close with a reason at any stage; notes always editable | **HAVE** / **HAVE** (ADR-243) |
 | 22 | Saved jobs disappear when the posting is removed | reviewers | A saved job is a row with the posting snapshot, not a link | **HAVE** |
 | 23 | Your data trains their models and sells ads | press | No model trained here, nothing sold; export of every table about you | **BUILD 7** |
 | 24 | Support is unreachable; accounts restricted without explanation | reviewers | Your data is exportable at all times; no account-level restriction exists in this product | **BUILD 7** |
@@ -227,7 +227,7 @@ listed so the count stays honest, not built.
 | 1 | Scam postings and fake "Indeed Interview" apps steering people to Telegram/WhatsApp | press, Indeed's own trust page, *recurring* | Red-flag scan: off-platform messaging, upfront fees, equipment purchase, check deposit, crypto, reshipping, task-pay schemes — each printed | **HAVE** (ADR-242) |
 | 2 | Ghost and expired listings | reviewers, surveys | Freshness verdict | **BUILD 1** |
 | 3 | Old adverts constantly reposted | Trustpilot reviewers, *recurring* | Re-datings counted | **BUILD 1** |
-| 4 | Indeed Apply → silence | reviewers, surveys, *recurring* | Silence measured against your own median | **BUILD 3** |
+| 4 | Indeed Apply → silence | reviewers, surveys, *recurring* | Silence measured against your own median | **HAVE** (ADR-243) |
 | 5 | Search returns unrelated jobs; sponsored listings dominate | Trustpilot reviewers, *recurring* | No paid placement; deterministic filters; explained score | **HAVE** |
 | 6 | "Estimated salary" and wrong pay periods (a seasonal stipend shown as monthly) | reviewers | Never an estimate; the parsed figure prints its period and source text | **HAVE** (ADR-242) |
 | 7 | Location and remote filters wrong | reviewers | Radius with resolved centre and honest exclusions; unstated kept | **HAVE** |
@@ -236,19 +236,19 @@ listed so the count stays honest, not built.
 | 10 | Assessments and skills tests forced on applicants | reviewers | None | **N/A** |
 | 11 | Indeed Resume mangles formatting | reviewers | Fact-only builders produce plain, ATS-safe text; versions kept | **HAVE** |
 | 12 | Knockout screening questions auto-reject | ATS guides, *recurring* | Requirements check: "must have" lines from the posting checked against your recorded facts, each with a verdict | **BUILD 4** |
-| 13 | Status is only "Applied"/"Viewed" | reviewers | Eleven stages; transitions ledger with dates | **HAVE** / **BUILD 3** |
+| 13 | Status is only "Applied"/"Viewed" | reviewers | Eleven stages; transitions ledger with dates | **HAVE** / **HAVE** (ADR-243) |
 | 14 | The same job listed several times | reviewers | Dedupe | **HAVE** |
 | 15 | Staffing-agency and commission-only spam | reviewers | Agency-likely label; exclude-company chips | **HAVE** (ADR-242) / **HAVE** |
 | 16 | Alerts are irrelevant | reviewers | Saved filters + minimum score + never-repeat | **HAVE** |
 | 17 | Redirect to the employer's site loses the trail | reviewers | Viewed mark on open; record the application with its URL | **HAVE** |
 | 18 | Postings without pay | surveys | Require-salary; completeness printed | **HAVE** / **HAVE** (ADR-242) |
 | 19 | Company reviews unreliable or removed | reviewers | Your own history with the company from your own rows | **BUILD 5** |
-| 20 | Employers no-show scheduled interviews | reviewers, employers | Interview tracker; days silent printed | **HAVE** / **BUILD 3** |
+| 20 | Employers no-show scheduled interviews | reviewers, employers | Interview tracker; days silent printed | **HAVE** / **HAVE** (ADR-243) |
 | 21 | Spam calls after uploading a resume | reviewers | The resume is private to you | **HAVE** |
 | 22 | "Urgently hiring" badges mean nothing | reviewers | No employer-claimed badges; freshness instead | **BUILD 1** |
 | 23 | Mobile app search breaks | reviewers | Responsive layouts verified in CI at 320px+ | **HAVE** |
 | 24 | Details scraped from other sites are wrong | reviewers | Only boards' own published surfaces are read; the publisher is named on every aggregator hit | **HAVE** |
-| 25 | No way to know if a human ever read it | Monster survey (60%) | No claim is made that one did; what you can know — days silent, your own reply rates — is printed | **BUILD 3** |
+| 25 | No way to know if a human ever read it | Monster survey (60%) | No claim is made that one did; what you can know — days silent, your own reply rates — is printed | **HAVE** (ADR-243) |
 
 ### 2C. The other popular boards
 
@@ -270,7 +270,7 @@ listed so the count stays honest, not built.
 | 14 | Expired listings linger | Google for Jobs | Freshness; still-open recheck | **BUILD 1** / **BUILD 9** |
 | 15 | No application tracking | Google for Jobs | Pipeline | **HAVE** |
 | 16 | Phishing "recruiters" | Dice | Red flags for pasted messages | **HAVE** (ADR-242) |
-| 17 | Startups ghost after a first call | Wellfound | Silence measured | **BUILD 3** |
+| 17 | Startups ghost after a first call | Wellfound | Silence measured | **HAVE** (ADR-243) |
 | 18 | Compensation ranges too wide to mean anything | Wellfound | Parsed figure with the whole range printed | **HAVE** (ADR-242) |
 | 19 | Stale mirrored listings | SimplyHired | Freshness | **BUILD 1** |
 | 20 | Visa sponsorship never stated | all | Sponsorship facet from the posting text | **HAVE** (ADR-242) |
@@ -292,7 +292,7 @@ apply scope with a postflight. Status is updated here as each lands.
 |-----------|-----|---------|--------|
 | 1 | ADR-241 | **Freshness**: a posting sightings ledger (public facts, one row per URL, written through one definer boundary) and a verdict per card — fresh / aging / likely stale / unknown — with the numbers printed; hide-them is the person's choice | **SHIPPED** |
 | 2 | ADR-242 | **Red flags and completeness**: scam markers with the matched phrase, agency-likely from the company name, posting completeness, sponsorship stated/not, work model derived from text, parsed salary with its period; all as derived facets through search, saved searches and alerts | **SHIPPED** |
-| 3 | ADR-243 | **Silence measured**: an append-only application transitions ledger, days-silent against your own median days-to-reply by source, a suggested follow-up date with the arithmetic, closure reasons, and a funnel of where your search stalls | planned |
+| 3 | ADR-243 | **Silence measured**: an append-only application transitions ledger, days-silent against your own median days-to-reply by source, a suggested follow-up date with the arithmetic, closure reasons, and a funnel of where your search stalls | **SHIPPED** |
 | 4 | ADR-244 | **Application kit**: the screening answers you keep (authorization, sponsorship, relocation, start date, notice, expectations), copy-ready ATS blocks from your profile, and a requirements check per posting | planned |
 | 5 | ADR-245 | **What keeps costing you**: the skills gap across your target and saved jobs ranked by frequency, and your own history with each company on every result | planned |
 | 6 | ADR-246 | **Interview prep sheet** composed from your own facts; model-generated questions only when a provider exists, labeled | planned |

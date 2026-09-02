@@ -1,5 +1,36 @@
 # Current state
 
+## 2026-09-02: JobSearch build-out — increment 3, silence measured (ADR-243)
+
+`20260902001300_application_transitions.sql`: `job_seeker_closed_reason`
+enum and `job_seeker_applications.closed_reason` (checked: only while
+CLOSED), an owner-identity key on applications, and
+`job_seeker_application_transitions` (one append-only row per stage or
+approval change, written by a SECURITY DEFINER AFTER trigger, composite
+FK to the application's owner identity, forced RLS, SELECT own rows
+only, no service_role grant, rewrite refused by trigger).
+`job_seeker_application_replies(org)` (INVOKER: first response-stage
+transition or a rejection/filled closure) and
+`job_seeker_response_stats(org)` (INVOKER: per source + all sources,
+applied/replied/silent and the median days to reply; no rows when
+nothing was submitted). `lib/job-seeker/silence.ts`: `describeSilence`
+(source median first, then overall, then a named 7-day default;
+follow-up = applied + median held between 7 and 21, arithmetic in the
+sentence), `buildFunnel`, the closure-reason vocabulary. Jobs GET
+attaches `silence` and `closedReason` per application plus a
+`silenceBasis` line; applications PATCH close takes `closedReason`;
+analytics GET adds `funnel`, `closedReasons` (null counted as
+"unstated") and `responseBySource`, each null when the ledger is
+unreadable. Applications page: the silence sentence, the suggested
+follow-up with "Use this date", a reason select beside Close, the reason
+on closed cards; Analytics page: where applications stall, why they
+ended, replies by source. Tests: job-seeker-transitions.behavior 4,
+job-seeker-silence 8, job-seeker-silence-routes 6, panels +1,
+job-seeker-analytics-panel 2. Grants roster and RLS census 231; replay
+executes the new postflight; runbook count 233; workflow 415,273 bytes
+of 420,000; tsc and eslint clean. Hosted apply scope
+`application-transitions` is dispatched after merge.
+
 ## 2026-09-02: JobSearch build-out — increment 2, posting signals (ADR-242)
 
 `lib/job-seeker/board-search/signals.ts` (pure, browser-safe): seven

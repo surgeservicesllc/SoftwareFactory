@@ -2,6 +2,7 @@ import {
   databaseErrorResponse,
   jsonNoStore,
 } from "@/lib/server/http";
+import { buildFunnel, toReplyStats } from "@/lib/job-seeker/silence";
 import { supabaseBoundaryErrorResponse } from "@/lib/supabase/http";
 import { requireActiveOrganization } from "@/lib/supabase/tenant";
 
@@ -35,7 +36,7 @@ export async function GET() {
           .eq("organization_id", activeOrganization.id),
         client
           .from("job_seeker_applications")
-          .select("job_id, stage")
+          .select("job_id, stage, closed_reason")
           .eq("organization_id", activeOrganization.id),
       ]);
     if (jobsError) return databaseErrorResponse(jobsError);
@@ -44,7 +45,53 @@ export async function GET() {
 
     const jobs = jobRows ?? [];
     const matches = matchRows ?? [];
-    const applications = applicationRows ?? [];
+    const applications = (applicationRows ?? []) as Array<{ job_id: string; stage: string; closed_reason?: string | null }>;
+
+    /*
+     * Silence measured (ADR-243): the funnel counts applications that ever
+     * reached each stage from the transitions ledger, closure reasons are
+     * the person's own words counted (null counted as "unstated"), and
+     * replies by source come from the same statistics the applications
+     * page prints. Each is failure-tolerant — an unapplied migration
+     * answers null for that section, never a fabricated zero.
+     */
+    let funnel: Array<{ stage: string; reached: number }> | null = null;
+    try {
+      const { data, error } = await client
+        .from("job_seeker_application_transitions")
+        .select("application_id, to_stage")
+        .eq("organization_id", activeOrganization.id);
+      if (!error && Array.isArray(data)) {
+        funnel = buildFunnel(
+          (data as Array<{ application_id: string; to_stage: string }>).map((row) => ({
+            applicationId: row.application_id,
+            toStage: row.to_stage,
+          })),
+        );
+      }
+    } catch {
+      funnel = null;
+    }
+    let responseBySource: ReturnType<typeof toReplyStats>[] | null = null;
+    try {
+      const stats = await client.rpc("job_seeker_response_stats", { p_organization_id: activeOrganization.id });
+      if (stats && !stats.error && Array.isArray(stats.data)) {
+        responseBySource = (stats.data as Record<string, unknown>[]).map(toReplyStats);
+      }
+    } catch {
+      responseBySource = null;
+    }
+    const closedReasons = Object.entries(
+      applications
+        .filter((row) => row.stage === "CLOSED")
+        .reduce<Record<string, number>>((acc, row) => {
+          const reason = row.closed_reason ?? "unstated";
+          acc[reason] = (acc[reason] ?? 0) + 1;
+          return acc;
+        }, {}),
+    )
+      .map(([reason, count]) => ({ reason, count }))
+      .sort((a, b) => b.count - a.count);
 
     const applied = applications.filter((row) => APPLIED_STAGES.includes(row.stage));
     const responded = applications.filter((row) => RESPONSE_STAGES.includes(row.stage));
@@ -89,6 +136,9 @@ export async function GET() {
             return acc;
           }, {}),
         ).map(([source, count]) => ({ source, count })),
+        funnel,
+        closedReasons,
+        responseBySource,
       },
     });
   } catch (error) {

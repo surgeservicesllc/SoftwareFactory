@@ -99,6 +99,7 @@ on:
           - schedule-bends
           - conversation-routing
           - posting-sightings
+          - application-transitions
           - probe
 permissions:
   actions: read
@@ -1906,6 +1907,21 @@ jobs:
           psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
           psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/postflight/posting-sightings.sql
           echo "Posting sightings applied; the ledger behind the freshness verdict, public facts only, written through one definer boundary."
+      - name: Apply application transitions (scope=application-transitions)
+        if: ${{ inputs.scope == 'application-transitions' }}
+        run: |
+          VERSION=20260902001300_application_transitions
+          FILE="supabase/migrations/${VERSION}.sql"
+          sha256sum "$FILE"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied "${VERSION%%_*}"
+          else
+            npx supabase migration repair --status applied "${VERSION%%_*}" --db-url "$DB_URL"
+          fi
+          psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/postflight/application-transitions.sql
+          echo "Application transitions applied; silence measured against the person's own replies, closure reasons, and the funnel."
       - name: Normalize exact legacy bot ACLs (scope=bot-legacy-acl-normalization)
         if: ${{ inputs.scope == 'bot-legacy-acl-normalization' }}
         run: |

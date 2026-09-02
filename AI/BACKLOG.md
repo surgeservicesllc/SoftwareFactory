@@ -82,10 +82,19 @@ own PR, ADR, behavior test against the real chain, and hosted scope.
   alert planner and panel; card badges with evidence; Contacts page
   "Check a recruiter message". No migration. Closes LinkedIn 8/9/10/11/16,
   Indeed 1/6/15/18, others 6/9/10/16/18/20.
-- [ ] Increment 3 (ADR-243): silence measured — append-only application
-  transitions ledger (trigger-written), days-silent against the person's
-  own median days-to-reply by source, suggested follow-up with the
-  arithmetic, closure reasons, funnel of where the search stalls.
+- [x] Increment 3 (ADR-243): silence measured —
+  `job_seeker_application_transitions` (trigger-written, append-only,
+  forced RLS, own rows only), `job_seeker_applications.closed_reason`
+  (enum, only while CLOSED), `job_seeker_application_replies()` and
+  `job_seeker_response_stats()` (INVOKER); `lib/job-seeker/silence.ts`
+  (days silent against the source's own median, then all sources, then
+  a named default; follow-up = applied + median held 7–21 with the sum
+  printed; funnel). Jobs list carries `silence` + `closedReason`;
+  close takes a reason; analytics adds the funnel, closure reasons and
+  replies by source; applications page prints the sentences and offers
+  "Use this date". 20260902001300; hosted apply:
+  scope=application-transitions after merge. Closes LinkedIn 1/13/21,
+  Indeed 4/13/20/25, others 17.
 - [ ] Increment 4 (ADR-244): application kit — screening answers the
   person keeps, copy-ready ATS blocks from the profile, a requirements
   check per posting with a verdict per line.

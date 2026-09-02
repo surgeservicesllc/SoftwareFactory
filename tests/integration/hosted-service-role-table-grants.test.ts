@@ -174,6 +174,7 @@ const publicTables = [
   "improvement_ledger",
   "incidents",
   "job_seeker_alert_deliveries",
+  "job_seeker_application_transitions",
   "job_seeker_applications",
   "job_seeker_contacts",
   "job_seeker_documents",

@@ -2,7 +2,35 @@
 
 Last updated: 2026-09-02
 
-## Newest (2026-09-02, latest+64): posting signals (ADR-242)
+## Newest (2026-09-02, latest+65): silence measured (ADR-243)
+
+THE TRIGGER WRITES THE LEDGER. `job_seeker_application_transitions` is
+written only by the AFTER trigger on applications (SECURITY DEFINER);
+authenticated holds SELECT and nothing else. Do not add an INSERT path
+"for imports": a transition that did not come from a row change is a
+lie about when something happened.
+
+A REJECTION IS A REPLY. `job_seeker_application_replies` counts the
+first transition into a response stage OR a closure with an employer
+reason (rejected before/after interview, position filled). Silence is
+the complaint; a "no" answers it. `no_response`, `withdrew`,
+`offer_declined` and `other` are not replies.
+
+THE COMPARISON IS THE PERSON'S OWN. Source median first, then every
+source, then the named 7-day default; the follow-up is applied + median
+held between 7 and 21. Do not introduce an industry benchmark: the
+boards' whole problem is numbers nobody can check.
+
+ROLLUP OVER NOTHING. `job_seeker_response_stats` groups by
+`rollup(source)` with `having count(*) > 0`; without the HAVING a person
+with no submissions gets a zero row, and the other-member privacy test
+catches it. An application whose stage outran the ledger (recorded
+before this migration) says so and gets no date.
+
+HOSTED: scope=application-transitions is dispatched after merge; record
+the run id here and in CURRENT_STATE.
+
+## Older (2026-09-02, latest+64): posting signals (ADR-242)
 
 THE TEXT IS THE ONLY SOURCE. Every signal in `board-search/signals.ts`
 is a deterministic pattern over the posting's own words, and every
