@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { TrendingUp } from "lucide-react";
 
 import { Card, Notice, PageHeader, SectionTitle } from "@/components/ui";
-import type { DashboardsPayload } from "@/components/services/types";
+import type { DashboardRowsPayload, DashboardsPayload } from "@/components/services/types";
 import { cn } from "@/lib/cn";
 
 /**
@@ -51,6 +51,36 @@ export function ServicesDashboardsPanel() {
   const [data, setData] = useState<DashboardsPayload | null>(null);
   const [listError, setListError] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("revenue");
+  const [drill, setDrill] = useState<{ figure: string; key: string | null; label: string; days?: number } | null>(null);
+  const [rows, setRows] = useState<DashboardRowsPayload | null>(null);
+  const [rowsError, setRowsError] = useState<string | null>(null);
+
+  /*
+   * Every figure opens. The rows come from `crm_dashboard_rows`, which
+   * repeats the figure's own predicate, so the list under a number is the
+   * number — never a nearby query that happens to agree today.
+   */
+  const openRows = useCallback(async (figure: string, key: string | null, label: string, days?: number) => {
+    setDrill({ figure, key, label, days });
+    setRows(null);
+    setRowsError(null);
+    const params = new URLSearchParams({ figure });
+    if (key !== null) params.set("key", key);
+    if (days !== undefined) params.set("days", String(days));
+    try {
+      const response = await fetch(`/api/services/dashboards/rows?${params.toString()}`, {
+        headers: { accept: "application/json" },
+      });
+      const body = (await response.json()) as DashboardRowsPayload & { error?: { message?: string } };
+      if (!response.ok) {
+        setRowsError(body.error?.message ?? "The rows behind that figure could not be read.");
+        return;
+      }
+      setRows(body);
+    } catch {
+      setRowsError("The rows behind that figure could not be read.");
+    }
+  }, []);
 
   const refresh = useCallback(async () => {
     try {
@@ -105,23 +135,75 @@ export function ServicesDashboardsPanel() {
           <Figure
             label={`Invoiced, ${data?.windows.months ?? 12} months`}
             value={data === null ? "—" : money(data.revenue.totals.invoicedCents)}
+            onOpen={() => void openRows("invoiced_month", `${new Date().toISOString().slice(0, 7)}-01`, "this month's invoices")}
           />
           <Figure
             label="Overdue"
             value={data === null ? "—" : money(data.receivable.overdueCents)}
             tone={(data?.receivable.overdueCents ?? 0) > 0 ? "amber" : undefined}
+            onOpen={() => void openRows("overdue", null, "overdue invoices")}
           />
           <Figure
             label="Customers with no plan"
             value={data?.retention === null || data === undefined ? "—" : String(data?.retention?.customersWithoutPlan ?? "—")}
             tone={(data?.retention?.customersWithoutPlan ?? 0) > 0 ? "amber" : undefined}
+            onOpen={() => void openRows("no_plan", null, "customers with no plan")}
           />
           <Figure
             label="Retention"
             value={data === null ? "—" : rate(data.retention?.retentionBps ?? null)}
+            onOpen={() => void openRows("retention", "inactive", "inactive accounts (the ones retention lost)")}
           />
         </dl>
       </Card>
+
+      {drill !== null ? (
+        <section className="card mb-6" data-testid="services-dashboard-rows">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <SectionTitle
+              title={`Behind ${drill.label}`}
+              description="Every row this figure counts, by the same rule the figure uses — the count on the tile and the list here cannot disagree."
+            />
+            <button type="button" onClick={() => { setDrill(null); setRows(null); }} className="btn btn-secondary px-3 py-1.5 text-xs">
+              Close
+            </button>
+          </div>
+          {rowsError !== null ? <Notice tone="warning">{rowsError}</Notice> : null}
+          {rows === null && rowsError === null ? (
+            <p className="mt-3 text-sm text-muted">Reading the rows…</p>
+          ) : rows !== null && rows.rows.length === 0 ? (
+            <p className="mt-3 text-sm text-muted">Nothing is behind this figure right now.</p>
+          ) : rows !== null ? (
+            <div className="mt-3 overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="border-b border-line text-xs uppercase tracking-wide text-faint">
+                    <th className="py-2 pr-3 font-medium">Account</th>
+                    <th className="py-2 pr-3 font-medium">Row</th>
+                    <th className="py-2 pr-3 font-medium">Date</th>
+                    <th className="py-2 pr-3 font-medium">Amount</th>
+                    <th className="py-2 font-medium">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-line">
+                  {rows.rows.map((row) => (
+                    <tr key={`${row.rowKind}:${row.rowId}`}>
+                      <td className="py-2 pr-3 text-foreground">{row.accountName}</td>
+                      <td className="py-2 pr-3 text-muted">{row.rowKind === "account" ? "account" : row.label}</td>
+                      <td className="py-2 pr-3 tabular-nums text-muted">{row.occurredOn ?? "—"}</td>
+                      <td className="py-2 pr-3 tabular-nums text-muted">{row.amountCents === null ? "—" : money(row.amountCents)}</td>
+                      <td className="py-2 text-muted">{row.status}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {rows.ceiling.reached ? (
+                <p className="mt-2 text-xs text-faint">Showing the first {rows.ceiling.rows} rows; the figure counts them all.</p>
+              ) : null}
+            </div>
+          ) : null}
+        </section>
+      ) : null}
 
       <div className="mb-4 flex flex-wrap gap-2" role="tablist" aria-label="Dashboards">
         {(
@@ -174,7 +256,11 @@ export function ServicesDashboardsPanel() {
                 <tbody className="divide-y divide-line">
                   {(data?.revenue.months ?? []).map((month) => (
                     <tr key={month.month}>
-                      <td className="py-2.5 pr-3 text-foreground">{month.month.slice(0, 7)}</td>
+                      <td className="py-2.5 pr-3 text-foreground">
+                        <button type="button" className="underline-offset-2 hover:underline" onClick={() => void openRows("invoiced_month", month.month.slice(0, 10), `invoices issued in ${month.month.slice(0, 7)}`)}>
+                          {month.month.slice(0, 7)}
+                        </button>
+                      </td>
                       <td className="py-2.5 pr-3 tabular-nums text-muted">{month.invoiceCount}</td>
                       <td className="py-2.5 pr-3 tabular-nums text-muted">{money(month.invoicedCents)}</td>
                       <td className="py-2.5 pr-3 tabular-nums text-foreground">{money(month.collectedCents)}</td>
@@ -294,7 +380,9 @@ export function ServicesDashboardsPanel() {
                 {(data?.receivable.buckets ?? []).map((bucket) => (
                   <tr key={bucket.bucket}>
                     <td className="py-2.5 pr-3 text-foreground">
-                      {BUCKET_LABELS[bucket.bucket] ?? bucket.bucket}
+                      <button type="button" className="underline-offset-2 hover:underline" onClick={() => void openRows("aging", bucket.bucket, `receivable ${BUCKET_LABELS[bucket.bucket] ?? bucket.bucket}`)}>
+                        {BUCKET_LABELS[bucket.bucket] ?? bucket.bucket}
+                      </button>
                     </td>
                     <td className="py-2.5 pr-3 tabular-nums text-muted">{bucket.invoiceCount}</td>
                     <td
@@ -350,7 +438,9 @@ export function ServicesDashboardsPanel() {
                 {(data?.productivity.technicians ?? []).slice(0, 100).map((technician) => (
                   <tr key={technician.technicianId}>
                     <td className="py-2.5 pr-3 text-foreground">
-                      {technician.name}
+                      <button type="button" className="underline-offset-2 hover:underline" onClick={() => void openRows("technician", technician.technicianId, `${technician.name}'s scheduled visits`, data?.windows.productivityDays)}>
+                        {technician.name}
+                      </button>
                       {technician.active ? null : (
                         <span className="ml-1.5 text-xs text-faint">off roster</span>
                       )}
@@ -409,7 +499,11 @@ export function ServicesDashboardsPanel() {
                 <tbody className="divide-y divide-line">
                   {(data?.routes.days ?? []).slice(0, 100).map((day) => (
                     <tr key={`${day.day}:${day.technicianId}`}>
-                      <td className="py-2.5 pr-3 text-foreground">{day.day}</td>
+                      <td className="py-2.5 pr-3 text-foreground">
+                        <button type="button" className="underline-offset-2 hover:underline" onClick={() => void openRows("route_day", `${day.day}|${day.technicianId}`, `the stops on ${day.day}`)}>
+                          {day.day}
+                        </button>
+                      </td>
                       <td className="py-2.5 pr-3 tabular-nums text-muted">{day.stops}</td>
                       <td className="py-2.5 pr-3 tabular-nums text-muted">{day.accounts}</td>
                       <td className="py-2.5 pr-3 tabular-nums text-muted">{hours(day.spanMinutes)}</td>
@@ -436,7 +530,7 @@ export function ServicesDashboardsPanel() {
   );
 }
 
-function Figure({ label, value, tone }: { label: string; value: string; tone?: "amber" | "rose" }) {
+function Figure({ label, value, tone, onOpen }: { label: string; value: string; tone?: "amber" | "rose"; onOpen?: () => void }) {
   return (
     <div className="rounded-xl border border-line bg-surface p-4">
       <dt className="flex items-center gap-2 text-xs uppercase tracking-wide text-faint">
@@ -451,6 +545,11 @@ function Figure({ label, value, tone }: { label: string; value: string; tone?: "
       >
         {value}
       </dd>
+      {onOpen ? (
+        <button type="button" onClick={onOpen} className="mt-2 text-xs text-[var(--accent)] underline-offset-2 hover:underline" aria-label={`Open the rows behind ${label}`}>
+          Open the rows
+        </button>
+      ) : null}
     </div>
   );
 }

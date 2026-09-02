@@ -72,6 +72,12 @@ export const COPILOT_SKILLS = [
     example: "Which jobs lost money this quarter?",
     keywords: ["lost money", "losing money", "unprofitable", "negative margin", "profitab", "margin", "cost us"],
   },
+  {
+    id: "schedule_audit",
+    label: "What contradicts in the schedule",
+    example: "What contradicts in the schedule?",
+    keywords: ["wrong with", "double book", "double-book", "overlap", "unrouted", "schedule audit", "contradict", "conflict"],
+  },
 ] as const;
 
 export type CopilotSkillId = (typeof COPILOT_SKILLS)[number]["id"];
@@ -220,6 +226,25 @@ export function composeLostMoneyAnswer(facts: {
     .map((visit) => `${visit.account} (${visit.service}: ${dollars(visit.marginCents)} on ${dollars(visit.revenueCents)} revenue)`)
     .join("; ");
   return `${coverage} ${facts.losers.length} lost money in the last ${facts.days} days; the worst: ${lines}. Every input is printed on the Profitability page.`;
+}
+
+export function composeScheduleAuditAnswer(facts: {
+  days: number;
+  total: number;
+  bySeverity: { high: number; medium: number; low: number };
+  byFinding: ReadonlyArray<{ label: string; count: number }>;
+  worst: ReadonlyArray<{ label: string; account: string; detail: string }>;
+}): string {
+  if (facts.total === 0) {
+    return `Nothing contradicts in the next ${facts.days} days: no double bookings, no unrouted visits, no due plan without a visit, no arrival outside its window, and nothing left open past its window.`;
+  }
+  const kinds = facts.byFinding.map((entry) => `${entry.count} ${entry.label.toLowerCase()}`).join(", ");
+  const urgent = facts.bySeverity.high > 0 ? ` ${facts.bySeverity.high} need${facts.bySeverity.high === 1 ? "s" : ""} attention today.` : "";
+  const worst = facts.worst
+    .slice(0, 3)
+    .map((finding) => `${finding.account} — ${finding.label.toLowerCase()}: ${finding.detail}`)
+    .join("; ");
+  return `${facts.total} contradiction${facts.total === 1 ? "" : "s"} in the next ${facts.days} days (${kinds}).${urgent} First: ${worst}. Every one is listed on the Schedule page with the rows involved.`;
 }
 
 /** The refusal that teaches: what this copilot can actually answer. */

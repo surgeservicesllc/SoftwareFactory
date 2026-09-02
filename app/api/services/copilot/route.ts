@@ -5,6 +5,7 @@ import {
   composeAutopayAnswer,
   composeFollowupsAnswer,
   composeLostMoneyAnswer,
+  composeScheduleAuditAnswer,
   composeOverdueAnswer,
   composeRevenueAnswer,
   composeRoutesAnswer,
@@ -13,6 +14,11 @@ import {
   composeVisitsAnswer,
   matchQuestion,
 } from "@/lib/services/copilot";
+import {
+  summarizeFindings,
+  toScheduleFindingView,
+  type CrmScheduleFindingRow,
+} from "@/lib/services/nothing-hidden";
 import {
   ApiRequestError,
   databaseErrorResponse,
@@ -85,6 +91,30 @@ export async function POST(request: Request) {
       return jsonNoStore({
         skill,
         answer: composeLostMoneyAnswer({ days, completed: rows.length, known: known.length, losers }),
+      });
+    }
+
+    if (skill === "schedule_audit") {
+      const days = 7;
+      const read = await client
+        .rpc("crm_schedule_audit", { p_organization: organizationId, p_days: days })
+        .limit(500);
+      if (read.error) return databaseErrorResponse(read.error);
+      const findings = ((read.data ?? []) as unknown as CrmScheduleFindingRow[]).map(toScheduleFindingView);
+      const summary = summarizeFindings(findings);
+      return jsonNoStore({
+        skill,
+        answer: composeScheduleAuditAnswer({
+          days,
+          total: summary.total,
+          bySeverity: summary.bySeverity,
+          byFinding: summary.byFinding,
+          worst: findings.slice(0, 3).map((finding) => ({
+            label: finding.label,
+            account: finding.accountName,
+            detail: finding.detail,
+          })),
+        }),
       });
     }
 

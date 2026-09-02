@@ -1,5 +1,38 @@
 # Current state
 
+## 2026-09-02: Nothing hidden (ADR-232)
+
+Increment 30 ships `20260902000500_nothing_hidden.sql`: three SECURITY
+INVOKER, STABLE functions that store nothing. `crm_schedule_audit(org,
+days)` names six contradictions with the rows involved — double-booked
+(each visit its own finding), slipped (window passed, still open),
+unrouted, plan due with no visit within a week, planned arrival outside
+the promised window, and a visit reassigned after routing — high before
+medium before low. `crm_automation_dry_run(org, rule, days)` lists which
+records a rule would touch right now, what it would do to each and why it
+would not (no email/phone on file, do-not-contact, marketing or notices
+declined); the rule's counters cannot move. `crm_dashboard_rows(org,
+figure, key)` opens every dashboard figure by the aggregate's exact
+predicate, every key cast inside a CASE on the figure. The Schedule page
+shows the audit above the board; the Marketing page's automations table
+gains a Dry run per rule with coverage stated first and the send labelled
+Not Connected; every Dashboards tile, month, bucket, technician and day
+opens the rows behind it. Copilot skill "What contradicts in the
+schedule?".
+
+Evidence: 4 behavior tests on the replayed chain (all six findings raised
+by fixtures and none by the clean rows, ordered by severity; three rules
+dry-run with the exact would-do text and blocked reason and counters
+untouched; every dashboard figure's row count equal to its aggregate,
+bucket by bucket, technician by technician, day by day, with a stray key
+never parsed; a rival sees nothing and only `authenticated` may execute);
+4 pure tests; 5 route tests; 3 panel tests (schedule audit card and its
+clean state; drill-down keys for a tile, a bucket, a technician, a day and
+a month with the ceiling stated; dry-run coverage and per-record lines);
+copilot +1. Scope replay with the new postflight, runbook count 225, byte
+guard 450,000 (447,824), tsc, eslint and a production build clean. Hosted
+apply scope `nothing-hidden` is dispatched after merge.
+
 ## 2026-09-02: Job profitability (ADR-231)
 
 Increment 29 ships `20260902000400_job_profitability.sql`: two bounded,

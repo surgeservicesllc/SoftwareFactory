@@ -7,6 +7,7 @@ import { dollars } from "@/components/services/ui";
 import type {
   AttributionPayload,
   AutomationsPayload,
+  DryRunPayload,
   CampaignsPayload,
   MarketingListsPayload,
 } from "@/components/services/types";
@@ -45,6 +46,35 @@ export function ServicesMarketingPanel() {
   const [attribution, setAttribution] = useState<AttributionPayload | null>(null);
   const [listError, setListError] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("campaigns");
+  const [dryRun, setDryRun] = useState<DryRunPayload | null>(null);
+  const [dryRunError, setDryRunError] = useState<string | null>(null);
+  const [dryRunning, setDryRunning] = useState<string | null>(null);
+
+  /*
+   * A dry run lists exactly which records the rule would touch right now,
+   * what it would do to each, and why it would not — read-only, so the
+   * rule's own counters cannot move. It is how a rule is checked before
+   * anybody arms it.
+   */
+  const runDry = useCallback(async (automationId: string) => {
+    setDryRunning(automationId);
+    setDryRunError(null);
+    try {
+      const response = await fetch(`/api/services/marketing/automations/dry-run?automationId=${automationId}`, {
+        headers: { accept: "application/json" },
+      });
+      const body = (await response.json()) as DryRunPayload & { error?: { message?: string } };
+      if (!response.ok) {
+        setDryRunError(body.error?.message ?? "The dry run could not be read.");
+        return;
+      }
+      setDryRun(body);
+    } catch {
+      setDryRunError("The dry run could not be read.");
+    } finally {
+      setDryRunning(null);
+    }
+  }, []);
 
   const refresh = useCallback(async () => {
     try {
@@ -260,7 +290,8 @@ export function ServicesMarketingPanel() {
                     <th className="py-2 pr-3 font-medium">When</th>
                     <th className="py-2 pr-3 font-medium">Then</th>
                     <th className="py-2 pr-3 font-medium">Delay</th>
-                    <th className="py-2 font-medium">Armed</th>
+                    <th className="py-2 pr-3 font-medium">Armed</th>
+                    <th className="py-2 font-medium">Check</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-line">
@@ -274,11 +305,22 @@ export function ServicesMarketingPanel() {
                       <td className="py-2.5 pr-3 tabular-nums text-muted">
                         {automation.delayHours === 0 ? "immediately" : `${automation.delayHours}h`}
                       </td>
-                      <td className="py-2.5 text-muted">
+                      <td className="py-2.5 pr-3 text-muted">
                         {automation.active ? "armed" : "off"}
                         <span className="block text-xs text-faint">
                           {automation.runCount === 0 ? "never run" : `${automation.runCount} runs`}
                         </span>
+                      </td>
+                      <td className="py-2.5">
+                        <button
+                          type="button"
+                          onClick={() => void runDry(automation.id)}
+                          disabled={dryRunning === automation.id}
+                          className="btn btn-secondary px-2.5 py-1 text-xs"
+                          aria-label={`Dry run ${automation.name}`}
+                        >
+                          {dryRunning === automation.id ? "Running…" : "Dry run"}
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -286,6 +328,38 @@ export function ServicesMarketingPanel() {
               </table>
             </div>
           )}
+          {dryRunError !== null ? <Notice tone="warning">{dryRunError}</Notice> : null}
+          {dryRun !== null ? (
+            <div className="mt-6 border-t border-line pt-4" data-testid="services-automation-dry-run">
+              <SectionTitle
+                title={`Dry run: ${dryRun.automation.name}`}
+                description={`What this rule would touch right now, over the last ${dryRun.window.days} days. Nothing ran; the send behind it is ${dryRun.execution.label}.`}
+              />
+              <p className="mt-3 text-sm text-muted" data-testid="services-automation-dry-run-summary">
+                {dryRun.summary.records === 0
+                  ? "No record matches this rule right now."
+                  : `${dryRun.summary.records} record${dryRun.summary.records === 1 ? "" : "s"} match; the rule would act on ${dryRun.summary.wouldAct} and skip ${dryRun.summary.blocked}${
+                      dryRun.summary.byReason.length > 0
+                        ? ` (${dryRun.summary.byReason.map((r) => `${r.count} ${r.reason}`).join(", ")})`
+                        : ""
+                    }.`}
+              </p>
+              {dryRun.records.length > 0 ? (
+                <ul className="mt-3 divide-y divide-line">
+                  {dryRun.records.slice(0, 50).map((record) => (
+                    <li key={`${record.recordKind}:${record.recordId}`} className="py-2 text-sm">
+                      <span className="font-medium text-foreground">{record.accountName}</span>
+                      <span className="text-faint"> · {record.recordKind.replace(/_/g, " ")} · {record.occurredAt.slice(0, 10)} → fires {record.firesAt.slice(0, 16).replace("T", " ")}</span>
+                      <span className="block text-muted">{record.wouldDo}</span>
+                      {record.blockedReason !== null ? (
+                        <span className="block text-xs text-[var(--warning)]">Would not: {record.blockedReason}.</span>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          ) : null}
         </Card>
       ) : null}
 

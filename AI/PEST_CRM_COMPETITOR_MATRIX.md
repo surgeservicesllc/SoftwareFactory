@@ -169,6 +169,7 @@ built.
 | **Commercial trend reports with heat maps** | PestPac | **HAVE** (ADR-203, ADR-206) — month x station-type activity on the customer's Stations tab, rendered as a shaded grid. It draws FOUR states rather than one ramp, because the data distinguishes them: nobody scanned, scanned without counting, counted at nothing, and counted with activity. Only the third is a clean month, and the grid refuses to let the other two borrow that reading. |
 | **Revenue forecasting** | Briostack | **HAVE** (ADR-202) — projects active plans and contracts with their term, and applies no churn or growth model, because this system has no evidence for one. Every omission is reported beside the figure. |
 | **Job profitability per visit, technician, service and branch** | PestPac (Wavelytics), FieldRoutes | **HAVE** (ADR-231) — revenue from the visit's non-void invoices, labour from finished timesheets or, labelled as such, the scheduled window, chemicals from the lot's recorded unit cost; every input printed beside the margin, and a margin left NULL — counted, never zeroed — whenever any input is unknown. Nothing stored; recomputed from the ledgers on every read. |
+| **Dashboard drill-down to the rows behind every figure** | HubSpot, PestPac | **HAVE** (ADR-232) — `crm_dashboard_rows` repeats each aggregate's own predicate, so the count on the tile and the list under it cannot disagree; the behavior test asserts that equality figure by figure. |
 
 ### I. Operations
 
@@ -178,6 +179,8 @@ built.
 | Org chart, roles, reporting lines | PestPac, ServSuite | **HAVE** (ADR-195) |
 | Warehouse/lot inventory | PestPac | **HAVE** (ADR-213) — an append-only movement ledger between warehouses (branches) and vehicles or sprayers (equipment), with every balance DERIVED rather than stored. A location can never go negative: the guard locks the lot before it reads the balance. A consumption names the application it served and their quantities must agree, and one application draws stock exactly once however often an offline sync replays. |
 | **Equipment and fleet/asset management** | ServSuite, FieldRoutes | **HAVE** (ADR-201) — assets, an append-only ledger, assignment, service schedules and meter readings that cannot run backwards. GPS telemetry beside it stays **Not Connected**. |
+| **Schedule audit: double bookings, slipped and unrouted visits, due plans with no visit, arrivals outside the promised window, post-routing reassignment** | PestPac (conflict detection) | **HAVE** (ADR-232) — computed live from the schedule itself on every read, named with the rows involved, shown above the board and answered by the copilot. |
+| **Automation dry run** | HubSpot | **HAVE** (ADR-232) — a STABLE function lists exactly which records a rule would touch right now, what it would do to each and why it would not; coverage stated first; the send stays **Not Connected** and executors stay **RED**. |
 | **Call centre / phone integration** | FieldRoutes, PestPac | **GAP** |
 
 ## Build order
