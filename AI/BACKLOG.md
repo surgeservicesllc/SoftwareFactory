@@ -199,6 +199,24 @@ anything on a timer stays RED and owner-gated.
   20260902000900; hosted apply: scope=forms-conditions after merge.
   Closes PestPac 14 (triggered forms) and complaint 13 (conditional
   questions).
+- [x] Increment 35 (ADR-239): the schedule bends —
+  `crm_work_orders_bulk_edit()` (INVOKER; up to 200 visits; set or clear
+  the technician, shift by days, set a status other than completed; one
+  outcome per row: applied, or "completed; not changed", or on a named
+  route for a date, or not found; a status change alone leaves a routed
+  visit in place); `crm_projects` (forced RLS, authenticated CRUD; span ≤
+  31 days, daily window, weekends optional) with `crm_work_orders.
+  project_id`, `crm_project_create()` (the project and one visit per
+  working day in one call; a span with no working day refused),
+  `crm_project_progress()` (days, completed, cancelled, remaining, next
+  day, state — live) and `crm_project_cancel()` (cancels what is not done;
+  each recorded by the outcome trigger). Routes: POST
+  /api/services/work-orders/bulk, GET/POST /api/services/projects, PATCH
+  /api/services/projects/[id]. Schedule page: checkboxes and a bulk bar
+  that lists every outcome by name; a Projects card with progress and
+  cancel; "Day 2 of 4" beside a project's visit. Seed: three projects.
+  20260902001000; hosted apply: scope=schedule-bends after merge. Closes
+  PestBoss 4/7.
 - [ ] **RED — owner direction required:** TOTP enrolment through Supabase
   Auth's own MFA (PestPac complaint 14). `policies/PROTECTED_RESOURCES.md`
   lists MFA under identity and authorization and

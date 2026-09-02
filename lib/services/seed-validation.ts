@@ -589,6 +589,20 @@ const SPECS: Spec[] = [
       + "in the schema and the seed overrides one (ADR-233).",
   },
   {
+    table: "crm_projects",
+    optional: ["technician_id", "note"],
+    enumColumn: "status",
+    parents: [
+      { column: "account_id", table: "crm_accounts" },
+      { column: "property_id", table: "crm_properties" },
+      { column: "technician_id", table: "crm_technicians" },
+    ],
+    floorExempt:
+      "A job that takes a crew several days is rare on a book of this size "
+      + "(ADR-239); the seed writes three — one under way, one planned, one "
+      + "cancelled — so the progress reads have every state.",
+  },
+  {
     table: "crm_kb_articles",
     optional: ["category", "published_at"],
     enumColumn: "audience",

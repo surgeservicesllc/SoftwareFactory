@@ -2,7 +2,22 @@
 
 Last updated: 2026-09-02
 
-## Newest (2026-09-02, latest+60): the form asks the next question (ADR-238)
+## Newest (2026-09-02, latest+61): the schedule bends (ADR-239)
+
+ONE OUTCOME PER ROW. `crm_work_orders_bulk_edit` never fails a batch for
+one bad visit; it returns applied/refused per id with the reason in words,
+and the page lists them by name. Do not "fix" a refusal by widening the
+function: a routed visit moves only after it leaves the route, and
+completion is never set in bulk.
+
+A PROJECT IS ITS VISITS. There is no project-level status beyond
+`cancelled`; planned/active/done are counted from the visits every time.
+Do not store progress on the project row.
+
+HOSTED: scope=schedule-bends is dispatched after merge; record the run id
+here and in CURRENT_STATE. scope=forms-conditions likewise.
+
+## Older (2026-09-02, latest+60): the form asks the next question (ADR-238)
 
 THE DATABASE DECIDES WHAT IS ASKED. `crm_form_question_asked` is the
 rule; the page's `askedNow` mirrors it for immediacy and nothing more.

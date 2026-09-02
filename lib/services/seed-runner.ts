@@ -573,6 +573,56 @@ export async function runSeed(
   );
   const visitIds = visits.data.map((row) => row.id as string);
 
+  // Three multi-day projects (ADR-239): one under way, one planned, one
+  // cancelled — one visit per working day each, so the progress reads have
+  // every state to show. Written after the ordinary visits so nothing
+  // else's offsets move.
+  const projectSubjects = dataset.accounts.filter((account) => account.properties.length > 0).slice(0, 3);
+  const projectRows = projectSubjects.map((account, index) => ({
+    organization_id: org,
+    account_id: accountIdByName.get(account.name),
+    property_id: propertyFor(account.name, 0),
+    technician_id: technicianId(index),
+    name: ["Plant fumigation", "Warehouse exclusion", "Loading dock rebuild"][index],
+    service_type: ["Fumigation", "Exclusion", "Rodent control"][index],
+    starts_on: dateInDays(index === 0 ? -2 : index === 1 ? 5 : -20),
+    ends_on: dateInDays(index === 0 ? 1 : index === 1 ? 8 : -17),
+    daily_start: "07:00",
+    daily_end: "15:30",
+    include_weekends: true,
+    status: index === 2 ? "cancelled" : "planned",
+    note: index === 0 ? "Tent up on day one; clear the dock." : null,
+    created_by: userId,
+  }));
+  const projects = await insertAll(client, "crm_projects", projectRows, "id");
+  if ("error" in projects) return projects;
+  const projectVisitRows = projects.data.flatMap((row, index) => {
+    const account = projectSubjects[index];
+    if (account === undefined) return [];
+    const firstDay = index === 0 ? -2 : index === 1 ? 5 : -20;
+    return [0, 1, 2, 3].map((offset) => {
+      const day = dateInDays(firstDay + offset);
+      const past = firstDay + offset < 0;
+      const status = index === 2 ? (offset === 0 ? "completed" : "cancelled") : past ? "completed" : "scheduled";
+      return {
+        organization_id: org,
+        account_id: accountIdByName.get(account.name),
+        property_id: propertyFor(account.name, 0),
+        technician_id: technicianId(index),
+        project_id: row.id as string,
+        service_type: ["Fumigation", "Exclusion", "Rodent control"][index],
+        scheduled_start: `${day}T07:00:00Z`,
+        scheduled_end: `${day}T15:30:00Z`,
+        status,
+        completed_at: status === "completed" ? `${day}T15:30:00Z` : null,
+        instructions: null,
+        created_by: userId,
+      };
+    });
+  });
+  const projectVisits = await insertAll(client, "crm_work_orders", projectVisitRows, "id");
+  if ("error" in projectVisits) return projectVisits;
+
   // Visit outcomes: grouped per step and status, and completions carry notes.
   const longestVisitPath = Math.max(0, ...visitSources.map((visit) => visit.statusPath.length));
   for (let step = 0; step < longestVisitPath; step += 1) {

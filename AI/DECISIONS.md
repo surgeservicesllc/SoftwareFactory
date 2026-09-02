@@ -6444,3 +6444,38 @@ says beside it what would ask it; Complete waits on the asked required
 ones. The builder offers conditions only against earlier questions with
 the ops that fit, and the trigger list is a comma-separated line. The
 templates tab prints every condition in words.
+
+## ADR-239 - The schedule bends: a bulk edit that answers for every row, and a project that is one visit per day
+
+PestBoss generates plans in bulk but cannot edit visits in bulk, and has
+no notion of a job that takes a crew several days. Both leave a
+dispatcher doing arithmetic by hand.
+
+**A bulk edit answers for every row.** `crm_work_orders_bulk_edit` takes
+up to two hundred visits and, per row, applies the change or says why not:
+a completed visit is not changed; a visit on a route is not moved to
+another day or technician until it leaves the route, and the refusal
+names the route and its date; an id the caller cannot see is "not found",
+because RLS decides what the function sees. The rest of the batch goes
+through. Two things are refused for the whole batch before any row:
+nothing to change, and "completed" — a visit is completed one at a time,
+with its notes, and the outcome trigger writes the service onto the
+timeline. A status change alone (cancel, dispatch) is allowed on a routed
+visit, because it does not move it.
+
+**A project is one visit per day.** `crm_projects` holds the span (at
+most 31 days), the daily window and whether weekends count;
+`crm_project_create` writes the project and one real work order per
+working day in one call, so a half-made project cannot exist. Each day is
+an ordinary visit: it routes on its own day (the route's same-day rule
+stands), completes with its own notes, and bills. Progress is counted
+from the visits every time it is asked — days, completed, cancelled,
+remaining, the next day — and the only stored status is `cancelled`; a
+"progress" column would drift from the visits it summarises. Cancelling a
+project cancels what is not done and leaves a completed day completed,
+because it happened.
+
+**The page.** A checkbox on every open visit and a bar that applies one
+change to all of them, then lists every outcome by name; a Projects card
+with progress and a two-step cancel; "Day 2 of 4" beside a visit that is
+one day of a project.

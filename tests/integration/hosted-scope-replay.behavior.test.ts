@@ -298,6 +298,7 @@ describe("the workflow's post-cutover surgical-scope fence", () => {
       "record-only-functions.sql",
       "recurring-billing.sql",
       "revenue-forecast.sql",
+      "schedule-bends.sql",
       "secret-guard-restricted-keys.sql",
       "service-documents.sql",
       "service-integrations.sql",

@@ -2,6 +2,20 @@
 
 Last reviewed: 2026-09-02
 
+**Addendum, 2026-09-02 latest+61 - the schedule bends (ADR-239):**
+services-schedule-bends.behavior 3 (four visits in one batch — applied
+with the new technician and day, completed-not-changed, on a named route
+for a date, not found — and the same routed visit cancelled by status
+alone with the timeline event; completed, nothing-to-change and an empty
+list refused; a rival reading not-found; five working days from a
+Monday-to-Sunday span with the 07:00–15:30 window, seven with weekends,
+a 46-day span, a weekend-only span and an inverted window refused;
+progress live after a completion and a bulk cancel; the project cancel
+counting three, recording four and refusing twice; grants exact).
+services-schedule-bends pure, routes and panel suites. Seed audit 68/68
+with three projects; grants roster and RLS census 229; replay executes
+the new postflight; runbook 230; tsc and eslint clean.
+
 **Addendum, 2026-09-02 latest+60 - the form asks the next question
 (ADR-238):** services-forms-conditions.behavior 4 (a condition on another
 form, on a later question, with an op that does not fit, malformed, half,

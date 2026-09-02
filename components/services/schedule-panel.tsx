@@ -8,7 +8,9 @@ import { Card, Notice, PageHeader, SectionTitle } from "@/components/ui";
 import { AccountAvatar, dollars } from "@/components/services/ui";
 import { useAccountProperties } from "@/components/services/use-account-properties";
 import { PlanSequenceEditor } from "@/components/services/plan-sequence-editor";
+import { ProjectsCard } from "@/components/services/projects-card";
 import { cn } from "@/lib/cn";
+import { projectDayLabel, type BulkEditOutcome } from "@/lib/services/schedule-bends";
 import type {
   AccountsPayload,
   ScheduleAuditPayload,
@@ -68,6 +70,14 @@ export function ServicesSchedulePanel() {
   const [openForm, setOpenForm] = useState<"workOrder" | "plan" | null>(null);
   const [schedulingPlan, setSchedulingPlan] = useState<string | null>(null);
   const [pendingComplete, setPendingComplete] = useState<{ id: string; notes: string } | null>(null);
+
+  // Bulk edit (ADR-239): a selection, one change, one outcome per row.
+  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
+  const [bulkTechnician, setBulkTechnician] = useState<string>("keep");
+  const [bulkShift, setBulkShift] = useState("0");
+  const [bulkStatus, setBulkStatus] = useState<string>("keep");
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkResult, setBulkResult] = useState<{ sentence: string; outcomes: BulkEditOutcome[] } | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -145,6 +155,52 @@ export function ServicesSchedulePanel() {
     }
     return map;
   }, [technicians]);
+
+  const toggleSelected = useCallback((id: string) => {
+    setSelected((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const applyBulk = useCallback(async () => {
+    const ids = [...selected];
+    const shiftDays = Number(bulkShift);
+    setBulkBusy(true);
+    setActError(null);
+    try {
+      const response = await fetch("/api/services/work-orders/bulk", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          ids,
+          setTechnician: bulkTechnician !== "keep",
+          ...(bulkTechnician !== "keep" ? { technicianId: bulkTechnician === "" ? null : bulkTechnician } : {}),
+          shiftDays: Number.isInteger(shiftDays) ? shiftDays : 0,
+          ...(bulkStatus !== "keep" ? { status: bulkStatus } : {}),
+        }),
+      });
+      const body = (await response.json()) as { summary?: { sentence: string }; outcomes?: BulkEditOutcome[]; error?: { message?: string } };
+      if (!response.ok || body.summary === undefined) {
+        setActError(body.error?.message ?? "The visits could not be changed.");
+        return;
+      }
+      setBulkResult({ sentence: body.summary.sentence, outcomes: body.outcomes ?? [] });
+      setSelected(new Set());
+      setBulkTechnician("keep");
+      setBulkShift("0");
+      setBulkStatus("keep");
+      void refresh();
+    } catch {
+      setActError("The request did not reach the server.");
+    } finally {
+      setBulkBusy(false);
+    }
+  }, [bulkShift, bulkStatus, bulkTechnician, refresh, selected]);
+
+  const orderById = useMemo(() => new Map((workOrders?.workOrders ?? []).map((order) => [order.id, order])), [workOrders]);
 
   const today = new Date().toISOString().slice(0, 10);
   const duePlans = (plans?.plans ?? []).filter((plan) => plan.active && plan.nextDue <= today);
@@ -272,6 +328,74 @@ export function ServicesSchedulePanel() {
         </section>
       ) : null}
 
+      <ProjectsCard accounts={accounts} technicians={technicians} onChanged={() => void refresh()} />
+
+      {selected.size > 0 || bulkResult !== null ? (
+        <section className="card mb-6" data-testid="services-bulk-bar">
+          <SectionTitle
+            title={selected.size > 0 ? `${selected.size} ${selected.size === 1 ? "visit" : "visits"} selected` : "Bulk edit"}
+            description="One change for all of them. Each visit answers for itself: a completed visit is not changed, and a visit on a route moves only after it leaves the route."
+          />
+          {selected.size > 0 ? (
+            <div className="mt-3 flex flex-wrap items-end gap-3">
+              <label className="text-xs text-muted">
+                Technician
+                <select value={bulkTechnician} onChange={(event) => setBulkTechnician(event.target.value)} className="input mt-1 min-h-8 py-1 text-xs" aria-label="Bulk technician">
+                  <option value="keep">Keep as is</option>
+                  <option value="">Unassigned</option>
+                  {(technicians?.technicians ?? []).filter((technician) => technician.active).map((technician) => (
+                    <option key={technician.id} value={technician.id}>{[technician.firstName, technician.lastName].filter(Boolean).join(" ")}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-xs text-muted">
+                Move by days
+                <input type="number" value={bulkShift} min={-365} max={365} onChange={(event) => setBulkShift(event.target.value)} className="input mt-1 min-h-8 w-24 py-1 text-xs" aria-label="Bulk move by days" />
+              </label>
+              <label className="text-xs text-muted">
+                Status
+                <select value={bulkStatus} onChange={(event) => setBulkStatus(event.target.value)} className="input mt-1 min-h-8 py-1 text-xs" aria-label="Bulk status">
+                  <option value="keep">Keep as is</option>
+                  <option value="scheduled">Scheduled</option>
+                  <option value="dispatched">Dispatched</option>
+                  <option value="in_progress">In progress</option>
+                  <option value="cancelled">Cancelled</option>
+                </select>
+              </label>
+              <button
+                type="button"
+                disabled={bulkBusy || (bulkTechnician === "keep" && Number(bulkShift) === 0 && bulkStatus === "keep")}
+                onClick={() => void applyBulk()}
+                className="btn btn-primary px-3 py-1.5 text-xs"
+                data-testid="services-bulk-apply"
+              >
+                Apply to {selected.size}
+              </button>
+              <button type="button" onClick={() => setSelected(new Set())} className="btn btn-secondary px-3 py-1.5 text-xs">
+                Clear selection
+              </button>
+            </div>
+          ) : null}
+          {bulkResult !== null ? (
+            <div className="mt-3" data-testid="services-bulk-result">
+              <p className="text-sm text-foreground">{bulkResult.sentence}</p>
+              {bulkResult.outcomes.some((outcome) => !outcome.applied) ? (
+                <ul className="mt-2 text-xs text-muted" data-testid="services-bulk-refusals">
+                  {bulkResult.outcomes.filter((outcome) => !outcome.applied).map((outcome) => {
+                    const order = orderById.get(outcome.workOrderId);
+                    return (
+                      <li key={outcome.workOrderId}>
+                        {order ? `${order.serviceType} · ${accountNames.get(order.accountId) ?? "account"} · ${order.scheduledStart.slice(0, 10)}` : outcome.workOrderId}: {outcome.reason}
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : null}
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+
       {duePlans.length > 0 ? (
         <Card className="mb-6 border-[var(--accent-border)]">
           <SectionTitle
@@ -330,10 +454,24 @@ export function ServicesSchedulePanel() {
               <ul className="mt-3 divide-y divide-line">
                 {orders.map((order) => (
                   <li key={order.id} className="flex flex-wrap items-center gap-3 py-3 text-sm">
+                    {order.status === "completed" || order.status === "cancelled" ? null : (
+                      <input
+                        type="checkbox"
+                        checked={selected.has(order.id)}
+                        onChange={() => toggleSelected(order.id)}
+                        aria-label={`Select ${order.serviceType} on ${order.scheduledStart.slice(0, 10)}`}
+                        data-testid={`services-select-${order.id}`}
+                      />
+                    )}
                     <span className={cn("size-2.5 shrink-0 rounded-full", STATUS_DOTS[order.status])} aria-hidden="true" />
                     <span className="min-w-0 flex-1">
                       <span className="flex flex-wrap items-center gap-2">
                         <span className="font-medium text-foreground">{order.serviceType}</span>
+                        {projectDayLabel(order, workOrders.workOrders) !== null ? (
+                          <span className="rounded-full border border-line px-2 py-0.5 text-[11px] text-muted" data-testid={`services-project-day-${order.id}`}>
+                            {projectDayLabel(order, workOrders.workOrders)}
+                          </span>
+                        ) : null}
                         <Link
                           href={`/Services/customers/${order.accountId}`}
                           className="flex items-center gap-1.5 text-muted underline-offset-2 hover:underline"
