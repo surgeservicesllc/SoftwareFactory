@@ -66,6 +66,12 @@ export const COPILOT_SKILLS = [
     example: "Where is there room to sell more?",
     keywords: ["upsell", "sell more", "cross-sell", "cross sell", "room to grow", "expand", "grow the account"],
   },
+  {
+    id: "lost_money",
+    label: "Visits that lost money",
+    example: "Which jobs lost money this quarter?",
+    keywords: ["lost money", "losing money", "unprofitable", "negative margin", "profitab", "margin", "cost us"],
+  },
 ] as const;
 
 export type CopilotSkillId = (typeof COPILOT_SKILLS)[number]["id"];
@@ -88,7 +94,8 @@ export function matchQuestion(question: string): CopilotSkillId | null {
 }
 
 function dollars(cents: number): string {
-  return `$${(cents / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const sign = cents < 0 ? "-" : "";
+  return `${sign}$${(Math.abs(cents) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 export function composeOverdueAnswer(facts: {
@@ -190,6 +197,29 @@ export function composeSignalsAnswer(facts: {
     .map((entry) => `${entry.name} at ${entry.score} (${entry.facts.slice(0, 3).join("; ") || "no rule applies"})`)
     .join("; ");
   return `${lead}, scored from your own records: ${lines}. Every point is itemised on the Signals page.`;
+}
+
+export function composeLostMoneyAnswer(facts: {
+  days: number;
+  completed: number;
+  known: number;
+  losers: ReadonlyArray<{ account: string; service: string; marginCents: number; revenueCents: number }>;
+}): string {
+  if (facts.completed === 0) {
+    return `No visits were completed in the last ${facts.days} days, so there is nothing to cost.`;
+  }
+  const unknown = facts.completed - facts.known;
+  const coverage = unknown === 0
+    ? `All ${facts.completed} completed visits have every cost input on file.`
+    : `${facts.known} of ${facts.completed} completed visits have every cost input on file; ${unknown} cannot be costed yet (no invoice, no hourly cost, or an uncosted lot).`;
+  if (facts.losers.length === 0) {
+    return `${coverage} None of the costed visits lost money in the last ${facts.days} days.`;
+  }
+  const lines = facts.losers
+    .slice(0, 3)
+    .map((visit) => `${visit.account} (${visit.service}: ${dollars(visit.marginCents)} on ${dollars(visit.revenueCents)} revenue)`)
+    .join("; ");
+  return `${coverage} ${facts.losers.length} lost money in the last ${facts.days} days; the worst: ${lines}. Every input is printed on the Profitability page.`;
 }
 
 /** The refusal that teaches: what this copilot can actually answer. */

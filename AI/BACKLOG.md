@@ -97,9 +97,17 @@ anything on a timer stays RED and owner-gated.
   each executed and the count pinned by the replay test), re-pointed with
   `-f`. The workflow is 446,039 bytes and the guard is ratcheted to
   450,000 so the recovered room is kept, not spent by accident.
-- [ ] Increment 29 (job profitability): technician cost rates and lot unit
-  costs; margin per visit, per plan, per branch, every input printed
-  beside the figure. Closes PestPac 8.
+- [x] Increment 29 (ADR-231): job profitability — `hourly_cost_cents` on
+  technicians and `unit_cost_cents` on lots (bounded, NULL = unknown), and
+  `crm_visit_profitability()` reading as the caller: revenue from non-void
+  invoices, labour from finished timesheets or the scheduled window (said
+  so), chemicals from the lot's recorded cost, every input returned beside
+  the margin and every unknown COUNTED rather than zeroed — a margin is
+  NULL when any input is. /Services/profitability with totals and
+  groupings over known visits only; costs edited beside the figures;
+  copilot "Which jobs lost money this quarter?" states coverage first.
+  20260902000400; hosted apply: scope=job-profitability after merge.
+  Closes PestPac 8.
 - [ ] Increment 30 (nothing hidden): schedule audit (double-booked
   technicians, visits on no route, due plans with no visit, promised
   windows that contradict planned arrival); automation DRY-RUN naming

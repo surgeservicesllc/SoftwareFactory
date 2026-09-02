@@ -236,8 +236,11 @@ export async function runSeed(
 
   /* ---------------------------------------------------------- independents */
 
-  const technicianRows = dataset.technicians.map((technician) => ({
+  const technicianRows = dataset.technicians.map((technician, index) => ({
     organization_id: org,
+    // A fully loaded hourly cost (ADR-231); every ninth technician has none
+    // on file, so the profitability page has an honest "unknown" to show.
+    hourly_cost_cents: index % 9 === 8 ? null : 2800 + (index % 5) * 350,
     first_name: technician.firstName,
     last_name: technician.lastName,
     email: technician.email,
@@ -276,10 +279,13 @@ export async function runSeed(
   const productId = (index: number) => productIdByName.get(dataset.products[index].name) ?? null;
 
   const lotRows = dataset.products.flatMap((product) =>
-    product.lots.map((lot) => ({
+    product.lots.map((lot, seat) => ({
       organization_id: org,
       product_id: productIdByName.get(product.name),
       lot_number: lot.lotNumber,
+      // Cost per unit as received (ADR-231); one lot in seven has no cost on
+      // file, which the profitability page counts rather than zeroes.
+      unit_cost_cents: seat % 7 === 6 ? null : 90 + ((seat * 37) % 400),
       unit: product.defaultUnit,
       quantity_received: lot.quantity,
       quantity_remaining: lot.quantity,

@@ -2,6 +2,23 @@
 
 Last reviewed: 2026-08-31
 
+**Addendum, 2026-09-02 latest+53 - job profitability (ADR-231):**
+services-profitability.behavior 6 (a fully known visit priced from
+invoice, timesheet-minus-break at the technician's rate and the lot's
+unit cost, with a voided duplicate excluded; the scheduled window standing
+in and labelled when no shift was clocked; NULL margins for an unknown
+rate, an uncosted lot and an unlinked invoice; worst-known-first ordering
+with NULLs last and the day window honoured; a rival sees nothing and
+only `authenticated` may execute; negative and absurd costs refused,
+clearing a cost allowed). services-profitability 3 (view mapping, unknown
+reasons, grouped sums over known visits only). services-profitability-
+panel 3 (every input printed beside the margin with the unknown explained;
+dollars saved as cents and a blank saved as unknown; the window select
+refetches). services-copilot +2 (the lost-money skill recognised from its
+example; coverage stated before the worst visits are named). Seed audit
+64/64 with the two new optional columns populated on most rows. Hosted
+apply scope `job-profitability` with its postflight.
+
 **Addendum, 2026-09-02 latest+51 - data you own (ADR-230):**
 services-data-own.behavior 5 (self-merge, cross-workspace and non-member
 refused; portal-email collision refused with its message; one statement

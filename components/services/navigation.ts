@@ -3,6 +3,7 @@ import {
   ListChecks,
   Gauge,
   Database,
+  Calculator,
   BanknoteArrowDown,
   Bug,
   Building2,
@@ -164,6 +165,12 @@ export const SERVICES_NAVIGATION: readonly ServicesNavItem[] = [
     label: "Dashboards",
     description: "Revenue, receivable, productivity, route density",
     icon: TrendingUp,
+  },
+  {
+    href: `${SERVICES_ROOT}/profitability`,
+    label: "Profitability",
+    description: "What each visit earned and cost, every unknown counted",
+    icon: Calculator,
   },
   {
     href: `${SERVICES_ROOT}/collections`,

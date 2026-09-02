@@ -168,6 +168,7 @@ built.
 | **Operating dashboards: revenue, retention/churn, tech productivity, route density** | all | **HAVE** (ADR-199) — all four, aggregated over the whole book in the database rather than over a bounded fetch. |
 | **Commercial trend reports with heat maps** | PestPac | **HAVE** (ADR-203, ADR-206) — month x station-type activity on the customer's Stations tab, rendered as a shaded grid. It draws FOUR states rather than one ramp, because the data distinguishes them: nobody scanned, scanned without counting, counted at nothing, and counted with activity. Only the third is a clean month, and the grid refuses to let the other two borrow that reading. |
 | **Revenue forecasting** | Briostack | **HAVE** (ADR-202) — projects active plans and contracts with their term, and applies no churn or growth model, because this system has no evidence for one. Every omission is reported beside the figure. |
+| **Job profitability per visit, technician, service and branch** | PestPac (Wavelytics), FieldRoutes | **HAVE** (ADR-231) — revenue from the visit's non-void invoices, labour from finished timesheets or, labelled as such, the scheduled window, chemicals from the lot's recorded unit cost; every input printed beside the margin, and a margin left NULL — counted, never zeroed — whenever any input is unknown. Nothing stored; recomputed from the ledgers on every read. |
 
 ### I. Operations
 

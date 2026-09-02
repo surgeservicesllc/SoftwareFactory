@@ -4,6 +4,7 @@ import {
   COPILOT_SKILLS,
   composeAutopayAnswer,
   composeFollowupsAnswer,
+  composeLostMoneyAnswer,
   composeOverdueAnswer,
   composeRevenueAnswer,
   composeRoutesAnswer,
@@ -61,6 +62,31 @@ export async function POST(request: Request) {
 
     const today = new Date();
     const todayIso = isoDay(today);
+
+    if (skill === "lost_money") {
+      const days = 90;
+      const read = await client
+        .rpc("crm_visit_profitability", { p_organization: organizationId, p_days: days })
+        .limit(5000);
+      if (read.error) return databaseErrorResponse(read.error);
+      const rows = (read.data ?? []) as Array<{
+        account_name: string; service_type: string; margin_cents: number | null; revenue_cents: number | null;
+      }>;
+      const known = rows.filter((row) => row.margin_cents !== null);
+      const losers = known
+        .filter((row) => Number(row.margin_cents) < 0)
+        .sort((a, b) => Number(a.margin_cents) - Number(b.margin_cents))
+        .map((row) => ({
+          account: row.account_name,
+          service: row.service_type,
+          marginCents: Number(row.margin_cents),
+          revenueCents: Number(row.revenue_cents ?? 0),
+        }));
+      return jsonNoStore({
+        skill,
+        answer: composeLostMoneyAnswer({ days, completed: rows.length, known: known.length, losers }),
+      });
+    }
 
     if (skill === "hot_leads" || skill === "churn_risk" || skill === "upsell") {
       const model = skill === "hot_leads" ? "lead" : skill === "churn_risk" ? "churn" : "upsell";

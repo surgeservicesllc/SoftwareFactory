@@ -318,7 +318,7 @@ const SPECS: Spec[] = [
   },
   {
     table: "crm_technicians",
-    optional: ["last_name", "email", "phone", "license_number", "branch_id", "reports_to_id", "hire_date"],
+    optional: ["hourly_cost_cents", "last_name", "email", "phone", "license_number", "branch_id", "reports_to_id", "hire_date"],
     parents: [
       { column: "branch_id", table: "crm_branches" },
       { column: "reports_to_id", table: "crm_employees" },
@@ -404,7 +404,7 @@ const SPECS: Spec[] = [
   },
   {
     table: "crm_product_lots",
-    optional: ["expires_on"],
+    optional: ["expires_on", "unit_cost_cents"],
     enumColumn: "unit",
     parents: [{ column: "product_id", table: "crm_products" }],
   },
