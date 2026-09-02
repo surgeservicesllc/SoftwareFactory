@@ -1,5 +1,43 @@
 # Current state
 
+## 2026-09-02: The customer's side (ADR-233)
+
+Increment 31 ships `20260902000600_customers_side.sql`: `crm_portal_surveys`
+(one 1–5 rating per completed visit, written only through
+`crm_portal_survey_submit` — a definer scoped to the caller's own account
+that refuses an unfinished visit and a second rating and writes a history
+line; staff SELECT only; deliberately unseeded), two stamps on
+`crm_portal_requests` (`acknowledged_at`, `first_response_at`) set once
+by a BEFORE trigger and never moved by hand, `crm_sla_defaults()` per kind
+in the schema with `crm_sla_policies` holding a workspace's overrides and
+`crm_request_sla()` computing met / breached / waiting / overdue /
+unrecorded live, and `crm_portal_messages` (a thread either side writes:
+the customer through `crm_portal_message_send`, staff through RLS as
+themselves; immutable once sent, the read mark set once). Staff routes
+under /api/services/portal/{sla,surveys,messages}; customer routes under
+/api/customer-portal/{surveys,messages}. The Customer Portal page gains
+Request clock, Ratings and Messages tabs with a per-kind policy editor;
+the customer's portal rates a completed visit from the Visits tab and
+carries a Messages tab that marks staff replies read on opening. Copilot
+skills "How are customers rating us?" and "Which requests are past their
+promise?". The seed writes staff-authored messages and one policy
+override; the customer side of every seeded thread is honestly empty.
+
+Evidence: 4 behavior tests on the replayed chain (a rating once, on the
+caller's own completed visit, kept as history, invisible and immutable to
+staff, and invisible to a rival; six defaults, one override, the clock
+moving from overdue to breached when acknowledgement comes late and from
+waiting to met when a question is answered and resolved, an unstamped
+acknowledgement reading unrecorded, and a stamp that cannot be moved by
+hand; a thread the customer writes on their own request and not on
+another's, staff writing as themselves and not as anybody else, a body
+that cannot be edited and a read mark set once, marks counted on both
+sides; nine functions granted to authenticated only and three tables
+fenced with forced RLS). Seed audit 66/66 with surveys deliberately
+unseeded; grants roster, RLS census 226, scope replay with the new
+postflight, runbook count 226, byte guard (448,707), tsc and eslint
+clean. Hosted apply scope `customers-side` is dispatched after merge.
+
 ## 2026-09-02: Nothing hidden (ADR-232)
 
 Increment 30 ships `20260902000500_nothing_hidden.sql`: three SECURITY
@@ -61,8 +99,8 @@ nothing and only `authenticated` may execute; negative and absurd costs
 refused); 3 summariser and 3 panel tests; 2 copilot tests; seed audit
 64/64 with the new optional columns; scope replay (44 probes, new
 postflight), runbook count 224, byte guard 450,000, tsc, eslint and a
-production build clean. Hosted apply scope `job-profitability` is
-dispatched after merge.
+production build clean. Hosted apply scope `job-profitability`: run
+33581692298 on main `a42ee73`, success, postflight passed.
 
 ## 2026-09-02: Workflow headroom (probe heredocs extracted)
 

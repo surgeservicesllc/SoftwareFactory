@@ -111,13 +111,13 @@ honest, not built.
 | 33 | Advanced reporting and analytics | Marketing/Data | **HAVE** (ADR-199, 202, 206); drill-down to the rows behind every figure (ADR-232) |
 | 34 | Breeze AI: assistants, agents | Cross-hub | **PARTIAL** — computed copilot (ADR-224, ADR-228); generation **GATED** (AI provider) |
 | 35 | Content Remix, Brand Voice, AI writer, AI image/video | Content | **GATED** (AI provider) |
-| 36 | Ticketing / help desk | Service | **PARTIAL** — portal requests with a staff response (ADR-198); an SLA clock: **BUILD 31** |
-| 37 | Live chat and chatbot | Service | **GAP** — two-way portal messages: **BUILD 31**; live chat needs a provider |
+| 36 | Ticketing / help desk | Service | **HAVE** — portal requests with a staff response (ADR-198) and a clock on every one, computed from stamps the row sets itself (ADR-233) |
+| 37 | Live chat and chatbot | Service | **PARTIAL** — two-way portal messages threaded on the account (ADR-233); live chat and a bot need a provider and stay **GATED** |
 | 38 | Conversation routing | Service | **GAP** |
 | 39 | Service automation (status notifications) | Service | **PARTIAL** — transactional notices compose and address (ADR-217); sending **GATED** |
-| 40 | NPS / customer satisfaction surveys | Service | **BUILD 31** — asked in the portal after a completed visit, no email needed |
+| 40 | NPS / customer satisfaction surveys | Service | **HAVE** (ADR-233) — a 1–5 rating asked in the portal after each completed visit, once, written only by the customer; average, response rate, distribution and detractors on the staff page |
 | 41 | Conversation intelligence | Service | **GATED** (AI + telephony) |
-| 42 | SLA management | Service | **BUILD 31** |
+| 42 | SLA management | Service | **HAVE** (ADR-233) — acknowledge/resolve hours per request kind, defaults in the schema and overrides per workspace; met / breached / waiting / overdue / unrecorded per request |
 | 43 | Knowledge base | Service | **GAP** |
 | 44 | Customer portal | Service | **HAVE** (ADR-198, ADR-203, ADR-222) |
 | 45 | Drag-and-drop page editor, themes, CDN, hosting, staging, membership, password pages | Content/CMS | **N/A** — a website builder is outside a CRM core (PestPac sells one too; listed, not built) |
@@ -184,7 +184,7 @@ honest, not built.
 | 41 | API (GET/POST), phone-system integration (Dialpad, TalkDesk), AI platform connectivity | **PARTIAL** — the routes are the API; telephony and AI **GATED** |
 | 42 | Multi-unit properties | **HAVE** (ADR-215) |
 | 43 | On-site compliance logbook (AIB/SQF/BRC) | **PARTIAL** — the portal holds every page of the binder (ADR-203, ADR-222); the tables behind it export (ADR-230); a bound document is a print job |
-| 44 | Post-service customer surveys | **BUILD 31** |
+| 44 | Post-service customer surveys | **HAVE** (ADR-233) — asked in the portal, no email needed |
 | 45 | Online sales (self-serve plan purchase) | **GATED** (payments) |
 | 46 | Print marketing fulfilment, direct mail | **GATED** (vendor) |
 | 47 | Website builder | **N/A** |
@@ -208,7 +208,7 @@ honest, not built.
 | 7 | Electronic payments, payment collection in the field | **GATED** |
 | 8 | Quotes / estimates, contract management | **HAVE** (ADR-194) |
 | 9 | Electronic signature, mobile signature capture | **HAVE** (ADR-197) |
-| 10 | Client portal: service reports, messages, inspection history, real-time site analytics | **HAVE** reports/history/analytics (ADR-203, ADR-222); messages: **BUILD 31** |
+| 10 | Client portal: service reports, messages, inspection history, real-time site analytics | **HAVE** reports/history/analytics (ADR-203, ADR-222) and two-way messages (ADR-233) |
 | 11 | Monitoring reports created, filed and shared from the field | **HAVE** filed (ADR-216); shared by email/SMS **GATED** |
 | 12 | Pest activity heat maps | **HAVE** (ADR-206) |
 | 13 | Barcode scanning of devices and chemicals | **HAVE** (ADR-191); chemical-lot barcodes: **GAP** |
@@ -266,7 +266,7 @@ with its status.
 | 22 | Deal visualisation "could be improved" | directors | Pipeline reading | **HAVE** stage board with whole-book conversion (ADR-186) |
 | 23 | Confusion between lists, workflows and sequences | reviewers | Three things that look alike | Lists are membership with consent (ADR-196); automations are rules (ADR-196); notices are transactional (ADR-217) — three tables, three pages |
 | 24 | Per-seat pricing on Sales Pro; Ops Hub needed for deeper automation | directors | Paying twice | See #1 |
-| 25 | Free tier has zero support; Service Hub "weaker as a standalone desk"; knowledge base gated | support leads | Service depth | **BUILD 31** — request SLA clock and two-way portal messages, in the base product |
+| 25 | Free tier has zero support; Service Hub "weaker as a standalone desk"; knowledge base gated | support leads | Service depth | **HAVE** (ADR-233) — request clock with per-kind promises and two-way portal messages, in the base product |
 
 ### 2B. PestPac
 
@@ -282,7 +282,7 @@ with its status.
 | 8 | Reporting "totally off", "inaccurate"; "impossible to determine profitability reliably" | branch managers, presidents | Trustworthy numbers | Dashboards aggregate over the whole book in SQL (ADR-199); **HAVE** (ADR-231) job profitability per visit with every input printed and every unknown counted, never zeroed |
 | 9 | Errors "cannot be corrected"; cannot un-void an invoice; inflexible name fields | operations, owners | Correction path | Voided invoices are reissued, never rebuilt (ADR-212); applications are superseded, never edited (ADR-192); **HAVE** audited merge for the account-level mistake (ADR-230) |
 | 10 | No email preview before sending notifications | admins | Sending blind | **HAVE** notices are composed and readable before any send (ADR-217); a rule's dry run shows the exact recipients and text before it is armed (ADR-232) |
-| 11 | "Not built for two-way communication" | reviewers | One-way messaging | **BUILD 31** — two-way portal messages, threaded on the account |
+| 11 | "Not built for two-way communication" | reviewers | One-way messaging | **HAVE** (ADR-233) — two-way portal messages threaded on the account, immutable once sent, read marks on both sides |
 | 12 | Mobile app: no manager dashboards, no in-app alerts, dated navigation, low store ratings; invoices differ between desktop and mobile | technology directors, operations | Two products | **HAVE** one responsive product; the invoice print view is the same page at every width (close-out) |
 | 13 | Forms lack conditional logic; must print on specific paper; plain-paper printing is a paid module | operations, admins | Forms tooling | **HAVE** browser printing for labels, reports and invoices, free (ADR-214, close-out); conditional questions: **GAP** |
 | 14 | No 2FA / biometric login confirmed | reviewers | Account security | **BUILD 32** — TOTP enrolment through Supabase Auth's own MFA, if policy review clears it as YELLOW (it touches authentication) |
@@ -328,7 +328,7 @@ own published feature list against what the field ships.
 | 20 | No provider registry / integration status | *(inferred)* — "third-party integrations" listed generically | **HAVE** (ADR-207) |
 | 21 | Small vendor, single product line — continuity risk | *(inferred)* | Whole-book export (ADR-230) is the customer's insurance either way |
 | 22 | No published pricing | *(inferred)* | Seats, published |
-| 23 | No customer surveys | *(inferred)* | **BUILD 31** |
+| 23 | No customer surveys | *(inferred)* | **HAVE** (ADR-233) — a post-visit rating in the portal |
 | 24 | No compliance-rule enforcement per jurisdiction at recording time | *(inferred)* — "pesticide usage tracking" listed without rules | **HAVE** (ADR-192) |
 | 25 | Facility-monitoring depth without a residential sales motion | *(inferred)* | **HAVE** both (ADR-185: residential and commercial kinds; ADR-198 and ADR-203 portal views) |
 
@@ -348,7 +348,7 @@ cadence: migration → routes → page → tests → PR → four real checks →
 | 28 | **Data you own** (ADR-230): import with explicit column mapping and a dry run; audited one-statement merge; whole-book export | HubSpot 7, 8; PestPac 9, 17; PestBoss 21 | **SHIPPED** |
 | 29 | **Job profitability** (ADR-231): technician hourly cost and lot unit cost; margin per visit, technician, service and branch with every input printed and every unknown counted | PestPac 8 | **SHIPPED** |
 | 30 | **Nothing hidden** (ADR-232): schedule audit (six contradictions with the rows involved), automation dry run (what a rule would touch, and why not), dashboard drill-down by the figure's own predicate | HubSpot 5, 6; PestPac 7, 10 | **SHIPPED** |
-| 31 | **The customer's side of the conversation**: post-service survey in the portal, request SLA clock, two-way portal messages | HubSpot 25, 36, 40, 42; PestPac 11; PestBoss 23 | |
+| 31 | **The customer's side of the conversation** (ADR-233): post-visit rating in the portal, the request clock with per-kind promises, two-way portal messages | HubSpot 25, 36, 40, 42; PestPac 11; PestBoss 23 | **SHIPPED** |
 | 32 | **Trust**: forecast scenario inputs, stale-contact hygiene, TOTP enrolment (pending policy review) | HubSpot 2, 10; PestPac 14 | |
 
 **What stays outside this program, and why.** Sending (email, SMS, voice),

@@ -4,7 +4,14 @@ import { useCallback, useEffect, useState } from "react";
 import { UserRoundCheck } from "lucide-react";
 
 import { Card, Notice, PageHeader, SectionTitle } from "@/components/ui";
-import type { PortalRequestsPayload, PortalUsersPayload } from "@/components/services/types";
+import type {
+  PortalMessagesPayload,
+  PortalRequestsPayload,
+  PortalUsersPayload,
+  RequestSlaPayload,
+  SurveysPayload,
+} from "@/components/services/types";
+import { SLA_STATE_LABELS, type SlaState } from "@/lib/services/customers-side";
 import { cn } from "@/lib/cn";
 
 /**
@@ -38,7 +45,33 @@ const REQUEST_TONES: Record<string, string> = {
 
 const NEXT_STATUS = ["acknowledged", "scheduled", "resolved", "declined"] as const;
 
-type Tab = "requests" | "logins";
+type Tab = "requests" | "clock" | "ratings" | "messages" | "logins";
+
+const SLA_TONES: Record<SlaState, string> = {
+  overdue: "border-rose-200 bg-rose-50 text-rose-700",
+  breached: "border-rose-200 bg-rose-50 text-rose-700",
+  waiting: "border-sky-200 bg-sky-50 text-sky-700",
+  met: "border-emerald-200 bg-emerald-50 text-emerald-700",
+  unrecorded: "border-slate-200 bg-slate-100 text-slate-500",
+};
+
+function SlaChip({ state, dueAt }: { state: SlaState; dueAt: string }) {
+  return (
+    <span className="inline-flex flex-col">
+      <span className={cn("inline-flex w-fit items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold", SLA_TONES[state])}>
+        {SLA_STATE_LABELS[state]}
+      </span>
+      <span className="text-[11px] text-faint">due {dueAt.slice(0, 16).replace("T", " ")}</span>
+    </span>
+  );
+}
+
+function waited(minutes: number | null): string {
+  if (minutes === null) return "—";
+  if (minutes < 60) return `${minutes} min`;
+  if (minutes < 48 * 60) return `${(minutes / 60).toFixed(1)} h`;
+  return `${(minutes / 1440).toFixed(1)} d`;
+}
 
 export function ServicesPortalPanel() {
   const [users, setUsers] = useState<PortalUsersPayload | null>(null);
@@ -49,12 +82,22 @@ export function ServicesPortalPanel() {
   const [tab, setTab] = useState<Tab>("requests");
   const [replyFor, setReplyFor] = useState<string | null>(null);
   const [reply, setReply] = useState("");
+  const [clock, setClock] = useState<RequestSlaPayload | null>(null);
+  const [surveys, setSurveys] = useState<SurveysPayload | null>(null);
+  const [threads, setThreads] = useState<PortalMessagesPayload | null>(null);
+  const [thread, setThread] = useState<PortalMessagesPayload | null>(null);
+  const [threadAccount, setThreadAccount] = useState<string | null>(null);
+  const [draft, setDraft] = useState("");
+  const [policyDraft, setPolicyDraft] = useState<Record<string, { acknowledgeHours: string; resolveHours: string }>>({});
 
   const refresh = useCallback(async () => {
     try {
-      const [usersRes, requestsRes] = await Promise.all([
+      const [usersRes, requestsRes, clockRes, surveysRes, threadsRes] = await Promise.all([
         fetch("/api/services/portal", { headers: { accept: "application/json" } }),
         fetch("/api/services/portal/requests", { headers: { accept: "application/json" } }),
+        fetch("/api/services/portal/sla", { headers: { accept: "application/json" } }),
+        fetch("/api/services/portal/surveys", { headers: { accept: "application/json" } }),
+        fetch("/api/services/portal/messages", { headers: { accept: "application/json" } }),
       ]);
       const body = (await requestsRes.json()) as PortalRequestsPayload & { error?: { message?: string } };
       if (!requestsRes.ok) {
@@ -64,10 +107,114 @@ export function ServicesPortalPanel() {
       setListError(null);
       setRequests(body);
       if (usersRes.ok) setUsers((await usersRes.json()) as PortalUsersPayload);
+      if (clockRes.ok) {
+        const clockBody = (await clockRes.json()) as Partial<RequestSlaPayload>;
+        setClock(Array.isArray(clockBody.requests) ? (clockBody as RequestSlaPayload) : null);
+      }
+      if (surveysRes.ok) {
+        const surveysBody = (await surveysRes.json()) as Partial<SurveysPayload>;
+        setSurveys(Array.isArray(surveysBody.responses) ? (surveysBody as SurveysPayload) : null);
+      }
+      if (threadsRes.ok) {
+        const threadsBody = (await threadsRes.json()) as Partial<PortalMessagesPayload>;
+        setThreads(Array.isArray(threadsBody.messages) ? (threadsBody as PortalMessagesPayload) : null);
+      }
     } catch {
       setListError("Service requests could not be read.");
     }
   }, []);
+
+  const openThread = useCallback(async (accountId: string) => {
+    setThreadAccount(accountId);
+    setThread(null);
+    try {
+      const response = await fetch(`/api/services/portal/messages?accountId=${accountId}`, {
+        headers: { accept: "application/json" },
+      });
+      if (response.ok) setThread((await response.json()) as PortalMessagesPayload);
+    } catch {
+      setActionError("The thread could not be read.");
+    }
+  }, []);
+
+  const sendMessage = useCallback(async () => {
+    if (threadAccount === null || draft.trim().length === 0) return;
+    setBusy(`message:${threadAccount}`);
+    setActionError(null);
+    try {
+      const response = await fetch("/api/services/portal/messages", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ accountId: threadAccount, body: draft.trim() }),
+      });
+      if (!response.ok) {
+        const body = (await response.json()) as { error?: { message?: string } };
+        setActionError(body.error?.message ?? "The message could not be sent.");
+        return;
+      }
+      setDraft("");
+      await openThread(threadAccount);
+      await refresh();
+    } catch {
+      setActionError("The message could not be sent.");
+    } finally {
+      setBusy(null);
+    }
+  }, [draft, openThread, refresh, threadAccount]);
+
+  const markRead = useCallback(async (messageId: string) => {
+    setBusy(`read:${messageId}`);
+    try {
+      const response = await fetch("/api/services/portal/messages", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ messageId }),
+      });
+      if (!response.ok) {
+        const body = (await response.json()) as { error?: { message?: string } };
+        setActionError(body.error?.message ?? "The message could not be marked read.");
+        return;
+      }
+      if (threadAccount !== null) await openThread(threadAccount);
+      await refresh();
+    } catch {
+      setActionError("The message could not be marked read.");
+    } finally {
+      setBusy(null);
+    }
+  }, [openThread, refresh, threadAccount]);
+
+  const savePolicy = useCallback(async (kind: string, reset: boolean) => {
+    setBusy(`policy:${kind}`);
+    setActionError(null);
+    try {
+      const current = policyDraft[kind];
+      const response = await fetch("/api/services/portal/sla", {
+        method: reset ? "DELETE" : "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(
+          reset
+            ? { kind }
+            : { kind, acknowledgeHours: Number(current?.acknowledgeHours), resolveHours: Number(current?.resolveHours) },
+        ),
+      });
+      if (!response.ok) {
+        const body = (await response.json()) as { error?: { message?: string } };
+        setActionError(body.error?.message ?? "The policy could not be saved.");
+        return;
+      }
+      setPolicyDraft((previous) => {
+        const next = { ...previous };
+        delete next[kind];
+        return next;
+      });
+      await refresh();
+    } catch {
+      setActionError("The policy could not be saved.");
+    } finally {
+      setBusy(null);
+    }
+  }, [policyDraft, refresh]);
 
   useEffect(() => {
     const kickoff = window.setTimeout(() => void refresh(), 0);
@@ -161,6 +308,9 @@ export function ServicesPortalPanel() {
         {(
           [
             ["requests", "Service requests", requests?.requests.length],
+            ["clock", "Request clock", clock?.summary.overdue],
+            ["ratings", "Ratings", surveys?.summary.responses],
+            ["messages", "Messages", threads?.summary.unreadFromCustomers],
             ["logins", "Portal logins", users?.portalUsers.length],
           ] as const
         ).map(([key, label, count]) => (
@@ -293,6 +443,317 @@ export function ServicesPortalPanel() {
             </div>
           )}
         </Card>
+      ) : null}
+
+      {tab === "clock" ? (
+        <>
+          <Card className="mb-6">
+            <SectionTitle
+              title="The clock on every request"
+              description="Two promises per request — acknowledge by, resolve by — computed from stamps the request sets itself the first time its status moves and the first time somebody writes back. A moment that was never recorded reads as unrecorded, not met."
+            />
+            {clock === null ? (
+              <p className="mt-4 text-sm text-muted">Loading the clock…</p>
+            ) : clock.requests.length === 0 ? (
+              <p className="mt-4 text-sm text-muted" data-testid="services-portal-clock-empty">
+                No requests in the last {clock.window.days} days and nothing open.
+              </p>
+            ) : (
+              <>
+                <p className="mt-3 text-sm text-muted" data-testid="services-portal-clock-summary">
+                  {clock.summary.open} open, {clock.summary.overdue} past a promise right now ·
+                  acknowledged: {clock.summary.acknowledge.met} met, {clock.summary.acknowledge.breached} breached,{" "}
+                  {clock.summary.acknowledge.unrecorded} unrecorded · resolved: {clock.summary.resolve.met} met,{" "}
+                  {clock.summary.resolve.breached} breached
+                </p>
+                <div className="mt-4 overflow-x-auto">
+                  <table className="w-full text-left text-sm" data-testid="services-portal-clock-table">
+                    <thead>
+                      <tr className="border-b border-line text-xs uppercase tracking-wide text-faint">
+                        <th className="py-2 pr-3 font-medium">Request</th>
+                        <th className="py-2 pr-3 font-medium">Kind</th>
+                        <th className="py-2 pr-3 font-medium">Sent</th>
+                        <th className="py-2 pr-3 font-medium">Waiting</th>
+                        <th className="py-2 pr-3 font-medium">Acknowledge</th>
+                        <th className="py-2 font-medium">Resolve</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-line">
+                      {clock.requests.slice(0, 200).map((row) => (
+                        <tr key={row.requestId}>
+                          <td className="py-2.5 pr-3 text-foreground">
+                            {row.summary}
+                            <span className="block text-xs text-muted">{row.accountName} · {row.status}</span>
+                          </td>
+                          <td className="py-2.5 pr-3 text-muted">{row.kind}</td>
+                          <td className="py-2.5 pr-3 text-muted">{row.submittedAt.slice(0, 16).replace("T", " ")}</td>
+                          <td className="py-2.5 pr-3 tabular-nums text-muted">{waited(row.waitingMinutes)}</td>
+                          <td className="py-2.5 pr-3"><SlaChip state={row.acknowledgeState} dueAt={row.acknowledgeDueAt} /></td>
+                          <td className="py-2.5"><SlaChip state={row.resolveState} dueAt={row.resolveDueAt} /></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+          </Card>
+          <Card>
+            <SectionTitle
+              title="The promises, by kind"
+              description="Hours to acknowledge and hours to resolve. The defaults are the schema's; a saved row overrides one kind for this workspace, and Reset returns it to the default."
+            />
+            <ul className="mt-3 divide-y divide-line" data-testid="services-portal-sla-policies">
+              {(clock?.policies ?? []).map((policy) => {
+                const current = policyDraft[policy.kind] ?? {
+                  acknowledgeHours: String(policy.acknowledgeHours),
+                  resolveHours: String(policy.resolveHours),
+                };
+                return (
+                  <li key={policy.kind} className="flex flex-wrap items-center gap-3 py-2.5 text-sm">
+                    <span className="w-24 font-medium text-foreground">{policy.kind}</span>
+                    <label className="flex items-center gap-1 text-xs text-muted">
+                      acknowledge in
+                      <input
+                        type="number"
+                        min={1}
+                        max={720}
+                        value={current.acknowledgeHours}
+                        aria-label={`Hours to acknowledge a ${policy.kind} request`}
+                        onChange={(event) => setPolicyDraft((previous) => ({ ...previous, [policy.kind]: { ...current, acknowledgeHours: event.target.value } }))}
+                        className="w-16 rounded-lg border border-line px-2 py-1 text-sm text-foreground"
+                      />
+                      h
+                    </label>
+                    <label className="flex items-center gap-1 text-xs text-muted">
+                      resolve in
+                      <input
+                        type="number"
+                        min={1}
+                        max={2160}
+                        value={current.resolveHours}
+                        aria-label={`Hours to resolve a ${policy.kind} request`}
+                        onChange={(event) => setPolicyDraft((previous) => ({ ...previous, [policy.kind]: { ...current, resolveHours: event.target.value } }))}
+                        className="w-16 rounded-lg border border-line px-2 py-1 text-sm text-foreground"
+                      />
+                      h
+                    </label>
+                    <span className="text-xs text-faint">{policy.overridden ? "overridden" : "default"}</span>
+                    <button
+                      type="button"
+                      disabled={busy === `policy:${policy.kind}` || policyDraft[policy.kind] === undefined}
+                      onClick={() => void savePolicy(policy.kind, false)}
+                      className="btn btn-primary px-2 py-0.5 text-xs"
+                      aria-label={`Save the ${policy.kind} policy`}
+                    >
+                      Save
+                    </button>
+                    {policy.overridden ? (
+                      <button
+                        type="button"
+                        disabled={busy === `policy:${policy.kind}`}
+                        onClick={() => void savePolicy(policy.kind, true)}
+                        className="btn btn-secondary px-2 py-0.5 text-xs"
+                        aria-label={`Reset the ${policy.kind} policy`}
+                      >
+                        Reset
+                      </button>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+          </Card>
+        </>
+      ) : null}
+
+      {tab === "ratings" ? (
+        <Card>
+          <SectionTitle
+            title="What customers said after their visits"
+            description="Asked in the portal after a completed visit, once per visit, in the customer's own words. The average is null until somebody answers; the response rate is null until a visit was completed to answer about."
+          />
+          {surveys === null ? (
+            <p className="mt-4 text-sm text-muted">Loading the ratings…</p>
+          ) : (
+            <>
+              <dl className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4" data-testid="services-portal-ratings-figures">
+                <div className="rounded-xl border border-line bg-surface p-4">
+                  <dt className="text-xs uppercase tracking-wide text-faint">Average</dt>
+                  <dd className="mt-1 text-2xl font-semibold tabular-nums text-foreground">
+                    {surveys.summary.averageScore === null ? "—" : `${surveys.summary.averageScore.toFixed(2)} / 5`}
+                  </dd>
+                </div>
+                <div className="rounded-xl border border-line bg-surface p-4">
+                  <dt className="text-xs uppercase tracking-wide text-faint">Responses</dt>
+                  <dd className="mt-1 text-2xl font-semibold tabular-nums text-foreground">{surveys.summary.responses}</dd>
+                </div>
+                <div className="rounded-xl border border-line bg-surface p-4">
+                  <dt className="text-xs uppercase tracking-wide text-faint">Response rate</dt>
+                  <dd className="mt-1 text-2xl font-semibold tabular-nums text-foreground">
+                    {surveys.summary.responseRateBps === null ? "—" : `${(surveys.summary.responseRateBps / 100).toFixed(1)}%`}
+                  </dd>
+                  <span className="text-xs text-faint">of {surveys.summary.completedVisits} completed visits, {surveys.window.days} days</span>
+                </div>
+                <div className="rounded-xl border border-line bg-surface p-4">
+                  <dt className="text-xs uppercase tracking-wide text-faint">Distribution</dt>
+                  <dd className="mt-1 text-sm tabular-nums text-foreground" data-testid="services-portal-ratings-distribution">
+                    {([5, 4, 3, 2, 1] as const).map((score) => `${score}★ ${surveys.summary.distribution[score]}`).join(" · ")}
+                  </dd>
+                </div>
+              </dl>
+              {surveys.summary.detractors.length > 0 ? (
+                <div className="mt-6" data-testid="services-portal-ratings-detractors">
+                  <h3 className="text-sm font-semibold text-foreground">Call these back</h3>
+                  <ul className="mt-2 divide-y divide-line">
+                    {surveys.summary.detractors.slice(0, 20).map((response) => (
+                      <li key={response.surveyId} className="py-2 text-sm">
+                        <span className="font-medium text-foreground">{response.accountName}</span>
+                        <span className="text-muted"> · {response.serviceType} · {response.technicianName ?? "no technician"} · {response.score}/5</span>
+                        {response.comment !== null ? <span className="block text-muted">“{response.comment}”</span> : null}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              {surveys.summary.byTechnician.length > 0 ? (
+                <div className="mt-6 overflow-x-auto">
+                  <table className="w-full text-left text-sm" data-testid="services-portal-ratings-technicians">
+                    <thead>
+                      <tr className="border-b border-line text-xs uppercase tracking-wide text-faint">
+                        <th className="py-2 pr-3 font-medium">Technician</th>
+                        <th className="py-2 pr-3 font-medium">Responses</th>
+                        <th className="py-2 font-medium">Average</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-line">
+                      {surveys.summary.byTechnician.map((entry) => (
+                        <tr key={entry.technicianId ?? "none"}>
+                          <td className="py-2 pr-3 text-foreground">{entry.technicianName}</td>
+                          <td className="py-2 pr-3 tabular-nums text-muted">{entry.responses}</td>
+                          <td className="py-2 tabular-nums text-muted">{entry.averageScore.toFixed(2)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="mt-4 text-sm text-muted" data-testid="services-portal-ratings-empty">
+                  No ratings yet. A customer with a portal login is asked after each completed visit.
+                </p>
+              )}
+            </>
+          )}
+        </Card>
+      ) : null}
+
+      {tab === "messages" ? (
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+          <Card>
+            <SectionTitle
+              title="Waiting on a reply"
+              description="Accounts with a customer message nobody has opened, newest first. Every message is kept as sent; only its read mark changes."
+            />
+            {threads === null ? (
+              <p className="mt-4 text-sm text-muted">Loading…</p>
+            ) : threads.summary.accountsAwaiting.length === 0 ? (
+              <p className="mt-4 text-sm text-muted" data-testid="services-portal-messages-clear">
+                Nothing unread from customers.
+              </p>
+            ) : (
+              <ul className="mt-3 divide-y divide-line" data-testid="services-portal-messages-awaiting">
+                {threads.summary.accountsAwaiting.map((entry) => (
+                  <li key={entry.accountId} className="flex items-center justify-between gap-2 py-2 text-sm">
+                    <button type="button" onClick={() => void openThread(entry.accountId)} className="text-left font-medium text-foreground underline-offset-2 hover:underline">
+                      {users?.portalUsers.find((portalUser) => portalUser.accountId === entry.accountId)?.accountName ?? entry.accountId}
+                    </button>
+                    <span className="text-xs text-muted">{entry.unread} unread · {entry.latestAt.slice(0, 10)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {(users?.portalUsers ?? []).length > 0 ? (
+              <label className="mt-4 block text-sm">
+                <span className="mb-1 block text-xs uppercase tracking-wide text-faint">Open a thread</span>
+                <select
+                  value={threadAccount ?? ""}
+                  onChange={(event) => { if (event.target.value) void openThread(event.target.value); }}
+                  aria-label="Open the thread for an account"
+                  className="w-full rounded-lg border border-line bg-surface px-2 py-1.5 text-sm"
+                >
+                  <option value="">Choose an account with a portal login…</option>
+                  {[...new Map((users?.portalUsers ?? []).map((portalUser) => [portalUser.accountId, portalUser.accountName ?? portalUser.accountId])).entries()].map(([accountId, name]) => (
+                    <option key={accountId} value={accountId}>{name}</option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+          </Card>
+          <Card>
+            <SectionTitle
+              title={threadAccount === null ? "Thread" : `Thread with ${users?.portalUsers.find((portalUser) => portalUser.accountId === threadAccount)?.accountName ?? "the account"}`}
+              description="Both sides, oldest first. What the customer wrote stays exactly as written."
+            />
+            {threadAccount === null ? (
+              <p className="mt-4 text-sm text-muted">Choose an account to read its thread.</p>
+            ) : thread === null ? (
+              <p className="mt-4 text-sm text-muted">Loading the thread…</p>
+            ) : (
+              <>
+                {thread.messages.length === 0 ? (
+                  <p className="mt-4 text-sm text-muted" data-testid="services-portal-thread-empty">No messages yet.</p>
+                ) : (
+                  <ul className="mt-3 space-y-2" data-testid="services-portal-thread">
+                    {thread.messages.map((message) => (
+                      <li
+                        key={message.id}
+                        className={cn(
+                          "rounded-xl border px-3 py-2 text-sm",
+                          message.authorKind === "customer" ? "border-amber-200 bg-amber-50/40" : "border-line bg-surface",
+                        )}
+                      >
+                        <span className="block text-xs text-faint">
+                          {message.authorKind === "customer" ? "Customer" : "Staff"} · {message.sentAt.slice(0, 16).replace("T", " ")}
+                          {message.readAt !== null ? " · read" : message.authorKind === "customer" ? " · unread" : ""}
+                        </span>
+                        <span className="block text-foreground">{message.body}</span>
+                        {message.authorKind === "customer" && message.readAt === null ? (
+                          <button
+                            type="button"
+                            disabled={busy === `read:${message.id}`}
+                            onClick={() => void markRead(message.id)}
+                            className="btn btn-secondary mt-1 px-2 py-0.5 text-xs"
+                          >
+                            Mark read
+                          </button>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <div className="mt-4 flex flex-col gap-2">
+                  <textarea
+                    value={draft}
+                    onChange={(event) => setDraft(event.target.value)}
+                    rows={3}
+                    maxLength={2000}
+                    aria-label="Write to the customer"
+                    placeholder="Write to the customer…"
+                    className="w-full rounded-lg border border-line px-2 py-1 text-sm"
+                  />
+                  <button
+                    type="button"
+                    disabled={busy === `message:${threadAccount}` || draft.trim().length === 0}
+                    onClick={() => void sendMessage()}
+                    className="btn btn-primary w-fit px-3 py-1.5 text-xs"
+                  >
+                    Send
+                  </button>
+                </div>
+              </>
+            )}
+          </Card>
+        </div>
       ) : null}
 
       {tab === "logins" ? (

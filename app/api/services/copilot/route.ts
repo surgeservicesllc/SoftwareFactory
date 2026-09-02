@@ -4,7 +4,9 @@ import {
   COPILOT_SKILLS,
   composeAutopayAnswer,
   composeFollowupsAnswer,
+  composeHelpDeskAnswer,
   composeLostMoneyAnswer,
+  composeRatingsAnswer,
   composeScheduleAuditAnswer,
   composeOverdueAnswer,
   composeRevenueAnswer,
@@ -19,6 +21,14 @@ import {
   toScheduleFindingView,
   type CrmScheduleFindingRow,
 } from "@/lib/services/nothing-hidden";
+import {
+  summarizeSla,
+  summarizeSurveys,
+  toRequestSlaView,
+  toSurveyResponseView,
+  type CrmRequestSlaRow,
+  type CrmSurveyResponseRow,
+} from "@/lib/services/customers-side";
 import {
   ApiRequestError,
   databaseErrorResponse,
@@ -115,6 +125,57 @@ export async function POST(request: Request) {
             detail: finding.detail,
           })),
         }),
+      });
+    }
+
+    if (skill === "customer_ratings") {
+      const days = 90;
+      const since = new Date(Date.now() - days * 86_400_000).toISOString();
+      const [responsesRead, completedRead] = await Promise.all([
+        client.rpc("crm_survey_responses", { p_organization: organizationId, p_days: days }).limit(1000),
+        client
+          .from("crm_work_orders")
+          .select("id", { count: "exact", head: true })
+          .eq("organization_id", organizationId)
+          .eq("status", "completed")
+          .gte("completed_at", since),
+      ]);
+      if (responsesRead.error) return databaseErrorResponse(responsesRead.error);
+      if (completedRead.error) return databaseErrorResponse(completedRead.error);
+      const responses = ((responsesRead.data ?? []) as unknown as CrmSurveyResponseRow[]).map(toSurveyResponseView);
+      const summary = summarizeSurveys(responses, completedRead.count ?? 0);
+      return jsonNoStore({
+        skill,
+        answer: composeRatingsAnswer({
+          days,
+          responses: summary.responses,
+          completedVisits: summary.completedVisits,
+          averageScore: summary.averageScore,
+          responseRateBps: summary.responseRateBps,
+          detractors: summary.detractors.map((entry) => ({ account: entry.accountName, score: entry.score, comment: entry.comment })),
+        }),
+      });
+    }
+
+    if (skill === "help_desk") {
+      const read = await client
+        .rpc("crm_request_sla", { p_organization: organizationId, p_days: 30 })
+        .limit(500);
+      if (read.error) return databaseErrorResponse(read.error);
+      const rows = ((read.data ?? []) as unknown as CrmRequestSlaRow[]).map(toRequestSlaView);
+      const summary = summarizeSla(rows);
+      const late = rows
+        .filter((row) => row.open && (row.acknowledgeState === "overdue" || row.resolveState === "overdue"))
+        .map((row) => ({
+          account: row.accountName,
+          kind: row.kind,
+          summary: row.summary,
+          waitingMinutes: row.waitingMinutes,
+          promise: row.resolveState === "overdue" ? "resolve" : "acknowledge",
+        }));
+      return jsonNoStore({
+        skill,
+        answer: composeHelpDeskAnswer({ open: summary.open, overdue: summary.overdue, late }),
       });
     }
 

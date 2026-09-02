@@ -6164,3 +6164,51 @@ checks the shape in code first.
 conflict, the dry run does not run, and the drill-down does not edit.
 Each names the rows and stops — the person decides, on the page that
 owns the row.
+
+## ADR-233 - The customer's side of the conversation: a rating only they can write, a clock the row keeps, a thread nobody can edit
+
+PestPac is "not built for two-way communication"; HubSpot's service desk
+is "weaker as a standalone" and its free tier has no support depth at all;
+neither asks the customer anything after a visit. The customer portal
+(ADR-198, 203, 222) already lets the customer read and ask; this
+increment lets them answer back, and holds the company to a clock.
+
+**A rating is the customer's word, written once, only by them.**
+`crm_portal_surveys` takes one row per completed visit, and only through
+`crm_portal_survey_submit` — a definer that checks the visit is on the
+caller's own account and completed, refuses a second rating, and writes a
+history line. Staff hold SELECT and nothing else: no INSERT, no UPDATE, no
+DELETE, and no service key writes one either, which is why the seeder
+cannot fabricate a rating and does not (`DELIBERATELY_UNSEEDED`). The
+staff page shows the average, the response rate against completed visits
+(null until there is a denominator), the distribution, the technicians,
+and the 1s and 2s to call back.
+
+**The clock is kept by the row.** `crm_portal_requests` gains
+`acknowledged_at` and `first_response_at`, set once by a BEFORE trigger —
+the first time status leaves 'submitted', the first time a reply is
+written — and never moved by hand: an UPDATE that touches them is
+overwritten with the old values. `crm_sla_defaults()` holds the promises
+per kind in the schema (a complaint is acknowledged in four hours, a
+quote in a day); `crm_sla_policies` holds only a workspace's overrides;
+`crm_request_sla()` computes both due moments and both states live —
+met, breached, waiting, overdue, or **unrecorded** when a request was born
+already acknowledged with no stamp, which is a different thing from met
+and is said so. A rating or a policy change re-clocks the whole queue on
+the next read, because nothing is stored.
+
+**A message is what was said.** `crm_portal_messages` is a thread on the
+account either side writes: the customer through `crm_portal_message_send`
+(a definer scoped to their own account, optionally on one of their own
+requests), staff through RLS as themselves — the insert policy refuses a
+message signed by anybody else or one that claims to be the customer's.
+Once sent, only the read mark can change, and it changes once; a trigger
+refuses every other edit. The customer's page marks staff messages read
+on opening the thread; staff mark customer messages read one by one, and
+the accounts waiting on a reply are the queue.
+
+**What this deliberately does not do.** No email or SMS leaves the
+building on a rating, a breach or a message — sending is a provider the
+owner opens (ADR-207), so a breached promise is shown, not dispatched. No
+survey is scheduled or sent; the customer is asked on their own portal
+because that is where they already are.

@@ -52,6 +52,17 @@ type Visit = {
   completionNotes: string | null;
 };
 
+type MyRating = { workOrderId: string; score: number; comment: string | null; submittedAt: string };
+
+type MyMessage = {
+  id: string;
+  requestId: string | null;
+  authorKind: "customer" | "staff";
+  body: string;
+  sentAt: string;
+  readAt: string | null;
+};
+
 type FiledCopy = {
   id: string;
   kind: string;
@@ -185,7 +196,8 @@ type Tab =
   | "invoices"
   | "visits"
   | "documents"
-  | "requests";
+  | "requests"
+  | "messages";
 
 const REQUEST_KINDS = ["service", "reschedule", "question", "complaint", "cancel", "quote"] as const;
 
@@ -294,6 +306,13 @@ export function CustomerPortalPanel() {
   const [documents, setDocuments] = useState<PortalDocument[]>([]);
   const [filedCopies, setFiledCopies] = useState<FiledCopy[]>([]);
   const [requests, setRequests] = useState<Request[]>([]);
+  const [ratings, setRatings] = useState<MyRating[]>([]);
+  const [messages, setMessages] = useState<MyMessage[]>([]);
+  const [ratingFor, setRatingFor] = useState<string | null>(null);
+  const [ratingScore, setRatingScore] = useState<number>(5);
+  const [ratingComment, setRatingComment] = useState("");
+  const [messageDraft, setMessageDraft] = useState("");
+  const [sendingMessage, setSendingMessage] = useState(false);
   const [sites, setSites] = useState<Site[]>([]);
   const [stations, setStations] = useState<Station[]>([]);
   const [trend, setTrend] = useState<TrendCell[]>([]);
@@ -352,6 +371,8 @@ export function CustomerPortalPanel() {
         complianceRes,
         wdoRes,
         filedRes,
+        ratingsRes,
+        messagesRes,
       ] = await Promise.all([
         fetch("/api/customer-portal/invoices", { headers: { accept: "application/json" } }),
         fetch("/api/customer-portal/visits", { headers: { accept: "application/json" } }),
@@ -365,6 +386,8 @@ export function CustomerPortalPanel() {
         fetch("/api/customer-portal/compliance", { headers: { accept: "application/json" } }),
         fetch("/api/customer-portal/wdo", { headers: { accept: "application/json" } }),
         fetch("/api/customer-portal/filed-documents", { headers: { accept: "application/json" } }),
+        fetch("/api/customer-portal/surveys", { headers: { accept: "application/json" } }),
+        fetch("/api/customer-portal/messages", { headers: { accept: "application/json" } }),
       ]);
       if (invoicesRes.ok) setInvoices(((await invoicesRes.json()) as { invoices: Invoice[] }).invoices);
       if (visitsRes.ok) setVisits(((await visitsRes.json()) as { visits: Visit[] }).visits);
@@ -390,10 +413,80 @@ export function CustomerPortalPanel() {
         setInspections(body.inspections);
       }
       if (wdoRes.ok) setWdoReports(((await wdoRes.json()) as { reports: WdoReport[] }).reports);
+      if (ratingsRes.ok) {
+        const body = (await ratingsRes.json()) as { surveys?: MyRating[] };
+        setRatings(Array.isArray(body.surveys) ? body.surveys : []);
+      }
+      if (messagesRes.ok) {
+        const body = (await messagesRes.json()) as { messages?: MyMessage[] };
+        setMessages(Array.isArray(body.messages) ? body.messages : []);
+      }
     } catch {
       setLoadError("Your account could not be loaded.");
     }
   }, [siteFilter]);
+
+  const rateVisit = useCallback(async () => {
+    if (ratingFor === null) return;
+    setActionError(null);
+    try {
+      const response = await fetch("/api/customer-portal/surveys", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          workOrderId: ratingFor,
+          score: ratingScore,
+          comment: ratingComment.trim().length === 0 ? null : ratingComment.trim(),
+        }),
+      });
+      if (!response.ok) {
+        const body = (await response.json()) as { error?: { message?: string } };
+        setActionError(body.error?.message ?? "Your rating could not be sent.");
+        return;
+      }
+      setRatingFor(null);
+      setRatingComment("");
+      setRatingScore(5);
+      await refresh();
+    } catch {
+      setActionError("Your rating could not be sent.");
+    }
+  }, [ratingComment, ratingFor, ratingScore, refresh]);
+
+  const sendMessage = useCallback(async () => {
+    if (messageDraft.trim().length === 0) return;
+    setSendingMessage(true);
+    setActionError(null);
+    try {
+      const response = await fetch("/api/customer-portal/messages", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ body: messageDraft.trim() }),
+      });
+      if (!response.ok) {
+        const body = (await response.json()) as { error?: { message?: string } };
+        setActionError(body.error?.message ?? "Your message could not be sent.");
+        return;
+      }
+      setMessageDraft("");
+      await refresh();
+    } catch {
+      setActionError("Your message could not be sent.");
+    } finally {
+      setSendingMessage(false);
+    }
+  }, [messageDraft, refresh]);
+
+  // Opening the thread is reading it: what staff wrote is marked seen.
+  const markStaffRead = useCallback(async () => {
+    if (!messages.some((message) => message.authorKind === "staff" && message.readAt === null)) return;
+    try {
+      const response = await fetch("/api/customer-portal/messages", { method: "PATCH", headers: { "content-type": "application/json" } });
+      if (response.ok) await refresh();
+    } catch {
+      /* The thread is still readable; the mark is a courtesy. */
+    }
+  }, [messages, refresh]);
 
   useEffect(() => {
     const kickoff = window.setTimeout(() => void refresh(), 0);
@@ -601,6 +694,7 @@ export function CustomerPortalPanel() {
             ["visits", "Visits", visits.length],
             ["documents", "Documents", documents.length],
             ["requests", "Requests", requests.length],
+            ["messages", "Messages", messages.filter((message) => message.authorKind === "staff" && message.readAt === null).length || undefined],
           ] as const
         ).map(([key, label, count]) => (
           <button
@@ -608,7 +702,10 @@ export function CustomerPortalPanel() {
             type="button"
             role="tab"
             aria-selected={tab === key}
-            onClick={() => setTab(key)}
+            onClick={() => {
+              setTab(key);
+              if (key === "messages") void markStaffRead();
+            }}
             className={cn("btn px-3 py-2 text-sm", tab === key ? "btn-primary" : "btn-secondary")}
           >
             {label}
@@ -1247,11 +1344,14 @@ export function CustomerPortalPanel() {
                     <th className="py-2 pr-3 font-medium">Site</th>
                     <th className="py-2 pr-3 font-medium">Scheduled</th>
                     <th className="py-2 pr-3 font-medium">Completed</th>
-                    <th className="py-2 font-medium">Notes</th>
+                    <th className="py-2 pr-3 font-medium">Notes</th>
+                    <th className="py-2 font-medium">Your rating</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-line">
-                  {visits.map((visit) => (
+                  {visits.map((visit) => {
+                    const rating = ratings.find((entry) => entry.workOrderId === visit.id);
+                    return (
                     <tr key={visit.id}>
                       <td className="py-2.5 pr-3 text-foreground">{visit.serviceType}</td>
                       <td className="py-2.5 pr-3 text-muted">{visit.propertyLabel ?? "—"}</td>
@@ -1261,9 +1361,63 @@ export function CustomerPortalPanel() {
                       <td className="py-2.5 pr-3 text-muted">
                         {visit.completedAt === null ? "—" : visit.completedAt.slice(0, 10)}
                       </td>
-                      <td className="py-2.5 text-muted">{visit.completionNotes ?? "—"}</td>
+                      <td className="py-2.5 pr-3 text-muted">{visit.completionNotes ?? "—"}</td>
+                      <td className="py-2.5 text-muted">
+                        {rating !== undefined ? (
+                          <span data-testid={`customer-portal-rating-${visit.id}`}>
+                            {rating.score}/5{rating.comment !== null ? ` · “${rating.comment}”` : ""}
+                          </span>
+                        ) : visit.completedAt === null ? (
+                          "—"
+                        ) : ratingFor === visit.id ? (
+                          <span className="flex flex-col gap-1">
+                            <span className="flex gap-1" role="radiogroup" aria-label="Score">
+                              {[1, 2, 3, 4, 5].map((score) => (
+                                <button
+                                  key={score}
+                                  type="button"
+                                  role="radio"
+                                  aria-checked={ratingScore === score}
+                                  aria-label={`${score} of 5`}
+                                  onClick={() => setRatingScore(score)}
+                                  className={cn("btn px-2 py-0.5 text-xs", ratingScore === score ? "btn-primary" : "btn-secondary")}
+                                >
+                                  {score}
+                                </button>
+                              ))}
+                            </span>
+                            <textarea
+                              value={ratingComment}
+                              onChange={(event) => setRatingComment(event.target.value)}
+                              rows={2}
+                              maxLength={1000}
+                              aria-label="What should we know?"
+                              placeholder="Anything we should know? (optional)"
+                              className="w-56 rounded-lg border border-line px-2 py-1 text-sm"
+                            />
+                            <span className="flex gap-1">
+                              <button type="button" onClick={() => void rateVisit()} className="btn btn-primary px-2 py-0.5 text-xs">
+                                Send rating
+                              </button>
+                              <button type="button" onClick={() => setRatingFor(null)} className="btn btn-secondary px-2 py-0.5 text-xs">
+                                Cancel
+                              </button>
+                            </span>
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => { setRatingFor(visit.id); setRatingScore(5); setRatingComment(""); }}
+                            className="btn btn-secondary px-2 py-0.5 text-xs"
+                            aria-label={`Rate the ${visit.serviceType} visit`}
+                          >
+                            Rate this visit
+                          </button>
+                        )}
+                      </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -1330,6 +1484,57 @@ export function CustomerPortalPanel() {
               ))}
             </ul>
           )}
+        </Card>
+      ) : null}
+
+      {tab === "messages" ? (
+        <Card>
+          <SectionTitle
+            title="Messages"
+            description="A conversation with your service company, kept as written. Anything you send here is read by a person; a reply appears below it."
+          />
+          {messages.length === 0 ? (
+            <p className="mt-4 text-sm text-muted" data-testid="customer-portal-messages-empty">
+              No messages yet. Write below and somebody at the office will answer here.
+            </p>
+          ) : (
+            <ul className="mt-3 space-y-2" data-testid="customer-portal-messages">
+              {messages.map((message) => (
+                <li
+                  key={message.id}
+                  className={cn(
+                    "rounded-xl border px-3 py-2 text-sm",
+                    message.authorKind === "customer" ? "border-line bg-surface" : "border-sky-200 bg-sky-50/40",
+                  )}
+                >
+                  <span className="block text-xs text-faint">
+                    {message.authorKind === "customer" ? "You" : "Your service company"} · {message.sentAt.slice(0, 16).replace("T", " ")}
+                  </span>
+                  <span className="block text-foreground">{message.body}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="mt-4 flex flex-col gap-2">
+            <textarea
+              value={messageDraft}
+              onChange={(event) => setMessageDraft(event.target.value)}
+              rows={3}
+              maxLength={2000}
+              aria-label="Write a message"
+              placeholder="Write a message…"
+              className="w-full rounded-lg border border-line px-2 py-1 text-sm"
+            />
+            <button
+              type="button"
+              disabled={sendingMessage || messageDraft.trim().length === 0}
+              onClick={() => void sendMessage()}
+              className="btn btn-primary w-fit px-3 py-1.5 text-xs"
+              data-testid="customer-portal-send-message"
+            >
+              Send
+            </button>
+          </div>
         </Card>
       ) : null}
 

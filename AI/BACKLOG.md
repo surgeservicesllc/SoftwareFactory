@@ -119,9 +119,19 @@ anything on a timer stays RED and owner-gated.
   aggregate's own predicate so tile and list cannot disagree. All three
   INVOKER, nothing stored. 20260902000500; hosted apply: scope=nothing-
   hidden after merge. Closes HubSpot 5/6, PestPac 7/10.
-- [ ] Increment 31 (the customer's side): post-service survey asked in the
-  portal after a completed visit; request SLA clock with breach flagged;
-  two-way portal messages threaded on the account. Closes HubSpot
+- [x] Increment 31 (ADR-233): the customer's side — `crm_portal_surveys`
+  (one rating per completed visit, written only through the customer's own
+  definer; staff read and never write; deliberately unseeded), the request
+  clock (`acknowledged_at` / `first_response_at` stamped once by the row,
+  `crm_sla_defaults()` per kind in the schema, `crm_sla_policies` holding
+  overrides, `crm_request_sla()` computing met / breached / waiting /
+  overdue / unrecorded live), and `crm_portal_messages` (a thread either
+  side writes and neither can edit; only the read mark moves, once). Staff
+  tabs Request clock / Ratings / Messages on the Customer Portal page; the
+  customer rates a visit from the Visits tab and writes on a Messages tab
+  that marks staff replies read on opening. Copilot "How are customers
+  rating us?" and "Which requests are past their promise?". 20260902000600;
+  hosted apply: scope=customers-side after merge. Closes HubSpot
   25/36/40/42, PestPac 11, PestBoss 23.
 - [ ] Increment 32 (trust): forecast scenario inputs (owner-supplied churn
   and growth, printed beside the figure); stale-contact hygiene report;

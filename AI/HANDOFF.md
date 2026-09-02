@@ -2,6 +2,27 @@
 
 Last updated: 2026-08-31
 
+## Newest (2026-09-02, latest+55): the customer's side (ADR-233)
+
+ONLY THE CUSTOMER RATES. `crm_portal_surveys` grants authenticated SELECT
+and nothing else, and no service key writes it; the only writer is the
+definer the customer calls. Do not add a staff insert "for corrections"
+— a correction is a call, and the rating stands. The seed leaves the
+table empty on purpose (`DELIBERATELY_UNSEEDED`); the report is told why.
+
+THE STAMPS ARE THE ROW'S. `acknowledged_at` / `first_response_at` are set
+by the BEFORE trigger and an UPDATE that touches them is overwritten with
+the old values. A request inserted already acknowledged keeps NULL and
+clocks as 'unrecorded', which is honest; do not backfill it with
+submitted_at to make the figure look met.
+
+MESSAGES ARE IMMUTABLE. Only `read_at` changes, once. A "delete message"
+control does not exist and should not; if a message must be withdrawn,
+say so in a new message.
+
+The new tables carry no service_role table grants (the hosted convention
+the grants roster and RLS census both pin); the seed writes as a member.
+
 ## Newest (2026-09-02, latest+54): nothing hidden (ADR-232)
 
 DRILL-DOWN MIRRORS THE AGGREGATE. `crm_dashboard_rows` repeats each

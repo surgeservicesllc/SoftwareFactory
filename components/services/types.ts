@@ -1120,3 +1120,37 @@ export type DashboardRowsPayload = {
   rows: DashboardRowViewT[];
   ceiling: { rows: number; reached: boolean };
 };
+
+/* --- the customer's side (increment 31, ADR-233) ------------------------- */
+
+import type {
+  PortalMessageView as PortalMessageViewT,
+  RequestSlaView as RequestSlaViewT,
+  SlaPolicyView as SlaPolicyViewT,
+  SlaSummary as SlaSummaryT,
+  SurveyResponseView as SurveyResponseViewT,
+  SurveySummary as SurveySummaryT,
+  MessageThreadSummary as MessageThreadSummaryT,
+} from "@/lib/services/customers-side";
+
+export type RequestSlaPayload = {
+  window: { days: number };
+  requests: RequestSlaViewT[];
+  summary: SlaSummaryT;
+  policies: SlaPolicyViewT[];
+  ceiling: { requests: number; reached: boolean };
+};
+
+export type SurveysPayload = {
+  window: { days: number };
+  responses: SurveyResponseViewT[];
+  summary: SurveySummaryT;
+  ceiling: { responses: number; reached: boolean };
+};
+
+export type PortalMessagesPayload = {
+  accountId: string | null;
+  messages: PortalMessageViewT[];
+  summary: MessageThreadSummaryT;
+  ceiling: { messages: number; reached: boolean };
+};
