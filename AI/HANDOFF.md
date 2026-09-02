@@ -2,6 +2,15 @@
 
 Last updated: 2026-08-31
 
+## Newest (2026-09-02, latest+52): workflow headroom for increment 29
+
+The probe step's last four heredocs are files now: 44 probe files, each
+executed against the migrated chain by the replay test, which pins the
+count. The workflow is 446,039 bytes against a guard ratcheted to
+450,000. A scope step costs ~700 bytes, so increments 29–32 fit; the next
+extraction, when one is needed, is one of the three mutating giants —
+same discipline: verbatim, re-pointed, its own change, never with a scope.
+
 ## Newest (2026-09-02, latest+51): data you own (ADR-230)
 
 MERGE: one statement. Do not split `crm_merge_accounts` into per-table

@@ -524,222 +524,23 @@ jobs:
           echo "policy and it is SELECT, so an owner that does not bypass cannot insert an audit"
           echo "row - which is the last statement of remove_ai_account, and a 42501."
           psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/06.sql
-          cat > /tmp/audit-write-probe.sql <<'PROBE_SQL'
-          do $probe$
-          declare
-            v_org uuid;
-          begin
-            select id into v_org from public.organizations limit 1;
-            if v_org is null then
-              raise notice 'no organization to write a probe row against';
-              return;
-            end if;
-            begin
-              insert into public.activity_events
-                (organization_id, event_type, entity_type, description)
-              values (v_org, 'ai_account.changed', 'ai_account', 'probe row, deleted immediately');
-              delete from public.activity_events where description = 'probe row, deleted immediately';
-              raise notice 'activity_events insert as %: OK, probe row deleted', current_user;
-            exception when others then
-              raise notice 'activity_events insert as %: % %', current_user, sqlstate, sqlerrm;
-            end;
-          end
-          $probe$;
-          PROBE_SQL
-          psql "$DB_URL" -q -f /tmp/audit-write-probe.sql
+          psql "$DB_URL" -q -f .github/hosted-apply/probe/audit-write-probe.sql
           echo ""
           echo "And the call itself, as the owner would make it, inside a transaction that is"
           echo "rolled back whatever happens. This reports the SQLSTATE and message the console"
           echo "receives, which is the one fact none of the queries above can produce."
-          cat > /tmp/remove-account-probe.sql <<'REMOVE_SQL'
-          begin;
-          do $probe$
-          declare
-            v_org uuid;
-            v_owner uuid;
-            v_account uuid;
-            v_result boolean;
-            v_uid uuid;
-            v_can boolean;
-            v_member record;
-          begin
-            /*
-             * The first attempt picked the earliest owner membership and found
-             * an organization with no accounts at all — the definitive call
-             * never ran. Start from the accounts instead: the organization that
-             * holds one, joined to an owner OF THAT organization, is the exact
-             * shape the console's failing request has.
-             */
-            select a.organization_id, m.user_id, a.id
-              into v_org, v_owner, v_account
-              from public.ai_accounts a
-              join public.organization_members m
-                on m.organization_id = a.organization_id and m.role = 'owner'
-             order by a.created_at
-             limit 1;
-            if v_account is null then
-              raise notice 'no AI account with an owner membership anywhere — nothing to test';
-              return;
-            end if;
-            raise notice 'testing org % account % as user %', v_org, v_account, v_owner;
-
-            for v_member in
-              select m.user_id, m.role from public.organization_members m
-               where m.organization_id = v_org order by m.created_at
-            loop
-              raise notice '  member % role %', v_member.user_id, v_member.role;
-            end loop;
-
-            perform set_config('request.jwt.claim.sub', v_owner::text, true);
-            perform set_config('request.jwt.claims',
-              json_build_object('sub', v_owner::text, 'role', 'authenticated')::text, true);
-            set local role authenticated;
-
-            /* Whether the identity plumbing itself resolves under this role is
-               half the diagnosis: a NULL here means the probe's JWT emulation
-               (not production) is what any refusal below is measuring. */
-            begin
-              select auth.uid() into v_uid;
-              raise notice 'auth.uid() under authenticated: %', coalesce(v_uid::text, 'NULL');
-            exception when others then
-              raise notice 'auth.uid() raised: % %', sqlstate, sqlerrm;
-            end;
-            begin
-              select public.can_manage_organization(v_org) into v_can;
-              raise notice 'can_manage_organization: %', v_can;
-            exception when others then
-              raise notice 'can_manage_organization raised: % %', sqlstate, sqlerrm;
-            end;
-
-            begin
-              select public.remove_ai_account(v_org, v_account) into v_result;
-              raise notice 'remove_ai_account as owner: returned % (rolled back)', v_result;
-            exception when others then
-              raise notice 'remove_ai_account as owner: % %', sqlstate, sqlerrm;
-            end;
-            reset role;
-          end
-          $probe$;
-          rollback;
-          REMOVE_SQL
-          psql "$DB_URL" -q -f /tmp/remove-account-probe.sql
+          psql "$DB_URL" -q -f .github/hosted-apply/probe/remove-account-probe.sql
           echo ""
           echo "Bot creation, the same way: the console's Create Bot ends at register_bot"
           echo "through ensureProviderBot, which swallows every database error into a"
           echo "'skipped' the route answers 200 for. This calls register_bot as the owner"
           echo "and reports what actually happens, rolled back either way."
-          cat > /tmp/register-bot-probe.sql <<'BOT_SQL'
-          begin;
-          do $probe$
-          declare
-            v_org uuid;
-            v_owner uuid;
-            v_row record;
-            v_count integer;
-          begin
-            select a.organization_id, m.user_id
-              into v_org, v_owner
-              from public.ai_accounts a
-              join public.organization_members m
-                on m.organization_id = a.organization_id and m.role = 'owner'
-             order by a.created_at
-             limit 1;
-            if v_org is null then
-              raise notice 'no organization with accounts to test bot creation in';
-              return;
-            end if;
-
-            select count(*) into v_count from public.bots b where b.organization_id = v_org;
-            raise notice 'org % holds % bot rows', v_org, v_count;
-
-            perform set_config('request.jwt.claim.sub', v_owner::text, true);
-            perform set_config('request.jwt.claims',
-              json_build_object('sub', v_owner::text, 'role', 'authenticated')::text, true);
-            set local role authenticated;
-
-            begin
-              select * into v_row from public.register_bot(
-                v_org, 'Probe Bot', 'anthropic'::public.bot_provider, 'claude-opus-5',
-                'SOFTWAREFACTORY_CLAUDE_CODE_OAUTH_TOKEN', null,
-                'Probe row, rolled back with this transaction.'
-              );
-              raise notice 'register_bot as owner: created % (rolled back)', v_row.id;
-            exception when others then
-              raise notice 'register_bot as owner: % %', sqlstate, sqlerrm;
-            end;
-            reset role;
-          end
-          $probe$;
-          rollback;
-          BOT_SQL
-          psql "$DB_URL" -q -f /tmp/register-bot-probe.sql
+          psql "$DB_URL" -q -f .github/hosted-apply/probe/register-bot-probe.sql
           echo ""
           echo "The Agents page's chain: per organization, how many logical agents and"
           echo "enabled model configurations exist, and whether assigning one to an agent"
           echo "works as the owner — rolled back either way."
-          cat > /tmp/agent-assignment-probe.sql <<'AGENT_SQL'
-          begin;
-          do $probe$
-          declare
-            v_org uuid;
-            v_owner uuid;
-            v_agent uuid;
-            v_model text;
-            v_row record;
-            v_counts record;
-          begin
-            for v_counts in
-              select o.id,
-                     (select count(*) from public.agents a where a.organization_id = o.id) as agents,
-                     (select count(*) from public.provider_model_configurations c
-                       where c.organization_id = o.id and c.enabled) as enabled_models
-                from public.organizations o
-               order by o.created_at
-            loop
-              raise notice 'org % holds % agents, % enabled model configurations',
-                v_counts.id, v_counts.agents, v_counts.enabled_models;
-            end loop;
-
-            select a.organization_id, a.id, m.user_id
-              into v_org, v_agent, v_owner
-              from public.agents a
-              join public.organization_members m
-                on m.organization_id = a.organization_id and m.role = 'owner'
-             order by a.created_at
-             limit 1;
-            if v_agent is null then
-              raise notice 'no agent with an owner membership anywhere - nothing to test';
-              return;
-            end if;
-            select c.model into v_model
-              from public.provider_model_configurations c
-             where c.organization_id = v_org
-               and c.provider = 'anthropic'::public.connection_provider
-               and c.enabled
-             order by c.model
-             limit 1;
-            if v_model is null then
-              raise notice 'org % has no enabled anthropic model to assign', v_org;
-              return;
-            end if;
-
-            perform set_config('request.jwt.claim.sub', v_owner::text, true);
-            perform set_config('request.jwt.claims',
-              json_build_object('sub', v_owner::text, 'role', 'authenticated')::text, true);
-            set local role authenticated;
-            begin
-              select * into v_row from public.set_agent_provider_assignment(v_agent, 'anthropic', v_model);
-              raise notice 'set_agent_provider_assignment as owner: agent % now % / % (rolled back)',
-                v_row.id, v_row.provider, v_row.model;
-            exception when others then
-              raise notice 'set_agent_provider_assignment as owner: % %', sqlstate, sqlerrm;
-            end;
-            reset role;
-          end
-          $probe$;
-          rollback;
-          AGENT_SQL
-          psql "$DB_URL" -q -f /tmp/agent-assignment-probe.sql
+          psql "$DB_URL" -q -f .github/hosted-apply/probe/agent-assignment-probe.sql
           psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/probe/07.sql
           echo ""
           echo "The Agentic SDLC lifecycle (20260821000100 and 20260821000200), asked about"

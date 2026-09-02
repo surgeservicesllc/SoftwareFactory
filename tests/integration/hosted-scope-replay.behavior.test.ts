@@ -237,7 +237,7 @@ describe("the workflow's post-cutover surgical-scope fence", () => {
     `);
     const probeDirectory = resolve(repositoryRoot, ".github/hosted-apply/probe");
     const files = (await readdir(probeDirectory)).filter((name) => name.endsWith(".sql")).sort();
-    expect(files.length).toBe(40);
+    expect(files.length).toBe(44);
     for (const file of files) {
       // The workflow must run the exact file this test proves executable.
       expect(workflow).toContain(`-f .github/hosted-apply/probe/${file}`);

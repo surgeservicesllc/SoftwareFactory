@@ -1,5 +1,13 @@
 # Current state
 
+## 2026-09-02: Workflow headroom (probe heredocs extracted)
+
+The apply workflow's probe step ran its last four probes from inline
+heredocs; they are now files under `.github/hosted-apply/probe/` (44),
+byte-identical, re-pointed with `-f`, each executed by the scope-replay
+test which pins the count. The workflow is 446,039 bytes; the
+byte guard is ratcheted from 455,000 to 450,000 so the room stays.
+
 ## 2026-09-02: Data you own (ADR-230)
 
 Increment 28 ships `20260902000300_data_you_own.sql`: `crm_accounts.merged_into_id`
