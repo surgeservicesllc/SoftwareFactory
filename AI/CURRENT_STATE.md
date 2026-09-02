@@ -1,5 +1,23 @@
 # Current state
 
+## 2026-09-02: JobSearch build-out — increment 7, your data is yours (ADR-247)
+
+No migration. `lib/job-seeker/export.ts`: `EXPORT_TABLES` (17 personal
+tables in order, explicit columns for uploads so no bytes are inlined),
+`NOT_PERSONAL` (the posting sightings ledger with the reason),
+`EXPORT_LIMIT` 5,000, `buildManifest`, `exportFilename`, `EXPORT_BASIS`.
+`GET /api/job-seeker/export`: each roster table read through the
+caller's client, organization-scoped under RLS, limit + 1 to detect
+truncation, per-table failure named in the manifest, one JSON
+attachment (`Content-Disposition`, no-store). `JobSeekerDataExportCard`
+("Your data is yours": the link, the roster, the cap and the not-personal
+note) under the Job Preferences form in the console. Tests:
+job-seeker-export 3 (the roster census against the migrations, no blob
+column, the manifest), export route 3 (every table read and scoped, the
+outcomes with a failed and a truncated table, no bytes read, signed-out
+refused), data-export card 1, console unchanged; tsc, eslint and the
+production build clean.
+
 ## 2026-09-02: JobSearch build-out — increment 6, the interview prep sheet (ADR-246)
 
 No migration. `lib/job-seeker/interview-prep.ts`: `matchedStrengths`

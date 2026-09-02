@@ -2,6 +2,22 @@
 
 Last reviewed: 2026-09-02
 
+**Addendum, 2026-09-02 latest+69 - JobSearch build-out, increment 7: your data is yours (ADR-247):**
+job-seeker-export 3 (the roster plus the not-personal list equals the
+job_seeker table census in the migrations with no duplicate; the
+uploads entry names its columns and none is the bytes; the manifest
+carries the outcomes, the limit, the not-personal ledger and the
+basis, and the filename is dated). job-seeker-export-route 3 (every
+roster table read in order through the caller's client with every
+`eq` scoped to their organization; a failed table named with the
+reason and an empty list, a table over the cap reported truncated at
+the cap; no select names the bytes column while the uploads metadata
+is read; a signed-out caller refused with no attachment header).
+job-seeker-data-export-card 1 (the link with `download`, one roster
+item per table, the not-personal reason printed). Console suite
+unchanged and green with the card mounted. No migration; tsc, eslint
+and the production build clean.
+
 **Addendum, 2026-09-02 latest+68 - JobSearch build-out, increment 6: the interview prep sheet (ADR-246):**
 job-seeker-interview-prep 8 (strengths named with where recorded and
 the role that used them, nothing from an empty profile; gaps as

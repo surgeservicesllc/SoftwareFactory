@@ -122,8 +122,13 @@ own PR, ADR, behavior test against the real chain, and hosted scope.
   `GET/POST /api/job-seeker/jobs/[jobId]/prep`; `InterviewPrepSheet`
   on the Interview Tracker and on every application. No migration.
   Closes LinkedIn 17, Glassdoor 2, "interview prep" rows.
-- [ ] Increment 7 (ADR-247): your data is yours — export of every table
-  the Job Seeker writes about a person, under their own RLS.
+- [x] Increment 7 (ADR-247): your data is yours — 2026-09-02.
+  `lib/job-seeker/export.ts` (the roster of 17 personal tables, the
+  not-personal ledger named, the census test against the migrations);
+  `GET /api/job-seeker/export` (one JSON attachment under RLS with a
+  manifest naming each table's count, truncation and any failure);
+  "Your data is yours" card on Job Preferences. No migration. Closes
+  LinkedIn 24, Indeed 23/24, Glassdoor-and-others 8, "data locked in".
 - [ ] Increment 8 (ADR-248): polish that cannot invent — model-polished
   resume/cover-letter variants through the existing provider path,
   checked term by term against the fact-only baseline; **Not Connected**

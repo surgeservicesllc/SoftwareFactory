@@ -6819,3 +6819,42 @@ a requirement phrased without a signal word is not a line to answer;
 "questions to ask" cover the posting's omissions, not the company's
 culture — that is what the person's contacts and notes are for. No
 migration.
+
+## ADR-247 - Your data is yours: one export of every table the Job Seeker keeps about a person, under their own RLS
+
+Date: 2026-09-02
+
+The complaints this answers are about power, not features: accounts
+restricted without explanation, support unreachable, data that trains
+someone's model and sells someone's ads, and no way to leave with what
+you put in. This product has no suspension mechanism, trains nothing and
+sells nothing; what it owed the person was proof — a way to take
+everything out at any time.
+
+`lib/job-seeker/export.ts` is the roster: every `job_seeker_*` table
+that holds personal rows, in order, with the columns to copy (`*` except
+for uploads, whose bytes are downloaded per file from the Resumes page
+rather than inlined into a JSON document) — and the tables under the
+prefix that hold no personal rows, named with the reason (the posting
+sightings ledger: public facts, one row per URL, shared by everyone).
+The roster test reads the migrations and fails when a `job_seeker_*`
+table appears in neither list, so a new personal table cannot silently
+fall outside the export.
+
+`GET /api/job-seeker/export` reads each roster table through the
+caller's own client — organization-scoped, RLS-narrowed to their rows,
+up to 5,000 rows per table plus one to detect truncation — and answers
+one JSON attachment: a manifest (exported-at, the limit, one outcome per
+table with its count, whether it was truncated, and the reason if it
+could not be read) and the rows exactly as stored. A table that cannot
+be read is named in the manifest and the export still answers with
+everything else; nothing is reworded, summarised or withheld, and
+nothing is written. The card "Your data is yours" on Job Preferences
+lists the roster and carries the one link.
+
+Bounds: an export is a read and leaves no activity row — the activity
+event type is an enum, and adding a value is a migration this increment
+does not need; a row cap of 5,000 per table is printed in the manifest
+rather than paged, because an export that needs paging is a different
+product (a scheduled archive) and the tables here are person-sized.
+No migration.

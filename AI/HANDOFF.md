@@ -2,7 +2,26 @@
 
 Last updated: 2026-09-02
 
-## Newest (2026-09-02, latest+68): the interview prep sheet (ADR-246)
+## Newest (2026-09-02, latest+69): your data is yours (ADR-247)
+
+THE ROSTER IS THE CONTRACT. `job-seeker-export.test.ts` reads every
+migration and fails when a `job_seeker_*` table is in neither
+`EXPORT_TABLES` nor `NOT_PERSONAL`. When you add a personal table, add it
+to the roster in the same change; when you add a shared-facts table, add
+it to `NOT_PERSONAL` with the reason. Never inline a bytea column —
+uploads list explicit columns for exactly that reason, and the route
+test asserts no select names `data`.
+
+THE EXPORT IS A READ. It writes no row and records no activity event
+(the event type is an enum; adding a value is a migration). A table
+that cannot be read is named in the manifest with the reason; the
+export never fails as a whole because one table did.
+
+HOSTED: nothing to apply for this increment. Still pending from #505
+(increments 2–4): scope=application-transitions then
+scope=application-kit, in that order, after merge.
+
+## Older (2026-09-02, latest+68): the interview prep sheet (ADR-246)
 
 THE SHEET IS COMPOSED; ONLY THE QUESTIONS LANE GENERATES. `buildPrepSheet`
 is pure and reads nothing but recorded rows and the posting text. The

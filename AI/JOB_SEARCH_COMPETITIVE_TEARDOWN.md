@@ -153,7 +153,7 @@ listed so the count stays honest, not built.
 | 21 | Indeed postings inside the search | **GATED** (JSearch, ADR-184); deep link-out today (ADR-169) |
 | 22 | Profile and job preferences | **HAVE** |
 | 23 | Mobile app | **HAVE** responsive |
-| 24 | Account and data controls | **BUILD 7** export of every table the product writes about you |
+| 24 | Account and data controls | **HAVE** (ADR-247) export of every table the product writes about you |
 | 25 | Reposting old adverts as new | **BUILD 1** — counted as re-datings, never shown as new |
 
 ### 1C. The other popular boards
@@ -183,7 +183,7 @@ listed so the count stays honest, not built.
 | 21 | Staffing-agency filter | all (none) | **HAVE** (ADR-242) agency-likely from the company name, labeled derived |
 | 22 | Visa sponsorship stated / not | all (none) | **HAVE** (ADR-242) sponsorship facet from the posting text |
 | 23 | Skills gap across your target roles | all (none) | **HAVE** (ADR-245) |
-| 24 | Data export | all (partial) | **BUILD 7** |
+| 24 | Data export | all (partial) | **HAVE** (ADR-247) |
 | 25 | Cover letters that cannot invent experience | all (none) | **HAVE** fact-only baseline; **BUILD 8** polish checked against it, **GATED** |
 
 ---
@@ -216,8 +216,8 @@ listed so the count stays honest, not built.
 | 20 | Expired jobs still listed | reviewers | Closing date passed → likely stale; a bounded "still open?" recheck of the posting URL | **BUILD 1** / **BUILD 9** |
 | 21 | Cannot withdraw or annotate after applying | reviewers | Close with a reason at any stage; notes always editable | **HAVE** / **HAVE** (ADR-243) |
 | 22 | Saved jobs disappear when the posting is removed | reviewers | A saved job is a row with the posting snapshot, not a link | **HAVE** |
-| 23 | Your data trains their models and sells ads | press | No model trained here, nothing sold; export of every table about you | **BUILD 7** |
-| 24 | Support is unreachable; accounts restricted without explanation | reviewers | Your data is exportable at all times; no account-level restriction exists in this product | **BUILD 7** |
+| 23 | Your data trains their models and sells ads | press | No model trained here, nothing sold; export of every table about you | **HAVE** (ADR-247) |
+| 24 | Support is unreachable; accounts restricted without explanation | reviewers | Your data is exportable at all times; no account-level restriction exists in this product | **HAVE** (ADR-247) |
 | 25 | Interview prep is a Premium AI upsell | comparisons | A prep sheet composed from your own facts — matched strengths, gaps to prepare, relevant history, contacts, notes; model questions only when a provider exists, labeled | **HAVE** (ADR-246) |
 
 ### 2B. Indeed
@@ -231,7 +231,7 @@ listed so the count stays honest, not built.
 | 5 | Search returns unrelated jobs; sponsored listings dominate | Trustpilot reviewers, *recurring* | No paid placement; deterministic filters; explained score | **HAVE** |
 | 6 | "Estimated salary" and wrong pay periods (a seasonal stipend shown as monthly) | reviewers | Never an estimate; the parsed figure prints its period and source text | **HAVE** (ADR-242) |
 | 7 | Location and remote filters wrong | reviewers | Radius with resolved centre and honest exclusions; unstated kept | **HAVE** |
-| 8 | Account suspended without warning or reason | reviewers, BBB, *recurring* | No suspension mechanism exists here; your data is exportable | **BUILD 7** |
+| 8 | Account suspended without warning or reason | reviewers, BBB, *recurring* | No suspension mechanism exists here; your data is exportable | **HAVE** (ADR-247) |
 | 9 | Support answers with automated replies | reviewers | Every refusal in this product carries its reason in words | **HAVE** (by design) |
 | 10 | Assessments and skills tests forced on applicants | reviewers | None | **N/A** |
 | 11 | Indeed Resume mangles formatting | reviewers | Fact-only builders produce plain, ATS-safe text; versions kept | **HAVE** |
@@ -276,7 +276,7 @@ listed so the count stays honest, not built.
 | 20 | Visa sponsorship never stated | all | Sponsorship facet from the posting text | **HAVE** (ADR-242) |
 | 21 | No interview preparation from what you already told the site | all | Prep sheet | **HAVE** (ADR-246) |
 | 22 | No view of the skills that keep costing you | all | Skills gap across target jobs | **HAVE** (ADR-245) |
-| 23 | Data locked in | all | Export | **BUILD 7** |
+| 23 | Data locked in | all | Export | **HAVE** (ADR-247) |
 | 24 | AI cover letters invent experience | all | Fact-only baseline; polish checked against it | **HAVE** / **BUILD 8** |
 | 25 | You cannot tell whether a posting is still open | all | Closing date passed → stale; a bounded recheck | **BUILD 1** / **BUILD 9** |
 
@@ -296,7 +296,7 @@ apply scope with a postflight. Status is updated here as each lands.
 | 4 | ADR-244 | **Application kit**: the screening answers you keep (authorization, sponsorship, relocation, start date, notice, expectations), copy-ready ATS blocks from your profile, and a requirements check per posting | **SHIPPED** |
 | 5 | ADR-245 | **What keeps costing you**: the skills gap across your target and saved jobs ranked by frequency, and your own history with each company on every result | **SHIPPED** |
 | 6 | ADR-246 | **Interview prep sheet** composed from your own facts; model-generated questions only when a provider exists, labeled | **SHIPPED** |
-| 7 | ADR-247 | **Your data is yours**: an export of every table the Job Seeker writes about you, under your own RLS | planned |
+| 7 | ADR-247 | **Your data is yours**: an export of every table the Job Seeker writes about you, under your own RLS | **SHIPPED** |
 | 8 | ADR-248 | **Polish that cannot invent**: model-polished resume and cover-letter variants through the existing provider path, checked term by term against the fact-only baseline; **Not Connected** without a credential | planned |
 | 9 | ADR-249 | **Still open?**: a bounded, owner-safe recheck of a posting URL (public https only, no private addresses, no body stored) recorded on the sightings row | planned |
 
