@@ -35,6 +35,7 @@ import {
   toContactHygieneView,
   type CrmContactHygieneRow,
 } from "@/lib/services/trust";
+import { composeKnowledgeAnswer, toKbSearchHit, type CrmKbSearchRow } from "@/lib/services/knowledge";
 import {
   ApiRequestError,
   databaseErrorResponse,
@@ -182,6 +183,26 @@ export async function POST(request: Request) {
       return jsonNoStore({
         skill,
         answer: composeHelpDeskAnswer({ open: summary.open, overdue: summary.overdue, late }),
+      });
+    }
+
+    if (skill === "knowledge") {
+      const [terms, search, all] = await Promise.all([
+        client.rpc("crm_kb_terms", { p_query: question }),
+        client.rpc("crm_kb_search", { p_organization: organizationId, p_query: question }).limit(10),
+        client.from("crm_kb_articles").select("id").eq("organization_id", organizationId).limit(5000),
+      ]);
+      if (terms.error) return databaseErrorResponse(terms.error);
+      if (search.error) return databaseErrorResponse(search.error);
+      if (all.error) return databaseErrorResponse(all.error);
+      const hits = ((search.data ?? []) as unknown as CrmKbSearchRow[]).map(toKbSearchHit);
+      return jsonNoStore({
+        skill,
+        answer: composeKnowledgeAnswer({
+          terms: ((terms.data ?? []) as unknown as Array<string | { crm_kb_terms: string }>).map((row) => (typeof row === "string" ? row : row.crm_kb_terms)),
+          total: (all.data ?? []).length,
+          hits: hits.map((hit) => ({ title: hit.title, audience: hit.audience, published: hit.publishedAt !== null, excerpt: hit.excerpt, rank: hit.rank })),
+        }),
       });
     }
 

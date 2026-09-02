@@ -94,6 +94,7 @@ on:
           - nothing-hidden
           - customers-side
           - trust
+          - knowledge-base
           - probe
 permissions:
   actions: read
@@ -1822,6 +1823,22 @@ jobs:
           psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
           psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/postflight/trust.sql
           echo "Trust applied; forecast scenario inputs with the factor printed, and the contact hygiene report."
+
+      - name: Apply the knowledge base (scope=knowledge-base)
+        if: ${{ inputs.scope == 'knowledge-base' }}
+        run: |
+          VERSION=20260902000800_knowledge_base
+          FILE="supabase/migrations/${VERSION}.sql"
+          sha256sum "$FILE"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied "${VERSION%%_*}"
+          else
+            npx supabase migration repair --status applied "${VERSION%%_*}" --db-url "$DB_URL"
+          fi
+          psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/postflight/knowledge-base.sql
+          echo "Knowledge base applied; articles with a printed search rank, the customer's help read, and the visit calendar."
       - name: Normalize exact legacy bot ACLs (scope=bot-legacy-acl-normalization)
         if: ${{ inputs.scope == 'bot-legacy-acl-normalization' }}
         run: |

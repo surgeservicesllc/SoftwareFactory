@@ -1,4 +1,5 @@
 import {
+  BookOpen,
   Sparkles,
   ListChecks,
   Gauge,
@@ -159,6 +160,12 @@ export const SERVICES_NAVIGATION: readonly ServicesNavItem[] = [
     label: "Customer Portal",
     description: "Invitations, and what customers asked for",
     icon: UserRoundCheck,
+  },
+  {
+    href: `${SERVICES_ROOT}/knowledge`,
+    label: "Knowledge",
+    description: "Answers written once, read by staff and customers",
+    icon: BookOpen,
   },
   {
     href: `${SERVICES_ROOT}/dashboards`,

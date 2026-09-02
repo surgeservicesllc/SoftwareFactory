@@ -54,6 +54,17 @@ type Visit = {
 
 type MyRating = { workOrderId: string; score: number; comment: string | null; submittedAt: string };
 
+type HelpArticle = {
+  id: string;
+  slug: string;
+  title: string;
+  category: string | null;
+  body: string;
+  publishedAt: string;
+  rank: number;
+  excerpt: string;
+};
+
 type MyMessage = {
   id: string;
   requestId: string | null;
@@ -197,7 +208,8 @@ type Tab =
   | "visits"
   | "documents"
   | "requests"
-  | "messages";
+  | "messages"
+  | "help";
 
 const REQUEST_KINDS = ["service", "reschedule", "question", "complaint", "cancel", "quote"] as const;
 
@@ -328,6 +340,11 @@ export function CustomerPortalPanel() {
   const [claiming, setClaiming] = useState(false);
   const [tab, setTab] = useState<Tab>("overview");
 
+  const [articles, setArticles] = useState<HelpArticle[]>([]);
+  const [helpQuery, setHelpQuery] = useState("");
+  const [helpAsked, setHelpAsked] = useState("");
+  const [openArticle, setOpenArticle] = useState<string | null>(null);
+
   const [kind, setKind] = useState<(typeof REQUEST_KINDS)[number]>("service");
   const [summaryText, setSummaryText] = useState("");
   const [detail, setDetail] = useState("");
@@ -425,6 +442,24 @@ export function CustomerPortalPanel() {
       setLoadError("Your account could not be loaded.");
     }
   }, [siteFilter]);
+
+  const searchHelp = useCallback(async (query: string) => {
+    const suffix = query.trim().length > 0 ? `?q=${encodeURIComponent(query.trim())}` : "";
+    try {
+      const response = await fetch(`/api/customer-portal/articles${suffix}`, { headers: { accept: "application/json" } });
+      if (!response.ok) return;
+      const body = (await response.json()) as { articles?: HelpArticle[] };
+      setArticles(Array.isArray(body.articles) ? body.articles : []);
+      setHelpAsked(query.trim());
+    } catch {
+      // The rest of the portal stands; Help says so on its own tab.
+    }
+  }, []);
+
+  useEffect(() => {
+    const kickoff = window.setTimeout(() => void searchHelp(""), 0);
+    return () => window.clearTimeout(kickoff);
+  }, [searchHelp]);
 
   const rateVisit = useCallback(async () => {
     if (ratingFor === null) return;
@@ -695,6 +730,7 @@ export function CustomerPortalPanel() {
             ["documents", "Documents", documents.length],
             ["requests", "Requests", requests.length],
             ["messages", "Messages", messages.filter((message) => message.authorKind === "staff" && message.readAt === null).length || undefined],
+            ["help", "Help", articles.length || undefined],
           ] as const
         ).map(([key, label, count]) => (
           <button
@@ -1357,6 +1393,16 @@ export function CustomerPortalPanel() {
                       <td className="py-2.5 pr-3 text-muted">{visit.propertyLabel ?? "—"}</td>
                       <td className="py-2.5 pr-3 text-muted">
                         {visit.scheduledStart === null ? "—" : visit.scheduledStart.slice(0, 10)}
+                        {visit.completedAt === null && visit.scheduledStart !== null ? (
+                          <a
+                            href={`/api/customer-portal/visits/${visit.id}/calendar`}
+                            download
+                            className="ml-2 text-xs underline underline-offset-2"
+                            data-testid={`customer-portal-calendar-${visit.id}`}
+                          >
+                            Add to calendar
+                          </a>
+                        ) : null}
                       </td>
                       <td className="py-2.5 pr-3 text-muted">
                         {visit.completedAt === null ? "—" : visit.completedAt.slice(0, 10)}
@@ -1535,6 +1581,63 @@ export function CustomerPortalPanel() {
               Send
             </button>
           </div>
+        </Card>
+      ) : null}
+
+      {tab === "help" ? (
+        <Card>
+          <SectionTitle
+            title="Help"
+            description="Answers your service company has written for you. Search by a word from the topic; the ones that mention it come first."
+          />
+          <form
+            className="mt-3 flex flex-wrap items-end gap-2"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void searchHelp(helpQuery);
+            }}
+          >
+            <input
+              value={helpQuery}
+              onChange={(event) => setHelpQuery(event.target.value)}
+              className="min-w-[12rem] flex-1 rounded-lg border border-line px-2 py-1 text-sm"
+              placeholder="ants, invoice, rescheduling…"
+              aria-label="Search help"
+            />
+            <button type="submit" className="btn btn-secondary px-3 py-1.5 text-xs" data-testid="customer-portal-help-search">
+              Search
+            </button>
+          </form>
+          {articles.length === 0 ? (
+            <p className="mt-4 text-sm text-muted" data-testid="customer-portal-help-empty">
+              {helpAsked.length > 0
+                ? `Nothing written mentions “${helpAsked}”. Ask on the Messages tab and a person will answer.`
+                : "Nothing has been written for customers yet. Ask on the Messages tab and a person will answer."}
+            </p>
+          ) : (
+            <ul className="mt-3 divide-y divide-line" data-testid="customer-portal-help">
+              {articles.map((article) => (
+                <li key={article.id} className="py-3">
+                  <button
+                    type="button"
+                    className="text-left"
+                    onClick={() => setOpenArticle((current) => (current === article.id ? null : article.id))}
+                    aria-expanded={openArticle === article.id}
+                    data-testid={`customer-portal-article-${article.slug}`}
+                  >
+                    <span className="block font-medium text-foreground underline-offset-2 hover:underline">{article.title}</span>
+                    {article.category ? <span className="block text-xs text-faint">{article.category}</span> : null}
+                    {openArticle === article.id ? null : <span className="mt-1 block text-xs text-muted">{article.excerpt}</span>}
+                  </button>
+                  {openArticle === article.id ? (
+                    <p className="mt-2 whitespace-pre-line text-sm text-foreground" data-testid={`customer-portal-article-body-${article.slug}`}>
+                      {article.body}
+                    </p>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          )}
         </Card>
       ) : null}
 

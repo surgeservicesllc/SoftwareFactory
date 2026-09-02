@@ -91,6 +91,12 @@ export const COPILOT_SKILLS = [
     keywords: ["past their promise", "past promise", "sla", "help desk", "unanswered request", "late request", "requests are late", "waiting on us"],
   },
   {
+    id: "knowledge",
+    label: "What the knowledge base says",
+    example: "What do we tell customers about ants?",
+    keywords: ["what do we tell", "knowledge base", "help article", "article about", "how do we explain", "what do we say", "what does the article", "written about"],
+  },
+  {
     id: "stale_contacts",
     label: "Contacts the book should not trust",
     example: "Which contacts are stale?",
