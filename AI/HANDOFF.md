@@ -2,7 +2,39 @@
 
 Last updated: 2026-09-02
 
-## Newest (2026-09-02, latest+67): what keeps costing you (ADR-245)
+## Newest (2026-09-02, latest+68): the interview prep sheet (ADR-246)
+
+THE SHEET IS COMPOSED; ONLY THE QUESTIONS LANE GENERATES. `buildPrepSheet`
+is pure and reads nothing but recorded rows and the posting text. The
+model is asked only on POST, only when the person clicks, and only when
+`resolveProviderConfiguration("anthropic")` is configured, not disabled,
+and has a model — the same gate as the resume review. Do not call it
+from GET; a page open must never bill.
+
+LABELS ARE THE PRODUCT. Not Connected names the environment variable
+(never a value); generated answers carry the model's name and "none of
+them is a recorded fact"; an unreadable answer or a thrown call is
+`failed`, never `generated`. `parseQuestions` accepts a bare or fenced
+JSON array of strings only.
+
+SHARED-TERM ORDER IS VOCABULARY ORDER. `relevantHistory` lists shared
+terms in the order the vocabulary names them (PostgreSQL before
+Kubernetes), which is deterministic and what the tests pin.
+
+CI FIX CARRIED ON #505: `job_seeker_record_application_transition()` is
+a SECURITY DEFINER trigger function and had default PUBLIC execute, which
+the schema security invariants caught (anon and service_role could
+execute it). The migration now revokes all on it from public, anon,
+authenticated and service_role before creating the trigger; the trigger
+still fires (the behavior suite proves it) because a trigger is fired by
+the table, not called. Every future definer trigger function needs the
+same revoke — copy it from `crm_record_contact_preference_change`.
+
+HOSTED: nothing to apply for this increment. Still pending from #505
+(increments 2–4): scope=application-transitions then
+scope=application-kit, in that order, after merge.
+
+## Older (2026-09-02, latest+67): what keeps costing you (ADR-245)
 
 THE GAP IS MEASURED AGAINST A PROFILE OR NOT AT ALL. Without a Career
 Profile the analytics route answers `skillsGap: null` and the basis says

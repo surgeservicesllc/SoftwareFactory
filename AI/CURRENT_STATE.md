@@ -1,5 +1,30 @@
 # Current state
 
+## 2026-09-02: JobSearch build-out — increment 6, the interview prep sheet (ADR-246)
+
+No migration. `lib/job-seeker/interview-prep.ts`: `matchedStrengths`
+(posting terms the profile records, with where and the role that used
+them), `gapsToPrepare` (vocabulary terms the profile lacks, as
+sentences), `relevantHistory` (entries sharing a term, most first,
+highlights verbatim), `questionsToAsk` (from completeness omissions and
+red flags, naming the phrase), `buildPrepSheet` (adds the unmet/unknown
+requirement lines, company memory, contacts, notes, `PREP_BASIS`).
+`lib/job-seeker/interview-questions.ts` (server-only): the model lane —
+`modelQuestionsAvailability` (Not Connected with the variable name),
+`interviewQuestionsPrompt`, `parseQuestions` (bare or fenced JSON array,
+≤ 10, ≤ 300 chars each), `generateInterviewQuestions` (generated /
+not_connected / failed, labeled with the model). Route
+`GET/POST /api/job-seeker/jobs/[jobId]/prep` (GET composes under RLS
+with the application embed, contacts by application, recorded postings
+for memory; POST is same-origin and asks the model on demand). Component
+`InterviewPrepSheet` (fetch on open; sections `prep-strengths`, `-gaps`,
+`-to-answer`, `-history`, `-questions`, `-memory`, `-contacts`,
+`-notes`, `-model`; "Ask the model for likely questions" only when
+available) mounted on every Interview Tracker in-progress row and on
+every application beside the requirements check. Tests:
+job-seeker-interview-prep 8, interview-questions 7, prep routes 4, prep
+panel 3; tsc, eslint and the production build clean.
+
 ## 2026-09-02: JobSearch build-out — increment 5, what keeps costing you (ADR-245)
 
 No migration. `lib/job-seeker/what-costs.ts`: `SKILL_VOCABULARY`

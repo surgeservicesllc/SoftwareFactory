@@ -6774,3 +6774,48 @@ learn rather than a stray word from a description. Company identity is
 the unifier's fold, so a subsidiary trading under another name is another
 company. No table is added; both views are arithmetic over rows that
 already exist.
+
+## ADR-246 - The interview prep sheet: composed from your own facts, with model questions in a labeled lane behind a credential
+
+Date: 2026-09-02
+
+"AI interview prep" is a Premium upsell on the boards, and what it sells
+is mostly a model asked to improvise about a posting. The person already
+told this product everything a prep sheet needs: their profile, their
+screening answers, the application, the people on it, what happened the
+last time they dealt with this employer — and the posting's own text.
+
+`lib/job-seeker/interview-prep.ts` composes the sheet from those and
+nothing else. Strengths are the posting's terms the profile records,
+each naming where it is recorded (skills, technologies, a certification)
+and the recorded role that used it. Gaps are the vocabulary terms the
+posting names that the profile does not (the ADR-245 vocabulary, so a
+gap is always a recognisable thing). Lines to answer are the posting's
+requirement sentences the kit could not mark met (ADR-244), each with
+its reason. History is the recorded employment entries that share a term
+with the posting, most shared first, highlights copied verbatim.
+Questions to ask are derived from what the posting failed to state
+(ADR-242's completeness: pay, place, work model, level, a real
+description) and from its red flags, each naming the phrase. Company
+memory (ADR-245), the application's contacts and the person's own notes
+complete it. The route `GET /api/job-seeker/jobs/[jobId]/prep` reads
+the caller's rows under RLS and composes; the sheet opens on each
+Interview Tracker row and on each application.
+
+The one generated section lives in its own lane,
+`lib/job-seeker/interview-questions.ts`, on the resume review's pattern
+(ADR-115): `POST …/prep` asks the model for likely questions only when
+the person clicks, so a page open never calls a provider; without a
+usable credential the section reads **Not Connected** with the
+environment variable that would enable it; with one, the questions come
+back labeled with the model that wrote them and the sentence that none
+of them is a recorded fact. An answer that is not a list, or a call that
+throws, is reported as failed — never as generated. The prompt hands the
+model the posting text and the sheet's own strengths and gaps and tells
+it not to invent facts; nothing from the model is written to a table.
+
+Bounds: the sheet is English-signal-word deterministic like the kit, so
+a requirement phrased without a signal word is not a line to answer;
+"questions to ask" cover the posting's omissions, not the company's
+culture — that is what the person's contacts and notes are for. No
+migration.

@@ -113,8 +113,15 @@ own PR, ADR, behavior test against the real chain, and hosted scope.
   every search card; `skillsGap` + `skillsGapBasis` on Analytics with
   "Skills that keep costing you". No migration. Closes LinkedIn 10/14,
   Indeed 5, Glassdoor 1, "skills gap" and "company reviews" rows.
-- [ ] Increment 6 (ADR-246): interview prep sheet from the person's own
-  facts; model questions only when a provider exists, labeled.
+- [x] Increment 6 (ADR-246): interview prep sheet — 2026-09-02.
+  `lib/job-seeker/interview-prep.ts` (strengths with where recorded,
+  gaps, requirement lines to answer, history verbatim, questions to ask
+  from the posting's omissions and red flags, company memory, contacts,
+  notes); `lib/job-seeker/interview-questions.ts` (model lane behind the
+  Anthropic credential, Not Connected otherwise, labeled, on demand);
+  `GET/POST /api/job-seeker/jobs/[jobId]/prep`; `InterviewPrepSheet`
+  on the Interview Tracker and on every application. No migration.
+  Closes LinkedIn 17, Glassdoor 2, "interview prep" rows.
 - [ ] Increment 7 (ADR-247): your data is yours — export of every table
   the Job Seeker writes about a person, under their own RLS.
 - [ ] Increment 8 (ADR-248): polish that cannot invent — model-polished

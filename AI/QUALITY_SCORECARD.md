@@ -2,6 +2,32 @@
 
 Last reviewed: 2026-09-02
 
+**Addendum, 2026-09-02 latest+68 - JobSearch build-out, increment 6: the interview prep sheet (ADR-246):**
+job-seeker-interview-prep 8 (strengths named with where recorded and
+the role that used them, nothing from an empty profile; gaps as
+sentences; history entries sharing a term with highlights verbatim;
+questions from each omitted fact and each red flag with the phrase, the
+level question only when the title states none, none when everything
+is stated; the full sheet with every section and its basis; a sheet
+from no application, no contacts and no profile). job-seeker-
+interview-questions 7 (bare and fenced arrays, trimmed, bounded,
+non-strings dropped; null for prose, an object, an empty or numeric
+list; Not Connected naming the variable with no call made; still Not
+Connected when the owner switched the provider off; generated and
+labeled with the model; the prompt carries the facts and forbids
+invention; failed, never generated, for prose or a thrown call).
+job-seeker-interview-prep-routes 4 (the sheet composed from the
+caller's rows with Not Connected reported; 404 for another person's
+job and 400 for a bad id; POST Not Connected without a credential;
+cross-origin refused). job-seeker-interview-prep-panel 3 (fetched on
+open and every section rendered with the model lane Not Connected;
+the model asked only on request and its answer labeled; the failure
+and no-profile states). Also on this branch: the schema security
+invariants caught the transition trigger function's default execute
+grant; revoked in the migration, trigger still firing under the
+behavior suite. No migration added; tsc, eslint and the production
+build clean.
+
 **Addendum, 2026-09-02 latest+67 - JobSearch build-out, increment 5: what keeps costing you (ADR-245):**
 job-seeker-what-costs 13 (terms named once on word boundaries and
 never inside another word or symbol; a duplicate-free vocabulary; the

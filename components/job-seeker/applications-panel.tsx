@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { Card, EmptyState, SectionTitle, StatusBadge } from "@/components/ui";
+import { InterviewPrepSheet } from "@/components/job-seeker/interview-prep";
 import type { JobView } from "@/components/job-seeker/jobs-panel";
 import { CLOSED_REASON_LABELS, CLOSED_REASONS, type ClosedReason } from "@/lib/job-seeker/silence";
 
@@ -447,6 +448,8 @@ export function JobSeekerApplicationsPanel() {
                       )}
                     </div>
                   </details>
+
+                  <InterviewPrepSheet jobId={job.id} />
 
                   <ApplicationDetailsEditor
                     // Re-seeded from the server's answer after every save.

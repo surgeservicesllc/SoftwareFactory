@@ -116,7 +116,7 @@ listed so the count stays honest, not built.
 | 14 | Company pages and follower insights | **N/A** (marketplace UGC); **HAVE** (ADR-245) your own history with the company from your own rows |
 | 15 | Recruiter InMail / messaging | **N/A** (employer side); Contacts & Outreach drafts you choose to send (HAVE) |
 | 16 | Premium: Top Applicant badge, who viewed, applicant insights | **N/A by design** — every insight this product has is computed and free; nothing is paywalled per feature |
-| 17 | Premium: AI interview prep | **BUILD 6** prep sheet from your own facts; **GATED** model-generated questions |
+| 17 | Premium: AI interview prep | **HAVE** (ADR-246) prep sheet from your own facts; **GATED** model-generated questions |
 | 18 | Premium: AI resume / cover-letter writing | **HAVE** fact-only builders (ADR-096); **BUILD 8** model polish with the non-fabrication check, **GATED** on a provider credential |
 | 19 | Apply on company site (external ATS hand-off) | **HAVE** link-out with viewed mark; **HAVE** (ADR-244) application kit for the re-entry every ATS demands |
 | 20 | Job collections / curated lists | **HAVE** saved searches (ADR-163 addendum) |
@@ -161,7 +161,7 @@ listed so the count stays honest, not built.
 | # | Feature | Board | Us |
 |---|---------|-------|----|
 | 1 | Company reviews behind a give-to-get wall | Glassdoor | **N/A by design** — no wall, no UGC; **HAVE** (ADR-245) your own history with the company |
-| 2 | Salaries and interview questions crowd-sourced | Glassdoor | **N/A** (UGC); **BUILD 6** prep sheet from your own facts |
+| 2 | Salaries and interview questions crowd-sourced | Glassdoor | **N/A** (UGC); **HAVE** (ADR-246) prep sheet from your own facts |
 | 3 | Job search mirrored from Indeed | Glassdoor | **HAVE** (dedupe keeps one card with every source) |
 | 4 | 1-Click Apply | ZipRecruiter | **N/A by design** (as 1A.2) |
 | 5 | AI matching ("Great match") | ZipRecruiter | **HAVE** printed arithmetic (ADR-163 addendum) |
@@ -218,7 +218,7 @@ listed so the count stays honest, not built.
 | 22 | Saved jobs disappear when the posting is removed | reviewers | A saved job is a row with the posting snapshot, not a link | **HAVE** |
 | 23 | Your data trains their models and sells ads | press | No model trained here, nothing sold; export of every table about you | **BUILD 7** |
 | 24 | Support is unreachable; accounts restricted without explanation | reviewers | Your data is exportable at all times; no account-level restriction exists in this product | **BUILD 7** |
-| 25 | Interview prep is a Premium AI upsell | comparisons | A prep sheet composed from your own facts — matched strengths, gaps to prepare, relevant history, contacts, notes; model questions only when a provider exists, labeled | **BUILD 6** |
+| 25 | Interview prep is a Premium AI upsell | comparisons | A prep sheet composed from your own facts — matched strengths, gaps to prepare, relevant history, contacts, notes; model questions only when a provider exists, labeled | **HAVE** (ADR-246) |
 
 ### 2B. Indeed
 
@@ -274,7 +274,7 @@ listed so the count stays honest, not built.
 | 18 | Compensation ranges too wide to mean anything | Wellfound | Parsed figure with the whole range printed | **HAVE** (ADR-242) |
 | 19 | Stale mirrored listings | SimplyHired | Freshness | **BUILD 1** |
 | 20 | Visa sponsorship never stated | all | Sponsorship facet from the posting text | **HAVE** (ADR-242) |
-| 21 | No interview preparation from what you already told the site | all | Prep sheet | **BUILD 6** |
+| 21 | No interview preparation from what you already told the site | all | Prep sheet | **HAVE** (ADR-246) |
 | 22 | No view of the skills that keep costing you | all | Skills gap across target jobs | **HAVE** (ADR-245) |
 | 23 | Data locked in | all | Export | **BUILD 7** |
 | 24 | AI cover letters invent experience | all | Fact-only baseline; polish checked against it | **HAVE** / **BUILD 8** |
@@ -295,7 +295,7 @@ apply scope with a postflight. Status is updated here as each lands.
 | 3 | ADR-243 | **Silence measured**: an append-only application transitions ledger, days-silent against your own median days-to-reply by source, a suggested follow-up date with the arithmetic, closure reasons, and a funnel of where your search stalls | **SHIPPED** |
 | 4 | ADR-244 | **Application kit**: the screening answers you keep (authorization, sponsorship, relocation, start date, notice, expectations), copy-ready ATS blocks from your profile, and a requirements check per posting | **SHIPPED** |
 | 5 | ADR-245 | **What keeps costing you**: the skills gap across your target and saved jobs ranked by frequency, and your own history with each company on every result | **SHIPPED** |
-| 6 | ADR-246 | **Interview prep sheet** composed from your own facts; model-generated questions only when a provider exists, labeled | planned |
+| 6 | ADR-246 | **Interview prep sheet** composed from your own facts; model-generated questions only when a provider exists, labeled | **SHIPPED** |
 | 7 | ADR-247 | **Your data is yours**: an export of every table the Job Seeker writes about you, under your own RLS | planned |
 | 8 | ADR-248 | **Polish that cannot invent**: model-polished resume and cover-letter variants through the existing provider path, checked term by term against the fact-only baseline; **Not Connected** without a credential | planned |
 | 9 | ADR-249 | **Still open?**: a bounded, owner-safe recheck of a posting URL (public https only, no private addresses, no body stored) recorded on the sightings row | planned |
