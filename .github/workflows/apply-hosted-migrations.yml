@@ -95,6 +95,7 @@ on:
           - customers-side
           - trust
           - knowledge-base
+          - forms-conditions
           - probe
 permissions:
   actions: read
@@ -1839,6 +1840,22 @@ jobs:
           psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
           psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/postflight/knowledge-base.sql
           echo "Knowledge base applied; articles with a printed search rank, the customer's help read, and the visit calendar."
+
+      - name: Apply forms conditions (scope=forms-conditions)
+        if: ${{ inputs.scope == 'forms-conditions' }}
+        run: |
+          VERSION=20260902000900_forms_conditions
+          FILE="supabase/migrations/${VERSION}.sql"
+          sha256sum "$FILE"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied "${VERSION%%_*}"
+          else
+            npx supabase migration repair --status applied "${VERSION%%_*}" --db-url "$DB_URL"
+          fi
+          psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/postflight/forms-conditions.sql
+          echo "Forms conditions applied; questions asked by earlier answers, completion counted over what is asked, and forms assigned by service type."
       - name: Normalize exact legacy bot ACLs (scope=bot-legacy-acl-normalization)
         if: ${{ inputs.scope == 'bot-legacy-acl-normalization' }}
         run: |

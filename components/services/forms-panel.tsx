@@ -4,8 +4,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ClipboardCheck } from "lucide-react";
 
 import { Card, Notice, PageHeader, SectionTitle } from "@/components/ui";
+import { FormAnswerSheet } from "@/components/services/form-answer-sheet";
+import { FormTemplateBuilder } from "@/components/services/form-template-builder";
 import type { FormsPayload, LicencesPayload, TimesheetsPayload } from "@/components/services/types";
 import { cn } from "@/lib/cn";
+import { describeCondition } from "@/lib/services/form-conditions";
 
 /**
  * Forms, timesheets and licences.
@@ -42,6 +45,8 @@ export function ServicesFormsPanel() {
   const [licences, setLicences] = useState<LicencesPayload | null>(null);
   const [listError, setListError] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("forms");
+  const [openInstance, setOpenInstance] = useState<string | null>(null);
+  const [building, setBuilding] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -150,7 +155,10 @@ export function ServicesFormsPanel() {
                     <th className="py-2 pr-3 font-medium">Assigned</th>
                     <th className="py-2 pr-3 font-medium">Completed</th>
                     <th className="py-2 pr-3 font-medium">Signature</th>
-                    <th className="py-2 font-medium">Status</th>
+                    <th className="py-2 pr-3 font-medium">Status</th>
+                    <th className="py-2 font-medium">
+                      <span className="sr-only">Open</span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-line">
@@ -182,12 +190,26 @@ export function ServicesFormsPanel() {
                           {instance.status.replace(/_/g, " ")}
                         </span>
                       </td>
+                      <td className="py-2.5">
+                        <button
+                          type="button"
+                          className="btn btn-secondary px-2.5 py-1 text-xs"
+                          onClick={() => setOpenInstance((current) => (current === instance.id ? null : instance.id))}
+                          aria-expanded={openInstance === instance.id}
+                          data-testid={`services-form-open-${instance.id}`}
+                        >
+                          {openInstance === instance.id ? "Close" : instance.status === "completed" ? "Read" : "Answer"}
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
           )}
+          {openInstance !== null ? (
+            <FormAnswerSheet key={openInstance} instanceId={openInstance} onChanged={() => void refresh()} />
+          ) : null}
         </Card>
       ) : null}
 
@@ -195,8 +217,25 @@ export function ServicesFormsPanel() {
         <Card>
           <SectionTitle
             title="Templates"
-            description="A template with forms assigned from it is versioned rather than edited — a report whose questions changed underneath it is not a report."
+            description="A template with forms assigned from it is versioned rather than edited — a report whose questions changed underneath it is not a report. A question can be asked only when an earlier one was answered a certain way; a service type named on a template gets it on every new visit."
           />
+          <button
+            type="button"
+            className="btn btn-primary mt-3 px-3 py-1.5 text-xs"
+            onClick={() => setBuilding((current) => !current)}
+            data-testid="services-forms-new-template"
+          >
+            {building ? "Close" : "New form"}
+          </button>
+          {building ? (
+            <FormTemplateBuilder
+              onCreated={() => {
+                setBuilding(false);
+                void refresh();
+              }}
+              onClose={() => setBuilding(false)}
+            />
+          ) : null}
           {(forms?.templates ?? []).length === 0 ? (
             <p className="mt-4 text-sm text-muted">No templates yet.</p>
           ) : (
@@ -219,7 +258,24 @@ export function ServicesFormsPanel() {
                         <span className="block text-xs text-faint">
                           version {template.version}
                           {template.active ? "" : " · retired"}
+                          {template.triggerServiceTypes.length > 0
+                            ? ` · assigned to new ${template.triggerServiceTypes.join(", ")} visits`
+                            : ""}
                         </span>
+                        {template.fields.some((field) => field.showWhen !== null) ? (
+                          <ul className="mt-1 text-xs text-muted" data-testid={`services-form-conditions-${template.id}`}>
+                            {template.fields
+                              .filter((field) => field.showWhen !== null && field.dependsOnFieldId !== null)
+                              .map((field) => {
+                                const parent = template.fields.find((entry) => entry.id === field.dependsOnFieldId);
+                                return (
+                                  <li key={field.id}>
+                                    “{field.label}” {field.showWhen !== null && parent !== undefined ? describeCondition(field.showWhen, parent.label) : ""}
+                                  </li>
+                                );
+                              })}
+                          </ul>
+                        ) : null}
                       </td>
                       <td className="py-2.5 pr-3 text-muted">{template.kind.replace(/_/g, " ")}</td>
                       <td className="py-2.5 pr-3 tabular-nums text-muted">{template.fields.length}</td>

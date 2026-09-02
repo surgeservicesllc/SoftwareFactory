@@ -154,7 +154,7 @@ honest, not built.
 | 11 | Form submission and signature capture in the field | **HAVE** (ADR-197, ADR-210) |
 | 12 | Payment collection in the field | **GATED** (card processor) |
 | 13 | Media / photo upload | **HAVE** (ADR-196) |
-| 14 | WorkWave Forms: templates, typed fields, service-type-triggered forms | **HAVE** (ADR-197); triggered-by-service-type: **PARTIAL** |
+| 14 | WorkWave Forms: templates, typed fields, service-type-triggered forms | **HAVE** (ADR-197); triggered-by-service-type: **HAVE** (ADR-238) — a template names service types and a new visit of one gets the form assigned by trigger, once |
 | 15 | Termite / WDI inspection reporting and diagrams | **HAVE** (ADR-205) + printable (close-out) |
 | 16 | Chemical tracking, EPA compliance logging | **HAVE** (ADR-192) |
 | 17 | Smart Trap integration | **GATED** (device vendor feed) |
@@ -284,7 +284,7 @@ with its status.
 | 10 | No email preview before sending notifications | admins | Sending blind | **HAVE** notices are composed and readable before any send (ADR-217); a rule's dry run shows the exact recipients and text before it is armed (ADR-232) |
 | 11 | "Not built for two-way communication" | reviewers | One-way messaging | **HAVE** (ADR-233) — two-way portal messages threaded on the account, immutable once sent, read marks on both sides |
 | 12 | Mobile app: no manager dashboards, no in-app alerts, dated navigation, low store ratings; invoices differ between desktop and mobile | technology directors, operations | Two products | **HAVE** one responsive product; the invoice print view is the same page at every width (close-out) |
-| 13 | Forms lack conditional logic; must print on specific paper; plain-paper printing is a paid module | operations, admins | Forms tooling | **HAVE** browser printing for labels, reports and invoices, free (ADR-214, close-out); conditional questions: **GAP** |
+| 13 | Forms lack conditional logic; must print on specific paper; plain-paper printing is a paid module | operations, admins | Forms tooling | **HAVE** browser printing for labels, reports and invoices, free (ADR-214, close-out); conditional questions: **HAVE** (ADR-238) — a question asked only when an earlier answer calls for it, completion counted over what is asked, the rule printed beside the question |
 | 14 | No 2FA / biometric login confirmed | reviewers | Account security | **RED — owner direction required** (ADR-234): MFA is a protected identity resource and authentication changes are RED under RISK_CLASSIFICATION, outside a general request; the exact enrolment scope is written in the backlog, ready for an explicit owner request |
 | 15 | No built-in GPS or time tracking; GPS is a paid add-on with manual fleet upload | reviewers | Field telemetry | **HAVE** timesheets (ADR-197); GPS **GATED** |
 | 16 | Integrations are bolt-ons; no QuickBooks/Xero; Zapier only on higher tiers | reviewers | Integration honesty | **PARTIAL** balanced journal export (ADR-220); registry (ADR-207) |
@@ -351,6 +351,7 @@ cadence: migration → routes → page → tests → PR → four real checks →
 | 31 | **The customer's side of the conversation** (ADR-233): post-visit rating in the portal, the request clock with per-kind promises, two-way portal messages | HubSpot 25, 36, 40, 42; PestPac 11; PestBoss 23 | **SHIPPED** |
 | 32 | **Trust** (ADR-234): forecast scenario inputs printed beside the figure, contact hygiene with reasons; TOTP recorded as RED, owner-gated | HubSpot 2, 10; PestPac 14 (gated) | **SHIPPED** (TOTP owner-gated) |
 | 33 | **What people look up** (ADR-237): a knowledge base written once and read by staff and customers, ranked by printed arithmetic; a calendar file for a booked visit; chemical-lot labels | HubSpot 10, 43; PestPac 13 | **SHIPPED** |
+| 34 | **The form asks the next question** (ADR-238): conditional questions checked by the database, completion counted over what is asked, forms assigned by a visit's service type; the answering sheet and the form builder | PestPac 14, complaint 13 | **SHIPPED** |
 
 **What stays outside this program, and why.** Sending (email, SMS, voice),
 charging (card, ACH, in-field), locating (geocoding, GPS), syncing

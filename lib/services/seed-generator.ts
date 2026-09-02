@@ -524,7 +524,12 @@ export type SeedFormTemplate = {
     required: boolean;
     helpText: string;
     options?: string[];
+    /** Asked only when the earlier question at this 1-based position was answered yes (ADR-238). */
+    dependsOnPosition?: number;
+    showWhen?: { op: "is_true" };
   }[];
+  /** New visits of these service types get this form assigned (ADR-238). */
+  triggerServiceTypes: string[];
 };
 
 export type SeedDataset = {
@@ -2374,12 +2379,16 @@ function formQuestions(index: number): SeedFormTemplate["fields"] {
       required: true,
       helpText: "Any evidence at all.",
     },
+    // The two questions that only make sense once activity was found are
+    // asked only then: the form asks the next question (ADR-238).
     {
       label: "Severity",
       fieldType: "select",
       required: false,
       helpText: "Where the site sits today.",
       options: ["none", "low", "moderate", "high"],
+      dependsOnPosition: 3,
+      showWhen: { op: "is_true" },
     },
     {
       label: "Pests observed",
@@ -2387,6 +2396,8 @@ function formQuestions(index: number): SeedFormTemplate["fields"] {
       required: false,
       helpText: "All that apply.",
       options: ["ants", "german roaches", "norway rats", "house mice", "bed bugs", "wasps"],
+      dependsOnPosition: 3,
+      showWhen: { op: "is_true" },
     },
     {
       label: "Next visit due",
@@ -2415,6 +2426,10 @@ function generateFormTemplate(random: Random, index: number): SeedFormTemplate {
     description: `${pick(random, ["Used on every quarterly visit", "Required by the account's compliance rule", "Filled out at the end of service", "Completed before treatment begins"])}.`,
     active: index % 19 !== 0,
     fields: formQuestions(index),
+    // A few templates are the form a service type calls for: a new visit of
+    // that type gets one assigned the moment it is created.
+    triggerServiceTypes:
+      index % 11 === 0 ? ["General pest"] : index % 13 === 0 ? ["Rodent control", "Rodent"] : [],
   };
 }
 

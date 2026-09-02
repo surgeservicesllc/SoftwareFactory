@@ -1,5 +1,48 @@
 # Current state
 
+## 2026-09-02: The form asks the next question (ADR-238)
+
+Increment 34 ships `20260902000900_forms_conditions.sql`:
+`crm_form_fields.depends_on_field_id` and `show_when` (jsonb; `answered`,
+`is_true`, `is_false`, `equals <value>`, `any_of [<values>]`, shape-checked
+with every operand test wrapped in `coalesce(…, false)`), a BEFORE trigger
+that requires the parent to be an earlier question of the same form with
+an op that fits its type and refuses a parent moving past its child;
+`crm_form_condition_met(jsonb, crm_form_answers)` and
+`crm_form_question_asked(instance, field)` (INVOKER; the rule up the whole
+chain, an unasked parent making every descendant unasked);
+`crm_form_instance_questions(instance)` (INVOKER; every question in order
+with `asked` and `answered` computed live); `crm_check_form_completeness`
+replaced to count only asked required questions; `crm_form_answers_check_asked`
+refusing an answer to a question the form is not asking; a hidden answer
+kept, not deleted. `crm_form_templates.trigger_service_types` (bounded by
+`crm_service_type_list_valid`) and `crm_work_orders_assign_forms` (AFTER
+INSERT, DEFINER) assigning each active matching template once, case-
+insensitively, with account, site, visit and technician. Routes: the form
+POST takes per-field `dependsOn` (1-based position) + `showWhen` and
+writes conditions second against resolved ids (a later parent refused
+before the database), templates take `triggerServiceTypes` on POST and
+PATCH; the instance GET carries `questions` (asked, answered, the rule in
+words) and `unansweredRequired` over asked questions only; the instance
+PATCH sends answers parents-first and names the not-asked refusal.
+`lib/services/form-conditions.ts` mirrors the rule for the page. Forms
+page: `FormAnswerSheet` (a question hidden the moment its parent's draft
+changes, the rule beside it, only asked answers sent, Complete waiting on
+asked required ones) and `FormTemplateBuilder` (conditions offered only
+against earlier questions with ops that fit; trigger service types);
+conditions in words and trigger types on the templates tab. Seed:
+Severity and Pests observed asked only when activity was found; every
+eleventh/thirteenth template assigned by service type. Tests:
+services-forms-conditions.behavior 4 (the condition's shape, same-form,
+earlier-only, op-fits-type, no-half, parent-cannot-move-past; asked up the
+chain, completion over what is asked, the not-asked refusal, the hidden
+answer kept; assignment by service type once with the visit's facts and
+none for a retired template or another type; grants), services-form-
+conditions 6, services-forms-conditions-routes 5, services-forms-
+conditions-panel 2. Seed audit 67/67; replay with the new postflight;
+runbook count 229; workflow 411,640 of 420,000; tsc and eslint clean.
+Hosted apply scope `forms-conditions` is dispatched after merge.
+
 ## 2026-09-02: What people look up (ADR-237)
 
 Increment 33 ships `20260902000800_knowledge_base.sql`: `crm_kb_articles`
@@ -37,8 +80,8 @@ assumed hour, filename; slug, rank explanation, composer),
 services-knowledge-routes 6, services-knowledge-panels 4. Seed: eight
 articles (67 tables); grants roster and RLS census 228; scope replay with
 the new postflight; runbook count 228; workflow 410,730 of 420,000; tsc
-and eslint clean. Hosted apply scope `knowledge-base` is dispatched after
-merge.
+and eslint clean. Hosted apply scope `knowledge-base`: run 33590201714
+succeeded on main `ea32e47`.
 
 ## 2026-09-02: scope=all's gate repaired (ADR-236)
 

@@ -89,7 +89,7 @@ const SPECS: Spec[] = [
   },
   {
     table: "crm_form_fields",
-    optional: ["help_text", "options"],
+    optional: ["help_text", "options", "depends_on_field_id", "show_when"],
     enumColumn: "field_type",
     parents: [{ column: "template_id", table: "crm_form_templates" }],
   },
