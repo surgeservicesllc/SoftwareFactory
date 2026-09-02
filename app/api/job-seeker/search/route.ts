@@ -24,7 +24,8 @@ import {
   type UnifiedFilters,
 } from "@/lib/job-seeker/board-search/unify";
 import { evaluateJob, EVALUATION_METHOD_LABEL } from "@/lib/job-seeker/evaluate";
-import { loadEvaluationInputs } from "@/lib/job-seeker/record";
+import { loadEvaluationInputs, loadRecordedPostings } from "@/lib/job-seeker/record";
+import { companyMemory } from "@/lib/job-seeker/what-costs";
 import { sealSearchResult } from "@/lib/job-seeker/search-result-token";
 import { supabaseBoundaryErrorResponse } from "@/lib/supabase/http";
 import { assertSameOriginRequest } from "@/lib/supabase/request";
@@ -325,7 +326,17 @@ export async function POST(request: Request) {
      * gets `match: null` and a basis saying so; scores computed over nothing
      * would be numbers wearing authority they do not have.
      */
-    const evaluation = await loadEvaluationInputs(client, activeOrganization.id);
+    const [evaluation, recorded] = await Promise.all([
+      loadEvaluationInputs(client, activeOrganization.id),
+      /*
+       * Company memory (ADR-245): the person's own recorded postings and
+       * applications, read once per search so every card can say what
+       * happened the last time they dealt with this employer. A failed
+       * read answers null and the basis line says so; it never fails the
+       * search and never invents a history.
+       */
+      loadRecordedPostings(client, activeOrganization.id),
+    ]);
     const minimumScore = parsed.data.filters?.minimumScore ?? null;
     if (minimumScore !== null && !evaluation.profileRecorded) {
       throw new ApiRequestError(
@@ -435,6 +446,14 @@ export async function POST(request: Request) {
         publishedOn: hit.publishedOn,
         titleStatesLevel: deriveSeniority(hit.job.title) !== null,
       }),
+      /*
+       * Your own history with this company (ADR-245): how many of its
+       * postings you recorded, how many you applied to, and how the most
+       * recent application went — from your rows, never from strangers'
+       * reviews. Null when you have no record with the company, or when
+       * the record could not be read (historyBasis says which).
+       */
+      history: recorded === null ? null : companyMemory(recorded, hit.job.company),
     }));
 
     /*
@@ -478,6 +497,10 @@ export async function POST(request: Request) {
         freshnessBasis: ledgerRead
           ? "Freshness is computed from each board's own dates and this product's sightings ledger; every verdict prints its numbers."
           : "Freshness is computed from each board's own dates only — the sightings ledger could not be read for this search.",
+        /** Where each card's company history came from, or that it could not be read. */
+        historyBasis: recorded === null
+          ? "Your history with each company could not be read for this search."
+          : `Your history with each company is read from your own recorded postings and applications (${recorded.length} recorded); nothing about an employer is asserted beyond what you recorded.`,
         /** How scores were produced, or that none could be. */
         matchBasis: evaluation.profileRecorded
           ? { computed: true as const, method: EVALUATION_METHOD_LABEL }

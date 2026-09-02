@@ -2,7 +2,145 @@
 
 Last updated: 2026-09-02
 
-## Newest (2026-09-02, latest+66): the application kit (ADR-244)
+## Newest (2026-09-02, latest+71): still open? (ADR-249) — the program is complete
+
+THE LEDGER IS THE ALLOW-LIST. The recheck route reads
+`read_posting_sightings` for the URL's key first and refuses (404) a URL
+the ledger has never seen; only then does `recheckPosting` run, and it
+refuses again (before any byte) unless the URL is https on a real public
+host whose every resolved address is public. Do not add a way to recheck
+an arbitrary URL; the two gates are the feature.
+
+REDIRECTS ARE NEVER FOLLOWED. `redirect: "manual"`; a 3xx is "moved"
+and decides nothing. A test that stubs fetch asserts the option.
+
+THE ANSWER IS DERIVED. 404/410 gone; 3xx moved; 2xx with a closure
+phrase gone (phrase quoted); other 2xx open — the note says "does not
+say the position is closed", not "open"; other 4xx/5xx blocked; no
+answer unreachable. `assessFreshness` folds a check under
+`RECHECK_VALID_DAYS` (7) in: gone → stale, open → at most aging with
+"that proves the page, not the vacancy", the rest printed only.
+
+TEN-MINUTE REUSE, TWICE. The route reuses a check under ten minutes old
+without fetching; the definer function returns the row unchanged for the
+same window even if a client calls it directly.
+
+`read_posting_sightings` was dropped and recreated (a return type cannot
+be altered); its grants are re-applied in the same migration and the
+posting-recheck postflight checks the new columns are in its result.
+
+HOSTED: scope=posting-recheck is dispatched after merge; record the run
+id here and in CURRENT_STATE. Also on this branch: scope=document-polish
+(increment 8). #505 (increments 2–4) is merged as d85a759; its scopes
+application-transitions (run 33636521077) and application-kit (run
+33636602923) are applied.
+
+## Older (2026-09-02, latest+70): polish that cannot invent (ADR-248)
+
+REJECTED MEANS NOT STORED. `generatePolishedDocument` returns `rejected`
+with the check when any term, number or mid-sentence name in the
+model's text is absent from the baseline and the profile's terms; the
+route inserts nothing for it and returns the violations without the
+rejected text. The table enforces the same: a polished row needs a
+model and a check whose `passed` is true (`origin_consistent`,
+`polish_passed`), and a baseline row may carry neither.
+
+THE BASELINE IS BUILT FRESH. Polish reads the profile and the job and
+builds the fact-only document at request time, so the check compares
+against exactly what the model was given — never against an older
+stored version.
+
+ONE MODEL LANE. `model-lane.ts` holds the gate (`modelLane`), the
+credential read (`modelLaneCredential`), the SDK factory and the
+response-text helper; interview questions and polish both use it. A
+third lane copies the same four imports and adds nothing of its own.
+
+BULLETS ARE NOT WORDS. The name pass skips the first word of every
+sentence and treats `•`, `-`, `–`, `—`, `*` as markers rather than
+words, so the verb after a bullet is not flagged as an invented name.
+The behavior suite accepts either check name for an unknown origin,
+because Postgres reports whichever fails first.
+
+HOSTED: scope=document-polish is dispatched after merge; record the run
+id here and in CURRENT_STATE. #505 (increments 2–4) is merged as d85a759;
+its scopes application-transitions (run 33636521077) and
+application-kit (run 33636602923) are applied.
+
+## Older (2026-09-02, latest+69): your data is yours (ADR-247)
+
+THE ROSTER IS THE CONTRACT. `job-seeker-export.test.ts` reads every
+migration and fails when a `job_seeker_*` table is in neither
+`EXPORT_TABLES` nor `NOT_PERSONAL`. When you add a personal table, add it
+to the roster in the same change; when you add a shared-facts table, add
+it to `NOT_PERSONAL` with the reason. Never inline a bytea column —
+uploads list explicit columns for exactly that reason, and the route
+test asserts no select names `data`.
+
+THE EXPORT IS A READ. It writes no row and records no activity event
+(the event type is an enum; adding a value is a migration). A table
+that cannot be read is named in the manifest with the reason; the
+export never fails as a whole because one table did.
+
+HOSTED: nothing to apply for this increment. #505 (increments 2–4) is merged
+as d85a759; its scopes application-transitions (run 33636521077) and
+application-kit (run 33636602923) are applied.
+
+## Older (2026-09-02, latest+68): the interview prep sheet (ADR-246)
+
+THE SHEET IS COMPOSED; ONLY THE QUESTIONS LANE GENERATES. `buildPrepSheet`
+is pure and reads nothing but recorded rows and the posting text. The
+model is asked only on POST, only when the person clicks, and only when
+`resolveProviderConfiguration("anthropic")` is configured, not disabled,
+and has a model — the same gate as the resume review. Do not call it
+from GET; a page open must never bill.
+
+LABELS ARE THE PRODUCT. Not Connected names the environment variable
+(never a value); generated answers carry the model's name and "none of
+them is a recorded fact"; an unreadable answer or a thrown call is
+`failed`, never `generated`. `parseQuestions` accepts a bare or fenced
+JSON array of strings only.
+
+SHARED-TERM ORDER IS VOCABULARY ORDER. `relevantHistory` lists shared
+terms in the order the vocabulary names them (PostgreSQL before
+Kubernetes), which is deterministic and what the tests pin.
+
+CI FIX CARRIED ON #505: `job_seeker_record_application_transition()` is
+a SECURITY DEFINER trigger function and had default PUBLIC execute, which
+the schema security invariants caught (anon and service_role could
+execute it). The migration now revokes all on it from public, anon,
+authenticated and service_role before creating the trigger; the trigger
+still fires (the behavior suite proves it) because a trigger is fired by
+the table, not called. Every future definer trigger function needs the
+same revoke — copy it from `crm_record_contact_preference_change`.
+
+HOSTED: nothing to apply for this increment. #505 (increments 2–4) is merged
+as d85a759; its scopes application-transitions (run 33636521077) and
+application-kit (run 33636602923) are applied.
+
+## Older (2026-09-02, latest+67): what keeps costing you (ADR-245)
+
+THE GAP IS MEASURED AGAINST A PROFILE OR NOT AT ALL. Without a Career
+Profile the analytics route answers `skillsGap: null` and the basis says
+why; do not "helpfully" compute it against an empty list — every term in
+every posting would become a shortfall.
+
+ONE POSTING IS NOT A PATTERN. `GAP_MINIMUM_POSTINGS` is 2 and the page
+prints it. The vocabulary is fixed and matched on word boundaries with a
+lookbehind/lookahead that treats `.`, `+` and `#` as word characters, so
+"Go" is not inside "Google", "C" is not inside "C#", and "Node.js" and
+".NET" match whole.
+
+COMPANY MEMORY IS YOUR ROWS. `companyMemory` says only what the person's
+own applications say; an entry never applied to (no `applied_at`) counts
+as recorded, not applied. The search route reads the recorded postings
+once per search without descriptions; the metering test now expects that
+one read beside the one write.
+
+HOSTED: nothing to apply for this increment. #505 (increments 2–4) is merged
+as d85a759; its scopes application-transitions (run 33636521077) and
+application-kit (run 33636602923) are applied.
+
+## Older (2026-09-02, latest+66): the application kit (ADR-244)
 
 UNKNOWN IS A VERDICT. `checkRequirements` answers "unknown" whenever no
 recorded fact can decide a line, and the reason names the screening
@@ -27,9 +165,8 @@ Kit, after Cover Letters); the navigation test's expected list carries
 the comment. The harness scene `job-seeker-application-kit` is in the
 component-layout sweep.
 
-HOSTED: scope=application-kit is dispatched after merge; record the run
-id here and in CURRENT_STATE. Also pending from this PR:
-scope=application-transitions (increment 3). Applied already:
+HOSTED: scope=application-kit run 33636602923 succeeded on main d85a759
+(#505 squash, 2026-09-02 13:35 UTC). Also from #505: scope=application-transitions run 33636521077 (increment 3). Applied already:
 scope=posting-sightings run 33630908789 on main 79324f5 (#504).
 
 ## Older (2026-09-02, latest+65): silence measured (ADR-243)
@@ -57,8 +194,8 @@ with no submissions gets a zero row, and the other-member privacy test
 catches it. An application whose stage outran the ledger (recorded
 before this migration) says so and gets no date.
 
-HOSTED: scope=application-transitions is dispatched after merge; record
-the run id here and in CURRENT_STATE.
+HOSTED: scope=application-transitions run 33636521077 succeeded on main
+d85a759 (#505 squash, 2026-09-02 13:34 UTC).
 
 ## Older (2026-09-02, latest+64): posting signals (ADR-242)
 

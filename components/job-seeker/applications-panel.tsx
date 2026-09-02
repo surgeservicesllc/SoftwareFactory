@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { Card, EmptyState, SectionTitle, StatusBadge } from "@/components/ui";
+import { InterviewPrepSheet } from "@/components/job-seeker/interview-prep";
 import type { JobView } from "@/components/job-seeker/jobs-panel";
 import { CLOSED_REASON_LABELS, CLOSED_REASONS, type ClosedReason } from "@/lib/job-seeker/silence";
 
@@ -41,6 +42,19 @@ type DocumentView = {
   version: number;
   content: string;
   createdAt: string;
+  /** "baseline" from the fact-only builders, or "polished" by a model and checked (ADR-248). */
+  origin?: string;
+  model?: string | null;
+};
+
+/** Whether the polish lane is usable, and the honest label either way (ADR-248). */
+type PolishAvailability = { available: boolean; model: string | null; detail: string };
+
+type PolishOutcomeView = {
+  status: "polished" | "rejected" | "not_connected" | "failed";
+  model: string | null;
+  detail: string;
+  violations: Array<{ kind: string; value: string }>;
 };
 
 /** The posting's own requirement lines, each with a verdict naming the fact (ADR-244). */
@@ -135,6 +149,8 @@ export function JobSeekerApplicationsPanel() {
   const [problem, setProblem] = useState("");
   const [busyId, setBusyId] = useState("");
   const [documentsByApplication, setDocumentsByApplication] = useState<Record<string, DocumentView[]>>({});
+  const [polishByApplication, setPolishByApplication] = useState<Record<string, PolishAvailability>>({});
+  const [polishOutcome, setPolishOutcome] = useState<Record<string, PolishOutcomeView | "asking">>({});
   /** The reason chosen beside each Close button; "" is "not said" (ADR-243). */
   const [closeReasons, setCloseReasons] = useState<Record<string, "" | ClosedReason>>({});
   const [requirementsByJob, setRequirementsByJob] = useState<Record<string, RequirementsView | "failed">>({});
@@ -162,8 +178,9 @@ export function JobSeekerApplicationsPanel() {
     try {
       const response = await fetch(`/api/job-seeker/applications/${applicationId}/documents`, { cache: "no-store" });
       if (!response.ok) return;
-      const body = (await response.json()) as { documents?: DocumentView[] };
+      const body = (await response.json()) as { documents?: DocumentView[]; polish?: PolishAvailability };
       setDocumentsByApplication((current) => ({ ...current, [applicationId]: body.documents ?? [] }));
+      if (body.polish) setPolishByApplication((current) => ({ ...current, [applicationId]: body.polish! }));
     } catch {
       /* The viewer simply stays closed; the next click retries. */
     }
@@ -203,6 +220,37 @@ export function JobSeekerApplicationsPanel() {
       setProblem("Documents could not be generated.");
     } finally {
       setBusyId("");
+    }
+  }
+
+  /**
+   * Polish (ADR-248): the model rewords the fresh fact-only version; the
+   * server checks it term by term and stores it only when nothing was
+   * added. The outcome is shown either way, with the additions named.
+   */
+  async function polish(applicationId: string, kind: "resume" | "cover_letter") {
+    setPolishOutcome((current) => ({ ...current, [applicationId]: "asking" }));
+    try {
+      const response = await fetch(`/api/job-seeker/applications/${applicationId}/documents`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "polish", kind }),
+      });
+      const body = (await response.json()) as { polish?: PolishOutcomeView; documents?: DocumentView[]; error?: { message?: string } };
+      if (!response.ok || !body.polish) {
+        setPolishOutcome((current) => ({
+          ...current,
+          [applicationId]: { status: "failed", model: null, detail: body.error?.message ?? "The polish could not be requested.", violations: [] },
+        }));
+        return;
+      }
+      setPolishOutcome((current) => ({ ...current, [applicationId]: body.polish! }));
+      setDocumentsByApplication((current) => ({ ...current, [applicationId]: body.documents ?? current[applicationId] ?? [] }));
+    } catch {
+      setPolishOutcome((current) => ({
+        ...current,
+        [applicationId]: { status: "failed", model: null, detail: "The polish could not be requested.", violations: [] },
+      }));
     }
   }
 
@@ -448,6 +496,8 @@ export function JobSeekerApplicationsPanel() {
                     </div>
                   </details>
 
+                  <InterviewPrepSheet jobId={job.id} />
+
                   <ApplicationDetailsEditor
                     // Re-seeded from the server's answer after every save.
                     key={`${application.id}:${application.notes ?? ""}:${application.applicationUrl ?? ""}:${application.followUpAt ?? ""}`}
@@ -479,6 +529,11 @@ export function JobSeekerApplicationsPanel() {
                             <div key={document.id} className="rounded-md border border-[var(--border)] p-3">
                               <p className="text-xs font-semibold uppercase text-[var(--text-faint)]">
                                 {document.kind.replaceAll("_", " ")} · v{document.version}
+                                {document.origin === "polished" ? (
+                                  <span className="ml-2 normal-case text-[var(--accent)]" data-testid="polished-badge">
+                                    Polished by {document.model ?? "a model"}, checked against the fact-only version
+                                  </span>
+                                ) : null}
                               </p>
                               <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap text-xs text-[var(--text)]">
                                 {document.content}
@@ -491,6 +546,54 @@ export function JobSeekerApplicationsPanel() {
                           not recorded never appears, whatever the posting asks for. Every
                           version is stored immutably.
                         </p>
+                        <div className="space-y-2" data-testid="polish-lane">
+                          {polishByApplication[application.id] === undefined ? null : !polishByApplication[application.id]!.available ? (
+                            <p className="text-xs text-[var(--text-muted)]">
+                              Model polish: <span className="font-semibold">Not Connected</span> — {polishByApplication[application.id]!.detail}
+                            </p>
+                          ) : (
+                            <>
+                              <p className="text-xs text-[var(--text-muted)]">{polishByApplication[application.id]!.detail}</p>
+                              <div className="flex flex-wrap gap-2">
+                                <button
+                                  type="button"
+                                  className="btn btn-secondary btn-sm"
+                                  disabled={polishOutcome[application.id] === "asking"}
+                                  onClick={() => void polish(application.id, "resume")}
+                                >
+                                  Polish the resume with the model
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn btn-secondary btn-sm"
+                                  disabled={polishOutcome[application.id] === "asking"}
+                                  onClick={() => void polish(application.id, "cover_letter")}
+                                >
+                                  Polish the cover letter with the model
+                                </button>
+                              </div>
+                            </>
+                          )}
+                          {polishOutcome[application.id] === "asking" ? (
+                            <p className="text-xs text-[var(--text-faint)]">Polishing, then checking every term against the fact-only version…</p>
+                          ) : polishOutcome[application.id] !== undefined ? (
+                            <div
+                              className={`rounded-md border p-2 text-xs ${(polishOutcome[application.id] as PolishOutcomeView).status === "polished" ? "border-[var(--accent)] text-[var(--text)]" : "border-[var(--warning)] text-[var(--text)]"}`}
+                              data-testid="polish-outcome"
+                            >
+                              <p>{(polishOutcome[application.id] as PolishOutcomeView).detail}</p>
+                              {(polishOutcome[application.id] as PolishOutcomeView).violations.length > 0 ? (
+                                <ul className="mt-1 list-disc pl-4 text-[var(--warning)]">
+                                  {(polishOutcome[application.id] as PolishOutcomeView).violations.map((violation) => (
+                                    <li key={`${violation.kind}:${violation.value}`}>
+                                      {violation.value} — a {violation.kind} your record does not contain
+                                    </li>
+                                  ))}
+                                </ul>
+                              ) : null}
+                            </div>
+                          ) : null}
+                        </div>
                       </div>
                     </details>
                   ) : null}

@@ -34,6 +34,9 @@ function sighting(overrides: Partial<Sighting> = {}): Sighting {
     latestPostedOn: null,
     reposts: 0,
     closesOn: null,
+    lastCheckedAt: null,
+    lastCheckStatus: null,
+    lastCheckNote: null,
     ...overrides,
   };
 }
@@ -157,6 +160,54 @@ describe("toSighting", () => {
       latestPostedOn: null,
       reposts: 0,
       closesOn: "2026-09-30",
+      lastCheckedAt: null,
+      lastCheckStatus: null,
+      lastCheckNote: null,
     });
+  });
+});
+
+describe("assessFreshness with a recheck (ADR-249)", () => {
+  it("calls a page that is gone stale whatever the dates say, and prints the recheck", () => {
+    const verdict = assessFreshness({
+      publishedOn: daysAgo(2),
+      closesOn: null,
+      sighting: sighting({ lastCheckedAt: `${daysAgo(1)}T00:00:00Z`, lastCheckStatus: "gone", lastCheckNote: "HTTP 404 — the page is gone." }),
+      now: NOW,
+    });
+    expect(verdict.level).toBe("stale");
+    expect(verdict.reasons.at(-1)).toBe("Rechecked 1 day ago: HTTP 404 — the page is gone.");
+    expect(verdict.recheck).toEqual({ status: "gone", checkedDaysAgo: 1, note: "HTTP 404 — the page is gone." });
+  });
+
+  it("lets a page that answered lift a stale-by-age posting to aging, and says what that proves", () => {
+    const verdict = assessFreshness({
+      publishedOn: daysAgo(STALE_FROM_DAYS + 10),
+      closesOn: null,
+      sighting: sighting({ lastCheckedAt: `${daysAgo(0)}T06:00:00Z`, lastCheckStatus: "open", lastCheckNote: "HTTP 200 — the page is up and does not say the position is closed." }),
+      now: NOW,
+    });
+    expect(verdict.level).toBe("aging");
+    expect(verdict.reasons.at(-1)).toBe("Rechecked today: HTTP 200 — the page is up and does not say the position is closed. That proves the page, not the vacancy.");
+  });
+
+  it("prints a redirect, a refusal or no answer without changing the verdict, and ignores a check older than a week", () => {
+    const blocked = assessFreshness({
+      publishedOn: daysAgo(2),
+      closesOn: null,
+      sighting: sighting({ lastCheckedAt: `${daysAgo(0)}T06:00:00Z`, lastCheckStatus: "blocked", lastCheckNote: "HTTP 403 — the site refused an automated read; that says nothing about the posting." }),
+      now: NOW,
+    });
+    expect(blocked.level).toBe("fresh");
+    expect(blocked.reasons.at(-1)).toContain("Rechecked today: HTTP 403");
+    const old = assessFreshness({
+      publishedOn: daysAgo(2),
+      closesOn: null,
+      sighting: sighting({ lastCheckedAt: `${daysAgo(9)}T00:00:00Z`, lastCheckStatus: "gone", lastCheckNote: "HTTP 404 — the page is gone." }),
+      now: NOW,
+    });
+    expect(old.level).toBe("fresh");
+    expect(old.recheck).toBeNull();
+    expect(old.reasons.some((reason) => reason.startsWith("Rechecked"))).toBe(false);
   });
 });

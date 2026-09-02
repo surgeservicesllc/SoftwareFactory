@@ -7,6 +7,7 @@ import { useSearchParams } from "next/navigation";
 import { JobSeekerAnalyticsPanel } from "@/components/job-seeker/analytics-panel";
 import { JobSeekerFollowUpPanel } from "@/components/job-seeker/follow-up-panel";
 import { JobSeekerApplicationsPanel } from "@/components/job-seeker/applications-panel";
+import { JobSeekerDataExportCard } from "@/components/job-seeker/data-export-card";
 import { JobSeekerJobsPanel } from "@/components/job-seeker/jobs-panel";
 import { JobSeekerPreferencesForm, type PreferencesView } from "@/components/job-seeker/preferences-form";
 import { JobSeekerProfileForm, type ProfileView } from "@/components/job-seeker/profile-form";
@@ -149,7 +150,10 @@ export function JobSeekerConsole({ section: fixedSection }: { section?: SectionK
       ) : section === "profile" ? (
         <JobSeekerProfileForm initial={profile} onSaved={setProfile} />
       ) : section === "preferences" ? (
-        <JobSeekerPreferencesForm initial={preferences} onSaved={setPreferences} />
+        <div className="space-y-6">
+          <JobSeekerPreferencesForm initial={preferences} onSaved={setPreferences} />
+          <JobSeekerDataExportCard />
+        </div>
       ) : section === "discovery" ? (
         <JobSeekerJobsPanel />
       ) : section === "applications" ? (

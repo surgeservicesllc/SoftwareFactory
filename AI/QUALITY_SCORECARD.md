@@ -2,6 +2,116 @@
 
 Last reviewed: 2026-09-02
 
+**Addendum, 2026-09-02 latest+71 - JobSearch build-out, increment 9: still open? (ADR-249):**
+job-seeker-recheck 8 (a public https URL accepted and every other
+shape refused by name; every private, loopback, link-local,
+carrier-grade, unique-local, multicast, mapped and documentation range
+rejected and public ranges accepted; gone, moved, blocked and open
+named with the HTTP status and a closure phrase quoted; refusal before
+any byte for a non-https URL, a private resolved address and an empty
+resolution; one fetch with manual redirects classified; the body bound
+proven with a phrase beyond and before the cap; unreachable, never a
+throw, for an unresolved host or a failed fetch). job-seeker-freshness
++3 (gone makes stale and prints the recheck; open lifts stale-by-age to
+aging with the proof sentence; blocked printed without changing the
+verdict and a week-old check ignored). job-seeker-recheck-route 4 (a
+known posting rechecked, recorded through the definer and folded into
+the verdict; a check under ten minutes reused without a read; an unseen
+posting and a non-public URL refused before any read; cross-origin
+refused). job-seeker-recheck.behavior 4 (recorded on the existing row
+and read with the sighting; reused under ten minutes and rewritten
+after; the vocabulary, the key shape, the note length and an unknown
+key; anon refused and direct writes refused). Search panel +1 (the
+button, the answer line, the verdict replaced). Replay executes the new
+postflight (45); workflow 417,893 bytes of 420,000; runbook count 236;
+tsc, eslint and the production build clean.
+
+**Addendum, 2026-09-02 latest+70 - JobSearch build-out, increment 8: polish that cannot invent (ADR-248):**
+job-seeker-polish-check 4 (a faithful rewording passes with the counts
+described; an added skill, number and name each named with its kind
+while the baseline's own terms and names are not; a profile term the
+baseline did not print accepted and sentence-initial words not flagged;
+a thousands separator is the same number). job-seeker-polish 6 (a
+fenced answer unwrapped and a too-short one refused; Not Connected
+naming the variable with no call; a faithful rewording polished with
+the model and the check; an addition rejected with the additions named
+and "nothing was saved"; the baseline handed over under the
+rewrite-only instruction; failed, never polished, for prose or a thrown
+call). job-seeker-documents-polish-route 5 (provenance and the lane's
+availability on GET; a passing variant inserted as the next version
+with origin, model and check, the baseline and profile terms handed to
+the lane; a rejected variant with no insert and no text returned; Not
+Connected with no insert and a polish without a kind refused; the
+default generation untouched with no model involved). Panels +2 (Not
+Connected with the reason and no buttons; polish on request, a
+rejection's additions named, a stored polish badged).
+job-seeker-document-polish.behavior 3 (baseline defaults; a polished
+row needs its model and a passing check, an unknown origin and a
+rejected check refused; a baseline claiming a model refused). Replay
+executes the new postflight (44); workflow 417,015 bytes of 420,000;
+runbook count 235; tsc, eslint and the production build clean.
+
+**Addendum, 2026-09-02 latest+69 - JobSearch build-out, increment 7: your data is yours (ADR-247):**
+job-seeker-export 3 (the roster plus the not-personal list equals the
+job_seeker table census in the migrations with no duplicate; the
+uploads entry names its columns and none is the bytes; the manifest
+carries the outcomes, the limit, the not-personal ledger and the
+basis, and the filename is dated). job-seeker-export-route 3 (every
+roster table read in order through the caller's client with every
+`eq` scoped to their organization; a failed table named with the
+reason and an empty list, a table over the cap reported truncated at
+the cap; no select names the bytes column while the uploads metadata
+is read; a signed-out caller refused with no attachment header).
+job-seeker-data-export-card 1 (the link with `download`, one roster
+item per table, the not-personal reason printed). Console suite
+unchanged and green with the card mounted. No migration; tsc, eslint
+and the production build clean.
+
+**Addendum, 2026-09-02 latest+68 - JobSearch build-out, increment 6: the interview prep sheet (ADR-246):**
+job-seeker-interview-prep 8 (strengths named with where recorded and
+the role that used them, nothing from an empty profile; gaps as
+sentences; history entries sharing a term with highlights verbatim;
+questions from each omitted fact and each red flag with the phrase, the
+level question only when the title states none, none when everything
+is stated; the full sheet with every section and its basis; a sheet
+from no application, no contacts and no profile). job-seeker-
+interview-questions 7 (bare and fenced arrays, trimmed, bounded,
+non-strings dropped; null for prose, an object, an empty or numeric
+list; Not Connected naming the variable with no call made; still Not
+Connected when the owner switched the provider off; generated and
+labeled with the model; the prompt carries the facts and forbids
+invention; failed, never generated, for prose or a thrown call).
+job-seeker-interview-prep-routes 4 (the sheet composed from the
+caller's rows with Not Connected reported; 404 for another person's
+job and 400 for a bad id; POST Not Connected without a credential;
+cross-origin refused). job-seeker-interview-prep-panel 3 (fetched on
+open and every section rendered with the model lane Not Connected;
+the model asked only on request and its answer labeled; the failure
+and no-profile states). Also on this branch: the schema security
+invariants caught the transition trigger function's default execute
+grant; revoked in the migration, trigger still firing under the
+behavior suite. No migration added; tsc, eslint and the production
+build clean.
+
+**Addendum, 2026-09-02 latest+67 - JobSearch build-out, increment 5: what keeps costing you (ADR-245):**
+job-seeker-what-costs 13 (terms named once on word boundaries and
+never inside another word or symbol; a duplicate-free vocabulary; the
+gap ranked with the counts in the sentence, singletons left out, the
+profile's terms skipped case-insensitively, the limit honoured, nothing
+from nothing; company memory null without a record, recorded-and-
+applied-to-none, identity not spelling, the most recent application's
+outcome in the person's own reason, days silent against today, a reply
+named by stage, a never-applied entry not counted as applied).
+job-seeker-what-costs-routes 2 (the gap with its basis; null with the
+reason without a profile and when the profile cannot be read). Search
+route +2 (history on the card with the basis; null and the basis when
+the record cannot be read, the search still answering). Search panel
++1 (the sentence on the remembered card only, the basis once).
+Analytics panel +2 (the table with counts and the profile link per
+row; the profile pointer when there is nothing to measure against; the
+empty sentence). No migration; tsc, eslint and the production build
+clean.
+
 **Addendum, 2026-09-02 latest+66 - JobSearch build-out, increment 4: the application kit (ADR-244):**
 job-seeker-application-kit 11 (blocks verbatim and in order with the
 answered questions, nothing from nothing; requirement sentences kept

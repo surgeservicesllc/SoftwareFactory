@@ -129,6 +129,22 @@ type FreshnessView = {
   timesSeen: number;
   reposts: number;
   reasons: string[];
+  /** The recheck that bore on the verdict (ADR-249), when a recent one exists. */
+  recheck?: { status: string; checkedDaysAgo: number; note: string } | null;
+};
+
+/** The answer to "still open?" for one URL (ADR-249). */
+type RecheckView =
+  | "checking"
+  | { failed: true; message: string }
+  | { failed?: false; reused: boolean; status: string | null; note: string | null; minutesAgo: number | null };
+
+/** Your own history with the posting's company, from your own rows (ADR-245). */
+type CompanyMemoryView = {
+  company: string;
+  recorded: number;
+  applied: number;
+  sentence: string;
 };
 
 type UnifiedCard = UnifiedHit & {
@@ -136,6 +152,8 @@ type UnifiedCard = UnifiedHit & {
   freshness?: FreshnessView | null;
   /** What the posting's own text says about itself (ADR-242). */
   signals?: PostingSignals | null;
+  /** Null when you have no record with the company, or the record could not be read. */
+  history?: CompanyMemoryView | null;
 };
 
 type MatchBasis =
@@ -337,6 +355,8 @@ export function JobSearchPanel() {
    */
   const [hideStale, setHideStale] = useState(false);
   const [freshnessBasis, setFreshnessBasis] = useState<string | null>(null);
+  const [historyBasis, setHistoryBasis] = useState<string | null>(null);
+  const [recheckByUrl, setRecheckByUrl] = useState<Record<string, RecheckView>>({});
 
   const [savedSearches, setSavedSearches] = useState<SavedSearchView[]>([]);
   const [alertsChannel, setAlertsChannel] = useState<AlertsChannel | null>(null);
@@ -466,6 +486,7 @@ export function JobSearchPanel() {
           matchBasis?: MatchBasis;
           radius?: RadiusView | null;
           freshnessBasis?: string;
+          historyBasis?: string;
         };
         error?: { message?: string };
       };
@@ -484,6 +505,7 @@ export function JobSearchPanel() {
       setMatchBasis(payload.unified?.matchBasis ?? null);
       setRadiusReport(payload.unified?.radius ?? null);
       setFreshnessBasis(payload.unified?.freshnessBasis ?? null);
+      setHistoryBasis(payload.unified?.historyBasis ?? null);
     } catch {
       if (requestRef.current === ticket) {
         setSearchError("The search could not be run.");
@@ -584,6 +606,45 @@ export function JobSearchPanel() {
   }, []);
 
   /** Called when a posting is opened; records `viewed` once, quietly. */
+  /**
+   * Still open? (ADR-249): one bounded server-side read of the posting's
+   * URL, recorded on the shared sightings row; the card's freshness verdict
+   * is replaced by the server's, which folds the answer in.
+   */
+  const recheck = useCallback(async (card: UnifiedCard) => {
+    const url = card.job.url;
+    if (url === null) return;
+    setRecheckByUrl((current) => ({ ...current, [url]: "checking" }));
+    try {
+      const response = await fetch("/api/job-seeker/search/recheck", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ url, publishedOn: card.publishedOn, closesOn: card.closesOn }),
+      });
+      const body = (await response.json()) as {
+        reused?: boolean;
+        recheck?: { status: string | null; note: string | null; minutesAgo: number | null };
+        freshness?: FreshnessView;
+        error?: { message?: string };
+      };
+      if (!response.ok || !body.recheck) {
+        setRecheckByUrl((current) => ({ ...current, [url]: { failed: true, message: body.error?.message ?? "The posting could not be rechecked." } }));
+        return;
+      }
+      const answer = body.recheck;
+      setRecheckByUrl((current) => ({
+        ...current,
+        [url]: { reused: body.reused === true, status: answer.status, note: answer.note, minutesAgo: answer.minutesAgo },
+      }));
+      if (body.freshness) {
+        const freshness = body.freshness;
+        setServerUnified((current) => current === null ? current : current.map((entry) => (entry.job.url === url ? { ...entry, freshness } : entry)));
+      }
+    } catch {
+      setRecheckByUrl((current) => ({ ...current, [url]: { failed: true, message: "The posting could not be rechecked." } }));
+    }
+  }, []);
+
   const recordViewed = useCallback((jobUrl: string | null) => {
     if (jobUrl === null || marks === null || marks.viewed.has(jobUrl)) return;
     void toggleMark(jobUrl, "viewed", true);
@@ -1697,6 +1758,11 @@ export function JobSearchPanel() {
                     {freshnessBasis}
                   </p>
                 ) : null}
+                {historyBasis !== null && (visibleUnified ?? []).some((card) => card.history != null) ? (
+                  <p className="mt-2 text-xs text-[var(--muted)]" data-testid="history-basis">
+                    {historyBasis}
+                  </p>
+                ) : null}
                 {likelyStale > 0 ? (
                   <p className="mt-2 text-xs text-[var(--muted)]" data-testid="stale-summary">
                     {likelyStale} {likelyStale === 1 ? "posting looks" : "postings look"} likely stale —
@@ -1837,6 +1903,26 @@ export function JobSearchPanel() {
                                     : " — pay, place, work model, level, description and date."}
                                 </p>
                               ) : null}
+                              {card.history != null ? (
+                                <p className="text-xs text-[var(--text)]" data-testid="company-memory">
+                                  <span className="font-semibold">Your history:</span> {card.history.sentence}
+                                </p>
+                              ) : null}
+                              {card.job.url !== null && recheckByUrl[card.job.url] !== undefined ? (
+                                <p className="text-xs text-[var(--text)]" data-testid="recheck-result">
+                                  {recheckByUrl[card.job.url] === "checking"
+                                    ? "Reading the posting's page once, within six seconds…"
+                                    : (recheckByUrl[card.job.url] as Exclude<RecheckView, "checking">).failed
+                                      ? (recheckByUrl[card.job.url] as { failed: true; message: string }).message
+                                      : (() => {
+                                          const answer = recheckByUrl[card.job.url] as { reused: boolean; note: string | null; minutesAgo: number | null };
+                                          const when = answer.reused && answer.minutesAgo !== null
+                                            ? `Checked ${answer.minutesAgo} minute${answer.minutesAgo === 1 ? "" : "s"} ago`
+                                            : "Rechecked just now";
+                                          return `${when}: ${answer.note ?? "no answer was recorded."}`;
+                                        })()}
+                                </p>
+                              ) : null}
                               <p className="mt-1 flex flex-wrap gap-1.5">
                                 {card.match != null ? (
                                   <span
@@ -1908,6 +1994,18 @@ export function JobSearchPanel() {
                             </div>
                             <div className="flex shrink-0 flex-col items-end gap-1.5">
                               {renderSaveButton(key, primary.board, card.job, primary.saveToken)}
+                              {card.job.url !== null ? (
+                                <button
+                                  type="button"
+                                  data-testid="recheck-button"
+                                  aria-label={`Still open? ${card.job.title}`}
+                                  disabled={recheckByUrl[card.job.url] === "checking"}
+                                  onClick={() => void recheck(card)}
+                                  className="rounded-md border border-[var(--border)] px-2 py-1 text-xs text-[var(--muted)]"
+                                >
+                                  Still open?
+                                </button>
+                              ) : null}
                               {marks !== null && card.job.url !== null ? (
                                 <div className="flex items-center gap-1.5">
                                   <button

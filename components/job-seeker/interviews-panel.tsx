@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { CalendarCheck, Loader2 } from "lucide-react";
 
 import { Card, PageHeader, StatusBadge } from "@/components/ui";
+import { InterviewPrepSheet } from "@/components/job-seeker/interview-prep";
 import { stageLabel, type JobSeekerJobView } from "@/lib/job-seeker/overview";
 
 /**
@@ -58,7 +59,7 @@ export function JobSeekerInterviewsPanel() {
     <div className="space-y-6">
       <PageHeader
         title="Interview Tracker"
-        description="Every application that reached a conversation, and where each one ended."
+        description="Every application that reached a conversation, and where each one ended. Each one carries a prep sheet composed from your own facts."
       />
 
       {state.kind === "loading" ? (
@@ -101,6 +102,9 @@ export function JobSeekerInterviewsPanel() {
                     <StatusBadge tone="info" dot={false}>
                       {stageLabel(job.application?.stage ?? "")}
                     </StatusBadge>
+                    <div className="basis-full">
+                      <InterviewPrepSheet jobId={job.id} />
+                    </div>
                   </li>
                 ))}
               </ul>

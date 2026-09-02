@@ -6727,3 +6727,224 @@ it if true, because the evaluator (ADR-096) already treats unrecorded as
 absent and two rules would be worse than one. The navigation grows by
 one destination beyond the owner's design, Application Kit, because
 every form asks for it and no other page holds it.
+
+## ADR-245 - What keeps costing you: the skills gap across your recorded postings, and your own history with each company
+
+Date: 2026-09-02
+
+Two things no board tells a person. The skills badges LinkedIn prints
+("you have 6 of 10 skills") are per posting and read by nobody; what a
+person needs is the pattern — which terms the roles they keep recording
+keep naming that their profile does not list, ranked by how often that
+costs them. And company pages are strangers' reviews behind a give-to-get
+wall; what a person needs is their own memory — what happened the last
+time they dealt with this employer.
+
+Both are computed from the person's own rows under RLS, and nothing
+else. `lib/job-seeker/what-costs.ts` carries a fixed vocabulary of tools,
+languages and disciplines (`SKILL_VOCABULARY`, matched on word
+boundaries so "Go" is not read inside "Google" and "R" is not read inside
+"React"); `skillsGap` counts, per term, the recorded postings whose title
+or description name it, drops terms the profile lists (case-insensitive,
+skills and technologies together), leaves out any term named by fewer
+than `GAP_MINIMUM_POSTINGS` (2 — one posting is not a pattern; the page
+prints the threshold), ranks by postings then by qualified postings, and
+prints one sentence per row with the counts. `companyMemory` folds the
+company name through the same identity the unifier uses and says, from
+the person's applications: how many of the company's postings they
+recorded, how many they applied to, and how the most recent application
+went — closed with the person's own reason, heard back at a named stage,
+or silent for a counted number of days. A pipeline entry that was never
+applied to is not an application.
+
+The analytics route computes the gap only against a recorded Career
+Profile: a gap measured against nothing would list every term in every
+posting and call it a shortfall, so a missing or unreadable profile
+answers null with the reason. The search route reads the person's
+recorded postings once per search (`loadRecordedPostings`, without
+descriptions — memory never needs them) and attaches `history` to each
+unified card, null when there is no record with that company; a failed
+read answers null everywhere and `historyBasis` says so. Neither read can
+fail a search or the analytics page, and the search path still makes
+exactly one write.
+
+Bounds: the vocabulary is a fixed list, so a term outside it is never a
+"gap" — the price of every row being a recognisable thing to record or
+learn rather than a stray word from a description. Company identity is
+the unifier's fold, so a subsidiary trading under another name is another
+company. No table is added; both views are arithmetic over rows that
+already exist.
+
+## ADR-246 - The interview prep sheet: composed from your own facts, with model questions in a labeled lane behind a credential
+
+Date: 2026-09-02
+
+"AI interview prep" is a Premium upsell on the boards, and what it sells
+is mostly a model asked to improvise about a posting. The person already
+told this product everything a prep sheet needs: their profile, their
+screening answers, the application, the people on it, what happened the
+last time they dealt with this employer — and the posting's own text.
+
+`lib/job-seeker/interview-prep.ts` composes the sheet from those and
+nothing else. Strengths are the posting's terms the profile records,
+each naming where it is recorded (skills, technologies, a certification)
+and the recorded role that used it. Gaps are the vocabulary terms the
+posting names that the profile does not (the ADR-245 vocabulary, so a
+gap is always a recognisable thing). Lines to answer are the posting's
+requirement sentences the kit could not mark met (ADR-244), each with
+its reason. History is the recorded employment entries that share a term
+with the posting, most shared first, highlights copied verbatim.
+Questions to ask are derived from what the posting failed to state
+(ADR-242's completeness: pay, place, work model, level, a real
+description) and from its red flags, each naming the phrase. Company
+memory (ADR-245), the application's contacts and the person's own notes
+complete it. The route `GET /api/job-seeker/jobs/[jobId]/prep` reads
+the caller's rows under RLS and composes; the sheet opens on each
+Interview Tracker row and on each application.
+
+The one generated section lives in its own lane,
+`lib/job-seeker/interview-questions.ts`, on the resume review's pattern
+(ADR-115): `POST …/prep` asks the model for likely questions only when
+the person clicks, so a page open never calls a provider; without a
+usable credential the section reads **Not Connected** with the
+environment variable that would enable it; with one, the questions come
+back labeled with the model that wrote them and the sentence that none
+of them is a recorded fact. An answer that is not a list, or a call that
+throws, is reported as failed — never as generated. The prompt hands the
+model the posting text and the sheet's own strengths and gaps and tells
+it not to invent facts; nothing from the model is written to a table.
+
+Bounds: the sheet is English-signal-word deterministic like the kit, so
+a requirement phrased without a signal word is not a line to answer;
+"questions to ask" cover the posting's omissions, not the company's
+culture — that is what the person's contacts and notes are for. No
+migration.
+
+## ADR-247 - Your data is yours: one export of every table the Job Seeker keeps about a person, under their own RLS
+
+Date: 2026-09-02
+
+The complaints this answers are about power, not features: accounts
+restricted without explanation, support unreachable, data that trains
+someone's model and sells someone's ads, and no way to leave with what
+you put in. This product has no suspension mechanism, trains nothing and
+sells nothing; what it owed the person was proof — a way to take
+everything out at any time.
+
+`lib/job-seeker/export.ts` is the roster: every `job_seeker_*` table
+that holds personal rows, in order, with the columns to copy (`*` except
+for uploads, whose bytes are downloaded per file from the Resumes page
+rather than inlined into a JSON document) — and the tables under the
+prefix that hold no personal rows, named with the reason (the posting
+sightings ledger: public facts, one row per URL, shared by everyone).
+The roster test reads the migrations and fails when a `job_seeker_*`
+table appears in neither list, so a new personal table cannot silently
+fall outside the export.
+
+`GET /api/job-seeker/export` reads each roster table through the
+caller's own client — organization-scoped, RLS-narrowed to their rows,
+up to 5,000 rows per table plus one to detect truncation — and answers
+one JSON attachment: a manifest (exported-at, the limit, one outcome per
+table with its count, whether it was truncated, and the reason if it
+could not be read) and the rows exactly as stored. A table that cannot
+be read is named in the manifest and the export still answers with
+everything else; nothing is reworded, summarised or withheld, and
+nothing is written. The card "Your data is yours" on Job Preferences
+lists the roster and carries the one link.
+
+Bounds: an export is a read and leaves no activity row — the activity
+event type is an enum, and adding a value is a migration this increment
+does not need; a row cap of 5,000 per table is printed in the manifest
+rather than paged, because an export that needs paging is a different
+product (a scheduled archive) and the tables here are person-sized.
+No migration.
+
+## ADR-248 - Polish that cannot invent: model-reworded documents checked term by term against the fact-only baseline before they are stored
+
+Date: 2026-09-02
+
+The boards' AI resume and cover-letter writers invent experience — the
+complaint recurs across every platform reviewed — and ADR-096 answered it
+by refusing to put a model in the path at all: the builders copy recorded
+facts and nothing else. That leaves the person with a document that is
+true and flat. This increment lets a model make it read well without
+letting it add a single thing.
+
+`lib/job-seeker/polish.ts` hands the fresh fact-only baseline (built at
+request time from the profile and the job, so the check's baseline is
+exact) to the model with a rewrite-only instruction, and
+`lib/job-seeker/polish-check.ts` checks what comes back in three passes:
+every skill-vocabulary term the polished text names, every number it
+states, and every capitalised name it uses mid-sentence must exist in
+the baseline or among the profile's own terms. One absent item is a
+violation, named with its kind; a variant with any violation is
+rejected and never stored, and the person sees the additions the model
+tried to make. A passing variant is stored as the next version of the
+same kind with `origin = 'polished'`, the model's name and the check —
+20260902001500 adds those three columns to `job_seeker_documents` with
+checks that a baseline carries neither and a polished version carries
+both, and that a stored check says it passed. The model lane itself
+(`lib/job-seeker/model-lane.ts`) is now shared with the interview
+questions (ADR-246): one gate, one factory, one honest reason.
+
+The action rides on the existing documents route as
+`{ action: "polish", kind }` — same-origin POST, on request only — and
+GET reports whether the lane is usable so the Applications page labels
+the buttons or prints **Not Connected** with the variable name. Every
+document list now carries its provenance, and the Resume Library badges
+a polished version with the model that wrote it.
+
+Bounds: the check is lexical. It catches added skills, numbers and
+names; it does not catch a reworded claim that inflates without new
+words ("led" for "joined"), and a proper noun that opens a sentence is
+not checked as a name. Those are the limits of a deterministic pass and
+are printed with the check's counts rather than hidden behind a "verified"
+badge. Hosted apply: scope=document-polish after merge.
+
+## ADR-249 - Still open? A bounded, owner-safe recheck of a posting URL, recorded on the sightings row
+
+Date: 2026-09-02
+
+Freshness (ADR-241) reasons from dates. The complaint it cannot fully
+answer — expired listings that linger, on every board reviewed — has one
+more source of evidence: the posting's own page. This increment reads
+it, once, on the person's request, within bounds, and records what it
+said where everyone who sees the posting will see it.
+
+The bounds come first because a server that fetches a URL a browser
+supplied is a request forger unless it refuses everything but the public
+web. `lib/job-seeker/board-search/recheck.ts` refuses, before a byte is
+sent: anything but https; a URL with credentials or a port; an address
+in place of a host; a single-label, local or internal name; and any host
+whose resolved addresses — all of them — are not public (loopback,
+private, link-local, carrier-grade, multicast, unique-local, mapped v4).
+Redirects are never followed; a 3xx is reported as "moved" and left
+there. One request, six seconds, at most 256 KB of body read and never
+stored. The route adds a second gate: only a URL the sightings ledger
+already holds is rechecked, so the endpoint cannot be pointed at an
+address a search never returned.
+
+The answer is derived, not judged: 404 or 410 is gone; 3xx is moved; a
+2xx whose text contains one of a fixed list of closure phrases is gone
+and the note quotes the phrase; any other 2xx is open; 4xx/5xx is
+blocked ("the site refused an automated read; that says nothing about
+the posting"); no answer is unreachable. `record_posting_recheck`
+(20260902001600) writes the status, HTTP status and note onto the
+existing sightings row through one definer boundary — authenticated,
+vocabulary-checked, reusing a check under ten minutes old so a burst of
+clicks is one outbound read — and `read_posting_sightings` is recreated
+to carry the latest check to every search card.
+
+`assessFreshness` folds a recheck under seven days old in: gone makes
+the verdict stale whatever the dates say; open lifts a stale-by-age
+posting to aging, with the sentence "that proves the page, not the
+vacancy"; moved, blocked and unreachable are printed and decide nothing.
+The card carries a "Still open?" button and prints the answer with when
+it was checked.
+
+Bounds: the closure phrases are a fixed list in English and Danish, so a
+board that says "closed" some other way reads as open — the note prints
+"does not say the position is closed" rather than "open" for exactly that
+reason; a page behind a login or a bot wall is "blocked", never guessed.
+Hosted apply: scope=posting-recheck after merge. With this increment the
+nine-increment program of the teardown is complete.

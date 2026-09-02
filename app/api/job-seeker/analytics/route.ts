@@ -3,6 +3,7 @@ import {
   jsonNoStore,
 } from "@/lib/server/http";
 import { buildFunnel, toReplyStats } from "@/lib/job-seeker/silence";
+import { GAP_MINIMUM_POSTINGS, skillsGap, type RecordedPosting, type SkillGap } from "@/lib/job-seeker/what-costs";
 import { supabaseBoundaryErrorResponse } from "@/lib/supabase/http";
 import { requireActiveOrganization } from "@/lib/supabase/tenant";
 
@@ -28,7 +29,7 @@ export async function GET() {
       await Promise.all([
         client
           .from("job_seeker_jobs")
-          .select("id, title, source")
+          .select("id, title, source, company, description, discovered_at")
           .eq("organization_id", activeOrganization.id),
         client
           .from("job_seeker_matches")
@@ -36,16 +37,78 @@ export async function GET() {
           .eq("organization_id", activeOrganization.id),
         client
           .from("job_seeker_applications")
-          .select("job_id, stage, closed_reason")
+          .select("job_id, stage, closed_reason, applied_at")
           .eq("organization_id", activeOrganization.id),
       ]);
     if (jobsError) return databaseErrorResponse(jobsError);
     if (matchesError) return databaseErrorResponse(matchesError);
     if (applicationsError) return databaseErrorResponse(applicationsError);
 
-    const jobs = jobRows ?? [];
+    const jobs = (jobRows ?? []) as Array<{
+      id: string;
+      title: string;
+      source: string;
+      company?: string | null;
+      description?: string | null;
+      discovered_at?: string | null;
+    }>;
     const matches = matchRows ?? [];
-    const applications = (applicationRows ?? []) as Array<{ job_id: string; stage: string; closed_reason?: string | null }>;
+    const applications = (applicationRows ?? []) as Array<{
+      job_id: string;
+      stage: string;
+      closed_reason?: string | null;
+      applied_at?: string | null;
+    }>;
+
+    /*
+     * The skills gap (ADR-245): vocabulary terms the recorded postings keep
+     * naming that the Career Profile does not list, ranked by how many
+     * postings name them. Computed only against a recorded profile — a gap
+     * measured against nothing would list every term in every posting and
+     * call it a shortfall. Failure-tolerant like the ledger sections: an
+     * unreadable profile answers null with the reason, never a zero.
+     */
+    let gap: SkillGap[] | null = null;
+    let gapBasis: string;
+    try {
+      const { data: profileRow, error: profileError } = await client
+        .from("job_seeker_profiles")
+        .select("skills, technologies")
+        .eq("organization_id", activeOrganization.id)
+        .maybeSingle();
+      if (profileError) {
+        gapBasis = "The skills gap could not be computed: your Career Profile could not be read.";
+      } else if (!profileRow) {
+        gapBasis = "No Career Profile is recorded yet, so the skills gap is not computed — a gap measured against nothing would list every term in every posting.";
+      } else {
+        const profile = profileRow as { skills?: unknown; technologies?: unknown };
+        const listed = [
+          ...(Array.isArray(profile.skills) ? profile.skills : []),
+          ...(Array.isArray(profile.technologies) ? profile.technologies : []),
+        ].map(String);
+        const qualifiedByJob = new Map(matches.map((match) => [match.job_id, match.qualified]));
+        const applicationByJob = new Map(applications.map((row) => [row.job_id, row]));
+        const postings: RecordedPosting[] = jobs.map((job) => {
+          const application = applicationByJob.get(job.id);
+          return {
+            id: job.id,
+            company: job.company ?? "",
+            title: job.title,
+            description: job.description ?? null,
+            qualified: qualifiedByJob.get(job.id) ?? null,
+            discoveredAt: job.discovered_at ?? "",
+            application: application
+              ? { stage: application.stage, appliedAt: application.applied_at ?? null, closedReason: application.closed_reason ?? null }
+              : null,
+          };
+        });
+        gap = skillsGap(postings, listed);
+        gapBasis = `Counted over your ${postings.length} recorded posting${postings.length === 1 ? "" : "s"} against the ${listed.length} skills and technologies in your Career Profile; a term named by fewer than ${GAP_MINIMUM_POSTINGS} postings is not a pattern and is left out.`;
+      }
+    } catch {
+      gap = null;
+      gapBasis = "The skills gap could not be computed: your Career Profile could not be read.";
+    }
 
     /*
      * Silence measured (ADR-243): the funnel counts applications that ever
@@ -139,6 +202,8 @@ export async function GET() {
         funnel,
         closedReasons,
         responseBySource,
+        skillsGap: gap,
+        skillsGapBasis: gapBasis,
       },
     });
   } catch (error) {

@@ -344,7 +344,10 @@ describe("searching across boards", () => {
     // sighting per URL, so the ledger counts a posting once per search.
     expect(recorded.p_sightings).toHaveLength(1);
     expect(recorded.p_sightings[0]).toMatchObject({ url: "https://jobnet.dk/find-job/1", source: "jobnet", postedOn: "2026-08-20" });
-    expect(client.from.mock.calls.map(([table]) => table)).toEqual(["job_seeker_search_events"]);
+    // The person's own recorded postings are read once for company memory
+    // (ADR-245); the metering event stays the only write.
+    expect(client.from.mock.calls.map(([table]) => table)).toEqual(["job_seeker_jobs", "job_seeker_search_events"]);
+    expect(client.insert).toHaveBeenCalledTimes(1);
     const rows = client.insert.mock.calls[0]?.[0] as Array<{ board: string; results_returned: number | null }>;
     expect(rows).toHaveLength(13);
     expect(rows.every((row) => row.results_returned === 1)).toBe(true);
@@ -790,5 +793,64 @@ describe("posting signals (ADR-242)", () => {
 
     const statedNo = (await (await POST(searchRequest({ text: "engineer", filters: { sponsorship: "stated_no" } }))).json()) as Payload;
     expect(statedNo.unified.hits.map((entry) => entry.job.company)).toEqual(["Apex Recruiting"]);
+  });
+});
+
+describe("company memory on every card (ADR-245)", () => {
+  /** A PostgREST-shaped chain for the one read the memory makes. */
+  function chain(result: unknown) {
+    const node: Record<string, unknown> = {};
+    for (const method of ["select", "eq", "limit", "order"]) {
+      node[method] = vi.fn(() => node);
+    }
+    node.then = (resolve: (value: unknown) => unknown, reject?: (reason: unknown) => unknown) =>
+      Promise.resolve(result).then(resolve, reject);
+    return node;
+  }
+
+  it("says what your own rows say about the company, and where that came from", async () => {
+    const insert = vi.fn(async () => ({ error: null }));
+    harness.requireActiveOrganization.mockResolvedValue({
+      activeOrganization: { id: activeOrganizationId },
+      user: { id: "user-1" },
+      client: {
+        from: vi.fn((table: string) =>
+          table === "job_seeker_jobs"
+            ? chain({
+                data: [
+                  {
+                    id: "j1", company: "Nordisk Teknik A/S", title: "Engineer", discovered_at: "2026-08-01T00:00:00Z",
+                    job_seeker_matches: { qualified: true },
+                    job_seeker_applications: { stage: "CLOSED", applied_at: "2026-08-10T00:00:00Z", closed_reason: "no_response" },
+                  },
+                  { id: "j2", company: "Elsewhere ApS", title: "Lead", discovered_at: "2026-08-02T00:00:00Z", job_seeker_matches: null, job_seeker_applications: null },
+                ],
+                error: null,
+              })
+            : { insert }),
+        rpc: vi.fn(),
+      },
+    });
+
+    const payload = (await (await POST(searchRequest({ text: "engineer", boards: ["jobnet"] }))).json()) as {
+      unified: { hits: Array<{ history: { recorded: number; applied: number; sentence: string } | null }>; historyBasis: string };
+    };
+    expect(payload.unified.hits[0]!.history).toEqual({
+      company: "Nordisk Teknik A/S",
+      recorded: 1,
+      applied: 1,
+      sentence: "You applied to Nordisk Teknik A/S on 2026-08-10; closed with no response.",
+    });
+    expect(payload.unified.historyBasis).toContain("(2 recorded)");
+  });
+
+  it("answers null and says so when your record could not be read — the search still answers", async () => {
+    // The default stub client has no select at all: the read throws, and is caught.
+    const payload = (await (await POST(searchRequest({ text: "engineer", boards: ["jobnet"] }))).json()) as {
+      unified: { hits: Array<{ history: unknown }>; historyBasis: string };
+    };
+    expect(payload.unified.hits).toHaveLength(1);
+    expect(payload.unified.hits[0]!.history).toBeNull();
+    expect(payload.unified.historyBasis).toBe("Your history with each company could not be read for this search.");
   });
 });

@@ -1,5 +1,119 @@
 # Current state
 
+## 2026-09-02: JobSearch build-out — increment 9, still open? (ADR-249) — the program is complete
+
+`20260902001600_posting_recheck.sql`: `job_seeker_posting_sightings`
+gains `last_checked_at`, `last_check_status` (open | gone | moved |
+blocked | unreachable), `last_check_http_status`, `last_check_note`,
+`checks` with four checks; `record_posting_recheck(text, text, integer,
+text)` SECURITY DEFINER (authenticated only; existing rows only; a check
+under ten minutes old is returned unchanged); `read_posting_sightings`
+recreated with the three check columns (invoker, authenticated only).
+`lib/job-seeker/board-search/recheck.ts`: `refuseUrl`, `isPublicAddress`,
+`classifyPage`, `recheckPosting` (DNS-resolved public-only, manual
+redirects, 6 s, 256 KB, nothing stored). `freshness.ts`: `Sighting`
+carries the check, `assessFreshness` folds one under seven days in with
+the sentence, `Freshness.recheck`. `POST /api/job-seeker/search/recheck`
+(same-origin; ledger as allow-list; reuse under ten minutes; records
+through the definer; returns the recheck and the new verdict). Search
+card: "Still open?" button and the answer line; the verdict replaced by
+the server's. Chain: workflow scope `posting-recheck` + step (417,893
+bytes of 420,000), postflight, replay roster 45, runbook count 236.
+Tests: freshness +3, recheck 8, recheck route 4, recheck.behavior 4,
+search panel +1; tsc, eslint and the production build clean. Hosted
+apply scope `posting-recheck` is dispatched after merge. All nine
+increments of `AI/JOB_SEARCH_COMPETITIVE_TEARDOWN.md` are shipped.
+
+## 2026-09-02: JobSearch build-out — increment 8, polish that cannot invent (ADR-248)
+
+`20260902001500_document_polish.sql`: `job_seeker_documents` gains
+`origin` (baseline | polished, default baseline), `model`, `polish_check`
+with five checks (known origin, model shape, check shape, origin
+consistent, polish passed); no new table, so grants, policies and the
+RLS census are unchanged. `lib/job-seeker/model-lane.ts` (shared gate,
+factory, response text; `interview-questions.ts` refactored onto it),
+`lib/job-seeker/polish-check.ts` (`checkPolish`: vocabulary terms,
+numbers, mid-sentence names against the baseline and profile terms;
+`describeCheck`), `lib/job-seeker/polish.ts` (`polishAvailability`,
+`parsePolished`, `generatePolishedDocument`: polished / rejected /
+not_connected / failed). Documents route: `{ action: "polish", kind }`
+stores a passing variant as the next version with its provenance,
+returns a rejected one's violations with no insert, GET carries `origin`,
+`model` and `polish` availability; the library list carries provenance.
+Applications page: polish buttons per kind or **Not Connected** with
+the reason, the outcome with additions named, a badge on polished
+versions; Resume Library badge. Chain: workflow scope `document-polish`
++ step (417,015 bytes of 420,000), postflight, replay roster 44,
+runbook count 235. Tests: polish-check 4, polish 6, documents polish
+route 5, panels +2, document-polish.behavior 3, interview-questions
+unchanged on the shared lane; tsc, eslint and the production build
+clean. Hosted apply scope `document-polish` is dispatched after merge.
+
+## 2026-09-02: JobSearch build-out — increment 7, your data is yours (ADR-247)
+
+No migration. `lib/job-seeker/export.ts`: `EXPORT_TABLES` (17 personal
+tables in order, explicit columns for uploads so no bytes are inlined),
+`NOT_PERSONAL` (the posting sightings ledger with the reason),
+`EXPORT_LIMIT` 5,000, `buildManifest`, `exportFilename`, `EXPORT_BASIS`.
+`GET /api/job-seeker/export`: each roster table read through the
+caller's client, organization-scoped under RLS, limit + 1 to detect
+truncation, per-table failure named in the manifest, one JSON
+attachment (`Content-Disposition`, no-store). `JobSeekerDataExportCard`
+("Your data is yours": the link, the roster, the cap and the not-personal
+note) under the Job Preferences form in the console. Tests:
+job-seeker-export 3 (the roster census against the migrations, no blob
+column, the manifest), export route 3 (every table read and scoped, the
+outcomes with a failed and a truncated table, no bytes read, signed-out
+refused), data-export card 1, console unchanged; tsc, eslint and the
+production build clean.
+
+## 2026-09-02: JobSearch build-out — increment 6, the interview prep sheet (ADR-246)
+
+No migration. `lib/job-seeker/interview-prep.ts`: `matchedStrengths`
+(posting terms the profile records, with where and the role that used
+them), `gapsToPrepare` (vocabulary terms the profile lacks, as
+sentences), `relevantHistory` (entries sharing a term, most first,
+highlights verbatim), `questionsToAsk` (from completeness omissions and
+red flags, naming the phrase), `buildPrepSheet` (adds the unmet/unknown
+requirement lines, company memory, contacts, notes, `PREP_BASIS`).
+`lib/job-seeker/interview-questions.ts` (server-only): the model lane —
+`modelQuestionsAvailability` (Not Connected with the variable name),
+`interviewQuestionsPrompt`, `parseQuestions` (bare or fenced JSON array,
+≤ 10, ≤ 300 chars each), `generateInterviewQuestions` (generated /
+not_connected / failed, labeled with the model). Route
+`GET/POST /api/job-seeker/jobs/[jobId]/prep` (GET composes under RLS
+with the application embed, contacts by application, recorded postings
+for memory; POST is same-origin and asks the model on demand). Component
+`InterviewPrepSheet` (fetch on open; sections `prep-strengths`, `-gaps`,
+`-to-answer`, `-history`, `-questions`, `-memory`, `-contacts`,
+`-notes`, `-model`; "Ask the model for likely questions" only when
+available) mounted on every Interview Tracker in-progress row and on
+every application beside the requirements check. Tests:
+job-seeker-interview-prep 8, interview-questions 7, prep routes 4, prep
+panel 3; tsc, eslint and the production build clean.
+
+## 2026-09-02: JobSearch build-out — increment 5, what keeps costing you (ADR-245)
+
+No migration. `lib/job-seeker/what-costs.ts`: `SKILL_VOCABULARY`
+(word-boundary matching), `namedSkills`, `skillsGap` (per-term counts
+over recorded postings against the profile's skills + technologies,
+minimum `GAP_MINIMUM_POSTINGS` = 2, ranked by postings then qualified,
+sentence per row), `companyMemory` (recorded / applied / the most recent
+application's outcome in a sentence, company folded through the
+unifier's identity). `loadRecordedPostings` in `lib/job-seeker/record.ts`
+(one RLS read with the match and application embeds, descriptions only
+on request, null on failure). Search route: `history` per unified card
+and `historyBasis`; analytics route: `skillsGap` (null with the reason
+without a profile) and `skillsGapBasis`. Search card prints "Your
+history: …" (`company-memory`) with the basis line once; Analytics gains
+"Skills that keep costing you" (term, postings naming it, of them
+qualified, "Record it if true" → /job-seeker/profile; the profile link
+when nothing to measure against; the empty sentence when the gap is
+empty). Tests: job-seeker-what-costs 13, what-costs routes 2, search
+route +2 (and the metering test now expects the one read beside the one
+write), search panel +1, analytics panel +2; tsc, eslint and the
+production build clean.
+
 ## 2026-09-02: JobSearch build-out — increment 4, the application kit (ADR-244)
 
 `20260902001400_application_kit.sql`: `job_seeker_screening_answers`
@@ -23,8 +137,8 @@ job-seeker-screening-answers.behavior 2, application-kit routes 6,
 application-kit panel 2, panels +1, navigation updated. Grants roster
 and RLS census 232; replay executes the new postflight; runbook count
 234; workflow 416,142 bytes of 420,000; tsc, eslint and the production
-build clean. Hosted apply scope `application-kit` is dispatched after
-merge.
+build clean. Hosted apply scope `application-kit`: run 33636602923
+succeeded on main d85a759 (#505 squash).
 
 ## 2026-09-02: JobSearch build-out — increment 3, silence measured (ADR-243)
 
@@ -55,7 +169,8 @@ job-seeker-silence 8, job-seeker-silence-routes 6, panels +1,
 job-seeker-analytics-panel 2. Grants roster and RLS census 231; replay
 executes the new postflight; runbook count 233; workflow 415,273 bytes
 of 420,000; tsc and eslint clean. Hosted apply scope
-`application-transitions` is dispatched after merge.
+`application-transitions`: run 33636521077 succeeded on main d85a759
+(#505 squash).
 
 ## 2026-09-02: JobSearch build-out — increment 2, posting signals (ADR-242)
 

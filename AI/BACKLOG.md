@@ -60,6 +60,9 @@ Audit: `AI/JOB_SEARCH_COMPETITIVE_TEARDOWN.md` — LinkedIn, Indeed and
 seven other boards, 25 features each, the top 25 complaints per platform
 with an AI-first answer, and the program below. Each increment is its
 own PR, ADR, behavior test against the real chain, and hosted scope.
+All nine increments are shipped as of 2026-09-02 (increments 2–4 on
+#505; 5–9 on the follow-on PR); hosted scopes are dispatched after each
+merge and recorded in `AI/CURRENT_STATE.md`.
 
 - [x] Increment 1 (ADR-241): freshness — `job_seeker_posting_sightings`
   (public facts, one row per URL, forced RLS, SELECT to authenticated,
@@ -105,19 +108,52 @@ own PR, ADR, behavior test against the real chain, and hosted scope.
   `/job-seeker/application-kit` with copy buttons and the answers form;
   "Requirements check" on every application. 20260902001400; hosted
   apply: scope=application-kit after merge. Closes LinkedIn 6, Indeed 12.
-- [ ] Increment 5 (ADR-245): what keeps costing you — skills gap across
-  target and saved jobs ranked by frequency; your own history with each
-  company on every result.
-- [ ] Increment 6 (ADR-246): interview prep sheet from the person's own
-  facts; model questions only when a provider exists, labeled.
-- [ ] Increment 7 (ADR-247): your data is yours — export of every table
-  the Job Seeker writes about a person, under their own RLS.
-- [ ] Increment 8 (ADR-248): polish that cannot invent — model-polished
-  resume/cover-letter variants through the existing provider path,
-  checked term by term against the fact-only baseline; **Not Connected**
-  without a credential.
-- [ ] Increment 9 (ADR-249): still open? — a bounded, owner-safe recheck
-  of a posting URL recorded on the sightings row.
+- [x] Increment 5 (ADR-245): what keeps costing you — 2026-09-02.
+  `lib/job-seeker/what-costs.ts` (fixed vocabulary on word boundaries;
+  `skillsGap` over the recorded postings against the profile, minimum
+  two postings, counts printed; `companyMemory` from the person's own
+  applications); `loadRecordedPostings`; `history` + `historyBasis` on
+  every search card; `skillsGap` + `skillsGapBasis` on Analytics with
+  "Skills that keep costing you". No migration. Closes LinkedIn 10/14,
+  Indeed 5, Glassdoor 1, "skills gap" and "company reviews" rows.
+- [x] Increment 6 (ADR-246): interview prep sheet — 2026-09-02.
+  `lib/job-seeker/interview-prep.ts` (strengths with where recorded,
+  gaps, requirement lines to answer, history verbatim, questions to ask
+  from the posting's omissions and red flags, company memory, contacts,
+  notes); `lib/job-seeker/interview-questions.ts` (model lane behind the
+  Anthropic credential, Not Connected otherwise, labeled, on demand);
+  `GET/POST /api/job-seeker/jobs/[jobId]/prep`; `InterviewPrepSheet`
+  on the Interview Tracker and on every application. No migration.
+  Closes LinkedIn 17, Glassdoor 2, "interview prep" rows.
+- [x] Increment 7 (ADR-247): your data is yours — 2026-09-02.
+  `lib/job-seeker/export.ts` (the roster of 17 personal tables, the
+  not-personal ledger named, the census test against the migrations);
+  `GET /api/job-seeker/export` (one JSON attachment under RLS with a
+  manifest naming each table's count, truncation and any failure);
+  "Your data is yours" card on Job Preferences. No migration. Closes
+  LinkedIn 24, Indeed 23/24, Glassdoor-and-others 8, "data locked in".
+- [x] Increment 8 (ADR-248): polish that cannot invent — 2026-09-02.
+  `lib/job-seeker/polish.ts` + `polish-check.ts` (terms, numbers and
+  mid-sentence names checked against the fact-only baseline; a variant
+  that adds anything is rejected with the additions named and never
+  stored); `model-lane.ts` shared with the interview questions;
+  `{ action: "polish", kind }` on the documents route; provenance
+  columns on `job_seeker_documents` (20260902001500); polish buttons or
+  **Not Connected** on Applications, badges on polished versions.
+  Hosted apply: scope=document-polish after merge. Closes LinkedIn 18,
+  "cover letters that cannot invent" rows.
+- [x] Increment 9 (ADR-249): still open? — 2026-09-02.
+  `lib/job-seeker/board-search/recheck.ts` (https only, no credentials
+  or port, no address literals or local names, every resolved address
+  public, redirects never followed, 6 s / 256 KB, nothing stored;
+  status from the HTTP answer and a fixed closure-phrase list, the
+  phrase quoted); `record_posting_recheck` + `read_posting_sightings`
+  with the check (20260902001600); `POST /api/job-seeker/search/recheck`
+  with the ledger as allow-list and ten-minute reuse; the verdict folds
+  a recheck under seven days in; "Still open?" on every card. Hosted
+  apply: scope=posting-recheck after merge. Closes Google-for-Jobs 11,
+  "expired jobs still listed", "cannot tell whether still open". The
+  nine-increment program is complete.
 - Owner-only, unchanged: `JSEARCH_RAPIDAPI_KEY` for inline LinkedIn/Indeed
   (ADR-184); `RESEND_API_KEY`, `JOB_ALERT_EMAIL_FROM`, `CRON_SECRET` for
   live alert email (ADR-164); the keyed boards' credentials

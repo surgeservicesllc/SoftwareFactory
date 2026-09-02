@@ -21,6 +21,9 @@ type DocumentView = {
   applicationId: string;
   kind: string;
   version: number;
+  /** "baseline" (fact-only builder) or "polished" (a model reworded it, checked; ADR-248). */
+  origin?: string;
+  model?: string | null;
   createdAt: string;
   stage: string | null;
   title: string | null;
@@ -107,6 +110,9 @@ export function JobSeekerDocumentsPanel({
                       {document.company ?? "Unknown company"}
                     </p>
                   </div>
+                  {document.origin === "polished" ? (
+                    <StatusBadge tone="info" dot={false}>Polished by {document.model ?? "a model"}</StatusBadge>
+                  ) : null}
                   <StatusBadge tone="neutral" dot={false}>v{document.version}</StatusBadge>
                 </div>
                 <p className="mt-3 line-clamp-3 text-sm text-muted">{document.preview}</p>
