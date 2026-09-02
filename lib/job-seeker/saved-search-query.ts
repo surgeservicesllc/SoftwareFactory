@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { SPONSORSHIP_STATES } from "@/lib/job-seeker/board-search/signals";
 import {
   INDUSTRIES,
   MARKETING_SPECIALTIES,
@@ -40,6 +41,10 @@ export const savedSearchQuerySchema = z
         requireSalary: z.boolean().optional(),
         postedWithinDays: z.number().int().min(1).max(365).nullish(),
         minimumScore: z.number().int().min(0).max(100).nullish(),
+        /** Posting signals (ADR-242); optional so earlier stored queries parse. */
+        hideRedFlags: z.boolean().optional(),
+        excludeAgencies: z.boolean().optional(),
+        sponsorship: z.enum(SPONSORSHIP_STATES).nullish(),
       })
       .strict()
       .optional(),

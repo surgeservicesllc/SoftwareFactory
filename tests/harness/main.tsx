@@ -65,6 +65,7 @@ import type { GrokSessionDetail } from "@/lib/grok/contracts";
 import { JobSeekerContactsPanel } from "@/components/job-seeker/contacts-panel";
 import { JobSeekerDocumentsPanel } from "@/components/job-seeker/documents-panel";
 import { JobSeekerInterviewsPanel } from "@/components/job-seeker/interviews-panel";
+import { JobSeekerApplicationKitPanel } from "@/components/job-seeker/application-kit-panel";
 import { JobSeekerOverview } from "@/components/job-seeker/overview";
 
 import {
@@ -237,6 +238,22 @@ function serveFixtures() {
           detail: "No worker is connected in this phase.",
           globalKillSwitchActive: true,
         },
+      });
+    }
+    if (url.includes("/api/job-seeker/application-kit")) {
+      return json({
+        profileRecorded: true,
+        blocks: [
+          { key: "contact", label: "Contact", text: "Dana Reyes\ndana@example.com\nAustin, TX" },
+          { key: "experience", label: "Work history (most recent first)", text: "Staff Engineer — Acme (2021 – present)\n• Led the platform team" },
+          { key: "skills", label: "Skills", text: "TypeScript, Kubernetes, PostgreSQL" },
+        ],
+        answers: { needs_sponsorship: "No" },
+        questions: [
+          { key: "work_authorization", label: "Are you legally authorized to work in the country of this job?", hint: "Yes/No" },
+          { key: "needs_sponsorship", label: "Will you now or in the future require visa sponsorship?", hint: "Yes or No" },
+          { key: "notice_period", label: "Notice period at your current employer", hint: "e.g. 30 days" },
+        ],
       });
     }
     if (url.includes("/api/job-seeker/profile")) return json({ profile: JOB_SEEKER_PROFILE });
@@ -641,6 +658,7 @@ const CASES: Record<string, () => React.ReactElement> = {
   ),
   "job-seeker-contacts": () => <InShell><JobSeekerContactsPanel /></InShell>,
   "job-seeker-interviews": () => <InShell><JobSeekerInterviewsPanel /></InShell>,
+  "job-seeker-application-kit": () => <InShell><JobSeekerApplicationKitPanel /></InShell>,
   /*
    * The lifecycle across runs, and one stage of it. Both render tables and an
    * eight-card grid that has to survive a phone.

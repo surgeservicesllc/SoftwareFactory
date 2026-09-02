@@ -62,6 +62,17 @@ export type JobView = {
     applicationUrl: string | null;
     notes: string | null;
     followUpAt: string | null;
+    /** Why it ended, in the person's own word (ADR-243); null when not said or not closed. */
+    closedReason?: string | null;
+    /** Silence measured against the person's own replies (ADR-243); null when not applied or unmeasurable. */
+    silence?: {
+      daysSinceApplied: number;
+      daysSilent: number | null;
+      repliedAfterDays: number | null;
+      sentence: string;
+      suggestedFollowUpOn: string | null;
+      suggestionSentence: string | null;
+    } | null;
   } | null;
 };
 

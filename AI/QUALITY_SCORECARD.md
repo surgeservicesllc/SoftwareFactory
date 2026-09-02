@@ -2,6 +2,63 @@
 
 Last reviewed: 2026-09-02
 
+**Addendum, 2026-09-02 latest+66 - JobSearch build-out, increment 4: the application kit (ADR-244):**
+job-seeker-application-kit 11 (blocks verbatim and in order with the
+answered questions, nothing from nothing; requirement sentences kept
+once and bounded; the experience span from dates; years from the
+answer before the dates and unknown without either; authorization and
+sponsorship from the answers only, an offered sponsorship met; degree,
+certification, clearance and language verdicts; a skills line met by
+the profile, unmet when unrecorded, unknown with no skills; unknown
+keys dropped). job-seeker-screening-answers.behavior 2 (the fixed
+vocabulary, the empty answer, the upsert in place; the other member
+blind and refused, service_role holding nothing, RLS forced).
+application-kit routes 6 (blocks + answers composed; no profile said;
+upsert and delete with the conflict key; unknown key and
+credential-shaped answer refused; the check's verdicts and basis; 404
+for another person's job), application-kit panel 2 (verbatim block,
+Copy to the clipboard, one PUT, the profile-first empty state), panels
++1 (the requirements check on open). Navigation test updated for the
+one destination beyond the design. Grants roster and RLS census 232;
+replay executes the new postflight; runbook 234; workflow 416,142 of
+420,000; tsc, eslint and the production build clean.
+
+**Addendum, 2026-09-02 latest+65 - JobSearch build-out, increment 3: silence measured (ADR-243):**
+job-seeker-transitions.behavior 4 (one row per stage or approval
+change and none for a note edit, exact from/to pairs; a recruiter
+response and a rejection both counted as replies with the median from
+real timestamps per source and overall; a closure reason refused off a
+closed row; append-only under both guards, private to the owner, anon
+refused, service_role holding no grant, RLS forced). job-seeker-silence
+8 (nothing before submission; the source median and the exact
+follow-up sentence; the all-sources fallback and "was due"; the named
+default and the 21-day clamp; replied/outran-the-ledger/closed
+sentences; the funnel counting applications not events; row mapping).
+job-seeker-silence-routes 6 (close writes stage and reason together;
+an unknown reason 422; the list's silence and basis; null silence with
+the reason when unreadable; analytics funnel/reasons/replies; nulls
+when the ledger is unreadable). panels +1 (sentence, suggestion, "Use
+this date" PATCH, close with reason PATCH), job-seeker-analytics-panel
+2. Grants roster and RLS census 231; replay executes the new
+postflight; runbook 233; workflow 415,273 of 420,000; tsc and eslint
+clean.
+
+**Addendum, 2026-09-02 latest+64 - JobSearch build-out, increment 2: posting signals (ADR-242):**
+job-seeker-signals 15 (the seven red flags with exact phrases on text
+that trips them and silence on an ordinary posting that mentions
+provided equipment and post-offer background checks; agency from the
+name and not from "Talent.com"; sponsorship no/yes/unstated and the
+buried exception; the board's field trusted and the text read labeled;
+hourly annualized with the assumption, a monthly range, a bare large
+figure as annual, a stipend left unperioded, nothing from
+"Competitive"; completeness 6/6 and 0/6; the composed signals). unify
++3 (text-derived work model passes the filter, red flags and agencies
+hidden only when asked, sponsorship stated only), alerts +1 (the three
+keys carried, defaulting off), route +1 (signals on the card and the
+three filters honoured), panel +1 (badges with evidence, the derived
+label, the salary note and the completeness line verbatim, hide/show
+by choice, chips), message-check 2. tsc and eslint clean.
+
 **Addendum, 2026-09-02 latest+63 - JobSearch build-out, increment 1: freshness (ADR-241):**
 job-seeker-sightings.behavior 6 (one row per URL, readable by another
 person; the JS key equals SQL's md5; repeat sightings counted, a

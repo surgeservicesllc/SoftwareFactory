@@ -254,6 +254,14 @@ describe("toDeliveryRows and toUnifiedFilters", () => {
     expect(filters.seniority).toBe("manager");
   });
 
+  it("carries the posting-signal filters into the alert scan, defaulting to off (ADR-242)", () => {
+    expect(toUnifiedFilters({ text: "x" })).toMatchObject({ hideRedFlags: false, excludeAgencies: false, sponsorship: null });
+    expect(toUnifiedFilters({
+      text: "x",
+      filters: { hideRedFlags: true, excludeAgencies: true, sponsorship: "stated_yes" },
+    })).toMatchObject({ hideRedFlags: true, excludeAgencies: true, sponsorship: "stated_yes" });
+  });
+
   it("carries stored specialty and industry filters into the alert scan unchanged", () => {
     const filters = toUnifiedFilters({
       text: "x",

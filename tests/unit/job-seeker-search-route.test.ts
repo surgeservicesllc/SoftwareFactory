@@ -739,3 +739,56 @@ describe("freshness (ADR-241)", () => {
     expect(payload.unified.freshnessBasis).toContain("could not be read");
   });
 });
+
+describe("posting signals (ADR-242)", () => {
+  it("attaches every signal to the card and honours the signal filters", async () => {
+    const base = hit("Data Entry Clerk");
+    harness.searchRemotive.mockResolvedValue({
+      board: "remotive",
+      hits: [{
+        ...base,
+        job: {
+          ...base.job,
+          url: "https://remotive.com/jobs/apex-1",
+          company: "Apex Recruiting",
+          description: "Fully remote. Contact us on Telegram to start. We cannot sponsor visas.",
+          salaryText: "$30 per hour",
+        },
+      }],
+      totalAvailable: 1,
+    });
+
+    type Payload = {
+      unified: {
+        hits: Array<{
+          job: { company: string };
+          signals: {
+            redFlags: Array<{ code: string; phrase: string }>;
+            agency: { likely: boolean; phrase: string | null };
+            sponsorship: { state: string | null };
+            workModel: { model: string | null; derived: boolean };
+            salary: { annualized: number | null } | null;
+            completeness: { score: number };
+          };
+        }>;
+      };
+    };
+    const open = (await (await POST(searchRequest({ text: "engineer" }))).json()) as Payload;
+    const card = open.unified.hits.find((entry) => entry.job.company === "Apex Recruiting")!;
+    expect(card.signals.redFlags).toEqual([{ code: "off_platform_messaging", label: expect.any(String), phrase: "Telegram" }]);
+    expect(card.signals.agency).toEqual({ likely: true, phrase: "Recruiting" });
+    expect(card.signals.sponsorship.state).toBe("stated_no");
+    expect(card.signals.workModel).toMatchObject({ model: "remote", derived: true });
+    expect(card.signals.salary?.annualized).toBe(62_400);
+    expect(card.signals.completeness.score).toBe(4);
+
+    const noFlags = (await (await POST(searchRequest({ text: "engineer", filters: { hideRedFlags: true } }))).json()) as Payload;
+    expect(noFlags.unified.hits.some((entry) => entry.job.company === "Apex Recruiting")).toBe(false);
+
+    const noAgencies = (await (await POST(searchRequest({ text: "engineer", filters: { excludeAgencies: true } }))).json()) as Payload;
+    expect(noAgencies.unified.hits.some((entry) => entry.job.company === "Apex Recruiting")).toBe(false);
+
+    const statedNo = (await (await POST(searchRequest({ text: "engineer", filters: { sponsorship: "stated_no" } }))).json()) as Payload;
+    expect(statedNo.unified.hits.map((entry) => entry.job.company)).toEqual(["Apex Recruiting"]);
+  });
+});

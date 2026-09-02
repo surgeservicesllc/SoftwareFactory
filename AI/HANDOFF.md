@@ -2,7 +2,92 @@
 
 Last updated: 2026-09-02
 
-## Newest (2026-09-02, latest+63): the JobSearch build-out opens — freshness (ADR-241)
+## Newest (2026-09-02, latest+66): the application kit (ADR-244)
+
+UNKNOWN IS A VERDICT. `checkRequirements` answers "unknown" whenever no
+recorded fact can decide a line, and the reason names the screening
+question or profile field to fill. Do not default an unanswered
+sponsorship or clearance line to "met"; a knockout question answered by
+assumption is the silent rejection the increment exists to prevent.
+
+THE VOCABULARY IS FIXED AND CONTAINS NO SELF-IDENTIFICATION. Twelve
+keys, checked in the schema and mirrored in `SCREENING_QUESTIONS`; the
+PUT schema is one optional field per key, strict (zod's record over an
+enum demands every key, which is why it is an object). Gender, veteran,
+disability and ethnicity questions are deliberately absent — the
+employer asks those on their own form.
+
+VERBATIM BLOCKS. `buildKitBlocks` copies the profile; it does not
+rewrite, rank or summarise. `Card` does not forward `data-testid`, so the
+block containers are `<section className="card">` — the same trap as
+every panel before it.
+
+The navigation gains one entry beyond the owner's design (Application
+Kit, after Cover Letters); the navigation test's expected list carries
+the comment. The harness scene `job-seeker-application-kit` is in the
+component-layout sweep.
+
+HOSTED: scope=application-kit is dispatched after merge; record the run
+id here and in CURRENT_STATE. Also pending from this PR:
+scope=application-transitions (increment 3). Applied already:
+scope=posting-sightings run 33630908789 on main 79324f5 (#504).
+
+## Older (2026-09-02, latest+65): silence measured (ADR-243)
+
+THE TRIGGER WRITES THE LEDGER. `job_seeker_application_transitions` is
+written only by the AFTER trigger on applications (SECURITY DEFINER);
+authenticated holds SELECT and nothing else. Do not add an INSERT path
+"for imports": a transition that did not come from a row change is a
+lie about when something happened.
+
+A REJECTION IS A REPLY. `job_seeker_application_replies` counts the
+first transition into a response stage OR a closure with an employer
+reason (rejected before/after interview, position filled). Silence is
+the complaint; a "no" answers it. `no_response`, `withdrew`,
+`offer_declined` and `other` are not replies.
+
+THE COMPARISON IS THE PERSON'S OWN. Source median first, then every
+source, then the named 7-day default; the follow-up is applied + median
+held between 7 and 21. Do not introduce an industry benchmark: the
+boards' whole problem is numbers nobody can check.
+
+ROLLUP OVER NOTHING. `job_seeker_response_stats` groups by
+`rollup(source)` with `having count(*) > 0`; without the HAVING a person
+with no submissions gets a zero row, and the other-member privacy test
+catches it. An application whose stage outran the ledger (recorded
+before this migration) says so and gets no date.
+
+HOSTED: scope=application-transitions is dispatched after merge; record
+the run id here and in CURRENT_STATE.
+
+## Older (2026-09-02, latest+64): posting signals (ADR-242)
+
+THE TEXT IS THE ONLY SOURCE. Every signal in `board-search/signals.ts`
+is a deterministic pattern over the posting's own words, and every
+positive signal carries the phrase that matched. Do not add a company
+directory, a reputation list or a model call to it; a signal that cannot
+print its evidence does not belong on the card.
+
+THE PAGE RECOMPUTES WHAT THE SERVER SHOWED. The route attaches
+`signals`; the browser's instant filters run `applyUnifiedFilters`
+over the same text through the same module. A panel test fixture must
+therefore carry the text its `signals` were derived from, or the filter
+will not hide the card the badge is on.
+
+"NO" BEFORE "YES". `deriveSponsorship` runs the cannot-sponsor patterns
+first so a buried exception wins. `deriveWorkModel` reads hybrid before
+remote for the same reason. Unstated stays unstated: the sponsorship
+filter drops it while set, as seniority does; nothing is hidden by
+default.
+
+The work-model filter now consults the derived model when the board's
+field is empty — the one change to an existing filter, labeled "(from
+the text)" on the card. The Contacts page's message check runs
+`scanRedFlags` in the browser and stores nothing.
+
+No migration; nothing to dispatch.
+
+## Older (2026-09-02, latest+63): the JobSearch build-out opens — freshness (ADR-241)
 
 A NEW PROGRAM. Owner /goal (task #91): the world's best job search site,
 measured against LinkedIn's, Indeed's and the other boards' own users'
@@ -37,8 +122,8 @@ proves JS and SQL agree. Keep `posting-key.ts` server-only
 (node:crypto) and `freshness.ts` browser-safe — the panel imports the
 latter.
 
-HOSTED: scope=posting-sightings is dispatched after merge; record the
-run id here and in CURRENT_STATE.
+HOSTED: scope=posting-sightings run 33630908789 succeeded on main
+79324f5 (#504).
 
 ## Older (2026-09-02, latest+62): conversation routing (ADR-240) — the teardown is closed
 

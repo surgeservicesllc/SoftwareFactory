@@ -1,5 +1,83 @@
 # Current state
 
+## 2026-09-02: JobSearch build-out — increment 4, the application kit (ADR-244)
+
+`20260902001400_application_kit.sql`: `job_seeker_screening_answers`
+(twelve fixed question keys, one answer per question per person,
+uniform own-row RLS, authenticated CRUD, nothing to anon or
+service_role). `lib/job-seeker/application-kit.ts`: `buildKitBlocks`
+(contact, summary, work history, education, skills, certifications,
+answered questions — verbatim), `extractRequirements` (signal-word
+sentences, ≤ 20, deduplicated), `recordedExperienceYears`,
+`checkRequirements` (met / unmet / unknown per line, each naming the
+recorded fact or the question to answer), `toScreeningAnswers`. Routes:
+`GET/PUT /api/job-seeker/application-kit` (blocks + answers; upsert per
+question, an empty answer deletes; unknown keys and credential-shaped
+answers refused) and `GET /api/job-seeker/jobs/[jobId]/requirements`
+(checks, counts, basis; 404 for another person's job). Page
+`/job-seeker/application-kit` (copy buttons, answers form, profile-first
+empty state) with a navigation entry after Cover Letters and a harness
+scene for the width sweep; the Applications page gains a "Requirements
+check" per application. Tests: job-seeker-application-kit 11,
+job-seeker-screening-answers.behavior 2, application-kit routes 6,
+application-kit panel 2, panels +1, navigation updated. Grants roster
+and RLS census 232; replay executes the new postflight; runbook count
+234; workflow 416,142 bytes of 420,000; tsc, eslint and the production
+build clean. Hosted apply scope `application-kit` is dispatched after
+merge.
+
+## 2026-09-02: JobSearch build-out — increment 3, silence measured (ADR-243)
+
+`20260902001300_application_transitions.sql`: `job_seeker_closed_reason`
+enum and `job_seeker_applications.closed_reason` (checked: only while
+CLOSED), an owner-identity key on applications, and
+`job_seeker_application_transitions` (one append-only row per stage or
+approval change, written by a SECURITY DEFINER AFTER trigger, composite
+FK to the application's owner identity, forced RLS, SELECT own rows
+only, no service_role grant, rewrite refused by trigger).
+`job_seeker_application_replies(org)` (INVOKER: first response-stage
+transition or a rejection/filled closure) and
+`job_seeker_response_stats(org)` (INVOKER: per source + all sources,
+applied/replied/silent and the median days to reply; no rows when
+nothing was submitted). `lib/job-seeker/silence.ts`: `describeSilence`
+(source median first, then overall, then a named 7-day default;
+follow-up = applied + median held between 7 and 21, arithmetic in the
+sentence), `buildFunnel`, the closure-reason vocabulary. Jobs GET
+attaches `silence` and `closedReason` per application plus a
+`silenceBasis` line; applications PATCH close takes `closedReason`;
+analytics GET adds `funnel`, `closedReasons` (null counted as
+"unstated") and `responseBySource`, each null when the ledger is
+unreadable. Applications page: the silence sentence, the suggested
+follow-up with "Use this date", a reason select beside Close, the reason
+on closed cards; Analytics page: where applications stall, why they
+ended, replies by source. Tests: job-seeker-transitions.behavior 4,
+job-seeker-silence 8, job-seeker-silence-routes 6, panels +1,
+job-seeker-analytics-panel 2. Grants roster and RLS census 231; replay
+executes the new postflight; runbook count 233; workflow 415,273 bytes
+of 420,000; tsc and eslint clean. Hosted apply scope
+`application-transitions` is dispatched after merge.
+
+## 2026-09-02: JobSearch build-out — increment 2, posting signals (ADR-242)
+
+`lib/job-seeker/board-search/signals.ts` (pure, browser-safe): seven
+FTC-shaped red-flag patterns each returning the matched phrase;
+agency-likely from the company name; sponsorship stated yes/no with the
+"no" patterns first; work model from the board's field or, labeled, from
+the text; salary parsed with its period and the annual equivalent and its
+assumption printed; completeness over the six facts a person needs.
+`UnifiedFilters` gains `hideRedFlags`, `excludeAgencies` and
+`sponsorship` (off by default, unstated dropped only while a sponsorship
+filter is set) and the work-model filter consults the derived model when
+the board states none. The search route attaches `signals` to every
+unified card; the saved-search schema and alert planner carry the new
+keys as optional; the panel shows red-flag/agency/sponsorship badges with
+their evidence, "(from the text)" on a derived work model, the salary
+note and a "States n of 6 — missing …" line, three new controls and
+chips, and a "Why the red flags" list. Contacts & Outreach gains "Check a
+recruiter message" (`message-check.tsx`, in-browser, nothing stored). No
+migration. Tests: job-seeker-signals 15, unify +3, alerts +1, route +1,
+panel +1, message-check 2; tsc and eslint clean.
+
 ## 2026-09-02: JobSearch build-out — increment 1, freshness (ADR-241)
 
 The owner's new /goal (task #91) opens a second competitive program,
@@ -27,8 +105,8 @@ line with the count, and "Hide them" as the person's own toggle. Tests:
 job-seeker-sightings.behavior 6, job-seeker-freshness 11, search route
 +3, panel +1. Grants roster and RLS census 230; replay executes the new
 postflight; runbook count 232; workflow 414,342 bytes of 420,000; tsc
-and eslint clean. Hosted apply scope `posting-sightings` is dispatched
-after merge.
+and eslint clean. Merged as #504 (79324f5); hosted apply scope
+`posting-sightings`: run 33630908789 succeeded on main 79324f5.
 
 ## 2026-09-02: Conversation routing (ADR-240)
 

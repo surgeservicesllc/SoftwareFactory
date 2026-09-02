@@ -20,6 +20,11 @@ import {
   type LinkoutQuery,
 } from "@/lib/job-seeker/board-search/linkout";
 import { freshnessLabel } from "@/lib/job-seeker/board-search/freshness";
+import {
+  COMPLETENESS_LABELS,
+  type PostingSignals,
+  type Sponsorship,
+} from "@/lib/job-seeker/board-search/signals";
 
 /**
  * Search: query live job boards and save what is worth keeping.
@@ -126,7 +131,12 @@ type FreshnessView = {
   reasons: string[];
 };
 
-type UnifiedCard = UnifiedHit & { match?: MatchView | null; freshness?: FreshnessView | null };
+type UnifiedCard = UnifiedHit & {
+  match?: MatchView | null;
+  freshness?: FreshnessView | null;
+  /** What the posting's own text says about itself (ADR-242). */
+  signals?: PostingSignals | null;
+};
 
 type MatchBasis =
   | { computed: true; method: string }
@@ -151,6 +161,9 @@ type SavedSearchQuery = {
     requireSalary?: boolean;
     postedWithinDays?: number | null;
     minimumScore?: number | null;
+    hideRedFlags?: boolean;
+    excludeAgencies?: boolean;
+    sponsorship?: Sponsorship | null;
   };
 };
 
@@ -301,6 +314,10 @@ export function JobSearchPanel() {
   const [industry, setIndustry] = useState<"" | DerivedIndustry>("");
   const [salaryMinimumInput, setSalaryMinimumInput] = useState("");
   const [requireSalary, setRequireSalary] = useState(false);
+  // Posting signals (ADR-242): each derived from the posting's own text.
+  const [hideRedFlags, setHideRedFlags] = useState(false);
+  const [excludeAgencies, setExcludeAgencies] = useState(false);
+  const [sponsorship, setSponsorship] = useState<"" | Sponsorship>("");
   const [postedWithinDays, setPostedWithinDays] = useState<"" | "1" | "3" | "7" | "14" | "30">("");
   const [minimumScoreInput, setMinimumScoreInput] = useState("");
 
@@ -589,8 +606,11 @@ export function JobSearchPanel() {
           : Math.max(0, Math.floor(Number(salaryMinimumInput))),
       requireSalary,
       postedWithinDays: postedWithinDays === "" ? null : Number(postedWithinDays),
+      hideRedFlags,
+      excludeAgencies,
+      sponsorship: sponsorship === "" ? null : sponsorship,
     }),
-    [keywordMode, keywords, excludeKeywords, excludeCompanies, workModel, seniority, specialty, industry, salaryMinimumInput, requireSalary, postedWithinDays],
+    [keywordMode, keywords, excludeKeywords, excludeCompanies, workModel, seniority, specialty, industry, salaryMinimumInput, requireSalary, postedWithinDays, hideRedFlags, excludeAgencies, sponsorship],
   );
 
   const filtersActive =
@@ -604,7 +624,10 @@ export function JobSearchPanel() {
     filters.salaryMinimum !== null ||
     requireSalary ||
     postedWithinDays !== "" ||
-    minimumScoreInput.trim() !== "";
+    minimumScoreInput.trim() !== "" ||
+    hideRedFlags ||
+    excludeAgencies ||
+    sponsorship !== "";
 
   const clearFilters = useCallback(() => {
     setKeywords([]);
@@ -621,6 +644,9 @@ export function JobSearchPanel() {
     setRequireSalary(false);
     setPostedWithinDays("");
     setMinimumScoreInput("");
+    setHideRedFlags(false);
+    setExcludeAgencies(false);
+    setSponsorship("");
   }, []);
 
   const unified = useMemo<UnifiedCard[] | null>(() => {
@@ -734,8 +760,11 @@ export function JobSearchPanel() {
       requireSalary,
       postedWithinDays: postedWithinDays === "" ? null : Number(postedWithinDays),
       minimumScore,
+      hideRedFlags,
+      excludeAgencies,
+      sponsorship: sponsorship === "" ? null : sponsorship,
     },
-  }), [text, location, radiusKm, boards, selectedBoards, sort, keywordMode, keywords, excludeKeywords, excludeCompanies, workModel, seniority, specialty, industry, filters.salaryMinimum, requireSalary, postedWithinDays, minimumScore]);
+  }), [text, location, radiusKm, boards, selectedBoards, sort, keywordMode, keywords, excludeKeywords, excludeCompanies, workModel, seniority, specialty, industry, filters.salaryMinimum, requireSalary, postedWithinDays, minimumScore, hideRedFlags, excludeAgencies, sponsorship]);
 
   const savedSearchRequest = useCallback(async (
     method: "POST" | "PATCH" | "DELETE",
@@ -794,6 +823,9 @@ export function JobSearchPanel() {
         : (String(savedFilters.postedWithinDays) as "" | "1" | "3" | "7" | "14" | "30"),
     );
     setMinimumScoreInput(savedFilters.minimumScore == null ? "" : String(savedFilters.minimumScore));
+    setHideRedFlags(savedFilters.hideRedFlags ?? false);
+    setExcludeAgencies(savedFilters.excludeAgencies ?? false);
+    setSponsorship(savedFilters.sponsorship ?? "");
     if (boards !== null && query.boards !== undefined) {
       const wanted = new Set(query.boards);
       setDeselected(new Set(boards.filter((board) => !wanted.has(board.key)).map((board) => board.key)));
@@ -1230,6 +1262,39 @@ export function JobSearchPanel() {
             />
             Only show postings that state a salary
           </label>
+          <div className="mt-2 flex flex-wrap items-end gap-4">
+            <label className="flex items-center gap-2 text-xs">
+              <input
+                type="checkbox"
+                checked={hideRedFlags}
+                onChange={(event) => setHideRedFlags(event.target.checked)}
+                title="Scam warning signs found in the posting's own text — off-platform messaging, upfront payment, money handling, too-good pay, early personal data, webmail contact, task pay. Each card names the phrase."
+              />
+              Hide postings with red flags (from the text)
+            </label>
+            <label className="flex items-center gap-2 text-xs">
+              <input
+                type="checkbox"
+                checked={excludeAgencies}
+                onChange={(event) => setExcludeAgencies(event.target.checked)}
+                title="Company names that read as staffing or recruiting agencies. An agency is not a scam; this drops the one job listed under six agency names."
+              />
+              Exclude staffing agencies (from the company name)
+            </label>
+            <label className="block text-xs">
+              <span className="text-[var(--muted)]">Visa sponsorship (from the posting text)</span>
+              <select
+                value={sponsorship}
+                onChange={(event) => setSponsorship(event.target.value as typeof sponsorship)}
+                title="Read from what the posting states. Postings that state nothing are hidden while this is set."
+                className="mt-1 w-full rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5 text-sm"
+              >
+                <option value="">Any (unstated kept)</option>
+                <option value="stated_yes">States it sponsors</option>
+                <option value="stated_no">States no sponsorship</option>
+              </select>
+            </label>
+          </div>
 
           {filtersActive ? (
             <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -1274,6 +1339,14 @@ export function JobSearchPanel() {
                 <Chip label={`salary ≥ ${filters.salaryMinimum}`} onRemove={() => setSalaryMinimumInput("")} />
               ) : null}
               {requireSalary ? <Chip label="salary stated" onRemove={() => setRequireSalary(false)} /> : null}
+              {hideRedFlags ? <Chip label="no red flags" onRemove={() => setHideRedFlags(false)} /> : null}
+              {excludeAgencies ? <Chip label="no agencies" onRemove={() => setExcludeAgencies(false)} /> : null}
+              {sponsorship !== "" ? (
+                <Chip
+                  label={sponsorship === "stated_yes" ? "sponsors visas" : "no sponsorship"}
+                  onRemove={() => setSponsorship("")}
+                />
+              ) : null}
               {postedWithinDays !== "" ? (
                 <Chip label={`≤ ${postedWithinDays}d old`} onRemove={() => setPostedWithinDays("")} />
               ) : null}
@@ -1713,15 +1786,57 @@ export function JobSearchPanel() {
                                     {freshnessLabel(card.freshness.level)}
                                   </span>
                                 ) : null}
+                                {card.signals != null && card.signals.redFlags.length > 0 ? (
+                                  <span
+                                    data-testid="redflag-badge"
+                                    title={card.signals.redFlags.map((flag) => flag.label).join(" ")}
+                                    className="ml-2 rounded-full border border-[var(--warning)] px-1.5 py-0.5 align-middle text-[10px] font-semibold uppercase tracking-wide text-[var(--warning)]"
+                                  >
+                                    {card.signals.redFlags.length === 1 ? "Red flag" : `${card.signals.redFlags.length} red flags`}
+                                  </span>
+                                ) : null}
+                                {card.signals?.agency.likely ? (
+                                  <span
+                                    data-testid="agency-badge"
+                                    title={`From the company name: “${card.signals.agency.phrase}”.`}
+                                    className="ml-2 rounded-full border border-[var(--border)] px-1.5 py-0.5 align-middle text-[10px] font-semibold uppercase tracking-wide text-[var(--muted)]"
+                                  >
+                                    Agency-likely
+                                  </span>
+                                ) : null}
+                                {card.signals?.sponsorship.state != null ? (
+                                  <span
+                                    data-testid="sponsorship-badge"
+                                    title={`The posting says: “${card.signals.sponsorship.phrase}”.`}
+                                    className="ml-2 rounded-full border border-[var(--border)] px-1.5 py-0.5 align-middle text-[10px] font-semibold uppercase tracking-wide text-[var(--muted)]"
+                                  >
+                                    {card.signals.sponsorship.state === "stated_yes" ? "Sponsors visas" : "No sponsorship"}
+                                  </span>
+                                ) : null}
                               </p>
                               <p className="text-sm text-[var(--muted)]">
                                 {card.job.company}
                                 {card.job.location === null ? "" : ` · ${card.job.location}`}
-                                {card.job.workModel === null ? "" : ` · ${card.job.workModel}`}
+                                {card.job.workModel !== null
+                                  ? ` · ${card.job.workModel}`
+                                  : card.signals?.workModel.derived
+                                    ? ` · ${card.signals.workModel.model} (from the text)`
+                                    : ""}
                                 {card.job.salaryText === null ? "" : ` · ${card.job.salaryText}`}
                                 {card.publishedOn === null ? "" : ` · posted ${card.publishedOn}`}
                                 {card.closesOn === null ? "" : ` · closes ${card.closesOn}`}
                               </p>
+                              {card.signals != null ? (
+                                <p className="text-xs text-[var(--muted)]" data-testid="posting-signals">
+                                  {card.signals.salary !== null && card.signals.salary.period !== "year"
+                                    ? `${card.signals.salary.note} `
+                                    : ""}
+                                  States {card.signals.completeness.score} of 6
+                                  {card.signals.completeness.missing.length > 0
+                                    ? ` — missing ${card.signals.completeness.missing.map((field) => COMPLETENESS_LABELS[field]).join(", ")}.`
+                                    : " — pay, place, work model, level, description and date."}
+                                </p>
+                              ) : null}
                               <p className="mt-1 flex flex-wrap gap-1.5">
                                 {card.match != null ? (
                                   <span
@@ -1774,6 +1889,18 @@ export function JobSearchPanel() {
                                   <ul className="mt-1 list-disc pl-4">
                                     {card.freshness.reasons.map((reason) => (
                                       <li key={reason}>{reason}</li>
+                                    ))}
+                                  </ul>
+                                </details>
+                              ) : null}
+                              {card.signals != null && card.signals.redFlags.length > 0 ? (
+                                <details className="mt-1 text-xs text-[var(--warning)]" data-testid="redflag-reasons">
+                                  <summary className="cursor-pointer">Why the red flags</summary>
+                                  <ul className="mt-1 list-disc pl-4">
+                                    {card.signals.redFlags.map((flag) => (
+                                      <li key={flag.code}>
+                                        {flag.label} Matched: “{flag.phrase}”.
+                                      </li>
                                     ))}
                                   </ul>
                                 </details>

@@ -65,6 +65,9 @@ describe("the Job Seeker navigation", () => {
       "Applications",
       "Resume Library",
       "Cover Letters",
+      // Beyond the design: the application kit (ADR-244), the one
+      // destination every ATS form needs and no other page holds.
+      "Application Kit",
       "Interview Tracker",
       "Contacts & Outreach",
       "Notes & Documents",

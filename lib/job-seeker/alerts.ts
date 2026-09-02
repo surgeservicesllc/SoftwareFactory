@@ -52,6 +52,9 @@ export function toUnifiedFilters(query: SavedSearchQuery): UnifiedFilters {
     salaryMinimum: filters.salaryMinimum ?? null,
     requireSalary: filters.requireSalary ?? false,
     postedWithinDays: filters.postedWithinDays ?? null,
+    hideRedFlags: filters.hideRedFlags ?? false,
+    excludeAgencies: filters.excludeAgencies ?? false,
+    sponsorship: filters.sponsorship ?? null,
   };
 }
 

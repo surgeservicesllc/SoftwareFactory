@@ -525,6 +525,84 @@ describe("the search panel", () => {
     expect(screen.getByText("Platform Engineer")).toBeInTheDocument();
   });
 
+  it("shows the posting's own signals with their evidence, and filters on them only when asked (ADR-242)", async () => {
+    // The signals below are what the server computed from this same text;
+    // the browser's instant filters recompute from it through the shared
+    // module, so the fixture carries the text the badges were derived from.
+    const flagged = {
+      job: {
+        ...hit("Data Entry Clerk").job,
+        url: "https://jobnet.dk/find-job/flagged",
+        company: "Apex Recruiting",
+        salaryText: "$30 per hour",
+        description: "Fully remote. Contact us on Telegram to start. We cannot sponsor visas.",
+      },
+      publishedOn: "2026-09-01",
+      closesOn: null,
+      sources: [{ board: "jobnet", boardName: "Jobnet", url: "https://jobnet.dk/find-job/flagged", externalId: "id-flagged", saveToken: "t-flagged" }],
+      primarySourceIndex: 0,
+      match: null,
+      signals: {
+        redFlags: [{ code: "off_platform_messaging", label: "Asks you to continue on a messaging app instead of the platform — the FTC's first warning sign.", phrase: "Telegram" }],
+        agency: { likely: true, phrase: "Recruiting" },
+        sponsorship: { state: "stated_no", phrase: "cannot sponsor visas" },
+        workModel: { model: "remote", derived: true, phrase: "Fully remote" },
+        salary: { low: 30, high: 30, period: "hour", currency: "USD", annualized: 62_400, note: "30 per hour → about 62,400 per year, assuming 2080 hours a year." },
+        completeness: { present: ["pay", "place", "work_model", "posted"], missing: ["level", "description"], score: 4 },
+      },
+    };
+    const plain = {
+      job: { ...hit("Go Engineer").job, url: "https://jobnet.dk/find-job/plain" },
+      publishedOn: "2026-09-01",
+      closesOn: null,
+      sources: [{ board: "jobnet", boardName: "Jobnet", url: "https://jobnet.dk/find-job/plain", externalId: "id-plain", saveToken: "t-plain" }],
+      primarySourceIndex: 0,
+      match: null,
+      signals: {
+        redFlags: [],
+        agency: { likely: false, phrase: null },
+        sponsorship: { state: null, phrase: null },
+        workModel: { model: null, derived: false, phrase: null },
+        salary: null,
+        completeness: { present: ["place", "posted"], missing: ["pay", "work_model", "level", "description"], score: 2 },
+      },
+    };
+    respond({
+      results: [{ board: "jobnet", boardName: "Jobnet", totalAvailable: 2, hits: [hit("Data Entry Clerk"), hit("Go Engineer")], locationApplied: true }],
+      failures: [],
+      unified: { hits: [flagged, plain], dedupedFrom: 2, beforeFilters: 2, matchBasis: { computed: false, reason: "No Career Profile is recorded yet." } },
+    });
+    const user = userEvent.setup();
+    render(<JobSearchPanel />);
+    await screen.findByText(/Searching 2 boards:/);
+
+    await search(user);
+
+    // Badges on the flagged card only, each carrying its evidence.
+    expect(await screen.findByTestId("redflag-badge")).toHaveTextContent("Red flag");
+    expect(screen.getByTestId("agency-badge")).toHaveAttribute("title", "From the company name: “Recruiting”.");
+    expect(screen.getByTestId("sponsorship-badge")).toHaveTextContent("No sponsorship");
+    expect(screen.getByText(/· remote \(from the text\)/)).toBeInTheDocument();
+    const signalLines = screen.getAllByTestId("posting-signals");
+    expect(signalLines[0]).toHaveTextContent("30 per hour → about 62,400 per year, assuming 2080 hours a year. States 4 of 6 — missing level, a real description.");
+    expect(signalLines[1]).toHaveTextContent("States 2 of 6 — missing pay, work model, level, a real description.");
+    await user.click(screen.getByText("Why the red flags"));
+    expect(screen.getByText(/Matched: “Telegram”/)).toBeInTheDocument();
+
+    // Nothing is hidden until the person asks; then the chip says what was asked.
+    expect(screen.getByText("Data Entry Clerk")).toBeInTheDocument();
+    await user.click(screen.getByLabelText(/Hide postings with red flags/));
+    expect(screen.queryByText("Data Entry Clerk")).not.toBeInTheDocument();
+    expect(screen.getByText("no red flags")).toBeInTheDocument();
+    await user.click(screen.getByLabelText(/Hide postings with red flags/));
+    expect(screen.getByText("Data Entry Clerk")).toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText(/Visa sponsorship \(from the posting text\)/), "stated_yes");
+    expect(screen.queryByText("Data Entry Clerk")).not.toBeInTheDocument();
+    expect(screen.queryByText("Go Engineer")).not.toBeInTheDocument();
+    expect(screen.getByText("sponsors visas")).toBeInTheDocument();
+  });
+
   it("says why scores are absent rather than inventing them", async () => {
     const card = {
       job: hit("Platform Engineer").job,

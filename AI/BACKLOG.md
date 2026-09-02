@@ -73,18 +73,38 @@ own PR, ADR, behavior test against the real chain, and hosted scope.
   20260902001200; hosted apply: scope=posting-sightings after merge.
   Closes LinkedIn 2/3/20, Indeed 2/3/22, others 11/14/19/25 (freshness
   half).
-- [ ] Increment 2 (ADR-242): red flags and completeness — scam markers
-  with the matched phrase, agency-likely from the company name, posting
-  completeness, sponsorship stated/not, work model derived from text,
-  parsed salary with its period; derived facets through search, saved
-  searches and alerts. No new table.
-- [ ] Increment 3 (ADR-243): silence measured — append-only application
-  transitions ledger (trigger-written), days-silent against the person's
-  own median days-to-reply by source, suggested follow-up with the
-  arithmetic, closure reasons, funnel of where the search stalls.
-- [ ] Increment 4 (ADR-244): application kit — screening answers the
-  person keeps, copy-ready ATS blocks from the profile, a requirements
-  check per posting with a verdict per line.
+- [x] Increment 2 (ADR-242): posting signals — `board-search/signals.ts`
+  (seven FTC-shaped red flags with the matched phrase, agency-likely
+  from the company name, sponsorship stated yes/no, work model from the
+  text labeled derived, salary parsed with its period and annual
+  equivalent, completeness over six facts); filters `hideRedFlags`,
+  `excludeAgencies`, `sponsorship` through route, saved-search schema,
+  alert planner and panel; card badges with evidence; Contacts page
+  "Check a recruiter message". No migration. Closes LinkedIn 8/9/10/11/16,
+  Indeed 1/6/15/18, others 6/9/10/16/18/20.
+- [x] Increment 3 (ADR-243): silence measured —
+  `job_seeker_application_transitions` (trigger-written, append-only,
+  forced RLS, own rows only), `job_seeker_applications.closed_reason`
+  (enum, only while CLOSED), `job_seeker_application_replies()` and
+  `job_seeker_response_stats()` (INVOKER); `lib/job-seeker/silence.ts`
+  (days silent against the source's own median, then all sources, then
+  a named default; follow-up = applied + median held 7–21 with the sum
+  printed; funnel). Jobs list carries `silence` + `closedReason`;
+  close takes a reason; analytics adds the funnel, closure reasons and
+  replies by source; applications page prints the sentences and offers
+  "Use this date". 20260902001300; hosted apply:
+  scope=application-transitions after merge. Closes LinkedIn 1/13/21,
+  Indeed 4/13/20/25, others 17.
+- [x] Increment 4 (ADR-244): application kit —
+  `job_seeker_screening_answers` (twelve fixed keys, own-row RLS);
+  `lib/job-seeker/application-kit.ts` (verbatim blocks; requirement
+  lines extracted from the posting and checked against recorded facts
+  with met/unmet/unknown naming the fact); routes
+  `/api/job-seeker/application-kit` (GET/PUT) and
+  `/api/job-seeker/jobs/[jobId]/requirements`; page
+  `/job-seeker/application-kit` with copy buttons and the answers form;
+  "Requirements check" on every application. 20260902001400; hosted
+  apply: scope=application-kit after merge. Closes LinkedIn 6, Indeed 12.
 - [ ] Increment 5 (ADR-245): what keeps costing you — skills gap across
   target and saved jobs ranked by frequency; your own history with each
   company on every result.

@@ -270,6 +270,77 @@ describe("JobSeekerApplicationsPanel", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/explicit approval first/);
   });
+  it("measures silence, offers the computed follow-up date, and closes with a reason (ADR-243)", async () => {
+    const patches: unknown[] = [];
+    const applied = {
+      ...SCORED_JOB,
+      application: {
+        id: "a3", stage: "APPLIED", approvalStatus: "approved", applicationUrl: null, notes: null, followUpAt: null,
+        closedReason: null,
+        silence: {
+          daysSinceApplied: 10, daysSilent: 10, repliedAfterDays: null,
+          sentence: "Silent for 10 days. Your median reply took 9 days across 1 reply on remotive.",
+          suggestedFollowUpOn: "2026-09-16",
+          suggestionSentence: "A follow-up was due 2026-09-16: applied 2026-09-07 + 9 days (your median 9 on remotive, held between 7 and 21).",
+        },
+      },
+    };
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.startsWith("/api/job-seeker/applications/") && init?.method === "PATCH") {
+        patches.push(JSON.parse(String(init.body)));
+        return jsonResponse({ application: { ...applied.application, followUpAt: "2026-09-16T09:00:00.000Z" } });
+      }
+      if (url === "/api/job-seeker/jobs") return jsonResponse({ jobs: [applied] });
+      if (url === "/api/job-seeker/import-sources") return jsonResponse({ sources: [] });
+      throw new Error(`Unexpected request: ${url}`);
+    }));
+
+    render(<JobSeekerApplicationsPanel />);
+    expect(await screen.findByTestId("silence")).toHaveTextContent("Silent for 10 days. Your median reply took 9 days across 1 reply on remotive.");
+    expect(screen.getByTestId("silence-suggestion")).toHaveTextContent("A follow-up was due 2026-09-16: applied 2026-09-07 + 9 days");
+
+    fireEvent.click(screen.getByRole("button", { name: "Use this date" }));
+    await waitFor(() => expect(patches).toHaveLength(1));
+    expect(patches[0]).toEqual({ action: "follow_up", followUpAt: "2026-09-16T09:00:00.000Z" });
+
+    fireEvent.change(screen.getByLabelText("Why is it closing?"), { target: { value: "no_response" } });
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(patches).toHaveLength(2));
+    expect(patches[1]).toEqual({ action: "close", closedReason: "no_response" });
+  });
+
+  it("checks the posting's requirements on demand, each line with its verdict and reason (ADR-244)", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/job-seeker/jobs/j1/requirements") {
+        return jsonResponse({
+          checks: [
+            { line: "5+ years of experience with TypeScript required.", verdict: "met", reason: "Asks for 5+ years; your recorded history (10 years from its dates) covers it." },
+            { line: "Must be authorized to work in the US without sponsorship.", verdict: "unknown", reason: "Answer the work-authorization and sponsorship screening questions to check this line." },
+          ],
+          counts: { met: 1, unmet: 0, unknown: 1 },
+          basis: "Each line is the posting's own sentence, checked against your recorded profile and screening answers; nothing is assumed met.",
+        });
+      }
+      if (url === "/api/job-seeker/jobs") return jsonResponse({ jobs: [SCORED_JOB] });
+      if (url === "/api/job-seeker/import-sources") return jsonResponse({ sources: [] });
+      throw new Error(`Unexpected request: ${url}`);
+    }));
+
+    render(<JobSeekerApplicationsPanel />);
+    await screen.findByText("Awaiting your review");
+    const details = screen.getByTestId("requirements-check");
+    fireEvent(details, new Event("toggle", { bubbles: false }));
+    (details as HTMLDetailsElement).open = true;
+    fireEvent(details, new Event("toggle"));
+
+    expect(await screen.findByText("1 met · 0 not met · 1 unknown.", { exact: false })).toBeInTheDocument();
+    expect(screen.getByText("Met")).toBeInTheDocument();
+    expect(screen.getByText("Unknown")).toBeInTheDocument();
+    expect(screen.getByText(/Answer the work-authorization and sponsorship screening questions/)).toBeInTheDocument();
+  });
+
   it("prepares an application: generates fact-only documents and shows them versioned", async () => {
     const posts: string[] = [];
     // The real route advances the stage to READY_FOR_REVIEW; the stub

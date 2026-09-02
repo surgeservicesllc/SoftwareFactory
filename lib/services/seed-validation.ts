@@ -778,7 +778,33 @@ export async function buildSeedReport(
     const populated = spec.optional.filter((column) =>
       rows.some((row) => row[column] !== null && row[column] !== undefined && row[column] !== ""),
     );
-    const empty = spec.optional.filter((column) => !populated.includes(column));
+    /*
+     * A column the sample never saw populated is not yet an empty column.
+     * The sample is a thousand rows in uuid order — a random slice — and a
+     * value written to a few dozen rows of a table several times that size
+     * can miss the slice by chance (a failure reason on one notice in
+     * thirty-seven did, on a run that was otherwise identical to the one
+     * before it). So each miss is settled with one exact query: ascending
+     * order puts a non-null value first if the table holds one anywhere.
+     * The report says when a column was proven beyond the sample.
+     */
+    const empty: string[] = [];
+    for (const column of spec.optional.filter((column) => !populated.includes(column))) {
+      const probe = await client
+        .from(spec.table)
+        .select(`id, ${column}`)
+        .eq("organization_id", organizationId)
+        .order(column, { ascending: true })
+        .limit(1);
+      const first = ((probe.data ?? []) as unknown as Record<string, unknown>[])[0];
+      const value = first?.[column];
+      if (!probe.error && value !== null && value !== undefined && value !== "") {
+        populated.push(column);
+        notes.push(`${column}: populated beyond the ${SAMPLE}-row sample`);
+      } else {
+        empty.push(column);
+      }
+    }
 
     const enumValues = spec.enumColumn
       ? [...new Set(rows.map((row) => String(row[spec.enumColumn as string])))].filter(

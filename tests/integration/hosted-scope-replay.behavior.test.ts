@@ -268,6 +268,8 @@ describe("the workflow's post-cutover surgical-scope fence", () => {
     const files = (await readdir(directory)).filter((name) => name.endsWith(".sql")).sort();
     expect(files).toEqual([
       "agentos-foundation.sql",
+      "application-kit.sql",
+      "application-transitions.sql",
       "autopay-authorization.sql",
       "billing-contracts.sql",
       "branches-org-sales.sql",

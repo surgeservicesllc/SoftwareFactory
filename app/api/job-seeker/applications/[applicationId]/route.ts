@@ -7,6 +7,7 @@ import {
   readBoundedJson,
   requestErrorResponse,
 } from "@/lib/server/http";
+import { CLOSED_REASONS } from "@/lib/job-seeker/silence";
 import { supabaseBoundaryErrorResponse } from "@/lib/supabase/http";
 import { assertSameOriginRequest } from "@/lib/supabase/request";
 import { requireActiveOrganization } from "@/lib/supabase/tenant";
@@ -33,11 +34,13 @@ const transitionSchema = z
     notes: z.string().trim().max(8000).optional(),
     followUpAt: z.string().datetime().nullish(),
     applicationUrl: z.string().trim().url().max(800).nullish(),
+    /** Why the application ended; the schema allows it only while CLOSED (ADR-243). */
+    closedReason: z.enum(CLOSED_REASONS).nullish(),
   })
   .strict();
 
 const APPLICATION_COLUMNS =
-  "id, job_id, stage, approval_status, decided_at, applied_at, application_url, notes, follow_up_at, updated_at";
+  "id, job_id, stage, approval_status, decided_at, applied_at, application_url, notes, follow_up_at, closed_reason, updated_at";
 
 type ApplicationRow = {
   id: string;
@@ -49,6 +52,7 @@ type ApplicationRow = {
   application_url: string | null;
   notes: string | null;
   follow_up_at: string | null;
+  closed_reason: string | null;
   updated_at: string | null;
 };
 
@@ -63,6 +67,7 @@ function toView(row: ApplicationRow) {
     applicationUrl: row.application_url,
     notes: row.notes,
     followUpAt: row.follow_up_at,
+    closedReason: row.closed_reason,
     updatedAt: row.updated_at,
   };
 }
@@ -97,6 +102,9 @@ export async function PATCH(
       if (payload.stage === "APPLIED") patch.applied_at = new Date().toISOString();
     } else if (payload.action === "close") {
       patch.stage = "CLOSED";
+      // The person's own word for why it ended; null is "not said", which
+      // the analytics count as such rather than guessing a reason.
+      patch.closed_reason = payload.closedReason ?? null;
     } else if (payload.action === "follow_up") {
       patch.follow_up_at = payload.followUpAt ?? null;
     }

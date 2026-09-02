@@ -8,6 +8,7 @@ import {
   requestErrorResponse,
 } from "@/lib/server/http";
 import { insertScoredJob, loadEvaluationInputs } from "@/lib/job-seeker/record";
+import { describeSilence, toReplyStats, type ReplyStats, type SilenceView } from "@/lib/job-seeker/silence";
 import { findSensitiveData } from "@/lib/server/sensitive-data";
 import { supabaseBoundaryErrorResponse } from "@/lib/supabase/http";
 import { assertSameOriginRequest } from "@/lib/supabase/request";
@@ -82,6 +83,7 @@ type ApplicationEmbed = {
   notes: string | null;
   follow_up_at: string | null;
   applied_at: string | null;
+  closed_reason?: string | null;
 };
 
 /*
@@ -101,9 +103,41 @@ const JOB_COLUMNS =
   "id, source, external_id, url, title, company, salary_text, location, work_model, "
   + "description, discovered_at, "
   + "job_seeker_matches ( score, breakdown, reasons, gaps, threshold_used, qualified ), "
-  + "job_seeker_applications ( id, stage, approval_status, application_url, notes, follow_up_at, applied_at )";
+  + "job_seeker_applications ( id, stage, approval_status, application_url, notes, follow_up_at, applied_at, closed_reason )";
 
-function toView(row: JobRow) {
+/**
+ * Silence measured (ADR-243): the first reply each application recorded
+ * and the person's reply statistics, read once per request through the
+ * two invoker functions. Both are failure-tolerant — an unapplied
+ * migration leaves `silence` null on every application and the list
+ * still answers — and nothing here is a guess about employers: the
+ * comparison is the person's own medians.
+ */
+type SilenceInputs = Readonly<{ replies: ReadonlyMap<string, string>; stats: readonly ReplyStats[] }>;
+
+async function loadSilenceInputs(
+  client: Awaited<ReturnType<typeof requireActiveOrganization>>["client"],
+  organizationId: string,
+): Promise<SilenceInputs | null> {
+  try {
+    const [replies, stats] = await Promise.all([
+      client.rpc("job_seeker_application_replies", { p_organization_id: organizationId }),
+      client.rpc("job_seeker_response_stats", { p_organization_id: organizationId }),
+    ]);
+    if (!replies || replies.error || !Array.isArray(replies.data)) return null;
+    if (!stats || stats.error || !Array.isArray(stats.data)) return null;
+    return {
+      replies: new Map(
+        (replies.data as Array<{ application_id: string; replied_at: string }>).map((row) => [row.application_id, row.replied_at]),
+      ),
+      stats: (stats.data as Record<string, unknown>[]).map(toReplyStats),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function toView(row: JobRow, silenceInputs: SilenceInputs | null = null) {
   const match = firstEmbed(row.job_seeker_matches);
   const application = firstEmbed(row.job_seeker_applications);
   return {
@@ -143,6 +177,16 @@ function toView(row: JobRow) {
         applicationUrl: application.application_url,
         notes: application.notes,
         followUpAt: application.follow_up_at,
+        closedReason: application.closed_reason ?? null,
+        silence: silenceInputs === null
+          ? null
+          : describeSilence({
+              appliedAt: application.applied_at,
+              repliedAt: silenceInputs.replies.get(application.id) ?? null,
+              stage: application.stage,
+              source: row.source,
+              stats: silenceInputs.stats,
+            }) satisfies SilenceView | null,
       }
       : null,
   };
@@ -158,7 +202,14 @@ export async function GET() {
       .order("discovered_at", { ascending: false })
       .limit(200);
     if (error) return databaseErrorResponse(error);
-    return jsonNoStore({ jobs: ((data ?? []) as unknown as JobRow[]).map(toView) });
+    const silenceInputs = await loadSilenceInputs(client, activeOrganization.id);
+    return jsonNoStore({
+      jobs: ((data ?? []) as unknown as JobRow[]).map((row) => toView(row, silenceInputs)),
+      /** Whether silence could be measured; null silence on every row otherwise. */
+      silenceBasis: silenceInputs === null
+        ? "Days silent could not be measured: the transitions ledger is not readable on this deployment."
+        : "Days silent are counted from your own applications' recorded replies; suggested follow-ups print their arithmetic.",
+    });
   } catch (error) {
     const boundary = supabaseBoundaryErrorResponse(error);
     if (boundary) return boundary;

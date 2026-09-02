@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { Card, EmptyState, SectionTitle, StatusBadge } from "@/components/ui";
 import type { JobView } from "@/components/job-seeker/jobs-panel";
+import { CLOSED_REASON_LABELS, CLOSED_REASONS, type ClosedReason } from "@/lib/job-seeker/silence";
 
 /**
  * The application pipeline. Eleven stages, and one rule above all of them:
@@ -40,6 +41,13 @@ type DocumentView = {
   version: number;
   content: string;
   createdAt: string;
+};
+
+/** The posting's own requirement lines, each with a verdict naming the fact (ADR-244). */
+type RequirementsView = {
+  checks: Array<{ line: string; verdict: "met" | "unmet" | "unknown"; reason: string }>;
+  counts: { met: number; unmet: number; unknown: number };
+  basis: string;
 };
 
 const DETAIL_FIELD_CLASS =
@@ -127,6 +135,9 @@ export function JobSeekerApplicationsPanel() {
   const [problem, setProblem] = useState("");
   const [busyId, setBusyId] = useState("");
   const [documentsByApplication, setDocumentsByApplication] = useState<Record<string, DocumentView[]>>({});
+  /** The reason chosen beside each Close button; "" is "not said" (ADR-243). */
+  const [closeReasons, setCloseReasons] = useState<Record<string, "" | ClosedReason>>({});
+  const [requirementsByJob, setRequirementsByJob] = useState<Record<string, RequirementsView | "failed">>({});
 
   const load = useCallback(async () => {
     try {
@@ -155,6 +166,20 @@ export function JobSeekerApplicationsPanel() {
       setDocumentsByApplication((current) => ({ ...current, [applicationId]: body.documents ?? [] }));
     } catch {
       /* The viewer simply stays closed; the next click retries. */
+    }
+  }
+
+  async function loadRequirements(jobId: string) {
+    try {
+      const response = await fetch(`/api/job-seeker/jobs/${jobId}/requirements`, { cache: "no-store" });
+      if (!response.ok) {
+        setRequirementsByJob((current) => ({ ...current, [jobId]: "failed" }));
+        return;
+      }
+      const body = (await response.json()) as RequirementsView;
+      setRequirementsByJob((current) => ({ ...current, [jobId]: body }));
+    } catch {
+      setRequirementsByJob((current) => ({ ...current, [jobId]: "failed" }));
     }
   }
 
@@ -252,7 +277,36 @@ export function JobSeekerApplicationsPanel() {
                       <p className="text-sm text-[var(--text-muted)]">
                         {job.company}
                         {job.match ? ` · score ${job.match.score}/100` : ""}
+                        {application.stage === "CLOSED" && application.closedReason ? (
+                          ` · closed: ${CLOSED_REASON_LABELS[application.closedReason as ClosedReason] ?? application.closedReason}`
+                        ) : ""}
                       </p>
+                      {application.silence ? (
+                        <p className="mt-1 text-xs text-[var(--text-muted)]" data-testid="silence">
+                          {application.silence.sentence}
+                        </p>
+                      ) : null}
+                      {application.silence?.suggestionSentence ? (
+                        <p className="mt-1 text-xs text-[var(--text-muted)]" data-testid="silence-suggestion">
+                          {application.silence.suggestionSentence}{" "}
+                          {application.followUpAt?.slice(0, 10) === application.silence.suggestedFollowUpOn ? (
+                            <span>Set as your follow-up.</span>
+                          ) : (
+                            <button
+                              type="button"
+                              className="underline underline-offset-2"
+                              disabled={busyId === application.id}
+                              onClick={() =>
+                                void transition(application.id, {
+                                  action: "follow_up",
+                                  followUpAt: `${application.silence!.suggestedFollowUpOn}T09:00:00.000Z`,
+                                })}
+                            >
+                              Use this date
+                            </button>
+                          )}
+                        </p>
+                      ) : null}
                     </div>
                     <StatusBadge
                       tone={
@@ -312,16 +366,87 @@ export function JobSeekerApplicationsPanel() {
                       </button>
                     ))}
                     {application.stage !== "CLOSED" ? (
-                      <button
-                        type="button"
-                        className="btn btn-sm"
-                        disabled={busyId === application.id}
-                        onClick={() => void transition(application.id, { action: "close" })}
-                      >
-                        Close
-                      </button>
+                      <span className="inline-flex items-center gap-1.5">
+                        <label className="sr-only" htmlFor={`close-reason-${application.id}`}>
+                          Why is it closing?
+                        </label>
+                        <select
+                          id={`close-reason-${application.id}`}
+                          value={closeReasons[application.id] ?? ""}
+                          onChange={(event) =>
+                            setCloseReasons((current) => ({
+                              ...current,
+                              [application.id]: event.target.value as "" | ClosedReason,
+                            }))}
+                          className="rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-xs"
+                        >
+                          <option value="">Why? (optional)</option>
+                          {CLOSED_REASONS.map((reason) => (
+                            <option key={reason} value={reason}>{CLOSED_REASON_LABELS[reason]}</option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          className="btn btn-sm"
+                          disabled={busyId === application.id}
+                          onClick={() =>
+                            void transition(application.id, {
+                              action: "close",
+                              closedReason: closeReasons[application.id] || null,
+                            })}
+                        >
+                          Close
+                        </button>
+                      </span>
                     ) : null}
                   </div>
+
+                  <details
+                    className="mt-3"
+                    data-testid="requirements-check"
+                    onToggle={(event) => {
+                      if ((event.target as HTMLDetailsElement).open && !requirementsByJob[job.id]) {
+                        void loadRequirements(job.id);
+                      }
+                    }}
+                  >
+                    <summary className="cursor-pointer text-sm text-[var(--text-muted)]">
+                      Requirements check
+                    </summary>
+                    <div className="mt-2 space-y-2 text-sm">
+                      {requirementsByJob[job.id] === undefined ? (
+                        <p className="text-[var(--text-faint)]">Checking the posting&rsquo;s requirement lines…</p>
+                      ) : requirementsByJob[job.id] === "failed" ? (
+                        <p className="text-[var(--danger)]">The requirements could not be checked.</p>
+                      ) : (
+                        (() => {
+                          const view = requirementsByJob[job.id] as RequirementsView;
+                          return (
+                            <>
+                              <p className="text-xs text-[var(--text-muted)]">
+                                {view.counts.met} met · {view.counts.unmet} not met · {view.counts.unknown} unknown. {view.basis}
+                              </p>
+                              {view.checks.length === 0 ? null : (
+                                <ul className="space-y-1.5">
+                                  {view.checks.map((check) => (
+                                    <li key={check.line} className="rounded-md border border-[var(--border)] p-2">
+                                      <span
+                                        className={`mr-2 rounded-full border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${check.verdict === "met" ? "border-[var(--accent)] text-[var(--accent)]" : check.verdict === "unmet" ? "border-[var(--warning)] text-[var(--warning)]" : "border-[var(--border)] text-[var(--text-muted)]"}`}
+                                      >
+                                        {check.verdict === "met" ? "Met" : check.verdict === "unmet" ? "Not met" : "Unknown"}
+                                      </span>
+                                      <span className="text-[var(--text)]">{check.line}</span>
+                                      <p className="mt-1 text-xs text-[var(--text-muted)]">{check.reason}</p>
+                                    </li>
+                                  ))}
+                                </ul>
+                              )}
+                            </>
+                          );
+                        })()
+                      )}
+                    </div>
+                  </details>
 
                   <ApplicationDetailsEditor
                     // Re-seeded from the server's answer after every save.

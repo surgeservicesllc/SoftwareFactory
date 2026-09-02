@@ -6576,3 +6576,154 @@ only through its two service_role definer functions and holds no grant
 on the ledger; adding freshness to alerts means a third definer
 function, never a table grant. A "still open?" recheck of the posting
 URL itself is increment 9 of the program, not this one.
+
+## ADR-242 - Posting signals: what a posting's own text says about itself, with the phrase printed
+
+Date: 2026-09-02
+
+Five of the top complaints in `AI/JOB_SEARCH_COMPETITIVE_TEARDOWN.md` are
+about postings that hide or misstate what they are: scam postings that
+look legitimate (the FTC counted $150M of job-scam losses in one quarter
+of 2025), one job listed under six staffing-agency names, pay shown in
+the wrong period, a "remote" filter that returns on-site roles, and visa
+sponsorship never stated until the last interview. Increment 2 answers
+all five from the same source and by the same rule: the posting's own
+text, and a printed phrase for every positive signal.
+
+`lib/job-seeker/board-search/signals.ts` is pure and browser-safe.
+`scanRedFlags` holds seven patterns named after the FTC's warning signs
+— off-platform messaging, upfront payment, money handling, too-good pay,
+early personal data, webmail contact, task pay — and returns each match
+with the exact text that tripped it, because a flag without its evidence
+is an accusation. `deriveAgencyLikely` reads staffing and recruiting
+from the company name alone and says so on the card; an agency is not a
+scam and is never hidden by default. `deriveSponsorship` runs the
+"cannot sponsor" patterns before the "sponsorship available" ones, so a
+buried exception wins over a general offer. `deriveWorkModel` trusts the
+board's own field and otherwise reads the text, labeled "(from the
+text)". `parseSalary` prints the figures, the period and the annual
+equivalent with its assumption ("30 per hour → about 62,400 per year,
+assuming 2080 hours a year"), and leaves a figure with no stated period
+as written — Indeed's complaint was a seasonal stipend shown as monthly,
+and the cure is to print the period the board gave, not to invent one.
+`postingCompleteness` counts which of the six facts a person needs (pay,
+place, work model, level, a real description, a posting date) the
+posting stated, and names the missing ones.
+
+The filters follow the seniority rule (ADR-167): `hideRedFlags`,
+`excludeAgencies` and `sponsorship` are off by default and never hide
+silently; a sponsorship filter drops unstated postings while set,
+because the filter means "the posting says so". The work-model filter
+now consults the derived model when the board's field is empty, which is
+the one behavior change to an existing filter — a posting whose text
+says "fully remote" passes a remote filter — and it is labeled on the
+card. The route attaches `signals` to every unified card; the saved-
+search schema and the alert planner carry the three new filters as
+optional keys so stored queries parse; the browser's instant filters
+recompute from the same text through the same module, so the server
+and the page cannot disagree. The Contacts page gains "Check a recruiter
+message": the same `scanRedFlags` over pasted text, run in the browser,
+nothing stored or sent, and the absence of a flag said as exactly that.
+
+Bounds: every pattern is a deterministic regular expression over English
+posting text; a scam written to avoid these phrases is not caught, and
+the card says "no red flags" only in the sense that none of the seven
+signs appears. No directory, reputation list or model is consulted, and
+nothing here can be wrong about a fact the posting did not state.
+
+## ADR-243 - Silence measured: a transitions ledger, days silent against your own replies, and a closure with its reason
+
+Date: 2026-09-02
+
+The complaint 67% of job seekers made in 2025 is silence — applied, and
+nothing — and its corollary is not knowing whether a follow-up is early,
+due, or pointless. No board can answer it, because none learns the
+outcome. This product can, because the person records every stage of
+every application here; what it lacked was the history. Stage changes
+were overwritten in place, so "how long do replies take" had no data
+behind it.
+
+Increment 3 keeps the history. `job_seeker_application_transitions`
+(20260902001300) holds one append-only row per stage or approval change,
+written by an AFTER trigger on `job_seeker_applications` so the ledger
+cannot disagree with the table; the trigger is SECURITY DEFINER so the
+row lands without handing authenticated an INSERT grant. A composite
+foreign key proves each row belongs to the same person and workspace as
+its application. The ledger is forced-RLS, readable by its owner only,
+and rewrite-refusing by trigger. A closed application also says why:
+`closed_reason` is the person's own word from a fixed enum, allowed only
+while the stage is CLOSED, and null means "not said" — counted as
+"unstated" in the analytics rather than guessed.
+
+Two invoker functions turn the ledger into numbers under the caller's
+own RLS. `job_seeker_application_replies` returns when each application
+first got a reply — a transition into a response stage, or a closure
+whose reason is the employer's answer, because a rejection is a reply
+and silence is the complaint. `job_seeker_response_stats` returns, per
+source and for every source together, applications submitted, replies
+recorded, still silent, and the median days from applied to first reply
+(`percentile_cont(0.5)` over real timestamps; a median over nothing is
+null; a person with no submitted applications gets no rows, not a row of
+zeroes).
+
+The page prints the arithmetic. `lib/job-seeker/silence.ts` says "Silent
+for 21 days. Your median reply took 12 days across 4 replies on
+remotive." — the source's own replies first, then every source, then a
+named default of 7 days when nothing is recorded — and derives the
+follow-up as applied + median, held between 7 and 21 days so one freak
+reply cannot make it absurd, with the whole sum in the sentence and a
+"Use this date" button that writes it as the follow-up. An application
+whose stage says a reply came but whose ledger has no row for it — one
+that predates the ledger — is told exactly that, and given no date.
+Analytics gains the funnel (applications that ever reached each stage,
+counted from the ledger), the closure reasons, and replies by source.
+
+Bounds: nothing here estimates an employer. The comparison is always
+the person's own medians, the default is named as a default, and every
+ledger-backed section answers null — never a fabricated zero — when the
+migration is not applied on a deployment.
+
+## ADR-244 - The application kit: answers kept once, blocks copied verbatim, and a requirements check that never assumes
+
+Date: 2026-09-02
+
+Two complaints share a root. Easy Apply is followed by an applicant
+tracking system that asks for everything again — Workday alone costs
+employers up to 70% of completed applications, and the twelve screening
+questions after the resume are the same on every form. And knockout
+questions are the leading cause of silent rejection: a "must be
+authorized to work without sponsorship" line answered wrong ends the
+application before a person reads it.
+
+The kit answers both from recorded facts. `job_seeker_screening_answers`
+(20260902001400) keeps one row per question from a fixed vocabulary of
+twelve — authorization, sponsorship, start date, notice period, years,
+education, clearance, languages, travel, relocation, salary expectation,
+references — person-scoped under the uniform own-row policies, with no
+demographic or self-identification questions in it, deliberately: those
+are the employer's to ask on their own form, not this product's to
+store. `buildKitBlocks` copies the profile into the blocks a form has
+fields for — contact, summary, work history, education, skills,
+certifications, answered questions — without rewording, so what is
+pasted is what was recorded; the page carries a Copy button per block.
+
+The requirements check reads the posting's own "must" sentences
+(`extractRequirements`: signal words, bounded, deduplicated) and answers
+each with a verdict that names the fact it used — years from the
+screening answer first and the recorded history's dates second,
+authorization and sponsorship from the answers, degrees and
+certifications from the recorded education and certifications, clearance
+and languages from the answers, and every other line from the skills and
+technologies it names — or says plainly that nothing recorded can answer
+it. "Unknown" is a verdict, not a gap in the checker: a person who has
+not said whether they need sponsorship is not assumed to meet a
+sponsorship line, and the reason tells them which question to answer.
+It lives on each application as "Requirements check", fetched on open.
+
+Bounds: the extractor is a deterministic pass over English posting text
+and misses requirements phrased without its signal words; a skill the
+profile does not record is reported "not met" with the advice to record
+it if true, because the evaluator (ADR-096) already treats unrecorded as
+absent and two rules would be worse than one. The navigation grows by
+one destination beyond the owner's design, Application Kit, because
+every form asks for it and no other page holds it.
