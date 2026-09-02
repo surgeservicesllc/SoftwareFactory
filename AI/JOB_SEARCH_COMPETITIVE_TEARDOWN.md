@@ -109,11 +109,11 @@ listed so the count stays honest, not built.
 | 7 | Posting date and "reposted" label | **HAVE** posted date; **BUILD 1** freshness verdict with the numbers (first seen, times seen, re-datings, closing passed) |
 | 8 | Applicant count and "actively reviewing" signals | **N/A by design** — no signal is shown that cannot be computed; the match score and freshness verdict are the computed ones |
 | 9 | Salary insights / estimates | **HAVE** stated salary as data, never an estimate; require-salary filter; **HAVE** (ADR-242) parsed figure with its period printed |
-| 10 | Skills match ("you have 6 of 10 skills") | **HAVE** — skills component of the evaluator names the posting's terms found in the profile; **BUILD 5** the gap across all target jobs |
+| 10 | Skills match ("you have 6 of 10 skills") | **HAVE** — skills component of the evaluator names the posting's terms found in the profile; **HAVE** (ADR-245) the gap across all target jobs |
 | 11 | Open to Work banner / recruiter visibility | **N/A by design** — the product is private; nothing is broadcast (ADR-096 ownership) |
 | 12 | Profile (experience, education, skills) | **HAVE** — Career Profile with checked shapes; resume upload + extraction (ADR-118 lineage) |
 | 13 | Skills assessments / badges | **N/A** — a badge no employer reads; the evaluator scores recorded facts instead |
-| 14 | Company pages and follower insights | **N/A** (marketplace UGC); **BUILD 5** your own history with the company from your own rows |
+| 14 | Company pages and follower insights | **N/A** (marketplace UGC); **HAVE** (ADR-245) your own history with the company from your own rows |
 | 15 | Recruiter InMail / messaging | **N/A** (employer side); Contacts & Outreach drafts you choose to send (HAVE) |
 | 16 | Premium: Top Applicant badge, who viewed, applicant insights | **N/A by design** — every insight this product has is computed and free; nothing is paywalled per feature |
 | 17 | Premium: AI interview prep | **BUILD 6** prep sheet from your own facts; **GATED** model-generated questions |
@@ -134,7 +134,7 @@ listed so the count stays honest, not built.
 | 2 | Indeed Apply | **N/A by design** (as 1A.2) |
 | 3 | Indeed Resume (hosted resume, searchable by employers) | **N/A by design** — the resume is private; **HAVE** upload, extraction and versioned fact-only documents |
 | 4 | Job alerts | **HAVE** (ADR-164) |
-| 5 | Company reviews and ratings | **N/A** (marketplace UGC); **BUILD 5** your own history with the company |
+| 5 | Company reviews and ratings | **N/A** (marketplace UGC); **HAVE** (ADR-245) your own history with the company |
 | 6 | Salary tool and "estimated" salary on postings | **HAVE** never estimates; **HAVE** (ADR-242) parsed figure with the period printed |
 | 7 | Indeed Assessments | **N/A** |
 | 8 | Employer messaging and interview scheduling (Indeed Interview) | **N/A** (employer side); **HAVE** Interview Tracker; **HAVE** (ADR-243) silence measured in days against your own median |
@@ -160,7 +160,7 @@ listed so the count stays honest, not built.
 
 | # | Feature | Board | Us |
 |---|---------|-------|----|
-| 1 | Company reviews behind a give-to-get wall | Glassdoor | **N/A by design** — no wall, no UGC; **BUILD 5** your own history with the company |
+| 1 | Company reviews behind a give-to-get wall | Glassdoor | **N/A by design** — no wall, no UGC; **HAVE** (ADR-245) your own history with the company |
 | 2 | Salaries and interview questions crowd-sourced | Glassdoor | **N/A** (UGC); **BUILD 6** prep sheet from your own facts |
 | 3 | Job search mirrored from Indeed | Glassdoor | **HAVE** (dedupe keeps one card with every source) |
 | 4 | 1-Click Apply | ZipRecruiter | **N/A by design** (as 1A.2) |
@@ -182,7 +182,7 @@ listed so the count stays honest, not built.
 | 20 | Scam detection | all (none) | **HAVE** (ADR-242) red flags with the matched phrase printed |
 | 21 | Staffing-agency filter | all (none) | **HAVE** (ADR-242) agency-likely from the company name, labeled derived |
 | 22 | Visa sponsorship stated / not | all (none) | **HAVE** (ADR-242) sponsorship facet from the posting text |
-| 23 | Skills gap across your target roles | all (none) | **BUILD 5** |
+| 23 | Skills gap across your target roles | all (none) | **HAVE** (ADR-245) |
 | 24 | Data export | all (partial) | **BUILD 7** |
 | 25 | Cover letters that cannot invent experience | all (none) | **HAVE** fact-only baseline; **BUILD 8** polish checked against it, **GATED** |
 
@@ -211,7 +211,7 @@ listed so the count stays honest, not built.
 | 15 | Cannot see which resume version went where | reviewers | Every generated version is stored against its application, immutably | **HAVE** |
 | 16 | Vague postings: no location, level or pay | reviewers | Posting completeness printed (pay, place, work model, level, description, date) | **HAVE** (ADR-242) |
 | 17 | Open to Work exposes you to your employer | reviewers | Private by construction: person-scoped rows under forced RLS, nothing broadcast | **HAVE** |
-| 18 | Keyword-only matching; skills badges nobody reads | reviewers | Reasons and gaps per posting; the gap across all your target jobs ranked by how often it costs you | **HAVE** / **BUILD 5** |
+| 18 | Keyword-only matching; skills badges nobody reads | reviewers | Reasons and gaps per posting; the gap across all your target jobs ranked by how often it costs you | **HAVE** (ADR-245) |
 | 19 | Recruiter spam in InMail | reviewers | No inbound channel; contacts are ones you record | **N/A** |
 | 20 | Expired jobs still listed | reviewers | Closing date passed → likely stale; a bounded "still open?" recheck of the posting URL | **BUILD 1** / **BUILD 9** |
 | 21 | Cannot withdraw or annotate after applying | reviewers | Close with a reason at any stage; notes always editable | **HAVE** / **HAVE** (ADR-243) |
@@ -242,7 +242,7 @@ listed so the count stays honest, not built.
 | 16 | Alerts are irrelevant | reviewers | Saved filters + minimum score + never-repeat | **HAVE** |
 | 17 | Redirect to the employer's site loses the trail | reviewers | Viewed mark on open; record the application with its URL | **HAVE** |
 | 18 | Postings without pay | surveys | Require-salary; completeness printed | **HAVE** / **HAVE** (ADR-242) |
-| 19 | Company reviews unreliable or removed | reviewers | Your own history with the company from your own rows | **BUILD 5** |
+| 19 | Company reviews unreliable or removed | reviewers | Your own history with the company from your own rows | **HAVE** (ADR-245) |
 | 20 | Employers no-show scheduled interviews | reviewers, employers | Interview tracker; days silent printed | **HAVE** / **HAVE** (ADR-243) |
 | 21 | Spam calls after uploading a resume | reviewers | The resume is private to you | **HAVE** |
 | 22 | "Urgently hiring" badges mean nothing | reviewers | No employer-claimed badges; freshness instead | **BUILD 1** |
@@ -254,7 +254,7 @@ listed so the count stays honest, not built.
 
 | # | Complaint | Board | AI-first answer | Us |
 |---|-----------|-------|-----------------|----|
-| 1 | A give-to-get wall before you may read reviews | Glassdoor | No wall; your own company memory | **BUILD 5** |
+| 1 | A give-to-get wall before you may read reviews | Glassdoor | No wall; your own company memory | **HAVE** (ADR-245) |
 | 2 | Real names attached to accounts without consent (2024) | Glassdoor | No identity beyond your sign-in; no public profile | **HAVE** |
 | 3 | Digest emails for jobs you are not qualified for | Glassdoor | Alerts gated on your minimum score | **HAVE** |
 | 4 | Search returns unrelated roles | Glassdoor | Deterministic filters | **HAVE** |
@@ -275,7 +275,7 @@ listed so the count stays honest, not built.
 | 19 | Stale mirrored listings | SimplyHired | Freshness | **BUILD 1** |
 | 20 | Visa sponsorship never stated | all | Sponsorship facet from the posting text | **HAVE** (ADR-242) |
 | 21 | No interview preparation from what you already told the site | all | Prep sheet | **BUILD 6** |
-| 22 | No view of the skills that keep costing you | all | Skills gap across target jobs | **BUILD 5** |
+| 22 | No view of the skills that keep costing you | all | Skills gap across target jobs | **HAVE** (ADR-245) |
 | 23 | Data locked in | all | Export | **BUILD 7** |
 | 24 | AI cover letters invent experience | all | Fact-only baseline; polish checked against it | **HAVE** / **BUILD 8** |
 | 25 | You cannot tell whether a posting is still open | all | Closing date passed → stale; a bounded recheck | **BUILD 1** / **BUILD 9** |
@@ -294,7 +294,7 @@ apply scope with a postflight. Status is updated here as each lands.
 | 2 | ADR-242 | **Red flags and completeness**: scam markers with the matched phrase, agency-likely from the company name, posting completeness, sponsorship stated/not, work model derived from text, parsed salary with its period; all as derived facets through search, saved searches and alerts | **SHIPPED** |
 | 3 | ADR-243 | **Silence measured**: an append-only application transitions ledger, days-silent against your own median days-to-reply by source, a suggested follow-up date with the arithmetic, closure reasons, and a funnel of where your search stalls | **SHIPPED** |
 | 4 | ADR-244 | **Application kit**: the screening answers you keep (authorization, sponsorship, relocation, start date, notice, expectations), copy-ready ATS blocks from your profile, and a requirements check per posting | **SHIPPED** |
-| 5 | ADR-245 | **What keeps costing you**: the skills gap across your target and saved jobs ranked by frequency, and your own history with each company on every result | planned |
+| 5 | ADR-245 | **What keeps costing you**: the skills gap across your target and saved jobs ranked by frequency, and your own history with each company on every result | **SHIPPED** |
 | 6 | ADR-246 | **Interview prep sheet** composed from your own facts; model-generated questions only when a provider exists, labeled | planned |
 | 7 | ADR-247 | **Your data is yours**: an export of every table the Job Seeker writes about you, under your own RLS | planned |
 | 8 | ADR-248 | **Polish that cannot invent**: model-polished resume and cover-letter variants through the existing provider path, checked term by term against the fact-only baseline; **Not Connected** without a credential | planned |

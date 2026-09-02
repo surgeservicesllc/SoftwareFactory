@@ -2,6 +2,25 @@
 
 Last reviewed: 2026-09-02
 
+**Addendum, 2026-09-02 latest+67 - JobSearch build-out, increment 5: what keeps costing you (ADR-245):**
+job-seeker-what-costs 13 (terms named once on word boundaries and
+never inside another word or symbol; a duplicate-free vocabulary; the
+gap ranked with the counts in the sentence, singletons left out, the
+profile's terms skipped case-insensitively, the limit honoured, nothing
+from nothing; company memory null without a record, recorded-and-
+applied-to-none, identity not spelling, the most recent application's
+outcome in the person's own reason, days silent against today, a reply
+named by stage, a never-applied entry not counted as applied).
+job-seeker-what-costs-routes 2 (the gap with its basis; null with the
+reason without a profile and when the profile cannot be read). Search
+route +2 (history on the card with the basis; null and the basis when
+the record cannot be read, the search still answering). Search panel
++1 (the sentence on the remembered card only, the basis once).
+Analytics panel +2 (the table with counts and the profile link per
+row; the profile pointer when there is nothing to measure against; the
+empty sentence). No migration; tsc, eslint and the production build
+clean.
+
 **Addendum, 2026-09-02 latest+66 - JobSearch build-out, increment 4: the application kit (ADR-244):**
 job-seeker-application-kit 11 (blocks verbatim and in order with the
 answered questions, nothing from nothing; requirement sentences kept

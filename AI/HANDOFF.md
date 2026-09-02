@@ -2,7 +2,30 @@
 
 Last updated: 2026-09-02
 
-## Newest (2026-09-02, latest+66): the application kit (ADR-244)
+## Newest (2026-09-02, latest+67): what keeps costing you (ADR-245)
+
+THE GAP IS MEASURED AGAINST A PROFILE OR NOT AT ALL. Without a Career
+Profile the analytics route answers `skillsGap: null` and the basis says
+why; do not "helpfully" compute it against an empty list — every term in
+every posting would become a shortfall.
+
+ONE POSTING IS NOT A PATTERN. `GAP_MINIMUM_POSTINGS` is 2 and the page
+prints it. The vocabulary is fixed and matched on word boundaries with a
+lookbehind/lookahead that treats `.`, `+` and `#` as word characters, so
+"Go" is not inside "Google", "C" is not inside "C#", and "Node.js" and
+".NET" match whole.
+
+COMPANY MEMORY IS YOUR ROWS. `companyMemory` says only what the person's
+own applications say; an entry never applied to (no `applied_at`) counts
+as recorded, not applied. The search route reads the recorded postings
+once per search without descriptions; the metering test now expects that
+one read beside the one write.
+
+HOSTED: nothing to apply for this increment. Still pending from #505
+(increments 2–4): scope=application-transitions then
+scope=application-kit, in that order, after merge.
+
+## Older (2026-09-02, latest+66): the application kit (ADR-244)
 
 UNKNOWN IS A VERDICT. `checkRequirements` answers "unknown" whenever no
 recorded fact can decide a line, and the reason names the screening

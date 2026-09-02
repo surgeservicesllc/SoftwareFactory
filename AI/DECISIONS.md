@@ -6727,3 +6727,50 @@ it if true, because the evaluator (ADR-096) already treats unrecorded as
 absent and two rules would be worse than one. The navigation grows by
 one destination beyond the owner's design, Application Kit, because
 every form asks for it and no other page holds it.
+
+## ADR-245 - What keeps costing you: the skills gap across your recorded postings, and your own history with each company
+
+Date: 2026-09-02
+
+Two things no board tells a person. The skills badges LinkedIn prints
+("you have 6 of 10 skills") are per posting and read by nobody; what a
+person needs is the pattern — which terms the roles they keep recording
+keep naming that their profile does not list, ranked by how often that
+costs them. And company pages are strangers' reviews behind a give-to-get
+wall; what a person needs is their own memory — what happened the last
+time they dealt with this employer.
+
+Both are computed from the person's own rows under RLS, and nothing
+else. `lib/job-seeker/what-costs.ts` carries a fixed vocabulary of tools,
+languages and disciplines (`SKILL_VOCABULARY`, matched on word
+boundaries so "Go" is not read inside "Google" and "R" is not read inside
+"React"); `skillsGap` counts, per term, the recorded postings whose title
+or description name it, drops terms the profile lists (case-insensitive,
+skills and technologies together), leaves out any term named by fewer
+than `GAP_MINIMUM_POSTINGS` (2 — one posting is not a pattern; the page
+prints the threshold), ranks by postings then by qualified postings, and
+prints one sentence per row with the counts. `companyMemory` folds the
+company name through the same identity the unifier uses and says, from
+the person's applications: how many of the company's postings they
+recorded, how many they applied to, and how the most recent application
+went — closed with the person's own reason, heard back at a named stage,
+or silent for a counted number of days. A pipeline entry that was never
+applied to is not an application.
+
+The analytics route computes the gap only against a recorded Career
+Profile: a gap measured against nothing would list every term in every
+posting and call it a shortfall, so a missing or unreadable profile
+answers null with the reason. The search route reads the person's
+recorded postings once per search (`loadRecordedPostings`, without
+descriptions — memory never needs them) and attaches `history` to each
+unified card, null when there is no record with that company; a failed
+read answers null everywhere and `historyBasis` says so. Neither read can
+fail a search or the analytics page, and the search path still makes
+exactly one write.
+
+Bounds: the vocabulary is a fixed list, so a term outside it is never a
+"gap" — the price of every row being a recognisable thing to record or
+learn rather than a stray word from a description. Company identity is
+the unifier's fold, so a subsidiary trading under another name is another
+company. No table is added; both views are arithmetic over rows that
+already exist.

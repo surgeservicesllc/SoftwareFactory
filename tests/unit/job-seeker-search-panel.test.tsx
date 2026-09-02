@@ -1339,3 +1339,52 @@ describe("the inline LinkedIn/Indeed door", () => {
     expect(await screen.findByText("via LinkedIn (JSearch)")).toBeInTheDocument();
   });
 });
+
+describe("your history with the company (ADR-245)", () => {
+  it("prints the sentence from your own rows on the card, and the basis once", async () => {
+    const remembered = {
+      job: { ...hit("Platform Engineer").job, url: "https://jobnet.dk/find-job/remembered" },
+      publishedOn: "2026-09-01",
+      closesOn: null,
+      sources: [{ board: "jobnet", boardName: "Jobnet", url: "https://jobnet.dk/find-job/remembered", externalId: "id-remembered", saveToken: "t-remembered" }],
+      primarySourceIndex: 0,
+      match: null,
+      history: {
+        company: "Nordisk Teknik A/S",
+        recorded: 2,
+        applied: 1,
+        sentence: "You applied to Nordisk Teknik A/S on 2026-08-10; closed with no response.",
+      },
+    };
+    const unknown = {
+      job: { ...hit("Go Engineer").job, company: "Elsewhere ApS", url: "https://jobnet.dk/find-job/unknown" },
+      publishedOn: "2026-09-01",
+      closesOn: null,
+      sources: [{ board: "jobnet", boardName: "Jobnet", url: "https://jobnet.dk/find-job/unknown", externalId: "id-unknown", saveToken: "t-unknown" }],
+      primarySourceIndex: 0,
+      match: null,
+      history: null,
+    };
+    respond({
+      results: [{ board: "jobnet", boardName: "Jobnet", totalAvailable: 2, hits: [hit("Platform Engineer"), hit("Go Engineer")], locationApplied: true }],
+      failures: [],
+      unified: {
+        hits: [remembered, unknown],
+        dedupedFrom: 2,
+        beforeFilters: 2,
+        matchBasis: { computed: false, reason: "No Career Profile is recorded yet." },
+        historyBasis: "Your history with each company is read from your own recorded postings and applications (2 recorded); nothing about an employer is asserted beyond what you recorded.",
+      },
+    });
+    const user = userEvent.setup();
+    render(<JobSearchPanel />);
+    await screen.findByText(/Searching 2 boards:/);
+
+    await search(user);
+
+    const lines = await screen.findAllByTestId("company-memory");
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toHaveTextContent("Your history: You applied to Nordisk Teknik A/S on 2026-08-10; closed with no response.");
+    expect(screen.getByTestId("history-basis")).toHaveTextContent("(2 recorded)");
+  });
+});

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { Card, EmptyState, SectionTitle } from "@/components/ui";
@@ -30,6 +31,9 @@ type AnalyticsView = {
     silent: number;
     medianDaysToReply: number | null;
   }> | null;
+  /** Vocabulary terms your recorded postings keep naming that your profile does not list (ADR-245). */
+  skillsGap?: Array<{ term: string; postings: number; qualifiedPostings: number; sentence: string }> | null;
+  skillsGapBasis?: string;
 };
 
 function stageLabel(stage: string): string {
@@ -229,6 +233,52 @@ export function JobSeekerAnalyticsPanel() {
             </table>
           </div>
         </Card>
+      ) : null}
+
+      {analytics.skillsGap !== undefined ? (
+        <section className="card" data-testid="skills-gap">
+          <SectionTitle
+            title="Skills that keep costing you"
+            description={analytics.skillsGapBasis ?? "Terms your recorded postings keep naming that your Career Profile does not list."}
+          />
+          {analytics.skillsGap === null ? (
+            <p className="mt-3 text-sm text-[var(--text-muted)]">
+              <Link href="/job-seeker/profile" className="underline underline-offset-2">Open your Career Profile</Link>
+              {" "}to record your skills; the gap is computed against them.
+            </p>
+          ) : analytics.skillsGap.length === 0 ? (
+            <p className="mt-3 text-sm text-[var(--text-muted)]">
+              Nothing named by two or more of your recorded postings is missing from your profile.
+            </p>
+          ) : (
+            <div className="mt-3 overflow-x-auto">
+              <table className="w-full min-w-96 text-sm">
+                <thead>
+                  <tr className="text-left text-xs uppercase text-[var(--text-faint)]">
+                    <th className="pb-2 pr-4 font-medium">Term</th>
+                    <th className="pb-2 pr-4 font-medium">Postings naming it</th>
+                    <th className="pb-2 pr-4 font-medium">Of them qualified</th>
+                    <th className="pb-2 font-medium"><span className="sr-only">Action</span></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {analytics.skillsGap.map((row) => (
+                    <tr key={row.term} className="border-t border-[var(--border)]" title={row.sentence}>
+                      <td className="py-2 pr-4 text-[var(--text)]">{row.term}</td>
+                      <td className="py-2 pr-4 tabular-nums text-[var(--text)]">{row.postings}</td>
+                      <td className="py-2 pr-4 tabular-nums text-[var(--text-muted)]">{row.qualifiedPostings}</td>
+                      <td className="py-2 text-xs">
+                        <Link href="/job-seeker/profile" className="underline underline-offset-2 text-[var(--text-muted)]">
+                          Record it if true
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
       ) : null}
 
       <p className="text-xs text-[var(--text-faint)]">

@@ -105,9 +105,14 @@ own PR, ADR, behavior test against the real chain, and hosted scope.
   `/job-seeker/application-kit` with copy buttons and the answers form;
   "Requirements check" on every application. 20260902001400; hosted
   apply: scope=application-kit after merge. Closes LinkedIn 6, Indeed 12.
-- [ ] Increment 5 (ADR-245): what keeps costing you — skills gap across
-  target and saved jobs ranked by frequency; your own history with each
-  company on every result.
+- [x] Increment 5 (ADR-245): what keeps costing you — 2026-09-02.
+  `lib/job-seeker/what-costs.ts` (fixed vocabulary on word boundaries;
+  `skillsGap` over the recorded postings against the profile, minimum
+  two postings, counts printed; `companyMemory` from the person's own
+  applications); `loadRecordedPostings`; `history` + `historyBasis` on
+  every search card; `skillsGap` + `skillsGapBasis` on Analytics with
+  "Skills that keep costing you". No migration. Closes LinkedIn 10/14,
+  Indeed 5, Glassdoor 1, "skills gap" and "company reviews" rows.
 - [ ] Increment 6 (ADR-246): interview prep sheet from the person's own
   facts; model questions only when a provider exists, labeled.
 - [ ] Increment 7 (ADR-247): your data is yours — export of every table

@@ -1,5 +1,27 @@
 # Current state
 
+## 2026-09-02: JobSearch build-out — increment 5, what keeps costing you (ADR-245)
+
+No migration. `lib/job-seeker/what-costs.ts`: `SKILL_VOCABULARY`
+(word-boundary matching), `namedSkills`, `skillsGap` (per-term counts
+over recorded postings against the profile's skills + technologies,
+minimum `GAP_MINIMUM_POSTINGS` = 2, ranked by postings then qualified,
+sentence per row), `companyMemory` (recorded / applied / the most recent
+application's outcome in a sentence, company folded through the
+unifier's identity). `loadRecordedPostings` in `lib/job-seeker/record.ts`
+(one RLS read with the match and application embeds, descriptions only
+on request, null on failure). Search route: `history` per unified card
+and `historyBasis`; analytics route: `skillsGap` (null with the reason
+without a profile) and `skillsGapBasis`. Search card prints "Your
+history: …" (`company-memory`) with the basis line once; Analytics gains
+"Skills that keep costing you" (term, postings naming it, of them
+qualified, "Record it if true" → /job-seeker/profile; the profile link
+when nothing to measure against; the empty sentence when the gap is
+empty). Tests: job-seeker-what-costs 13, what-costs routes 2, search
+route +2 (and the metering test now expects the one read beside the one
+write), search panel +1, analytics panel +2; tsc, eslint and the
+production build clean.
+
 ## 2026-09-02: JobSearch build-out — increment 4, the application kit (ADR-244)
 
 `20260902001400_application_kit.sql`: `job_seeker_screening_answers`

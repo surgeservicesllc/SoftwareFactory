@@ -131,11 +131,21 @@ type FreshnessView = {
   reasons: string[];
 };
 
+/** Your own history with the posting's company, from your own rows (ADR-245). */
+type CompanyMemoryView = {
+  company: string;
+  recorded: number;
+  applied: number;
+  sentence: string;
+};
+
 type UnifiedCard = UnifiedHit & {
   match?: MatchView | null;
   freshness?: FreshnessView | null;
   /** What the posting's own text says about itself (ADR-242). */
   signals?: PostingSignals | null;
+  /** Null when you have no record with the company, or the record could not be read. */
+  history?: CompanyMemoryView | null;
 };
 
 type MatchBasis =
@@ -337,6 +347,7 @@ export function JobSearchPanel() {
    */
   const [hideStale, setHideStale] = useState(false);
   const [freshnessBasis, setFreshnessBasis] = useState<string | null>(null);
+  const [historyBasis, setHistoryBasis] = useState<string | null>(null);
 
   const [savedSearches, setSavedSearches] = useState<SavedSearchView[]>([]);
   const [alertsChannel, setAlertsChannel] = useState<AlertsChannel | null>(null);
@@ -466,6 +477,7 @@ export function JobSearchPanel() {
           matchBasis?: MatchBasis;
           radius?: RadiusView | null;
           freshnessBasis?: string;
+          historyBasis?: string;
         };
         error?: { message?: string };
       };
@@ -484,6 +496,7 @@ export function JobSearchPanel() {
       setMatchBasis(payload.unified?.matchBasis ?? null);
       setRadiusReport(payload.unified?.radius ?? null);
       setFreshnessBasis(payload.unified?.freshnessBasis ?? null);
+      setHistoryBasis(payload.unified?.historyBasis ?? null);
     } catch {
       if (requestRef.current === ticket) {
         setSearchError("The search could not be run.");
@@ -1697,6 +1710,11 @@ export function JobSearchPanel() {
                     {freshnessBasis}
                   </p>
                 ) : null}
+                {historyBasis !== null && (visibleUnified ?? []).some((card) => card.history != null) ? (
+                  <p className="mt-2 text-xs text-[var(--muted)]" data-testid="history-basis">
+                    {historyBasis}
+                  </p>
+                ) : null}
                 {likelyStale > 0 ? (
                   <p className="mt-2 text-xs text-[var(--muted)]" data-testid="stale-summary">
                     {likelyStale} {likelyStale === 1 ? "posting looks" : "postings look"} likely stale —
@@ -1835,6 +1853,11 @@ export function JobSearchPanel() {
                                   {card.signals.completeness.missing.length > 0
                                     ? ` — missing ${card.signals.completeness.missing.map((field) => COMPLETENESS_LABELS[field]).join(", ")}.`
                                     : " — pay, place, work model, level, description and date."}
+                                </p>
+                              ) : null}
+                              {card.history != null ? (
+                                <p className="text-xs text-[var(--text)]" data-testid="company-memory">
+                                  <span className="font-semibold">Your history:</span> {card.history.sentence}
                                 </p>
                               ) : null}
                               <p className="mt-1 flex flex-wrap gap-1.5">

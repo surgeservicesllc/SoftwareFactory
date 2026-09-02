@@ -1,4 +1,5 @@
 import { evaluateJob, hasLeadershipEvidence } from "@/lib/job-seeker/evaluate";
+import type { RecordedPosting } from "@/lib/job-seeker/what-costs";
 
 /**
  * Shared server-side recording for scored jobs. Evaluation stays in this
@@ -172,4 +173,69 @@ export async function insertScoredJob(
     qualified: result.qualified,
     score: result.score,
   };
+}
+
+type Embed<T> = T | T[] | null | undefined;
+
+function firstEmbed<T>(value: Embed<T>): T | null {
+  if (Array.isArray(value)) return value[0] ?? null;
+  return value ?? null;
+}
+
+/**
+ * The person's recorded postings with their match verdict and application
+ * (ADR-245) — one read, under RLS, for the skills gap and company memory.
+ * Descriptions are fetched only when asked for: company memory never
+ * reads them, and a description is bounded at 30,000 characters per row.
+ *
+ * Answers null, not an empty list, when the read fails: "you recorded
+ * nothing" and "your record could not be read" are different facts, and
+ * the routes print which one applies.
+ */
+export async function loadRecordedPostings(
+  client: QueryClient,
+  organizationId: string,
+  options: Readonly<{ descriptions: boolean }> = { descriptions: false },
+): Promise<RecordedPosting[] | null> {
+  const columns = [
+    "id, company, title, discovered_at",
+    options.descriptions ? "description" : null,
+    "job_seeker_matches ( qualified )",
+    "job_seeker_applications ( stage, applied_at, closed_reason )",
+  ]
+    .filter((part) => part !== null)
+    .join(", ");
+  try {
+    const { data, error } = await client
+      .from("job_seeker_jobs")
+      .select(columns)
+      .eq("organization_id", organizationId)
+      .limit(2000);
+    if (error || !Array.isArray(data)) return null;
+    return (data as unknown as Array<{
+      id: string;
+      company: string | null;
+      title: string | null;
+      description?: string | null;
+      discovered_at: string | null;
+      job_seeker_matches: Embed<{ qualified: boolean | null }>;
+      job_seeker_applications: Embed<{ stage: string; applied_at: string | null; closed_reason: string | null }>;
+    }>).map((row) => {
+      const match = firstEmbed(row.job_seeker_matches);
+      const application = firstEmbed(row.job_seeker_applications);
+      return {
+        id: String(row.id),
+        company: row.company ?? "",
+        title: row.title ?? "",
+        description: row.description ?? null,
+        qualified: match?.qualified ?? null,
+        discoveredAt: row.discovered_at ?? "",
+        application: application === null
+          ? null
+          : { stage: application.stage, appliedAt: application.applied_at, closedReason: application.closed_reason },
+      };
+    });
+  } catch {
+    return null;
+  }
 }
