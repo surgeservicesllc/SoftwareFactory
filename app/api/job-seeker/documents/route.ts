@@ -24,6 +24,8 @@ type DocumentRow = {
   application_id: string;
   kind: string;
   version: number;
+  origin?: string | null;
+  model?: string | null;
   content: string;
   created_at: string;
   job_seeker_applications: {
@@ -47,7 +49,7 @@ export async function GET(request: Request) {
     let query = client
       .from("job_seeker_documents")
       .select(
-        "id, application_id, kind, version, content, created_at, "
+        "id, application_id, kind, version, content, created_at, origin, model, "
         + "job_seeker_applications ( stage, job_seeker_jobs ( title, company ) )",
       )
       .eq("organization_id", activeOrganization.id)
@@ -66,6 +68,8 @@ export async function GET(request: Request) {
           applicationId: row.application_id,
           kind: row.kind,
           version: row.version,
+          origin: row.origin ?? "baseline",
+          model: row.model ?? null,
           createdAt: row.created_at,
           stage: row.job_seeker_applications?.stage ?? null,
           title: job?.title ?? null,

@@ -2,7 +2,38 @@
 
 Last updated: 2026-09-02
 
-## Newest (2026-09-02, latest+69): your data is yours (ADR-247)
+## Newest (2026-09-02, latest+70): polish that cannot invent (ADR-248)
+
+REJECTED MEANS NOT STORED. `generatePolishedDocument` returns `rejected`
+with the check when any term, number or mid-sentence name in the
+model's text is absent from the baseline and the profile's terms; the
+route inserts nothing for it and returns the violations without the
+rejected text. The table enforces the same: a polished row needs a
+model and a check whose `passed` is true (`origin_consistent`,
+`polish_passed`), and a baseline row may carry neither.
+
+THE BASELINE IS BUILT FRESH. Polish reads the profile and the job and
+builds the fact-only document at request time, so the check compares
+against exactly what the model was given — never against an older
+stored version.
+
+ONE MODEL LANE. `model-lane.ts` holds the gate (`modelLane`), the
+credential read (`modelLaneCredential`), the SDK factory and the
+response-text helper; interview questions and polish both use it. A
+third lane copies the same four imports and adds nothing of its own.
+
+BULLETS ARE NOT WORDS. The name pass skips the first word of every
+sentence and treats `•`, `-`, `–`, `—`, `*` as markers rather than
+words, so the verb after a bullet is not flagged as an invented name.
+The behavior suite accepts either check name for an unknown origin,
+because Postgres reports whichever fails first.
+
+HOSTED: scope=document-polish is dispatched after merge; record the run
+id here and in CURRENT_STATE. Still pending from #505 (increments 2–4):
+scope=application-transitions then scope=application-kit, in that
+order, after merge.
+
+## Older (2026-09-02, latest+69): your data is yours (ADR-247)
 
 THE ROSTER IS THE CONTRACT. `job-seeker-export.test.ts` reads every
 migration and fails when a `job_seeker_*` table is in neither

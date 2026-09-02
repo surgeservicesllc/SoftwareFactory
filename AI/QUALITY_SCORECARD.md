@@ -2,6 +2,31 @@
 
 Last reviewed: 2026-09-02
 
+**Addendum, 2026-09-02 latest+70 - JobSearch build-out, increment 8: polish that cannot invent (ADR-248):**
+job-seeker-polish-check 4 (a faithful rewording passes with the counts
+described; an added skill, number and name each named with its kind
+while the baseline's own terms and names are not; a profile term the
+baseline did not print accepted and sentence-initial words not flagged;
+a thousands separator is the same number). job-seeker-polish 6 (a
+fenced answer unwrapped and a too-short one refused; Not Connected
+naming the variable with no call; a faithful rewording polished with
+the model and the check; an addition rejected with the additions named
+and "nothing was saved"; the baseline handed over under the
+rewrite-only instruction; failed, never polished, for prose or a thrown
+call). job-seeker-documents-polish-route 5 (provenance and the lane's
+availability on GET; a passing variant inserted as the next version
+with origin, model and check, the baseline and profile terms handed to
+the lane; a rejected variant with no insert and no text returned; Not
+Connected with no insert and a polish without a kind refused; the
+default generation untouched with no model involved). Panels +2 (Not
+Connected with the reason and no buttons; polish on request, a
+rejection's additions named, a stored polish badged).
+job-seeker-document-polish.behavior 3 (baseline defaults; a polished
+row needs its model and a passing check, an unknown origin and a
+rejected check refused; a baseline claiming a model refused). Replay
+executes the new postflight (44); workflow 417,015 bytes of 420,000;
+runbook count 235; tsc, eslint and the production build clean.
+
 **Addendum, 2026-09-02 latest+69 - JobSearch build-out, increment 7: your data is yours (ADR-247):**
 job-seeker-export 3 (the roster plus the not-personal list equals the
 job_seeker table census in the migrations with no duplicate; the

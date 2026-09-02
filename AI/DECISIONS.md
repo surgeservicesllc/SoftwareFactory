@@ -6858,3 +6858,45 @@ does not need; a row cap of 5,000 per table is printed in the manifest
 rather than paged, because an export that needs paging is a different
 product (a scheduled archive) and the tables here are person-sized.
 No migration.
+
+## ADR-248 - Polish that cannot invent: model-reworded documents checked term by term against the fact-only baseline before they are stored
+
+Date: 2026-09-02
+
+The boards' AI resume and cover-letter writers invent experience — the
+complaint recurs across every platform reviewed — and ADR-096 answered it
+by refusing to put a model in the path at all: the builders copy recorded
+facts and nothing else. That leaves the person with a document that is
+true and flat. This increment lets a model make it read well without
+letting it add a single thing.
+
+`lib/job-seeker/polish.ts` hands the fresh fact-only baseline (built at
+request time from the profile and the job, so the check's baseline is
+exact) to the model with a rewrite-only instruction, and
+`lib/job-seeker/polish-check.ts` checks what comes back in three passes:
+every skill-vocabulary term the polished text names, every number it
+states, and every capitalised name it uses mid-sentence must exist in
+the baseline or among the profile's own terms. One absent item is a
+violation, named with its kind; a variant with any violation is
+rejected and never stored, and the person sees the additions the model
+tried to make. A passing variant is stored as the next version of the
+same kind with `origin = 'polished'`, the model's name and the check —
+20260902001500 adds those three columns to `job_seeker_documents` with
+checks that a baseline carries neither and a polished version carries
+both, and that a stored check says it passed. The model lane itself
+(`lib/job-seeker/model-lane.ts`) is now shared with the interview
+questions (ADR-246): one gate, one factory, one honest reason.
+
+The action rides on the existing documents route as
+`{ action: "polish", kind }` — same-origin POST, on request only — and
+GET reports whether the lane is usable so the Applications page labels
+the buttons or prints **Not Connected** with the variable name. Every
+document list now carries its provenance, and the Resume Library badges
+a polished version with the model that wrote it.
+
+Bounds: the check is lexical. It catches added skills, numbers and
+names; it does not catch a reworded claim that inflates without new
+words ("led" for "joined"), and a proper noun that opens a sentence is
+not checked as a name. Those are the limits of a deterministic pass and
+are printed with the check's counts rather than hidden behind a "verified"
+badge. Hosted apply: scope=document-polish after merge.

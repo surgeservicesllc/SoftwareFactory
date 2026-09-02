@@ -117,7 +117,7 @@ listed so the count stays honest, not built.
 | 15 | Recruiter InMail / messaging | **N/A** (employer side); Contacts & Outreach drafts you choose to send (HAVE) |
 | 16 | Premium: Top Applicant badge, who viewed, applicant insights | **N/A by design** — every insight this product has is computed and free; nothing is paywalled per feature |
 | 17 | Premium: AI interview prep | **HAVE** (ADR-246) prep sheet from your own facts; **GATED** model-generated questions |
-| 18 | Premium: AI resume / cover-letter writing | **HAVE** fact-only builders (ADR-096); **BUILD 8** model polish with the non-fabrication check, **GATED** on a provider credential |
+| 18 | Premium: AI resume / cover-letter writing | **HAVE** fact-only builders (ADR-096); **HAVE** (ADR-248) model polish with the non-fabrication check, **GATED** on a provider credential |
 | 19 | Apply on company site (external ATS hand-off) | **HAVE** link-out with viewed mark; **HAVE** (ADR-244) application kit for the re-entry every ATS demands |
 | 20 | Job collections / curated lists | **HAVE** saved searches (ADR-163 addendum) |
 | 21 | Commute / distance filter | **HAVE** radius with the resolved centre printed (ADR-168/170) |
@@ -184,7 +184,7 @@ listed so the count stays honest, not built.
 | 22 | Visa sponsorship stated / not | all (none) | **HAVE** (ADR-242) sponsorship facet from the posting text |
 | 23 | Skills gap across your target roles | all (none) | **HAVE** (ADR-245) |
 | 24 | Data export | all (partial) | **HAVE** (ADR-247) |
-| 25 | Cover letters that cannot invent experience | all (none) | **HAVE** fact-only baseline; **BUILD 8** polish checked against it, **GATED** |
+| 25 | Cover letters that cannot invent experience | all (none) | **HAVE** fact-only baseline; **HAVE** (ADR-248) polish checked against it, **GATED** |
 
 ---
 
@@ -277,7 +277,7 @@ listed so the count stays honest, not built.
 | 21 | No interview preparation from what you already told the site | all | Prep sheet | **HAVE** (ADR-246) |
 | 22 | No view of the skills that keep costing you | all | Skills gap across target jobs | **HAVE** (ADR-245) |
 | 23 | Data locked in | all | Export | **HAVE** (ADR-247) |
-| 24 | AI cover letters invent experience | all | Fact-only baseline; polish checked against it | **HAVE** / **BUILD 8** |
+| 24 | AI cover letters invent experience | all | Fact-only baseline; polish checked against it | **HAVE** (ADR-248) |
 | 25 | You cannot tell whether a posting is still open | all | Closing date passed → stale; a bounded recheck | **BUILD 1** / **BUILD 9** |
 
 ---
@@ -297,7 +297,7 @@ apply scope with a postflight. Status is updated here as each lands.
 | 5 | ADR-245 | **What keeps costing you**: the skills gap across your target and saved jobs ranked by frequency, and your own history with each company on every result | **SHIPPED** |
 | 6 | ADR-246 | **Interview prep sheet** composed from your own facts; model-generated questions only when a provider exists, labeled | **SHIPPED** |
 | 7 | ADR-247 | **Your data is yours**: an export of every table the Job Seeker writes about you, under your own RLS | **SHIPPED** |
-| 8 | ADR-248 | **Polish that cannot invent**: model-polished resume and cover-letter variants through the existing provider path, checked term by term against the fact-only baseline; **Not Connected** without a credential | planned |
+| 8 | ADR-248 | **Polish that cannot invent**: model-polished resume and cover-letter variants through the existing provider path, checked term by term against the fact-only baseline; **Not Connected** without a credential | **SHIPPED** |
 | 9 | ADR-249 | **Still open?**: a bounded, owner-safe recheck of a posting URL (public https only, no private addresses, no body stored) recorded on the sightings row | planned |
 
 ## Part 4 — What stays GATED or RED, and why

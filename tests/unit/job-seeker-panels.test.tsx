@@ -377,3 +377,81 @@ describe("JobSeekerApplicationsPanel", () => {
     expect(screen.getByText(/a term you have\s+not recorded never appears/i)).toBeInTheDocument();
   });
 });
+
+describe("model polish on the application's documents (ADR-248)", () => {
+  const SCORED = {
+    id: "job-3", title: "Platform Engineer", company: "Acme", discoveredAt: "2026-08-20T00:00:00.000Z",
+    match: { score: 88, qualified: true },
+    application: { id: "a3", stage: "READY_FOR_REVIEW", approvalStatus: "pending_review", applicationUrl: null, notes: null, followUpAt: null },
+  };
+
+  it("labels the lane Not Connected with the reason, and shows no polish buttons", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/job-seeker/jobs") return jsonResponse({ jobs: [SCORED] });
+      if (url === "/api/job-seeker/applications/a3/documents") {
+        return jsonResponse({
+          documents: [{ id: "d1", kind: "resume", version: 1, content: "SUMMARY\nPlatform engineer.", createdAt: "2026-08-20T01:00:00.000Z", origin: "baseline", model: null }],
+          polish: { available: false, model: null, detail: "ANTHROPIC_API_KEY is not set on the server." },
+        });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    }));
+    render(<JobSeekerApplicationsPanel />);
+    fireEvent.click(await screen.findByText(/generated documents/i));
+    const lane = await screen.findByTestId("polish-lane");
+    expect(lane).toHaveTextContent("Not Connected — ANTHROPIC_API_KEY is not set on the server.");
+    expect(screen.queryByRole("button", { name: /polish the resume/i })).not.toBeInTheDocument();
+    expect(screen.queryByTestId("polished-badge")).not.toBeInTheDocument();
+  });
+
+  it("asks for a polish on request, names a rejected variant's additions, and badges a stored one", async () => {
+    const posts: string[] = [];
+    let polishedStored = false;
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/job-seeker/jobs") return jsonResponse({ jobs: [SCORED] });
+      if (url === "/api/job-seeker/applications/a3/documents" && init?.method === "POST") {
+        const body = JSON.parse(String(init.body)) as { action: string; kind: string };
+        posts.push(`${body.action}:${body.kind}`);
+        if (body.kind === "cover_letter") {
+          return jsonResponse({
+            polish: { status: "rejected", model: "claude-opus-5", detail: "claude-opus-5 added things your record does not contain, so nothing was saved.", violations: [{ kind: "term", value: "Terraform" }] },
+            documents: [{ id: "d1", kind: "resume", version: 1, content: "SUMMARY\nPlatform engineer.", createdAt: "2026-08-20T01:00:00.000Z", origin: "baseline", model: null }],
+          });
+        }
+        polishedStored = true;
+        return jsonResponse({
+          polish: { status: "polished", model: "claude-opus-5", detail: "Polished by claude-opus-5; 1 term, 0 numbers and 1 name verified against the fact-only baseline; nothing added.", violations: [] },
+          documents: [
+            { id: "d2", kind: "resume", version: 2, content: "SUMMARY\nA platform engineer.", createdAt: "2026-08-20T02:00:00.000Z", origin: "polished", model: "claude-opus-5" },
+            { id: "d1", kind: "resume", version: 1, content: "SUMMARY\nPlatform engineer.", createdAt: "2026-08-20T01:00:00.000Z", origin: "baseline", model: null },
+          ],
+        }, 201);
+      }
+      if (url === "/api/job-seeker/applications/a3/documents") {
+        return jsonResponse({
+          documents: [{ id: "d1", kind: "resume", version: 1, content: "SUMMARY\nPlatform engineer.", createdAt: "2026-08-20T01:00:00.000Z", origin: "baseline", model: null }],
+          polish: { available: true, model: "claude-opus-5", detail: "Polished by claude-opus-5 when you ask, then checked term by term against the fact-only version; a variant that adds anything is not saved." },
+        });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    }));
+    render(<JobSeekerApplicationsPanel />);
+    fireEvent.click(await screen.findByText(/generated documents/i));
+    expect(await screen.findByText(/checked term by term against the fact-only version/)).toBeInTheDocument();
+    expect(posts).toEqual([]);
+
+    fireEvent.click(screen.getByRole("button", { name: /polish the cover letter/i }));
+    const rejected = await screen.findByTestId("polish-outcome");
+    expect(rejected).toHaveTextContent("nothing was saved");
+    expect(rejected).toHaveTextContent("Terraform — a term your record does not contain");
+    expect(screen.queryByTestId("polished-badge")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /polish the resume/i }));
+    await waitFor(() => expect(polishedStored).toBe(true));
+    expect(await screen.findByTestId("polished-badge")).toHaveTextContent("Polished by claude-opus-5, checked against the fact-only version");
+    expect(screen.getByTestId("polish-outcome")).toHaveTextContent("nothing added");
+    expect(posts).toEqual(["polish:cover_letter", "polish:resume"]);
+  });
+});

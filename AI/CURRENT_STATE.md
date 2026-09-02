@@ -1,5 +1,30 @@
 # Current state
 
+## 2026-09-02: JobSearch build-out — increment 8, polish that cannot invent (ADR-248)
+
+`20260902001500_document_polish.sql`: `job_seeker_documents` gains
+`origin` (baseline | polished, default baseline), `model`, `polish_check`
+with five checks (known origin, model shape, check shape, origin
+consistent, polish passed); no new table, so grants, policies and the
+RLS census are unchanged. `lib/job-seeker/model-lane.ts` (shared gate,
+factory, response text; `interview-questions.ts` refactored onto it),
+`lib/job-seeker/polish-check.ts` (`checkPolish`: vocabulary terms,
+numbers, mid-sentence names against the baseline and profile terms;
+`describeCheck`), `lib/job-seeker/polish.ts` (`polishAvailability`,
+`parsePolished`, `generatePolishedDocument`: polished / rejected /
+not_connected / failed). Documents route: `{ action: "polish", kind }`
+stores a passing variant as the next version with its provenance,
+returns a rejected one's violations with no insert, GET carries `origin`,
+`model` and `polish` availability; the library list carries provenance.
+Applications page: polish buttons per kind or **Not Connected** with
+the reason, the outcome with additions named, a badge on polished
+versions; Resume Library badge. Chain: workflow scope `document-polish`
++ step (417,015 bytes of 420,000), postflight, replay roster 44,
+runbook count 235. Tests: polish-check 4, polish 6, documents polish
+route 5, panels +2, document-polish.behavior 3, interview-questions
+unchanged on the shared lane; tsc, eslint and the production build
+clean. Hosted apply scope `document-polish` is dispatched after merge.
+
 ## 2026-09-02: JobSearch build-out — increment 7, your data is yours (ADR-247)
 
 No migration. `lib/job-seeker/export.ts`: `EXPORT_TABLES` (17 personal

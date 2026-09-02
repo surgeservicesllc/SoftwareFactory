@@ -4,6 +4,7 @@ import {
   ApiRequestError,
   databaseErrorResponse,
   jsonNoStore,
+  readBoundedJson,
   requestErrorResponse,
 } from "@/lib/server/http";
 import {
@@ -11,6 +12,7 @@ import {
   buildCoverLetter,
   type ProfileForDocuments,
 } from "@/lib/job-seeker/documents";
+import { generatePolishedDocument, polishAvailability, type DocumentKind } from "@/lib/job-seeker/polish";
 import { supabaseBoundaryErrorResponse } from "@/lib/supabase/http";
 import { assertSameOriginRequest } from "@/lib/supabase/request";
 import { requireActiveOrganization } from "@/lib/supabase/tenant";
@@ -22,7 +24,15 @@ export const runtime = "nodejs";
  * profile ONLY (there is no model in this path — nothing can fabricate),
  * stored as immutable versions, and the application moves to
  * READY_FOR_REVIEW so the person's approval is the next gate.
+ *
+ * Polish (ADR-248) is the one model lane: `{ action: "polish", kind }`
+ * hands the fresh fact-only baseline to the model and stores what comes
+ * back as the next version — with the model's name and the check — only
+ * when the non-fabrication check passes. A rejected variant is returned
+ * with its additions named and nothing is stored.
  */
+
+const DOCUMENT_COLUMNS = "id, kind, version, content, created_at, origin, model";
 
 type DocumentRow = {
   id: string;
@@ -30,6 +40,8 @@ type DocumentRow = {
   version: number;
   content: string;
   created_at: string;
+  origin?: string | null;
+  model?: string | null;
 };
 
 function toView(row: DocumentRow) {
@@ -39,8 +51,21 @@ function toView(row: DocumentRow) {
     version: row.version,
     content: row.content,
     createdAt: row.created_at,
+    origin: row.origin ?? "baseline",
+    model: row.model ?? null,
   };
 }
+
+const postSchema = z
+  .object({
+    action: z.enum(["generate", "polish"]).default("generate"),
+    kind: z.enum(["resume", "cover_letter"]).optional(),
+  })
+  .strict()
+  .refine((value) => value.action !== "polish" || value.kind !== undefined, {
+    message: "Say which document to polish: resume or cover_letter.",
+    path: ["kind"],
+  });
 
 export async function GET(
   _request: Request,
@@ -54,13 +79,17 @@ export async function GET(
     const { client, activeOrganization } = await requireActiveOrganization();
     const { data, error } = await client
       .from("job_seeker_documents")
-      .select("id, kind, version, content, created_at")
+      .select(DOCUMENT_COLUMNS)
       .eq("organization_id", activeOrganization.id)
       .eq("application_id", applicationId)
       .order("version", { ascending: false })
       .order("kind");
     if (error) return databaseErrorResponse(error);
-    return jsonNoStore({ documents: ((data ?? []) as DocumentRow[]).map(toView) });
+    return jsonNoStore({
+      documents: ((data ?? []) as DocumentRow[]).map(toView),
+      /** Whether the polish lane is usable, and the honest label either way. */
+      polish: polishAvailability(),
+    });
   } catch (error) {
     if (error instanceof ApiRequestError) return requestErrorResponse(error);
     const boundary = supabaseBoundaryErrorResponse(error);
@@ -83,6 +112,11 @@ export async function POST(
       throw new ApiRequestError(400, "invalid_application", "The application id is not valid.");
     }
     const { client, user, activeOrganization } = await requireActiveOrganization();
+    const parsed = postSchema.safeParse(await readBoundedJson(request));
+    if (!parsed.success) {
+      throw new ApiRequestError(400, "documents_request_invalid", parsed.error.issues[0]?.message ?? "The request was not valid.");
+    }
+    const action = parsed.data.action;
 
     const { data: application, error: applicationError } = await client
       .from("job_seeker_applications")
@@ -150,6 +184,47 @@ export async function POST(
     const nextVersion = (kind: string) =>
       ((versionRows ?? []).find((row) => row.kind === kind)?.version ?? 0) + 1;
 
+    if (action === "polish") {
+      const kind = parsed.data.kind as DocumentKind;
+      const baseline = kind === "resume" ? buildAtsResume(profile, job) : buildCoverLetter(profile, job);
+      const outcome = await generatePolishedDocument({
+        kind,
+        baseline,
+        profileTerms: [...profile.skills, ...profile.technologies, ...profile.certifications],
+      });
+      if (outcome.status === "polished") {
+        const { error: polishInsertError } = await client.from("job_seeker_documents").insert([{
+          organization_id: activeOrganization.id,
+          user_id: user.id,
+          application_id: applicationId,
+          kind,
+          version: nextVersion(kind),
+          content: outcome.content,
+          origin: "polished",
+          model: outcome.model,
+          polish_check: outcome.check,
+        }]);
+        if (polishInsertError) return databaseErrorResponse(polishInsertError);
+      }
+      const { data: afterPolish, error: afterPolishError } = await client
+        .from("job_seeker_documents")
+        .select(DOCUMENT_COLUMNS)
+        .eq("application_id", applicationId)
+        .order("version", { ascending: false })
+        .order("kind");
+      if (afterPolishError) return databaseErrorResponse(afterPolishError);
+      // The rejected text is not returned: it is the thing the check refused.
+      const polish = outcome.status === "rejected"
+        ? { status: outcome.status, model: outcome.model, detail: outcome.detail, violations: outcome.check.violations }
+        : outcome.status === "polished"
+          ? { status: outcome.status, model: outcome.model, detail: outcome.detail, violations: [] }
+          : { status: outcome.status, model: outcome.model, detail: outcome.detail, violations: [] };
+      return jsonNoStore(
+        { polish, documents: ((afterPolish ?? []) as DocumentRow[]).map(toView) },
+        { status: outcome.status === "polished" ? 201 : 200 },
+      );
+    }
+
     const { error: insertError } = await client.from("job_seeker_documents").insert([
       {
         organization_id: activeOrganization.id,
@@ -183,7 +258,7 @@ export async function POST(
 
     const { data: documents, error: listError } = await client
       .from("job_seeker_documents")
-      .select("id, kind, version, content, created_at")
+      .select(DOCUMENT_COLUMNS)
       .eq("application_id", applicationId)
       .order("version", { ascending: false })
       .order("kind");

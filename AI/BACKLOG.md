@@ -129,10 +129,16 @@ own PR, ADR, behavior test against the real chain, and hosted scope.
   manifest naming each table's count, truncation and any failure);
   "Your data is yours" card on Job Preferences. No migration. Closes
   LinkedIn 24, Indeed 23/24, Glassdoor-and-others 8, "data locked in".
-- [ ] Increment 8 (ADR-248): polish that cannot invent — model-polished
-  resume/cover-letter variants through the existing provider path,
-  checked term by term against the fact-only baseline; **Not Connected**
-  without a credential.
+- [x] Increment 8 (ADR-248): polish that cannot invent — 2026-09-02.
+  `lib/job-seeker/polish.ts` + `polish-check.ts` (terms, numbers and
+  mid-sentence names checked against the fact-only baseline; a variant
+  that adds anything is rejected with the additions named and never
+  stored); `model-lane.ts` shared with the interview questions;
+  `{ action: "polish", kind }` on the documents route; provenance
+  columns on `job_seeker_documents` (20260902001500); polish buttons or
+  **Not Connected** on Applications, badges on polished versions.
+  Hosted apply: scope=document-polish after merge. Closes LinkedIn 18,
+  "cover letters that cannot invent" rows.
 - [ ] Increment 9 (ADR-249): still open? — a bounded, owner-safe recheck
   of a posting URL recorded on the sightings row.
 - Owner-only, unchanged: `JSEARCH_RAPIDAPI_KEY` for inline LinkedIn/Indeed

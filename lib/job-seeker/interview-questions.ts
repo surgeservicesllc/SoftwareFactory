@@ -1,8 +1,12 @@
 import "server-only";
 
-import Anthropic from "@anthropic-ai/sdk";
-
-import { readProviderCredential, resolveProviderConfiguration } from "@/lib/providers/config";
+import {
+  defaultAnthropicFactory,
+  modelLane,
+  modelLaneCredential,
+  textOfResponse,
+  type AnthropicFactory,
+} from "@/lib/job-seeker/model-lane";
 
 /**
  * Model-written interview questions (ADR-246): the one generated section
@@ -15,6 +19,8 @@ import { readProviderCredential, resolveProviderConfiguration } from "@/lib/prov
  * open never bills.
  */
 
+export type { AnthropicFactory } from "@/lib/job-seeker/model-lane";
+
 export const MAX_QUESTIONS = 10;
 const MAX_OUTPUT_TOKENS = 1_024;
 const QUESTIONS_TIMEOUT_MS = 60_000;
@@ -24,15 +30,6 @@ export type ModelQuestions =
   | Readonly<{ status: "generated"; model: string; questions: string[]; detail: string }>
   | Readonly<{ status: "not_connected"; model: null; questions: []; detail: string }>
   | Readonly<{ status: "failed"; model: string; questions: []; detail: string }>;
-
-export type AnthropicFactory = (apiKey: string, baseUrl: string | null) => {
-  messages: {
-    create: (body: Record<string, unknown>, options?: Record<string, unknown>) => Promise<unknown>;
-  };
-};
-
-const defaultFactory: AnthropicFactory = (apiKey, baseUrl) =>
-  new Anthropic({ apiKey, ...(baseUrl ? { baseURL: baseUrl } : {}) }) as never;
 
 export const QUESTIONS_SYSTEM_PROMPT = [
   "You prepare a job candidate for an interview.",
@@ -60,29 +57,14 @@ export function interviewQuestionsPrompt(input: QuestionsInput): string {
 
 /** Whether the model lane is usable, said without naming any value. */
 export function modelQuestionsAvailability(): Readonly<{ available: boolean; model: string | null; detail: string }> {
-  const configuration = resolveProviderConfiguration("anthropic");
-  const usable = configuration.configured && !configuration.disabled && configuration.defaultModel !== null;
+  const lane = modelLane();
   return {
-    available: usable,
-    model: usable ? configuration.defaultModel : null,
-    detail: usable
-      ? `Questions are written by ${configuration.defaultModel} when you ask; none of them is a recorded fact.`
-      : configuration.unavailableReason
-        ?? "No model provider is configured on this server.",
+    available: lane.available,
+    model: lane.model,
+    detail: lane.available
+      ? `Questions are written by ${lane.model} when you ask; none of them is a recorded fact.`
+      : lane.unavailableReason ?? "No model provider is configured on this server.",
   };
-}
-
-/** Pull the text out of a Messages response without trusting its shape. */
-function textOfResponse(response: unknown): string {
-  const content = (response as { content?: unknown })?.content;
-  if (!Array.isArray(content)) return "";
-  return content
-    .map((block) =>
-      typeof block === "object" && block !== null && (block as { type?: string }).type === "text"
-        ? String((block as { text?: unknown }).text ?? "")
-        : "",
-    )
-    .join("");
 }
 
 /** A JSON array of strings, fenced or bare; null when the answer is anything else. */
@@ -110,17 +92,17 @@ export function parseQuestions(text: string): string[] | null {
 
 export async function generateInterviewQuestions(
   input: QuestionsInput,
-  factory: AnthropicFactory = defaultFactory,
+  factory: AnthropicFactory = defaultAnthropicFactory,
 ): Promise<ModelQuestions> {
   const availability = modelQuestionsAvailability();
-  const configuration = resolveProviderConfiguration("anthropic");
-  const credential = availability.available ? readProviderCredential("anthropic") : null;
+  const lane = modelLane();
+  const credential = modelLaneCredential();
   const model = availability.model;
   if (!credential || !model) {
     return { status: "not_connected", model: null, questions: [], detail: availability.detail };
   }
   try {
-    const client = factory(credential, configuration.baseUrl);
+    const client = factory(credential, lane.baseUrl);
     const response = await client.messages.create(
       {
         model,
