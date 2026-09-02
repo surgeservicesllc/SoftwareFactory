@@ -2,6 +2,28 @@
 
 Last reviewed: 2026-08-31
 
+**Addendum, 2026-09-02 latest+56 - trust (ADR-234):**
+services-trust.behavior 3 (flat months untouched at zero rates and
+numbered from zero; (0.88)^(11/12) at eleven months of twelve percent
+churn with the scenario equal to the rounded product, strictly decreasing
+factors, churn and growth compounded together, inputs clamped both ways,
+a one-month window; one assumptions row per workspace, the 0–100% check,
+a rival seeing and writing nothing; four flagged contacts with exact
+reasons in order — undeliverable-by-case-insensitive-match, duplicate,
+inactive and untouched-with-a-400-day-old-invoice — and the clean contact
+absent; both functions authenticated-only). services-trust 3 (clamped
+input, totals with the difference, reason counts in order with unknown
+flags appended). services-trust-routes 4 (stored applied and said so;
+query what-if clamped and never saved; none when nothing stored; an
+assumption outside 0–100% refused before the database and a sound one
+saved as the caller; the hygiene summary and labels). services-trust-
+panels 2 (saved assumptions applied and shown, a what-if tried and never
+saved, a save in basis points with provenance; the hygiene reasons, list
+and clean state). services-copilot +1. Grants roster and RLS census 227;
+assumptions deliberately unseeded.
+Hosted apply scope `trust` with a postflight that refuses a second row
+per workspace and a DEFINER or VOLATILE function.
+
 **Addendum, 2026-09-02 latest+55 - the customer's side (ADR-233):**
 services-customers-side.behavior 4 (a rating once per completed visit on
 the caller's own account, refused unfinished, refused twice, refused

@@ -218,7 +218,7 @@ describe("Phase 1E production operations behavior", () => {
     // (ADR-228), crm_scoring_rules (ADR-229) and crm_imports (ADR-230): 223.
     // Each is RLS-enabled and forced, which the filter on the next line is
     // what actually proves.
-    expect(rlsRows).toHaveLength(226);
+    expect(rlsRows).toHaveLength(227);
     expect(rlsRows.filter((row) => !row.relrowsecurity || !row.relforcerowsecurity)).toEqual([]);
 
     const { rows: grantRows } = await db.query<{ table_name: string }>(

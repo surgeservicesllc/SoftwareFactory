@@ -133,11 +133,29 @@ anything on a timer stays RED and owner-gated.
   rating us?" and "Which requests are past their promise?". 20260902000600;
   hosted apply: scope=customers-side after merge. Closes HubSpot
   25/36/40/42, PestPac 11, PestBoss 23.
-- [ ] Increment 32 (trust): forecast scenario inputs (owner-supplied churn
-  and growth, printed beside the figure); stale-contact hygiene report;
-  TOTP enrolment through Supabase Auth's own MFA — touches authentication,
-  so it needs a policy read before it is built. Closes HubSpot 2/10,
-  PestPac 14.
+- [x] Increment 32 (ADR-234): trust — `crm_forecast_assumptions` (one row
+  per workspace: annual churn and growth in basis points with a note on
+  their provenance; deliberately unseeded) and
+  `crm_revenue_forecast_scenario()` returning the recorded forecast beside
+  the same months with the rates compounded and the factor printed per
+  month, month zero untouched, inputs clamped, a what-if applied from the
+  query and never saved; `crm_contact_hygiene()` naming every contact the
+  book should not trust with the reasons (unreachable, undeliverable,
+  duplicate email, inactive account, untouched for a year) and deleting
+  nothing. Scenario card on the Dashboards forecast tab; Hygiene card on
+  the Data page; copilot "Which contacts are stale?". 20260902000700;
+  hosted apply: scope=trust after merge. Closes HubSpot 2/10.
+- [ ] **RED — owner direction required:** TOTP enrolment through Supabase
+  Auth's own MFA (PestPac complaint 14). `policies/PROTECTED_RESOURCES.md`
+  lists MFA under identity and authorization and
+  `policies/RISK_CLASSIFICATION.md` classes authentication changes RED
+  and excludes them from a general request, so the build-out's goal does
+  not authorise it. What it would touch: the sign-in flow (an enrolment
+  page calling `supabase.auth.mfa.enroll/challenge/verify`, a factor check
+  on session refresh), the account page (enrol / unenrol), and a policy
+  read on whether MFA is required for owners. What it would not touch:
+  RLS, service-role access, or any customer table. Ready to build on an
+  explicit owner request naming it.
 
 ## Site-wide dark/light theme (ADR-225, 2026-08-31)
 

@@ -6212,3 +6212,43 @@ building on a rating, a breach or a message — sending is a provider the
 owner opens (ADR-207), so a breached promise is shown, not dispatched. No
 survey is scheduled or sent; the customer is asked on their own portal
 because that is where they already are.
+
+## ADR-234 - Trust: the owner's assumptions printed beside the figure, a hygiene list that deletes nothing, and a lock that stays owner-gated
+
+The teardown's last three rows are about trust. HubSpot's "forecasting
+tool lacks customisation" — a model nobody can see — and its "inactive and
+bounced contacts need manual cleanup" — a list that quietly rots; PestPac
+reviewers "cannot confirm 2FA".
+
+**The assumptions are the owner's, and they are printed.** ADR-202's
+forecast projects what is on the books and applies no model, because the
+system has no evidence for one. This increment does not change that: it
+adds `crm_forecast_assumptions` — one row per workspace holding an annual
+churn and growth in basis points and a note saying where the numbers came
+from — and `crm_revenue_forecast_scenario()`, which returns the recorded
+forecast beside the same months with those rates compounded month by
+month and the factor printed per month, so month eleven of a twelve
+percent churn reads (0.88)^(11/12) and anyone can check it. Month zero is
+always the recorded figure. A request may supply a what-if instead of the
+stored row; the payload says which was applied (`stored`, `query`, `none`)
+and a what-if is never saved. Inputs outside 0–100% are clamped, not
+trusted. The seed leaves the table empty on purpose: a made-up model under
+the demo forecast is the exact thing the recorded forecast refuses.
+
+**Hygiene is a list, not a broom.** `crm_contact_hygiene()` names every
+contact the book should not trust as it stands, with the reasons — no
+email and no phone; a transactional notice to that address or number
+failed; the same email on another contact; an inactive account; nothing
+on the account (history, invoice or completed visit) in a year — most
+flagged first. It returns nothing for a clean contact, so the list is the
+finding. It deletes, merges and unsubscribes nothing: each row opens its
+account, where the audited merge (ADR-230) and the preference record
+(ADR-217) already exist for the person who decides.
+
+**TOTP stays owner-gated.** `policies/PROTECTED_RESOURCES.md` lists MFA
+under identity and authorization, and `policies/RISK_CLASSIFICATION.md`
+classes authentication changes RED and says a general request does not
+silently authorise them. The build-out's goal is a general request, so
+TOTP enrolment through Supabase Auth's own MFA is recorded as a precise,
+owner-gated item — what it would touch, what it would not — and not
+built here. That is the policy working, not the increment falling short.

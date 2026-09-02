@@ -2,6 +2,28 @@
 
 Last updated: 2026-08-31
 
+## Newest (2026-09-02, latest+56): trust (ADR-234) — the program is complete
+
+The seven-increment build-out (26–32) is shipped. What remains from the
+teardown is either **GATED** on a provider the owner opens (sending,
+charging, locating, syncing, listening, generating) or **RED** on an
+owner request (TOTP — its exact scope is in the backlog; executors on a
+clock). Do not build either under a general goal.
+
+THE SCENARIO IS NOT A MODEL. `crm_revenue_forecast_scenario` applies only
+what the owner typed, prints the factor per month, and keeps month zero
+recorded. Do not add seasonality, a default churn, or a "suggested"
+growth rate — the recorded forecast (ADR-202) exists precisely so the
+number with no assumptions is always on the page.
+
+HYGIENE DELETES NOTHING. A "clean up" button that removes or merges
+flagged contacts does not exist and should not; the audited merge
+(ADR-230) and the preference record (ADR-217) are where a person acts.
+
+WORKFLOW: 449,510 of 450,000 bytes. The NEXT scope will breach. Extract
+first, in its own change: one of the three mutating giants, verbatim,
+re-pointed, guard ratcheted. Never in the same change as a scope.
+
 ## Newest (2026-09-02, latest+55): the customer's side (ADR-233)
 
 ONLY THE CUSTOMER RATES. `crm_portal_surveys` grants authenticated SELECT

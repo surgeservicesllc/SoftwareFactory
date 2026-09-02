@@ -89,6 +89,7 @@ const publicTables = [
   "crm_estimates",
   "crm_field_submissions",
   "crm_followup_dismissals",
+  "crm_forecast_assumptions",
   "crm_form_answers",
   "crm_form_fields",
   "crm_form_instances",

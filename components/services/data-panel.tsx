@@ -4,6 +4,7 @@ import { Database, Download, GitMerge, Upload } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 import { Card, EmptyState, MetricCard, PageHeader, SectionTitle } from "@/components/ui";
+import type { ContactHygieneView, HygieneSummary } from "@/lib/services/trust";
 import { IMPORT_FIELDS, parseCsv, type ImportField } from "@/lib/services/data-import";
 
 /**
@@ -73,6 +74,31 @@ export function ServicesDataPanel() {
   const [survivor, setSurvivor] = useState<AccountHit | null>(null);
   const [loser, setLoser] = useState<AccountHit | null>(null);
   const [mergeResult, setMergeResult] = useState<Record<string, number> | null>(null);
+  const [hygiene, setHygiene] = useState<{ contacts: ContactHygieneView[]; summary: HygieneSummary; ceiling: { contacts: number; reached: boolean } } | null>(null);
+  const [hygieneError, setHygieneError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const read = async () => {
+      try {
+        const response = await fetch("/api/services/data/hygiene", { cache: "no-store" });
+        const body = (await response.json()) as { contacts?: ContactHygieneView[]; summary?: HygieneSummary; ceiling?: { contacts: number; reached: boolean }; error?: { message?: string } };
+        if (cancelled) return;
+        if (!response.ok || !Array.isArray(body.contacts) || !body.summary) {
+          setHygieneError(body.error?.message ?? "The hygiene report could not be read.");
+          return;
+        }
+        setHygiene({ contacts: body.contacts, summary: body.summary, ceiling: body.ceiling ?? { contacts: 1000, reached: false } });
+      } catch {
+        if (!cancelled) setHygieneError("The hygiene report could not be read.");
+      }
+    };
+    const kickoff = window.setTimeout(() => void read(), 0);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(kickoff);
+    };
+  }, []);
 
   const loadManifest = useCallback(async () => {
     setManifestError("");
@@ -415,6 +441,42 @@ export function ServicesDataPanel() {
           </ul>
         )}
       </Card>
+
+      <section className="card" data-testid="services-hygiene">
+        <SectionTitle
+          title="Hygiene"
+          description="Every contact the book should not trust as it stands, with the reasons — computed from the book itself each time you look. Nothing is deleted or merged for you: each row is a person's call, made on the account."
+        />
+        {hygieneError !== null ? <p className="mt-3 text-sm text-[var(--warning)]">{hygieneError}</p> : null}
+        {hygiene === null && hygieneError === null ? (
+          <p className="mt-3 text-sm text-muted">Reading the book…</p>
+        ) : hygiene !== null && hygiene.contacts.length === 0 ? (
+          <p className="mt-3 text-sm text-muted" data-testid="services-hygiene-clean">
+            Every contact can be reached, is unique, sits on a live account, and has been touched this year.
+          </p>
+        ) : hygiene !== null ? (
+          <>
+            <p className="mt-3 text-sm text-muted" data-testid="services-hygiene-summary">
+              {hygiene.contacts.length} contact{hygiene.contacts.length === 1 ? "" : "s"} flagged
+              {hygiene.summary.multiFlagged > 0 ? `, ${hygiene.summary.multiFlagged} for more than one reason` : ""}:{" "}
+              {hygiene.summary.byFlag.map((entry) => `${entry.count} ${entry.label.toLowerCase()}`).join(" · ")}
+              {hygiene.ceiling.reached ? ` · showing the first ${hygiene.ceiling.contacts}` : ""}
+            </p>
+            <ul className="mt-3 divide-y divide-line" data-testid="services-hygiene-list">
+              {hygiene.contacts.slice(0, 200).map((contact) => (
+                <li key={contact.contactId} className="py-2.5 text-sm">
+                  <span className="font-medium text-foreground">{contact.contactName}</span>
+                  <span className="text-muted">
+                    {" "}· {contact.accountName} ({contact.accountStatus}) · {contact.email ?? "no email"} · {contact.phone ?? "no phone"}
+                    {contact.daysSinceTouch === null ? " · never touched" : ` · touched ${contact.daysSinceTouch} day${contact.daysSinceTouch === 1 ? "" : "s"} ago`}
+                  </span>
+                  <span className="block text-xs text-[var(--warning)]">{contact.labels.join("; ")}</span>
+                </li>
+              ))}
+            </ul>
+          </>
+        ) : null}
+      </section>
     </div>
   );
 }
