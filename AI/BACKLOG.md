@@ -105,16 +105,16 @@ anything on a timer stays RED and owner-gated.
   `hosted-guard-captures.behavior` at the state its step expects; the two
   pinning suites read the files spliced in place. 449,510 → 409,854 bytes;
   guard ratcheted to 420,000. Its own change; no scope in it.
-- [ ] **scope=all's protected-catalog gate refuses on hosted** (found by
-  the extraction's execution test; ADR-235): the gate pins the four
-  `_checked` mutators' sources as 20260822000200 wrote them, and
-  20260822000900 — which the same gate requires in the ledger — rewrote
-  them. Repair, in its own change: replace the four source md5s in
-  `.github/hosted-apply/guard/scope-all-protected-catalog-ready.sql` with
-  the post-repair values the record-only step already pins beside the old
-  ones; flip the test's broad expectation to `true` and drop its
-  decomposition. Do not loosen the clause. A broad push itself stays an
-  owner-dispatched action.
+- [x] **scope=all's protected-catalog gate refused on hosted** (found by
+  the extraction's execution test, ADR-235; repaired in ADR-236): the gate
+  pinned the four `_checked` mutators' sources as 20260822000200 wrote
+  them, and 20260822000900 — which the same gate requires in the ledger —
+  rewrote them. The four source md5s in
+  `.github/hosted-apply/guard/scope-all-protected-catalog-ready.sql` now
+  name the post-repair values the record-only step already pinned beside
+  the old ones; nothing else in the gate changed; the execution test's
+  broad expectation is `true` against the whole chain. A broad push itself
+  stays an owner-dispatched action.
 - [x] Increment 29 (ADR-231): job profitability — `hourly_cost_cents` on
   technicians and `unit_cost_cents` on lots (bounded, NULL = unknown), and
   `crm_visit_profitability()` reading as the caller: revenue from non-void

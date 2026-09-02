@@ -124,21 +124,6 @@ beforeAll(async () => {
     await capture("scope-all-protected-catalog-ready.sql");
 }, 180_000);
 
-/**
- * The broad check's own CTEs, followed by a query of the caller's choosing —
- * so a refusal can be taken apart into the rows that caused it.
- */
-async function broadCatalog<Row>(select: string): Promise<Row[]> {
-  const sql = await readFile(resolve(guardRoot, "scope-all-protected-catalog-ready.sql"), "utf8");
-  const ctes = sql.slice(sql.indexOf("with expected_functions"), sql.indexOf("select to_regrole("));
-  expect(ctes).toContain("function_state as (");
-  try {
-    return (await db.query<Row>(`${ctes}${select}`)).rows;
-  } finally {
-    await db.exec("reset search_path");
-  }
-}
-
 afterAll(async () => {
   await db?.close();
 });
@@ -186,46 +171,17 @@ describe("the apply workflow's captured guard files", () => {
     expect(captured["contract:bot-mutator-contract-catalog-ready.sql"]).toBe(false);
   });
 
-  it("the broad scope's protected-catalog check prints f against the whole chain, for exactly one recorded reason", async () => {
+  it("the broad scope's protected-catalog check prints t against the whole chain", () => {
     /*
-     * This is the finding the extraction surfaced, pinned rather than hidden.
-     * The check expects the four `_checked` mutators' sources as
-     * 20260822000200 wrote them — but 20260822000900 (the hosted plpgsql
-     * catalog repair, which the same step requires to be in the ledger)
-     * rewrote all four. The workflow already pins both hashes side by side in
-     * the record-only chain's verification; this gate still names the old
-     * one. So against the chain as it stands, and against the hosted database
-     * that has applied it, scope=all refuses with "catalog is not exact".
-     *
-     * Every other predicate holds. Repairing the four pins is a change to a
-     * release gate and is its own change, not part of moving the SQL; when
-     * it lands, this expectation flips to `true` and the decomposition below
-     * goes.
+     * The extraction that moved this file (ADR-235) found it printing f:
+     * it pinned the four `_checked` mutators' sources as 20260822000200
+     * wrote them, and 20260822000900 — which the same gate requires in the
+     * ledger — rewrote all four, so scope=all had been refusing on hosted
+     * with "catalog is not exact" since that repair landed. The four pins
+     * now name the post-repair sources the record-only chain's verification
+     * pins beside the old ones, and the gate says t for the catalog the
+     * chain actually produces.
      */
-    expect(captured["latest:scope-all-protected-catalog-ready.sql"]).toBe(false);
-
-    const drifted = await broadCatalog<{ signature: string }>(
-      "select signature from function_state where actual_source_md5 is distinct from source_md5 order by 1",
-    );
-    expect(drifted.map((row) => row.signature)).toEqual([
-      "public.assign_bots_to_project_checked(uuid,uuid,jsonb)",
-      "public.set_bot_assignment_execution_checked(uuid,uuid,uuid,bigint,text,text)",
-      "public.update_bot_assignment_checked(uuid,uuid,uuid,bigint,public.bot_assignment_status)",
-      "public.update_bot_assignment_configuration_checked(uuid,uuid,uuid,bigint,jsonb,uuid,public.bot_assignment_status)",
-    ]);
-
-    // And with that one clause set aside, the check would print t: nothing
-    // else about the sixteen functions, the revision columns or the triggers
-    // has drifted.
-    const sql = await readFile(resolve(guardRoot, "scope-all-protected-catalog-ready.sql"), "utf8");
-    const clause = "             and actual_source_md5 = source_md5\n";
-    expect(sql).toContain(clause);
-    try {
-      const results = await db.exec(sql.replace(clause, ""));
-      const last = results[results.length - 1];
-      expect(Object.values(last.rows[0] as Record<string, unknown>)).toEqual([true]);
-    } finally {
-      await db.exec("reset search_path");
-    }
+    expect(captured["latest:scope-all-protected-catalog-ready.sql"]).toBe(true);
   });
 });

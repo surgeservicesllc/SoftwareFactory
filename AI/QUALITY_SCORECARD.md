@@ -2,6 +2,14 @@
 
 Last reviewed: 2026-09-02
 
+**Addendum, 2026-09-02 latest+58 - scope=all's gate repaired (ADR-236):**
+hosted-guard-captures.behavior 4 with the broad gate's expectation flipped
+to `t` against the whole chain (four source pins renamed to the
+post-20260822000900 values; every other predicate untouched); the
+EXPAND-state `t` and CONTRACT-preflight `f` expectations unchanged. The
+fifteen workflow-reading suites and the path-reference guard pass; eslint
+and tsc clean.
+
 **Addendum, 2026-09-02 latest+57 - guard captures (ADR-235):**
 hosted-guard-captures.behavior 4 (each captured guard file named once by
 exactly the step that carried it inline and still branched on; both
