@@ -1717,6 +1717,7 @@ export async function runSeed(
     version: template.version,
     description: template.description,
     active: template.active,
+    trigger_service_types: template.triggerServiceTypes,
     created_by: userId,
   }));
   const formTemplates = await insertAll(client, "crm_form_templates", templateRows, "id, name");
@@ -1751,6 +1752,29 @@ export async function runSeed(
   const fieldIdByKey = new Map(
     formFields.data.map((row) => [`${row.template_id as string}:${row.position as number}`, row.id as string]),
   );
+
+  // Conditions point at questions that now have ids (ADR-238): written
+  // second, resolved by position, checked by the database against the
+  // parent's type and position.
+  const conditionRows = dataset.formTemplates.flatMap((template, templateIndex) => {
+    const id = templateId(templateIndex);
+    if (id === null) return [];
+    return template.fields.flatMap((field, position) => {
+      if (field.dependsOnPosition === undefined || field.showWhen === undefined) return [];
+      const childId = fieldIdByKey.get(`${id}:${position + 1}`);
+      const parentId = fieldIdByKey.get(`${id}:${field.dependsOnPosition}`);
+      if (childId === undefined || parentId === undefined) return [];
+      return [{ id: childId, depends_on_field_id: parentId, show_when: field.showWhen }];
+    });
+  });
+  for (const row of conditionRows) {
+    const conditioned = await client
+      .from("crm_form_fields")
+      .update({ depends_on_field_id: row.depends_on_field_id, show_when: row.show_when } as never)
+      .eq("organization_id", org)
+      .eq("id", row.id);
+    if (conditioned.error) return { error: conditioned.error };
+  }
 
   const instanceRows = dataset.accounts.flatMap((account) => {
     const accountId = accountIdByName.get(account.name);
@@ -1803,6 +1827,14 @@ export async function runSeed(
           // A part-finished form answers what it has reached; a completed
           // one answers everything, which is what lets it complete.
           if (!form.answerEvery && !field.required) return;
+          // A conditioned question is answered only when the form is asking
+          // it — here, when its yes/no parent was answered yes below.
+          if (field.dependsOnPosition !== undefined) {
+            const parentIndex = field.dependsOnPosition - 1;
+            const parent = template.fields[parentIndex];
+            const parentYes = parent?.fieldType === "boolean" && (account.index + parentIndex) % 3 !== 0;
+            if (!parentYes) return;
+          }
           const fieldId = fieldIdByKey.get(`${templateKey}:${position + 1}`);
           if (fieldId === undefined) return;
           answerRows.push({

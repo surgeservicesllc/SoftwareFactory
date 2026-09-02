@@ -4,6 +4,8 @@
  * with the routes about every field name.
  */
 
+import type { ShowWhen } from "@/lib/services/form-conditions";
+
 export type AccountView = {
   id: string;
   name: string;
@@ -719,6 +721,9 @@ export type FormFieldView = {
   required: boolean;
   helpText: string | null;
   options: string[];
+  /** Asked only when an earlier question was answered a certain way (ADR-238). */
+  dependsOnFieldId: string | null;
+  showWhen: ShowWhen | null;
   createdAt: string;
 };
 
@@ -729,6 +734,8 @@ export type FormTemplateView = {
   version: number;
   description: string | null;
   active: boolean;
+  /** New visits of these service types get this form assigned (ADR-238). */
+  triggerServiceTypes: string[];
   createdAt: string;
   updatedAt: string;
   fields: FormFieldView[];

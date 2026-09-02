@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { readShowWhen } from "@/lib/services/form-conditions";
+
 import {
   CRM_CHOICE_FIELD_TYPES,
   CRM_FIELD_TYPES,
@@ -46,11 +48,22 @@ const fieldSchema = z
     required: z.boolean().default(false),
     helpText: z.string().trim().min(1).max(1000).nullish(),
     options: z.array(z.string().trim().min(1).max(120)).max(100).nullish(),
+    /** The 1-based position of the earlier question this one depends on (ADR-238). */
+    dependsOn: z.number().int().min(1).max(500).nullish(),
+    showWhen: z.unknown().nullish(),
   })
   .strict()
   .refine((value) => CHOICE.has(value.fieldType) === Boolean(value.options?.length), {
     message: "A choice question carries its choices, and every other kind carries none.",
+  })
+  .refine((value) => (value.dependsOn == null) === (value.showWhen == null), {
+    message: "A condition names the question it depends on and how it was answered — both, or neither.",
+  })
+  .refine((value) => value.showWhen == null || readShowWhen(value.showWhen) !== null, {
+    message: "A condition is one of: answered, is yes, is no, is exactly a value, is any of some values.",
   });
+
+const serviceTypeList = z.array(z.string().trim().min(1).max(120)).max(50);
 
 const createSchema = z
   .object({
@@ -60,8 +73,13 @@ const createSchema = z
     /** Publishing a new version of an existing form; defaults to the first. */
     version: z.number().int().min(1).max(1000).default(1),
     fields: z.array(fieldSchema).min(1).max(500),
+    /** New visits of these service types get this form assigned (ADR-238). */
+    triggerServiceTypes: serviceTypeList.default([]),
   })
-  .strict();
+  .strict()
+  .refine((value) => value.fields.every((field, index) => field.dependsOn == null || field.dependsOn < index + 1), {
+    message: "A question can only depend on an earlier question.",
+  });
 
 const patchSchema = z
   .object({
@@ -69,6 +87,7 @@ const patchSchema = z
     name: z.string().trim().min(1).max(160).optional(),
     description: z.string().trim().min(1).max(2000).nullable().optional(),
     active: z.boolean().optional(),
+    triggerServiceTypes: serviceTypeList.optional(),
   })
   .strict()
   .refine((value) => Object.keys(value).length > 1, { message: "Nothing to change." });
@@ -161,6 +180,7 @@ export async function POST(request: Request) {
         kind: payload.kind,
         version: payload.version,
         description: payload.description ?? null,
+        trigger_service_types: payload.triggerServiceTypes,
         created_by: user.id,
       })
       .select(CRM_FORM_TEMPLATE_COLUMNS)
@@ -198,12 +218,50 @@ export async function POST(request: Request) {
       .select(CRM_FORM_FIELD_COLUMNS);
     if (fields.error) return databaseErrorResponse(fields.error);
 
+    // Conditions point at questions that now have ids: resolved by position,
+    // written second, and checked by the database against the parent's type.
+    const byPosition = new Map(
+      ((fields.data ?? []) as unknown as CrmFormFieldRow[]).map((row) => [row.position, row]),
+    );
+    let rows = (fields.data ?? []) as unknown as CrmFormFieldRow[];
+    for (const [index, field] of payload.fields.entries()) {
+      if (field.dependsOn == null || field.showWhen == null) continue;
+      const child = byPosition.get(index + 1);
+      const parent = byPosition.get(field.dependsOn);
+      if (child === undefined || parent === undefined) continue;
+      const conditioned = await client
+        .from("crm_form_fields")
+        .update({ depends_on_field_id: parent.id, show_when: readShowWhen(field.showWhen) })
+        .eq("organization_id", activeOrganization.id)
+        .eq("id", child.id);
+      if (conditioned.error) {
+        if (conditioned.error.code === "23514" || conditioned.error.code === "P0001") {
+          return jsonNoStore(
+            { error: { code: "condition_refused", message: `"${field.label}": ${conditioned.error.message}` } },
+            { status: 422 },
+          );
+        }
+        return databaseErrorResponse(conditioned.error);
+      }
+    }
+    if (payload.fields.some((field) => field.dependsOn != null)) {
+      const reread = await client
+        .from("crm_form_fields")
+        .select(CRM_FORM_FIELD_COLUMNS)
+        .eq("organization_id", activeOrganization.id)
+        .eq("template_id", template.id)
+        .order("position", { ascending: true })
+        .limit(500);
+      if (reread.error) return databaseErrorResponse(reread.error);
+      rows = (reread.data ?? []) as unknown as CrmFormFieldRow[];
+    }
+
     return jsonNoStore(
       {
         template: {
           ...template,
           inUse: false,
-          fields: ((fields.data ?? []) as unknown as CrmFormFieldRow[]).map(toFormFieldView),
+          fields: rows.map(toFormFieldView),
         },
       },
       { status: 201 },
@@ -226,6 +284,7 @@ export async function PATCH(request: Request) {
     if (payload.name !== undefined) changes.name = payload.name;
     if (payload.description !== undefined) changes.description = payload.description;
     if (payload.active !== undefined) changes.active = payload.active;
+    if (payload.triggerServiceTypes !== undefined) changes.trigger_service_types = payload.triggerServiceTypes;
 
     const { data, error } = await client
       .from("crm_form_templates")

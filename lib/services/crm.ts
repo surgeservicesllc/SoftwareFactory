@@ -7,6 +7,8 @@
  * once so a renamed column cannot drift half the surfaces.
  */
 
+import { readShowWhen } from "@/lib/services/form-conditions";
+
 export const CRM_ACCOUNT_KINDS = ["residential", "commercial"] as const;
 export type CrmAccountKind = (typeof CRM_ACCOUNT_KINDS)[number];
 
@@ -1622,9 +1624,9 @@ export const CRM_ANSWER_SHAPE: Record<CrmFieldType, "text" | "number" | "boolean
 };
 
 export const CRM_FORM_TEMPLATE_COLUMNS =
-  "id, name, kind, version, description, active, created_at, updated_at";
+  "id, name, kind, version, description, active, trigger_service_types, created_at, updated_at";
 export const CRM_FORM_FIELD_COLUMNS =
-  "id, template_id, position, label, field_type, required, help_text, options, created_at";
+  "id, template_id, position, label, field_type, required, help_text, options, depends_on_field_id, show_when, created_at";
 export const CRM_FORM_INSTANCE_COLUMNS =
   "id, template_id, account_id, property_id, work_order_id, technician_id, status, assigned_at, started_at, completed_at, signed_by_name, signed_at, signature_path, notes, created_at, updated_at";
 export const CRM_FORM_ANSWER_COLUMNS =
@@ -1639,6 +1641,8 @@ export type CrmFormTemplateRow = {
   version: number;
   description: string | null;
   active: boolean;
+  /** Service types whose new visits get this form assigned (ADR-238). */
+  trigger_service_types: string[] | null;
   created_at: string;
   updated_at: string;
 };
@@ -1652,6 +1656,9 @@ export type CrmFormFieldRow = {
   required: boolean;
   help_text: string | null;
   options: string[] | null;
+  /** Asked only when an earlier question was answered a certain way (ADR-238). */
+  depends_on_field_id: string | null;
+  show_when: Record<string, unknown> | null;
   created_at: string;
 };
 
@@ -1706,6 +1713,7 @@ export function toFormTemplateView(row: CrmFormTemplateRow) {
     version: row.version,
     description: row.description,
     active: row.active,
+    triggerServiceTypes: row.trigger_service_types ?? [],
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -1721,6 +1729,8 @@ export function toFormFieldView(row: CrmFormFieldRow) {
     required: row.required,
     helpText: row.help_text,
     options: row.options ?? [],
+    dependsOnFieldId: row.depends_on_field_id ?? null,
+    showWhen: readShowWhen(row.show_when ?? null),
     createdAt: row.created_at,
   };
 }

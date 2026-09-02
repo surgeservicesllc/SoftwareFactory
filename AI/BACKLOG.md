@@ -177,6 +177,28 @@ anything on a timer stays RED and owner-gated.
   copilot "What do we tell customers about ants?". Seed: eight articles.
   20260902000800; hosted apply: scope=knowledge-base after merge. Closes
   HubSpot 10/43, PestPac 13.
+- [x] Increment 34 (ADR-238): the form asks the next question —
+  `crm_form_fields.depends_on_field_id` + `show_when` (answered, is_true,
+  is_false, equals, any_of; earlier question of the same form only; op
+  checked against the parent's type; a parent cannot move past its
+  child), `crm_form_condition_met()` / `crm_form_question_asked()` (the
+  rule as arithmetic up the whole chain), `crm_form_instance_questions()`
+  (every question with asked/answered computed live), the completeness
+  trigger counting only asked required questions, an answer to an unasked
+  question refused, a hidden answer kept; `crm_form_templates.
+  trigger_service_types` and `crm_work_orders_assign_forms` assigning
+  each active matching template once on visit creation. Routes: fields
+  take `dependsOn` (position) + `showWhen`, templates take
+  `triggerServiceTypes`, the instance read carries `questions` with
+  `asked`, answers go in parents-first with the not-asked refusal named.
+  Forms page: an answering sheet that hides a question the moment its
+  parent changes and says what would ask it; a form builder with per-
+  question conditions and trigger types; conditions in words on the
+  templates tab. Seed: Severity and Pests observed asked only when
+  activity was found; a few templates assigned by service type.
+  20260902000900; hosted apply: scope=forms-conditions after merge.
+  Closes PestPac 14 (triggered forms) and complaint 13 (conditional
+  questions).
 - [ ] **RED — owner direction required:** TOTP enrolment through Supabase
   Auth's own MFA (PestPac complaint 14). `policies/PROTECTED_RESOURCES.md`
   lists MFA under identity and authorization and

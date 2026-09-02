@@ -6398,3 +6398,49 @@ per product. Spent lots are not printed.
 for staff, one draft — so the customer's Help tab, the member's search
 and the draft filter each have something to show on the demo book; the
 seed roster says why the floor does not apply.
+
+## ADR-238 - The form asks the next question: conditions the database checks, completion over what is asked, and a form the visit brings with it
+
+PestPac's forms "lack conditional logic"; WorkWave triggers a form from
+the service type only in a paid tier. Both are the same sentence: the
+form should know what to ask next, and the visit should know which form
+it needs, without a person remembering either.
+
+**A condition points earlier, and the database checks it.** A question
+may depend on one earlier question of the same form, answered a certain
+way: `answered`, `is_true`, `is_false`, `equals <value>`, `any_of
+[<values>]`. "Earlier" is what makes a cycle impossible and the chain
+finite; the trigger also refuses a parent moving past its child. The op
+must fit the parent's type (yes/no ops on a yes/no question). The shape
+check wraps every operand test in `coalesce(…, false)`, because a CHECK
+waves NULL through and `{op: equals}` without a value once passed for
+that reason.
+
+**"Asked" is arithmetic over the answers present.** `crm_form_question_asked`
+walks up the chain; an unasked parent makes every descendant unasked,
+whatever a stale child answer says. `crm_form_instance_questions` returns
+every question with `asked` and `answered` computed live, so the page and
+the database read the same form. The page mirrors the rule (`askedNow`)
+only so a question can disappear the moment its parent's draft changes;
+the database remains the authority, and an answer to a question it is not
+asking is refused by trigger — which is why the route sends answers
+parents-first.
+
+**Completion counts what is asked.** The completeness trigger now counts
+only asked required questions, so "no pests found" completes without the
+three questions that only make sense when there were. A hidden answer is
+kept, not deleted: not shown, not counted, back when the condition is met
+again. A form never silently loses what somebody wrote.
+
+**The visit brings its form.** A template names the service types it is
+for; an AFTER INSERT trigger on the visit assigns each active matching
+template once, case-insensitively, carrying the account, the site, the
+visit and the technician. Assignment on later edits of the service type
+is deliberately not done: a visit re-typed after its form was started
+would otherwise grow a second form nobody asked for.
+
+**The page.** The answering sheet strikes through an unasked question and
+says beside it what would ask it; Complete waits on the asked required
+ones. The builder offers conditions only against earlier questions with
+the ops that fit, and the trigger list is a comma-separated line. The
+templates tab prints every condition in words.

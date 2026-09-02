@@ -2,7 +2,30 @@
 
 Last updated: 2026-09-02
 
-## Newest (2026-09-02, latest+59): what people look up (ADR-237)
+## Newest (2026-09-02, latest+60): the form asks the next question (ADR-238)
+
+THE DATABASE DECIDES WHAT IS ASKED. `crm_form_question_asked` is the
+rule; the page's `askedNow` mirrors it for immediacy and nothing more.
+An answer to an unasked question is refused by trigger, so send answers
+parents-first (the route sorts by position). Do not let the page "skip"
+the database by sending unasked answers.
+
+A CONDITION POINTS EARLIER, ALWAYS. That is what makes a cycle impossible
+and the chain finite; the trigger also refuses a parent moving past its
+child. Do not relax it to "any question".
+
+A HIDDEN ANSWER IS KEPT. When a parent changes and a child becomes
+unasked, its answer stays in the row: not shown, not counted, back when
+the condition is met again. Do not add a trigger that deletes it.
+
+EVERY OPERAND TEST IN THE SHAPE CHECK IS `coalesce(…, false)`. A CHECK
+waves NULL through; `{op: equals}` without a value once passed for that
+reason. Keep the wrapping when adding an op.
+
+HOSTED: scope=forms-conditions is dispatched after merge; record the run
+id here and in CURRENT_STATE. Workflow 411,640 of 420,000.
+
+## Older (2026-09-02, latest+59): what people look up (ADR-237)
 
 THE SEARCH IS ARITHMETIC. `crm_kb_search` counts whole-word hits (title
 ×3, body ×1, plural s optional, stop words nothing) and returns the
@@ -20,8 +43,8 @@ row otherwise → 404), the staff route reads under RLS and includes the
 dispatch instructions because the file is for the person doing the visit.
 Two-way calendar sync stays GATED.
 
-HOSTED: scope=knowledge-base is dispatched after merge; record the run id
-here and in CURRENT_STATE. Workflow 410,730 of 420,000.
+HOSTED: scope=knowledge-base run 33590201714 succeeded on main ea32e47.
+Workflow 410,730 of 420,000.
 
 ## Older (2026-09-02, latest+58): scope=all's gate repaired (ADR-236)
 

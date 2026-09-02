@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { toFormQuestionView, type CrmFormQuestionRow } from "@/lib/services/form-conditions";
+
 import {
   CRM_ANSWER_SHAPE,
   CRM_FORM_ANSWER_COLUMNS,
@@ -116,7 +118,7 @@ export async function GET(request: Request) {
     }
     const view = toFormInstanceView(instance.data as unknown as CrmFormInstanceRow);
 
-    const [fields, answers] = await Promise.all([
+    const [fields, answers, asked] = await Promise.all([
       client
         .from("crm_form_fields")
         .select(CRM_FORM_FIELD_COLUMNS)
@@ -130,24 +132,26 @@ export async function GET(request: Request) {
         .eq("organization_id", activeOrganization.id)
         .eq("instance_id", view.id)
         .limit(500),
+      client.rpc("crm_form_instance_questions", { p_instance: view.id }).limit(500),
     ]);
     if (fields.error) return databaseErrorResponse(fields.error);
     if (answers.error) return databaseErrorResponse(answers.error);
+    if (asked.error) return databaseErrorResponse(asked.error);
 
-    const answered = new Set(
-      ((answers.data ?? []) as unknown as CrmFormAnswerRow[]).map((row) => row.field_id),
-    );
-    const questions = ((fields.data ?? []) as unknown as CrmFormFieldRow[]).map(toFormFieldView);
+    const questions = ((asked.data ?? []) as unknown as CrmFormQuestionRow[]).map(toFormQuestionView);
 
     return jsonNoStore({
       instance: view,
-      fields: questions,
+      fields: ((fields.data ?? []) as unknown as CrmFormFieldRow[]).map(toFormFieldView),
       answers: ((answers.data ?? []) as unknown as CrmFormAnswerRow[]).map(toFormAnswerView),
+      // Every question with whether it is asked, given the answers so far,
+      // and whether it is answered — the database's own reading (ADR-238).
+      questions,
       // What still stands between this form and being completable, named
-      // rather than discovered on the refusal.
+      // rather than discovered on the refusal: required, asked, unanswered.
       unansweredRequired: questions
-        .filter((field) => field.required && !answered.has(field.id))
-        .map((field) => field.label),
+        .filter((question) => question.required && question.asked && !question.answered)
+        .map((question) => question.label),
     });
   } catch (error) {
     const boundary = supabaseBoundaryErrorResponse(error);
@@ -239,7 +243,7 @@ export async function PATCH(request: Request) {
         ((fields.data ?? []) as unknown as CrmFormFieldRow[]).map((row) => [row.id, toFormFieldView(row)]),
       );
 
-      const rows: Record<string, unknown>[] = [];
+      const rows: Array<{ position: number; row: Record<string, unknown> }> = [];
       for (const answer of payload.answers) {
         const field = byId.get(answer.fieldId);
         if (field === undefined) {
@@ -272,22 +276,39 @@ export async function PATCH(request: Request) {
           );
         }
         rows.push({
-          organization_id: activeOrganization.id,
-          instance_id: before.id,
-          field_id: field.id,
-          value_text: answer.text ?? null,
-          value_number: answer.number ?? null,
-          value_boolean: answer.boolean ?? null,
-          value_date: answer.date ?? null,
-          value_options: answer.options ?? null,
-          created_by: user.id,
+          position: field.position,
+          row: {
+            organization_id: activeOrganization.id,
+            instance_id: before.id,
+            field_id: field.id,
+            value_text: answer.text ?? null,
+            value_number: answer.number ?? null,
+            value_boolean: answer.boolean ?? null,
+            value_date: answer.date ?? null,
+            value_options: answer.options ?? null,
+            created_by: user.id,
+          },
         });
       }
 
+      // Parents before children: a question is asked by the answer before it,
+      // and the database checks each answer against the answers already in.
+      rows.sort((a, b) => a.position - b.position);
       const saved = await client
         .from("crm_form_answers")
-        .upsert(rows as never, { onConflict: "organization_id,instance_id,field_id" });
+        .upsert(rows.map((entry) => entry.row) as never, { onConflict: "organization_id,instance_id,field_id" });
       if (saved.error) {
+        if (saved.error.code === "23514" && /not asked/i.test(saved.error.message ?? "")) {
+          return jsonNoStore(
+            {
+              error: {
+                code: "question_not_asked",
+                message: "One of those answers is for a question this form is not asking yet — answer the question it depends on first.",
+              },
+            },
+            { status: 422 },
+          );
+        }
         if (saved.error.code === "23514") {
           return jsonNoStore(
             {

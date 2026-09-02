@@ -2,6 +2,28 @@
 
 Last reviewed: 2026-09-02
 
+**Addendum, 2026-09-02 latest+60 - the form asks the next question
+(ADR-238):** services-forms-conditions.behavior 4 (a condition on another
+form, on a later question, with an op that does not fit, malformed, half,
+or a parent moving past its child — each refused by name; asked computed
+up the chain with the exact five-row reading, the not-asked refusal,
+completion refusing "2 required" then "1 required" then passing, the
+hidden answer kept and uncounted; a visit assigned its form once with
+account, site and technician, none for a retired template or another
+type, the trigger list bounded; grants exact). services-form-conditions 6
+(shape, ops per parent type, the rule in words, the mirrored rule over
+every shape, the chain walk, the trigger list). services-forms-
+conditions-routes 5 (conditions written second by resolved id, three
+refusals before the database, the trigger list patched, the read with
+asked and outstanding, answers parents-first and the refusal named).
+services-forms-conditions-panel 2 (hidden with its rule, revealed on yes,
+hidden again on no, only asked answers sent in order, Complete gated;
+conditions in words and trigger types shown, the builder posting a
+condition by position with the trigger list de-duplicated). Seed audit
+67/67 with conditional questions seeded; replay executes the new
+postflight; runbook 229; byte guard 420,000 against 411,640; tsc and
+eslint clean.
+
 **Addendum, 2026-09-02 latest+59 - what people look up (ADR-237):**
 services-knowledge.behavior 5 (RLS forced with authenticated-only grants
 and the two definers; slug shape, per-workspace uniqueness, the secret
