@@ -55,8 +55,12 @@ unknown rule refused, rival sees nothing, on-create assignment with its
 history line, backfill after coverage grows, a chosen territory never
 overridden); 5 panel tests; 2 copilot composer tests; seed audit 63/63;
 scope replay, roster, migration-version, path-reference and byte-ceiling
-guards; tsc and eslint clean. Hosted apply scope `explainable-scoring` is
-dispatched after merge and recorded here.
+guards; tsc and eslint clean. PR #490 merged as exact main
+`eb188a18b8a761133ed3e22d9291a0e995703b14`; hosted apply scope
+`explainable-scoring` succeeded in run `33577784853` (postflight: 27
+defaults, overrides name real rules, engine and matcher read as the
+caller). Both /Services/followups and /Services/signals are live against
+production.
 
 ## 2026-09-02: The world-class CRM build-out begins with follow-ups and the suggested next step (ADR-228)
 
