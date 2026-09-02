@@ -137,8 +137,8 @@ job-seeker-screening-answers.behavior 2, application-kit routes 6,
 application-kit panel 2, panels +1, navigation updated. Grants roster
 and RLS census 232; replay executes the new postflight; runbook count
 234; workflow 416,142 bytes of 420,000; tsc, eslint and the production
-build clean. Hosted apply scope `application-kit` is dispatched after
-merge.
+build clean. Hosted apply scope `application-kit`: run 33636602923
+succeeded on main d85a759 (#505 squash).
 
 ## 2026-09-02: JobSearch build-out — increment 3, silence measured (ADR-243)
 
@@ -169,7 +169,8 @@ job-seeker-silence 8, job-seeker-silence-routes 6, panels +1,
 job-seeker-analytics-panel 2. Grants roster and RLS census 231; replay
 executes the new postflight; runbook count 233; workflow 415,273 bytes
 of 420,000; tsc and eslint clean. Hosted apply scope
-`application-transitions` is dispatched after merge.
+`application-transitions`: run 33636521077 succeeded on main d85a759
+(#505 squash).
 
 ## 2026-09-02: JobSearch build-out — increment 2, posting signals (ADR-242)
 

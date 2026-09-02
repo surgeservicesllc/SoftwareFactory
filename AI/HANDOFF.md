@@ -31,8 +31,9 @@ posting-recheck postflight checks the new columns are in its result.
 
 HOSTED: scope=posting-recheck is dispatched after merge; record the run
 id here and in CURRENT_STATE. Also on this branch: scope=document-polish
-(increment 8). Still pending from #505 (increments 2–4):
-scope=application-transitions then scope=application-kit, in that order.
+(increment 8). #505 (increments 2–4) is merged as d85a759; its scopes
+application-transitions (run 33636521077) and application-kit (run
+33636602923) are applied.
 
 ## Older (2026-09-02, latest+70): polish that cannot invent (ADR-248)
 
@@ -61,9 +62,9 @@ The behavior suite accepts either check name for an unknown origin,
 because Postgres reports whichever fails first.
 
 HOSTED: scope=document-polish is dispatched after merge; record the run
-id here and in CURRENT_STATE. Still pending from #505 (increments 2–4):
-scope=application-transitions then scope=application-kit, in that
-order, after merge.
+id here and in CURRENT_STATE. #505 (increments 2–4) is merged as d85a759;
+its scopes application-transitions (run 33636521077) and
+application-kit (run 33636602923) are applied.
 
 ## Older (2026-09-02, latest+69): your data is yours (ADR-247)
 
@@ -80,9 +81,9 @@ THE EXPORT IS A READ. It writes no row and records no activity event
 that cannot be read is named in the manifest with the reason; the
 export never fails as a whole because one table did.
 
-HOSTED: nothing to apply for this increment. Still pending from #505
-(increments 2–4): scope=application-transitions then
-scope=application-kit, in that order, after merge.
+HOSTED: nothing to apply for this increment. #505 (increments 2–4) is merged
+as d85a759; its scopes application-transitions (run 33636521077) and
+application-kit (run 33636602923) are applied.
 
 ## Older (2026-09-02, latest+68): the interview prep sheet (ADR-246)
 
@@ -112,9 +113,9 @@ still fires (the behavior suite proves it) because a trigger is fired by
 the table, not called. Every future definer trigger function needs the
 same revoke — copy it from `crm_record_contact_preference_change`.
 
-HOSTED: nothing to apply for this increment. Still pending from #505
-(increments 2–4): scope=application-transitions then
-scope=application-kit, in that order, after merge.
+HOSTED: nothing to apply for this increment. #505 (increments 2–4) is merged
+as d85a759; its scopes application-transitions (run 33636521077) and
+application-kit (run 33636602923) are applied.
 
 ## Older (2026-09-02, latest+67): what keeps costing you (ADR-245)
 
@@ -135,9 +136,9 @@ as recorded, not applied. The search route reads the recorded postings
 once per search without descriptions; the metering test now expects that
 one read beside the one write.
 
-HOSTED: nothing to apply for this increment. Still pending from #505
-(increments 2–4): scope=application-transitions then
-scope=application-kit, in that order, after merge.
+HOSTED: nothing to apply for this increment. #505 (increments 2–4) is merged
+as d85a759; its scopes application-transitions (run 33636521077) and
+application-kit (run 33636602923) are applied.
 
 ## Older (2026-09-02, latest+66): the application kit (ADR-244)
 
@@ -164,9 +165,8 @@ Kit, after Cover Letters); the navigation test's expected list carries
 the comment. The harness scene `job-seeker-application-kit` is in the
 component-layout sweep.
 
-HOSTED: scope=application-kit is dispatched after merge; record the run
-id here and in CURRENT_STATE. Also pending from this PR:
-scope=application-transitions (increment 3). Applied already:
+HOSTED: scope=application-kit run 33636602923 succeeded on main d85a759
+(#505 squash, 2026-09-02 13:35 UTC). Also from #505: scope=application-transitions run 33636521077 (increment 3). Applied already:
 scope=posting-sightings run 33630908789 on main 79324f5 (#504).
 
 ## Older (2026-09-02, latest+65): silence measured (ADR-243)
@@ -194,8 +194,8 @@ with no submissions gets a zero row, and the other-member privacy test
 catches it. An application whose stage outran the ledger (recorded
 before this migration) says so and gets no date.
 
-HOSTED: scope=application-transitions is dispatched after merge; record
-the run id here and in CURRENT_STATE.
+HOSTED: scope=application-transitions run 33636521077 succeeded on main
+d85a759 (#505 squash, 2026-09-02 13:34 UTC).
 
 ## Older (2026-09-02, latest+64): posting signals (ADR-242)
 
