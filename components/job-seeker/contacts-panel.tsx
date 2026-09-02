@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Loader2, Mail, User } from "lucide-react";
 
 import { Card, PageHeader, StatusBadge } from "@/components/ui";
+import { RecruiterMessageCheck } from "@/components/job-seeker/message-check";
 
 /**
  * The people behind the applications, and what has been written to them.
@@ -80,6 +81,8 @@ export function JobSeekerContactsPanel() {
         title="Contacts & Outreach"
         description="The people behind your applications, and what has been written to them."
       />
+
+      <RecruiterMessageCheck />
 
       {state.kind === "loading" ? (
         <Card className="grid min-h-40 place-items-center">

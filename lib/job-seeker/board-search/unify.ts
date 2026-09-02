@@ -1,3 +1,10 @@
+import {
+  deriveAgencyLikely,
+  deriveSponsorship,
+  deriveWorkModel,
+  scanRedFlags,
+  type Sponsorship,
+} from "@/lib/job-seeker/board-search/signals";
 import type { BoardSearchHit } from "@/lib/job-seeker/board-search/types";
 
 /**
@@ -277,6 +284,16 @@ export type UnifiedFilters = Readonly<{
   requireSalary: boolean;
   /** Keep only hits published within this many days; null keeps undated hits. */
   postedWithinDays: number | null;
+  /** Drop hits whose text raises a red flag (scanRedFlags, ADR-242). */
+  hideRedFlags: boolean;
+  /** Drop hits whose company name reads as a staffing agency (deriveAgencyLikely). */
+  excludeAgencies: boolean;
+  /**
+   * Keep only hits whose text states this sponsorship position. Unstated
+   * postings are dropped while set, for the same reason as seniority: the
+   * filter means "the posting says so".
+   */
+  sponsorship: Sponsorship | null;
 }>;
 
 export const EMPTY_FILTERS: UnifiedFilters = Object.freeze({
@@ -291,6 +308,9 @@ export const EMPTY_FILTERS: UnifiedFilters = Object.freeze({
   salaryMinimum: null,
   requireSalary: false,
   postedWithinDays: null,
+  hideRedFlags: false,
+  excludeAgencies: false,
+  sponsorship: null,
 });
 
 /**
@@ -335,7 +355,25 @@ export function applyUnifiedFilters<T extends UnifiedHit>(
     if (filters.excludeCompanies.some((name) => contains(hit.job.company.toLowerCase(), name))) {
       return false;
     }
-    if (filters.workModel !== null && hit.job.workModel !== filters.workModel) return false;
+    // The board's own field first; the posting text second, labeled derived
+    // on the card (ADR-242). A posting that states nothing either way is
+    // still dropped while the filter is set — nothing is invented.
+    if (
+      filters.workModel !== null &&
+      deriveWorkModel(hit.job.workModel, `${hit.job.title} ${hit.job.description ?? ""}`).model !== filters.workModel
+    ) {
+      return false;
+    }
+    if (filters.hideRedFlags && scanRedFlags(`${hit.job.title} ${hit.job.description ?? ""}`).length > 0) {
+      return false;
+    }
+    if (filters.excludeAgencies && deriveAgencyLikely(hit.job.company).likely) return false;
+    if (
+      filters.sponsorship !== null &&
+      deriveSponsorship(`${hit.job.title} ${hit.job.description ?? ""}`).state !== filters.sponsorship
+    ) {
+      return false;
+    }
     if (filters.seniority !== null && deriveSeniority(hit.job.title) !== filters.seniority) {
       return false;
     }

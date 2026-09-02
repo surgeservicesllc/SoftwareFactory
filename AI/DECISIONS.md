@@ -6576,3 +6576,57 @@ only through its two service_role definer functions and holds no grant
 on the ledger; adding freshness to alerts means a third definer
 function, never a table grant. A "still open?" recheck of the posting
 URL itself is increment 9 of the program, not this one.
+
+## ADR-242 - Posting signals: what a posting's own text says about itself, with the phrase printed
+
+Date: 2026-09-02
+
+Five of the top complaints in `AI/JOB_SEARCH_COMPETITIVE_TEARDOWN.md` are
+about postings that hide or misstate what they are: scam postings that
+look legitimate (the FTC counted $150M of job-scam losses in one quarter
+of 2025), one job listed under six staffing-agency names, pay shown in
+the wrong period, a "remote" filter that returns on-site roles, and visa
+sponsorship never stated until the last interview. Increment 2 answers
+all five from the same source and by the same rule: the posting's own
+text, and a printed phrase for every positive signal.
+
+`lib/job-seeker/board-search/signals.ts` is pure and browser-safe.
+`scanRedFlags` holds seven patterns named after the FTC's warning signs
+— off-platform messaging, upfront payment, money handling, too-good pay,
+early personal data, webmail contact, task pay — and returns each match
+with the exact text that tripped it, because a flag without its evidence
+is an accusation. `deriveAgencyLikely` reads staffing and recruiting
+from the company name alone and says so on the card; an agency is not a
+scam and is never hidden by default. `deriveSponsorship` runs the
+"cannot sponsor" patterns before the "sponsorship available" ones, so a
+buried exception wins over a general offer. `deriveWorkModel` trusts the
+board's own field and otherwise reads the text, labeled "(from the
+text)". `parseSalary` prints the figures, the period and the annual
+equivalent with its assumption ("30 per hour → about 62,400 per year,
+assuming 2080 hours a year"), and leaves a figure with no stated period
+as written — Indeed's complaint was a seasonal stipend shown as monthly,
+and the cure is to print the period the board gave, not to invent one.
+`postingCompleteness` counts which of the six facts a person needs (pay,
+place, work model, level, a real description, a posting date) the
+posting stated, and names the missing ones.
+
+The filters follow the seniority rule (ADR-167): `hideRedFlags`,
+`excludeAgencies` and `sponsorship` are off by default and never hide
+silently; a sponsorship filter drops unstated postings while set,
+because the filter means "the posting says so". The work-model filter
+now consults the derived model when the board's field is empty, which is
+the one behavior change to an existing filter — a posting whose text
+says "fully remote" passes a remote filter — and it is labeled on the
+card. The route attaches `signals` to every unified card; the saved-
+search schema and the alert planner carry the three new filters as
+optional keys so stored queries parse; the browser's instant filters
+recompute from the same text through the same module, so the server
+and the page cannot disagree. The Contacts page gains "Check a recruiter
+message": the same `scanRedFlags` over pasted text, run in the browser,
+nothing stored or sent, and the absence of a flag said as exactly that.
+
+Bounds: every pattern is a deterministic regular expression over English
+posting text; a scam written to avoid these phrases is not caught, and
+the card says "no red flags" only in the sense that none of the seven
+signs appears. No directory, reputation list or model is consulted, and
+nothing here can be wrong about a fact the posting did not state.

@@ -207,6 +207,34 @@ describe("applyUnifiedFilters", () => {
     expect(recent.map((h) => h.job.company)).toEqual(["Contra", "Wordsmith Co"]);
   });
 
+  it("reads the work model from the posting text when the board states none, labeled derived (ADR-242)", () => {
+    const remoteByText = unified({
+      title: "Content Strategist", company: "Wordsmith Co", workModel: null,
+      description: "This is a fully remote role.",
+    });
+    const kept = applyUnifiedFilters([remoteByText, ...hits], { ...EMPTY_FILTERS, workModel: "remote" }, now);
+    expect(kept.map((h) => h.job.company)).toEqual(["Wordsmith Co", "Contra"]);
+  });
+
+  it("hides red-flagged postings and agency-looking companies only when asked", () => {
+    const flagged = unified({ title: "Data Entry", company: "Quick Cash Ltd", description: "Contact us on Telegram to start." });
+    const agency = unified({ title: "Marketing Manager", company: "Apex Recruiting" });
+    const all = [flagged, agency, ...hits];
+    expect(applyUnifiedFilters(all, EMPTY_FILTERS, now)).toHaveLength(5);
+    expect(applyUnifiedFilters(all, { ...EMPTY_FILTERS, hideRedFlags: true }, now).map((h) => h.job.company))
+      .toEqual(["Apex Recruiting", "Contra", "Wordsmith Co", "Zahlen AG"]);
+    expect(applyUnifiedFilters(all, { ...EMPTY_FILTERS, excludeAgencies: true }, now).map((h) => h.job.company))
+      .toEqual(["Quick Cash Ltd", "Contra", "Wordsmith Co", "Zahlen AG"]);
+  });
+
+  it("keeps only postings that state the requested sponsorship position", () => {
+    const yes = unified({ title: "Engineer", company: "Visa Friendly", description: "Visa sponsorship is available." });
+    const no = unified({ title: "Engineer", company: "No Visa Co", description: "We cannot sponsor visas." });
+    const all = [yes, no, ...hits];
+    expect(applyUnifiedFilters(all, { ...EMPTY_FILTERS, sponsorship: "stated_yes" }, now).map((h) => h.job.company)).toEqual(["Visa Friendly"]);
+    expect(applyUnifiedFilters(all, { ...EMPTY_FILTERS, sponsorship: "stated_no" }, now).map((h) => h.job.company)).toEqual(["No Visa Co"]);
+  });
+
   it("keeps only titles that state the requested seniority — no level is invented", () => {
     const managers = applyUnifiedFilters(hits, { ...EMPTY_FILTERS, seniority: "manager" }, now);
     expect(managers.map((h) => h.job.title)).toEqual(["Growth Marketing Manager"]);

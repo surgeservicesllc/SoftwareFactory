@@ -12,9 +12,12 @@ import { BoardSearchError, type BoardSearchQuery } from "@/lib/job-seeker/board-
 import { applyRadius, resolvePlace } from "@/lib/job-seeker/board-search/geo";
 import { assessFreshness, toSighting, type Sighting } from "@/lib/job-seeker/board-search/freshness";
 import { postingUrlKey } from "@/lib/job-seeker/board-search/posting-key";
+import { postingSignals } from "@/lib/job-seeker/board-search/signals";
+import { SPONSORSHIP_STATES } from "@/lib/job-seeker/board-search/signals";
 import {
   applyUnifiedFilters,
   dedupeAcrossBoards,
+  deriveSeniority,
   INDUSTRIES,
   MARKETING_SPECIALTIES,
   SENIORITY_LEVELS,
@@ -82,6 +85,10 @@ const filtersSchema = z
      * recorded profile is refused rather than silently ignored.
      */
     minimumScore: z.number().int().min(0).max(100).nullish(),
+    /** Posting signals (ADR-242): each derived from the posting's own text. */
+    hideRedFlags: z.boolean().default(false),
+    excludeAgencies: z.boolean().default(false),
+    sponsorship: z.enum(SPONSORSHIP_STATES).nullish(),
   })
   .strict();
 
@@ -264,6 +271,9 @@ export async function POST(request: Request) {
           salaryMinimum: parsed.data.filters.salaryMinimum ?? null,
           requireSalary: parsed.data.filters.requireSalary,
           postedWithinDays: parsed.data.filters.postedWithinDays ?? null,
+          hideRedFlags: parsed.data.filters.hideRedFlags,
+          excludeAgencies: parsed.data.filters.excludeAgencies,
+          sponsorship: parsed.data.filters.sponsorship ?? null,
         }
       : null;
     const deduped = dedupeAcrossBoards(taggedForUnify);
@@ -407,6 +417,23 @@ export async function POST(request: Request) {
         publishedOn: hit.publishedOn,
         closesOn: hit.closesOn,
         sighting: hit.job.url === null ? null : sightingsByKey.get(postingUrlKey(hit.job.url)) ?? null,
+      }),
+      /*
+       * Signals (ADR-242): what the posting's own text says about itself —
+       * red flags with the matched phrase, an agency-looking company name,
+       * a stated sponsorship position, a work model derived from the text
+       * when the board states none, the pay parsed with its period, and
+       * which of the six facts a person needs the posting bothered to state.
+       */
+      signals: postingSignals({
+        title: hit.job.title,
+        company: hit.job.company,
+        description: hit.job.description,
+        salaryText: hit.job.salaryText,
+        location: hit.job.location,
+        workModel: hit.job.workModel,
+        publishedOn: hit.publishedOn,
+        titleStatesLevel: deriveSeniority(hit.job.title) !== null,
       }),
     }));
 

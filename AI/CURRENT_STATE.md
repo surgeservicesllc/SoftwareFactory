@@ -1,5 +1,26 @@
 # Current state
 
+## 2026-09-02: JobSearch build-out — increment 2, posting signals (ADR-242)
+
+`lib/job-seeker/board-search/signals.ts` (pure, browser-safe): seven
+FTC-shaped red-flag patterns each returning the matched phrase;
+agency-likely from the company name; sponsorship stated yes/no with the
+"no" patterns first; work model from the board's field or, labeled, from
+the text; salary parsed with its period and the annual equivalent and its
+assumption printed; completeness over the six facts a person needs.
+`UnifiedFilters` gains `hideRedFlags`, `excludeAgencies` and
+`sponsorship` (off by default, unstated dropped only while a sponsorship
+filter is set) and the work-model filter consults the derived model when
+the board states none. The search route attaches `signals` to every
+unified card; the saved-search schema and alert planner carry the new
+keys as optional; the panel shows red-flag/agency/sponsorship badges with
+their evidence, "(from the text)" on a derived work model, the salary
+note and a "States n of 6 — missing …" line, three new controls and
+chips, and a "Why the red flags" list. Contacts & Outreach gains "Check a
+recruiter message" (`message-check.tsx`, in-browser, nothing stored). No
+migration. Tests: job-seeker-signals 15, unify +3, alerts +1, route +1,
+panel +1, message-check 2; tsc and eslint clean.
+
 ## 2026-09-02: JobSearch build-out — increment 1, freshness (ADR-241)
 
 The owner's new /goal (task #91) opens a second competitive program,

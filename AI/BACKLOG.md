@@ -73,11 +73,15 @@ own PR, ADR, behavior test against the real chain, and hosted scope.
   20260902001200; hosted apply: scope=posting-sightings after merge.
   Closes LinkedIn 2/3/20, Indeed 2/3/22, others 11/14/19/25 (freshness
   half).
-- [ ] Increment 2 (ADR-242): red flags and completeness — scam markers
-  with the matched phrase, agency-likely from the company name, posting
-  completeness, sponsorship stated/not, work model derived from text,
-  parsed salary with its period; derived facets through search, saved
-  searches and alerts. No new table.
+- [x] Increment 2 (ADR-242): posting signals — `board-search/signals.ts`
+  (seven FTC-shaped red flags with the matched phrase, agency-likely
+  from the company name, sponsorship stated yes/no, work model from the
+  text labeled derived, salary parsed with its period and annual
+  equivalent, completeness over six facts); filters `hideRedFlags`,
+  `excludeAgencies`, `sponsorship` through route, saved-search schema,
+  alert planner and panel; card badges with evidence; Contacts page
+  "Check a recruiter message". No migration. Closes LinkedIn 8/9/10/11/16,
+  Indeed 1/6/15/18, others 6/9/10/16/18/20.
 - [ ] Increment 3 (ADR-243): silence measured — append-only application
   transitions ledger (trigger-written), days-silent against the person's
   own median days-to-reply by source, suggested follow-up with the

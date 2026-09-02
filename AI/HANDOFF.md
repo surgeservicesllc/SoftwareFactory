@@ -2,7 +2,34 @@
 
 Last updated: 2026-09-02
 
-## Newest (2026-09-02, latest+63): the JobSearch build-out opens — freshness (ADR-241)
+## Newest (2026-09-02, latest+64): posting signals (ADR-242)
+
+THE TEXT IS THE ONLY SOURCE. Every signal in `board-search/signals.ts`
+is a deterministic pattern over the posting's own words, and every
+positive signal carries the phrase that matched. Do not add a company
+directory, a reputation list or a model call to it; a signal that cannot
+print its evidence does not belong on the card.
+
+THE PAGE RECOMPUTES WHAT THE SERVER SHOWED. The route attaches
+`signals`; the browser's instant filters run `applyUnifiedFilters`
+over the same text through the same module. A panel test fixture must
+therefore carry the text its `signals` were derived from, or the filter
+will not hide the card the badge is on.
+
+"NO" BEFORE "YES". `deriveSponsorship` runs the cannot-sponsor patterns
+first so a buried exception wins. `deriveWorkModel` reads hybrid before
+remote for the same reason. Unstated stays unstated: the sponsorship
+filter drops it while set, as seniority does; nothing is hidden by
+default.
+
+The work-model filter now consults the derived model when the board's
+field is empty — the one change to an existing filter, labeled "(from
+the text)" on the card. The Contacts page's message check runs
+`scanRedFlags` in the browser and stores nothing.
+
+No migration; nothing to dispatch.
+
+## Older (2026-09-02, latest+63): the JobSearch build-out opens — freshness (ADR-241)
 
 A NEW PROGRAM. Owner /goal (task #91): the world's best job search site,
 measured against LinkedIn's, Indeed's and the other boards' own users'

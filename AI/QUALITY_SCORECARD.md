@@ -2,6 +2,22 @@
 
 Last reviewed: 2026-09-02
 
+**Addendum, 2026-09-02 latest+64 - JobSearch build-out, increment 2: posting signals (ADR-242):**
+job-seeker-signals 15 (the seven red flags with exact phrases on text
+that trips them and silence on an ordinary posting that mentions
+provided equipment and post-offer background checks; agency from the
+name and not from "Talent.com"; sponsorship no/yes/unstated and the
+buried exception; the board's field trusted and the text read labeled;
+hourly annualized with the assumption, a monthly range, a bare large
+figure as annual, a stipend left unperioded, nothing from
+"Competitive"; completeness 6/6 and 0/6; the composed signals). unify
++3 (text-derived work model passes the filter, red flags and agencies
+hidden only when asked, sponsorship stated only), alerts +1 (the three
+keys carried, defaulting off), route +1 (signals on the card and the
+three filters honoured), panel +1 (badges with evidence, the derived
+label, the salary note and the completeness line verbatim, hide/show
+by choice, chips), message-check 2. tsc and eslint clean.
+
 **Addendum, 2026-09-02 latest+63 - JobSearch build-out, increment 1: freshness (ADR-241):**
 job-seeker-sightings.behavior 6 (one row per URL, readable by another
 person; the JS key equals SQL's md5; repeat sightings counted, a
