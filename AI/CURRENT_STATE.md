@@ -1,5 +1,47 @@
 # Current state
 
+## 2026-09-02: The schedule bends (ADR-239)
+
+Increment 35 ships `20260902001000_schedule_bends.sql`:
+`crm_work_orders_bulk_edit(org, ids, set_technician, technician,
+shift_days, status)` (INVOKER, VOLATILE; between one and two hundred ids;
+"completed" refused as a bulk status; one row back per id — applied with
+the new technician, start and status, or refused: "completed; not
+changed", `on route "<name>" for <date>; take it off the route first` for
+a day or technician move, "not found in this workspace" for a rival's or
+a missing id; a status change alone leaves a routed visit in place and
+the outcome trigger records a cancellation); `crm_projects` (forced RLS,
+authenticated CRUD and nothing for anon or service_role; site on the
+account, technician in the workspace, `ends_on - starts_on ≤ 30`, daily
+window in order, no-secret checks) with `crm_work_orders.project_id`;
+`crm_project_create(...)` (INVOKER; the project and one visit per working
+day — weekends optional — in one call, refusing a span with no working
+day); `crm_project_progress(org)` (INVOKER, STABLE; days, completed,
+cancelled, remaining, next day and a state of planned/active/done/
+cancelled, all counted from the visits); `crm_project_cancel(org,
+project)` (cancels the project and every visit not completed; each
+recorded). `lib/services/schedule-bends.ts` maps the rows, summarises a
+batch ("7 of 9 changed; 2 not: 1 completed, 1 on a route.") and labels
+"Day 2 of 4". Routes: POST `/api/services/work-orders/bulk` (nothing-to-
+change and completed refused before the database), GET/POST
+`/api/services/projects` (span and window checked before the database;
+the database's refusal passed through as 422), PATCH
+`/api/services/projects/[id]` (cancel). Schedule page: a checkbox on
+every open visit and a bulk bar (technician, days, status) that lists
+every outcome by name after applying; a Projects card with progress, the
+next day, a two-step cancel and a New project form; "Day n of m" beside
+a project's visit. Seed: three projects (under way, planned, cancelled)
+with four visits each. Tests: services-schedule-bends.behavior 3 (four
+outcomes in one batch; a status change alone on a routed visit recorded;
+completed/nothing/empty refused; the rival's not-found; one visit per
+working day with the window, weekends, the span, the no-working-day and
+the inverted window; progress live through a completion and a bulk
+cancel; project cancel counting three and recording four; grants), pure,
+routes and panel suites. Seed audit 68/68; grants roster and RLS census
+229; replay with the new postflight; runbook count 230; workflow bytes
+under 420,000; tsc and eslint clean. Hosted apply scope `schedule-bends`
+is dispatched after merge.
+
 ## 2026-09-02: The form asks the next question (ADR-238)
 
 Increment 34 ships `20260902000900_forms_conditions.sql`:

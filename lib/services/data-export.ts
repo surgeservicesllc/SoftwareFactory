@@ -79,6 +79,7 @@ export const CRM_EXPORT_TABLES = [
   "crm_scoring_rules",
   "crm_sla_policies",
   "crm_kb_articles",
+  "crm_projects",
   "crm_imports",
 ] as const;
 

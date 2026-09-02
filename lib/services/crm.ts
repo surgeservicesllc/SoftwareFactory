@@ -161,7 +161,7 @@ export const CRM_SERVICE_PLAN_COLUMNS =
 export const CRM_PLAN_STEP_COLUMNS =
   "id, plan_id, position, month_offset, anchor, day_of_month, week_of_month, weekday, service_type, created_at, updated_at";
 export const CRM_WORK_ORDER_COLUMNS =
-  "id, account_id, property_id, technician_id, plan_id, status, service_type, scheduled_start, scheduled_end, instructions, completion_notes, completed_at, created_at, updated_at";
+  "id, account_id, property_id, technician_id, plan_id, project_id, status, service_type, scheduled_start, scheduled_end, instructions, completion_notes, completed_at, created_at, updated_at";
 export const CRM_PRODUCT_COLUMNS =
   "id, name, epa_registration_number, active_ingredient, signal_word, sds_url, label_url, restricted_use, default_unit, active, created_at, updated_at";
 export const CRM_LOT_COLUMNS =
@@ -287,6 +287,8 @@ export type CrmWorkOrderRow = {
   property_id: string;
   technician_id: string | null;
   plan_id: string | null;
+  /** The multi-day project this visit is one day of (ADR-239). */
+  project_id?: string | null;
   status: string;
   service_type: string;
   scheduled_start: string;
@@ -565,6 +567,7 @@ export function toWorkOrderView(row: CrmWorkOrderRow) {
     propertyId: row.property_id,
     technicianId: row.technician_id,
     planId: row.plan_id,
+    projectId: row.project_id ?? null,
     status: row.status,
     serviceType: row.service_type,
     scheduledStart: row.scheduled_start,

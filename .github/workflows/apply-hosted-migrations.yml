@@ -96,6 +96,7 @@ on:
           - trust
           - knowledge-base
           - forms-conditions
+          - schedule-bends
           - probe
 permissions:
   actions: read
@@ -1856,6 +1857,22 @@ jobs:
           psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
           psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/postflight/forms-conditions.sql
           echo "Forms conditions applied; questions asked by earlier answers, completion counted over what is asked, and forms assigned by service type."
+
+      - name: Apply schedule bends (scope=schedule-bends)
+        if: ${{ inputs.scope == 'schedule-bends' }}
+        run: |
+          VERSION=20260902001000_schedule_bends
+          FILE="supabase/migrations/${VERSION}.sql"
+          sha256sum "$FILE"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied "${VERSION%%_*}"
+          else
+            npx supabase migration repair --status applied "${VERSION%%_*}" --db-url "$DB_URL"
+          fi
+          psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/postflight/schedule-bends.sql
+          echo "Schedule bends applied; bulk visit edits with one outcome per row, and multi-day projects as one visit per day."
       - name: Normalize exact legacy bot ACLs (scope=bot-legacy-acl-normalization)
         if: ${{ inputs.scope == 'bot-legacy-acl-normalization' }}
         run: |

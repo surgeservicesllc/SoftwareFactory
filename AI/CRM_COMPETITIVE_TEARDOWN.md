@@ -144,10 +144,10 @@ honest, not built.
 | 1 | Appointment scheduler, drag-and-drop, technician timeline | **HAVE** (ADR-189, ADR-221) |
 | 2 | Best Fit semi-automatic assignment | **PARTIAL** — putting a visit on a route assigns it (ADR-221); a suggested slot needs geocoding |
 | 3 | Recurring job generation (calendar, interval, preset dates) | **HAVE** (ADR-189, ADR-211) |
-| 4 | Bulk scheduling | **PARTIAL** — plan generation is bulk; bulk edit is not |
+| 4 | Bulk scheduling | **HAVE** (ADR-239) — plan generation is bulk (ADR-189) and so is editing: many visits, one call, one outcome per row with the reason in words |
 | 5 | RouteOp route optimisation by drive time | **GATED** (mapping provider) |
 | 6 | Visual Route Manager | **PARTIAL** — the day route sequencer (ADR-221); a map needs geocoding |
-| 7 | Multi-day route projects | **GAP** |
+| 7 | Multi-day route projects | **HAVE** (ADR-239) — a project is one real visit per working day inside its span, counted live; each day routes on its own |
 | 8 | Technician mobile app, iOS/Android | **HAVE** as responsive web (ADR-210) |
 | 9 | Offline mode | **HAVE** (ADR-210) |
 | 10 | Job start/stop, timesheets | **HAVE** (ADR-197) |
@@ -352,6 +352,7 @@ cadence: migration → routes → page → tests → PR → four real checks →
 | 32 | **Trust** (ADR-234): forecast scenario inputs printed beside the figure, contact hygiene with reasons; TOTP recorded as RED, owner-gated | HubSpot 2, 10; PestPac 14 (gated) | **SHIPPED** (TOTP owner-gated) |
 | 33 | **What people look up** (ADR-237): a knowledge base written once and read by staff and customers, ranked by printed arithmetic; a calendar file for a booked visit; chemical-lot labels | HubSpot 10, 43; PestPac 13 | **SHIPPED** |
 | 34 | **The form asks the next question** (ADR-238): conditional questions checked by the database, completion counted over what is asked, forms assigned by a visit's service type; the answering sheet and the form builder | PestPac 14, complaint 13 | **SHIPPED** |
+| 35 | **The schedule bends** (ADR-239): bulk visit edit with one outcome per row, and multi-day projects as one visit per day | PestBoss 4, 7 | **SHIPPED** |
 
 **What stays outside this program, and why.** Sending (email, SMS, voice),
 charging (card, ACH, in-field), locating (geocoding, GPS), syncing

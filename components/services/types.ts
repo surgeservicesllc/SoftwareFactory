@@ -131,6 +131,7 @@ export type WorkOrderView = {
   propertyId: string;
   technicianId: string | null;
   planId: string | null;
+  projectId: string | null;
   status: string;
   serviceType: string;
   scheduledStart: string;
