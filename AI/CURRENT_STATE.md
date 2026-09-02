@@ -14,8 +14,11 @@ job-seeker-service-role-contract 1 (every job_seeker table named in an
 explicit service_role revoke). Hosted: scope=document-polish run
 33638477432 applied the migration and recorded 20260902001500, then its
 postflight refused on the pre-existing grant ("job_seeker_documents
-grants are wrong"); the contraction scope is dispatched after merge,
-then scope=document-polish is re-run for its green postflight.
+grants are wrong"). Hosted apply scope
+`job-seeker-service-role-contract`: run 33641187574 succeeded on main
+e991b60 (#507 squash) — its postflight walked every job_seeker table.
+scope=document-polish re-run 33641273883 succeeded on main e991b60 with
+its postflight green (2026-09-02 14:19 UTC).
 
 ## 2026-09-02: JobSearch build-out — increment 9, still open? (ADR-249) — the program is complete
 

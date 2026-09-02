@@ -20,10 +20,12 @@ extraction contract already revokes explicitly and has passed its own
 postflight on production. `job-seeker-service-role-contract.test.ts`
 pins the convention for the next table.
 
-ORDER AFTER MERGE: scope=job-seeker-service-role-contract, then re-run
-scope=document-polish (idempotent statements, repair no-op) for its
-green postflight; record both run ids here and in CURRENT_STATE. Also
-from #506: scope=posting-recheck (see below).
+HOSTED: scope=job-seeker-service-role-contract run 33641187574
+succeeded on main e991b60 (#507 squash, 2026-09-02 14:18 UTC); every
+job_seeker table now holds nothing for anon or service_role.
+scope=document-polish re-run 33641273883 succeeded on main e991b60 with
+its postflight green (2026-09-02 14:19 UTC). Also from #506:
+scope=posting-recheck (see below).
 
 ## Older (2026-09-02, latest+71): still open? (ADR-249) — the program is complete
 
