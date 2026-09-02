@@ -103,7 +103,7 @@ honest, not built.
 | 25 | Social media management | Marketing | **N/A** |
 | 26 | Advanced segmentation / lists | Marketing | **HAVE** (ADR-196) — lists with consent as a record |
 | 27 | Landing pages | Marketing/Content | **N/A** |
-| 28 | Duplicate detection and merge | Marketing/Data | **PARTIAL** — detection on create (ADR-186); an audited merge: **BUILD 28** |
+| 28 | Duplicate detection and merge | Marketing/Data | **HAVE** (ADR-186, ADR-230) — detection on create; an audited one-statement merge |
 | 29 | Company scoring and qualification | Marketing | **HAVE** (ADR-229) — the same explainable engine |
 | 30 | SEO recommendations | Marketing | **N/A** |
 | 31 | Smart content / personalisation | Marketing | **N/A** |
@@ -121,9 +121,9 @@ honest, not built.
 | 43 | Knowledge base | Service | **GAP** |
 | 44 | Customer portal | Service | **HAVE** (ADR-198, ADR-203, ADR-222) |
 | 45 | Drag-and-drop page editor, themes, CDN, hosting, staging, membership, password pages | Content/CMS | **N/A** — a website builder is outside a CRM core (PestPac sells one too; listed, not built) |
-| 46 | Field mapping on import | Data/Ops | **BUILD 28** — explicit mapping with a dry run that refuses to invent columns |
-| 47 | Data quality automation | Data/Ops | **BUILD 28** (import), **BUILD 32** (stale-contact hygiene) |
-| 48 | AI-based duplicate merging | Data/Ops | **BUILD 28** — merge with an audit line, never automatic |
+| 46 | Field mapping on import | Data/Ops | **HAVE** (ADR-230) — explicit mapping with a dry run that refuses to invent columns |
+| 47 | Data quality automation | Data/Ops | **HAVE** import (ADR-230); stale-contact hygiene **BUILD 32** |
+| 48 | AI-based duplicate merging | Data/Ops | **HAVE** (ADR-230) — merge with an audit line, never automatic |
 | 49 | Scheduled workflows (date/time triggers) | Ops | **RED** — nothing here runs on a timer without owner authorization |
 | 50 | Programmable automation (JavaScript), webhooks, custom UI extensions | Ops | **N/A** |
 | 51 | Datasets for reporting | Ops | **HAVE** — the dashboards are whole-book SQL, not bounded fetches |
@@ -167,7 +167,7 @@ honest, not built.
 | 24 | Communication Center: SMS, email, voice; automated confirmations and reminders; message logging | **PARTIAL** — composed, addressed, deduplicated and suppressed (ADR-217); the send **GATED** |
 | 25 | Wavelytics: Intelligence Hub, scorecards, leaderboards, automated problem flagging | **HAVE** dashboards + leaderboards (ADR-195, ADR-199); problem flagging: **HAVE** (ADR-228 suggestions) and **BUILD 30** (schedule audit) |
 | 26 | Standard reports: service completion, production value, sales forecast, material usage, technician efficiency | **HAVE** — dashboards, forecast, compliance report, productivity |
-| 27 | Custom report builder, exports to Excel/PDF | **PARTIAL** — CSV/JSON exports per report; whole-book export: **BUILD 28** |
+| 27 | Custom report builder, exports to Excel/PDF | **PARTIAL** — CSV/JSON exports per report and the whole book (ADR-230); a builder is not sold here |
 | 28 | User roles and permissions | **PARTIAL** — org membership + super-admin; per-role fences are the org chart's roles (ADR-195), not enforced per page |
 | 29 | Audit logging | **HAVE** — immutable timeline and append-only ledgers everywhere |
 | 30 | Technician profiles: certifications, availability, territories | **HAVE** (ADR-189, ADR-195, ADR-197) |
@@ -183,7 +183,7 @@ honest, not built.
 | 40 | Geographic lead mapping | **GATED** (geocoding) |
 | 41 | API (GET/POST), phone-system integration (Dialpad, TalkDesk), AI platform connectivity | **PARTIAL** — the routes are the API; telephony and AI **GATED** |
 | 42 | Multi-unit properties | **HAVE** (ADR-215) |
-| 43 | On-site compliance logbook (AIB/SQF/BRC) | **PARTIAL** — the portal holds every page of the binder (ADR-203, ADR-222); a bound export: **BUILD 28** |
+| 43 | On-site compliance logbook (AIB/SQF/BRC) | **PARTIAL** — the portal holds every page of the binder (ADR-203, ADR-222); the tables behind it export (ADR-230); a bound document is a print job |
 | 44 | Post-service customer surveys | **BUILD 31** |
 | 45 | Online sales (self-serve plan purchase) | **GATED** (payments) |
 | 46 | Print marketing fulfilment, direct mail | **GATED** (vendor) |
@@ -248,8 +248,8 @@ with its status.
 | 4 | Steep learning curve; "so many features and menus"; interface "noisy" (recurring) | agents, directors, CMOs | Complexity | Each Services page does one job and says what it proves; the copilot's refusal lists what CAN be asked (ADR-224) |
 | 5 | Reporting is limited; dashboards cap the number of reports; no drill-down | analysts, directors | Opaque figures | **BUILD 30** — every dashboard figure opens the rows behind it |
 | 6 | Workflows are hard to build, hard to visualise past ten branches, "nerve-racking" to set live | RevOps, strategists | Fear of automation | **BUILD 30** — a rule can be DRY-RUN: exactly which records it would touch, before it is ever active; executors stay **RED** |
-| 7 | Importing from Excel silently creates new properties | customer service | Import without consent | **BUILD 28** — import shows every column, requires an explicit mapping, refuses to invent a field, and dry-runs first |
-| 8 | Duplicate companies with no cleanup tools; "inactive and bounced contacts need manual cleanup" | BDRs, marketers | Data hygiene | **PARTIAL** now (detection, ADR-186); **BUILD 28** merge with an audit line; **BUILD 32** hygiene |
+| 7 | Importing from Excel silently creates new properties | customer service | Import without consent | **HAVE** (ADR-230) — import shows every column, requires an explicit mapping, refuses to invent a field, and dry-runs first |
+| 8 | Duplicate companies with no cleanup tools; "inactive and bounced contacts need manual cleanup" | BDRs, marketers | Data hygiene | **HAVE** detection (ADR-186) and audited merge (ADR-230); **BUILD 32** hygiene |
 | 9 | Lead scoring is "complex and clunky"; contact scoring "finicky, we have to restart the workflow" | RevOps, marketing | Scoring nobody can explain | **HAVE** (ADR-229) — a score is a sum of named rules with editable weights, and every point is printed with its reason |
 | 10 | Forecasting tool lacks customisation | RevOps | A model you cannot see | **HAVE** a forecast with NO hidden model (ADR-202); **BUILD 32** owner-supplied scenario inputs, printed beside the figure |
 | 11 | Email template builder limited and dated; landing pages generic | marketers | Design tooling | **N/A** — the send is gated; templates here are text with a transcript of what was sent |
@@ -280,7 +280,7 @@ with its status.
 | 6 | Support slow, tickets only, paid webinars, "forums instead of help" (recurring) | owners, HR | Support model | Outside product code |
 | 7 | Scheduling puts tasks on the wrong day; technician schedules "missing stops"; phantom arrival times; customer communications randomly stop | office managers, marketing | Schedule integrity | **HAVE** a route cannot hold a stop for another day or another technician (ADR-221 trigger); **BUILD 30** the schedule audit names every double-booking, unrouted visit and unplanned due plan |
 | 8 | Reporting "totally off", "inaccurate"; "impossible to determine profitability reliably" | branch managers, presidents | Trustworthy numbers | Dashboards aggregate over the whole book in SQL (ADR-199); **BUILD 29** job profitability with every input printed |
-| 9 | Errors "cannot be corrected"; cannot un-void an invoice; inflexible name fields | operations, owners | Correction path | Voided invoices are reissued, never rebuilt (ADR-212); applications are superseded, never edited (ADR-192); **BUILD 28** audited merge for the account-level mistake |
+| 9 | Errors "cannot be corrected"; cannot un-void an invoice; inflexible name fields | operations, owners | Correction path | Voided invoices are reissued, never rebuilt (ADR-212); applications are superseded, never edited (ADR-192); **HAVE** audited merge for the account-level mistake (ADR-230) |
 | 10 | No email preview before sending notifications | admins | Sending blind | **HAVE** notices are composed and readable before any send (ADR-217); **BUILD 30** dry-run for rules |
 | 11 | "Not built for two-way communication" | reviewers | One-way messaging | **BUILD 31** — two-way portal messages, threaded on the account |
 | 12 | Mobile app: no manager dashboards, no in-app alerts, dated navigation, low store ratings; invoices differ between desktop and mobile | technology directors, operations | Two products | **HAVE** one responsive product; the invoice print view is the same page at every width (close-out) |
@@ -288,7 +288,7 @@ with its status.
 | 14 | No 2FA / biometric login confirmed | reviewers | Account security | **BUILD 32** — TOTP enrolment through Supabase Auth's own MFA, if policy review clears it as YELLOW (it touches authentication) |
 | 15 | No built-in GPS or time tracking; GPS is a paid add-on with manual fleet upload | reviewers | Field telemetry | **HAVE** timesheets (ADR-197); GPS **GATED** |
 | 16 | Integrations are bolt-ons; no QuickBooks/Xero; Zapier only on higher tiers | reviewers | Integration honesty | **PARTIAL** balanced journal export (ADR-220); registry (ADR-207) |
-| 17 | Data "held hostage"; migration expensive, incomplete, "extreme manual work daily" | owners | Lock-in | **BUILD 28** — a whole-book export the customer can take anywhere, from a button |
+| 17 | Data "held hostage"; migration expensive, incomplete, "extreme manual work daily" | owners | Lock-in | **HAVE** (ADR-230) — a whole-book export the customer can take anywhere, from a button; an import that invents nothing on the way in |
 | 18 | Customer-facing side lacking for multi-unit | VP finance | Portal depth | **HAVE** multi-unit (ADR-215) and the commercial portal (ADR-203) |
 | 19 | Logs out constantly mid-workflow | reviewers | Session handling | Supabase Auth refresh sessions; no product-level timeout |
 | 20 | Routing costs extra; Visual Route Manager needs a separate login | office managers | Routing access | **HAVE** the day route in the base product (ADR-221); optimisation **GATED** |
@@ -326,7 +326,7 @@ own published feature list against what the field ships.
 | 18 | No lead scoring, churn risk or next-best-action | *(inferred)* | **HAVE** (ADR-228, ADR-229) |
 | 19 | No duplicate detection | *(inferred)* | **HAVE** (ADR-186) |
 | 20 | No provider registry / integration status | *(inferred)* — "third-party integrations" listed generically | **HAVE** (ADR-207) |
-| 21 | Small vendor, single product line — continuity risk | *(inferred)* | Whole-book export **BUILD 28** is the customer's insurance either way |
+| 21 | Small vendor, single product line — continuity risk | *(inferred)* | Whole-book export (ADR-230) is the customer's insurance either way |
 | 22 | No published pricing | *(inferred)* | Seats, published |
 | 23 | No customer surveys | *(inferred)* | **BUILD 31** |
 | 24 | No compliance-rule enforcement per jurisdiction at recording time | *(inferred)* — "pesticide usage tracking" listed without rules | **HAVE** (ADR-192) |
@@ -345,8 +345,8 @@ cadence: migration → routes → page → tests → PR → four real checks →
 |-----|------|--------|--------|
 | 26 | **Follow-ups and the suggested next step** (ADR-228): `crm_tasks`, `crm_followup_dismissals`, `crm_suggest_followups()` — seven rules read live, each with its reason; accept-once-while-open; done writes history | HubSpot 21, 6 (partly); PestPac 23, 7 (partly); PestBoss 18 | **SHIPPED** |
 | 27 | **Explainable scoring** (ADR-229): lead score, churn risk and upsell signals as sums of named, weighted, editable rules with every point itemised; automatic lead assignment by postal code with the reason on the history | HubSpot 9, 16, 29, 53; PestPac 36, 37; PestBoss 18 | **SHIPPED** |
-| 28 | **Data you own**: import with explicit column mapping and a dry run; audited duplicate merge; whole-book export | HubSpot 7, 8; PestPac 9, 17; PestBoss 21 | next |
-| 29 | **Job profitability**: technician cost rates and lot unit costs; margin per visit, plan, branch, with every input printed | PestPac 8 | |
+| 28 | **Data you own** (ADR-230): import with explicit column mapping and a dry run; audited one-statement merge; whole-book export | HubSpot 7, 8; PestPac 9, 17; PestBoss 21 | **SHIPPED** |
+| 29 | **Job profitability**: technician cost rates and lot unit costs; margin per visit, plan, branch, with every input printed | PestPac 8 | next (after a workflow-headroom change) |
 | 30 | **Nothing hidden**: schedule audit (double-bookings, unrouted visits, due plans unscheduled), automation dry-run, dashboard drill-down | HubSpot 5, 6; PestPac 7, 10 | |
 | 31 | **The customer's side of the conversation**: post-service survey in the portal, request SLA clock, two-way portal messages | HubSpot 25, 36, 40, 42; PestPac 11; PestBoss 23 | |
 | 32 | **Trust**: forecast scenario inputs, stale-contact hygiene, TOTP enrolment (pending policy review) | HubSpot 2, 10; PestPac 14 | |

@@ -2,6 +2,28 @@
 
 Last updated: 2026-08-31
 
+## Newest (2026-09-02, latest+51): data you own (ADR-230)
+
+MERGE: one statement. Do not split `crm_merge_accounts` into per-table
+updates — the ten property-keyed children and the properties themselves
+must move in the same WITH or the composite keys fail mid-way. It is a
+DEFINER on purpose (ledgers hold no UPDATE grant) and checks membership
+first; keep both. History is never re-pointed. New account-keyed tables
+must be added to the WITH, or a merge silently leaves them behind — the
+behavior test's counts are the place to notice.
+
+IMPORT: the refusal on an unmapped column is the feature. Do not add a
+"map the rest automatically" convenience; the guess is in the PAGE, shown
+and editable, and the server only ever sees an explicit mapping.
+
+EXPORT: `CRM_EXPORT_TABLES` is an allowlist; a new crm_ table is added to
+it deliberately, and the seed-roster test is what reminds you the table
+exists at all.
+
+WORKFLOW: 454,449 of 455,000 bytes. The prior note said 28 would breach;
+it fit by 551 bytes. Increment 29 WILL breach — extract first, in its own
+change (the probe step's four remaining heredocs are the cheapest).
+
 ## Newest (2026-09-02, latest+50): scores you can argue with (ADR-229)
 
 SCORING: a score is a READ. `crm_score_accounts` computes facts per account

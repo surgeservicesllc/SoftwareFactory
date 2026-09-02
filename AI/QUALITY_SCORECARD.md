@@ -2,6 +2,23 @@
 
 Last reviewed: 2026-08-31
 
+**Addendum, 2026-09-02 latest+51 - data you own (ADR-230):**
+services-data-own.behavior 5 (self-merge, cross-workspace and non-member
+refused; portal-email collision refused with its message; one statement
+moves property, work order, contact, invoice, payment and task while the
+shared list membership stays and both histories carry "Merged into" /
+"Absorbed" with the counts; a merged account refused as survivor, as loser
+and as a customer; the import log append-only with counts bounded by the
+row count and invisible across workspaces). services-data-import 5
+(RFC 4180 with BOM/CRLF/escaped quotes; unmapped column refuses; missing
+required refuses; invalid rows named; in-file repeat held back; contact
+without first name and label without address refused).
+services-data-panel 4 (export list with counts and downloads; header
+guesses shown and editable, dry run sent as one and the report repeated;
+a 422 repeated verbatim; merge body and moved counts). Seed audit 64/64
+with the seed recorded as its own import; all replay, roster and census
+guards green at 223 migrations.
+
 **Addendum, 2026-09-02 latest+50 - explainable scoring and assignment
 (ADR-229):** services-scoring.behavior 10 (defaults in code and database
 the same 27; grant posture; a lead at 65 with every fact including "An

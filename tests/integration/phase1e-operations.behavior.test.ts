@@ -215,10 +215,10 @@ describe("Phase 1E production operations behavior", () => {
     // specialist roster. (Both branches counted 215 -> 217 independently;
     // the union is 219, which this line proves either way.) 222 since the
     // world-class build-out added crm_tasks and crm_followup_dismissals
-    // (ADR-228) and crm_scoring_rules (ADR-229).
+    // (ADR-228), crm_scoring_rules (ADR-229) and crm_imports (ADR-230): 223.
     // Each is RLS-enabled and forced, which the filter on the next line is
     // what actually proves.
-    expect(rlsRows).toHaveLength(222);
+    expect(rlsRows).toHaveLength(223);
     expect(rlsRows.filter((row) => !row.relrowsecurity || !row.relforcerowsecurity)).toEqual([]);
 
     const { rows: grantRows } = await db.query<{ table_name: string }>(

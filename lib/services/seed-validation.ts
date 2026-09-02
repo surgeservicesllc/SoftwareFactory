@@ -563,6 +563,15 @@ const SPECS: Spec[] = [
     ],
   },
   {
+    table: "crm_imports",
+    optional: [],
+    parents: [],
+    floorExempt:
+      "An import is an event, and the seed records exactly one — itself "
+      + "(ADR-230). Two hundred and fifty import events would be a fiction "
+      + "about how the book arrived.",
+  },
+  {
     table: "crm_scoring_rules",
     optional: ["note"],
     enumColumn: "model",
