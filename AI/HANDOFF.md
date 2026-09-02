@@ -2,7 +2,45 @@
 
 Last updated: 2026-09-02
 
-## Newest (2026-09-02, latest+62): conversation routing (ADR-240) — the teardown is closed
+## Newest (2026-09-02, latest+63): the JobSearch build-out opens — freshness (ADR-241)
+
+A NEW PROGRAM. Owner /goal (task #91): the world's best job search site,
+measured against LinkedIn's, Indeed's and the other boards' own users'
+complaints. The audit is `AI/JOB_SEARCH_COMPETITIVE_TEARDOWN.md`; the
+nine increments are in BACKLOG under "World-class JobSearch build-out".
+Increment 1 is freshness; increment 2 (red flags, completeness,
+sponsorship, derived work model, parsed salary) is next and needs no
+table.
+
+THE LEDGER IS PUBLIC FACTS. `job_seeker_posting_sightings` holds the
+URL, board, company, title, the board's own dates and this product's
+sighting counts — no person, workspace or query. Do not add a user_id
+"for safety": the value of "first seen 62 days ago on 9 searches" is
+that it is counted across everyone, and a person-scoped copy would count
+one diary. Writes cross `record_posting_sightings` only; the route calls
+it as the signed-in person.
+
+THE EARLIEST DATE WINS. A re-dated posting is older than it says: the
+verdict reads `earliest_posted_on` over today's `publishedOn` and counts
+the forward move as a repost. `least`/`greatest` ignore nulls on purpose
+so a board that omits its date this time cannot erase what an earlier
+sighting recorded.
+
+SHOWN BY DEFAULT. Likely-stale cards render with the badge and their
+reasons; "Hide them" is the person's toggle and is not saved. The alert
+runner does not consult freshness yet — it reaches the database only
+through its two service_role definer functions and holds no grant on the
+ledger; adding it means a third definer function, never a table grant.
+
+The key is md5 of the trimmed URL on both sides; the behavior test
+proves JS and SQL agree. Keep `posting-key.ts` server-only
+(node:crypto) and `freshness.ts` browser-safe — the panel imports the
+latter.
+
+HOSTED: scope=posting-sightings is dispatched after merge; record the
+run id here and in CURRENT_STATE.
+
+## Older (2026-09-02, latest+62): conversation routing (ADR-240) — the teardown is closed
 
 THE ORDER IS THE RULE. Branch manager of the address's territory → the
 territory's rep → the least-loaded CSR or dispatcher → nobody. Every

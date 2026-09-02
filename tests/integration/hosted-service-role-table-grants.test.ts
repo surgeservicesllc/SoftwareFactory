@@ -180,6 +180,7 @@ const publicTables = [
   "job_seeker_jobs",
   "job_seeker_matches",
   "job_seeker_outreach",
+  "job_seeker_posting_sightings",
   "job_seeker_preferences",
   "job_seeker_profiles",
   "job_seeker_result_marks",

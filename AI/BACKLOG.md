@@ -54,6 +54,55 @@ category/insert-chain/notice truthfulness fixes. Nothing in this file is
 open because work stopped; everything open is waiting on a named key, a
 named decision, a named authorization, or production itself.
 
+## World-class JobSearch build-out (owner /goal 2026-09-02, task #91)
+
+Audit: `AI/JOB_SEARCH_COMPETITIVE_TEARDOWN.md` — LinkedIn, Indeed and
+seven other boards, 25 features each, the top 25 complaints per platform
+with an AI-first answer, and the program below. Each increment is its
+own PR, ADR, behavior test against the real chain, and hosted scope.
+
+- [x] Increment 1 (ADR-241): freshness — `job_seeker_posting_sightings`
+  (public facts, one row per URL, forced RLS, SELECT to authenticated,
+  nothing to service_role), `record_posting_sightings()` (DEFINER,
+  ≤ 400, skip-not-fail, re-datings counted) and `read_posting_sightings()`
+  (INVOKER, ≤ 1,000); `board-search/freshness.ts` verdict with printed
+  thresholds (21/45 days, two re-datings, closing passed) and
+  `posting-key.ts` (server-only md5). Search route records and reads
+  the ledger, attaches a verdict per unified card and a basis line;
+  panel badge, reasons, summary count and "Hide them" toggle.
+  20260902001200; hosted apply: scope=posting-sightings after merge.
+  Closes LinkedIn 2/3/20, Indeed 2/3/22, others 11/14/19/25 (freshness
+  half).
+- [ ] Increment 2 (ADR-242): red flags and completeness — scam markers
+  with the matched phrase, agency-likely from the company name, posting
+  completeness, sponsorship stated/not, work model derived from text,
+  parsed salary with its period; derived facets through search, saved
+  searches and alerts. No new table.
+- [ ] Increment 3 (ADR-243): silence measured — append-only application
+  transitions ledger (trigger-written), days-silent against the person's
+  own median days-to-reply by source, suggested follow-up with the
+  arithmetic, closure reasons, funnel of where the search stalls.
+- [ ] Increment 4 (ADR-244): application kit — screening answers the
+  person keeps, copy-ready ATS blocks from the profile, a requirements
+  check per posting with a verdict per line.
+- [ ] Increment 5 (ADR-245): what keeps costing you — skills gap across
+  target and saved jobs ranked by frequency; your own history with each
+  company on every result.
+- [ ] Increment 6 (ADR-246): interview prep sheet from the person's own
+  facts; model questions only when a provider exists, labeled.
+- [ ] Increment 7 (ADR-247): your data is yours — export of every table
+  the Job Seeker writes about a person, under their own RLS.
+- [ ] Increment 8 (ADR-248): polish that cannot invent — model-polished
+  resume/cover-letter variants through the existing provider path,
+  checked term by term against the fact-only baseline; **Not Connected**
+  without a credential.
+- [ ] Increment 9 (ADR-249): still open? — a bounded, owner-safe recheck
+  of a posting URL recorded on the sightings row.
+- Owner-only, unchanged: `JSEARCH_RAPIDAPI_KEY` for inline LinkedIn/Indeed
+  (ADR-184); `RESEND_API_KEY`, `JOB_ALERT_EMAIL_FROM`, `CRON_SECRET` for
+  live alert email (ADR-164); the keyed boards' credentials
+  (`AI/JOB_SEARCH_SOURCES.md`).
+
 ## World-class CRM build-out (owner /goal 2026-09-02, task #85)
 
 The audit is `AI/CRM_COMPETITIVE_TEARDOWN.md`: HubSpot, PestBoss and

@@ -457,6 +457,74 @@ describe("the search panel", () => {
     expect(screen.getByRole("option", { name: "Best match" })).toBeInTheDocument();
   });
 
+  it("shows a likely-stale verdict with its numbers, and hides it only when asked (ADR-241)", async () => {
+    const stale = {
+      job: { ...hit("Platform Engineer").job, url: "https://jobnet.dk/find-job/stale" },
+      publishedOn: "2026-08-20",
+      closesOn: null,
+      sources: [{ board: "jobnet", boardName: "Jobnet", url: "https://jobnet.dk/find-job/stale", externalId: "id-stale", saveToken: "t-stale" }],
+      primarySourceIndex: 0,
+      match: null,
+      freshness: {
+        level: "stale",
+        postedDaysAgo: 72,
+        firstSeenDaysAgo: 70,
+        timesSeen: 9,
+        reposts: 1,
+        reasons: [
+          "The board now dates it 2026-08-20, but it was first dated 2026-06-22: 72 days ago.",
+          "First seen here 70 days ago, on 9 searches.",
+          "Re-dated 1 time since first seen (the posting date moved forward).",
+        ],
+      },
+    };
+    const fresh = {
+      job: { ...hit("Go Engineer").job, url: "https://jobnet.dk/find-job/fresh" },
+      publishedOn: "2026-09-01",
+      closesOn: null,
+      sources: [{ board: "jobnet", boardName: "Jobnet", url: "https://jobnet.dk/find-job/fresh", externalId: "id-fresh", saveToken: "t-fresh" }],
+      primarySourceIndex: 0,
+      match: null,
+      freshness: { level: "fresh", postedDaysAgo: 1, firstSeenDaysAgo: null, timesSeen: 0, reposts: 0, reasons: ["Posted 1 day ago by the board's own date."] },
+    };
+    respond({
+      results: [{ board: "jobnet", boardName: "Jobnet", totalAvailable: 2, hits: [hit("Platform Engineer"), hit("Go Engineer")], locationApplied: true }],
+      failures: [],
+      unified: {
+        hits: [stale, fresh],
+        dedupedFrom: 2,
+        beforeFilters: 2,
+        matchBasis: { computed: false, reason: "No Career Profile is recorded yet." },
+        freshnessBasis: "Freshness is computed from each board's own dates and this product's sightings ledger; every verdict prints its numbers.",
+      },
+    });
+    const user = userEvent.setup();
+    render(<JobSearchPanel />);
+    await screen.findByText(/Searching 2 boards:/);
+
+    await search(user);
+
+    // One badge, on the stale card only; a fresh card carries no warning.
+    expect(await screen.findByTestId("freshness-badge")).toHaveTextContent("Likely stale");
+    expect(screen.getAllByTestId("freshness-badge")).toHaveLength(1);
+    expect(screen.getByTestId("freshness-basis")).toHaveTextContent(/sightings ledger/);
+    expect(screen.getByTestId("stale-summary")).toHaveTextContent("1 posting looks likely stale");
+
+    // The numbers are one click away, verbatim.
+    await user.click(screen.getByText("Why likely stale"));
+    expect(screen.getByText("First seen here 70 days ago, on 9 searches.")).toBeInTheDocument();
+    expect(screen.getByText(/Re-dated 1 time since first seen/)).toBeInTheDocument();
+
+    // Shown by default; hidden only by the person's choice, and reversible.
+    expect(screen.getByText("Platform Engineer")).toBeInTheDocument();
+    await user.click(screen.getByTestId("stale-toggle"));
+    expect(screen.queryByText("Platform Engineer")).not.toBeInTheDocument();
+    expect(screen.getByText("Go Engineer")).toBeInTheDocument();
+    expect(screen.getByTestId("stale-toggle")).toHaveTextContent("Show them");
+    await user.click(screen.getByTestId("stale-toggle"));
+    expect(screen.getByText("Platform Engineer")).toBeInTheDocument();
+  });
+
   it("says why scores are absent rather than inventing them", async () => {
     const card = {
       job: hit("Platform Engineer").job,

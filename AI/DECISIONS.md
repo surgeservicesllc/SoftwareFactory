@@ -6514,3 +6514,65 @@ the help desk?" names the oldest and its suggestion.
 GAP or PARTIAL row that needed no provider and no owner-gated
 authentication change. What remains is GATED on a provider the owner
 opens or RED on owner direction, and stays recorded as such.
+
+## ADR-241 - Freshness: a posting sightings ledger of public facts, and a verdict that prints its numbers
+
+Date: 2026-09-02
+
+The owner's new /goal (task #91, audited in
+`AI/JOB_SEARCH_COMPETITIVE_TEARDOWN.md`) asks for the world's best job
+search site, measured against the complaints LinkedIn, Indeed and the
+other boards' own users make. The complaint every board shares is the
+ghost job: 18–22% of listings by Greenhouse's 2025 count, reposted so
+they look new, or left up after the role closed. No board says how long
+a posting has really been up. This product can, because it returns the
+same URL search after search.
+
+The ledger is public facts. `job_seeker_posting_sightings`
+(20260902001200) holds one row per posting URL: the URL, the board that
+returned it, the company and title as the board wrote them, the earliest
+and latest posting dates the board has ever stated for it, a closing
+date, and how often and when THIS product has seen it. No person,
+workspace or query is stored, which is what lets every signed-in person
+read every row: "first seen here 62 days ago, on 9 searches" is worth
+having because it is counted across everyone who searched, and a
+person-scoped copy would count one diary. Writes cross exactly one
+SECURITY DEFINER boundary, `record_posting_sightings`, called by the
+search route as the signed-in person with at most 400 sightings; a
+malformed element (no http URL, an empty company, a source that is not a
+board key, an impossible date) is skipped and not counted, because it is
+the board's malformed answer rather than the caller's mistake, and the
+function returns the number it actually wrote. Reads cross
+`read_posting_sightings`, an invoker function bounded at 1,000 keys, so a
+search with hundreds of cards asks once instead of building a URL the
+gateway would refuse. The table is RLS-enabled and forced, authenticated
+holds SELECT only, and service_role holds nothing — the pinned grants
+contract.
+
+The earliest date wins. A re-dated posting is older than it says, so the
+verdict reads `earliest_posted_on` over today's `publishedOn` and counts
+each forward move of the latest date as a repost. `least`/`greatest`
+ignore nulls on purpose: a board that omits its date this time can
+neither erase nor move what an earlier sighting recorded. The verdict
+itself (`assessFreshness`) is arithmetic with its thresholds printed —
+under 21 days fresh, 21 to 44 aging, 45 and over likely stale; a passed
+closing date or two re-datings is stale at any age; no date and no
+earlier sighting is unknown, never assumed fresh — and every sentence in
+`reasons` names the number that produced it.
+
+The route records first, then reads, and both calls are
+failure-tolerant: a search that answered is never failed by its own
+bookkeeping, and when the ledger cannot be read the basis line on the
+page says the verdicts came from the boards' dates only. The panel shows
+a likely-stale card by default with its badge and its numbers one click
+away; "Hide them" is the person's toggle, not saved, so a filter nobody
+set can never make a search look emptier than it was.
+
+Bounds, stated: the URL key is md5 of the trimmed URL on both sides, kept
+in a server-only module (node:crypto) apart from the browser-safe
+evaluator, and the behavior test proves JavaScript and SQL agree. The
+alert runner does not consult freshness yet — it reaches the database
+only through its two service_role definer functions and holds no grant
+on the ledger; adding freshness to alerts means a third definer
+function, never a table grant. A "still open?" recheck of the posting
+URL itself is increment 9 of the program, not this one.
