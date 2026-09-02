@@ -2367,6 +2367,84 @@ export async function runSeed(
   if ("error" in routeStops) return routeStops;
 
   /*
+   * Follow-ups (ADR-228). A manual task is somebody's own decision; a
+   * suggested one carries the rule's key and the reason it was raised, so
+   * the seeded book shows both shapes. The done and cancelled moments are
+   * NOT written here — the row stamps them itself from the status, which is
+   * the whole point of the stamping trigger.
+   *
+   * No dismissals are seeded: a dismissal is one person's judgement about
+   * one suggestion, and fabricating it would also hide real suggestions
+   * from the demo book for thirty days.
+   */
+  const taskOwners = [...employeeIdByCode.values()];
+  const taskVerbs = [
+    "Confirm the renewal with",
+    "Return the call from",
+    "Send the label and SDS pack to",
+    "Walk the property with",
+    "Check the gate code for",
+  ];
+  const taskRows: SeedRow[] = dataset.accounts.flatMap((account, index) => {
+    const accountId = accountIdByName.get(account.name);
+    if (accountId === undefined) return [];
+    const rows: SeedRow[] = [];
+    const count = index % 4 === 0 ? 2 : 1;
+    for (let n = 0; n < count; n += 1) {
+      const seed = index * 3 + n;
+      const done = seed % 5 === 0;
+      const cancelled = !done && seed % 11 === 0;
+      const suggested = !done && !cancelled && seed % 6 === 0;
+      // Every third follow-up is about the account's first deal — a task
+      // can be about an opportunity as well as an account.
+      const deal = seed % 3 === 0 && account.opportunities.length > 0
+        ? opportunityIdByName.get(account.opportunities[0].name) ?? null
+        : null;
+      rows.push({
+        organization_id: org,
+        account_id: accountId,
+        opportunity_id: deal,
+        assignee_employee_id: taskOwners.length === 0 ? null : taskOwners[seed % taskOwners.length],
+        title: `${taskVerbs[seed % taskVerbs.length]} ${account.name}`.slice(0, 200),
+        detail: seed % 8 === 0 ? "Customer asked for a morning call." : null,
+        // -7..+13 days, so the seeded board has overdue, today and later.
+        due_on: dateInDays((seed % 21) - 7),
+        priority: seed % 7 === 0 ? "high" : seed % 5 === 1 ? "low" : "normal",
+        status: done ? "done" : cancelled ? "cancelled" : "open",
+        origin: suggested ? "suggested" : "manual",
+        suggestion_key: suggested ? `stale_lead:${accountId}` : null,
+        reason: suggested ? "Lead with no recorded activity in 14 days." : null,
+        created_by: userId,
+      });
+    }
+    return rows;
+  });
+  const tasks = await insertAll(client, "crm_tasks", taskRows, "id");
+  if ("error" in tasks) return tasks;
+
+  /*
+   * Explainable scoring (ADR-229). The 27 default rules live in the
+   * database; only OVERRIDES are rows. A workspace changes a handful, so
+   * three are seeded — one per model — each with the reason a person gave.
+   */
+  const scoringRuleRows: SeedRow[] = [
+    {
+      organization_id: org, model: "lead", rule_key: "commercial", points: 20, active: true,
+      note: "Commercial work is where this branch makes its margin.", created_by: userId,
+    },
+    {
+      organization_id: org, model: "churn", rule_key: "overdue_invoice", points: 25, active: true,
+      note: "An unpaid bill has been the first sign every time.", created_by: userId,
+    },
+    {
+      organization_id: org, model: "upsell", rule_key: "wdo_stale", points: 10, active: true,
+      note: "Most of the book is commercial; termite letters matter less here.", created_by: userId,
+    },
+  ];
+  const scoringRules = await insertAll(client, "crm_scoring_rules", scoringRuleRows, "id");
+  if ("error" in scoringRules) return scoringRules;
+
+  /*
    * Autopay authorization (ADR-218). The instrument is metadata only — a
    * brand, four digits and the NAME of the vault purpose a processor token
    * would be filed under. Nothing here is or resembles a card number, and

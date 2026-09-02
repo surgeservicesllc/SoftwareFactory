@@ -143,6 +143,10 @@ built.
 | Capability | Who has it | Us |
 |---|---|---|
 | Opportunity pipeline with stages | FieldRoutes, Briostack | **HAVE** (ADR-186) |
+| **Tasks, reminders and follow-up date tracking** | PestPac (CRM), HubSpot | **HAVE** (ADR-228) — `crm_tasks` with owner, date, priority; no DELETE; moments stamped by the row |
+| **Actionable dashboard: recommended next steps** | PestPac (CRM), HubSpot (Breeze) | **HAVE** (ADR-228) — seven rules computed live from the book, each printed with the fact that raised it; a suggestion becomes a task only when accepted, once while open |
+| **Lead scoring, churn risk and upsell signals** | HubSpot (predictive, Enterprise), PestPac (service opportunity identification) | **HAVE** (ADR-229) — three models over one engine; a score is a sum of named, editable rules and every point is printed beside the fact that earned it; nothing stored |
+| **Automatic lead assignment** | PestPac (CRM), HubSpot (lead rotation) | **HAVE** (ADR-229) — by the postal code in the billing address against a territory's declared coverage, on create and by backfill, with a history line naming the postal code and the territory; a chosen territory is never overridden |
 | Territory mapping | Briostack, FieldRoutes | **HAVE** (ADR-195) |
 | Per-rep and per-territory performance, leaderboards | Briostack | **HAVE** (ADR-195) |
 | Commission management | Briostack | **HAVE** (ADR-195) |

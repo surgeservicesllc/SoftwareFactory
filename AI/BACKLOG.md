@@ -54,6 +54,56 @@ category/insert-chain/notice truthfulness fixes. Nothing in this file is
 open because work stopped; everything open is waiting on a named key, a
 named decision, a named authorization, or production itself.
 
+## World-class CRM build-out (owner /goal 2026-09-02, task #85)
+
+The audit is `AI/CRM_COMPETITIVE_TEARDOWN.md`: HubSpot, PestBoss and
+PestPac inventoried feature by feature, the top 25 complaints for each
+mapped to a row here, and a seven-increment program ordered by how many
+complaints each closes. Provider-gated capabilities ship **Not Connected**;
+anything on a timer stays RED and owner-gated.
+
+- [x] Increment 26 (ADR-228): follow-ups and the suggested next step —
+  `crm_tasks` (no DELETE; moments stamped by the row; a suggested task
+  keeps its rule key and reason), `crm_followup_dismissals` (dated), and
+  `crm_suggest_followups()` reading seven rules live as the caller. Accept
+  recomputes and refuses a key that no longer fires; one open task per key
+  by index. /Services/followups; copilot skill "What should I follow up on
+  today?"; seeded book gains 400 tasks. 20260902000100; hosted apply:
+  scope=followups after merge.
+- [x] Increment 27 (ADR-229): explainable scoring — `crm_scoring_defaults()`
+  (27 rules in code, mirrored in TypeScript under a parity test),
+  `crm_scoring_rules` holding only a workspace's overrides (a trigger
+  refuses an unknown rule; delete = reset), and `crm_score_accounts()`
+  computing lead / churn / upsell live as the caller with every point
+  printed beside its fact. Assignment by the last postal code in the
+  billing address on create and by backfill, each writing a history line
+  naming the territory and the postal code; a chosen territory is never
+  overridden. /Services/signals; three copilot skills. 20260902000200;
+  hosted apply: scope=explainable-scoring after merge. Closes HubSpot
+  9/16/29/53, PestPac 36/37, PestBoss 18.
+- [ ] Increment 28 (data you own): CSV import with an explicit column
+  mapping and a dry run that refuses to invent a field; audited duplicate
+  merge (survivor chosen, every child re-pointed by a definer, a merge
+  event on the timeline, the loser kept readable); whole-book export.
+  Closes HubSpot 7/8, PestPac 9/17, PestBoss 21.
+- [ ] Increment 29 (job profitability): technician cost rates and lot unit
+  costs; margin per visit, per plan, per branch, every input printed
+  beside the figure. Closes PestPac 8.
+- [ ] Increment 30 (nothing hidden): schedule audit (double-booked
+  technicians, visits on no route, due plans with no visit, promised
+  windows that contradict planned arrival); automation DRY-RUN naming
+  exactly which records a rule would touch; dashboard drill-down to the
+  rows behind every figure. Closes HubSpot 5/6, PestPac 7/10.
+- [ ] Increment 31 (the customer's side): post-service survey asked in the
+  portal after a completed visit; request SLA clock with breach flagged;
+  two-way portal messages threaded on the account. Closes HubSpot
+  25/36/40/42, PestPac 11, PestBoss 23.
+- [ ] Increment 32 (trust): forecast scenario inputs (owner-supplied churn
+  and growth, printed beside the figure); stale-contact hygiene report;
+  TOTP enrolment through Supabase Auth's own MFA — touches authentication,
+  so it needs a policy read before it is built. Closes HubSpot 2/10,
+  PestPac 14.
+
 ## Site-wide dark/light theme (ADR-225, 2026-08-31)
 
 - [x] Make dark the deterministic first-visit default and restore only a valid

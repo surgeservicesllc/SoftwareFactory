@@ -3,9 +3,11 @@ import { z } from "zod";
 import {
   COPILOT_SKILLS,
   composeAutopayAnswer,
+  composeFollowupsAnswer,
   composeOverdueAnswer,
   composeRevenueAnswer,
   composeRoutesAnswer,
+  composeSignalsAnswer,
   composeUnknownAnswer,
   composeVisitsAnswer,
   matchQuestion,
@@ -59,6 +61,66 @@ export async function POST(request: Request) {
 
     const today = new Date();
     const todayIso = isoDay(today);
+
+    if (skill === "hot_leads" || skill === "churn_risk" || skill === "upsell") {
+      const model = skill === "hot_leads" ? "lead" : skill === "churn_risk" ? "churn" : "upsell";
+      const scoresRead = await client.rpc("crm_score_accounts", { p_organization: organizationId, p_model: model });
+      if (scoresRead.error) return databaseErrorResponse(scoresRead.error);
+      const rows = (scoresRead.data ?? []) as Array<{
+        account_id: string; score: number; breakdown: Array<{ fact: string }>;
+      }>;
+      const top = rows.filter((row) => Number(row.score) > 0).slice(0, 3);
+      const nameById = new Map<string, string>();
+      if (top.length > 0) {
+        const namesRead = await client
+          .from("crm_accounts")
+          .select("id, name")
+          .eq("organization_id", organizationId)
+          .in("id", top.map((row) => row.account_id));
+        if (namesRead.error) return databaseErrorResponse(namesRead.error);
+        for (const account of (namesRead.data ?? []) as Array<{ id: string; name: string }>) {
+          nameById.set(account.id, account.name);
+        }
+      }
+      return jsonNoStore({
+        skill,
+        answer: composeSignalsAnswer({
+          model,
+          scored: rows.length,
+          top: top.map((row) => ({
+            name: nameById.get(row.account_id) ?? "an account",
+            score: Number(row.score),
+            facts: (Array.isArray(row.breakdown) ? row.breakdown : []).map((line) => line.fact),
+          })),
+        }),
+      });
+    }
+
+    if (skill === "followups") {
+      const [openRead, suggestRead] = await Promise.all([
+        client
+          .from("crm_tasks")
+          .select("due_on")
+          .eq("organization_id", organizationId)
+          .eq("status", "open")
+          .lte("due_on", todayIso)
+          .limit(2000),
+        client.rpc("crm_suggest_followups", { p_organization: organizationId }),
+      ]);
+      if (openRead.error) return databaseErrorResponse(openRead.error);
+      if (suggestRead.error) return databaseErrorResponse(suggestRead.error);
+      const due = (openRead.data ?? []) as Array<{ due_on: string }>;
+      const suggestions = (suggestRead.data ?? []) as Array<{ title: string; reason: string }>;
+      return jsonNoStore({
+        skill,
+        answer: composeFollowupsAnswer({
+          overdue: due.filter((task) => task.due_on < todayIso).length,
+          dueToday: due.filter((task) => task.due_on === todayIso).length,
+          suggestions,
+          suggestionCount: suggestions.length,
+        }),
+      });
+    }
 
     if (skill === "overdue_invoices") {
       const { data, error } = await client

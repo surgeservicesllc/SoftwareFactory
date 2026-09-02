@@ -1,5 +1,69 @@
 # Current state
 
+## 2026-09-02: Explainable scoring and assignment with its reason (ADR-229)
+
+Increment 27 of the build-out ships `20260902000200_explainable_scoring.sql`:
+`crm_scoring_defaults()` (27 rules across lead / churn / upsell, versioned
+with the schema and mirrored by `SCORING_DEFAULTS` under a parity test),
+`crm_scoring_rules` holding only a workspace's overrides (a trigger refuses
+an unknown rule; deleting an override is the reset), and
+`crm_score_accounts(org, model)` — a SECURITY INVOKER engine that computes
+one facts row per account and keeps, beside every point, the specific
+sentence that earned it. Nothing about a score is stored. A new account is
+assigned territory, branch and rep by the LAST five-digit postal code in
+its billing address against an active territory's declared coverage
+(never a city name), only filling what the caller left blank, and a `note`
+on its history names the postal code and the territory;
+`crm_assign_accounts_by_postal(org)` backfills the same way as the caller.
+/Services/signals shows the three models with per-point chips, the rules
+editor (points, on/off, save, reset) and the backfill; the copilot gains
+warmest leads, churn risk and room to grow. The seeded book gains three
+overrides (one per model, each with the reason a person gave).
+
+Evidence: 10 behavior tests on the replayed chain (defaults parity, grant
+posture, a lead at 65 with every fact, churn at 75 and 30 with the facts,
+upsell at 60 highest-first, override → 80 → 90 → reset to 65 with an
+unknown rule refused, rival sees nothing, on-create assignment with its
+history line, backfill after coverage grows, a chosen territory never
+overridden); 5 panel tests; 2 copilot composer tests; seed audit 63/63;
+scope replay, roster, migration-version, path-reference and byte-ceiling
+guards; tsc and eslint clean. Hosted apply scope `explainable-scoring` is
+dispatched after merge and recorded here.
+
+## 2026-09-02: The world-class CRM build-out begins with follow-ups and the suggested next step (ADR-228)
+
+The owner /goal of 2026-09-02 is audited in `AI/CRM_COMPETITIVE_TEARDOWN.md`:
+HubSpot (60 features across its hubs), PestPac (53 modules) and PestBoss
+(30 capabilities) are inventoried against this product row by row, and the
+top 25 complaints for each — quoted from verified reviewers on Capterra,
+G2, GetApp, SourceForge and Software Advice, with PestBoss's thin evidence
+said plainly and its inferred rows marked — are mapped to a
+seven-increment program in `AI/BACKLOG.md`.
+
+Increment 26 ships the first: `20260902000100_followups.sql` adds
+`crm_tasks` (no DELETE; done/cancelled moments stamped by a BEFORE trigger
+from the status alone; a suggested task must carry its rule key and reason,
+a manual one must not), `crm_followup_dismissals` (dated), and
+`crm_suggest_followups(org)` — a SECURITY INVOKER function reading seven
+rules live: stale lead, overdue opportunity, undecided estimate, unanswered
+portal request, quiet overdue invoice, expiring licence, uncorrected
+high-severity sighting. Nothing is stored. One open task per suggestion key
+is a partial unique index. Finishing a follow-up about an account writes a
+`task` line on its history through the foundation's definer pattern, which
+is also what ends the stale-lead suggestion. /Services/followups accepts
+by KEY only (the route recomputes and refuses a key that no longer fires,
+409), dismisses for thirty days, and buckets open work into overdue / today
+/ later; the copilot gains "What should I follow up on today?". The seeded
+book gains 400 tasks; dismissals are deliberately unseeded.
+
+Evidence: 9 behavior tests on the replayed chain (RLS forced, exact grant
+posture, all seven rules with their reasons, rival organization sees
+nothing, accept-once-while-open, self-stamped moments, history line, dated
+dismissal, collection action silencing the rule, both origin contradictions
+refused); 5 panel tests; copilot composer tests; seed roster, scope replay,
+migration-version and path-reference guards; tsc and eslint clean. Hosted
+apply scope `followups` is dispatched after merge and recorded here.
+
 ## 2026-08-31: Grok completion DDL is hosted; acceptance awaits a version-safe ACL verifier (ADR-227)
 
 Exact main `24a6313e98023bfc618a921fc563c9f4bde4cad2` passed all four

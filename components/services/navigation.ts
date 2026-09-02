@@ -1,5 +1,7 @@
 import {
   Sparkles,
+  ListChecks,
+  Gauge,
   BanknoteArrowDown,
   Bug,
   Building2,
@@ -59,6 +61,18 @@ export const SERVICES_NAVIGATION: readonly ServicesNavItem[] = [
     label: "Copilot",
     description: "Ask the workspace; answers computed from your rows",
     icon: Sparkles,
+  },
+  {
+    href: `${SERVICES_ROOT}/followups`,
+    label: "Follow-ups",
+    description: "What is owed today, and what your records suggest next",
+    icon: ListChecks,
+  },
+  {
+    href: `${SERVICES_ROOT}/signals`,
+    label: "Signals",
+    description: "Lead score, churn risk, upsell — every point with its reason",
+    icon: Gauge,
   },
   {
     href: `${SERVICES_ROOT}/customers`,

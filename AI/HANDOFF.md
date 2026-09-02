@@ -2,6 +2,51 @@
 
 Last updated: 2026-08-31
 
+## Newest (2026-09-02, latest+50): scores you can argue with (ADR-229)
+
+SCORING: a score is a READ. `crm_score_accounts` computes facts per account
+and applies the effective rules; do not add a stored score column — the
+whole point is that a paid invoice changes the number immediately. New
+rules go in THREE places or the parity test fails: the VALUES list in
+`crm_scoring_defaults()`, `SCORING_DEFAULTS` in lib/services/scoring.ts,
+and the two CASE branches (multiplier, fact) in the engine. Rule keys may
+carry digits (`silent_30d`) — the CHECK is `^[a-z][a-z0-9_]{2,39}$`, and an
+earlier draft that forbade digits refused six of the defaults.
+
+ASSIGNMENT: the LAST five-digit group in the billing address is the
+postal code (suite numbers come first). Match only on `postal_codes` of an
+ACTIVE territory; never on city. Only fill nulls. The on-create writer is
+the one DEFINER in this increment and is not callable; the backfill is
+INVOKER and writes history as the caller.
+
+WORKFLOW: 453,550 bytes against the 455,000 guard — the NEXT scope will
+breach it. Increment 28 must extract something (the three mutating giants
+named in the backlog) in its own change BEFORE adding its scope.
+
+## Newest (2026-09-02, latest+49): follow-ups, and the program behind them (ADR-228)
+
+Read `AI/CRM_COMPETITIVE_TEARDOWN.md` before touching the CRM again: it is
+the owner's audit (three feature inventories, 75 complaints mapped) and the
+seven-increment build order. Increment 26 is in; 27 (explainable scoring)
+is next.
+
+FOLLOW-UPS: a suggestion is NEVER stored — `crm_suggest_followups(org)`
+reads seven rules live as the caller. Accepting re-runs the function and
+takes title/reason from ITS result, never the request body; a key that no
+longer fires is 409. Do not add a "snooze" that mutates the suggestion —
+dismissals are the dated record of "not now". `done_at`/`cancelled_at` are
+stamped by the row from the status; the route sends status only. No DELETE
+on crm_tasks. The `task` timeline line on completion is what makes a
+stale lead un-stale, so do not suppress it.
+
+SEED: crm_tasks is seeded (400 rows: 320 accounts + every fourth twice);
+crm_followup_dismissals is DELIBERATELY_UNSEEDED with its reason — do not
+"fix" the roster by seeding it.
+
+WORKFLOW: scope `followups` added; byte size 452,629 against the 455,000
+guard — the next scope needs ~900 bytes, so the one after that must
+extract something first.
+
 ## Newest (2026-08-31, latest+48): the close-out tail
 
 Eight rows in one stretch, all UI over machinery that already existed —
