@@ -2,6 +2,29 @@
 
 Last reviewed: 2026-09-02
 
+**Addendum, 2026-09-02 latest+59 - what people look up (ADR-237):**
+services-knowledge.behavior 5 (RLS forced with authenticated-only grants
+and the two definers; slug shape, per-workspace uniqueness, the secret
+refusal; "bait" ranks two bodies at 1, "rodent stations" the title at 7
+with the arithmetic returned, the question and its one surviving word
+giving the same answer, no words returning everything at rank 0 with the
+audience and published filters narrowing, a rival and a portal user seeing
+nothing through the member search; the customer's read of exactly the
+published customer articles with the body, "station" at rank 4; the
+calendar facts for the owning account only). services-knowledge 5
+(escaping, 75-octet folding across a multi-byte character, UTC moments,
+the assumed hour said in the entry, filenames; slug derivation, rank
+explanation, the composer's three sentences). services-knowledge-routes 6
+(filters through and the book counted; slug derived, publisher stamped,
+empty title refused; first publication moment kept and cleared; the
+customer read with no organization; text/calendar with the exact headers
+and 404 otherwise; the staff file with instructions and the assumed hour).
+services-knowledge-panels 4 (list, rank printed, derived slug saved; Help
+tab search and open, calendar link only on a booked visit; lot label
+symbol, refusal and nothing for a spent lot). Seed audit 67/67; grants
+roster and RLS census 228; replay with the new postflight; runbook count
+228; byte guard 420,000 against 410,730; tsc and eslint clean.
+
 **Addendum, 2026-09-02 latest+58 - scope=all's gate repaired (ADR-236):**
 hosted-guard-captures.behavior 4 with the broad gate's expectation flipped
 to `t` against the whole chain (four source pins renamed to the

@@ -589,6 +589,16 @@ const SPECS: Spec[] = [
       + "in the schema and the seed overrides one (ADR-233).",
   },
   {
+    table: "crm_kb_articles",
+    optional: ["category", "published_at"],
+    enumColumn: "audience",
+    parents: [],
+    floorExempt:
+      "A help centre is a dozen answers written once, not 250 rows (ADR-237); "
+      + "the seed writes eight — six published to customers, one for staff, one "
+      + "draft — so both reads have something to find.",
+  },
+  {
     table: "crm_scoring_rules",
     optional: ["note"],
     enumColumn: "model",

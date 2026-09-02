@@ -1,5 +1,45 @@
 # Current state
 
+## 2026-09-02: What people look up (ADR-237)
+
+Increment 33 ships `20260902000800_knowledge_base.sql`: `crm_kb_articles`
+(forced RLS, authenticated CRUD and nothing for anon or service_role; slug
+`^[a-z0-9]+(?:-[a-z0-9]+)*$` unique per workspace; title, body and
+category refuse a likely secret; audience `staff`/`customer`; `published_at`
+null is a draft), `crm_kb_terms()` (the words that count: lower-cased,
+plural s dropped, ≥3 characters, not in the stop list), `crm_kb_search()`
+(INVOKER, STABLE: title hit ×3 + body hit ×1 on whole words with an
+optional plural s; rank, hits and excerpt returned; audience and
+published-only filters), `crm_portal_articles()` (DEFINER: published
+customer articles of the caller's own workspace through the same scorer,
+with the body) and `crm_portal_visit_calendar()` (DEFINER: one booked
+visit of the caller's account with moments, site, address, technician and
+workspace name; no row otherwise). `lib/services/ics.ts` builds an RFC
+5545 file (escaping, 75-octet folding, UTC moments, an assumed hour said
+in the entry); `lib/services/knowledge.ts` maps rows, derives the slug,
+explains a rank and composes the copilot answer. Routes:
+`/api/services/knowledge` (GET search + counts, POST with the slug derived
+or refused), `/api/services/knowledge/[id]` (GET, PATCH keeping the first
+publication moment, DELETE), `/api/customer-portal/articles`,
+`/api/customer-portal/visits/[id]/calendar` and
+`/api/services/work-orders/[id]/calendar` (text/calendar, 404 for a visit
+that is not theirs). Knowledge page (`/Services/knowledge`, nav entry)
+with search, filters, rank printed per hit, editor with derived slug,
+publish flag and two-step delete; portal Help tab (search, open) and "Add
+to calendar" on a booked visit; `LotLabels` beside the products on the
+compliance page; copilot `knowledge` ("What do we tell customers about
+ants?"). Tests: services-knowledge.behavior 5 (fence and grants; slug
+shape, per-workspace uniqueness and the secret refusal; the scorer's
+arithmetic with stop words, plurals, filters, RLS and the portal user's
+empty member search; the customer's read; the calendar facts to the
+owning account only), services-knowledge 5 (escaping, folding, UTC,
+assumed hour, filename; slug, rank explanation, composer),
+services-knowledge-routes 6, services-knowledge-panels 4. Seed: eight
+articles (67 tables); grants roster and RLS census 228; scope replay with
+the new postflight; runbook count 228; workflow 410,730 of 420,000; tsc
+and eslint clean. Hosted apply scope `knowledge-base` is dispatched after
+merge.
+
 ## 2026-09-02: scope=all's gate repaired (ADR-236)
 
 The broad push's protected-catalog gate

@@ -163,6 +163,20 @@ anything on a timer stays RED and owner-gated.
   nothing. Scenario card on the Dashboards forecast tab; Hygiene card on
   the Data page; copilot "Which contacts are stale?". 20260902000700;
   hosted apply: scope=trust after merge. Closes HubSpot 2/10.
+- [x] Increment 33 (ADR-237): what people look up — `crm_kb_articles`
+  (forced RLS, authenticated CRUD, slug shaped and unique per workspace,
+  no-secret checks, audience staff/customer, published moment) with
+  `crm_kb_search()` (invoker; title ×3 + body ×1 on whole words, plural s
+  optional, stop words nothing; rank and excerpt printed) and
+  `crm_portal_articles()` (definer; published customer articles of the
+  caller's own workspace); `crm_portal_visit_calendar()` (definer; one
+  booked visit's moments, address and technician, own account only) and
+  an RFC 5545 builder (`lib/services/ics.ts`) behind customer and staff
+  calendar routes; Code 39 lot labels beside the product. Knowledge page
+  with editor and printed rank; portal Help tab and "Add to calendar";
+  copilot "What do we tell customers about ants?". Seed: eight articles.
+  20260902000800; hosted apply: scope=knowledge-base after merge. Closes
+  HubSpot 10/43, PestPac 13.
 - [ ] **RED — owner direction required:** TOTP enrolment through Supabase
   Auth's own MFA (PestPac complaint 14). `policies/PROTECTED_RESOURCES.md`
   lists MFA under identity and authorization and

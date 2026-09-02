@@ -5,6 +5,7 @@ import { AlertTriangle, Download, FlaskConical, ShieldCheck } from "lucide-react
 
 import { Card, Notice, PageHeader, SectionTitle } from "@/components/ui";
 import { useAccountProperties } from "@/components/services/use-account-properties";
+import { LotLabels } from "@/components/services/lot-labels";
 import type {
   StockPayload,
   AccountsPayload,
@@ -356,6 +357,11 @@ export function ServicesCompliancePanel() {
               product, so this is where the compliance trail starts.
             </p>
           ) : (
+            <>
+            <LotLabels
+              lots={catalogue.lots}
+              productName={(productId) => catalogue.products.find((product) => product.id === productId)?.name ?? null}
+            />
             <ul className="mt-3 space-y-3" data-testid="services-products">
               {catalogue.products.map((product) => {
                 const lots = lotsByProduct.get(product.id) ?? [];
@@ -436,6 +442,7 @@ export function ServicesCompliancePanel() {
                 );
               })}
             </ul>
+            </>
           )}
         </Card>
 

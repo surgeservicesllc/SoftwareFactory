@@ -89,6 +89,33 @@ const BATCH = 500;
 
 type SeedRow = Record<string, unknown>;
 
+/**
+ * The help centre (ADR-237): eight answers written once. Six are published
+ * to customers, one is for staff, and one is a draft, so the customer's
+ * read, the member's search and the draft filter each have something to
+ * show. Bodies are plain sentences; the search scores the words in them.
+ */
+const KB_ARTICLES: ReadonlyArray<{
+  slug: string; title: string; category: string; audience: "staff" | "customer"; published: boolean; body: string;
+}> = [
+  { slug: "before-your-first-visit", title: "Before your first visit", category: "Before your visit", audience: "customer", published: true,
+    body: "Clear the counters and floors where we will treat, and keep pets in another room for two hours. Your technician will walk the property with you first and explain what is being applied and why." },
+  { slug: "ant-treatment-what-to-expect", title: "Ant treatment: what to expect", category: "Before your visit", audience: "customer", published: true,
+    body: "We place bait where the ants trail rather than spraying the trail, because the bait is carried back to the colony. It can take ten days for the ants to disappear; more ants in the first days is the bait working." },
+  { slug: "rodent-stations-on-commercial-sites", title: "Rodent stations on commercial sites", category: "Commercial", audience: "customer", published: true,
+    body: "Every station is numbered and checked on every visit, and the scan is your record. Bait is locked inside; please do not move a station, and tell us if one is damaged." },
+  { slug: "reading-your-invoice", title: "Reading your invoice", category: "Billing", audience: "customer", published: true,
+    body: "An invoice lists each visit with the service and the date, then the plan charge if you are on one. Autopay, when you have authorised it, charges the card on file on the due date and never before." },
+  { slug: "rescheduling-a-visit", title: "Rescheduling a visit", category: "Visits", audience: "customer", published: true,
+    body: "Ask for a new date on the Requests tab and we will confirm a window. A visit inside a route is moved rather than cancelled, so your plan stays on schedule." },
+  { slug: "what-the-safety-sheet-is", title: "What the safety sheet is", category: "Compliance", audience: "customer", published: true,
+    body: "Every product we apply has a safety data sheet and a label, and both are on your Compliance tab. The application record says which lot was used, how much, and where." },
+  { slug: "calling-back-a-complaint", title: "Calling back a complaint", category: "Service", audience: "staff", published: true,
+    body: "Call within two hours of the request. Read the request and the last visit note first, then offer a return visit at no charge before the customer asks for one." },
+  { slug: "termite-pretreatment", title: "Termite pretreatment", category: "Before your visit", audience: "customer", published: false,
+    body: "Draft: the slab is treated before the pour, and the builder schedules us for the day before. This page is not finished." },
+];
+
 const STAFF_MESSAGE_BODIES = [
   "Confirmed for Tuesday's route; Rosa will call from the gate.",
   "The report from the last visit is filed under Documents on your portal.",
@@ -1442,6 +1469,24 @@ export async function runSeed(
     "id",
   );
   if ("error" in slaPolicies) return slaPolicies;
+
+  const kbArticles = await insertAll(
+    client,
+    "crm_kb_articles",
+    KB_ARTICLES.map((entry, index) => ({
+      organization_id: org,
+      slug: entry.slug,
+      title: entry.title,
+      body: entry.body,
+      category: entry.category,
+      audience: entry.audience,
+      published_at: entry.published ? daysAgoIso(30 - index) : null,
+      created_by: userId,
+      updated_by: userId,
+    })),
+    "id",
+  );
+  if ("error" in kbArticles) return kbArticles;
 
   const canvassRouteRows = dataset.canvassRoutes.map((route) => {
     const walkedAt = daysAgoIso(route.walkedDaysAgo);

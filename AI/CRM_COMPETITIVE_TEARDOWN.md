@@ -85,7 +85,7 @@ honest, not built.
 | 7 | Insights: automatic company research / enrichment | Smart CRM | **GATED** (licensed enrichment provider; contact data is never fabricated) |
 | 8 | Marketplace of 1000+ integrations | Platform | **PARTIAL** — the provider registry (ADR-207) is the integration surface; eight providers, each honestly labelled |
 | 9 | Snippets and templates | Sales | **PARTIAL** — notice templates (ADR-217), automation templates (ADR-196) |
-| 10 | Meeting scheduling with calendar sync | Sales | **PARTIAL** — portal service requests carry a preferred date (ADR-198); no calendar link |
+| 10 | Meeting scheduling with calendar sync | Sales | **HAVE** (ADR-237) — a booked visit hands over a calendar file built from its own row (customer portal and staff), no provider; two-way sync stays GATED on a provider |
 | 11 | Quotes / CPQ | Sales | **HAVE** (ADR-194) — estimates with lines |
 | 12 | KPI dashboards | Sales | **HAVE** (ADR-199); every figure opens the rows behind it by its own predicate (ADR-232) |
 | 13 | Sales automation (workflows on prospect behaviour) | Sales | **PARTIAL** — rules recorded (ADR-196) and rehearsed by a dry run that names exactly which records they would touch and why not (ADR-232); an executor on a clock: **RED** |
@@ -118,7 +118,7 @@ honest, not built.
 | 40 | NPS / customer satisfaction surveys | Service | **HAVE** (ADR-233) — a 1–5 rating asked in the portal after each completed visit, once, written only by the customer; average, response rate, distribution and detractors on the staff page |
 | 41 | Conversation intelligence | Service | **GATED** (AI + telephony) |
 | 42 | SLA management | Service | **HAVE** (ADR-233) — acknowledge/resolve hours per request kind, defaults in the schema and overrides per workspace; met / breached / waiting / overdue / unrecorded per request |
-| 43 | Knowledge base | Service | **GAP** |
+| 43 | Knowledge base | Service | **HAVE** (ADR-237) — articles written once with an audience and a published moment; staff search with the rank printed; customers read published customer articles under Help |
 | 44 | Customer portal | Service | **HAVE** (ADR-198, ADR-203, ADR-222) |
 | 45 | Drag-and-drop page editor, themes, CDN, hosting, staging, membership, password pages | Content/CMS | **N/A** — a website builder is outside a CRM core (PestPac sells one too; listed, not built) |
 | 46 | Field mapping on import | Data/Ops | **HAVE** (ADR-230) — explicit mapping with a dry run that refuses to invent columns |
@@ -211,7 +211,7 @@ honest, not built.
 | 10 | Client portal: service reports, messages, inspection history, real-time site analytics | **HAVE** reports/history/analytics (ADR-203, ADR-222) and two-way messages (ADR-233) |
 | 11 | Monitoring reports created, filed and shared from the field | **HAVE** filed (ADR-216); shared by email/SMS **GATED** |
 | 12 | Pest activity heat maps | **HAVE** (ADR-206) |
-| 13 | Barcode scanning of devices and chemicals | **HAVE** (ADR-191); chemical-lot barcodes: **GAP** |
+| 13 | Barcode scanning of devices and chemicals | **HAVE** (ADR-191); chemical-lot barcodes: **HAVE** (ADR-237) — printable Code 39 lot labels beside the product, with the same refusal as station labels |
 | 14 | In-field barcode production | **HAVE** (ADR-214) |
 | 15 | Device monitoring dashboards, thresholds, alerts | **HAVE** (ADR-191); alert delivery **GATED** |
 | 16 | Property layouts / site maps | **PARTIAL** — WDO diagrams (ADR-205); site device maps need coordinates or a floor plan |
@@ -350,6 +350,7 @@ cadence: migration → routes → page → tests → PR → four real checks →
 | 30 | **Nothing hidden** (ADR-232): schedule audit (six contradictions with the rows involved), automation dry run (what a rule would touch, and why not), dashboard drill-down by the figure's own predicate | HubSpot 5, 6; PestPac 7, 10 | **SHIPPED** |
 | 31 | **The customer's side of the conversation** (ADR-233): post-visit rating in the portal, the request clock with per-kind promises, two-way portal messages | HubSpot 25, 36, 40, 42; PestPac 11; PestBoss 23 | **SHIPPED** |
 | 32 | **Trust** (ADR-234): forecast scenario inputs printed beside the figure, contact hygiene with reasons; TOTP recorded as RED, owner-gated | HubSpot 2, 10; PestPac 14 (gated) | **SHIPPED** (TOTP owner-gated) |
+| 33 | **What people look up** (ADR-237): a knowledge base written once and read by staff and customers, ranked by printed arithmetic; a calendar file for a booked visit; chemical-lot labels | HubSpot 10, 43; PestPac 13 | **SHIPPED** |
 
 **What stays outside this program, and why.** Sending (email, SMS, voice),
 charging (card, ACH, in-field), locating (geocoding, GPS), syncing

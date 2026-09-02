@@ -6342,3 +6342,59 @@ and a future drift in any of the sixteen functions fails it outright.
 `scope=all` able to say yes again; it does not dispatch anything, and the
 policy that a broad push is dispatched by the owner, with every protected
 version already recorded separately, is unchanged.
+
+## ADR-237 - What people look up: a knowledge base ranked by printed arithmetic, a calendar file with no provider, and a label for the lot
+
+Three rows the teardown left open share a shape: the thing a person wants
+already exists in the book, and only the way to reach it was missing.
+HubSpot gates its knowledge base behind Service Hub; its "calendar sync"
+is a provider integration; PestPac scans a chemical but cannot print the
+lot's label.
+
+**The knowledge base is written once and read by both sides.**
+`crm_kb_articles` is a member's row under forced RLS with a slug the schema
+shapes (`^[a-z0-9]+(?:-[a-z0-9]+)*$`, unique per workspace), an audience
+(`staff` or `customer`) and a published moment whose null is a draft. A
+draft is a draft for everybody: the customer's read, `crm_portal_articles`,
+is a DEFINER that resolves the caller's account and returns only published,
+customer-audience articles of that workspace — a definer because a portal
+user is not a member, and the resolver is what scopes it. Staff read as
+themselves through `crm_kb_search`, an INVOKER: RLS decides what they see.
+Publishing is recorded on the row (`published_at`, `updated_by`) like a
+policy override, not as a separate ledger; the row is the record.
+
+**The search is arithmetic, and it says so.** `crm_kb_terms` keeps the
+words that carry meaning: lower-cased, split on anything that is not a
+letter or digit, a plural s dropped, at least three characters, not in a
+short stop list. A term matches a whole word, with or without a plural s;
+a hit in the title counts three and a hit in the body one; the rank, the
+two counts and the excerpt around the first hit are returned, and the page
+prints "rank 4: 1 in the title ×3 + 1 in the body". There is no relevance
+model, no synonym table and no embedding, deliberately: "why is this
+first?" has an answer a person can check against the article, and the
+same question asked in a sentence or a word gives the same list. The
+copilot's "What do we tell customers about ants?" runs the same scorer
+and names the articles with their state and rank.
+
+**The calendar file is built from the visit's row.** What a customer does
+with a booking is put it in a calendar, and every calendar opens an .ics.
+`crm_portal_visit_calendar` (DEFINER, own account, no row otherwise — the
+same shape as "does not exist") hands over the moments, the site and its
+address, the technician and the workspace name; `lib/services/ics.ts`
+writes RFC 5545 in the small (CRLF, 75-octet folding at character
+boundaries, the five escaped characters, UTC moments) and, when no end was
+recorded, an hour — said in the entry rather than implied. The staff route
+reads the work order under RLS and includes the dispatch instructions,
+because that file is for the person doing the visit. Two-way sync with a
+provider stays GATED; this needs nothing connected.
+
+**The lot gets the same label, and the same refusal, as a station.** Code
+39 again, printed from the browser; a lot number the symbology cannot
+carry is printed as text with the reason, never uppercased into a symbol
+that would scan as a different lot, because the lot key is case-sensitive
+per product. Spent lots are not printed.
+
+**Seeded on purpose.** Eight articles — six published to customers, one
+for staff, one draft — so the customer's Help tab, the member's search
+and the draft filter each have something to show on the demo book; the
+seed roster says why the floor does not apply.

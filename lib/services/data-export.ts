@@ -78,6 +78,7 @@ export const CRM_EXPORT_TABLES = [
   "crm_forecast_assumptions",
   "crm_scoring_rules",
   "crm_sla_policies",
+  "crm_kb_articles",
   "crm_imports",
 ] as const;
 

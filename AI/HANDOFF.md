@@ -2,7 +2,28 @@
 
 Last updated: 2026-09-02
 
-## Newest (2026-09-02, latest+58): scope=all's gate repaired (ADR-236)
+## Newest (2026-09-02, latest+59): what people look up (ADR-237)
+
+THE SEARCH IS ARITHMETIC. `crm_kb_search` counts whole-word hits (title
+×3, body ×1, plural s optional, stop words nothing) and returns the
+numbers; the page prints "rank 4: 1 in the title ×3 + 1 in the body". Do
+not add a relevance model, synonyms or an embedding: the rule fits in a
+sentence, and that is the feature.
+
+A DRAFT IS A DRAFT FOR EVERYBODY. `published_at` null hides the article
+from the customer read whatever its audience; the customer definer also
+filters `audience = 'customer'`. Staff see drafts in their own search.
+
+THE CALENDAR FILE HAS NO PROVIDER. It is built from the visit's row; the
+customer route goes through `crm_portal_visit_calendar` (own account, no
+row otherwise → 404), the staff route reads under RLS and includes the
+dispatch instructions because the file is for the person doing the visit.
+Two-way calendar sync stays GATED.
+
+HOSTED: scope=knowledge-base is dispatched after merge; record the run id
+here and in CURRENT_STATE. Workflow 410,730 of 420,000.
+
+## Older (2026-09-02, latest+58): scope=all's gate repaired (ADR-236)
 
 THE GATE SAYS T AGAIN. The four `_checked` source pins in
 `guard/scope-all-protected-catalog-ready.sql` name the post-20260822000900

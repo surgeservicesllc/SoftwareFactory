@@ -97,6 +97,7 @@ const publicTables = [
   "crm_imports",
   "crm_invoice_lines",
   "crm_invoices",
+  "crm_kb_articles",
   "crm_knocks",
   "crm_list_members",
   "crm_marketing_lists",
