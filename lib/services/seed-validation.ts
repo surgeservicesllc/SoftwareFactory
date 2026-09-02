@@ -563,6 +563,16 @@ const SPECS: Spec[] = [
     ],
   },
   {
+    table: "crm_scoring_rules",
+    optional: ["note"],
+    enumColumn: "model",
+    parents: [],
+    floorExempt:
+      "A workspace overrides a handful of its 27 default rules at most (ADR-229); "
+      + "the defaults live in the database, not in rows, so 250 overrides would be "
+      + "a workspace that had rewritten every rule nine times.",
+  },
+  {
     table: "crm_tasks",
     optional: [
       "account_id", "opportunity_id", "assignee_employee_id", "detail", "suggestion_key",

@@ -88,6 +88,7 @@ on:
           - portal-filed-documents
           - queue-diagnosis-visibility
           - followups
+          - explainable-scoring
           - probe
 permissions:
   actions: read
@@ -1922,6 +1923,22 @@ jobs:
           psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
           psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/postflight/followups.sql
           echo "Follow-ups applied; one open task per suggestion, moments stamped by the row, rules read as the caller."
+
+      - name: Apply explainable scoring and postal assignment (scope=explainable-scoring)
+        if: ${{ inputs.scope == 'explainable-scoring' }}
+        run: |
+          VERSION=20260902000200_explainable_scoring
+          FILE="supabase/migrations/${VERSION}.sql"
+          sha256sum "$FILE"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied "${VERSION%%_*}"
+          else
+            npx supabase migration repair --status applied "${VERSION%%_*}" --db-url "$DB_URL"
+          fi
+          psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/postflight/explainable-scoring.sql
+          echo "Explainable scoring applied; 27 defaults, overrides name real rules, engine and matcher read as the caller."
 
       - name: Normalize exact legacy bot ACLs (scope=bot-legacy-acl-normalization)
         if: ${{ inputs.scope == 'bot-legacy-acl-normalization' }}

@@ -5972,3 +5972,54 @@ composes the same figures. The competitor rows for tasks, follow-up
 tracking, and actionable next steps move to HAVE; the teardown in
 `AI/CRM_COMPETITIVE_TEARDOWN.md` records which complaints this closes and
 which it only starts on.
+
+## ADR-229 - A score is a sum you can argue with; an assignment is a line that names the postal code
+
+HubSpot's lead scoring is "complex and clunky", its contact scoring
+"finicky", and its predictive score is a number nobody can dispute because
+nobody can see inside it. PestPac sells "service opportunity
+identification" and "automatic lead assignment" as paid modules. All four
+have the same honest answer: a score that is a SUM of named rules with
+editable points, where every point on an account is printed beside the
+FACT that earned it — "estimate sent (+15), commercial (+15), two
+locations (+10), no activity in 30 days (−10)" — so a salesperson reading
+65 can disagree with any line of it, and change the rule.
+
+**Three models, one engine, nothing stored.** `crm_score_accounts(org,
+model)` is SECURITY INVOKER: it computes one facts row per account from
+the member-scoped tables and asks each active rule whether it applies and
+with what multiplier, keeping the specific sentence beside the points.
+Lead scores leads and prospects (twelve rules: what is on file, the deal,
+the estimate, the portal, recency); churn scores customers (eight: missed
+service, money owed, unresolved sightings, an ending contract, silence);
+upsell scores customers (seven: locations and sightings with no plan, no
+WDO in a year, an accepted estimate with no contract, a renewal due,
+one-off visits that should be a plan, a commercial account with no
+stations). A stored score is stale the moment an invoice is paid, so no
+score is stored; a score is a read.
+
+**Defaults are code; overrides are rows.** The 27 default rules live in
+`crm_scoring_defaults()`, versioned with the schema and identical for every
+workspace, and `SCORING_DEFAULTS` in TypeScript mirrors them under a test
+that compares the two lists. `crm_scoring_rules` holds only what a
+workspace changed — points, or switching a rule off — and a trigger refuses
+an override naming a rule that does not exist. Deleting an override IS
+resetting to the default; nothing writes the default down as if somebody
+chose it.
+
+**Assignment says which postal code matched.** A new account whose billing
+address carries a five-digit postal code inside an ACTIVE territory's
+declared coverage is assigned that territory, its branch and its rep by an
+AFTER INSERT definer — filling only what the caller left blank, so a
+territory somebody chose stays — and a `note` on the account's history says
+"Assigned to territory Harbor north (HRB-N) by postal code 93940". The
+LAST five-digit group is used, because a suite number comes before the
+postal code in most addresses. A backfill runs the same match as the caller
+over every unassigned account and reports the count. Nothing here matches
+on a city name or invents a coverage: an address outside every territory
+stays unassigned, and the page says so.
+
+The copilot gains three skills (warmest leads, churn risk, room to grow),
+each naming the top three with their facts. The competitor rows for lead
+scoring, predictive analytics, service opportunity identification and
+automatic lead assignment move to HAVE.

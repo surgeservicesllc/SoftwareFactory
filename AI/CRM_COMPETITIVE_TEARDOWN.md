@@ -91,9 +91,9 @@ honest, not built.
 | 13 | Sales automation (workflows on prospect behaviour) | Sales | **PARTIAL** — rules recorded (ADR-196); a dry-run that names exactly which records a rule would touch: **BUILD 30**; an executor on a clock: **RED** |
 | 14 | ABM tools | Sales | **N/A** |
 | 15 | Sequences (multi-step email) | Sales | **GATED** (email provider) |
-| 16 | Lead scoring (predictive and manual) | Sales/Marketing | **BUILD 27** — explainable: every point itemised from an editable rule |
+| 16 | Lead scoring (predictive and manual) | Sales/Marketing | **HAVE** (ADR-229) — explainable: every point itemised from an editable rule |
 | 17 | Forecasting | Sales | **HAVE** (ADR-202) with no model; owner-supplied scenario inputs printed beside the figure: **BUILD 32** |
-| 18 | Lead rotation and automatic assignment | Sales | **PARTIAL** — territory → rep exists (ADR-195); assignment on create: **BUILD 27** |
+| 18 | Lead rotation and automatic assignment | Sales | **HAVE** (ADR-229) — by postal code against territory coverage, on create and by backfill, with the reason on the history |
 | 19 | HubSpot Payments | Sales/Commerce | **GATED** (card processor) |
 | 20 | Playbooks | Sales/Service | **PARTIAL** — form templates (ADR-197) are the standardised script |
 | 21 | Forms | Marketing | **HAVE** (ADR-197) |
@@ -104,7 +104,7 @@ honest, not built.
 | 26 | Advanced segmentation / lists | Marketing | **HAVE** (ADR-196) — lists with consent as a record |
 | 27 | Landing pages | Marketing/Content | **N/A** |
 | 28 | Duplicate detection and merge | Marketing/Data | **PARTIAL** — detection on create (ADR-186); an audited merge: **BUILD 28** |
-| 29 | Company scoring and qualification | Marketing | **BUILD 27** (same explainable engine) |
+| 29 | Company scoring and qualification | Marketing | **HAVE** (ADR-229) — the same explainable engine |
 | 30 | SEO recommendations | Marketing | **N/A** |
 | 31 | Smart content / personalisation | Marketing | **N/A** |
 | 32 | A/B testing | Marketing | **N/A** |
@@ -128,7 +128,7 @@ honest, not built.
 | 50 | Programmable automation (JavaScript), webhooks, custom UI extensions | Ops | **N/A** |
 | 51 | Datasets for reporting | Ops | **HAVE** — the dashboards are whole-book SQL, not bounded fetches |
 | 52 | Multi-touch attribution (Enterprise) | Marketing | **HAVE** as records (ADR-196) |
-| 53 | Predictive analytics (Enterprise) | Marketing | **BUILD 27** — churn risk with itemised reasons, no model |
+| 53 | Predictive analytics (Enterprise) | Marketing | **HAVE** (ADR-229) — churn risk with itemised reasons, no model |
 | 54 | Sandbox environments, advanced permissions (Enterprise) | Platform | **N/A** in this phase |
 | 55 | Mobile app | Cross-hub | **HAVE** as responsive web (ADR-210) |
 | 56 | Account Updater / stored payment methods | Commerce | **PARTIAL** — instruments as metadata + mandate (ADR-218); the vault **GATED** |
@@ -176,8 +176,8 @@ honest, not built.
 | 33 | Lead-to-opportunity conversion, expected revenue | **HAVE** (ADR-186) |
 | 34 | Tasks and reminders, follow-up date tracking | **HAVE** (ADR-228) |
 | 35 | Digital contracts, sent for signature | **HAVE** record + signature completeness (ADR-194); e-delivery **GATED** |
-| 36 | Automatic lead assignment | **BUILD 27** |
-| 37 | Service opportunity identification (upsell on closed services) | **BUILD 27** — upsell signals with reasons |
+| 36 | Automatic lead assignment | **HAVE** (ADR-229) |
+| 37 | Service opportunity identification (upsell on closed services) | **HAVE** (ADR-229) — upsell signals with reasons |
 | 38 | Actionable dashboard with recommended next steps | **HAVE** (ADR-228) |
 | 39 | Google Analytics and call-tracking integration, marketing ROI | **GATED** |
 | 40 | Geographic lead mapping | **GATED** (geocoding) |
@@ -250,7 +250,7 @@ with its status.
 | 6 | Workflows are hard to build, hard to visualise past ten branches, "nerve-racking" to set live | RevOps, strategists | Fear of automation | **BUILD 30** — a rule can be DRY-RUN: exactly which records it would touch, before it is ever active; executors stay **RED** |
 | 7 | Importing from Excel silently creates new properties | customer service | Import without consent | **BUILD 28** — import shows every column, requires an explicit mapping, refuses to invent a field, and dry-runs first |
 | 8 | Duplicate companies with no cleanup tools; "inactive and bounced contacts need manual cleanup" | BDRs, marketers | Data hygiene | **PARTIAL** now (detection, ADR-186); **BUILD 28** merge with an audit line; **BUILD 32** hygiene |
-| 9 | Lead scoring is "complex and clunky"; contact scoring "finicky, we have to restart the workflow" | RevOps, marketing | Scoring nobody can explain | **BUILD 27** — a score is a sum of named rules with editable weights, and every point is printed with its reason |
+| 9 | Lead scoring is "complex and clunky"; contact scoring "finicky, we have to restart the workflow" | RevOps, marketing | Scoring nobody can explain | **HAVE** (ADR-229) — a score is a sum of named rules with editable weights, and every point is printed with its reason |
 | 10 | Forecasting tool lacks customisation | RevOps | A model you cannot see | **HAVE** a forecast with NO hidden model (ADR-202); **BUILD 32** owner-supplied scenario inputs, printed beside the figure |
 | 11 | Email template builder limited and dated; landing pages generic | marketers | Design tooling | **N/A** — the send is gated; templates here are text with a transcript of what was sent |
 | 12 | Email deliverability issues; shared-IP reputation | marketers | Sending infrastructure | **GATED** — a provider row; when connected, every send is a `crm_messages` record with its outcome |
@@ -323,7 +323,7 @@ own published feature list against what the field ships.
 | 15 | No multi-unit property model | *(inferred)* | **HAVE** (ADR-215) |
 | 16 | No truck-stock movement ledger | *(inferred)* — "inventory" is listed without locations | **HAVE** (ADR-213) |
 | 17 | No autopay authorisation / mandate | *(inferred)* | **PARTIAL** (ADR-218) |
-| 18 | No lead scoring, churn risk or next-best-action | *(inferred)* | **HAVE** next step (ADR-228); **BUILD 27** |
+| 18 | No lead scoring, churn risk or next-best-action | *(inferred)* | **HAVE** (ADR-228, ADR-229) |
 | 19 | No duplicate detection | *(inferred)* | **HAVE** (ADR-186) |
 | 20 | No provider registry / integration status | *(inferred)* — "third-party integrations" listed generically | **HAVE** (ADR-207) |
 | 21 | Small vendor, single product line — continuity risk | *(inferred)* | Whole-book export **BUILD 28** is the customer's insurance either way |
@@ -344,8 +344,8 @@ cadence: migration → routes → page → tests → PR → four real checks →
 | Inc | Name | Closes | Status |
 |-----|------|--------|--------|
 | 26 | **Follow-ups and the suggested next step** (ADR-228): `crm_tasks`, `crm_followup_dismissals`, `crm_suggest_followups()` — seven rules read live, each with its reason; accept-once-while-open; done writes history | HubSpot 21, 6 (partly); PestPac 23, 7 (partly); PestBoss 18 | **SHIPPED** |
-| 27 | **Explainable scoring**: lead score, churn risk and upsell signals as sums of named, weighted, editable rules with every point itemised; automatic lead assignment by territory | HubSpot 9, 16, 29, 53; PestPac 36, 37; PestBoss 18 | next |
-| 28 | **Data you own**: import with explicit column mapping and a dry run; audited duplicate merge; whole-book export | HubSpot 7, 8; PestPac 9, 17; PestBoss 21 | |
+| 27 | **Explainable scoring** (ADR-229): lead score, churn risk and upsell signals as sums of named, weighted, editable rules with every point itemised; automatic lead assignment by postal code with the reason on the history | HubSpot 9, 16, 29, 53; PestPac 36, 37; PestBoss 18 | **SHIPPED** |
+| 28 | **Data you own**: import with explicit column mapping and a dry run; audited duplicate merge; whole-book export | HubSpot 7, 8; PestPac 9, 17; PestBoss 21 | next |
 | 29 | **Job profitability**: technician cost rates and lot unit costs; margin per visit, plan, branch, with every input printed | PestPac 8 | |
 | 30 | **Nothing hidden**: schedule audit (double-bookings, unrouted visits, due plans unscheduled), automation dry-run, dashboard drill-down | HubSpot 5, 6; PestPac 7, 10 | |
 | 31 | **The customer's side of the conversation**: post-service survey in the portal, request SLA clock, two-way portal messages | HubSpot 25, 36, 40, 42; PestPac 11; PestBoss 23 | |

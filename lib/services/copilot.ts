@@ -48,6 +48,24 @@ export const COPILOT_SKILLS = [
     example: "What should I follow up on today?",
     keywords: ["follow up", "follow-up", "followup", "to do", "todo", "my plate", "next step", "what should i"],
   },
+  {
+    id: "hot_leads",
+    label: "Warmest leads",
+    example: "Which leads are the warmest right now?",
+    keywords: ["warmest", "hottest", "hot lead", "warm lead", "best lead", "lead score", "top lead"],
+  },
+  {
+    id: "churn_risk",
+    label: "Churn risk",
+    example: "Which customers are at risk of leaving?",
+    keywords: ["churn", "at risk", "risk of leaving", "might cancel", "losing", "leaving"],
+  },
+  {
+    id: "upsell",
+    label: "Room to grow",
+    example: "Where is there room to sell more?",
+    keywords: ["upsell", "sell more", "cross-sell", "cross sell", "room to grow", "expand", "grow the account"],
+  },
 ] as const;
 
 export type CopilotSkillId = (typeof COPILOT_SKILLS)[number]["id"];
@@ -149,6 +167,29 @@ export function composeFollowupsAnswer(facts: {
     .join("; ");
   const more = facts.suggestionCount > 3 ? ` and ${facts.suggestionCount - 3} more on the Follow-ups page` : "";
   return `${owed} Your records suggest: ${top}${more}.`;
+}
+
+export function composeSignalsAnswer(facts: {
+  model: "lead" | "churn" | "upsell";
+  scored: number;
+  top: ReadonlyArray<{ name: string; score: number; facts: ReadonlyArray<string> }>;
+}): string {
+  const noun = facts.model === "lead" ? "lead or prospect" : "customer";
+  if (facts.scored === 0) {
+    return `There is no ${noun} to score yet.`;
+  }
+  const lead = {
+    lead: "The warmest leads",
+    churn: "The customers most at risk",
+    upsell: "The customers with the most room to grow",
+  }[facts.model];
+  if (facts.top.length === 0) {
+    return `${lead}: none — no rule applies to any of the ${facts.scored} scored right now.`;
+  }
+  const lines = facts.top
+    .map((entry) => `${entry.name} at ${entry.score} (${entry.facts.slice(0, 3).join("; ") || "no rule applies"})`)
+    .join("; ");
+  return `${lead}, scored from your own records: ${lines}. Every point is itemised on the Signals page.`;
 }
 
 /** The refusal that teaches: what this copilot can actually answer. */

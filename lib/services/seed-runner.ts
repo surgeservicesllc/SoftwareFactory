@@ -2423,6 +2423,28 @@ export async function runSeed(
   if ("error" in tasks) return tasks;
 
   /*
+   * Explainable scoring (ADR-229). The 27 default rules live in the
+   * database; only OVERRIDES are rows. A workspace changes a handful, so
+   * three are seeded — one per model — each with the reason a person gave.
+   */
+  const scoringRuleRows: SeedRow[] = [
+    {
+      organization_id: org, model: "lead", rule_key: "commercial", points: 20, active: true,
+      note: "Commercial work is where this branch makes its margin.", created_by: userId,
+    },
+    {
+      organization_id: org, model: "churn", rule_key: "overdue_invoice", points: 25, active: true,
+      note: "An unpaid bill has been the first sign every time.", created_by: userId,
+    },
+    {
+      organization_id: org, model: "upsell", rule_key: "wdo_stale", points: 10, active: true,
+      note: "Most of the book is commercial; termite letters matter less here.", created_by: userId,
+    },
+  ];
+  const scoringRules = await insertAll(client, "crm_scoring_rules", scoringRuleRows, "id");
+  if ("error" in scoringRules) return scoringRules;
+
+  /*
    * Autopay authorization (ADR-218). The instrument is metadata only — a
    * brand, four digits and the NAME of the vault purpose a processor token
    * would be filed under. Nothing here is or resembles a card number, and

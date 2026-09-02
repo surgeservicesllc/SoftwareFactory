@@ -7,6 +7,7 @@ import {
   composeOverdueAnswer,
   composeRevenueAnswer,
   composeRoutesAnswer,
+  composeSignalsAnswer,
   composeUnknownAnswer,
   composeVisitsAnswer,
   matchQuestion,
@@ -98,5 +99,27 @@ describe("the follow-ups answer", () => {
   it("says plainly when nothing is owed and nothing is suggested", () => {
     expect(composeFollowupsAnswer({ overdue: 0, dueToday: 0, suggestions: [], suggestionCount: 0 }))
       .toBe("No open follow-ups are due today or overdue. Your records suggest nothing further right now.");
+  });
+});
+
+describe("the signals answer", () => {
+  it("names the top accounts with their scores and the facts behind them", () => {
+    const answer = composeSignalsAnswer({
+      model: "churn",
+      scored: 12,
+      top: [
+        { name: "Harborview Foods", score: 75, facts: ["An active plan is 30 days past due", "$486.00 past due", "No activity in 90 days", "extra"] },
+        { name: "Maple Street Homes", score: 10, facts: ["No activity in 90 days"] },
+      ],
+    });
+    expect(answer).toContain("The customers most at risk");
+    expect(answer).toContain("Harborview Foods at 75 (An active plan is 30 days past due; $486.00 past due; No activity in 90 days)");
+    expect(answer).not.toContain("extra");
+    expect(answer).toContain("Signals page");
+  });
+
+  it("says when nobody scores rather than inventing a leader", () => {
+    expect(composeSignalsAnswer({ model: "lead", scored: 0, top: [] })).toBe("There is no lead or prospect to score yet.");
+    expect(composeSignalsAnswer({ model: "upsell", scored: 4, top: [] })).toContain("none — no rule applies to any of the 4");
   });
 });

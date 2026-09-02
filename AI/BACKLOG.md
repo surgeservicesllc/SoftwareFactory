@@ -70,10 +70,17 @@ anything on a timer stays RED and owner-gated.
   by index. /Services/followups; copilot skill "What should I follow up on
   today?"; seeded book gains 400 tasks. 20260902000100; hosted apply:
   scope=followups after merge.
-- [ ] Increment 27 (explainable scoring): lead score, churn risk and upsell
-  signals as sums of named, weighted, EDITABLE rules with every point
-  itemised; automatic lead assignment by territory on create. Closes
-  HubSpot 9/16/29/53, PestPac 36/37.
+- [x] Increment 27 (ADR-229): explainable scoring — `crm_scoring_defaults()`
+  (27 rules in code, mirrored in TypeScript under a parity test),
+  `crm_scoring_rules` holding only a workspace's overrides (a trigger
+  refuses an unknown rule; delete = reset), and `crm_score_accounts()`
+  computing lead / churn / upsell live as the caller with every point
+  printed beside its fact. Assignment by the last postal code in the
+  billing address on create and by backfill, each writing a history line
+  naming the territory and the postal code; a chosen territory is never
+  overridden. /Services/signals; three copilot skills. 20260902000200;
+  hosted apply: scope=explainable-scoring after merge. Closes HubSpot
+  9/16/29/53, PestPac 36/37, PestBoss 18.
 - [ ] Increment 28 (data you own): CSV import with an explicit column
   mapping and a dry run that refuses to invent a field; audited duplicate
   merge (survivor chosen, every child re-pointed by a definer, a merge

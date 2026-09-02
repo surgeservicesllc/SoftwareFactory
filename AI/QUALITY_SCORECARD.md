@@ -2,6 +2,21 @@
 
 Last reviewed: 2026-08-31
 
+**Addendum, 2026-09-02 latest+50 - explainable scoring and assignment
+(ADR-229):** services-scoring.behavior 10 (defaults in code and database
+the same 27; grant posture; a lead at 65 with every fact including "An
+open opportunity worth $2,500.00" and "No activity ever recorded"; churn
+at 75 with "An active plan is 30 days past due" and "$486.00 past due";
+the calm customer at 30 on exactly no_visit_90d + silent_90d; upsell at 60
+highest-first with "1 of 2 locations has no active plan"; override to 80,
+switch-off to 90, unknown rule refused by name, delete resets to 65; rival
+scores nothing; on-create assignment with the postal-code history line;
+backfill 0 then 1 once coverage grows; a chosen territory kept).
+services-scoring-panel 5 (points beside facts, model switch re-reads,
+save/reset bodies, Reset only when overridden, assignment count repeated
+verbatim). services-copilot +2 (the signals composer). Seed audit 63/63
+with three overrides; all replay and roster guards green.
+
 **Addendum, 2026-09-02 latest+49 - follow-ups and the suggested next step
 (ADR-228):** services-followups.behavior 9 (RLS forced and exact grants on
 both tables; all seven rules with their computed reasons and high-first

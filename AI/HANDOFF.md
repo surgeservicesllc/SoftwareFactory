@@ -2,6 +2,27 @@
 
 Last updated: 2026-08-31
 
+## Newest (2026-09-02, latest+50): scores you can argue with (ADR-229)
+
+SCORING: a score is a READ. `crm_score_accounts` computes facts per account
+and applies the effective rules; do not add a stored score column — the
+whole point is that a paid invoice changes the number immediately. New
+rules go in THREE places or the parity test fails: the VALUES list in
+`crm_scoring_defaults()`, `SCORING_DEFAULTS` in lib/services/scoring.ts,
+and the two CASE branches (multiplier, fact) in the engine. Rule keys may
+carry digits (`silent_30d`) — the CHECK is `^[a-z][a-z0-9_]{2,39}$`, and an
+earlier draft that forbade digits refused six of the defaults.
+
+ASSIGNMENT: the LAST five-digit group in the billing address is the
+postal code (suite numbers come first). Match only on `postal_codes` of an
+ACTIVE territory; never on city. Only fill nulls. The on-create writer is
+the one DEFINER in this increment and is not callable; the backfill is
+INVOKER and writes history as the caller.
+
+WORKFLOW: 453,550 bytes against the 455,000 guard — the NEXT scope will
+breach it. Increment 28 must extract something (the three mutating giants
+named in the backlog) in its own change BEFORE adding its scope.
+
 ## Newest (2026-09-02, latest+49): follow-ups, and the program behind them (ADR-228)
 
 Read `AI/CRM_COMPETITIVE_TEARDOWN.md` before touching the CRM again: it is
