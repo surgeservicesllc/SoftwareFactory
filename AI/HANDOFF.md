@@ -2,7 +2,29 @@
 
 Last updated: 2026-09-02
 
-## Newest (2026-09-02, latest+61): the schedule bends (ADR-239)
+## Newest (2026-09-02, latest+62): conversation routing (ADR-240) — the teardown is closed
+
+THE ORDER IS THE RULE. Branch manager of the address's territory → the
+territory's rep → the least-loaded CSR or dispatcher → nobody. Every
+suggestion says which step chose it. Do not add a rule table, round-robin
+or a weighting: a suggestion that cannot be explained in one sentence is
+one nobody will trust when it is wrong.
+
+SUGGESTED, NOT ASSIGNED. Nothing auto-assigns on insert; a person accepts
+the suggestion (or picks somebody else) and the timeline says who did.
+
+NOTHING BUILDABLE REMAINS. Increments 26–36 closed every GAP/PARTIAL row
+of the teardown that needs no provider and no owner-gated authentication
+change. What is left is GATED (sending, charging, locating, syncing,
+listening, generating) or RED (TOTP, executors on a clock). The next
+scope, if any, needs owner direction, not a general goal.
+
+HOSTED: scope=forms-conditions run 33591853778 succeeded on main f178847;
+scope=schedule-bends run 33593186976 dispatched on main b67b31c (record its
+result); scope=conversation-routing is dispatched after its merge; record
+both outcomes here and in CURRENT_STATE.
+
+## Older (2026-09-02, latest+61): the schedule bends (ADR-239)
 
 ONE OUTCOME PER ROW. `crm_work_orders_bulk_edit` never fails a batch for
 one bad visit; it returns applied/refused per id with the reason in words,
@@ -14,8 +36,9 @@ A PROJECT IS ITS VISITS. There is no project-level status beyond
 `cancelled`; planned/active/done are counted from the visits every time.
 Do not store progress on the project row.
 
-HOSTED: scope=schedule-bends is dispatched after merge; record the run id
-here and in CURRENT_STATE. scope=forms-conditions likewise.
+HOSTED: scope=schedule-bends run 33593186976 dispatched on main b67b31c;
+record its result here and in CURRENT_STATE. scope=forms-conditions: run
+33591853778.
 
 ## Older (2026-09-02, latest+60): the form asks the next question (ADR-238)
 
@@ -37,8 +60,7 @@ EVERY OPERAND TEST IN THE SHAPE CHECK IS `coalesce(…, false)`. A CHECK
 waves NULL through; `{op: equals}` without a value once passed for that
 reason. Keep the wrapping when adding an op.
 
-HOSTED: scope=forms-conditions is dispatched after merge; record the run
-id here and in CURRENT_STATE. Workflow 411,640 of 420,000.
+HOSTED: scope=forms-conditions run 33591853778 succeeded on main f178847. Workflow 411,640 of 420,000.
 
 ## Older (2026-09-02, latest+59): what people look up (ADR-237)
 

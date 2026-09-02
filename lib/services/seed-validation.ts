@@ -185,6 +185,9 @@ const SPECS: Spec[] = [
   {
     table: "crm_portal_requests",
     optional: [
+      "assignee_employee_id",
+      "assigned_at",
+      "assigned_by",
       "property_id",
       "portal_user_id",
       "detail",

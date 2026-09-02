@@ -13,6 +13,7 @@ import type {
 } from "@/components/services/types";
 import { SLA_STATE_LABELS, type SlaState } from "@/lib/services/customers-side";
 import { cn } from "@/lib/cn";
+import { waitingLabel, type QueueEmployee, type RequestQueueView } from "@/lib/services/conversation-routing";
 
 /**
  * The staff side of the customer portal: invitations, and the queue of what
@@ -89,16 +90,23 @@ export function ServicesPortalPanel() {
   const [threadAccount, setThreadAccount] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [policyDraft, setPolicyDraft] = useState<Record<string, { acknowledgeHours: string; resolveHours: string }>>({});
+  const [queue, setQueue] = useState<{ queue: RequestQueueView[]; employees: QueueEmployee[]; myEmployeeId: string | null } | null>(null);
+  const [mineOnly, setMineOnly] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
-      const [usersRes, requestsRes, clockRes, surveysRes, threadsRes] = await Promise.all([
+      const [usersRes, requestsRes, clockRes, surveysRes, threadsRes, queueRes] = await Promise.all([
         fetch("/api/services/portal", { headers: { accept: "application/json" } }),
         fetch("/api/services/portal/requests", { headers: { accept: "application/json" } }),
         fetch("/api/services/portal/sla", { headers: { accept: "application/json" } }),
         fetch("/api/services/portal/surveys", { headers: { accept: "application/json" } }),
         fetch("/api/services/portal/messages", { headers: { accept: "application/json" } }),
+        fetch("/api/services/portal/queue", { headers: { accept: "application/json" } }),
       ]);
+      if (queueRes.ok) {
+        const queueBody = (await queueRes.json()) as Partial<{ queue: RequestQueueView[]; employees: QueueEmployee[]; myEmployeeId: string | null }>;
+        setQueue(Array.isArray(queueBody.queue) ? { queue: queueBody.queue, employees: Array.isArray(queueBody.employees) ? queueBody.employees : [], myEmployeeId: queueBody.myEmployeeId ?? null } : null);
+      }
       const body = (await requestsRes.json()) as PortalRequestsPayload & { error?: { message?: string } };
       if (!requestsRes.ok) {
         setListError(body.error?.message ?? "Service requests could not be read.");
@@ -221,6 +229,26 @@ export function ServicesPortalPanel() {
     return () => window.clearTimeout(kickoff);
   }, [refresh]);
 
+  const assignRequest = useCallback(async (requestId: string, employeeId: string | null) => {
+    setActionError(null);
+    setBusy(requestId);
+    try {
+      const response = await fetch(`/api/services/portal/requests/${requestId}/assignment`, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ employeeId }),
+      });
+      if (!response.ok) {
+        const body = (await response.json().catch(() => null)) as { error?: { message?: string } } | null;
+        setActionError(body?.error?.message ?? "The request could not be assigned.");
+        return;
+      }
+      await refresh();
+    } finally {
+      setBusy(null);
+    }
+  }, [refresh]);
+
   const patchRequest = useCallback(
     async (requestId: string, changes: Record<string, unknown>) => {
       setBusy(requestId);
@@ -332,8 +360,14 @@ export function ServicesPortalPanel() {
         <Card>
           <SectionTitle
             title="Service requests"
-            description="The customer's own words, and the answer beside them. A reply never overwrites what they wrote — they are separate columns, on purpose."
+            description="The customer's own words, and the answer beside them. A reply never overwrites what they wrote — they are separate columns, on purpose. Each open request names who has it, or who should — the branch manager for the address's territory, then its rep, then the least-loaded CSR — with the reason."
           />
+          {queue !== null && queue.myEmployeeId !== null ? (
+            <label className="mt-3 flex items-center gap-2 text-xs text-muted">
+              <input type="checkbox" checked={mineOnly} onChange={(event) => setMineOnly(event.target.checked)} aria-label="Only requests assigned to me" />
+              Mine only ({queue.queue.filter((row) => row.assigneeEmployeeId === queue.myEmployeeId).length})
+            </label>
+          ) : null}
           {(requests?.requests ?? []).length === 0 ? (
             <p className="mt-4 text-sm text-muted" data-testid="services-portal-requests-empty">
               Nothing has come in yet. Invite a customer on the Portal logins tab, and anything they
@@ -349,11 +383,17 @@ export function ServicesPortalPanel() {
                     <th className="py-2 pr-3 font-medium">Sent</th>
                     <th className="py-2 pr-3 font-medium">Preferred</th>
                     <th className="py-2 pr-3 font-medium">Status</th>
+                    <th className="py-2 pr-3 font-medium">Assigned</th>
                     <th className="py-2 font-medium">Reply</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-line">
-                  {(requests?.requests ?? []).slice(0, 100).map((request) => (
+                  {(requests?.requests ?? [])
+                    .filter((request) => !mineOnly || (queue !== null && request.assigneeEmployeeId === queue.myEmployeeId))
+                    .slice(0, 100)
+                    .map((request) => {
+                    const queued = queue?.queue.find((row) => row.requestId === request.id) ?? null;
+                    return (
                     <tr key={request.id}>
                       <td className="py-2.5 pr-3 text-foreground">
                         {request.summary}
@@ -388,6 +428,47 @@ export function ServicesPortalPanel() {
                             ))}
                           </span>
                         ) : null}
+                      </td>
+                      <td className="py-2.5 pr-3" data-testid={`services-request-assignment-${request.id}`}>
+                        {request.open && queue !== null ? (
+                          <span className="flex flex-col gap-1">
+                            <select
+                              value={request.assigneeEmployeeId ?? ""}
+                              disabled={busy === request.id}
+                              onChange={(event) => void assignRequest(request.id, event.target.value === "" ? null : event.target.value)}
+                              className="input min-h-8 py-1 text-xs"
+                              aria-label={`Assignee for ${request.summary}`}
+                            >
+                              <option value="">Nobody yet</option>
+                              {queue.employees.map((employee) => (
+                                <option key={employee.id} value={employee.id}>{employee.name}</option>
+                              ))}
+                            </select>
+                            {queued !== null && queued.assigneeEmployeeId === null ? (
+                              queued.suggestedEmployeeId !== null ? (
+                                <span className="text-xs text-muted" data-testid={`services-request-suggestion-${request.id}`}>
+                                  Suggested: <span className="text-foreground">{queued.suggestedName}</span> — {queued.suggestedReason}
+                                  {" "}
+                                  <button
+                                    type="button"
+                                    disabled={busy === request.id}
+                                    onClick={() => void assignRequest(request.id, queued.suggestedEmployeeId)}
+                                    className="btn btn-secondary px-2 py-0.5 text-xs"
+                                    data-testid={`services-request-accept-${request.id}`}
+                                  >
+                                    Accept
+                                  </button>
+                                </span>
+                              ) : (
+                                <span className="text-xs text-muted" data-testid={`services-request-suggestion-${request.id}`}>{queued.suggestedReason}</span>
+                              )
+                            ) : queued !== null ? (
+                              <span className="text-xs text-faint">waiting {waitingLabel(queued.waitingMinutes)}</span>
+                            ) : null}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-muted">{queued?.assigneeName ?? "—"}</span>
+                        )}
                       </td>
                       <td className="py-2.5">
                         {request.response !== null ? (
@@ -437,7 +518,8 @@ export function ServicesPortalPanel() {
                         )}
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

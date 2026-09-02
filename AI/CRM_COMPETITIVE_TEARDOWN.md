@@ -113,7 +113,7 @@ honest, not built.
 | 35 | Content Remix, Brand Voice, AI writer, AI image/video | Content | **GATED** (AI provider) |
 | 36 | Ticketing / help desk | Service | **HAVE** — portal requests with a staff response (ADR-198) and a clock on every one, computed from stamps the row sets itself (ADR-233) |
 | 37 | Live chat and chatbot | Service | **PARTIAL** — two-way portal messages threaded on the account (ADR-233); live chat and a bot need a provider and stay **GATED** |
-| 38 | Conversation routing | Service | **GAP** |
+| 38 | Conversation routing | Service | **HAVE** (ADR-240) — a suggested person for every open request with the reason printed (branch manager of the address's territory, then its rep, then the least-loaded CSR, then nobody, said plainly); assignment recorded on the timeline by name; the queue by person |
 | 39 | Service automation (status notifications) | Service | **PARTIAL** — transactional notices compose and address (ADR-217); sending **GATED** |
 | 40 | NPS / customer satisfaction surveys | Service | **HAVE** (ADR-233) — a 1–5 rating asked in the portal after each completed visit, once, written only by the customer; average, response rate, distribution and detractors on the staff page |
 | 41 | Conversation intelligence | Service | **GATED** (AI + telephony) |
@@ -353,6 +353,7 @@ cadence: migration → routes → page → tests → PR → four real checks →
 | 33 | **What people look up** (ADR-237): a knowledge base written once and read by staff and customers, ranked by printed arithmetic; a calendar file for a booked visit; chemical-lot labels | HubSpot 10, 43; PestPac 13 | **SHIPPED** |
 | 34 | **The form asks the next question** (ADR-238): conditional questions checked by the database, completion counted over what is asked, forms assigned by a visit's service type; the answering sheet and the form builder | PestPac 14, complaint 13 | **SHIPPED** |
 | 35 | **The schedule bends** (ADR-239): bulk visit edit with one outcome per row, and multi-day projects as one visit per day | PestBoss 4, 7 | **SHIPPED** |
+| 36 | **Conversation routing** (ADR-240): a suggested assignee with the reason printed, assignment on the timeline, the queue by person | HubSpot 38 | **SHIPPED** |
 
 **What stays outside this program, and why.** Sending (email, SMS, voice),
 charging (card, ACH, in-field), locating (geocoding, GPS), syncing

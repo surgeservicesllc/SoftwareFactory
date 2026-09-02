@@ -1450,11 +1450,19 @@ export async function runSeed(
     if (accountId === undefined) return [];
     const visitOffset = visitOffsets.get(account.name) ?? 0;
     const seats = account.portalUsers ?? [];
-    return (account.portalRequests ?? []).map((request) => {
+    return (account.portalRequests ?? []).map((request, requestIndex) => {
       const seat = request.portalSeat === undefined ? undefined : seats[request.portalSeat];
+      // Every third request already has a person (ADR-240); the rest carry
+      // a suggestion computed live and wait for somebody to accept it.
+      const assignee = (account.index + requestIndex) % 3 === 0
+        ? employeeId((account.index + requestIndex) % dataset.employees.length)
+        : null;
       return {
         organization_id: org,
         account_id: accountId,
+        assignee_employee_id: assignee,
+        assigned_at: assignee === null ? null : daysAgoIso(request.submittedDaysAgo),
+        assigned_by: assignee === null ? null : userId,
         property_id:
           request.propertySeat === undefined ? null : propertyFor(account.name, request.propertySeat),
         portal_user_id:

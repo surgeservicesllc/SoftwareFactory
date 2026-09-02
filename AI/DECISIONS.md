@@ -6479,3 +6479,38 @@ because it happened.
 change to all of them, then lists every outcome by name; a Projects card
 with progress and a two-step cancel; "Day 2 of 4" beside a visit that is
 one day of a project.
+
+## ADR-240 - Conversation routing: a suggested person with the reason printed, and an assignment the timeline remembers
+
+HubSpot routes conversations by rules nobody can read back. A request
+that lands on the help desk should land on a person, and the reason it
+landed on them should be a sentence.
+
+**The order is the rule.** `crm_request_suggested_assignee` walks: the
+active branch manager of the territory the account's billing address
+falls in (`crm_territory_for_address`, ADR-229's resolver); failing that
+the territory's active rep; failing that the least-loaded active CSR or
+dispatcher, ties broken by name; failing that nobody. Every branch
+returns the step that chose it in words, the territory and postal code
+it used, and the person's open load. There is no rule table, no
+round-robin and no weighting, deliberately: a suggestion that cannot be
+explained in one sentence is one nobody will trust when it is wrong, and
+a wrong routing on a help desk is a customer waiting on nobody.
+
+**Suggested, not assigned.** Nothing assigns on insert. The queue shows
+the suggestion beside every unassigned request; a person accepts it or
+picks somebody else, and `crm_request_assign` records "Request assigned
+to Ana Cruz." on the account's timeline with who did it. An inactive
+person is refused; null unassigns and is recorded too. The pairing of
+assignee and moment is a CHECK.
+
+**The queue is by person.** `crm_request_queue` lists open requests
+unassigned-first, then oldest, with the assignee's name or the
+suggestion; `crm_my_employee` resolves the caller's own staff record so
+"mine" is a filter and not a guess. The copilot's "What is unassigned on
+the help desk?" names the oldest and its suggestion.
+
+**This closes the teardown.** Increments 26 through 36 closed every
+GAP or PARTIAL row that needed no provider and no owner-gated
+authentication change. What remains is GATED on a provider the owner
+opens or RED on owner direction, and stays recorded as such.
