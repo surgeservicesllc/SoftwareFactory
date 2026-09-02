@@ -78,6 +78,18 @@ export const COPILOT_SKILLS = [
     example: "What contradicts in the schedule?",
     keywords: ["wrong with", "double book", "double-book", "overlap", "unrouted", "schedule audit", "contradict", "conflict"],
   },
+  {
+    id: "customer_ratings",
+    label: "How customers rate us",
+    example: "How are customers rating us?",
+    keywords: ["rating", "rated", "survey", "satisfaction", "nps", "how are customers", "feedback"],
+  },
+  {
+    id: "help_desk",
+    label: "What is late on the help desk",
+    example: "Which requests are past their promise?",
+    keywords: ["past their promise", "past promise", "sla", "help desk", "unanswered request", "late request", "requests are late", "waiting on us"],
+  },
 ] as const;
 
 export type CopilotSkillId = (typeof COPILOT_SKILLS)[number]["id"];
@@ -245,6 +257,53 @@ export function composeScheduleAuditAnswer(facts: {
     .map((finding) => `${finding.account} — ${finding.label.toLowerCase()}: ${finding.detail}`)
     .join("; ");
   return `${facts.total} contradiction${facts.total === 1 ? "" : "s"} in the next ${facts.days} days (${kinds}).${urgent} First: ${worst}. Every one is listed on the Schedule page with the rows involved.`;
+}
+
+export function composeRatingsAnswer(facts: {
+  days: number;
+  responses: number;
+  completedVisits: number;
+  averageScore: number | null;
+  responseRateBps: number | null;
+  detractors: ReadonlyArray<{ account: string; score: number; comment: string | null }>;
+}): string {
+  if (facts.responses === 0) {
+    return facts.completedVisits === 0
+      ? `No visits were completed in the last ${facts.days} days, so nobody was asked.`
+      : `${facts.completedVisits} visits were completed in the last ${facts.days} days and none has been rated yet — customers are asked in the portal after each completed visit.`;
+  }
+  const rate = facts.responseRateBps === null ? "" : ` (${(facts.responseRateBps / 100).toFixed(0)}% of ${facts.completedVisits} completed visits)`;
+  const average = facts.averageScore === null ? "no average" : `${facts.averageScore.toFixed(2)} out of 5`;
+  const worst = facts.detractors.length === 0
+    ? "Nobody rated a visit 1 or 2."
+    : `${facts.detractors.length} rated a visit 1 or 2 — call back ${facts.detractors
+        .slice(0, 3)
+        .map((entry) => `${entry.account} (${entry.score}/5${entry.comment ? `: "${entry.comment}"` : ""})`)
+        .join("; ")}.`;
+  return `${facts.responses} rating${facts.responses === 1 ? "" : "s"} in the last ${facts.days} days${rate}, averaging ${average}. ${worst} Every response is on the Customer Portal page under Ratings.`;
+}
+
+export function composeHelpDeskAnswer(facts: {
+  open: number;
+  overdue: number;
+  late: ReadonlyArray<{ account: string; kind: string; summary: string; waitingMinutes: number | null; promise: string }>;
+}): string {
+  if (facts.open === 0) return "Nothing is open on the help desk.";
+  if (facts.overdue === 0) {
+    return `${facts.open} request${facts.open === 1 ? " is" : "s are"} open and every one is inside its promise.`;
+  }
+  const lines = facts.late
+    .slice(0, 3)
+    .map((entry) => {
+      const waited = entry.waitingMinutes === null
+        ? ""
+        : entry.waitingMinutes < 120
+          ? ` after ${entry.waitingMinutes} min`
+          : ` after ${(entry.waitingMinutes / 60).toFixed(1)} h`;
+      return `${entry.account} — ${entry.kind}: "${entry.summary}" (${entry.promise} overdue${waited})`;
+    })
+    .join("; ");
+  return `${facts.overdue} of ${facts.open} open requests ${facts.overdue === 1 ? "is" : "are"} past a promise. First: ${lines}. The full clock is on the Customer Portal page.`;
 }
 
 /** The refusal that teaches: what this copilot can actually answer. */

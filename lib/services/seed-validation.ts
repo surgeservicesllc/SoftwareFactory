@@ -572,6 +572,23 @@ const SPECS: Spec[] = [
       + "about how the book arrived.",
   },
   {
+    table: "crm_portal_messages",
+    optional: ["request_id", "read_at"],
+    parents: [{ column: "account_id", table: "crm_accounts" }],
+    floorExempt:
+      "A thread exists only where a customer holds a portal seat, and only the "
+      + "staff side can be seeded: the customer's messages are written through "
+      + "their own login (ADR-233), which the seeder cannot hold.",
+  },
+  {
+    table: "crm_sla_policies",
+    optional: [],
+    parents: [],
+    floorExempt:
+      "At most six rows per workspace, one per request kind; the defaults live "
+      + "in the schema and the seed overrides one (ADR-233).",
+  },
+  {
     table: "crm_scoring_rules",
     optional: ["note"],
     enumColumn: "model",
@@ -629,6 +646,10 @@ export const SEED_SPEC_TABLES: readonly string[] = SPECS.map((spec) => spec.tabl
  * skipping work: each says why 250 rows of it would be fiction.
  */
 export const DELIBERATELY_UNSEEDED: Readonly<Record<string, string>> = {
+  crm_portal_surveys:
+    "A rating is the customer's own word, written only through their portal "
+    + "login (ADR-233). Staff hold no INSERT on the table, so the seeder — "
+    + "which writes as a member — cannot fabricate one, and should not.",
   crm_followup_dismissals:
     "A dismissal is one person's decision about one computed suggestion "
     + "(ADR-228). Seeding it would fabricate judgement nobody exercised, "

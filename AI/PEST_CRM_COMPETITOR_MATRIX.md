@@ -181,6 +181,9 @@ built.
 | **Equipment and fleet/asset management** | ServSuite, FieldRoutes | **HAVE** (ADR-201) — assets, an append-only ledger, assignment, service schedules and meter readings that cannot run backwards. GPS telemetry beside it stays **Not Connected**. |
 | **Schedule audit: double bookings, slipped and unrouted visits, due plans with no visit, arrivals outside the promised window, post-routing reassignment** | PestPac (conflict detection) | **HAVE** (ADR-232) — computed live from the schedule itself on every read, named with the rows involved, shown above the board and answered by the copilot. |
 | **Automation dry run** | HubSpot | **HAVE** (ADR-232) — a STABLE function lists exactly which records a rule would touch right now, what it would do to each and why it would not; coverage stated first; the send stays **Not Connected** and executors stay **RED**. |
+| **Post-visit customer rating** | HubSpot (surveys), PestPac (CustomerConnect) | **HAVE** (ADR-233) — one 1–5 rating per completed visit, asked in the portal and written only through the customer's own definer; staff read, never write; average, response rate against completed visits, distribution and detractors. |
+| **Help-desk clock with per-kind promises** | HubSpot Service Hub | **HAVE** (ADR-233) — acknowledged_at / first_response_at stamped once by the request row, defaults per kind in the schema, overrides per workspace, states computed live including 'unrecorded'. |
+| **Two-way portal messages** | PestPac (CustomerConnect) | **HAVE** (ADR-233) — a thread on the account either side writes, immutable once sent, read marks both ways; the customer writes through a definer scoped to their own account. |
 | **Call centre / phone integration** | FieldRoutes, PestPac | **GAP** |
 
 ## Build order

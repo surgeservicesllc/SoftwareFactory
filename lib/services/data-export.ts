@@ -68,12 +68,15 @@ export const CRM_EXPORT_TABLES = [
   "crm_wdo_inspections",
   "crm_wdo_findings",
   "crm_portal_users",
+  "crm_portal_messages",
   "crm_portal_requests",
+  "crm_portal_surveys",
   "crm_field_submissions",
   "crm_service_integrations",
   "crm_tasks",
   "crm_followup_dismissals",
   "crm_scoring_rules",
+  "crm_sla_policies",
   "crm_imports",
 ] as const;
 

@@ -89,6 +89,13 @@ const BATCH = 500;
 
 type SeedRow = Record<string, unknown>;
 
+const STAFF_MESSAGE_BODIES = [
+  "Confirmed for Tuesday's route; Rosa will call from the gate.",
+  "The report from the last visit is filed under Documents on your portal.",
+  "We saw your note about the loading dock and added it to the visit instructions.",
+  "Monitoring stations were reset on the last visit; the trend is on your Stations tab.",
+] as const;
+
 /**
  * Insert in chunks, returning the selected rows in insert order. The rows
  * are shaped per table by their callers, so the payload is untyped here on
@@ -1393,6 +1400,48 @@ export async function runSeed(
   });
   const portalRequests = await insertAll(client, "crm_portal_requests", portalRequestRows, "id");
   if ("error" in portalRequests) return portalRequests;
+
+  /* ------------------------------------------ the customer's side (31) */
+
+  // Requests come back in insert order, so the first request of each
+  // account is the one a staff message can be threaded on.
+  const firstRequestByAccount = new Map<string, string>();
+  portalRequests.data.forEach((row, index) => {
+    const accountId = portalRequestRows[index]?.account_id as string | undefined;
+    if (accountId !== undefined && !firstRequestByAccount.has(accountId)) {
+      firstRequestByAccount.set(accountId, row.id as string);
+    }
+  });
+  // Staff-authored messages only. A customer's message is written through
+  // their own portal login — a definer the seeder cannot hold — so the
+  // customer side of every seeded thread is honestly empty.
+  const portalMessageRows: SeedRow[] = dataset.accounts.flatMap((account) => {
+    const accountId = accountIdByName.get(account.name);
+    if (accountId === undefined || (account.portalUsers?.length ?? 0) === 0) return [];
+    return Array.from({ length: 1 + (account.index % 3) }, (_, seat) => ({
+      organization_id: org,
+      account_id: accountId,
+      request_id: seat === 0 ? firstRequestByAccount.get(accountId) ?? null : null,
+      author_kind: "staff",
+      portal_user_id: null,
+      author_user_id: userId,
+      body: STAFF_MESSAGE_BODIES[(account.index + seat) % STAFF_MESSAGE_BODIES.length],
+      sent_at: daysAgoIso(2 + seat * 3 + (account.index % 5)),
+      read_at: seat === 0 ? daysAgoIso(1 + (account.index % 5)) : null,
+    }));
+  });
+  const portalMessages = await insertAll(client, "crm_portal_messages", portalMessageRows, "id");
+  if ("error" in portalMessages) return portalMessages;
+
+  // One overridden promise: complaints are acknowledged in two hours here,
+  // not the schema's four. The other five kinds keep their defaults.
+  const slaPolicies = await insertAll(
+    client,
+    "crm_sla_policies",
+    [{ organization_id: org, kind: "complaint", acknowledge_hours: 2, resolve_hours: 24, updated_by: userId }],
+    "id",
+  );
+  if ("error" in slaPolicies) return slaPolicies;
 
   const canvassRouteRows = dataset.canvassRoutes.map((route) => {
     const walkedAt = daysAgoIso(route.walkedDaysAgo);

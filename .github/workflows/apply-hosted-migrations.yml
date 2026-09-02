@@ -92,6 +92,7 @@ on:
           - data-you-own
           - job-profitability
           - nothing-hidden
+          - customers-side
           - probe
 permissions:
   actions: read
@@ -1790,6 +1791,21 @@ jobs:
           psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
           psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/postflight/nothing-hidden.sql
           echo "Nothing hidden applied; schedule audit, automation dry run and dashboard drill-down, three invoker functions that store nothing."
+      - name: Apply the customer's side (scope=customers-side)
+        if: ${{ inputs.scope == 'customers-side' }}
+        run: |
+          VERSION=20260902000600_customers_side
+          FILE="supabase/migrations/${VERSION}.sql"
+          sha256sum "$FILE"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied "${VERSION%%_*}"
+          else
+            npx supabase migration repair --status applied "${VERSION%%_*}" --db-url "$DB_URL"
+          fi
+          psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/postflight/customers-side.sql
+          echo "Customer side applied; post-visit ratings, the request SLA clock with its two stamps, and the two-way message thread."
       - name: Normalize exact legacy bot ACLs (scope=bot-legacy-acl-normalization)
         if: ${{ inputs.scope == 'bot-legacy-acl-normalization' }}
         run: |

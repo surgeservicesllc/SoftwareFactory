@@ -2,6 +2,25 @@
 
 Last reviewed: 2026-08-31
 
+**Addendum, 2026-09-02 latest+55 - the customer's side (ADR-233):**
+services-customers-side.behavior 4 (a rating once per completed visit on
+the caller's own account, refused unfinished, refused twice, refused
+across accounts, kept as history, listed to staff with the technician,
+immutable and undeletable to staff, invisible to a rival; six default
+promises, one override, a breach recorded by the row when acknowledgement
+comes late, a met clock when a question is answered and resolved, an
+unstamped acknowledgement reading unrecorded, ordering overdue-first, a
+stamp that cannot be moved by hand; a customer message on their own
+request and refused on another's, staff writing as themselves and refused
+as anybody else, a body that cannot be edited, a read mark set once, the
+thread read back in order and staff replies marked read once; nine
+functions authenticated-only, three tables fenced and forced).
+services-customers-side (pure), services-customers-side-routes,
+services-portal-panel and customer-portal-panel: see the suites of the
+same names; services-copilot +2. Seed audit 66/66; grants roster and RLS
+census 226. Hosted apply scope `customers-side` with a postflight that
+refuses staff write grants on ratings and any delete on messages.
+
 **Addendum, 2026-09-02 latest+54 - nothing hidden (ADR-232):**
 services-nothing-hidden.behavior 4 (six findings each raised once by a
 fixture and never by the clean rows, ordered high/medium/low with the

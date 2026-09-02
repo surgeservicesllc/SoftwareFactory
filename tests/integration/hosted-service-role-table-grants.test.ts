@@ -15,10 +15,6 @@ const grantsMigration =
 const latestMigration = LATEST_MIGRATION;
 
 const publicTables = [
-  // Sorted alphabetically to match the catalogue query. Keep it sorted when
-  // adding tables, and only after confirming RLS and FORCE RLS are enabled.
-  // Both carry RLS and FORCE RLS with no policy at all, which is stricter than
-  // the rest of this list rather than weaker: no role may read them directly.
   "activity_events",
   "agent_handoffs",
   "agent_runs",
@@ -54,10 +50,6 @@ const publicTables = [
   "bot_assignments",
   "bot_roles",
   "bots",
-  // The Budget Tracker's six. Like the rest of this list they carry RLS and
-  // FORCE RLS; unlike most of it they also revoke service_role explicitly,
-  // because that role is BYPASSRLS and the hosted default privileges would
-  // otherwise hand it every household balance in the product.
   "budget_accounts",
   "budget_categories",
   "budget_import_batches",
@@ -71,9 +63,6 @@ const publicTables = [
   "connection_capability_types",
   "connection_routing_decisions",
   "connections",
-  // The Services CRM (ADR-185/186/189/190/191/193/194/195/196): forty
-  // org-scoped tables with service_role revoked outright — nothing
-  // server-side reads the CRM.
   "crm_accounts",
   "crm_applications",
   "crm_attributions",
@@ -118,7 +107,9 @@ const publicTables = [
   "crm_payments",
   "crm_pest_sightings",
   "crm_plan_steps",
+  "crm_portal_messages",
   "crm_portal_requests",
+  "crm_portal_surveys",
   "crm_portal_users",
   "crm_product_lots",
   "crm_products",
@@ -131,6 +122,7 @@ const publicTables = [
   "crm_service_documents",
   "crm_service_integrations",
   "crm_service_plans",
+  "crm_sla_policies",
   "crm_stock_movements",
   "crm_tasks",
   "crm_technicians",
@@ -166,9 +158,6 @@ const publicTables = [
   "graph_templates",
   "graph_verifications",
   "graphs",
-  // Grok's tenant-scoped evidence and one-use guard tables. Every table forces
-  // RLS and revokes direct service_role table access; trusted writes use the
-  // exact reviewed SECURITY DEFINER functions pinned by the schema invariant.
   "grok_artifact_links",
   "grok_control_intents",
   "grok_events",
@@ -181,9 +170,6 @@ const publicTables = [
   "grok_task_links",
   "improvement_ledger",
   "incidents",
-  // The alert engine's delivery ledger (20260829000300, ADR-164): owner
-  // SELECT under forced RLS, append-only by trigger, writes only through the
-  // record_job_seeker_alert_scan definer — service_role explicitly revoked.
   "job_seeker_alert_deliveries",
   "job_seeker_applications",
   "job_seeker_contacts",
@@ -193,8 +179,6 @@ const publicTables = [
   "job_seeker_outreach",
   "job_seeker_preferences",
   "job_seeker_profiles",
-  // Personal favorite/hidden/viewed marks (20260829000400): forced RLS,
-  // own-row policies only, service_role explicitly revoked in the migration.
   "job_seeker_result_marks",
   "job_seeker_resume_extractions",
   "job_seeker_saved_searches",

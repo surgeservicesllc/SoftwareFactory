@@ -4,7 +4,9 @@ import {
   COPILOT_SKILLS,
   composeAutopayAnswer,
   composeFollowupsAnswer,
+  composeHelpDeskAnswer,
   composeLostMoneyAnswer,
+  composeRatingsAnswer,
   composeScheduleAuditAnswer,
   composeOverdueAnswer,
   composeRevenueAnswer,
@@ -168,5 +170,29 @@ describe("the schedule-audit answer", () => {
       + "Old Mill — plan due with no visit: Quarterly IPM due 2026-04-17 (quarterly); no visit within a week of it.. "
       + "Every one is listed on the Schedule page with the rows involved.",
     );
+  });
+});
+
+describe("the ratings answer", () => {
+  it("says nobody was asked, or nobody answered, before it averages anything", () => {
+    expect(composeRatingsAnswer({ days: 90, responses: 0, completedVisits: 0, averageScore: null, responseRateBps: null, detractors: [] }))
+      .toBe("No visits were completed in the last 90 days, so nobody was asked.");
+    expect(composeRatingsAnswer({ days: 90, responses: 0, completedVisits: 12, averageScore: null, responseRateBps: 0, detractors: [] }))
+      .toMatch(/^12 visits were completed in the last 90 days and none has been rated yet/);
+    expect(composeRatingsAnswer({
+      days: 90, responses: 8, completedVisits: 20, averageScore: 4.25, responseRateBps: 4000,
+      detractors: [{ account: "Old Mill", score: 2, comment: "Late again." }],
+    })).toBe('8 ratings in the last 90 days (40% of 20 completed visits), averaging 4.25 out of 5. 1 rated a visit 1 or 2 — call back Old Mill (2/5: "Late again."). Every response is on the Customer Portal page under Ratings.');
+  });
+});
+
+describe("the help-desk answer", () => {
+  it("separates nothing open, everything inside its promise, and the late ones named first", () => {
+    expect(composeHelpDeskAnswer({ open: 0, overdue: 0, late: [] })).toBe("Nothing is open on the help desk.");
+    expect(composeHelpDeskAnswer({ open: 3, overdue: 0, late: [] })).toBe("3 requests are open and every one is inside its promise.");
+    expect(composeHelpDeskAnswer({
+      open: 3, overdue: 1,
+      late: [{ account: "Harborview Foods", kind: "complaint", summary: "Ants again", waitingMinutes: 390, promise: "acknowledge" }],
+    })).toBe('1 of 3 open requests is past a promise. First: Harborview Foods — complaint: "Ants again" (acknowledge overdue after 6.5 h). The full clock is on the Customer Portal page.');
   });
 });
