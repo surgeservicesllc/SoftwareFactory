@@ -81,11 +81,21 @@ anything on a timer stays RED and owner-gated.
   overridden. /Services/signals; three copilot skills. 20260902000200;
   hosted apply: scope=explainable-scoring after merge. Closes HubSpot
   9/16/29/53, PestPac 36/37, PestBoss 18.
-- [ ] Increment 28 (data you own): CSV import with an explicit column
-  mapping and a dry run that refuses to invent a field; audited duplicate
-  merge (survivor chosen, every child re-pointed by a definer, a merge
-  event on the timeline, the loser kept readable); whole-book export.
-  Closes HubSpot 7/8, PestPac 9/17, PestBoss 21.
+- [x] Increment 28 (ADR-230): data you own — `planImport` (pure; every
+  column mapped or ignored or the import is refused; invalid rows named;
+  in-file repeats held back) with a dry run and an append-only
+  `crm_imports` log; `crm_merge_accounts()` re-pointing every child in ONE
+  statement (the loser stays readable, inactive, `merged_into_id` pointing
+  home; both histories written; shared list membership and contact
+  preference left behind; portal-email and live-autopay collisions refuse);
+  a 65-table JSON export through the caller's own RLS. /Services/data.
+  20260902000300; hosted apply: scope=data-you-own after merge. Closes
+  HubSpot 7/8, PestPac 9/17, PestBoss 21.
+- [ ] Workflow headroom, BEFORE increment 29's scope: the apply workflow is
+  at 454,449 bytes against the 455,000 guard. Extract something in its own
+  change first — the probe step still carries four heredocs (25,918
+  bytes), or one of the three mutating giants named above — with the
+  verbatim+re-point discipline, never in the same change as a new scope.
 - [ ] Increment 29 (job profitability): technician cost rates and lot unit
   costs; margin per visit, per plan, per branch, every input printed
   beside the figure. Closes PestPac 8.

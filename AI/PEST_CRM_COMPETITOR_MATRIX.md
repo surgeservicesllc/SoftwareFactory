@@ -74,6 +74,9 @@ built.
 | Residential + commercial accounts, contacts, multiple service locations | all | **HAVE** (ADR-185) |
 | Lead → prospect → customer lifecycle with trigger-written history | all | **HAVE** (ADR-185) |
 | Duplicate detection on create | PestPac, FieldRoutes | **HAVE** (ADR-186) |
+| **Duplicate merge, audited** | HubSpot (AI dedup), PestPac | **HAVE** (ADR-230) — one statement re-points every child; the loser stays readable and points home; both histories say so; the two undecidable collisions refuse |
+| **Import with explicit mapping and a dry run** | HubSpot, PestPac (migration service) | **HAVE** (ADR-230) — every column mapped or ignored or the import is refused; invalid rows named; duplicates against the book skipped and listed; what an import did is an append-only record |
+| **Whole-book export** | none sell it; PestPac users call the absence "data held hostage" | **HAVE** (ADR-230) — 65 tables as JSON through the caller's own RLS |
 | Global search across records | all | **HAVE** (ADR-186) |
 | Account timeline / service history | all | **HAVE** (ADR-185) |
 | **Customer portal — residential**: balances, pay invoice, request service, service history | PestPac, GorillaDesk (Pro), Briostack, Jobber | **PARTIAL** — balances, invoices, visit history, documents and service requests ship (ADR-198). Paying online is **Not Connected**: no card processor is configured. |

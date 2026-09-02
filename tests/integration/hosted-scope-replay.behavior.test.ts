@@ -274,6 +274,7 @@ describe("the workflow's post-cutover surgical-scope fence", () => {
       "chemicals-compliance.sql",
       "commercial-portal.sql",
       "customer-portal.sql",
+      "data-you-own.sql",
       "day-route.sql",
       "documents-canvassing-marketing.sql",
       "equipment-fleet.sql",

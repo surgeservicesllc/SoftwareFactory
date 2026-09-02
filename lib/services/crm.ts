@@ -143,7 +143,7 @@ export const CRM_EPA_PATTERN = /^[0-9]{2,7}-[0-9]{1,7}(-[0-9]{1,7})?$/;
 export const CRM_JURISDICTION_PATTERN = /^[A-Z]{2}(-[A-Z0-9]{1,10})?$/;
 
 export const CRM_ACCOUNT_COLUMNS =
-  "id, name, kind, status, email, phone, source, billing_address, notes, created_at, updated_at";
+  "id, name, kind, status, email, phone, source, billing_address, notes, merged_into_id, created_at, updated_at";
 export const CRM_CONTACT_COLUMNS =
   "id, account_id, first_name, last_name, role, email, phone, is_primary, created_at";
 export const CRM_PROPERTY_COLUMNS =
@@ -177,6 +177,8 @@ export const CRM_SIGHTING_COLUMNS =
 
 export type CrmAccountRow = {
   id: string;
+  /** Where this account went if it was merged away (ADR-230); null otherwise. */
+  merged_into_id?: string | null;
   name: string;
   kind: string;
   status: string;
@@ -452,6 +454,7 @@ export function toAccountView(row: CrmAccountRow) {
     source: row.source,
     billingAddress: row.billing_address,
     notes: row.notes,
+    mergedIntoId: row.merged_into_id ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

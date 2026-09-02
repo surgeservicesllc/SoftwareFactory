@@ -2,6 +2,7 @@ import {
   Sparkles,
   ListChecks,
   Gauge,
+  Database,
   BanknoteArrowDown,
   Bug,
   Building2,
@@ -193,6 +194,12 @@ export const SERVICES_NAVIGATION: readonly ServicesNavItem[] = [
     label: "Integrations",
     description: "What this workspace can do, and what needs an account",
     icon: PlugZap,
+  },
+  {
+    href: `${SERVICES_ROOT}/data`,
+    label: "Your data",
+    description: "Import without inventing a column, merge, export the whole book",
+    icon: Database,
   },
 ];
 

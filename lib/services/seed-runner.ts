@@ -2445,6 +2445,25 @@ export async function runSeed(
   if ("error" in scoringRules) return scoringRules;
 
   /*
+   * The seed is itself an import (ADR-230), and it is recorded as one: what
+   * arrived, how many accounts, locations and contacts it created. Nothing
+   * was skipped or invalid, because the generator wrote every row itself.
+   */
+  const importLog = await insertAll(client, "crm_imports", [{
+    organization_id: org,
+    source_label: "Demo Data book (seeded)",
+    mapping: { generator: "lib/services/seed-generator.ts", scale },
+    row_count: accountRows.length,
+    created_accounts: accounts.data.length,
+    created_properties: properties.data.length,
+    created_contacts: contacts.data.length,
+    skipped_duplicates: 0,
+    invalid_rows: 0,
+    created_by: userId,
+  }], "id");
+  if ("error" in importLog) return importLog;
+
+  /*
    * Autopay authorization (ADR-218). The instrument is metadata only — a
    * brand, four digits and the NAME of the vault purpose a processor token
    * would be filed under. Nothing here is or resembles a card number, and

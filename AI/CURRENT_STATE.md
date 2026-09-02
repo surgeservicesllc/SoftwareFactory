@@ -1,5 +1,33 @@
 # Current state
 
+## 2026-09-02: Data you own (ADR-230)
+
+Increment 28 ships `20260902000300_data_you_own.sql`: `crm_accounts.merged_into_id`
+(a merged account is inactive by CHECK, never itself, and points home),
+the append-only `crm_imports` log, and `crm_merge_accounts()` — a definer
+that checks membership itself and re-points every child table in ONE
+statement of data-modifying CTEs so the (organization, account, property)
+keys are checked once at the end; history is never moved, both accounts
+get a line, shared list membership and contact preference stay behind,
+and a portal-email or live-autopay collision refuses. The importer
+(`planImport`, pure) maps every column or refuses, names every invalid
+row, holds back in-file repeats, and the route skips and lists duplicates
+against the book by the same normals the create path uses; a dry run
+writes nothing and a commit records itself. The export is a 65-table
+allowlist read through the caller's RLS, one JSON document per table with
+a reported ceiling. /Services/data carries all three; the seed records
+itself as the book's first import.
+
+Evidence: 5 behavior tests on the replayed chain (self/cross-workspace/
+non-member refused; the portal-email collision refused; every child
+re-pointed with the shared membership left behind and both histories
+written with the re-pointed counts; a merged account refused again and
+refused as a customer; the import log append-only, count-checked, and
+invisible to a rival); 5 planner tests and 4 panel tests; seed audit
+64/64; scope replay, roster, runbook-count, grants-roster, RLS-count,
+migration-version, path-reference and byte-ceiling guards; tsc and
+eslint clean. Hosted apply scope `data-you-own` is dispatched after merge.
+
 ## 2026-09-02: Explainable scoring and assignment with its reason (ADR-229)
 
 Increment 27 of the build-out ships `20260902000200_explainable_scoring.sql`:
@@ -61,8 +89,10 @@ posture, all seven rules with their reasons, rival organization sees
 nothing, accept-once-while-open, self-stamped moments, history line, dated
 dismissal, collection action silencing the rule, both origin contradictions
 refused); 5 panel tests; copilot composer tests; seed roster, scope replay,
-migration-version and path-reference guards; tsc and eslint clean. Hosted
-apply scope `followups` is dispatched after merge and recorded here.
+migration-version and path-reference guards; tsc and eslint clean. PR #490 merged as exact main
+`eb188a18b8a761133ed3e22d9291a0e995703b14`; hosted apply scope `followups`
+succeeded in run `33577715452` (postflight: one open task per suggestion,
+moments stamped by the row, rules read as the caller).
 
 ## 2026-08-31: Grok completion DDL is hosted; acceptance awaits a version-safe ACL verifier (ADR-227)
 

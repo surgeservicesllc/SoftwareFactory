@@ -104,6 +104,7 @@ const publicTables = [
   "crm_form_fields",
   "crm_form_instances",
   "crm_form_templates",
+  "crm_imports",
   "crm_invoice_lines",
   "crm_invoices",
   "crm_knocks",

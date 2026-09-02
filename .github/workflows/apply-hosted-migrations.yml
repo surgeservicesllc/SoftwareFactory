@@ -89,6 +89,7 @@ on:
           - queue-diagnosis-visibility
           - followups
           - explainable-scoring
+          - data-you-own
           - probe
 permissions:
   actions: read
@@ -1939,6 +1940,22 @@ jobs:
           psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
           psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/postflight/explainable-scoring.sql
           echo "Explainable scoring applied; 27 defaults, overrides name real rules, engine and matcher read as the caller."
+
+      - name: Apply the merge, import log and merged-account link (scope=data-you-own)
+        if: ${{ inputs.scope == 'data-you-own' }}
+        run: |
+          VERSION=20260902000300_data_you_own
+          FILE="supabase/migrations/${VERSION}.sql"
+          sha256sum "$FILE"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
+          if [ "$MODE" = "token" ]; then
+            npx supabase migration repair --status applied "${VERSION%%_*}"
+          else
+            npx supabase migration repair --status applied "${VERSION%%_*}" --db-url "$DB_URL"
+          fi
+          psql "$DB_URL" -q -c "NOTIFY pgrst, 'reload schema';"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f .github/hosted-apply/postflight/data-you-own.sql
+          echo "Data you own applied; merged accounts stay and point home, imports are a record, the merge checks membership itself."
 
       - name: Normalize exact legacy bot ACLs (scope=bot-legacy-acl-normalization)
         if: ${{ inputs.scope == 'bot-legacy-acl-normalization' }}

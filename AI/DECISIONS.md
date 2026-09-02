@@ -6023,3 +6023,49 @@ The copilot gains three skills (warmest leads, churn risk, room to grow),
 each naming the top three with their facts. The competitor rows for lead
 scoring, predictive analytics, service opportunity identification and
 automatic lead assignment move to HAVE.
+
+## ADR-230 - Data you own: nothing invented on the way in, nothing lost on the way out, and one statement in between
+
+Three of the most-cited complaints across both CRMs are the same
+complaint: the customer's data is treated as the vendor's. HubSpot
+"creates new properties if I don't set everything correctly" and leaves
+"duplicate companies with no cleanup tools"; PestPac users say errors
+"cannot be corrected", their data is "held hostage", and migration is
+"expensive, incomplete, and requires extreme manual work daily".
+
+**Import invents nothing.** Every column in the file must be mapped to a
+field this product already has, or explicitly ignored, before a single row
+is considered; an unmapped column refuses the whole import with the list.
+The planner is pure (`planImport`): it names every invalid row with its
+reason, holds back a row that repeats an earlier row of the same file, and
+the route adds the one thing only the database knows — which rows
+duplicate accounts already on file, by the same normals the create path
+uses. A dry run returns exactly what a commit would do and writes nothing.
+A commit writes accounts, then their locations and contacts, and records
+what it did in `crm_imports`, append-only, with the mapping kept so "why
+does this account have that source?" has an answer a year later. The seed
+records itself as an import.
+
+**The merge is one statement.** Ten tables key on (organization, account,
+property); moving the property first orphans its work orders, moving the
+work orders first points them at a row that does not exist yet. Data-
+modifying CTEs run as one statement and the keys are checked once, at the
+end, when every row already agrees — so `crm_merge_accounts` re-points
+every child in a single WITH and needs no constraint made deferrable. It
+is the one DEFINER here, because the ledgers whose browser roles hold no
+UPDATE grant on purpose (payments, applications, notices) are exactly what
+a merge must move; it checks membership itself first. What it does NOT
+move is history: the timeline is immutable, the loser stays readable and
+inactive with `merged_into_id` pointing home, and both accounts get a line
+saying what happened and what was re-pointed. A list membership or a
+contact preference the survivor already holds is left behind rather than
+overwritten — consent is not something a merge decides. Two collisions
+refuse rather than guess: a portal login with the same email on both
+sides, and a live autopay enrollment on both. A merged account cannot be
+merged again and cannot come back as a customer; the schema says so.
+
+**The export is an allowlist.** Sixty-five tables, each downloaded as one
+JSON document through the caller's own RLS, paged by id inside the route
+with a reported ceiling rather than a silent truncation. The list is
+explicit, not a catalogue query, so the export can never reach a table
+that is not the customer's.
