@@ -4,6 +4,7 @@ import {
   COPILOT_SKILLS,
   composeAutopayAnswer,
   composeFollowupsAnswer,
+  composeLostMoneyAnswer,
   composeOverdueAnswer,
   composeRevenueAnswer,
   composeRoutesAnswer,
@@ -121,5 +122,26 @@ describe("the signals answer", () => {
   it("says when nobody scores rather than inventing a leader", () => {
     expect(composeSignalsAnswer({ model: "lead", scored: 0, top: [] })).toBe("There is no lead or prospect to score yet.");
     expect(composeSignalsAnswer({ model: "upsell", scored: 4, top: [] })).toContain("none — no rule applies to any of the 4");
+  });
+});
+
+describe("the lost-money answer", () => {
+  it("states coverage before naming the worst visits, so an unknown never reads as a loss", () => {
+    const answer = composeLostMoneyAnswer({
+      days: 90, completed: 12, known: 9,
+      losers: [
+        { account: "Harborview Foods", service: "Monthly IPM", marginCents: -4300, revenueCents: 1000 },
+        { account: "Ridgeway Bakery", service: "One-off", marginCents: -200, revenueCents: 5000 },
+      ],
+    });
+    expect(answer).toContain("9 of 12 completed visits have every cost input on file; 3 cannot be costed yet");
+    expect(answer).toContain("2 lost money in the last 90 days");
+    expect(answer).toContain("Harborview Foods (Monthly IPM: -$43.00 on $10.00 revenue)");
+  });
+
+  it("says when nothing was completed, and when nothing lost money", () => {
+    expect(composeLostMoneyAnswer({ days: 30, completed: 0, known: 0, losers: [] })).toContain("nothing to cost");
+    expect(composeLostMoneyAnswer({ days: 30, completed: 4, known: 4, losers: [] }))
+      .toBe("All 4 completed visits have every cost input on file. None of the costed visits lost money in the last 30 days.");
   });
 });

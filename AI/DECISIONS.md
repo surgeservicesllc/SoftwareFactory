@@ -6069,3 +6069,48 @@ JSON document through the caller's own RLS, paged by id inside the route
 with a reported ceiling rather than a silent truncation. The list is
 explicit, not a catalogue query, so the export can never reach a table
 that is not the customer's.
+
+## ADR-231 - A margin whose inputs are hidden is a number nobody can check
+
+PestPac's most-cited reporting complaint is that profitability is
+"impossible to determine reliably" and the reports are "totally off". The
+arithmetic was never the problem; the inputs were. A margin computed from
+a labour rate nobody entered, a chemical cost defaulted to zero and an
+invoice that was never linked is precise and wrong, and a manager who
+cannot see which of those happened cannot tell a bad Tuesday from a bad
+record.
+
+**Two costs the book did not know, bounded and nullable.**
+`crm_technicians.hourly_cost_cents` (the fully loaded hourly cost, whatever
+the workspace means by that) and `crm_product_lots.unit_cost_cents` (what
+one unit of the lot cost when it was received), each CHECKed between 0 and
+$1,000,000 and NULL by default, because "unknown" is an honest answer and
+zero is a lie. They are set on the Profitability page beside the figures
+they change, in dollars, and a blank saves as unknown.
+
+**One function, invoker, printing its inputs.** `crm_visit_profitability
+(org, days)` reads as the caller — RLS, not a definer — and returns, per
+completed visit: revenue as the sum of the visit's non-void invoices, NULL
+when none is linked because unbilled is not free; labour minutes from
+finished timesheets clocked against the visit or, when none was, the
+scheduled window, with `labour_basis` saying which; labour cost from those
+minutes and the technician's rate; chemical cost from each application's
+lot at its recorded unit cost, with an application whose lot has no cost,
+or no lot at all, counted in `uncosted_applications` instead of priced at
+nothing. `margin_cents` and `margin_bps` are NULL whenever revenue, labour
+or any application is unknown. Nothing is stored: the figures are
+recomputed from the ledgers on every read, so a corrected timesheet
+corrects the margin and a cost entered today re-prices last month.
+
+**Sums cover only what is known, and say so.** The page's totals and its
+groupings by technician, service and branch sum known margins only and
+carry the unknown count beside them; a card breaks the unknowns down by
+reason, because each reason is a different chore. The copilot's "Which
+jobs lost money this quarter?" answer states coverage before it names a
+loser, so a visit nobody has costed never reads as a loss.
+
+**What this deliberately does not do.** No overhead allocation, no vehicle
+cost per mile, no per-route figure: those need inputs the book does not
+carry, and inventing a default for them is exactly the practice this
+increment exists to refuse. A route's profitability is the sum of its
+visits', which the grouping by technician already shows.

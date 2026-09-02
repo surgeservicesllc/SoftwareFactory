@@ -2,6 +2,25 @@
 
 Last updated: 2026-08-31
 
+## Newest (2026-09-02, latest+53): job profitability (ADR-231)
+
+UNKNOWN IS NOT ZERO. `crm_visit_profitability` returns a NULL margin when
+revenue, the technician's rate or any application's cost is unknown, and
+`summarizeProfitability` sums known visits only. Do not "improve" either
+with a default rate, an average cost or a zero — that is the exact
+practice PestPac users cannot trust. A new cost input means a new
+`unknownReasons` entry and a new uncosted count, not a fallback.
+
+LABOUR BASIS is printed. A visit with no finished timesheet uses the
+scheduled window and says `window`; if you add a third basis (e.g. GPS
+dwell) it must be labelled the same way, and the behavior test's
+`labour_basis` assertions are the place to prove it.
+
+The function reads as the caller (INVOKER) and is granted to
+`authenticated` only; the route caps the window at 730 days and the
+visits it reads at 5,000, reporting the ceiling. The page shows 40 visits
+and 200 lots; the API returns 200 of each.
+
 ## Newest (2026-09-02, latest+52): workflow headroom for increment 29
 
 The probe step's last four heredocs are files now: 44 probe files, each

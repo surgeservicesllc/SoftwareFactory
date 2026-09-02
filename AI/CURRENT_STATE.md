@@ -1,5 +1,36 @@
 # Current state
 
+## 2026-09-02: Job profitability (ADR-231)
+
+Increment 29 ships `20260902000400_job_profitability.sql`: two bounded,
+nullable cost columns (`crm_technicians.hourly_cost_cents`,
+`crm_product_lots.unit_cost_cents`; NULL means unknown, never zero) and
+`crm_visit_profitability(org, days)`, SECURITY INVOKER, returning per
+completed visit the revenue (non-void invoices linked to the visit; NULL
+when none), labour minutes with their basis (finished timesheets, or the
+scheduled window said so), labour cost, chemical cost from the lot's
+recorded unit cost, the count of applications that could not be costed,
+and a margin that is NULL whenever any input is unknown. Nothing is
+stored. /Services/profitability shows totals and groupings by technician,
+service and branch over known visits only with the unknown count beside
+them, a card of unknowns by reason, the visits worst-first with every
+input printed, and the cost editors in dollars. Copilot skill "Which jobs
+lost money this quarter?" states coverage before naming a loser. The seed
+gives most technicians a rate and most lots a cost, leaving some unknown
+so the page's unknown states are exercised.
+
+Evidence: 6 behavior tests on the replayed chain (a fully known visit at
+$486.00 − $50.00 (75 min at $40/h, timesheet) − $3.00 = $433.00, 89.09%,
+with a voided duplicate excluded; window basis when no shift was clocked;
+NULL margins for no rate, an uncosted lot and no invoice; worst-known
+first with NULLs last and the 90-day window honoured; a rival sees
+nothing and only `authenticated` may execute; negative and absurd costs
+refused); 3 summariser and 3 panel tests; 2 copilot tests; seed audit
+64/64 with the new optional columns; scope replay (44 probes, new
+postflight), runbook count 224, byte guard 450,000, tsc, eslint and a
+production build clean. Hosted apply scope `job-profitability` is
+dispatched after merge.
+
 ## 2026-09-02: Workflow headroom (probe heredocs extracted)
 
 The apply workflow's probe step ran its last four probes from inline
@@ -34,7 +65,8 @@ refused as a customer; the import log append-only, count-checked, and
 invisible to a rival); 5 planner tests and 4 panel tests; seed audit
 64/64; scope replay, roster, runbook-count, grants-roster, RLS-count,
 migration-version, path-reference and byte-ceiling guards; tsc and
-eslint clean. Hosted apply scope `data-you-own` is dispatched after merge.
+eslint clean. Hosted apply scope `data-you-own`: run 33579099463 on main
+`c77992e`, success, postflight passed.
 
 ## 2026-09-02: Explainable scoring and assignment with its reason (ADR-229)
 
