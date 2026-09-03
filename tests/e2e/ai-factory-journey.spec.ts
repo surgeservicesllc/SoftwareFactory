@@ -295,6 +295,15 @@ test.describe("AI Factory live journey", () => {
     await expect(wizard.getByText(/Can open pull requests.*Can merge pull requests, with approval/))
       .toBeVisible();
     await expect(wizard.getByText("1 of 1")).toBeVisible();
+    // Write access, pull-request rights and preview reach are elevated grants,
+    // and the wizard refuses to confirm them until a person says they reviewed
+    // what each bot may do. That acknowledgement is the product working, so
+    // the walk ticks it the way an owner would rather than bypassing it; the
+    // scheduled lane sat on a disabled Confirm for a week because it did not.
+    const acknowledgement = wizard.getByRole("checkbox", { name: /elevated permissions/i });
+    await expect(acknowledgement).toBeVisible();
+    await acknowledgement.check();
+    await expect(acknowledgement).toBeChecked();
     const confirm = wizard.getByRole("button", { name: "Confirm" });
     await expect(confirm).toBeEnabled({ timeout: 20_000 });
     await confirm.click();
