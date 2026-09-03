@@ -424,28 +424,47 @@ test.describe("AI Factory live journey", () => {
     await expect(prompt).toBeVisible({ timeout: 20_000 });
     await prompt.fill("Add a fake health endpoint and cover it with a test.");
 
-    // This local lane deliberately binds a nonexistent GitHub repository, so
-    // immutable base-SHA verification must refuse the submission. The normal
-    // browser lane separately requires the persisted record-only success path
-    // to advance Step 8 and render the non-execution Step 9 contract.
+    // The seeded repository does not exist on GitHub. Without the fake GitHub
+    // API, immutable base-SHA verification must refuse the submission; with
+    // it, the base resolves to fake data and the command is recorded only —
+    // the Claude route records, it never dispatches — so Step 8 reads Done
+    // and Step 9 states the record-only contract.
     const submit = composer.getByRole("button", { name: /queue|submit|send|start|run/i }).last();
     await expect(submit).toBeVisible({ timeout: 10_000 });
     await submit.click();
     await page.waitForTimeout(3000);
 
-    await expect(composer.getByText(/failed safely|cannot|could not|not verified/i).first())
-      .toBeVisible({ timeout: 10_000 });
-    await page.keyboard.press("Escape");
-    await expect(commandStep.getByText("Done")).toHaveCount(0);
-
-    // ── Step 9: Watch It Ship says what actually executes ─────────────────
     const watchStep = stepCard(page, "Watch It Ship");
-    await expect(watchStep.getByText("Done")).toHaveCount(0);
-    await watchStep.getByRole("button", { name: "Watch execution" }).click();
-    const watchDialog = page.getByRole("dialog");
-    await expect(watchDialog.getByText("Not Connected")).toBeVisible({ timeout: 20_000 });
-    await expect(watchDialog.getByText(/will not start until an executor is connected/)).toBeVisible();
-    await page.keyboard.press("Escape");
+    if (fakeGitHub) {
+      await expect(composer.getByText(/recorded only|did not dispatch a worker|remains blocked from execution/i).first())
+        .toBeVisible({ timeout: 10_000 });
+      await page.keyboard.press("Escape");
+      await expect(commandStep.getByText("Done")).toBeVisible({ timeout: 30_000 });
+      await expect(commandStep.getByText(/\d+ commands? on this factory · \d+ recorded only/)).toBeVisible();
+
+      // ── Step 9: a recorded-only command is not a run ──────────────────
+      await expect(watchStep.getByText("Done")).toHaveCount(0);
+      await expect(watchStep.getByText(/recorded only · no execution is queued/)).toBeVisible();
+      await watchStep.getByRole("button", { name: "Review command record" }).click();
+      const watchDialog = page.getByRole("dialog");
+      await expect(watchDialog.getByText(/Record-only mode creates no worker dispatch, execution run, branch, or pull request/))
+        .toBeVisible({ timeout: 20_000 });
+      await expect(watchDialog.getByText(/\b(is running|has started|dispatched)\b/i)).toHaveCount(0);
+      await page.keyboard.press("Escape");
+    } else {
+      await expect(composer.getByText(/failed safely|cannot|could not|not verified/i).first())
+        .toBeVisible({ timeout: 10_000 });
+      await page.keyboard.press("Escape");
+      await expect(commandStep.getByText("Done")).toHaveCount(0);
+
+      // ── Step 9: Watch It Ship says what actually executes ───────────────
+      await expect(watchStep.getByText("Done")).toHaveCount(0);
+      await watchStep.getByRole("button", { name: "Watch execution" }).click();
+      const watchDialog = page.getByRole("dialog");
+      await expect(watchDialog.getByText("Not Connected")).toBeVisible({ timeout: 20_000 });
+      await expect(watchDialog.getByText(/will not start until an executor is connected/)).toBeVisible();
+      await page.keyboard.press("Escape");
+    }
 
     // ── Persistence: what Supabase stored, not what React remembered ──────
     await page.reload();
