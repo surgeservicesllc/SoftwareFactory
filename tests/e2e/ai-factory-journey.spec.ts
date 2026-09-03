@@ -731,7 +731,9 @@ test.describe("AI Factory live journey", () => {
     await expect(conversation.getByRole("article", { name: "You message" })).toContainText(goal, {
       timeout: 30_000,
     });
-    await expect(sessions.getByRole("button", { name: goal })).toBeVisible();
+    // A serial replay records a second session with the same title; the
+    // newest is the one selected, and one listed is what this proves.
+    await expect(sessions.getByRole("button", { name: goal }).first()).toBeVisible();
 
     // No live control is offered over a session with no graph: every control
     // names the state it is unavailable in, and every one is disabled.
@@ -754,7 +756,9 @@ test.describe("AI Factory live journey", () => {
     await expect(inspector.getByText(/No routing plan recorded|Planned routing intent/)).toBeVisible();
     await expect(inspector.getByText("Observed node execution route")).toHaveCount(0);
     await inspector.getByRole("tab", { name: "Deployment" }).click();
-    await expect(inspector.getByText("Not Connected")).toHaveCount(2);
+    // The two badges, exactly: the pane's detail sentence also says "not
+    // connected" in prose, and a loose match would count that too.
+    await expect(inspector.getByText("Not Connected", { exact: true })).toHaveCount(2);
     await expect(page.getByText("Demo Data")).toHaveCount(0);
   });
 
