@@ -2,6 +2,14 @@
 
 Last reviewed: 2026-09-03
 
+**Addendum, 2026-09-03 latest+75 - AI Factory build-out, increment 3: release gates ask for their checks by name (ADR-251):**
+exact-head-check-gates 5 (each of the seven gates fetches per required
+check with a server-side check_name filter inside the loop, no
+single-page read precedes a loop, and each gate still names exactly the
+four CI checks; the suite fails against the previous shape). Every
+workflow contract suite unchanged and green; apply-hosted-migrations.yml
+419,657 bytes of 420,000. The fresh read-only `scope=verify` on the next green/READY main is dispatched after this merge and recorded on its own line.
+
 **Addendum, 2026-09-03 latest+74 - AI Factory build-out, increment 2: Grok Bot and the launcher walked with fake data (ADR-251):**
 grok-sessions-route +1 (a GitHub refusal at release resolution answers
 503 with the durable session id after the plan and roster were

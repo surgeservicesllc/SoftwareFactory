@@ -151,16 +151,21 @@ jobs:
             echo "::error::Protected database scopes may run only from the exact SoftwareFactory refs/heads/main checkout."
             exit 1
           fi
-          CHECK_RUNS=$(curl --fail --silent --show-error \
-            --header "Accept: application/vnd.github+json" \
-            --header "Authorization: Bearer ${GH_TOKEN}" \
-            --header "X-GitHub-Api-Version: 2022-11-28" \
-            "${GH_API_URL}/repos/${GH_REPOSITORY}/commits/${CHECKED_OUT_SHA}/check-runs?per_page=100")
+          # One server-filtered request per required check. A single page of this
+          # head's check runs is not the same thing: scheduled worker check-ins pile
+          # up on a long-lived head (main 91a7e2b carried 106) and pushed the CI
+          # checks onto a page this gate never read.
           for REQUIRED_CHECK in \
             "Lint, typecheck, test, and build" \
             "Browser and accessibility tests 1/3" \
             "Browser and accessibility tests 2/3" \
             "Browser and accessibility tests 3/3"; do
+            CHECK_RUNS=$(curl --fail --silent --show-error --get \
+              --header "Accept: application/vnd.github+json" \
+              --header "Authorization: Bearer ${GH_TOKEN}" \
+              --header "X-GitHub-Api-Version: 2022-11-28" \
+              --data-urlencode "check_name=${REQUIRED_CHECK}" \
+              "${GH_API_URL}/repos/${GH_REPOSITORY}/commits/${CHECKED_OUT_SHA}/check-runs?per_page=100")
             LATEST_CHECK_STATE=$(jq -r \
               --arg name "$REQUIRED_CHECK" \
               --arg sha "$CHECKED_OUT_SHA" '
@@ -244,16 +249,21 @@ jobs:
               exit 1
             fi
           done
-          CHECK_RUNS=$(curl --fail --silent --show-error \
-            --header "Accept: application/vnd.github+json" \
-            --header "Authorization: Bearer ${GH_TOKEN}" \
-            --header "X-GitHub-Api-Version: 2022-11-28" \
-            "${GH_API_URL}/repos/${GH_REPOSITORY}/commits/${CHECKED_OUT_SHA}/check-runs?per_page=100")
+          # One server-filtered request per required check. A single page of this
+          # head's check runs is not the same thing: scheduled worker check-ins pile
+          # up on a long-lived head (main 91a7e2b carried 106) and pushed the CI
+          # checks onto a page this gate never read.
           for REQUIRED_CHECK in \
             "Lint, typecheck, test, and build" \
             "Browser and accessibility tests 1/3" \
             "Browser and accessibility tests 2/3" \
             "Browser and accessibility tests 3/3"; do
+            CHECK_RUNS=$(curl --fail --silent --show-error --get \
+              --header "Accept: application/vnd.github+json" \
+              --header "Authorization: Bearer ${GH_TOKEN}" \
+              --header "X-GitHub-Api-Version: 2022-11-28" \
+              --data-urlencode "check_name=${REQUIRED_CHECK}" \
+              "${GH_API_URL}/repos/${GH_REPOSITORY}/commits/${CHECKED_OUT_SHA}/check-runs?per_page=100")
             LATEST_CHECK_STATE=$(jq -r \
               --arg name "$REQUIRED_CHECK" \
               --arg sha "$CHECKED_OUT_SHA" '

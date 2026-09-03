@@ -2,7 +2,22 @@
 
 Last updated: 2026-09-03
 
-## Newest (2026-09-03, latest+74): Grok Bot and the launcher walked with fake data (ADR-251)
+## Newest (2026-09-03, latest+75): the release gates ask for their checks by name (ADR-251)
+
+A GATE READS WHAT IT REQUIRES, NOT A PAGE. Seven exact-head gates read
+one page of check runs; a long-lived main head accumulates scheduled
+worker check-ins (91a7e2b: 106) and the CI checks fall off the page.
+Every gate now asks GitHub for each required check by name, inside the
+loop that names them. Do not reintroduce a single-page read; the unit
+test exact-head-check-gates pins all seven. The fresh read-only `scope=verify` on the next green/READY main is dispatched after this merge and recorded on its own line.
+
+THE APPLY WORKFLOW IS 343 BYTES FROM ITS GUARD. 419,657 of 420,000.
+The next hosted scope must extract a step into a file before it adds.
+
+Workers, autonomy and automatic actions remain OFF; the global kill
+switch remains ON; **GROK BOT: PRODUCTION READY is not declared.**
+
+## Older (2026-09-03, latest+74): Grok Bot and the launcher walked with fake data (ADR-251)
 
 A REFUSAL NAMES ITS RECORD. The Grok route commits the session, the
 message, the plan and the roster before it asks GitHub for the release
