@@ -445,14 +445,18 @@ test.describe("AI Factory live journey", () => {
       await expect(commandStep.getByText(/\d+ commands? on this factory · \d+ recorded only/)).toBeVisible();
 
       // ── Step 9: a recorded command is not a run ───────────────────────
+      // The latest command routes to the Claude posting on a first attempt
+      // (a read-only analysis plan, recorded only) and to the Codex posting
+      // once a replay has posted it (queued for a worker that is Not
+      // Connected). Both are stated; neither claims a run.
       await expect(watchStep.getByText("Done")).toHaveCount(0);
-      await expect(watchStep.getByText(/Analysis planned · waiting for the analysis worker to claim it|recorded only · no execution is queued/))
+      await expect(watchStep.getByText(/Analysis planned · waiting for the analysis worker to claim it|recorded only · no execution is queued|commands? queued; Worker Not Connected/))
         .toBeVisible();
-      await watchStep.getByRole("button", { name: /^(Watch the analysis run|Review command record)$/ }).click();
+      await watchStep.getByRole("button", { name: /^(Watch the analysis run|Review command record|Watch execution)$/ }).click();
       const watchDialog = page.getByRole("dialog");
-      await expect(watchDialog.getByText(/No repository write, branch, or pull request can result|Record-only mode creates no worker dispatch/))
+      await expect(watchDialog.getByText(/No repository write, branch, or pull request can result|Record-only mode creates no worker dispatch|will not start until an executor is connected/))
         .toBeVisible({ timeout: 20_000 });
-      await expect(watchDialog.getByText(/the bot is working now|Analysis completed/)).toHaveCount(0);
+      await expect(watchDialog.getByText(/the bot is working now|Analysis completed|Work is in flight/)).toHaveCount(0);
       await page.keyboard.press("Escape");
     } else {
       await expect(composer.getByText(/failed safely|cannot|could not|not verified/i).first())
@@ -1001,11 +1005,22 @@ test.describe("AI Factory live journey", () => {
     await expect.poll(() => inspector.getByRole("listitem").count()).toBeGreaterThanOrEqual(5);
     await inspector.getByRole("tab", { name: "Agents" }).click();
     await expect(inspector.getByText("Planned routing intent")).toBeVisible();
-    await expect(inspector.getByText(/Codex/).first()).toBeVisible();
     await expect(inspector.getByText("Observed node execution route")).toHaveCount(0);
-    const controls = page.getByRole("button", { name: /^(pause|resume|stop) unavailable in / });
-    await expect.poll(() => controls.count()).toBeGreaterThanOrEqual(2);
-    for (const control of await controls.all()) await expect(control).toBeDisabled();
+    if (fakeGitHub) {
+      // Once the canonical graph is linked, the pane reads the graph's nodes,
+      // and a node without a run carries no route: the planned identities
+      // are never substituted for execution evidence. The graph is paused at
+      // the database boundary, so resume and stop are offered as durable
+      // control intents and pause is not; the walk presses none of them.
+      await expect(inspector.getByText("No planned routing identities recorded")).toBeVisible();
+      await expect(page.getByRole("button", { name: "pause unavailable in paused" })).toBeDisabled();
+      await expect(page.getByRole("button", { name: /^(resume|stop) session$/ })).toHaveCount(2);
+    } else {
+      await expect(inspector.getByText(/Codex/).first()).toBeVisible();
+      const controls = page.getByRole("button", { name: /^(pause|resume|stop) unavailable in / });
+      await expect.poll(() => controls.count()).toBeGreaterThanOrEqual(2);
+      for (const control of await controls.all()) await expect(control).toBeDisabled();
+    }
 
     // After a reload, the same durable plan and the same honest boundary.
     await page.goto(`/solutions/factory/grok?sessionId=${encodeURIComponent(sessionId)}`);
