@@ -16,7 +16,7 @@ all seven gates (5 tests; fails against the old shape). Every workflow
 contract test still passes; `apply-hosted-migrations.yml` is 419,657
 bytes of the 420,000 guard (343 bytes of headroom — the next scope must
 extract before it adds). Verifier-only: no migration, ledger, catalog,
-ACL or runtime assertion changed. The fresh read-only `scope=verify` on the next green/READY main is dispatched after this merge and recorded on its own line.
+ACL or runtime assertion changed. Fresh read-only `scope=verify` run 33709118624 on main f77abd9 (the first green/READY main after this merge) passed every gate — the four CI checks found by name on a head that still carries the scheduled check-ins, completion ledger 1|1, prerequisite catalog, exact catalog / ACL / rollback runtime / lint / health, stopped containment, and the exact release, READY deployment and health postflight.
 
 ## 2026-09-03: AI Factory build-out — increment 2, Grok Bot and the launcher walked with fake data (ADR-251)
 

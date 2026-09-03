@@ -446,8 +446,8 @@ items named below.
   (`commits/{sha}/check-runs?per_page=100`) miss the CI checks once a
   head accumulates more than 100 scheduled check-ins (main 91a7e2b: 106,
   CI on page two; verify 33702924062 refused "missing|missing"). Query
-  by `check_name`; then dispatch one fresh read-only `scope=verify` on
-  the next green/READY main and record it.
+  by `check_name`. Fresh read-only `scope=verify` run 33709118624 on main
+  f77abd9 passed every gate — DONE.
 - [ ] Owner-gated, unchanged: signed-in production create/return/reload
   acceptance; the separate provider-backed E2E (needs a ready Codex
   agent and its own authorization); a connected Codex account. Each

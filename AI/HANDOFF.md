@@ -9,7 +9,7 @@ one page of check runs; a long-lived main head accumulates scheduled
 worker check-ins (91a7e2b: 106) and the CI checks fall off the page.
 Every gate now asks GitHub for each required check by name, inside the
 loop that names them. Do not reintroduce a single-page read; the unit
-test exact-head-check-gates pins all seven. The fresh read-only `scope=verify` on the next green/READY main is dispatched after this merge and recorded on its own line.
+test exact-head-check-gates pins all seven. Fresh read-only `scope=verify` run 33709118624 on main f77abd9 (the first green/READY main after this merge) passed every gate — the four CI checks found by name on a head that still carries the scheduled check-ins, completion ledger 1|1, prerequisite catalog, exact catalog / ACL / rollback runtime / lint / health, stopped containment, and the exact release, READY deployment and health postflight.
 
 THE APPLY WORKFLOW IS 343 BYTES FROM ITS GUARD. 419,657 of 420,000.
 The next hosted scope must extract a step into a file before it adds.

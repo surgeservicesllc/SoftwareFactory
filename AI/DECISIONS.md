@@ -7035,7 +7035,8 @@ one server-filtered request per required check (`check_name`), inside
 the loop that names them; the jq filter on name, head and app is
 unchanged, and a unit test pins the shape in all seven gates. This is
 verifier-only: no migration, ledger, catalog, ACL or runtime assertion
-changed.
+changed. Fresh read-only verify run 33709118624 on main f77abd9 passed every
+gate with the renamed query.
 
 Bounds: the local-stack proofs stop exactly where GitHub and a Codex
 account are Not Connected; they assert the refusal is stated and that
