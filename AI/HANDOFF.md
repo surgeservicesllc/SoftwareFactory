@@ -2,7 +2,35 @@
 
 Last updated: 2026-09-03
 
-## Newest (2026-09-03, latest+75): the release gates ask for their checks by name (ADR-251)
+## Newest (2026-09-03, latest+76): the Grok planner plans on the local stack, after a normalizer defect that refused every roster (ADR-251)
+
+NORMALIZATION IS THE IDENTITY ON CANONICAL NAMES. The roster
+normalizes a role's capabilities once and the planner normalizes the
+roster again; `security_review` was the one canonical name the alias
+table did not spell, so the second pass dropped it and every intent
+(all carry a security-review task) was refused with
+MISSING_CLAUDE_AGENT, a generalist `*` role included. Do not add an
+alias table entry without keeping every canonical name its own alias;
+grok-capabilities pins it for every capability.
+
+THE ROSTER IS THE PLANNER'S INPUT. A Claude bot on a starter role
+cannot cover the planning tasks and a build needs a Codex posting for
+its implementation task; the walk now builds exactly that roster with
+fake data (Generalist role with the explicit generalist declaration,
+the seeded Codex account's bot, both assigned, the Codex model named)
+and the planner records a plan. The next boundary is GitHub Not
+Connected at the release base, and the reply names the durable session.
+Lane run 33712769100 on branch f1d40e3: 7 passed, 1 skipped.
+
+WHEN THE LANE FAILS, READ THE DUMP. The local lane prints the account,
+bot, role, posting and Grok session tables whole on failure; a
+planner refusal names a code and nothing else, and the rows are what
+reproduce it in a unit test.
+
+Workers, autonomy and automatic actions remain OFF; the global kill
+switch remains ON; **GROK BOT: PRODUCTION READY is not declared.**
+
+## Older (2026-09-03, latest+75): the release gates ask for their checks by name (ADR-251)
 
 A GATE READS WHAT IT REQUIRES, NOT A PAGE. Seven exact-head gates read
 one page of check runs; a long-lived main head accumulates scheduled

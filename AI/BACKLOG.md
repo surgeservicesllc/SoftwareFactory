@@ -448,6 +448,15 @@ items named below.
   CI on page two; verify 33702924062 refused "missing|missing"). Query
   by `check_name`. Fresh read-only `scope=verify` run 33709118624 on main
   f77abd9 passed every gate — DONE.
+- [x] Increment 4 (ADR-251; lane run 33712769100): the planner plans on the
+  local stack — a Generalist role through the role editor, the seeded
+  Codex account's bot through Connect Bots and the wizard, the Claude
+  posting moved onto the role, the Codex model named; "Build me…"
+  records a plan and stops at the release base with GitHub Not
+  Connected naming the session. Found and fixed on the way: the
+  capability normalizer dropped `security_review` on its second pass,
+  so every roster was refused with MISSING_CLAUDE_AGENT; the lane now
+  prints the roster tables on failure.
 - [ ] Owner-gated, unchanged: signed-in production create/return/reload
   acceptance; the separate provider-backed E2E (needs a ready Codex
   agent and its own authorization); a connected Codex account. Each

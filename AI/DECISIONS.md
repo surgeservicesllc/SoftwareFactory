@@ -7038,6 +7038,17 @@ verifier-only: no migration, ledger, catalog, ACL or runtime assertion
 changed. Fresh read-only verify run 33709118624 on main f77abd9 passed every
 gate with the renamed query.
 
+A capability normalizer is the identity on its own output. The roster
+normalizes a role's declared capabilities once and the planner
+normalizes the roster again; `security_review` was the one canonical
+name the alias table did not spell, so the second pass dropped it and
+every intent, all of which carry a security-review task, was refused
+with MISSING_CLAUDE_AGENT for every roster — a generalist `*` role
+included. The fix admits every canonical name as its own alias before
+the table is consulted, and a test pins identity on every capability.
+The lane found it only because its failure step now prints the roster
+tables: a refusal names a code, and the rows are what reproduce it.
+
 Bounds: the local-stack proofs stop exactly where GitHub and a Codex
 account are Not Connected; they assert the refusal is stated and that
 nothing was recorded that reads as execution. Signed-in production
