@@ -436,20 +436,23 @@ test.describe("AI Factory live journey", () => {
 
     const watchStep = stepCard(page, "Watch It Ship");
     if (fakeGitHub) {
-      await expect(composer.getByText(/recorded only|did not dispatch a worker|remains blocked from execution/i).first())
-        .toBeVisible({ timeout: 10_000 });
-      await page.keyboard.press("Escape");
+      // A recorded command closes the composer and the step card is the
+      // evidence: the command counts, and it is recorded only. The Claude
+      // route records a read-only analysis plan beside it; with the worker
+      // switch off nothing claims that plan, and Step 9 says so either way.
+      await expect(page.getByRole("dialog")).toHaveCount(0, { timeout: 20_000 });
       await expect(commandStep.getByText("Done")).toBeVisible({ timeout: 30_000 });
       await expect(commandStep.getByText(/\d+ commands? on this factory · \d+ recorded only/)).toBeVisible();
 
-      // ── Step 9: a recorded-only command is not a run ──────────────────
+      // ── Step 9: a recorded command is not a run ───────────────────────
       await expect(watchStep.getByText("Done")).toHaveCount(0);
-      await expect(watchStep.getByText(/recorded only · no execution is queued/)).toBeVisible();
-      await watchStep.getByRole("button", { name: "Review command record" }).click();
+      await expect(watchStep.getByText(/Analysis planned · waiting for the analysis worker to claim it|recorded only · no execution is queued/))
+        .toBeVisible();
+      await watchStep.getByRole("button", { name: /^(Watch the analysis run|Review command record)$/ }).click();
       const watchDialog = page.getByRole("dialog");
-      await expect(watchDialog.getByText(/Record-only mode creates no worker dispatch, execution run, branch, or pull request/))
+      await expect(watchDialog.getByText(/No repository write, branch, or pull request can result|Record-only mode creates no worker dispatch/))
         .toBeVisible({ timeout: 20_000 });
-      await expect(watchDialog.getByText(/\b(is running|has started|dispatched)\b/i)).toHaveCount(0);
+      await expect(watchDialog.getByText(/the bot is working now|Analysis completed/)).toHaveCount(0);
       await page.keyboard.press("Escape");
     } else {
       await expect(composer.getByText(/failed safely|cannot|could not|not verified/i).first())
