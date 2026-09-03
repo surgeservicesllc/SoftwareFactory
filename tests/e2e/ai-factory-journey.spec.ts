@@ -741,7 +741,12 @@ test.describe("AI Factory live journey", () => {
     // empty route announcer also carries the alert role; only text counts.)
     const alert = page.getByRole("alert").filter({ hasText: /\S/ });
     await expect(alert).toBeVisible({ timeout: 30_000 });
-    await expect(alert).not.toHaveText(/\b(started|running|dispatched)\b/i);
+    // Three boundaries can answer here, each stated in the product's own
+    // words: planning coverage (a starter role cannot cover the planning
+    // tasks), GitHub Not Connected, or — once a replay has covered the roster
+    // — the research intent's missing runtime bridge, which says in so many
+    // words that no graph or worker was started.
+    await expect(alert).toHaveText(/Planning is blocked|Not Connected|No graph or worker was started\./);
     await expect.poll(() => new URL(page.url()).searchParams.get("sessionId"), { timeout: 30_000 })
       .toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
     const sessionId = new URL(page.url()).searchParams.get("sessionId")!;
@@ -944,8 +949,11 @@ test.describe("AI Factory live journey", () => {
     const conversation = page.getByRole("log", { name: "Recorded session messages" });
     await expect(conversation.getByRole("article", { name: "Chief of Staff message" }))
       .toContainText(/recorded a deterministic build plan/, { timeout: 30_000 });
+    // The saved plan is not evidence of execution, and the notice says so in
+    // one of two wordings depending on whether the release-base refusal left
+    // the session blocked or merely unlinked.
     await expect(page.getByRole("status"))
-      .toContainText("This durable session has no linked graph");
+      .toContainText(/no graph or worker execution has started|This durable session has no linked graph/);
     const inspector = page.getByRole("complementary", { name: "Session inspector" });
     await inspector.getByRole("tab", { name: "Plan" }).click();
     await expect.poll(() => inspector.getByRole("listitem").count()).toBeGreaterThanOrEqual(5);
