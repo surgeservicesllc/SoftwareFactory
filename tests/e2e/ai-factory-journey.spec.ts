@@ -1069,11 +1069,15 @@ test.describe("AI Factory live journey", () => {
     const alert = page.getByRole("alert").filter({ hasText: /\S/ });
     if (fakeGitHub) {
       // The release base resolved against the fake GitHub API: the graph is
-      // recorded, named, and nothing claims it ran (the worker stays off).
-      await expect(page.getByText("Recorded", { exact: true })).toBeVisible({ timeout: 30_000 });
-      await expect(page.getByText(/^Graph [0-9a-f-]{36}$/)).toBeVisible();
+      // recorded and the step page selects it in place of the launcher. The
+      // worker switch is off, so the page says the executor is Not Connected,
+      // that no run exists for this exact graph, and that nothing was woken.
+      await expect(page.getByRole("heading", { name: "Graph recorded — executor Not Connected" }))
+        .toBeVisible({ timeout: 30_000 });
+      await expect(page.getByText(/Graph [0-9a-f-]{36} is selected\. No run for this exact graph/)).toBeVisible();
+      await expect(page.getByText(/this request did not wake a worker/)).toBeVisible();
       await expect(alert).toHaveCount(0);
-      await expect(page.getByText(/\b(running|started|dispatched)\b/i)).toHaveCount(0);
+      await expect(page.getByText(/\b(is running|has started|dispatched)\b/i)).toHaveCount(0);
       return;
     }
     await expect(alert).toBeVisible({ timeout: 30_000 });
