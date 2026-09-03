@@ -466,6 +466,21 @@ items named below.
   acceptance; the separate provider-backed E2E (needs a ready Codex
   agent and its own authorization); a connected Codex account. Each
   stays **Not Connected** until the owner acts.
+- [ ] Owner decision: a runtime bridge for the research and deploy
+  intents. Build, fix and test intents launch the canonical Full
+  Lifecycle graph; research records its plan and refuses with
+  `grok_intent_runtime_bridge_required` because no database function
+  links a Grok session to a read-only analysis graph (the command
+  route's `launch_command_analysis_graph` is command-bound, and only
+  `launch_grok_full_lifecycle*` exist). Closing it is a hosted
+  migration, so it waits for owner direction.
+- [ ] Owner decision: the planner refusal names a code, not the
+  uncovered task. The route's contract (pinned by
+  `grok-sessions-route`: no planner details in the response) and the
+  database-owned message text keep "covers every required planning and
+  verification task" fixed; the lane's failure-time roster dump is how
+  a reader finds the task today. Naming it durably changes the hosted
+  message function and that contract.
 
 ## Grok Bot -> truthful Chief-of-Staff workspace (ADR-190, 2026-08-30)
 
