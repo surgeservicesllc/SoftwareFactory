@@ -833,6 +833,10 @@ test.describe("AI Factory live journey", () => {
     await page.goto("/solutions/ai-factory");
     await expect(page.getByRole("heading", { name: "Your factory, step by step" }))
       .toBeVisible({ timeout: 45_000 });
+    // The journey reads its steps from live records after the page paints, so
+    // wait for the route the nine-step walk posted before reading Connect Bots.
+    const assignStep = stepCard(page, "Assign Bots to Project");
+    await expect(assignStep.getByText("Done")).toBeVisible({ timeout: 30_000 });
     const botsStep = stepCard(page, "Connect Bots");
     if (!(await botsStep.getByRole("list", { name: "Ready connected bots" }).getByText("Codex").isVisible().catch(() => false))) {
       await botsStep.getByRole("button", { name: "Manage bots" }).click();
@@ -849,10 +853,13 @@ test.describe("AI Factory live journey", () => {
     }
 
     // ── The Codex posting through the wizard; the Claude posting onto the role
-    const assignStep = stepCard(page, "Assign Bots to Project");
     await assignStep.getByRole("button", { name: /Change assignments|Assign bots/ }).click();
     const roster = page.getByRole("dialog").last();
-    if (!(await roster.getByText("2 bots assigned").isVisible().catch(() => false))) {
+    // The roster fetches its postings after it opens; decide from the count it
+    // prints, never from the loading state.
+    const assignedCount = roster.getByText(/^\d+ bots? assigned$/);
+    await expect(assignedCount).toBeVisible({ timeout: 30_000 });
+    if (!/^2 /.test((await assignedCount.textContent()) ?? "")) {
       // The roster's button reads "Assign Bots" when empty and "Assign More"
       // once a posting exists; the Claude route from the nine-step walk exists.
       await roster.getByRole("button", { name: /^Assign (Bots|More)$/ }).click();
@@ -893,6 +900,28 @@ test.describe("AI Factory live journey", () => {
       await roster.getByRole("button", { name: "Cancel", exact: true }).click();
     }
     await expect(roster.getByText("2 bots assigned")).toBeVisible({ timeout: 30_000 });
+
+    // The Codex posting names its model explicitly, the way the Claude one
+    // did in the nine-step walk: a posting left on every default is not yet a
+    // configured route, and the planner only routes to configured postings.
+    const codexModel = "gpt-5.3-codex";
+    const codexPosting = roster.getByRole("listitem").filter({
+      has: page.locator(`option[value="${codexModel}"]`),
+    });
+    await expect(codexPosting).toHaveCount(1);
+    const codexModelSelect = codexPosting.getByLabel("Model");
+    if ((await codexModelSelect.inputValue()) !== codexModel) {
+      const modelWrite = page.waitForResponse((response) =>
+        response.request().method() === "PATCH"
+        && /\/api\/bot-assignments\/[^/]+$/.test(new URL(response.url()).pathname));
+      const modelReadback = page.waitForResponse((response) =>
+        response.request().method() === "GET"
+        && /\/api\/projects\/[^/]+\/bots$/.test(new URL(response.url()).pathname));
+      await codexModelSelect.selectOption(codexModel);
+      expect((await modelWrite).ok()).toBeTruthy();
+      expect((await modelReadback).ok()).toBeTruthy();
+    }
+    await expect(codexModelSelect).toHaveValue(codexModel);
     await roster.getByRole("button", { name: "Return to AI Factory" }).click();
     await expect(page.getByRole("dialog")).toHaveCount(0);
 

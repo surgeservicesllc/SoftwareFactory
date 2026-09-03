@@ -308,6 +308,18 @@ jobs:
         if: failure() && (inputs.base_url == '' || inputs.base_url == null)
         run: tail -80 next-start.log || true
 
+      - name: Print the roster and the Grok record the planner saw
+        if: failure() && (inputs.base_url == '' || inputs.base_url == null)
+        # The planner's refusal names a code, not the posting it rejected. On
+        # the local stack the rows are fake and the credential rows are never
+        # read, so print the roster tables and the Grok session record whole.
+        run: |
+          DB_URL=$(npx supabase status -o json | python3 -c "import sys,json; print(json.load(sys.stdin)['DB_URL'])")
+          for TABLE in ai_accounts bots bot_roles bot_assignments grok_sessions grok_messages grok_events; do
+            echo "== public.$TABLE"
+            psql "$DB_URL" -X -A -t -c "select left(row_to_json(t)::text, 1200) from public.$TABLE t" || true
+          done
+
       - name: Print the page snapshots Playwright captured at each failure
         if: failure()
         # error-context.md is the accessibility tree of the page at the moment
