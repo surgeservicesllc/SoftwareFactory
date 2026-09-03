@@ -1,5 +1,44 @@
 # Current state
 
+## 2026-09-03: AI Factory build-out — increment 4, the Grok planner plans on the local stack, and a normalizer defect that refused every roster (ADR-251)
+
+`lib/grok/capabilities.ts`: `normalizeGrokCapabilities` is now the
+identity on every canonical capability. The roster normalizes a role
+once and the planner normalizes the roster again; every canonical name
+was also an alias key except `security_review` (spelled only as
+`security-review` and `security`), so the second pass dropped it, and
+because every intent carries a security-review task, every roster was
+refused with MISSING_CLAUDE_AGENT whatever the role declared — a
+generalist `*` included. Found by the lane's new failure-time roster
+dump (run 33711526102) and reproduced with those rows;
+`tests/unit/grok-capabilities.test.ts` (4 tests) pins identity on every
+capability, the alias table, a build planned end to end through the
+roster projection with the lane's rows, and the named refusal when
+security review is absent.
+
+`.github/workflows/ai-factory-journey.yml` (local-stack mode) seeds a
+fake Codex subscription account beside the Claude one (same inert
+envelope; `SOFTWAREFACTORY_CODEX_AUTH_JSON` placeholder that
+authenticates nothing) and, when the journey fails, prints the account,
+bot, role, posting and Grok session tables whole (fake rows; no
+credential row is read). `tests/e2e/ai-factory-journey.spec.ts`
+(seeded stack only): a Generalist role authored through the Bot
+Manager's role editor (inside Developer Diagnostics, on its Roles tab)
+with the explicit generalist declaration; the Codex bot created from
+the seeded account through Connect Bots; assigned through the Select →
+Configure → Review wizard; the Claude posting moved onto the Generalist
+role through the roster's inline Configure; the Codex posting's model
+named explicitly. "Build me a fake health endpoint and prove it with a
+test." then records a Chief-of-Staff plan (assistant message, Plan pane
+tasks, Agents pane planned routing intent for both providers) and stops
+at the release base with GitHub Not Connected, the reply naming the
+durable session — the increment 2 route change proven on the real
+stack — with no live control offered and the same plan after a reload.
+The nine-step walk reads its roster by posting card, so a serial
+replay over two postings stays unambiguous. Evidence: lane run 33712769100
+on branch f1d40e3 (7 passed, 1 skipped). Bounds unchanged: no provider
+is called, no graph is recorded, nothing reads as execution.
+
 ## 2026-09-03: AI Factory build-out — increment 3, every release gate asks for its checks by name (ADR-251)
 
 The seven exact-head CI gates (`apply-hosted-migrations.yml` ×2,
@@ -16,7 +55,7 @@ all seven gates (5 tests; fails against the old shape). Every workflow
 contract test still passes; `apply-hosted-migrations.yml` is 419,657
 bytes of the 420,000 guard (343 bytes of headroom — the next scope must
 extract before it adds). Verifier-only: no migration, ledger, catalog,
-ACL or runtime assertion changed. The fresh read-only `scope=verify` on the next green/READY main is dispatched after this merge and recorded on its own line.
+ACL or runtime assertion changed. Fresh read-only `scope=verify` run 33709118624 on main f77abd9 (the first green/READY main after this merge) passed every gate — the four CI checks found by name on a head that still carries the scheduled check-ins, completion ledger 1|1, prerequisite catalog, exact catalog / ACL / rollback runtime / lint / health, stopped containment, and the exact release, READY deployment and health postflight.
 
 ## 2026-09-03: AI Factory build-out — increment 2, Grok Bot and the launcher walked with fake data (ADR-251)
 

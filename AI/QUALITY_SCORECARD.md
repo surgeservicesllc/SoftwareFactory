@@ -2,13 +2,26 @@
 
 Last reviewed: 2026-09-03
 
+**Addendum, 2026-09-03 latest+76 - AI Factory build-out, increment 4: the Grok planner plans on the local stack (ADR-251):**
+grok-capabilities 4 (normalization is the identity on every canonical
+capability and on its own output; the alias table still expands role
+vocabulary; a generalist Claude posting and a backend Codex posting
+plan a build end to end through the roster projection with the lane's
+rows; the refusal names `security_review/STRONG` when it is absent).
+ai-factory-journey.spec.ts +1 (the covered-roster walk: role editor on
+the Roles tab, Codex bot, wizard, inline role change, explicit Codex
+model, then a recorded build plan and the release-base refusal naming
+the session, held after a reload) and the nine-step walk reads its
+roster by posting card. Lane run 33712769100: 7 passed, 1 skipped. Every
+Grok suite green (68 tests across the five Grok files).
+
 **Addendum, 2026-09-03 latest+75 - AI Factory build-out, increment 3: release gates ask for their checks by name (ADR-251):**
 exact-head-check-gates 5 (each of the seven gates fetches per required
 check with a server-side check_name filter inside the loop, no
 single-page read precedes a loop, and each gate still names exactly the
 four CI checks; the suite fails against the previous shape). Every
 workflow contract suite unchanged and green; apply-hosted-migrations.yml
-419,657 bytes of 420,000. The fresh read-only `scope=verify` on the next green/READY main is dispatched after this merge and recorded on its own line.
+419,657 bytes of 420,000. Fresh read-only `scope=verify` run 33709118624 on main f77abd9 (the first green/READY main after this merge) passed every gate — the four CI checks found by name on a head that still carries the scheduled check-ins, completion ledger 1|1, prerequisite catalog, exact catalog / ACL / rollback runtime / lint / health, stopped containment, and the exact release, READY deployment and health postflight.
 
 **Addendum, 2026-09-03 latest+74 - AI Factory build-out, increment 2: Grok Bot and the launcher walked with fake data (ADR-251):**
 grok-sessions-route +1 (a GitHub refusal at release resolution answers

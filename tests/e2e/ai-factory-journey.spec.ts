@@ -335,7 +335,15 @@ test.describe("AI Factory live journey", () => {
       response.request().method() === "GET"
       && /\/api\/projects\/[^/]+\/bots$/.test(new URL(response.url()).pathname));
 
-    const model = roster.getByLabel("Model");
+    // A replay after the covered-roster walk finds a second posting on this
+    // roster, so every posting-level read is scoped to the card of the bot
+    // this walk created: the one whose model catalogue carries the model it
+    // is about to choose.
+    const posting = roster.getByRole("listitem").filter({
+      has: page.locator(`option[value="${assignmentModel}"]`),
+    });
+    await expect(posting).toHaveCount(1, { timeout: 30_000 });
+    const model = posting.getByLabel("Model");
     await expect(model).toBeVisible({ timeout: 30_000 });
     await expect(model.locator(`option[value="${assignmentModel}"]`)).toHaveCount(1);
     if ((await model.inputValue()) !== assignmentModel) {
@@ -348,7 +356,7 @@ test.describe("AI Factory live journey", () => {
     await expect(model).toHaveValue(assignmentModel);
     await expect(model).toBeEnabled();
 
-    const effort = roster.getByLabel("Work effort");
+    const effort = posting.getByLabel("Work effort");
     if ((await effort.inputValue()) !== assignmentEffort) {
       const effortWrite = assignmentWrite();
       const effortReadback = rosterReadback();
@@ -363,8 +371,8 @@ test.describe("AI Factory live journey", () => {
     // with exactly the active route it created, and no worker is connected.
     // An attempt that stopped between the two leaves the posting paused, so
     // it is resumed first and the pair is then driven from the active state.
-    const pause = roster.getByRole("button", { name: /^Pause / });
-    const resume = roster.getByRole("button", { name: /^Resume / });
+    const pause = posting.getByRole("button", { name: /^Pause / });
+    const resume = posting.getByRole("button", { name: /^Resume / });
     if (await resume.isVisible().catch(() => false)) {
       const recoverWrite = postingWrite();
       const recoverReadback = rosterReadback();
@@ -386,8 +394,14 @@ test.describe("AI Factory live journey", () => {
     await resume.click();
     expect((await resumeWrite).ok()).toBeTruthy();
     expect((await resumeReadback).ok()).toBeTruthy();
-    await expect(roster.getByRole("button", { name: /^Pause / })).toBeVisible();
-    await expect(roster.getByText("1 bot assigned")).toBeVisible();
+    await expect(pause).toBeVisible();
+    // The count the roster prints is the count of postings it lists: one on
+    // a first attempt, two once the covered-roster walk has posted Codex.
+    const postings = roster.getByRole("listitem").filter({
+      has: page.getByRole("button", { name: /^(Pause|Resume) / }),
+    });
+    await expect(roster.getByText(new RegExp(`^${await postings.count()} bots? assigned$`)))
+      .toBeVisible();
     await expect(page.getByRole("dialog")).toHaveCount(1);
     await roster.getByRole("button", { name: "Return to AI Factory" }).click();
     await expect(page.getByRole("dialog")).toHaveCount(0);
@@ -447,12 +461,16 @@ test.describe("AI Factory live journey", () => {
     const persistedRoster = page.getByRole("dialog");
     await expect(persistedRoster).toBeVisible();
     await expect(page.getByRole("dialog")).toHaveCount(1);
-    await expect(persistedRoster.getByText("1 bot assigned")).toBeVisible();
-    await expect(persistedRoster.getByLabel("Model")).toHaveValue(assignmentModel);
-    await expect(persistedRoster.getByLabel("Work effort")).toHaveValue(assignmentEffort);
-    await expect(persistedRoster.getByRole("button", { name: /^Pause / })).toBeVisible();
+    const persistedPosting = persistedRoster.getByRole("listitem").filter({
+      has: page.locator(`option[value="${assignmentModel}"]`),
+    });
+    await expect(persistedPosting).toHaveCount(1);
+    await expect(persistedRoster.getByText(/^\d+ bots? assigned$/)).toBeVisible();
+    await expect(persistedPosting.getByLabel("Model")).toHaveValue(assignmentModel);
+    await expect(persistedPosting.getByLabel("Work effort")).toHaveValue(assignmentEffort);
+    await expect(persistedPosting.getByRole("button", { name: /^Pause / })).toBeVisible();
 
-    await persistedRoster.getByRole("button", { name: /^Configure / }).click();
+    await persistedPosting.getByRole("button", { name: /^Configure / }).click();
     await expect(page.getByRole("dialog")).toHaveCount(1);
     const persistedRole = persistedRoster.getByRole("combobox", { name: /^Role for / });
     if (roleOptions[0]) {
@@ -490,7 +508,7 @@ test.describe("AI Factory live journey", () => {
     // assignment. Close only the outer surface after proving that read-back.
     await persistedRoster.getByRole("button", { name: "Cancel", exact: true }).click();
     await expect(page.getByRole("dialog")).toHaveCount(1);
-    await expect(persistedRoster.getByRole("button", { name: /^Pause / })).toBeVisible();
+    await expect(persistedPosting.getByRole("button", { name: /^Pause / })).toBeVisible();
     await persistedRoster.getByRole("button", { name: "Return to AI Factory" }).click();
     await expect(page.getByRole("dialog")).toHaveCount(0);
   });
@@ -723,7 +741,12 @@ test.describe("AI Factory live journey", () => {
     // empty route announcer also carries the alert role; only text counts.)
     const alert = page.getByRole("alert").filter({ hasText: /\S/ });
     await expect(alert).toBeVisible({ timeout: 30_000 });
-    await expect(alert).not.toHaveText(/\b(started|running|dispatched)\b/i);
+    // Three boundaries can answer here, each stated in the product's own
+    // words: planning coverage (a starter role cannot cover the planning
+    // tasks), GitHub Not Connected, or — once a replay has covered the roster
+    // — the research intent's missing runtime bridge, which says in so many
+    // words that no graph or worker was started.
+    await expect(alert).toHaveText(/Planning is blocked|Not Connected|No graph or worker was started\./);
     await expect.poll(() => new URL(page.url()).searchParams.get("sessionId"), { timeout: 30_000 })
       .toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
     const sessionId = new URL(page.url()).searchParams.get("sessionId")!;
@@ -759,6 +782,197 @@ test.describe("AI Factory live journey", () => {
     await inspector.getByRole("tab", { name: "Deployment" }).click();
     // The two badges, exactly: the pane's detail sentence also says "not
     // connected" in prose, and a loose match would count that too.
+    await expect(inspector.getByText("Not Connected", { exact: true })).toHaveCount(2);
+    await expect(page.getByText("Demo Data")).toHaveCount(0);
+  });
+
+  test("Grok Bot plans on a covered roster with fake data, and stops honestly at the release base", async ({ page }) => {
+    /*
+     * The walk above proves the honest refusal of an uncovered roster. This
+     * one builds the roster the planner needs and proves the next boundary:
+     * a role that covers every planning and verification task, made through
+     * the Bot Manager's own role editor; a Codex bot from the seeded account,
+     * assigned through the same wizard; the Claude posting moved onto that
+     * role. Then "Build me…" must record a Chief-of-Staff plan and stop at
+     * the release base, because GitHub is Not Connected -- with the durable
+     * session named beside that reason, the plan and its routing intent
+     * readable, no live control offered, and all of it there after a reload.
+     */
+    test.skip(!seeded, "builds the covered roster only on the seeded local stack");
+    test.setTimeout(360_000);
+
+    await page.goto("/auth/sign-in");
+    await page.getByLabel("Email").fill(email);
+    await page.getByLabel("Password").fill(password);
+    await page.getByRole("button", { name: /^sign in$/i }).click();
+    await waitForSignedIn(page);
+
+    // ── A generalist role, authored where roles are authored ──────────────
+    // The role editor is technical detail, so the Bot Manager keeps it inside
+    // the Developer Diagnostics disclosure, closed by default, and the console
+    // in there opens on its Fleet tab; open the disclosure, then pick Roles.
+    await page.goto("/solutions/bot-manager");
+    const diagnostics = page.locator("#developer-diagnostics");
+    await expect(diagnostics).toBeVisible({ timeout: 45_000 });
+    if (!(await diagnostics.evaluate((node) => (node as HTMLDetailsElement).open))) {
+      await diagnostics.locator("summary").click();
+    }
+    const rolesTab = diagnostics.getByRole("tab", { name: /^Roles\b/ });
+    await expect(rolesTab).toBeVisible({ timeout: 45_000 });
+    await rolesTab.click();
+    await expect(rolesTab).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByRole("heading", { name: "Your roles" })).toBeVisible({ timeout: 45_000 });
+    if (!(await page.getByRole("heading", { name: "Generalist" }).isVisible().catch(() => false))) {
+      await page.getByRole("button", { name: "New role" }).click();
+      await page.locator("#role-name").fill("Generalist");
+      await page.locator("#role-slug").fill("generalist");
+      await page.locator("#role-summary").fill("Covers every planning and verification task the journey asks for.");
+      await page.locator("#role-instructions")
+        .fill("Read the repository and report exactly what you find. Never claim a result you did not observe.");
+      await page.locator("#role-capabilities").fill("*");
+      await page.getByRole("button", { name: "Save role" }).click();
+      await expect(page.getByRole("heading", { name: "Generalist" })).toBeVisible({ timeout: 30_000 });
+    }
+
+    // ── The Codex bot, from the seeded account, through Connect Bots ──────
+    await page.goto("/solutions/ai-factory");
+    await expect(page.getByRole("heading", { name: "Your factory, step by step" }))
+      .toBeVisible({ timeout: 45_000 });
+    // The journey reads its steps from live records after the page paints, so
+    // wait for the route the nine-step walk posted before reading Connect Bots.
+    const assignStep = stepCard(page, "Assign Bots to Project");
+    await expect(assignStep.getByText("Done")).toBeVisible({ timeout: 30_000 });
+    const botsStep = stepCard(page, "Connect Bots");
+    if (!(await botsStep.getByRole("list", { name: "Ready connected bots" }).getByText("Codex").isVisible().catch(() => false))) {
+      await botsStep.getByRole("button", { name: "Manage bots" }).click();
+      const connectDialog = page.getByRole("dialog", { name: "Connect Bots" });
+      await connectDialog.getByRole("button", { name: "Create Bot" }).click();
+      const codexAccount = connectDialog.getByRole("button", { name: /Fake Codex Account/ });
+      await expect(codexAccount).toBeVisible({ timeout: 20_000 });
+      await codexAccount.click();
+      await expect(connectDialog.getByRole("status"))
+        .toContainText(/Bot created|now linked|already has a bot/, { timeout: 30_000 });
+      await page.keyboard.press("Escape");
+      await expect(botsStep.getByText(/2 ready bots linked to 2 connected accounts/))
+        .toBeVisible({ timeout: 30_000 });
+    }
+
+    // ── The Codex posting through the wizard; the Claude posting onto the role
+    await assignStep.getByRole("button", { name: /Change assignments|Assign bots/ }).click();
+    const roster = page.getByRole("dialog").last();
+    // The roster fetches its postings after it opens; decide from the count it
+    // prints, never from the loading state.
+    const assignedCount = roster.getByText(/^\d+ bots? assigned$/);
+    await expect(assignedCount).toBeVisible({ timeout: 30_000 });
+    if (!/^2 /.test((await assignedCount.textContent()) ?? "")) {
+      // The roster's button reads "Assign Bots" when empty and "Assign More"
+      // once a posting exists; the Claude route from the nine-step walk exists.
+      await roster.getByRole("button", { name: /^Assign (Bots|More)$/ }).click();
+      const wizard = page.getByRole("dialog").last();
+      // Only the unassigned Codex bot is selectable; the Claude route exists.
+      await wizard.getByRole("button", { name: "Select All" }).click();
+      await expect(wizard.getByText("1 bot selected")).toBeVisible();
+      await wizard.getByRole("button", { name: "Next" }).click();
+      const role = wizard.getByRole("combobox", { name: /^Role for / });
+      await expect(role).toBeVisible({ timeout: 20_000 });
+      // A writing role for the writing bot: the starter the first walk
+      // adopted covers implementation, which is the one task Codex is given.
+      const writingRole = await role.locator("option").evaluateAll((nodes) =>
+        (nodes as HTMLOptionElement[])
+          .filter((node) => node.value && !/generalist/i.test(node.textContent ?? ""))
+          .map((node) => node.value));
+      await role.selectOption(writingRole[0]);
+      await wizard.getByRole("button", { name: "Next" }).click();
+      const acknowledgement = wizard.getByRole("checkbox", { name: /elevated permissions/i });
+      if (await acknowledgement.isVisible().catch(() => false)) await acknowledgement.check();
+      await wizard.getByRole("button", { name: "Confirm" }).click();
+      await expect(roster.getByText("2 bots assigned")).toBeVisible({ timeout: 30_000 });
+    }
+    const claudeRole = roster.getByRole("combobox", { name: "Role for Claude" });
+    await roster.getByRole("button", { name: "Configure Claude" }).click();
+    await expect(claudeRole).toBeVisible({ timeout: 20_000 });
+    if (!/generalist/i.test(await claudeRole.locator("option:checked").textContent() ?? "")) {
+      // The Configure editor saves the whole posting through the project's
+      // bots route; only the roster's inline model and effort selects go
+      // through /api/bot-assignments.
+      const saved = page.waitForResponse((response) =>
+        response.request().method() === "PATCH"
+        && /\/api\/projects\/[^/]+\/bots\/[^/]+$/.test(new URL(response.url()).pathname));
+      await claudeRole.selectOption({ label: "Generalist" });
+      await roster.getByRole("button", { name: "Save changes" }).click();
+      expect((await saved).ok()).toBeTruthy();
+    } else {
+      await roster.getByRole("button", { name: "Cancel", exact: true }).click();
+    }
+    await expect(roster.getByText("2 bots assigned")).toBeVisible({ timeout: 30_000 });
+
+    // The Codex posting names its model explicitly, the way the Claude one
+    // did in the nine-step walk: a posting left on every default is not yet a
+    // configured route, and the planner only routes to configured postings.
+    const codexModel = "gpt-5.3-codex";
+    const codexPosting = roster.getByRole("listitem").filter({
+      has: page.locator(`option[value="${codexModel}"]`),
+    });
+    await expect(codexPosting).toHaveCount(1);
+    const codexModelSelect = codexPosting.getByLabel("Model");
+    if ((await codexModelSelect.inputValue()) !== codexModel) {
+      const modelWrite = page.waitForResponse((response) =>
+        response.request().method() === "PATCH"
+        && /\/api\/bot-assignments\/[^/]+$/.test(new URL(response.url()).pathname));
+      const modelReadback = page.waitForResponse((response) =>
+        response.request().method() === "GET"
+        && /\/api\/projects\/[^/]+\/bots$/.test(new URL(response.url()).pathname));
+      await codexModelSelect.selectOption(codexModel);
+      expect((await modelWrite).ok()).toBeTruthy();
+      expect((await modelReadback).ok()).toBeTruthy();
+    }
+    await expect(codexModelSelect).toHaveValue(codexModel);
+    await roster.getByRole("button", { name: "Return to AI Factory" }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+
+    // ── "Build me…" plans, then stops at the release base ─────────────────
+    await page.goto("/solutions/factory/grok");
+    await expect(page.locator('[aria-label="Loading Grok Bot"]')).toHaveCount(0, { timeout: 45_000 });
+    const sessions = page.getByRole("complementary", { name: "Grok sessions" });
+    await sessions.getByLabel("Project").selectOption({ label: "Storefront Rebuild" });
+    const goal = "Build me a fake health endpoint and prove it with a test.";
+    await page.getByRole("textbox", { name: "Tell Grok Bot what you want done" }).fill(goal);
+    await page.getByRole("button", { name: "Start goal" }).click();
+
+    const alert = page.getByRole("alert").filter({ hasText: /\S/ });
+    await expect(alert).toBeVisible({ timeout: 45_000 });
+    await expect(alert).toContainText("Not Connected");
+    await expect.poll(() => new URL(page.url()).searchParams.get("sessionId"), { timeout: 30_000 })
+      .toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+    const sessionId = new URL(page.url()).searchParams.get("sessionId")!;
+
+    const conversation = page.getByRole("log", { name: "Recorded session messages" });
+    await expect(conversation.getByRole("article", { name: "Chief of Staff message" }))
+      .toContainText(/recorded a deterministic build plan/, { timeout: 30_000 });
+    // The saved plan is not evidence of execution, and the notice says so in
+    // one of two wordings depending on whether the release-base refusal left
+    // the session blocked or merely unlinked.
+    await expect(page.getByRole("status"))
+      .toContainText(/no graph or worker execution has started|This durable session has no linked graph/);
+    const inspector = page.getByRole("complementary", { name: "Session inspector" });
+    await inspector.getByRole("tab", { name: "Plan" }).click();
+    await expect.poll(() => inspector.getByRole("listitem").count()).toBeGreaterThanOrEqual(5);
+    await inspector.getByRole("tab", { name: "Agents" }).click();
+    await expect(inspector.getByText("Planned routing intent")).toBeVisible();
+    await expect(inspector.getByText(/Codex/).first()).toBeVisible();
+    await expect(inspector.getByText("Observed node execution route")).toHaveCount(0);
+    const controls = page.getByRole("button", { name: /^(pause|resume|stop) unavailable in / });
+    await expect.poll(() => controls.count()).toBeGreaterThanOrEqual(2);
+    for (const control of await controls.all()) await expect(control).toBeDisabled();
+
+    // After a reload, the same durable plan and the same honest boundary.
+    await page.goto(`/solutions/factory/grok?sessionId=${encodeURIComponent(sessionId)}`);
+    await expect(page.locator('[aria-label="Loading Grok Bot"]')).toHaveCount(0, { timeout: 45_000 });
+    await expect(conversation.getByRole("article", { name: "Chief of Staff message" }))
+      .toContainText(/recorded a deterministic build plan/, { timeout: 30_000 });
+    await inspector.getByRole("tab", { name: "Plan" }).click();
+    await expect.poll(() => inspector.getByRole("listitem").count()).toBeGreaterThanOrEqual(5);
+    await inspector.getByRole("tab", { name: "Deployment" }).click();
     await expect(inspector.getByText("Not Connected", { exact: true })).toHaveCount(2);
     await expect(page.getByText("Demo Data")).toHaveCount(0);
   });

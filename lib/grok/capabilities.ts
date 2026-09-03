@@ -1,5 +1,9 @@
 import { NODE_CAPABILITIES, type NodeCapability } from "@/lib/graph/contracts";
 
+function isNodeCapability(token: string): token is NodeCapability {
+  return (NODE_CAPABILITIES as readonly string[]).includes(token);
+}
+
 export const GROK_CAPABILITY_ALIASES: Readonly<Record<string, readonly NodeCapability[]>> =
   Object.freeze({
     planning: ["planning"], architecture: ["architecture"], implementation: ["implementation"],
@@ -27,6 +31,16 @@ export function normalizeGrokCapabilities(
     const token = declared.trim().toLowerCase();
     if (token === "*") {
       for (const capability of NODE_CAPABILITIES) normalized.add(capability);
+      continue;
+    }
+    // A canonical name is always its own alias, so normalizing an already
+    // normalized list is the identity. The roster normalizes a role once and
+    // the planner normalizes the roster again; `security_review` is the one
+    // canonical name the alias table does not spell, and before this line the
+    // second pass dropped it and every intent was refused for want of a
+    // security reviewer.
+    if (isNodeCapability(token)) {
+      normalized.add(token);
       continue;
     }
     for (const capability of GROK_CAPABILITY_ALIASES[token] ?? []) {
