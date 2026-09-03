@@ -6991,3 +6991,55 @@ created after 20260812002600's blanket narrowing may carry the same
 default grants; the hosted-service-role-table-grants roster checks the
 chain, not production, and a production-wide readback is a separate
 decision for the owner.
+
+## ADR-251 - The AI Factory is proven with fake data on a real stack, and its release gates read the checks they require by name
+
+Date: 2026-09-03
+
+The owner's directive was to walk the whole AI Factory, the Grok Bot
+section included, with fake data end to end. The audit found the
+surfaces built and documented and the proofs unfinished: the scheduled
+local-stack journey lane had never been green, the Grok workspace had
+no fake-data walk through the real route and database, and the fresh
+read-only verify that closed ADR-227 had never been written down.
+
+Three decisions follow.
+
+The local stack gets the stack's own service-role key. Anything that
+records through a service-role recorder — bot readiness, the Grok
+service client — throws without it, and the provision route then
+answers 503 after saving the bot. The Supabase CLI's local development
+keys are public defaults, the same class as the anon key the lane
+already wrote; writing the service key next to it is wiring, not a
+secret. A journey proof is driven from the state the page reports,
+never from the assumption that nothing exists yet, because the group is
+serial and one failure replays the walk over committed rows; a fresh
+workspace offers the launcher outright and the proof accepts that state.
+
+A refusal over a durable record names the record. The Grok route
+commits the session, its message, the Chief-of-Staff plan and the
+specialist roster before it resolves the release base from GitHub. When
+GitHub refuses (Not Connected, or an API error), the reply now carries
+the session id beside the boundary's own sentence, and the workspace
+reopens that session for any refusal that names one rather than only
+the planner's 409. A bare error over a request that did commit hides
+real work; nothing here implies a graph, worker or provider started.
+
+A release gate asks for each required check by name. The exact-head
+gates read one page of the head's check runs and filtered locally. A
+long-lived main head accumulates scheduled worker check-ins (main
+91a7e2b carried 106) and the four CI checks fall onto a page the gate
+never read, so a green head reports "missing|missing" and a read-only
+verify refuses (run 33702924062 on main 91a7e2b). Every gate is to make
+one server-filtered request per required check (`check_name`), inside
+the loop that names them; the jq filter on name, head and app stays as
+it is, and a unit test pins the shape in all seven gates. The rewrite
+and its test land as increment 3 of this build-out; it is verifier-only,
+and no migration, ledger, catalog, ACL or runtime assertion changes.
+
+Bounds: the local-stack proofs stop exactly where GitHub and a Codex
+account are Not Connected; they assert the refusal is stated and that
+nothing was recorded that reads as execution. Signed-in production
+acceptance, the provider-backed end-to-end run and a connected Codex
+account remain owner-gated, and GROK BOT: PRODUCTION READY is not
+declared by anything here.

@@ -2,7 +2,27 @@
 
 Last updated: 2026-09-03
 
-## Newest (2026-09-03, latest+73): the fake-data AI Factory journey is green on the local stack
+## Newest (2026-09-03, latest+74): Grok Bot and the launcher walked with fake data (ADR-251)
+
+A REFUSAL NAMES ITS RECORD. The Grok route commits the session, the
+message, the plan and the roster before it asks GitHub for the release
+base; a GitHub refusal there now carries the session id, and the
+workspace reopens any refusal that names a session. Do not turn that
+into a bare error again: a request that committed is real work.
+
+THE LOCAL WALK STOPS WHERE THE PRODUCT STOPS. One Claude bot on a
+starter role cannot cover the planning tasks, and GitHub is Not
+Connected, so the Grok walk asserts the stated refusal, the reopened
+durable session, no live control and persistence after reload; the
+launcher walk asserts GitHub Not Connected and nothing recorded. Only
+the seeded local stack submits a goal or presses Launch; a deployed
+target with a real installation could record real work, so it runs the
+signed-in read only. Lane run 33704808335 on branch dc4a41d.
+
+Workers, autonomy and automatic actions remain OFF; the global kill
+switch remains ON; **GROK BOT: PRODUCTION READY is not declared.**
+
+## Older (2026-09-03, latest+73): the fake-data AI Factory journey is green on the local stack
 
 THE LANE HAD NEVER PASSED LOCALLY. Every green run of "AI Factory live
 journey" in its history was the remote read-only half. The scheduled

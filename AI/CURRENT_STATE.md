@@ -1,5 +1,30 @@
 # Current state
 
+## 2026-09-03: AI Factory build-out — increment 2, Grok Bot and the launcher walked with fake data (ADR-251)
+
+`tests/e2e/ai-factory-journey.spec.ts` (local-stack mode, after the
+nine-step walk, over the project it built): the Grok Bot workspace is
+driven from the page — the journey project chosen, a goal typed, and
+the product must record it durably and state exactly where it stops.
+On the local stack the roster is one Claude bot on a starter role and
+GitHub is Not Connected, so the refusal is honest by construction;
+whichever refusal fires, the session it names is reopened beside the
+reason (address bar, sessions list, the recorded message), survives a
+reload, offers no live control (every control disabled and naming the
+state it is unavailable in), and the Deployment pane keeps Rollback and
+Automatic continuation as Not Connected. The ten-step launcher is
+pressed on the seeded stack only: Launch refuses with GitHub Not
+Connected, nothing reads as Recorded, and the page still offers the
+launcher after a reload. A deployed target runs the signed-in read of
+the workspace and presses nothing. Product change:
+`app/api/grok/sessions/route.ts` names the durable session when GitHub
+refuses at release resolution (session, message, plan and roster are
+committed by then), and `components/grok/grok-workspace.tsx` reopens
+any refusal that names a session, not only the planner's 409. Tests:
+grok-sessions-route +1, grok-workspace +1; `vitest run grok` 17 files /
+182 tests; eslint, tsc and the production build clean. Evidence: lane
+run 33704808335 on branch dc4a41d.
+
 ## 2026-09-03: AI Factory build-out — increment 1, the fake-data journey lane is green on the local stack
 
 `.github/workflows/ai-factory-journey.yml` (local-stack mode) now writes

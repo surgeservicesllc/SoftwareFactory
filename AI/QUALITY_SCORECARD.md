@@ -2,6 +2,17 @@
 
 Last reviewed: 2026-09-03
 
+**Addendum, 2026-09-03 latest+74 - AI Factory build-out, increment 2: Grok Bot and the launcher walked with fake data (ADR-251):**
+grok-sessions-route +1 (a GitHub refusal at release resolution answers
+503 with the durable session id after the plan and roster were
+recorded, and launches nothing). grok-workspace +1 (a 503 that names a
+session is reopened beside the reason: detail fetched, address bar
+updated, the saved-plan notice shown, planned routing intent on the
+Agents tab, every control disabled). ai-factory-journey.spec.ts +2
+(the Grok walk and the launcher walk on the seeded stack); lane run
+33704808335: 6 passed, 1 skipped. `vitest run grok` 17 files / 182 tests;
+eslint, tsc and the production build clean.
+
 **Addendum, 2026-09-03 latest+73 - AI Factory build-out, increment 1: the fake-data journey lane (local stack):**
 ai-factory-journey.spec.ts against a real local Supabase stack, run
 33702735093: 4 passed, 1 skipped (the nine-step walk with fake data and

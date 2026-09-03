@@ -435,7 +435,7 @@ items named below.
   the fresh-workspace launcher state; failures print every
   error-context.md. Runs 33702000830 (first past step 5 and Confirm;
   the walk passed first attempt) and 33702735093 (4 passed, 1 skipped).
-- [ ] Increment 2: the Grok Bot workspace and the ten-step launcher
+- [x] Increment 2 (ADR-251; lane run 33704808335): the Grok Bot workspace and the ten-step launcher
   walked with fake data on the local stack — a goal recorded durably and
   reopened beside the refusal the boundary states (planning coverage or
   GitHub Not Connected), no live control offered, persistence after
