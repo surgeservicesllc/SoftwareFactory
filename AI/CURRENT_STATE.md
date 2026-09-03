@@ -1,5 +1,23 @@
 # Current state
 
+## 2026-09-03: AI Factory build-out — increment 3, every release gate asks for its checks by name (ADR-251)
+
+The seven exact-head CI gates (`apply-hosted-migrations.yml` ×2,
+`grok-bot-completion-migrations.yml` ×2, `grok-bot-release-migrations.yml`,
+`factory-lifecycle-release-migrations.yml`, `graph-artifact-containment.yml`)
+read one page of the head's check runs and filtered locally; main
+91a7e2b carried 106 check runs (scheduled worker check-ins), the four CI
+checks sat on page two, and read-only verify 33702924062 refused with
+"missing|missing". Each gate now makes one server-filtered request per
+required check (`--get --data-urlencode "check_name=..."`) inside the
+loop that names the four checks; the jq filter on name, head and app is
+unchanged. `tests/unit/exact-head-check-gates.test.ts` pins the shape in
+all seven gates (5 tests; fails against the old shape). Every workflow
+contract test still passes; `apply-hosted-migrations.yml` is 419,657
+bytes of the 420,000 guard (343 bytes of headroom — the next scope must
+extract before it adds). Verifier-only: no migration, ledger, catalog,
+ACL or runtime assertion changed. The fresh read-only `scope=verify` on the next green/READY main is dispatched after this merge and recorded on its own line.
+
 ## 2026-09-03: AI Factory build-out — increment 2, Grok Bot and the launcher walked with fake data (ADR-251)
 
 `tests/e2e/ai-factory-journey.spec.ts` (local-stack mode, after the

@@ -7030,12 +7030,12 @@ gates read one page of the head's check runs and filtered locally. A
 long-lived main head accumulates scheduled worker check-ins (main
 91a7e2b carried 106) and the four CI checks fall onto a page the gate
 never read, so a green head reports "missing|missing" and a read-only
-verify refuses (run 33702924062 on main 91a7e2b). Every gate is to make
+verify refuses (run 33702924062 on main 91a7e2b). Every gate now makes
 one server-filtered request per required check (`check_name`), inside
-the loop that names them; the jq filter on name, head and app stays as
-it is, and a unit test pins the shape in all seven gates. The rewrite
-and its test land as increment 3 of this build-out; it is verifier-only,
-and no migration, ledger, catalog, ACL or runtime assertion changes.
+the loop that names them; the jq filter on name, head and app is
+unchanged, and a unit test pins the shape in all seven gates. This is
+verifier-only: no migration, ledger, catalog, ACL or runtime assertion
+changed.
 
 Bounds: the local-stack proofs stop exactly where GitHub and a Codex
 account are Not Connected; they assert the refusal is stated and that

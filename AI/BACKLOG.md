@@ -442,7 +442,7 @@ items named below.
   reload; Launch refused with GitHub Not Connected and nothing
   recorded. A GitHub refusal at release resolution now names the durable
   session so the workspace reopens it.
-- [ ] Increment 3: the seven single-page check-run gates
+- [x] Increment 3 (ADR-251): the seven single-page check-run gates
   (`commits/{sha}/check-runs?per_page=100`) miss the CI checks once a
   head accumulates more than 100 scheduled check-ins (main 91a7e2b: 106,
   CI on page two; verify 33702924062 refused "missing|missing"). Query
