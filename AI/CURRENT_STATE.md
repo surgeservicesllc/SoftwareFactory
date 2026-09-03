@@ -32,6 +32,15 @@ fake (`AI_FACTORY_E2E_FAKE_GITHUB` unset) every walk still asserts the
 Not Connected refusals. Evidence: lane run 33717344109 on branch 8450cbd
 (7 passed, 1 skipped).
 
+Where the fake-data proof stops: execution. The worker switch, a
+provider-backed run and a connected Codex account are owner-gated, and
+two Grok gaps are owner decisions because they change hosted database
+functions — a runtime bridge for the research and deploy intents (no
+function links a Grok session to a read-only analysis graph) and a
+refusal that names the uncovered task (the route's contract withholds
+planner details and the message text is database-owned). Both are
+listed under task #61 in `AI/BACKLOG.md`.
+
 ## 2026-09-03: AI Factory build-out — increment 4, the Grok planner plans on the local stack, and a normalizer defect that refused every roster (ADR-251)
 
 `lib/grok/capabilities.ts`: `normalizeGrokCapabilities` is now the

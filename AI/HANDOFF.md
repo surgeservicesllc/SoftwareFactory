@@ -16,6 +16,16 @@ launcher records a Full Lifecycle graph (Recorded); the worker switch
 stays off, so nothing runs. Lane run 33717344109 on branch 8450cbd: 7
 passed, 1 skipped. Without the fake both walks assert Not Connected.
 
+WHERE THE FAKE-DATA PROOF STOPS. Increments 1–5 walk everything fake
+data can reach on a real stack: nine steps, a recorded command, a
+covered roster, a recorded plan, a recorded and paused lifecycle graph
+from both Grok and the launcher. The next boundary is execution, and
+that is owner-gated three ways: the worker switch, a provider-backed
+run, a connected Codex account. Two further Grok gaps are owner
+decisions because they change hosted database functions: a runtime
+bridge for the research and deploy intents, and a refusal that names
+the uncovered task (BACKLOG, task #61 section).
+
 Workers, autonomy and automatic actions remain OFF; the global kill
 switch remains ON; **GROK BOT: PRODUCTION READY is not declared.**
 
