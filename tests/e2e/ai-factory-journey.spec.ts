@@ -785,7 +785,14 @@ test.describe("AI Factory live journey", () => {
     await waitForSignedIn(page);
 
     // ── A generalist role, authored where roles are authored ──────────────
+    // The role editor is technical detail, so the Bot Manager keeps it inside
+    // the Developer Diagnostics disclosure, closed by default; open it first.
     await page.goto("/solutions/bot-manager");
+    const diagnostics = page.locator("#developer-diagnostics");
+    await expect(diagnostics).toBeVisible({ timeout: 45_000 });
+    if (!(await diagnostics.evaluate((node) => (node as HTMLDetailsElement).open))) {
+      await diagnostics.locator("summary").click();
+    }
     await expect(page.getByRole("heading", { name: "Your roles" })).toBeVisible({ timeout: 45_000 });
     if (!(await page.getByRole("heading", { name: "Generalist" }).isVisible().catch(() => false))) {
       await page.getByRole("button", { name: "New role" }).click();
