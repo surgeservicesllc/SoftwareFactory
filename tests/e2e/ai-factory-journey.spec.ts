@@ -719,8 +719,9 @@ test.describe("AI Factory live journey", () => {
 
     // The refusal is stated in words, never swallowed, and never reads as a
     // run. The request is durable regardless: the reply names the session
-    // and the workspace reopens it in the address bar.
-    const alert = page.getByRole("alert");
+    // and the workspace reopens it in the address bar. (The framework's
+    // empty route announcer also carries the alert role; only text counts.)
+    const alert = page.getByRole("alert").filter({ hasText: /\S/ });
     await expect(alert).toBeVisible({ timeout: 30_000 });
     await expect(alert).not.toHaveText(/\b(started|running|dispatched)\b/i);
     await expect.poll(() => new URL(page.url()).searchParams.get("sessionId"), { timeout: 30_000 })
@@ -788,7 +789,7 @@ test.describe("AI Factory live journey", () => {
     await page.getByLabel("Project").selectOption({ label: "Storefront Rebuild" });
     await page.getByRole("button", { name: /^Launch Full Lifecycle/ }).click();
 
-    const alert = page.getByRole("alert");
+    const alert = page.getByRole("alert").filter({ hasText: /\S/ });
     await expect(alert).toBeVisible({ timeout: 30_000 });
     await expect(alert).toContainText("Not Connected");
     await expect(page.getByText("Recorded", { exact: true })).toHaveCount(0);
