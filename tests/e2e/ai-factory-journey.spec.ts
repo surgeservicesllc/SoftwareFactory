@@ -835,7 +835,9 @@ test.describe("AI Factory live journey", () => {
     await assignStep.getByRole("button", { name: /Change assignments|Assign bots/ }).click();
     const roster = page.getByRole("dialog").last();
     if (!(await roster.getByText("2 bots assigned").isVisible().catch(() => false))) {
-      await roster.getByRole("button", { name: "Assign Bots" }).click();
+      // The roster's button reads "Assign Bots" when empty and "Assign More"
+      // once a posting exists; the Claude route from the nine-step walk exists.
+      await roster.getByRole("button", { name: /^Assign (Bots|More)$/ }).click();
       const wizard = page.getByRole("dialog").last();
       // Only the unassigned Codex bot is selectable; the Claude route exists.
       await wizard.getByRole("button", { name: "Select All" }).click();
