@@ -158,6 +158,11 @@ jobs:
             # to find; it is not a credential and authenticates nothing, and
             # the journey never calls a provider with it.
             echo "SOFTWAREFACTORY_CLAUDE_CODE_OAUTH_TOKEN=fake-journey-placeholder-not-a-credential"
+            # The same placeholder for the seeded Codex account's slot, so a
+            # Codex bot can read as ready and the Chief-of-Staff planner can
+            # cover its implementation task. It authenticates nothing and the
+            # journey never calls a provider with it.
+            echo "SOFTWAREFACTORY_CODEX_AUTH_JSON=fake-journey-placeholder-not-a-credential"
             # Creating a bot also records its readiness verdict through the
             # server-only recorder, which needs the stack's service-role key.
             # Without it the provision route answers 503 after saving the bot,
@@ -226,6 +231,27 @@ jobs:
             organization_id, purpose, sealed_envelope, source, created_by
           ) values (
             '10000000-0000-4000-8000-0000000fa001', 'claude',
+            'v1.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+            'connect_session', :user_id
+          );
+
+          -- A second seeded sign-in, for Codex: the planner routes every
+          -- repository-writing task to an OpenAI posting, so without one it
+          -- can only refuse. Same shape as the Claude row ('codex' is the
+          -- broker's slot 1 for OpenAI), same inert envelope.
+          insert into public.ai_accounts (
+            id, organization_id, provider, auth_method, display_name, status,
+            credential_purpose, last_verified_at, created_by
+          ) values (
+            '40000000-0000-4000-8000-0000000fa002', '10000000-0000-4000-8000-0000000fa001',
+            'openai', 'subscription', 'Fake Codex Account', 'connected',
+            'codex', now(), :user_id
+          );
+
+          insert into public.provider_credentials (
+            organization_id, purpose, sealed_envelope, source, created_by
+          ) values (
+            '10000000-0000-4000-8000-0000000fa001', 'codex',
             'v1.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
             'connect_session', :user_id
           );
