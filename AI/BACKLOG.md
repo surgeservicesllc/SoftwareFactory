@@ -457,6 +457,11 @@ items named below.
   capability normalizer dropped `security_review` on its second pass,
   so every roster was refused with MISSING_CLAUDE_AGENT; the lane now
   prints the roster tables on failure.
+- [x] Increment 5 (ADR-251; lane run 33717344109): a fake GitHub API on the
+  local stack (hosts entry, runner-made certificate, three endpoints for
+  the seeded repository, no application change) lets the covered-roster
+  Grok walk record the canonical Full Lifecycle graph and the launcher
+  record a Full Lifecycle graph; both read as recorded, neither runs.
 - [ ] Owner-gated, unchanged: signed-in production create/return/reload
   acceptance; the separate provider-backed E2E (needs a ready Codex
   agent and its own authorization); a connected Codex account. Each

@@ -2,7 +2,24 @@
 
 Last updated: 2026-09-03
 
-## Newest (2026-09-03, latest+76): the Grok planner plans on the local stack, after a normalizer defect that refused every roster (ADR-251)
+## Newest (2026-09-03, latest+77): a fake GitHub API on the local stack records a lifecycle graph (ADR-251)
+
+FAKE THE HOST, NOT THE CLIENT. The GitHub client's origin pin stays;
+the lane resolves api.github.com to the runner and trusts a
+certificate it made for the name. Do not add an origin override to the
+application for a test's sake. The fake serves three endpoints for the
+seeded repository and 404s everything else; the App's private key is
+generated on the runner and never committed, and every other value is
+a placeholder. With the release base resolved, the Grok walk records
+the canonical Full Lifecycle graph (paused; no run evidence) and the
+launcher records a Full Lifecycle graph (Recorded); the worker switch
+stays off, so nothing runs. Lane run 33717344109 on branch 8450cbd: 7
+passed, 1 skipped. Without the fake both walks assert Not Connected.
+
+Workers, autonomy and automatic actions remain OFF; the global kill
+switch remains ON; **GROK BOT: PRODUCTION READY is not declared.**
+
+## Older (2026-09-03, latest+76): the Grok planner plans on the local stack, after a normalizer defect that refused every roster (ADR-251)
 
 NORMALIZATION IS THE IDENTITY ON CANONICAL NAMES. The roster
 normalizes a role's capabilities once and the planner normalizes the
