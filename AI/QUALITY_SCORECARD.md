@@ -1,6 +1,16 @@
 # Quality scorecard
 
-Last reviewed: 2026-09-02
+Last reviewed: 2026-09-03
+
+**Addendum, 2026-09-03 latest+73 - AI Factory build-out, increment 1: the fake-data journey lane (local stack):**
+ai-factory-journey.spec.ts against a real local Supabase stack, run
+33702735093: 4 passed, 1 skipped (the nine-step walk with fake data and
+its Supabase read-back after reload; the signed-in read of the journey;
+New Request in its fresh-workspace state; the signed-out refusal; the
+empty-workspace honesty case skips itself once the workspace has
+progress). No unit counts change in this increment. The lane's history
+is corrected in CURRENT_STATE: it had never been green in local-stack
+mode before this run.
 
 **Addendum, 2026-09-02 latest+72 - the hosted service_role contract (ADR-250):**
 job-seeker-service-role-contract 1 (every job_seeker table in the
