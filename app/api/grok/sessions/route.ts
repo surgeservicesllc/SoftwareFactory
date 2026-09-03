@@ -393,11 +393,42 @@ export async function POST(request: Request) {
           { status: 409 },
         );
       }
-      const release = await resolveCanonicalFullLifecycleReleaseIdentity(
-        context.client,
-        context.activeOrganization.id,
-        project.projectId,
-      );
+      let release: Awaited<ReturnType<typeof resolveCanonicalFullLifecycleReleaseIdentity>>;
+      try {
+        release = await resolveCanonicalFullLifecycleReleaseIdentity(
+          context.client,
+          context.activeOrganization.id,
+          project.projectId,
+        );
+      } catch (error) {
+        if (!(error instanceof GitHubApiError) && !(error instanceof GitHubConfigurationError)) {
+          throw error;
+        }
+        /*
+         * The session, its message, the Chief-of-Staff plan and the specialist
+         * roster are all durable by now; only the release base could not be
+         * resolved from GitHub. The refusal therefore names the session, so
+         * the workspace reopens that durable record beside the stated reason
+         * instead of showing a bare error over a request that did commit.
+         * The reason itself is the GitHub boundary's own sentence.
+         */
+        const refusal = githubRouteErrorResponse(error);
+        const refusalBody = await refusal.json() as { error: { code: string; message: string } };
+        return jsonNoStore(
+          {
+            sessionId: session.id,
+            session: {
+              id: session.id,
+              status: bundle.session.status,
+              version: bundle.session.version,
+            },
+            workerWoken: false,
+            executionStarted: false,
+            error: refusalBody.error,
+          },
+          { status: refusal.status },
+        );
+      }
       if (!release.ok) {
         if (release.databaseError) return databaseErrorResponse(release.databaseError);
         return jsonNoStore(

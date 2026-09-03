@@ -421,6 +421,38 @@ claim to check, since the first version of it did not verify that the data
 the algorithm needs exists.
 
 
+## AI Factory build-out → Grok-Build-class platform (task #61, owner /goal 2026-09-02)
+
+Audit-first. The ten-step factory, the Grok Bot workspace, the guided
+nine-step journey, the graph engine and the worker all exist and are
+documented; the gaps are proofs and verifiers, plus the owner-gated
+items named below.
+
+- [x] Increment 1: the fake-data journey lane is green on the local
+  stack. Local mode writes the stack's service-role key into .env.local
+  (the readiness recorder is service-role only); the spec ticks the
+  elevated-grant acknowledgement, survives a serial replay, and accepts
+  the fresh-workspace launcher state; failures print every
+  error-context.md. Runs 33702000830 (first past step 5 and Confirm;
+  the walk passed first attempt) and 33702735093 (4 passed, 1 skipped).
+- [x] Increment 2 (ADR-251; lane run 33704808335): the Grok Bot workspace and the ten-step launcher
+  walked with fake data on the local stack — a goal recorded durably and
+  reopened beside the refusal the boundary states (planning coverage or
+  GitHub Not Connected), no live control offered, persistence after
+  reload; Launch refused with GitHub Not Connected and nothing
+  recorded. A GitHub refusal at release resolution now names the durable
+  session so the workspace reopens it.
+- [ ] Increment 3: the seven single-page check-run gates
+  (`commits/{sha}/check-runs?per_page=100`) miss the CI checks once a
+  head accumulates more than 100 scheduled check-ins (main 91a7e2b: 106,
+  CI on page two; verify 33702924062 refused "missing|missing"). Query
+  by `check_name`; then dispatch one fresh read-only `scope=verify` on
+  the next green/READY main and record it.
+- [ ] Owner-gated, unchanged: signed-in production create/return/reload
+  acceptance; the separate provider-backed E2E (needs a ready Codex
+  agent and its own authorization); a connected Codex account. Each
+  stays **Not Connected** until the owner acts.
+
 ## Grok Bot -> truthful Chief-of-Staff workspace (ADR-190, 2026-08-30)
 
 - [x] Deterministic Chief-of-Staff planner: owner prompt -> intent,
@@ -528,9 +560,13 @@ the algorithm needs exists.
   green CI, exact READY Vercel identity, and matching public health. Exact main
   `85a7fed15ad876be4e56fd74903e41b68d4488b4`, CI `33395309085`, and READY
   deployment `dpl_FcbZciXJFJN1DWxN2mxd23wEPfaU` satisfy this gate.
-- [ ] Apply only the protected completion sequence through the dedicated
+- [x] Apply only the protected completion sequence through the dedicated
   workflow: fresh `probe`, `claim-admission-fence` (`00900`),
   `specialist-admission-planning` (`01000`), then fresh read-only `verify`.
+  DONE 2026-08-31: after #488 (ADR-227) reached exact main ee65189, fresh
+  read-only verify run `33406858766` passed every gate — ledger `1|1`,
+  prerequisite catalog, exact catalog/ACL/rollback runtime/lint/health,
+  stopped containment — recorded on 2026-09-03 during the audit.
   Require exact ledger, catalog, RLS, ACL, runtime, lint, health, and stopped
   safety evidence; never broad-push, replay, repair, reset, or down-migrate.
   Both one-file applies are complete and ledger is now `1|1`; 010 postflight

@@ -98,7 +98,7 @@ function installFetch(
     includeDetailInList?: boolean;
     detailFailures?: number;
     detailPending?: boolean;
-    planningFailure?: Readonly<{ message: string; sessionId: string }>;
+    planningFailure?: Readonly<{ message: string; sessionId: string; status?: number; code?: string }>;
     postFailures?: number;
     postHttpFailures?: number;
     controlBodyFailures?: number;
@@ -127,10 +127,10 @@ function installFetch(
         return json({
           sessionId: options.planningFailure.sessionId,
           error: {
-            code: "MISSING_CODEX_AGENT",
+            code: options.planningFailure.code ?? "MISSING_CODEX_AGENT",
             message: options.planningFailure.message,
           },
-        }, 409);
+        }, options.planningFailure.status ?? 409);
       }
       return json({
         ...BLOCKED_SESSION,
@@ -355,6 +355,41 @@ describe("GrokWorkspace", () => {
     await user.click(within(inspector).getByRole("tab", { name: "Agents" }));
     expect(within(inspector).getByText("No routing plan recorded")).toBeInTheDocument();
     expect(within(inspector).getByText(/no provider, model, or agent routing identity was recorded/i)).toBeInTheDocument();
+  });
+
+  it("reopens the durable planned session when release resolution answers 503 with its id", async () => {
+    // The plan committed; only the GitHub release base was Not Connected.
+    // The workspace shows that record and the boundary's own reason rather
+    // than a bare error, and the retry key survives the server-side refusal.
+    const refusal = "GitHub App integration is Not Connected because its server configuration is incomplete.";
+    // No run evidence at all: the plan is the newest durable fact.
+    const planned: GrokSessionDetail = { ...BLOCKED_SESSION, runEvidence: null };
+    const fetchMock = installFetch(planned, {
+      includeDetailInList: false,
+      planningFailure: { message: refusal, sessionId: planned.session.id, status: 503, code: "github_not_configured" },
+    });
+    const user = userEvent.setup();
+    render(<GrokWorkspace initialSelection={{}} />);
+    await screen.findByRole("heading", { name: "Ask for the outcome" });
+
+    await user.type(screen.getByRole("textbox", { name: "Tell Grok Bot what you want done" }), "Build me a health endpoint");
+    await user.click(screen.getByRole("button", { name: "Start goal" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(refusal);
+    expect(fetchMock).toHaveBeenCalledWith(
+      `/api/grok/sessions/${planned.session.id}`,
+      { cache: "no-store" },
+    );
+    expect(window.location.search).toContain(`sessionId=${planned.session.id}`);
+    expect(await screen.findByText("The session and plan are saved, but no graph or worker execution has started.")).toBeInTheDocument();
+    expect(screen.getByRole("log", { name: "Recorded session messages" })).toBeInTheDocument();
+
+    const inspector = screen.getByRole("complementary", { name: "Session inspector" });
+    await user.click(within(inspector).getByRole("tab", { name: "Agents" }));
+    expect(within(inspector).getByText("Planned routing intent")).toBeInTheDocument();
+    for (const action of ["pause", "resume", "stop"]) {
+      expect(screen.getByRole("button", { name: `${action} unavailable in blocked` })).toBeDisabled();
+    }
   });
 
   it("keeps a committed planning-failure session in the URL when its follow-up read fails", async () => {

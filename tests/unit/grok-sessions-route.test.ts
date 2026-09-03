@@ -34,9 +34,14 @@ const harness = vi.hoisted(() => ({
 
 vi.mock("@/lib/supabase/request", () => ({
   assertSameOriginRequest: harness.assertSameOriginRequest,
+  // Read by the boundary classifier on the GitHub refusal path.
+  RequestOriginError: class RequestOriginError extends Error {},
 }));
 vi.mock("@/lib/supabase/tenant", () => ({
   requireActiveOrganization: harness.requireActiveOrganization,
+  // The GitHub refusal path consults the Supabase boundary first, which
+  // reads this class from the tenant module; the mock must define it.
+  SupabaseTenantError: class SupabaseTenantError extends Error {},
 }));
 vi.mock("@/lib/security/sensitive-data", () => ({
   findSensitiveData: harness.findSensitiveData,
@@ -87,6 +92,7 @@ vi.mock("@/lib/server/http", async (importOriginal) => {
 });
 
 import { POST } from "@/app/api/grok/sessions/route";
+import { GitHubConfigurationError } from "@/lib/github/config";
 import { GrokProviderAdmissionError } from "@/lib/grok/provider-admission";
 
 const organizationId = "10000000-0000-4000-8000-000000000001";
@@ -448,6 +454,36 @@ describe("Grok sessions POST", () => {
       },
     });
     expect(harness.resolveRelease).not.toHaveBeenCalled();
+    expect(harness.serviceRpc).not.toHaveBeenCalled();
+  });
+
+  it("names the durable session when GitHub is Not Connected at release resolution", async () => {
+    // Everything before the release base is durable: session, message, plan,
+    // roster, event. Refusing with the session id lets the workspace reopen
+    // that record beside the GitHub boundary's own sentence.
+    harness.resolveRelease.mockRejectedValueOnce(
+      new GitHubConfigurationError("GITHUB_APP_ID is not configured."),
+    );
+
+    const response = await POST(new Request("https://factory.example/api/grok/sessions", {
+      method: "POST",
+      headers: { origin: "https://factory.example", "content-type": "application/json" },
+      body: JSON.stringify({ projectId, prompt: "Build the portal" }),
+    }));
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({
+      sessionId,
+      session: { id: sessionId, version: 2 },
+      workerWoken: false,
+      executionStarted: false,
+      error: {
+        code: "github_not_configured",
+        message: expect.stringMatching(/Not Connected/),
+      },
+    });
+    expect(harness.appendAssistant).toHaveBeenCalledTimes(1);
+    expect(harness.recordRoster).toHaveBeenCalledTimes(1);
     expect(harness.serviceRpc).not.toHaveBeenCalled();
   });
 

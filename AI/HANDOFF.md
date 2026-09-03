@@ -1,8 +1,68 @@
 # Handoff
 
-Last updated: 2026-09-02
+Last updated: 2026-09-03
 
-## Newest (2026-09-02, latest+72): the hosted service_role contract (ADR-250)
+## Newest (2026-09-03, latest+74): Grok Bot and the launcher walked with fake data (ADR-251)
+
+A REFUSAL NAMES ITS RECORD. The Grok route commits the session, the
+message, the plan and the roster before it asks GitHub for the release
+base; a GitHub refusal there now carries the session id, and the
+workspace reopens any refusal that names a session. Do not turn that
+into a bare error again: a request that committed is real work.
+
+THE LOCAL WALK STOPS WHERE THE PRODUCT STOPS. One Claude bot on a
+starter role cannot cover the planning tasks, and GitHub is Not
+Connected, so the Grok walk asserts the stated refusal, the reopened
+durable session, no live control and persistence after reload; the
+launcher walk asserts GitHub Not Connected and nothing recorded. Only
+the seeded local stack submits a goal or presses Launch; a deployed
+target with a real installation could record real work, so it runs the
+signed-in read only. Lane run 33704808335 on branch dc4a41d.
+
+Workers, autonomy and automatic actions remain OFF; the global kill
+switch remains ON; **GROK BOT: PRODUCTION READY is not declared.**
+
+## Older (2026-09-03, latest+73): the fake-data AI Factory journey is green on the local stack
+
+THE LANE HAD NEVER PASSED LOCALLY. Every green run of "AI Factory live
+journey" in its history was the remote read-only half. The scheduled
+local-stack walk failed on every run since 2026-08-26, at two places
+only a real stack reaches: Create Bot (no SUPABASE_SERVICE_ROLE_KEY in
+.env.local, so the readiness recorder threw and the provision route
+answered 503 after saving the bot) and the wizard's Confirm (elevated
+grants need the acknowledgement; the spec never ticked it). Run
+33702000830 was the first past both: the nine-step walk passed on its
+first attempt. Run 33702735093 is the green one: 4 passed, 1 skipped.
+
+RULES THE FIX LEAVES BEHIND. (1) Anything that records through a
+service-role recorder — bot readiness, the Grok service client — needs
+the stack's service-role key in .env.local; the CLI's development keys
+are public, not secrets. (2) The group is serial: one failing test
+replays the whole walk over rows the first attempt committed, so every
+step is driven from the state the page reports, never from the
+assumption that nothing exists yet. (3) A fresh workspace has no
+lifecycle run, so the step page offers the launcher outright under "No
+lifecycle has run yet"; New Request accepts both states and presses
+nothing. (4) The failure step prints every error-context.md; read it
+before guessing.
+
+THE VERIFY THAT WAS NEVER RECORDED. Fresh read-only scope=verify run
+33406858766 (main ee65189, 2026-08-31 15:10 UTC, after #488's ADR-227
+verifier) passed every gate — ledger 1|1, exact catalog/ACL/rollback
+runtime/lint/health, stopped containment — and no memory file said so.
+It is recorded now. Today's fresh verify 33702924062 on main 91a7e2b
+refused at the exact-head CI gate ("missing|missing"): the head carries
+106 check runs, page one is scheduled worker check-ins, and the CI
+checks are on page two. The seven single-page check-run gates need a
+check_name-filtered query (increment 3). Do not apply, replay, reload,
+reset, repair, or down-migrate either hosted completion migration.
+
+Workers, autonomy and automatic actions remain OFF; the global kill
+switch remains ON. Signed-in production acceptance and a real
+provider-backed E2E remain owner-gated; **GROK BOT: PRODUCTION READY is
+not declared.**
+
+## Older (2026-09-02, latest+72): the hosted service_role contract (ADR-250)
 
 THE POSTFLIGHT DID ITS JOB. scope=document-polish (run 33638477432)
 applied 20260902001500 and recorded it, then refused on

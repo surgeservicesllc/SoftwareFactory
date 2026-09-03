@@ -90,6 +90,8 @@ test.describe("Grok provider-backed recorded evidence", () => {
     // evidence-reader from being mistaken for full autonomous-loop acceptance.
     await expect(inspector.getByText("Rollback")).toBeVisible();
     await expect(inspector.getByText("Automatic continuation")).toBeVisible();
-    await expect(inspector.getByText("Not Connected")).toHaveCount(2);
+    // The two badges, exactly: the pane's detail sentence also says "not
+    // connected" in prose, and a loose match would count that too.
+    await expect(inspector.getByText("Not Connected", { exact: true })).toHaveCount(2);
   });
 });

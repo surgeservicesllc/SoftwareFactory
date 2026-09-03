@@ -1,5 +1,72 @@
 # Current state
 
+## 2026-09-03: AI Factory build-out — increment 2, Grok Bot and the launcher walked with fake data (ADR-251)
+
+`tests/e2e/ai-factory-journey.spec.ts` (local-stack mode, after the
+nine-step walk, over the project it built): the Grok Bot workspace is
+driven from the page — the journey project chosen, a goal typed, and
+the product must record it durably and state exactly where it stops.
+On the local stack the roster is one Claude bot on a starter role and
+GitHub is Not Connected, so the refusal is honest by construction;
+whichever refusal fires, the session it names is reopened beside the
+reason (address bar, sessions list, the recorded message), survives a
+reload, offers no live control (every control disabled and naming the
+state it is unavailable in), and the Deployment pane keeps Rollback and
+Automatic continuation as Not Connected. The ten-step launcher is
+pressed on the seeded stack only: Launch refuses with GitHub Not
+Connected, nothing reads as Recorded, and the page still offers the
+launcher after a reload. A deployed target runs the signed-in read of
+the workspace and presses nothing. Product change:
+`app/api/grok/sessions/route.ts` names the durable session when GitHub
+refuses at release resolution (session, message, plan and roster are
+committed by then), and `components/grok/grok-workspace.tsx` reopens
+any refusal that names a session, not only the planner's 409. Tests:
+grok-sessions-route +1, grok-workspace +1; `vitest run grok` 17 files /
+182 tests; eslint, tsc and the production build clean. Evidence: lane
+run 33704808335 on branch dc4a41d.
+
+## 2026-09-03: AI Factory build-out — increment 1, the fake-data journey lane is green on the local stack
+
+`.github/workflows/ai-factory-journey.yml` (local-stack mode) now writes
+`SUPABASE_SERVICE_ROLE_KEY` — the Supabase CLI's public development
+default, the same class as the anon key it already wrote — into
+`.env.local`: the bot provision route records readiness through a
+service-role-only recorder and answered 503 after saving the bot without
+it, so Create Bot showed a refusal instead of the Your AI Team roster. A
+failure step prints every Playwright `error-context.md` (the page's
+accessibility tree at the failing assertion), since the lane attaches no
+artifact store. `tests/e2e/ai-factory-journey.spec.ts`: the wizard's
+elevated-permission acknowledgement is ticked before Confirm (write
+access, pull-request rights and preview reach are elevated by design;
+the spec had never ticked it); the walk is driven from the state the
+page reports (wizard when no route exists, roster read-back when one
+does; a posting value already saved is asserted, not re-selected; a
+posting left paused is resumed first) so the serial group survives a
+replay over rows an earlier attempt committed; New Request accepts the
+fresh-workspace state ("No lifecycle has run yet", the launcher offered
+outright) and still presses nothing. Evidence: run 33702000830 (branch
+c56797e) was the first local-stack run past step 5 and past Confirm —
+the nine-step walk passed on its first attempt in 26 s; only the New
+Request assumption failed, and the serial replay then tripped on
+committed rows. Run 33702735093 (branch 99ab780): 4 passed, 1 skipped
+(the empty-workspace honesty case skips itself once the workspace has
+progress). History, for the record: every green run of this lane
+before today was the remote read-only half; the scheduled local-stack
+run had failed on every run since the migration gate was repaired on
+2026-08-26.
+
+Audit finding, recorded here for the first time: read-only
+`scope=verify` run 33406858766 of `grok-bot-completion-migrations.yml`
+on main ee65189 (2026-08-31 15:10 UTC, after #488) passed every gate —
+completion ledger `1|1`, prerequisite catalog, exact catalog / ACL /
+rollback runtime / lint / health, stopped containment, and the exact
+release, READY deployment and health survived postflight. Today's fresh
+`scope=verify` run 33702924062 on main 91a7e2b refused at the exact-head
+CI gate with "missing|missing": that head carries 106 check runs, the
+first page of 100 is scheduled worker check-ins, and the four CI checks
+sit on page 2. Verifier-only; the same single-page query exists in
+seven release gates (increment 3).
+
 ## 2026-09-02: the job seeker tables' hosted service_role grants (ADR-250)
 
 `20260902001700_job_seeker_service_role_contract.sql`: revoke all from

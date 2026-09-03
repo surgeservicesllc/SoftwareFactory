@@ -588,7 +588,12 @@ export function GrokWorkspace({
         // failed to project it, so preserve the key and let retry recover that
         // exact attempt rather than creating another session.
         if (error.status < 500) submitAttempt.current = null;
-        if (error.status === 409 && error.sessionId) {
+        // Any refusal that names a session is a refusal over a durable
+        // record: the planner's block (409) and the release boundary's
+        // Not Connected (503) both commit the session and plan first. The
+        // record is reopened beside the stated reason either way; a bare
+        // error over a request that did commit would hide real work.
+        if (error.sessionId) {
           setSessionId(error.sessionId);
           // The POST already committed this durable identity. Preserve it in
           // the address bar before the follow-up read so a transient GET

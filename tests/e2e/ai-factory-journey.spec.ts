@@ -207,9 +207,23 @@ test.describe("AI Factory live journey", () => {
     await expect(botsStep.getByText(/ready bot.*linked to.*connected account/i)).toBeVisible();
 
     // ── Step 6: Assign Bots, through the Select → Configure → Review wizard ─
+    // The group is serial, so a failure anywhere in this file replays the
+    // whole walk over rows an earlier attempt already committed. The step is
+    // therefore driven from the state the page reports: the wizard when no
+    // route exists yet, the roster read-back when one does. Both paths end in
+    // the same roster, which the posting-level checks below then exercise.
     const assignStep = stepCard(page, "Assign Bots to Project");
-    await assignStep.getByRole("button", { name: "Assign bots" }).click();
+    const assignmentInstructions =
+      "Review every fake journey change carefully and record the evidence before handoff.";
+    const assignmentModel = "claude-fable-5";
+    const assignmentEffort = "high";
+    const assignmentDone = await assignStep.getByText("Done").isVisible().catch(() => false);
+    await assignStep
+      .getByRole("button", { name: assignmentDone ? "Change assignments" : "Assign bots" })
+      .click();
     const roster = page.getByRole("dialog").last();
+    let roleOptions: string[] = [];
+    if (!assignmentDone) {
     await roster.getByRole("button", { name: "Assign Bots" }).click();
     const wizard = page.getByRole("dialog").last();
     // AI Factory owns the one modal/focus boundary. The shared project roster
@@ -231,17 +245,12 @@ test.describe("AI Factory live journey", () => {
     await wizard.getByRole("button", { name: "Next" }).click();
 
     // ── Step 7: Configure Bot Settings, every field on the pane ───────────
-    const assignmentInstructions =
-      "Review every fake journey change carefully and record the evidence before handoff.";
-    const assignmentModel = "claude-fable-5";
-    const assignmentEffort = "high";
-
     await expect(wizard.getByRole("combobox", { name: /^Role for / })).toBeVisible({ timeout: 20_000 });
     await wizard.getByRole("button", { name: "Reviewer" }).click();
     // The preset shapes responsibilities and access; the role is a separate
     // required choice, and the database refuses an assignment without one.
     const role = wizard.getByRole("combobox", { name: /^Role for / });
-    let roleOptions = await role.locator("option").evaluateAll((nodes) =>
+    roleOptions = await role.locator("option").evaluateAll((nodes) =>
       nodes.map((node) => (node as HTMLOptionElement).value).filter(Boolean));
 
     if (roleOptions.length === 0) {
@@ -295,65 +304,85 @@ test.describe("AI Factory live journey", () => {
     await expect(wizard.getByText(/Can open pull requests.*Can merge pull requests, with approval/))
       .toBeVisible();
     await expect(wizard.getByText("1 of 1")).toBeVisible();
+    // Write access, pull-request rights and preview reach are elevated grants,
+    // and the wizard refuses to confirm them until a person says they reviewed
+    // what each bot may do. That acknowledgement is the product working, so
+    // the walk ticks it the way an owner would rather than bypassing it; the
+    // scheduled lane sat on a disabled Confirm for a week because it did not.
+    const acknowledgement = wizard.getByRole("checkbox", { name: /elevated permissions/i });
+    await expect(acknowledgement).toBeVisible();
+    await acknowledgement.check();
+    await expect(acknowledgement).toBeChecked();
     const confirm = wizard.getByRole("button", { name: "Confirm" });
     await expect(confirm).toBeEnabled({ timeout: 20_000 });
     await confirm.click();
+    }
 
     // Confirmation returns to the real project roster inside the same outer
     // AI Factory modal. Model and effort are posting-level controls, so drive
     // them here and wait for each database write plus roster read-back before
-    // touching the next revision-checked field.
+    // touching the next revision-checked field. A value an earlier attempt
+    // already saved is asserted rather than re-selected: a select does not
+    // fire for an unchanged value, so there would be no write to wait for.
     await expect(page.getByRole("dialog")).toHaveCount(1);
+    const assignmentWrite = () => page.waitForResponse((response) =>
+      response.request().method() === "PATCH"
+      && /\/api\/bot-assignments\/[^/]+$/.test(new URL(response.url()).pathname));
+    const postingWrite = () => page.waitForResponse((response) =>
+      response.request().method() === "PATCH"
+      && /\/api\/projects\/[^/]+\/bots\/[^/]+$/.test(new URL(response.url()).pathname));
+    const rosterReadback = () => page.waitForResponse((response) =>
+      response.request().method() === "GET"
+      && /\/api\/projects\/[^/]+\/bots$/.test(new URL(response.url()).pathname));
+
     const model = roster.getByLabel("Model");
     await expect(model).toBeVisible({ timeout: 30_000 });
     await expect(model.locator(`option[value="${assignmentModel}"]`)).toHaveCount(1);
-    const modelWrite = page.waitForResponse((response) =>
-      response.request().method() === "PATCH"
-      && /\/api\/bot-assignments\/[^/]+$/.test(new URL(response.url()).pathname));
-    const modelReadback = page.waitForResponse((response) =>
-      response.request().method() === "GET"
-      && /\/api\/projects\/[^/]+\/bots$/.test(new URL(response.url()).pathname));
-    await model.selectOption(assignmentModel);
-    expect((await modelWrite).ok()).toBeTruthy();
-    expect((await modelReadback).ok()).toBeTruthy();
+    if ((await model.inputValue()) !== assignmentModel) {
+      const modelWrite = assignmentWrite();
+      const modelReadback = rosterReadback();
+      await model.selectOption(assignmentModel);
+      expect((await modelWrite).ok()).toBeTruthy();
+      expect((await modelReadback).ok()).toBeTruthy();
+    }
     await expect(model).toHaveValue(assignmentModel);
     await expect(model).toBeEnabled();
 
     const effort = roster.getByLabel("Work effort");
-    const effortWrite = page.waitForResponse((response) =>
-      response.request().method() === "PATCH"
-      && /\/api\/bot-assignments\/[^/]+$/.test(new URL(response.url()).pathname));
-    const effortReadback = page.waitForResponse((response) =>
-      response.request().method() === "GET"
-      && /\/api\/projects\/[^/]+\/bots$/.test(new URL(response.url()).pathname));
-    await effort.selectOption(assignmentEffort);
-    expect((await effortWrite).ok()).toBeTruthy();
-    expect((await effortReadback).ok()).toBeTruthy();
+    if ((await effort.inputValue()) !== assignmentEffort) {
+      const effortWrite = assignmentWrite();
+      const effortReadback = rosterReadback();
+      await effort.selectOption(assignmentEffort);
+      expect((await effortWrite).ok()).toBeTruthy();
+      expect((await effortReadback).ok()).toBeTruthy();
+    }
     await expect(effort).toHaveValue(assignmentEffort);
     await expect(effort).toBeEnabled();
 
     // Pause and resume the same posting. Never remove it: the journey must end
     // with exactly the active route it created, and no worker is connected.
+    // An attempt that stopped between the two leaves the posting paused, so
+    // it is resumed first and the pair is then driven from the active state.
     const pause = roster.getByRole("button", { name: /^Pause / });
-    const pauseWrite = page.waitForResponse((response) =>
-      response.request().method() === "PATCH"
-      && /\/api\/projects\/[^/]+\/bots\/[^/]+$/.test(new URL(response.url()).pathname));
-    const pauseReadback = page.waitForResponse((response) =>
-      response.request().method() === "GET"
-      && /\/api\/projects\/[^/]+\/bots$/.test(new URL(response.url()).pathname));
+    const resume = roster.getByRole("button", { name: /^Resume / });
+    if (await resume.isVisible().catch(() => false)) {
+      const recoverWrite = postingWrite();
+      const recoverReadback = rosterReadback();
+      await resume.click();
+      expect((await recoverWrite).ok()).toBeTruthy();
+      expect((await recoverReadback).ok()).toBeTruthy();
+    }
+    await expect(pause).toBeVisible();
+    const pauseWrite = postingWrite();
+    const pauseReadback = rosterReadback();
     await pause.click();
     expect((await pauseWrite).ok()).toBeTruthy();
     expect((await pauseReadback).ok()).toBeTruthy();
-    const resume = roster.getByRole("button", { name: /^Resume / });
     await expect(resume).toBeVisible();
     await expect(page.getByRole("dialog")).toHaveCount(1);
 
-    const resumeWrite = page.waitForResponse((response) =>
-      response.request().method() === "PATCH"
-      && /\/api\/projects\/[^/]+\/bots\/[^/]+$/.test(new URL(response.url()).pathname));
-    const resumeReadback = page.waitForResponse((response) =>
-      response.request().method() === "GET"
-      && /\/api\/projects\/[^/]+\/bots$/.test(new URL(response.url()).pathname));
+    const resumeWrite = postingWrite();
+    const resumeReadback = rosterReadback();
     await resume.click();
     expect((await resumeWrite).ok()).toBeTruthy();
     expect((await resumeReadback).ok()).toBeTruthy();
@@ -425,8 +454,14 @@ test.describe("AI Factory live journey", () => {
 
     await persistedRoster.getByRole("button", { name: /^Configure / }).click();
     await expect(page.getByRole("dialog")).toHaveCount(1);
-    await expect(persistedRoster.getByRole("combobox", { name: /^Role for / }))
-      .toHaveValue(roleOptions[0]);
+    const persistedRole = persistedRoster.getByRole("combobox", { name: /^Role for / });
+    if (roleOptions[0]) {
+      await expect(persistedRole).toHaveValue(roleOptions[0]);
+    } else {
+      // The route was created by an earlier attempt; its role is read back
+      // from Supabase rather than from a choice this attempt did not make.
+      await expect(persistedRole).not.toHaveValue("");
+    }
     await expect(persistedRoster.getByRole("combobox", { name: /^Repository access for / }))
       .toHaveValue("write");
     await expect(persistedRoster.getByRole("combobox", { name: /^Branch strategy for / }))
@@ -605,11 +640,25 @@ test.describe("AI Factory live journey", () => {
 
     const button = page.getByRole("button", { name: /new request/i });
     const launch = page.getByRole("button", { name: /^launch/i });
+    const noRunYet = page.getByRole("heading", { name: "No lifecycle has run yet" });
 
-    // This account has lifecycle runs, so the step renders its ready state and
-    // the button is there. Without one the page offers the launcher outright,
-    // which is a different state and not what this case is about.
-    await expect(button).toBeVisible({ timeout: 45_000 });
+    // Two honest states, decided by the workspace rather than assumed. A
+    // workspace with lifecycle runs renders the step's ready state and the
+    // button discloses the launcher. A fresh workspace -- every local-stack
+    // run of this lane -- has none, and the page offers the launcher
+    // outright under a heading that says so. Either way the launcher must be
+    // reachable, and nothing here presses Launch: recording a graph is real
+    // work in a real workspace, and no test should start one nobody asked for.
+    await expect(button.or(noRunYet).first()).toBeVisible({ timeout: 45_000 });
+
+    if (await noRunYet.isVisible()) {
+      await expect(button).toHaveCount(0);
+      await expect(launch).toBeVisible({ timeout: 30_000 });
+      await expect(page.getByRole("heading", { name: "Launch this graph" })).toBeVisible();
+      await expect(page.getByLabel("Goal")).toBeVisible();
+      return;
+    }
+
     await expect(button).toHaveAttribute("aria-expanded", "false");
     await expect(launch).toHaveCount(0);
 
@@ -622,6 +671,133 @@ test.describe("AI Factory live journey", () => {
     await button.click();
     await expect(button).toHaveAttribute("aria-expanded", "false");
     await expect(launch).toHaveCount(0);
+  });
+
+  test("Grok Bot records a durable goal with fake data and states exactly why it stops", async ({ page }) => {
+    /*
+     * The Grok Bot section, walked over the project the nine-step walk built.
+     *
+     * A goal is typed the way an owner would type it. What the product must
+     * then do is record the request durably and say, in the boundary's own
+     * words, exactly where it stops -- and nothing here may read as a run.
+     * On a local stack that stopping point is honest by construction: the
+     * roster the walk assigned is one Claude bot on a starter role, and GitHub
+     * is Not Connected, so planning or release resolution refuses. Whichever
+     * refusal fires, the session it names is reopened beside the reason,
+     * survives a reload, and offers no live control.
+     *
+     * Only the seeded local stack submits a goal. A deployed target with a
+     * real installation could resolve a release base and record a paused
+     * graph in that workspace, which no test should start unasked; there the
+     * signed-in read of the workspace is what runs.
+     */
+    test.skip(!stepOneReady, "needs step 1 satisfied, like the walk it follows");
+    test.setTimeout(240_000);
+
+    await page.goto("/auth/sign-in");
+    await page.getByLabel("Email").fill(email);
+    await page.getByLabel("Password").fill(password);
+    await page.getByRole("button", { name: /^sign in$/i }).click();
+    await waitForSignedIn(page);
+
+    await page.goto("/solutions/factory/grok");
+    await expect(page.getByRole("heading", { level: 1, name: "Grok Bot" })).toBeVisible({ timeout: 45_000 });
+    await expect(page.locator('[aria-label="Loading Grok Bot"]')).toHaveCount(0, { timeout: 45_000 });
+    await expect(page.getByRole("heading", { name: "Grok Bot is unavailable" })).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "Sign in to use Grok Bot" })).toHaveCount(0);
+
+    const sessions = page.getByRole("complementary", { name: "Grok sessions" });
+    const project = sessions.getByLabel("Project");
+    await expect(project).toBeVisible();
+    await project.selectOption({ label: "Storefront Rebuild" });
+
+    if (!seeded) return;
+
+    const goal = "Research the fake storefront repository and report what a health endpoint needs.";
+    await page.getByRole("textbox", { name: "Tell Grok Bot what you want done" }).fill(goal);
+    await page.getByRole("button", { name: "Start goal" }).click();
+
+    // The refusal is stated in words, never swallowed, and never reads as a
+    // run. The request is durable regardless: the reply names the session
+    // and the workspace reopens it in the address bar. (The framework's
+    // empty route announcer also carries the alert role; only text counts.)
+    const alert = page.getByRole("alert").filter({ hasText: /\S/ });
+    await expect(alert).toBeVisible({ timeout: 30_000 });
+    await expect(alert).not.toHaveText(/\b(started|running|dispatched)\b/i);
+    await expect.poll(() => new URL(page.url()).searchParams.get("sessionId"), { timeout: 30_000 })
+      .toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+    const sessionId = new URL(page.url()).searchParams.get("sessionId")!;
+
+    const conversation = page.getByRole("log", { name: "Recorded session messages" });
+    await expect(conversation.getByRole("article", { name: "You message" })).toContainText(goal, {
+      timeout: 30_000,
+    });
+    // A serial replay records a second session with the same title; the
+    // newest is the one selected, and one listed is what this proves.
+    await expect(sessions.getByRole("button", { name: goal }).first()).toBeVisible();
+
+    // No live control is offered over a session with no graph: every control
+    // names the state it is unavailable in, and every one is disabled.
+    const controls = page.getByRole("button", { name: /^(pause|resume|stop) unavailable in / });
+    await expect.poll(() => controls.count()).toBeGreaterThanOrEqual(2);
+    for (const control of await controls.all()) await expect(control).toBeDisabled();
+    await expect(page.getByRole("button", { name: /^(pause|resume|stop) session$/ })).toHaveCount(0);
+
+    // What Supabase stored, not what React remembered.
+    await page.goto(`/solutions/factory/grok?sessionId=${encodeURIComponent(sessionId)}`);
+    await expect(page.locator('[aria-label="Loading Grok Bot"]')).toHaveCount(0, { timeout: 45_000 });
+    await expect(conversation.getByRole("article", { name: "You message" })).toContainText(goal, {
+      timeout: 30_000,
+    });
+    await expect(page.getByRole("status")).toBeVisible();
+    const inspector = page.getByRole("complementary", { name: "Session inspector" });
+    await inspector.getByRole("tab", { name: "Goal" }).click();
+    await expect(inspector.getByText(goal)).toBeVisible();
+    await inspector.getByRole("tab", { name: "Agents" }).click();
+    await expect(inspector.getByText(/No routing plan recorded|Planned routing intent/)).toBeVisible();
+    await expect(inspector.getByText("Observed node execution route")).toHaveCount(0);
+    await inspector.getByRole("tab", { name: "Deployment" }).click();
+    // The two badges, exactly: the pane's detail sentence also says "not
+    // connected" in prose, and a loose match would count that too.
+    await expect(inspector.getByText("Not Connected", { exact: true })).toHaveCount(2);
+    await expect(page.getByText("Demo Data")).toHaveCount(0);
+  });
+
+  test("the ten-step launcher refuses honestly where GitHub is Not Connected, and records nothing", async ({ page }) => {
+    /*
+     * The one control that starts a lifecycle, pressed on the seeded stack.
+     *
+     * Recording a Full Lifecycle graph requires an exact release base from
+     * GitHub, and the local stack has no App configured, so the launch must
+     * refuse with that reason and must not leave a graph behind. A deployed
+     * target with a real installation is different: Launch there would record
+     * real work in a real workspace, so this presses nothing on it.
+     */
+    test.skip(!seeded, "presses Launch only on the seeded local stack");
+    test.setTimeout(180_000);
+
+    await page.goto("/auth/sign-in");
+    await page.getByLabel("Email").fill(email);
+    await page.getByLabel("Password").fill(password);
+    await page.getByRole("button", { name: /^sign in$/i }).click();
+    await waitForSignedIn(page);
+
+    await page.goto("/solutions/factory/requirement");
+    await expect(page.getByRole("heading", { name: "No lifecycle has run yet" }))
+      .toBeVisible({ timeout: 45_000 });
+    await page.getByLabel("Goal").fill("Build me a fake health endpoint and prove it with a test.");
+    await page.getByLabel("Project").selectOption({ label: "Storefront Rebuild" });
+    await page.getByRole("button", { name: /^Launch Full Lifecycle/ }).click();
+
+    const alert = page.getByRole("alert").filter({ hasText: /\S/ });
+    await expect(alert).toBeVisible({ timeout: 30_000 });
+    await expect(alert).toContainText("Not Connected");
+    await expect(page.getByText("Recorded", { exact: true })).toHaveCount(0);
+
+    // Nothing was recorded: the step still offers the launcher outright.
+    await page.reload();
+    await expect(page.getByRole("heading", { name: "No lifecycle has run yet" }))
+      .toBeVisible({ timeout: 45_000 });
   });
 
   test("the journey's reads are refused to a signed-out visitor", async ({ browser }) => {
