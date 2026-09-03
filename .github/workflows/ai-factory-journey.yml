@@ -170,6 +170,18 @@ jobs:
             # how every local-stack run of this lane failed at step 5. The
             # key is the CLI's public local-development default, not a secret.
             echo "SUPABASE_SERVICE_ROLE_KEY=$SERVICE"
+            # A fake GitHub App, for the fake GitHub API the next step stands
+            # up. The ids match the seeded installation; every secret-shaped
+            # value is a placeholder that authenticates nothing, and the App's
+            # private key is generated on this runner and never leaves it.
+            echo "GITHUB_APP_ID=4582606"
+            echo "GITHUB_APP_SLUG=fake-factory-app"
+            echo "GITHUB_APP_CALLBACK_URL=https://localhost/fake-journey-callback"
+            echo "GITHUB_APP_CLIENT_ID=fake-journey-client-id"
+            echo "GITHUB_APP_CLIENT_SECRET=fake-journey-client-secret-placeholder-not-a-credential"
+            echo "GITHUB_APP_STATE_SECRET=fake-journey-state-secret-placeholder-not-a-credential-0001"
+            echo "GITHUB_APP_WEBHOOK_SECRET=fake-journey-webhook-secret-placeholder-not-a-credential-0002"
+            echo "GITHUB_APP_PRIVATE_KEY_BASE64=$(openssl genrsa 2048 2>/dev/null | base64 -w0)"
           } > .env.local
 
       - name: Seed the workspace and the GitHub installation
@@ -267,11 +279,41 @@ jobs:
           );
           SEED
 
+      - name: Stand up a fake GitHub API for the release base
+        if: ${{ inputs.base_url == '' || inputs.base_url == null }}
+        # The application pins its GitHub client to https://api.github.com and
+        # accepts no other origin, so the fake is reached the way a person
+        # fakes a host: api.github.com resolves to this runner and the runner
+        # trusts a certificate it just made for that name. Nothing in the
+        # application changes; nothing here can ever point production at a
+        # fake. The three endpoints the release base needs answer with fake
+        # data for the seeded repository; the fake logs every request.
+        run: |
+          mkdir -p .fake-github
+          openssl req -x509 -newkey rsa:2048 -nodes -days 2 -subj "/CN=api.github.com" \
+            -addext "subjectAltName=DNS:api.github.com" \
+            -keyout .fake-github/tls-key.pem -out .fake-github/tls-cert.pem 2>/dev/null
+          echo "127.0.0.1 api.github.com" | sudo tee -a /etc/hosts >/dev/null
+          sudo -E env FAKE_GITHUB_PORT=443 nohup "$(command -v node)" tests/harness/fake-github-api.mjs > fake-github.log 2>&1 &
+          for i in $(seq 1 30); do
+            if curl -sf --cacert .fake-github/tls-cert.pem -H "Authorization: Bearer probe" \
+              "https://api.github.com/repos/fake-owner/storefront/git/ref/heads/main" >/dev/null; then
+              echo "The fake GitHub API answers for api.github.com."
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "The fake GitHub API never answered."
+          cat fake-github.log
+          exit 1
+
       - name: Build and serve the production app
         if: ${{ inputs.base_url == '' || inputs.base_url == null }}
+        # NODE_EXTRA_CA_CERTS makes the server trust the fake GitHub API's
+        # certificate; it changes nothing else about the build or the app.
         run: |
           npm run build
-          nohup npx next start > next-start.log 2>&1 &
+          NODE_EXTRA_CA_CERTS="$PWD/.fake-github/tls-cert.pem" nohup npx next start > next-start.log 2>&1 &
           for i in $(seq 1 60); do
             curl -sf -o /dev/null http://localhost:3000/ && exit 0
             sleep 2
@@ -285,6 +327,7 @@ jobs:
         env:
           AI_FACTORY_E2E: 1
           AI_FACTORY_E2E_SEEDED: 1
+          AI_FACTORY_E2E_FAKE_GITHUB: 1
           PLAYWRIGHT_BASE_URL: http://localhost:3000
         run: npx playwright test tests/e2e/ai-factory-journey.spec.ts --project=desktop-chromium --reporter=line
 
@@ -306,7 +349,10 @@ jobs:
 
       - name: Report what the app logged if the journey failed
         if: failure() && (inputs.base_url == '' || inputs.base_url == null)
-        run: tail -80 next-start.log || true
+        run: |
+          tail -80 next-start.log || true
+          echo "== fake GitHub API"
+          cat fake-github.log || true
 
       - name: Print the roster and the Grok record the planner saw
         if: failure() && (inputs.base_url == '' || inputs.base_url == null)
@@ -315,10 +361,14 @@ jobs:
         # read, so print the roster tables and the Grok session record whole.
         run: |
           DB_URL=$(npx supabase status -o json | python3 -c "import sys,json; print(json.load(sys.stdin)['DB_URL'])")
-          for TABLE in ai_accounts bots bot_roles bot_assignments grok_sessions grok_messages grok_events; do
+          for TABLE in ai_accounts bots bot_roles bot_assignments grok_sessions grok_messages grok_events grok_graph_launches graphs; do
             echo "== public.$TABLE"
             psql "$DB_URL" -X -A -t -c "select left(row_to_json(t)::text, 1200) from public.$TABLE t" || true
           done
+
+      - name: Put api.github.com back
+        if: always() && (inputs.base_url == '' || inputs.base_url == null)
+        run: sudo sed -i '/api\.github\.com/d' /etc/hosts || true
 
       - name: Print the page snapshots Playwright captured at each failure
         if: failure()

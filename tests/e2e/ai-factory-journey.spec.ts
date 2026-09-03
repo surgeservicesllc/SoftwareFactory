@@ -61,6 +61,11 @@ test.describe("AI Factory live journey", () => {
    * set it on its own.
    */
   const seeded = process.env.AI_FACTORY_E2E_SEEDED === "1";
+  // The lane can stand up a fake GitHub API for the seeded repository, so the
+  // release base resolves to fake data and a lifecycle graph is recorded
+  // (never run: the worker switch stays off). Without it, GitHub is Not
+  // Connected and both launches must refuse; both outcomes are asserted.
+  const fakeGitHub = seeded && process.env.AI_FACTORY_E2E_FAKE_GITHUB === "1";
   const installed = process.env.AI_FACTORY_E2E_INSTALLED === "1";
   const stepOneReady = seeded || installed;
 
@@ -939,21 +944,36 @@ test.describe("AI Factory live journey", () => {
     await page.getByRole("textbox", { name: "Tell Grok Bot what you want done" }).fill(goal);
     await page.getByRole("button", { name: "Start goal" }).click();
 
+    const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
     const alert = page.getByRole("alert").filter({ hasText: /\S/ });
-    await expect(alert).toBeVisible({ timeout: 45_000 });
-    await expect(alert).toContainText("Not Connected");
+    if (fakeGitHub) {
+      // The release base resolved against the fake GitHub API, so the route
+      // recorded the canonical Full Lifecycle graph and paused it at the
+      // database boundary: the address bar names the graph, no alert fires,
+      // and the notice says exactly that nothing has run.
+      await expect.poll(() => new URL(page.url()).searchParams.get("graphId"), { timeout: 45_000 })
+        .toMatch(uuid);
+      await expect(alert).toHaveCount(0);
+    } else {
+      await expect(alert).toBeVisible({ timeout: 45_000 });
+      await expect(alert).toContainText("Not Connected");
+    }
     await expect.poll(() => new URL(page.url()).searchParams.get("sessionId"), { timeout: 30_000 })
-      .toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+      .toMatch(uuid);
     const sessionId = new URL(page.url()).searchParams.get("sessionId")!;
 
     const conversation = page.getByRole("log", { name: "Recorded session messages" });
     await expect(conversation.getByRole("article", { name: "Chief of Staff message" }))
       .toContainText(/recorded a deterministic build plan/, { timeout: 30_000 });
-    // The saved plan is not evidence of execution, and the notice says so in
-    // one of two wordings depending on whether the release-base refusal left
+    // The saved plan is not evidence of execution, and the notice says so: a
+    // recorded graph has no run evidence; an unresolved release base leaves
     // the session blocked or merely unlinked.
-    await expect(page.getByRole("status"))
-      .toContainText(/no graph or worker execution has started|This durable session has no linked graph/);
+    await expect(page.getByRole("status")).toContainText(fakeGitHub
+      ? /graph is recorded, but no durable run evidence is linked/
+      : /no graph or worker execution has started|This durable session has no linked graph/);
+    if (fakeGitHub) {
+      await expect(page.getByText("graph recorded; no run evidence yet")).toBeVisible();
+    }
     const inspector = page.getByRole("complementary", { name: "Session inspector" });
     await inspector.getByRole("tab", { name: "Plan" }).click();
     await expect.poll(() => inspector.getByRole("listitem").count()).toBeGreaterThanOrEqual(5);
@@ -970,6 +990,12 @@ test.describe("AI Factory live journey", () => {
     await expect(page.locator('[aria-label="Loading Grok Bot"]')).toHaveCount(0, { timeout: 45_000 });
     await expect(conversation.getByRole("article", { name: "Chief of Staff message" }))
       .toContainText(/recorded a deterministic build plan/, { timeout: 30_000 });
+    if (fakeGitHub) {
+      await expect.poll(() => new URL(page.url()).searchParams.get("graphId"), { timeout: 30_000 })
+        .toMatch(uuid);
+      await expect(page.getByText("graph recorded; no run evidence yet")).toBeVisible();
+      await expect(inspector.getByText("Observed node execution route")).toHaveCount(0);
+    }
     await inspector.getByRole("tab", { name: "Plan" }).click();
     await expect.poll(() => inspector.getByRole("listitem").count()).toBeGreaterThanOrEqual(5);
     await inspector.getByRole("tab", { name: "Deployment" }).click();
@@ -1004,6 +1030,15 @@ test.describe("AI Factory live journey", () => {
     await page.getByRole("button", { name: /^Launch Full Lifecycle/ }).click();
 
     const alert = page.getByRole("alert").filter({ hasText: /\S/ });
+    if (fakeGitHub) {
+      // The release base resolved against the fake GitHub API: the graph is
+      // recorded, named, and nothing claims it ran (the worker stays off).
+      await expect(page.getByText("Recorded", { exact: true })).toBeVisible({ timeout: 30_000 });
+      await expect(page.getByText(/^Graph [0-9a-f-]{36}$/)).toBeVisible();
+      await expect(alert).toHaveCount(0);
+      await expect(page.getByText(/\b(running|started|dispatched)\b/i)).toHaveCount(0);
+      return;
+    }
     await expect(alert).toBeVisible({ timeout: 30_000 });
     await expect(alert).toContainText("Not Connected");
     await expect(page.getByText("Recorded", { exact: true })).toHaveCount(0);
