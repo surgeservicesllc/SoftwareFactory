@@ -335,7 +335,15 @@ test.describe("AI Factory live journey", () => {
       response.request().method() === "GET"
       && /\/api\/projects\/[^/]+\/bots$/.test(new URL(response.url()).pathname));
 
-    const model = roster.getByLabel("Model");
+    // A replay after the covered-roster walk finds a second posting on this
+    // roster, so every posting-level read is scoped to the card of the bot
+    // this walk created: the one whose model catalogue carries the model it
+    // is about to choose.
+    const posting = roster.getByRole("listitem").filter({
+      has: page.locator(`option[value="${assignmentModel}"]`),
+    });
+    await expect(posting).toHaveCount(1, { timeout: 30_000 });
+    const model = posting.getByLabel("Model");
     await expect(model).toBeVisible({ timeout: 30_000 });
     await expect(model.locator(`option[value="${assignmentModel}"]`)).toHaveCount(1);
     if ((await model.inputValue()) !== assignmentModel) {
@@ -348,7 +356,7 @@ test.describe("AI Factory live journey", () => {
     await expect(model).toHaveValue(assignmentModel);
     await expect(model).toBeEnabled();
 
-    const effort = roster.getByLabel("Work effort");
+    const effort = posting.getByLabel("Work effort");
     if ((await effort.inputValue()) !== assignmentEffort) {
       const effortWrite = assignmentWrite();
       const effortReadback = rosterReadback();
@@ -363,8 +371,8 @@ test.describe("AI Factory live journey", () => {
     // with exactly the active route it created, and no worker is connected.
     // An attempt that stopped between the two leaves the posting paused, so
     // it is resumed first and the pair is then driven from the active state.
-    const pause = roster.getByRole("button", { name: /^Pause / });
-    const resume = roster.getByRole("button", { name: /^Resume / });
+    const pause = posting.getByRole("button", { name: /^Pause / });
+    const resume = posting.getByRole("button", { name: /^Resume / });
     if (await resume.isVisible().catch(() => false)) {
       const recoverWrite = postingWrite();
       const recoverReadback = rosterReadback();
@@ -386,8 +394,14 @@ test.describe("AI Factory live journey", () => {
     await resume.click();
     expect((await resumeWrite).ok()).toBeTruthy();
     expect((await resumeReadback).ok()).toBeTruthy();
-    await expect(roster.getByRole("button", { name: /^Pause / })).toBeVisible();
-    await expect(roster.getByText("1 bot assigned")).toBeVisible();
+    await expect(pause).toBeVisible();
+    // The count the roster prints is the count of postings it lists: one on
+    // a first attempt, two once the covered-roster walk has posted Codex.
+    const postings = roster.getByRole("listitem").filter({
+      has: page.getByRole("button", { name: /^(Pause|Resume) / }),
+    });
+    await expect(roster.getByText(new RegExp(`^${await postings.count()} bots? assigned$`)))
+      .toBeVisible();
     await expect(page.getByRole("dialog")).toHaveCount(1);
     await roster.getByRole("button", { name: "Return to AI Factory" }).click();
     await expect(page.getByRole("dialog")).toHaveCount(0);
@@ -447,12 +461,16 @@ test.describe("AI Factory live journey", () => {
     const persistedRoster = page.getByRole("dialog");
     await expect(persistedRoster).toBeVisible();
     await expect(page.getByRole("dialog")).toHaveCount(1);
-    await expect(persistedRoster.getByText("1 bot assigned")).toBeVisible();
-    await expect(persistedRoster.getByLabel("Model")).toHaveValue(assignmentModel);
-    await expect(persistedRoster.getByLabel("Work effort")).toHaveValue(assignmentEffort);
-    await expect(persistedRoster.getByRole("button", { name: /^Pause / })).toBeVisible();
+    const persistedPosting = persistedRoster.getByRole("listitem").filter({
+      has: page.locator(`option[value="${assignmentModel}"]`),
+    });
+    await expect(persistedPosting).toHaveCount(1);
+    await expect(persistedRoster.getByText(/^\d+ bots? assigned$/)).toBeVisible();
+    await expect(persistedPosting.getByLabel("Model")).toHaveValue(assignmentModel);
+    await expect(persistedPosting.getByLabel("Work effort")).toHaveValue(assignmentEffort);
+    await expect(persistedPosting.getByRole("button", { name: /^Pause / })).toBeVisible();
 
-    await persistedRoster.getByRole("button", { name: /^Configure / }).click();
+    await persistedPosting.getByRole("button", { name: /^Configure / }).click();
     await expect(page.getByRole("dialog")).toHaveCount(1);
     const persistedRole = persistedRoster.getByRole("combobox", { name: /^Role for / });
     if (roleOptions[0]) {
@@ -490,7 +508,7 @@ test.describe("AI Factory live journey", () => {
     // assignment. Close only the outer surface after proving that read-back.
     await persistedRoster.getByRole("button", { name: "Cancel", exact: true }).click();
     await expect(page.getByRole("dialog")).toHaveCount(1);
-    await expect(persistedRoster.getByRole("button", { name: /^Pause / })).toBeVisible();
+    await expect(persistedPosting.getByRole("button", { name: /^Pause / })).toBeVisible();
     await persistedRoster.getByRole("button", { name: "Return to AI Factory" }).click();
     await expect(page.getByRole("dialog")).toHaveCount(0);
   });
@@ -862,9 +880,12 @@ test.describe("AI Factory live journey", () => {
     await roster.getByRole("button", { name: "Configure Claude" }).click();
     await expect(claudeRole).toBeVisible({ timeout: 20_000 });
     if (!/generalist/i.test(await claudeRole.locator("option:checked").textContent() ?? "")) {
+      // The Configure editor saves the whole posting through the project's
+      // bots route; only the roster's inline model and effort selects go
+      // through /api/bot-assignments.
       const saved = page.waitForResponse((response) =>
         response.request().method() === "PATCH"
-        && /\/api\/bot-assignments\/[^/]+$/.test(new URL(response.url()).pathname));
+        && /\/api\/projects\/[^/]+\/bots\/[^/]+$/.test(new URL(response.url()).pathname));
       await claudeRole.selectOption({ label: "Generalist" });
       await roster.getByRole("button", { name: "Save changes" }).click();
       expect((await saved).ok()).toBeTruthy();
