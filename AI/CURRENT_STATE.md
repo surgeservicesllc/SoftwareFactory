@@ -1,5 +1,37 @@
 # Current state
 
+## 2026-09-03: AI Factory build-out — increment 5, a fake GitHub API on the local stack records a lifecycle graph (ADR-251)
+
+The application pins its GitHub client to `https://api.github.com` and
+accepts no other origin, so the fake-data lane fakes the host the way a
+person would: `api.github.com` resolves to the runner through
+`/etc/hosts`, the runner trusts a certificate it just made for that
+name through `NODE_EXTRA_CA_CERTS`, and `tests/harness/fake-github-api.mjs`
+answers the three requests the release base makes — the installation
+token, the branch tip, and `.softwarefactory/release-policy.json` —
+with fake data for the seeded `fake-owner/storefront` repository, and
+404 for anything else. Nothing in the application changed and nothing
+can point production at it; the fake App's private key is generated on
+the runner and never leaves it, and every other value is a placeholder.
+With the release base resolved, the covered-roster Grok walk records
+the canonical Full Lifecycle graph and pauses it at the database
+boundary (the address bar names the graph, the notice says no run
+evidence is linked, "graph recorded; no run evidence yet", no observed
+execution route, the same after a reload), and the launcher walk
+records a Full Lifecycle graph that reads Recorded with its id and
+nothing claims it ran. The nine-step walk's command at step 8 is now
+recorded rather than refused: routed to the Claude posting it is
+recorded only with a read-only analysis plan nobody claims, routed to
+the Codex posting (once a replay has posted it) it is queued for a
+worker that is Not Connected, and step 9 states whichever holds. The
+Agents pane over a linked, unrun graph reads "No planned routing
+identities recorded": a graph node without a run carries no route, and
+the plan's identities are never substituted for execution evidence.
+The worker switch stays off, so neither graph is ever run. Without the
+fake (`AI_FACTORY_E2E_FAKE_GITHUB` unset) every walk still asserts the
+Not Connected refusals. Evidence: lane run 33717344109 on branch 8450cbd
+(7 passed, 1 skipped).
+
 ## 2026-09-03: AI Factory build-out — increment 4, the Grok planner plans on the local stack, and a normalizer defect that refused every roster (ADR-251)
 
 `lib/grok/capabilities.ts`: `normalizeGrokCapabilities` is now the

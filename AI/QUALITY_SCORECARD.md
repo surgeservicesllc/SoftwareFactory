@@ -2,6 +2,16 @@
 
 Last reviewed: 2026-09-03
 
+**Addendum, 2026-09-03 latest+77 - AI Factory build-out, increment 5: a fake GitHub API on the local stack records a lifecycle graph (ADR-251):**
+ai-factory-journey.spec.ts: the covered-roster Grok walk and the
+launcher walk each carry a fake-GitHub branch (a recorded graph named
+in the address bar, a paused session with no run evidence, a Recorded
+lifecycle with its id, nothing claiming execution) beside the Not
+Connected branch. The fake (tests/harness/fake-github-api.mjs) was
+smoke-tested for all three endpoints, unknown paths (404) and missing
+authorization (401). Lane run 33717344109: 7 passed, 1 skipped. No unit
+counts change.
+
 **Addendum, 2026-09-03 latest+76 - AI Factory build-out, increment 4: the Grok planner plans on the local stack (ADR-251):**
 grok-capabilities 4 (normalization is the identity on every canonical
 capability and on its own output; the alias table still expands role

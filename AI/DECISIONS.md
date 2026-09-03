@@ -7049,6 +7049,16 @@ the table is consulted, and a test pins identity on every capability.
 The lane found it only because its failure step now prints the roster
 tables: a refusal names a code, and the rows are what reproduce it.
 
+A test fakes the host, never the client. The GitHub client pins its
+origin and accepts no other; adding an override for a test would be a
+switch that could one day point production at a fake. The fake-data
+lane instead resolves api.github.com to the runner and trusts a
+certificate it made for that name, and a small server answers the
+three requests the release base makes with fake data for the seeded
+repository. The recorded graphs are real rows in the local stack; the
+worker switch stays off, so they are never run, and the walk asserts
+that nothing claims otherwise.
+
 Bounds: the local-stack proofs stop exactly where GitHub and a Codex
 account are Not Connected; they assert the refusal is stated and that
 nothing was recorded that reads as execution. Signed-in production

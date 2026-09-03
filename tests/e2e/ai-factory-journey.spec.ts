@@ -61,6 +61,11 @@ test.describe("AI Factory live journey", () => {
    * set it on its own.
    */
   const seeded = process.env.AI_FACTORY_E2E_SEEDED === "1";
+  // The lane can stand up a fake GitHub API for the seeded repository, so the
+  // release base resolves to fake data and a lifecycle graph is recorded
+  // (never run: the worker switch stays off). Without it, GitHub is Not
+  // Connected and both launches must refuse; both outcomes are asserted.
+  const fakeGitHub = seeded && process.env.AI_FACTORY_E2E_FAKE_GITHUB === "1";
   const installed = process.env.AI_FACTORY_E2E_INSTALLED === "1";
   const stepOneReady = seeded || installed;
 
@@ -419,28 +424,54 @@ test.describe("AI Factory live journey", () => {
     await expect(prompt).toBeVisible({ timeout: 20_000 });
     await prompt.fill("Add a fake health endpoint and cover it with a test.");
 
-    // This local lane deliberately binds a nonexistent GitHub repository, so
-    // immutable base-SHA verification must refuse the submission. The normal
-    // browser lane separately requires the persisted record-only success path
-    // to advance Step 8 and render the non-execution Step 9 contract.
+    // The seeded repository does not exist on GitHub. Without the fake GitHub
+    // API, immutable base-SHA verification must refuse the submission; with
+    // it, the base resolves to fake data and the command is recorded only —
+    // the Claude route records, it never dispatches — so Step 8 reads Done
+    // and Step 9 states the record-only contract.
     const submit = composer.getByRole("button", { name: /queue|submit|send|start|run/i }).last();
     await expect(submit).toBeVisible({ timeout: 10_000 });
     await submit.click();
     await page.waitForTimeout(3000);
 
-    await expect(composer.getByText(/failed safely|cannot|could not|not verified/i).first())
-      .toBeVisible({ timeout: 10_000 });
-    await page.keyboard.press("Escape");
-    await expect(commandStep.getByText("Done")).toHaveCount(0);
-
-    // ── Step 9: Watch It Ship says what actually executes ─────────────────
     const watchStep = stepCard(page, "Watch It Ship");
-    await expect(watchStep.getByText("Done")).toHaveCount(0);
-    await watchStep.getByRole("button", { name: "Watch execution" }).click();
-    const watchDialog = page.getByRole("dialog");
-    await expect(watchDialog.getByText("Not Connected")).toBeVisible({ timeout: 20_000 });
-    await expect(watchDialog.getByText(/will not start until an executor is connected/)).toBeVisible();
-    await page.keyboard.press("Escape");
+    if (fakeGitHub) {
+      // A recorded command closes the composer and the step card is the
+      // evidence: the command counts, and it is recorded only. The Claude
+      // route records a read-only analysis plan beside it; with the worker
+      // switch off nothing claims that plan, and Step 9 says so either way.
+      await expect(page.getByRole("dialog")).toHaveCount(0, { timeout: 20_000 });
+      await expect(commandStep.getByText("Done")).toBeVisible({ timeout: 30_000 });
+      await expect(commandStep.getByText(/\d+ commands? on this factory · \d+ recorded only/)).toBeVisible();
+
+      // ── Step 9: a recorded command is not a run ───────────────────────
+      // The latest command routes to the Claude posting on a first attempt
+      // (a read-only analysis plan, recorded only) and to the Codex posting
+      // once a replay has posted it (queued for a worker that is Not
+      // Connected). Both are stated; neither claims a run.
+      await expect(watchStep.getByText("Done")).toHaveCount(0);
+      await expect(watchStep.getByText(/Analysis planned · waiting for the analysis worker to claim it|recorded only · no execution is queued|commands? queued; Worker Not Connected/))
+        .toBeVisible();
+      await watchStep.getByRole("button", { name: /^(Watch the analysis run|Review command record|Watch execution)$/ }).click();
+      const watchDialog = page.getByRole("dialog");
+      await expect(watchDialog.getByText(/No repository write, branch, or pull request can result|Record-only mode creates no worker dispatch|will not start until an executor is connected/))
+        .toBeVisible({ timeout: 20_000 });
+      await expect(watchDialog.getByText(/the bot is working now|Analysis completed|Work is in flight/)).toHaveCount(0);
+      await page.keyboard.press("Escape");
+    } else {
+      await expect(composer.getByText(/failed safely|cannot|could not|not verified/i).first())
+        .toBeVisible({ timeout: 10_000 });
+      await page.keyboard.press("Escape");
+      await expect(commandStep.getByText("Done")).toHaveCount(0);
+
+      // ── Step 9: Watch It Ship says what actually executes ───────────────
+      await expect(watchStep.getByText("Done")).toHaveCount(0);
+      await watchStep.getByRole("button", { name: "Watch execution" }).click();
+      const watchDialog = page.getByRole("dialog");
+      await expect(watchDialog.getByText("Not Connected")).toBeVisible({ timeout: 20_000 });
+      await expect(watchDialog.getByText(/will not start until an executor is connected/)).toBeVisible();
+      await page.keyboard.press("Escape");
+    }
 
     // ── Persistence: what Supabase stored, not what React remembered ──────
     await page.reload();
@@ -939,37 +970,69 @@ test.describe("AI Factory live journey", () => {
     await page.getByRole("textbox", { name: "Tell Grok Bot what you want done" }).fill(goal);
     await page.getByRole("button", { name: "Start goal" }).click();
 
+    const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
     const alert = page.getByRole("alert").filter({ hasText: /\S/ });
-    await expect(alert).toBeVisible({ timeout: 45_000 });
-    await expect(alert).toContainText("Not Connected");
+    if (fakeGitHub) {
+      // The release base resolved against the fake GitHub API, so the route
+      // recorded the canonical Full Lifecycle graph and paused it at the
+      // database boundary: the address bar names the graph, no alert fires,
+      // and the notice says exactly that nothing has run.
+      await expect.poll(() => new URL(page.url()).searchParams.get("graphId"), { timeout: 45_000 })
+        .toMatch(uuid);
+      await expect(alert).toHaveCount(0);
+    } else {
+      await expect(alert).toBeVisible({ timeout: 45_000 });
+      await expect(alert).toContainText("Not Connected");
+    }
     await expect.poll(() => new URL(page.url()).searchParams.get("sessionId"), { timeout: 30_000 })
-      .toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+      .toMatch(uuid);
     const sessionId = new URL(page.url()).searchParams.get("sessionId")!;
 
     const conversation = page.getByRole("log", { name: "Recorded session messages" });
     await expect(conversation.getByRole("article", { name: "Chief of Staff message" }))
       .toContainText(/recorded a deterministic build plan/, { timeout: 30_000 });
-    // The saved plan is not evidence of execution, and the notice says so in
-    // one of two wordings depending on whether the release-base refusal left
+    // The saved plan is not evidence of execution, and the notice says so: a
+    // recorded graph has no run evidence; an unresolved release base leaves
     // the session blocked or merely unlinked.
-    await expect(page.getByRole("status"))
-      .toContainText(/no graph or worker execution has started|This durable session has no linked graph/);
+    await expect(page.getByRole("status")).toContainText(fakeGitHub
+      ? /graph is recorded, but no durable run evidence is linked/
+      : /no graph or worker execution has started|This durable session has no linked graph/);
+    if (fakeGitHub) {
+      await expect(page.getByText("graph recorded; no run evidence yet")).toBeVisible();
+    }
     const inspector = page.getByRole("complementary", { name: "Session inspector" });
     await inspector.getByRole("tab", { name: "Plan" }).click();
     await expect.poll(() => inspector.getByRole("listitem").count()).toBeGreaterThanOrEqual(5);
     await inspector.getByRole("tab", { name: "Agents" }).click();
     await expect(inspector.getByText("Planned routing intent")).toBeVisible();
-    await expect(inspector.getByText(/Codex/).first()).toBeVisible();
     await expect(inspector.getByText("Observed node execution route")).toHaveCount(0);
-    const controls = page.getByRole("button", { name: /^(pause|resume|stop) unavailable in / });
-    await expect.poll(() => controls.count()).toBeGreaterThanOrEqual(2);
-    for (const control of await controls.all()) await expect(control).toBeDisabled();
+    if (fakeGitHub) {
+      // Once the canonical graph is linked, the pane reads the graph's nodes,
+      // and a node without a run carries no route: the planned identities
+      // are never substituted for execution evidence. The graph is paused at
+      // the database boundary, so resume and stop are offered as durable
+      // control intents and pause is not; the walk presses none of them.
+      await expect(inspector.getByText("No planned routing identities recorded")).toBeVisible();
+      await expect(page.getByRole("button", { name: "pause unavailable in paused" })).toBeDisabled();
+      await expect(page.getByRole("button", { name: /^(resume|stop) session$/ })).toHaveCount(2);
+    } else {
+      await expect(inspector.getByText(/Codex/).first()).toBeVisible();
+      const controls = page.getByRole("button", { name: /^(pause|resume|stop) unavailable in / });
+      await expect.poll(() => controls.count()).toBeGreaterThanOrEqual(2);
+      for (const control of await controls.all()) await expect(control).toBeDisabled();
+    }
 
     // After a reload, the same durable plan and the same honest boundary.
     await page.goto(`/solutions/factory/grok?sessionId=${encodeURIComponent(sessionId)}`);
     await expect(page.locator('[aria-label="Loading Grok Bot"]')).toHaveCount(0, { timeout: 45_000 });
     await expect(conversation.getByRole("article", { name: "Chief of Staff message" }))
       .toContainText(/recorded a deterministic build plan/, { timeout: 30_000 });
+    if (fakeGitHub) {
+      await expect.poll(() => new URL(page.url()).searchParams.get("graphId"), { timeout: 30_000 })
+        .toMatch(uuid);
+      await expect(page.getByText("graph recorded; no run evidence yet")).toBeVisible();
+      await expect(inspector.getByText("Observed node execution route")).toHaveCount(0);
+    }
     await inspector.getByRole("tab", { name: "Plan" }).click();
     await expect.poll(() => inspector.getByRole("listitem").count()).toBeGreaterThanOrEqual(5);
     await inspector.getByRole("tab", { name: "Deployment" }).click();
@@ -1004,6 +1067,19 @@ test.describe("AI Factory live journey", () => {
     await page.getByRole("button", { name: /^Launch Full Lifecycle/ }).click();
 
     const alert = page.getByRole("alert").filter({ hasText: /\S/ });
+    if (fakeGitHub) {
+      // The release base resolved against the fake GitHub API: the graph is
+      // recorded and the step page selects it in place of the launcher. The
+      // worker switch is off, so the page says the executor is Not Connected,
+      // that no run exists for this exact graph, and that nothing was woken.
+      await expect(page.getByRole("heading", { name: "Graph recorded — executor Not Connected" }))
+        .toBeVisible({ timeout: 30_000 });
+      await expect(page.getByText(/Graph [0-9a-f-]{36} is selected\. No run for this exact graph/)).toBeVisible();
+      await expect(page.getByText(/this request did not wake a worker/)).toBeVisible();
+      await expect(alert).toHaveCount(0);
+      await expect(page.getByText(/\b(is running|has started|dispatched)\b/i)).toHaveCount(0);
+      return;
+    }
     await expect(alert).toBeVisible({ timeout: 30_000 });
     await expect(alert).toContainText("Not Connected");
     await expect(page.getByText("Recorded", { exact: true })).toHaveCount(0);
